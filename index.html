@@ -276,8 +276,33 @@ function parseGames(games){
         if(B.point!=null)pB.push(B.point);
       });
       if(!oA.length)return;
-      var avgA=oA.reduce(function(s,v){return s+v;},0)/oA.length;
-      var avgB=oB.reduce(function(s,v){return s+v;},0)/oB.length;
+      // Fix: only average odds from books that have matching lines
+      // to avoid mixing odds from different spread/total numbers
+      function amToDecimal(a){return a>=0?(a/100)+1:(100/Math.abs(a))+1;}
+      function decimalToAm(d){return d>=2?Math.round((d-1)*100):Math.round(-100/(d-1));}
+
+      // Find most common line for side A
+      if(pA.length>0){
+        var lineCountA={};
+        pA.forEach(function(p){var k=Math.round(p*2)/2;lineCountA[k]=(lineCountA[k]||0)+1;});
+        var modeLineA=parseFloat(Object.keys(lineCountA).reduce(function(a,b){return lineCountA[a]>lineCountA[b]?a:b;}));
+        // only use odds from books where lineA matches mode
+        var filtOA=[],filtOB=[];
+        books.forEach(function(b){
+          var m=(b.markets||[]).find(function(x){return x.key===mk;});
+          if(!m||!m.outcomes||m.outcomes.length!==2)return;
+          var A=m.outcomes[0],B=m.outcomes[1];
+          if(A.point!=null&&Math.round(A.point*2)/2===modeLineA){
+            filtOA.push(A.price);filtOB.push(B.price);
+          }
+        });
+        if(filtOA.length){oA=filtOA;oB=filtOB;}
+      }
+
+      var avgDecA=oA.map(amToDecimal).reduce(function(s,v){return s+v;},0)/oA.length;
+      var avgDecB=oB.map(amToDecimal).reduce(function(s,v){return s+v;},0)/oB.length;
+      var avgA=decimalToAm(avgDecA);
+      var avgB=decimalToAm(avgDecB);
       var ptA=pA.length?pA.reduce(function(s,v){return s+v;},0)/pA.length:null;
       var ptB=pB.length?pB.reduce(function(s,v){return s+v;},0)/pB.length:null;
       var lbl=mktLbl(mk);
