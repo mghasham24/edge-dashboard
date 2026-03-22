@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Edge Dashboard</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Barlow:wght@400;500;600;700&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0a0c;--bg2:#111116;--bg3:#18181f;--bg4:#1e1e28;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.12);
+  --text:#f0eff5;--muted:#7a7990;--muted2:#4a4960;
+  --accent:#4f6ef7;--green:#2dcc7e;--yellow:#f5c842;--red:#f05252;
+  --mono:'IBM Plex Mono',monospace;--sans:'Barlow',system-ui,sans-serif;
+}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;min-height:100vh;padding:0 0 80px}
+.header{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:60px;position:sticky;top:0;z-index:100}
+.logo{font-family:var(--mono);font-weight:600;font-size:15px;letter-spacing:.08em;display:flex;align-items:center;gap:8px}
+.logo-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.api-remaining{font-family:var(--mono);font-size:11px;color:var(--muted);padding:4px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:4px}
+.refresh-btn{background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:.05em;padding:7px 16px;border-radius:5px;cursor:pointer;text-transform:uppercase}
+.refresh-btn:hover{opacity:.85}.refresh-btn:disabled{opacity:.4;cursor:not-allowed}
+.sport-tabs{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 24px;display:flex;overflow-x:auto}
+.sport-tab{font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);padding:14px 18px;cursor:pointer;border:none;border-bottom:2px solid transparent;background:none;white-space:nowrap}
+.sport-tab:hover{color:var(--text)}.sport-tab.active{color:var(--text);border-bottom-color:var(--accent)}
+.controls{padding:16px 24px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;border-bottom:1px solid var(--border);background:var(--bg2)}
+.ctrl-lbl{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.ctrl-sel,.ctrl-inp{background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--sans);font-size:13px;padding:6px 10px;border-radius:5px;outline:none}
+.ctrl-inp{width:80px;font-family:var(--mono)}
+.search-wrap{position:relative}
+.search-inp{background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--sans);font-size:13px;padding:6px 12px 6px 30px;border-radius:5px;outline:none;width:220px}
+.search-ico{position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;pointer-events:none}
+.stats-pill{margin-left:auto;display:flex;gap:16px}
+.stat-item{display:flex;flex-direction:column;align-items:flex-end}
+.stat-val{font-family:var(--mono);font-size:16px;font-weight:600;line-height:1}
+.stat-lbl{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-top:2px}
+.status-bar{padding:8px 24px;font-family:var(--mono);font-size:11px;color:var(--muted);display:flex;align-items:center;gap:8px}
+.sdot{width:6px;height:6px;border-radius:50%;background:var(--muted2);flex-shrink:0}
+.sdot.live{background:var(--green);animation:pulse 1.5s ease-in-out infinite}
+.sdot.loading{background:var(--yellow);animation:pulse .8s ease-in-out infinite}
+.sdot.error{background:var(--red)}
+.table-wrap{padding:0 24px;overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:900px}
+thead tr{border-bottom:1px solid var(--border2)}
+th{font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:10px 12px;text-align:left;white-space:nowrap}
+th.r{text-align:right}th.c{text-align:center}
+tbody tr{border-bottom:1px solid var(--border);transition:background .1s}
+tbody tr:hover{background:var(--bg2)}
+tbody tr.has-edge{background:rgba(45,204,126,.03)}
+td{padding:10px 12px;vertical-align:middle;font-size:13px}
+td.r{text-align:right}td.c{text-align:center}
+.game-name{font-weight:600;font-size:13px}
+.game-time{font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px}
+.mkt-badge{display:inline-block;font-family:var(--mono);font-size:10px;font-weight:600;padding:2px 7px;border-radius:3px;background:var(--bg4);border:1px solid var(--border2);color:var(--muted)}
+.odds-pos{color:#6ee7b7;font-family:var(--mono);font-weight:600}
+.odds-neg{color:var(--text);font-family:var(--mono);font-weight:600}
+.pred-wrap{display:flex;align-items:center;gap:4px;justify-content:center}
+.pred-inp{width:58px;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:12px;padding:5px 6px;border-radius:4px;outline:none;text-align:right}
+.pred-inp:focus{border-color:var(--accent)}
+.pred-inp.filled{border-color:rgba(79,110,247,.5);background:rgba(79,110,247,.05)}
+.pred-unit{font-size:11px;color:var(--muted);font-family:var(--mono)}
+.edge-wrap{display:flex;align-items:center;gap:6px;justify-content:flex-end}
+.edge-bar-bg{width:50px;height:4px;background:var(--bg4);border-radius:2px;overflow:hidden;flex-shrink:0}
+.edge-bar-fill{height:100%;border-radius:2px}
+.edge-val{font-family:var(--mono);font-size:13px;font-weight:600;min-width:52px;text-align:right}
+.e-none{color:var(--muted2)}.e-strong{color:var(--green)}.e-med{color:#7ddfab}.e-weak{color:var(--yellow)}.e-neg{color:var(--red)}
+.u-pass{color:var(--muted2);font-family:var(--mono);font-size:12px}
+.u-val{font-family:var(--mono);font-weight:600;color:var(--green)}
+.bet-val{font-family:var(--mono);font-size:13px;font-weight:600}
+.state-row td{padding:60px 0;text-align:center;color:var(--muted)}
+::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="logo"><span class="logo-dot"></span>EDGE DASHBOARD</div>
+  <div style="display:flex;align-items:center;gap:10px">
+    <div class="api-remaining" id="api-remaining">— requests left</div>
+    <button class="refresh-btn" id="refresh-btn" onclick="loadOdds()">Refresh</button>
+  </div>
+</header>
+
+<nav class="sport-tabs" id="sport-tabs"></nav>
+
+<div class="controls">
+  <div class="search-wrap">
+    <span class="search-ico">&#9906;</span>
+    <input class="search-inp" id="search" placeholder="Search team or matchup..." oninput="renderTable()">
+  </div>
+  <div style="display:flex;align-items:center;gap:6px">
+    <span class="ctrl-lbl">Market</span>
+    <select class="ctrl-sel" id="mkt-filter" onchange="loadOdds()">
+      <option value="ALL">All (3 credits)</option>
+      <option value="ML">Moneyline (1 credit)</option>
+      <option value="Spread">Spread (1 credit)</option>
+      <option value="Total">Total (1 credit)</option>
+    </select>
+  </div>
+  <div style="display:flex;align-items:center;gap:6px">
+    <span class="ctrl-lbl">Unit $</span>
+    <input class="ctrl-inp" id="unit-size" type="number" value="300" min="1" step="1" oninput="renderTable()">
+  </div>
+  <div class="stats-pill">
+    <div class="stat-item"><span class="stat-val" id="stat-lines">0</span><span class="stat-lbl">Lines</span></div>
+    <div class="stat-item"><span class="stat-val" id="stat-edges">0</span><span class="stat-lbl">Edges</span></div>
+  </div>
+</div>
+
+<div class="status-bar">
+  <span class="sdot" id="sdot"></span>
+  <span id="status-txt">Loading...</span>
+</div>
+
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Game</th><th>Mkt</th><th>Side</th><th>Line</th>
+        <th class="r">FD Odds</th><th class="r">No-Vig %</th>
+        <th class="c">Mkt Price %</th><th class="r">Edge</th>
+        <th class="r">Units</th><th class="r">Bet Size</th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</div>
+
+<script>
+var SPORTS = [
+  {key:'basketball_nba',         label:'NBA'},
+  {key:'basketball_ncaab',       label:'NCAAB'},
+  {key:'icehockey_nhl',          label:'NHL'},
+  {key:'baseball_mlb',           label:'MLB'},
+  {key:'mma_mixed_martial_arts', label:'UFC/MMA'}
+];
+var MARKET_KEYS = {ML:'h2h', Spread:'spreads', Total:'totals'};
+var currentSport = 'basketball_nba';
+var rawRows = [];
+var preds = {};
+
+function americanToImplied(n) {
+  n = Number(n);
+  if (!isFinite(n)) return null;
+  return n < 0 ? Math.abs(n) / (Math.abs(n) + 100) : 100 / (n + 100);
+}
+function noVig(iA, iB) {
+  if (iA == null || iB == null) return {fa:null, fb:null};
+  var t = iA + iB;
+  if (!isFinite(t) || t <= 0) return {fa:null, fb:null};
+  return {fa: iA/t, fb: iB/t};
+}
+function mktLabel(m) {
+  if (m==='h2h') return 'ML';
+  if (m==='spreads') return 'Spread';
+  if (m==='totals') return 'Total';
+  return m;
+}
+function fmtAmerican(n) {
+  n = Number(n);
+  return !isFinite(n) ? '-' : (n >= 0 ? '+'+n : ''+n);
+}
+function edgeUnits(e) {
+  if (e==null||!isFinite(e)) return 0;
+  if (e>=12) return 3;
+  if (e>=8)  return 2;
+  if (e>=5)  return 1;
+  if (e>=3)  return 0.5;
+  return 0;
+}
+
+function buildTabs() {
+  var nav = document.getElementById('sport-tabs');
+  nav.innerHTML = '';
+  SPORTS.forEach(function(s) {
+    var btn = document.createElement('button');
+    btn.className = 'sport-tab' + (s.key === currentSport ? ' active' : '');
+    btn.textContent = s.label;
+    btn.setAttribute('data-key', s.key);
+    btn.onclick = function() {
+      currentSport = s.key;
+      document.querySelectorAll('.sport-tab').forEach(function(b) {
+        b.classList.toggle('active', b.getAttribute('data-key') === s.key);
+      });
+      loadOdds();
+    };
+    nav.appendChild(btn);
+  });
+}
+
+function parseGames(games) {
+  var rows = [];
+  games.forEach(function(game) {
+    var fd = null;
+    (game.bookmakers||[]).forEach(function(b){ if(b.key==='fanduel') fd=b; });
+    if (!fd) return;
+    (fd.markets||[]).forEach(function(market) {
+      if (!market.outcomes || market.outcomes.length !== 2) return;
+      var A = market.outcomes[0], B = market.outcomes[1];
+      var lbl = mktLabel(market.key);
+      var gameStr = game.away_team + ' @ ' + game.home_team;
+      var commence = game.commence_time ? new Date(game.commence_time) : null;
+      var pairId = game.id + '-' + market.key;
+      rows.push({id:pairId+'-A', game:gameStr, commence:commence, market:lbl, side:A.name, american:A.price, point:A.point!=null?A.point:null, pairId:pairId, ps:'A'});
+      rows.push({id:pairId+'-B', game:gameStr, commence:commence, market:lbl, side:B.name, american:B.price, point:B.point!=null?B.point:null, pairId:pairId, ps:'B'});
+    });
+  });
+  return rows;
+}
+
+function loadOdds() {
+  var btn   = document.getElementById('refresh-btn');
+  var dot   = document.getElementById('sdot');
+  var stxt  = document.getElementById('status-txt');
+  var sport = SPORTS.find(function(s){ return s.key===currentSport; });
+  var label = sport ? sport.label : currentSport;
+
+  btn.disabled = true;
+  dot.className = 'sdot loading';
+  stxt.textContent = 'Fetching ' + label + ' odds...';
+  document.getElementById('tbody').innerHTML = '<tr class="state-row"><td colspan="10">Loading...</td></tr>';
+
+  var selectedMkt = document.getElementById('mkt-filter').value;
+  var mkts;
+  if (currentSport === 'mma_mixed_martial_arts') {
+    mkts = 'h2h';
+  } else if (selectedMkt === 'ALL') {
+    mkts = 'h2h,spreads,totals';
+  } else {
+    mkts = MARKET_KEYS[selectedMkt] || 'h2h';
+  }
+
+  var url = '/api/odds?sport=' + currentSport + '&markets=' + mkts;
+
+  fetch(url)
+    .then(function(res) {
+      var rem = res.headers.get('x-requests-remaining');
+      if (rem) document.getElementById('api-remaining').textContent = rem + ' requests left';
+      return res.json();
+    })
+    .then(function(data) {
+      if (Array.isArray(data)) {
+        rawRows = parseGames(data);
+        var now = new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit',second:'2-digit'});
+        if (rawRows.length) {
+          dot.className = 'sdot live';
+          stxt.textContent = 'Updated ' + now + ' - ' + (rawRows.length/2|0) + ' games - FanDuel';
+        } else {
+          dot.className = 'sdot error';
+          stxt.textContent = 'No ' + label + ' games on FanDuel right now';
+        }
+      } else {
+        rawRows = [];
+        dot.className = 'sdot error';
+        stxt.textContent = 'API error: ' + (data.message || JSON.stringify(data));
+      }
+    })
+    .catch(function(err) {
+      rawRows = [];
+      dot.className = 'sdot error';
+      stxt.textContent = 'Error: ' + err.message;
+    })
+    .then(function() {
+      btn.disabled = false;
+      renderTable();
+    });
+}
+
+function renderTable() {
+  var unit = parseFloat(document.getElementById('unit-size').value) || 300;
+  var q    = document.getElementById('search').value.trim().toLowerCase();
+
+  if (!rawRows.length) {
+    document.getElementById('tbody').innerHTML = '<tr class="state-row"><td colspan="10">No odds loaded - hit Refresh</td></tr>';
+    document.getElementById('stat-lines').textContent = '0';
+    document.getElementById('stat-edges').textContent = '0';
+    return;
+  }
+
+  var pairs = {};
+  rawRows.forEach(function(r) {
+    if (!pairs[r.pairId]) pairs[r.pairId] = {};
+    pairs[r.pairId][r.ps] = r;
+  });
+
+  var computed = rawRows.map(function(r) {
+    var pair = pairs[r.pairId]||{};
+    var iA   = pair.A ? americanToImplied(pair.A.american) : null;
+    var iB   = pair.B ? americanToImplied(pair.B.american) : null;
+    var nv   = noVig(iA, iB);
+    var fair = r.ps==='A' ? nv.fa : nv.fb;
+    var predRaw = preds[r.id];
+    var pred    = (predRaw!==undefined && predRaw!=='') ? parseFloat(predRaw)/100 : null;
+    var edgePct = (fair!=null && pred!=null && isFinite(pred)) ? (fair-pred)*100 : null;
+    var units   = edgeUnits(edgePct);
+    return {id:r.id, game:r.game, commence:r.commence, market:r.market, side:r.side, american:r.american, point:r.point, ps:r.ps, pairId:r.pairId, fair:fair, edgePct:edgePct, units:units, betSize:units*unit};
+  });
+
+  var filtered = computed.filter(function(r) {
+    if (!q) return true;
+    return (r.game+' '+r.side+' '+r.market).toLowerCase().indexOf(q) !== -1;
+  });
+
+  filtered.sort(function(a,b) {
+    return (b.edgePct!=null?b.edgePct:-9999) - (a.edgePct!=null?a.edgePct:-9999);
+  });
+
+  var edgeCount = filtered.filter(function(r){ return r.edgePct!=null && r.edgePct>0; }).length;
+  document.getElementById('stat-lines').textContent = filtered.length;
+  document.getElementById('stat-edges').textContent = edgeCount;
+
+  if (!filtered.length) {
+    document.getElementById('tbody').innerHTML = '<tr class="state-row"><td colspan="10">No results for current filters</td></tr>';
+    return;
+  }
+  document.getElementById('tbody').innerHTML = filtered.map(buildRow).join('');
+}
+
+function buildRow(r) {
+  var oddsStr  = fmtAmerican(r.american);
+  var oddsCls  = Number(r.american) >= 0 ? 'odds-pos' : 'odds-neg';
+  var lineStr  = '-';
+  if (r.point != null) {
+    lineStr = r.market==='Total' ? (r.ps==='A'?'O ':'U ')+Math.abs(r.point) : (r.point>=0?'+'+r.point:''+r.point);
+  }
+  var fairStr = r.fair!=null ? (r.fair*100).toFixed(1)+'%' : '-';
+  var edgeStr='-', edgeCls='e-none', barW=0, barC='var(--muted2)';
+  if (r.edgePct!=null) {
+    edgeStr = (r.edgePct>0?'+':'')+r.edgePct.toFixed(1)+'%';
+    if      (r.edgePct>=8) { edgeCls='e-strong'; barC='var(--green)'; }
+    else if (r.edgePct>=5) { edgeCls='e-med';    barC='#7ddfab'; }
+    else if (r.edgePct>0)  { edgeCls='e-weak';   barC='var(--yellow)'; }
+    else                   { edgeCls='e-neg';     barC='var(--red)'; }
+    barW = Math.min(Math.abs(r.edgePct)*5, 50);
+  }
+  var unitsHtml = r.units===0 ? '<span class="u-pass">PASS</span>' : '<span class="u-val">'+r.units+'u</span>';
+  var betHtml   = r.units===0 ? '<span class="u-pass">-</span>' : '<span class="bet-val">$'+r.betSize.toFixed(0)+'</span>';
+  var timeStr   = '';
+  if (r.commence) timeStr = r.commence.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' '+r.commence.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+  var predVal   = preds[r.id]||'';
+
+  return '<tr class="'+(r.edgePct!=null&&r.edgePct>0?'has-edge':'')+'">'
+    +'<td><div class="game-name">'+r.game+'</div>'+(timeStr?'<div class="game-time">'+timeStr+'</div>':'')+'</td>'
+    +'<td><span class="mkt-badge">'+r.market+'</span></td>'
+    +'<td>'+r.side+'</td>'
+    +'<td style="font-family:var(--mono);color:var(--muted);font-size:12px">'+lineStr+'</td>'
+    +'<td class="r"><span class="'+oddsCls+'">'+oddsStr+'</span></td>'
+    +'<td class="r" style="font-family:var(--mono);color:var(--muted)">'+fairStr+'</td>'
+    +'<td class="c"><div class="pred-wrap"><input class="pred-inp'+(predVal?' filled':'')+'" type="number" min="1" max="99" step="0.5" placeholder="-" value="'+predVal+'" data-id="'+r.id+'" onblur="setPred(this)" onkeydown="if(event.key===\'Enter\')this.blur()"><span class="pred-unit">%</span></div></td>'
+    +'<td class="r"><div class="edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:'+barW+'px;background:'+barC+'"></div></div><span class="edge-val '+edgeCls+'">'+edgeStr+'</span></div></td>'
+    +'<td class="r">'+unitsHtml+'</td>'
+    +'<td class="r">'+betHtml+'</td>'
+    +'</tr>';
+}
+
+function setPred(input) {
+  var id = input.getAttribute('data-id');
+  preds[id] = input.value;
+  input.classList.toggle('filled', !!input.value);
+  var tr = input.closest('tr');
+  if (!tr) return;
+  var r = rawRows.find(function(x){ return x.id===id; });
+  if (!r) return;
+  var pairs = {};
+  rawRows.forEach(function(x){ if(!pairs[x.pairId]) pairs[x.pairId]={}; pairs[x.pairId][x.ps]=x; });
+  var pair = pairs[r.pairId]||{};
+  var iA   = pair.A ? americanToImplied(pair.A.american) : null;
+  var iB   = pair.B ? americanToImplied(pair.B.american) : null;
+  var nv   = noVig(iA, iB);
+  var fair = r.ps==='A' ? nv.fa : nv.fb;
+  var pred    = input.value!=='' ? parseFloat(input.value)/100 : null;
+  var edgePct = (fair!=null&&pred!=null&&isFinite(pred)) ? (fair-pred)*100 : null;
+  var units   = edgeUnits(edgePct);
+  var unit    = parseFloat(document.getElementById('unit-size').value)||300;
+  var edgeStr='-', edgeCls='e-none', barW=0, barC='var(--muted2)';
+  if (edgePct!=null) {
+    edgeStr=(edgePct>0?'+':'')+edgePct.toFixed(1)+'%';
+    if      (edgePct>=8) { edgeCls='e-strong'; barC='var(--green)'; }
+    else if (edgePct>=5) { edgeCls='e-med';    barC='#7ddfab'; }
+    else if (edgePct>0)  { edgeCls='e-weak';   barC='var(--yellow)'; }
+    else                 { edgeCls='e-neg';     barC='var(--red)'; }
+    barW=Math.min(Math.abs(edgePct)*5,50);
+  }
+  var tds=tr.querySelectorAll('td');
+  tds[7].innerHTML='<div class="edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:'+barW+'px;background:'+barC+'"></div></div><span class="edge-val '+edgeCls+'">'+edgeStr+'</span></div>';
+  tds[8].innerHTML=units===0?'<span class="u-pass">PASS</span>':'<span class="u-val">'+units+'u</span>';
+  tds[9].innerHTML=units===0?'<span class="u-pass">-</span>':'<span class="bet-val">$'+(units*unit).toFixed(0)+'</span>';
+  tr.classList.toggle('has-edge', edgePct!=null&&edgePct>0);
+  document.getElementById('stat-edges').textContent=document.querySelectorAll('tr.has-edge').length;
+}
+
+buildTabs();
+loadOdds();
+</script>
+</body>
+</html>
