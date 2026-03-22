@@ -120,7 +120,7 @@ td.r{text-align:right}td.c{text-align:center}
       <tr>
         <th>Game</th><th>Mkt</th><th>Side</th><th>Line</th>
         <th class="r">FD Odds</th><th class="r">No-Vig %</th>
-        <th class="c">Mkt Price %</th><th class="r">Edge</th>
+        <th class="c">Your Line</th><th class="c">Mkt Price %</th><th class="r">Adj. Fair %</th><th class="r">Edge</th>
         <th class="r">Units</th><th class="r">Bet Size</th>
       </tr>
     </thead>
@@ -140,6 +140,7 @@ var MARKET_KEYS = {ML:'h2h', Spread:'spreads', Total:'totals'};
 var currentSport = 'basketball_nba';
 var rawRows = [];
 var preds = {};
+var yourLines = {};
 
 function americanToImplied(n) {
   n = Number(n);
@@ -169,6 +170,18 @@ function edgeUnits(e) {
   if (e>=5)  return 1;
   if (e>=3)  return 0.5;
   return 0;
+}
+
+// Each half point on a spread/total is worth ~3% probability
+function adjustFairForLine(fair, fdLine, yourLine, market) {
+  if (fair == null || fdLine == null || yourLine == null) return fair;
+  if (market === 'ML') return fair;
+  var diff = parseFloat(yourLine) - parseFloat(fdLine);
+  if (!isFinite(diff) || diff === 0) return fair;
+  // positive diff = your line is higher (easier for favorite, harder for dog)
+  // each 0.5 point = ~3% shift
+  var adjustment = (diff / 0.5) * 0.03;
+  return Math.min(Math.max(fair - adjustment, 0.01), 0.99);
 }
 
 function buildTabs() {
@@ -291,11 +304,13 @@ function renderTable() {
     var iB   = pair.B ? americanToImplied(pair.B.american) : null;
     var nv   = noVig(iA, iB);
     var fair = r.ps==='A' ? nv.fa : nv.fb;
-    var predRaw = preds[r.id];
-    var pred    = (predRaw!==undefined && predRaw!=='') ? parseFloat(predRaw)/100 : null;
-    var edgePct = (fair!=null && pred!=null && isFinite(pred)) ? (fair-pred)*100 : null;
-    var units   = edgeUnits(edgePct);
-    return {id:r.id, game:r.game, commence:r.commence, market:r.market, side:r.side, american:r.american, point:r.point, ps:r.ps, pairId:r.pairId, fair:fair, edgePct:edgePct, units:units, betSize:units*unit};
+    var predRaw  = preds[r.id];
+    var pred     = (predRaw!==undefined && predRaw!=='') ? parseFloat(predRaw)/100 : null;
+    var yourLine = yourLines[r.id] !== undefined ? yourLines[r.id] : null;
+    var adjFair  = adjustFairForLine(fair, r.point, yourLine, r.market);
+    var edgePct  = (adjFair!=null && pred!=null && isFinite(pred)) ? (adjFair-pred)*100 : null;
+    var units    = edgeUnits(edgePct);
+    return {id:r.id, game:r.game, commence:r.commence, market:r.market, side:r.side, american:r.american, point:r.point, ps:r.ps, pairId:r.pairId, fair:fair, adjFair:adjFair, yourLine:yourLine, edgePct:edgePct, units:units, betSize:units*unit};
   });
 
   var filtered = computed.filter(function(r) {
@@ -325,7 +340,10 @@ function buildRow(r) {
   if (r.point != null) {
     lineStr = r.market==='Total' ? (r.ps==='A'?'O ':'U ')+Math.abs(r.point) : (r.point>=0?'+'+r.point:''+r.point);
   }
-  var fairStr = r.fair!=null ? (r.fair*100).toFixed(1)+'%' : '-';
+  var fairStr    = r.fair!=null    ? (r.fair*100).toFixed(1)+'%'    : '-';
+  var adjFairStr = r.adjFair!=null ? (r.adjFair*100).toFixed(1)+'%' : '-';
+  var yourLineVal = (r.yourLine !== null && r.yourLine !== undefined) ? r.yourLine : '';
+  var fdLineDefault = r.point != null ? r.point : '';
   var edgeStr='-', edgeCls='e-none', barW=0, barC='var(--muted2)';
   if (r.edgePct!=null) {
     edgeStr = (r.edgePct>0?'+':'')+r.edgePct.toFixed(1)+'%';
@@ -370,8 +388,10 @@ function setPred(input) {
   var iB   = pair.B ? americanToImplied(pair.B.american) : null;
   var nv   = noVig(iA, iB);
   var fair = r.ps==='A' ? nv.fa : nv.fb;
-  var pred    = input.value!=='' ? parseFloat(input.value)/100 : null;
-  var edgePct = (fair!=null&&pred!=null&&isFinite(pred)) ? (fair-pred)*100 : null;
+  var pred     = input.value!=='' ? parseFloat(input.value)/100 : null;
+  var yourLine = yourLines[id] !== undefined ? yourLines[id] : null;
+  var adjFair  = adjustFairForLine(fair, r.point, yourLine, r.market);
+  var edgePct  = (adjFair!=null&&pred!=null&&isFinite(pred)) ? (adjFair-pred)*100 : null;
   var units   = edgeUnits(edgePct);
   var unit    = parseFloat(document.getElementById('unit-size').value)||300;
   var edgeStr='-', edgeCls='e-none', barW=0, barC='var(--muted2)';
@@ -384,11 +404,40 @@ function setPred(input) {
     barW=Math.min(Math.abs(edgePct)*5,50);
   }
   var tds=tr.querySelectorAll('td');
-  tds[7].innerHTML='<div class="edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:'+barW+'px;background:'+barC+'"></div></div><span class="edge-val '+edgeCls+'">'+edgeStr+'</span></div>';
-  tds[8].innerHTML=units===0?'<span class="u-pass">PASS</span>':'<span class="u-val">'+units+'u</span>';
-  tds[9].innerHTML=units===0?'<span class="u-pass">-</span>':'<span class="bet-val">$'+(units*unit).toFixed(0)+'</span>';
+  tds[9].innerHTML='<div class="edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:'+barW+'px;background:'+barC+'"></div></div><span class="edge-val '+edgeCls+'">'+edgeStr+'</span></div>';
+  tds[10].innerHTML=units===0?'<span class="u-pass">PASS</span>':'<span class="u-val">'+units+'u</span>';
+  tds[11].innerHTML=units===0?'<span class="u-pass">-</span>':'<span class="bet-val">$'+(units*unit).toFixed(0)+'</span>';
   tr.classList.toggle('has-edge', edgePct!=null&&edgePct>0);
   document.getElementById('stat-edges').textContent=document.querySelectorAll('tr.has-edge').length;
+}
+
+function setLine(input) {
+  var id = input.getAttribute('data-id');
+  yourLines[id] = input.value !== '' ? parseFloat(input.value) : null;
+
+  var tr = input.closest('tr');
+  if (!tr) return;
+  var r = rawRows.find(function(x){ return x.id===id; });
+  if (!r) return;
+
+  var pairs = {};
+  rawRows.forEach(function(x){ if(!pairs[x.pairId]) pairs[x.pairId]={}; pairs[x.pairId][x.ps]=x; });
+  var pair = pairs[r.pairId]||{};
+  var iA   = pair.A ? americanToImplied(pair.A.american) : null;
+  var iB   = pair.B ? americanToImplied(pair.B.american) : null;
+  var nv   = noVig(iA, iB);
+  var fair = r.ps==='A' ? nv.fa : nv.fb;
+  var yourLine = yourLines[id];
+  var adjFair  = adjustFairForLine(fair, r.point, yourLine, r.market);
+
+  // Update adj fair cell (index 8)
+  var tds = tr.querySelectorAll('td');
+  tds[8].textContent = adjFair != null ? (adjFair*100).toFixed(1)+'%' : '-';
+  tds[8].style.cssText = 'text-align:right;font-family:var(--mono);color:var(--muted)';
+
+  // Re-trigger edge calc using existing pred input
+  var predInput = tr.querySelector('.pred-inp');
+  if (predInput) setPred(predInput);
 }
 
 buildTabs();
