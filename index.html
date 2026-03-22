@@ -70,6 +70,17 @@ td.r{text-align:right}td.c{text-align:center}
 .u-val{font-family:var(--mono);font-weight:600;color:var(--green)}
 .bet-val{font-family:var(--mono);font-size:13px;font-weight:600}
 .state-row td{padding:60px 0;text-align:center;color:var(--muted)}
+.game-header-row td{padding:6px 12px;background:var(--bg3);border-top:1px solid var(--border2);border-bottom:none}
+.game-header-inner{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.game-stripe{width:3px;height:14px;border-radius:2px;flex-shrink:0}
+tbody tr.game-row-0{border-left:3px solid var(--stripe-0,transparent)}
+tbody tr.game-row-1{border-left:3px solid var(--stripe-1,transparent)}
+tbody tr.game-row-2{border-left:3px solid var(--stripe-2,transparent)}
+tbody tr.game-row-3{border-left:3px solid var(--stripe-3,transparent)}
+tbody tr.game-row-4{border-left:3px solid var(--stripe-4,transparent)}
+tbody tr.game-row-5{border-left:3px solid var(--stripe-5,transparent)}
+tbody tr.game-row-6{border-left:3px solid var(--stripe-6,transparent)}
+tbody tr.game-row-7{border-left:3px solid var(--stripe-7,transparent)}
 ::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
 .gate{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:9999;flex-direction:column;gap:24px}
 .gate-box{background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:40px;display:flex;flex-direction:column;align-items:center;gap:20px;min-width:320px}
@@ -398,10 +409,44 @@ function renderTable() {
     document.getElementById('tbody').innerHTML='<tr class="state-row"><td colspan="12">No results for current filters</td></tr>';
     return;
   }
-  document.getElementById('tbody').innerHTML=filtered.map(buildRow).join('');
+  // Group rows by game and insert game header rows
+  var GAME_COLORS = [
+    '#4f6ef7','#2dcc7e','#f5c842','#f05252','#a78bfa','#38bdf8','#fb923c','#e879f9',
+    '#34d399','#f87171','#60a5fa','#fbbf24','#a3e635','#c084fc','#fb7185','#22d3ee'
+  ];
+  var gameOrder = [];
+  var gameSeen = {};
+  filtered.forEach(function(r) {
+    if (!gameSeen[r.game]) { gameSeen[r.game]=true; gameOrder.push(r.game); }
+  });
+  var gameColorMap = {};
+  gameOrder.forEach(function(g,i){ gameColorMap[g]=GAME_COLORS[i%GAME_COLORS.length]; });
+
+  var html = '';
+  var lastGame = null;
+  filtered.forEach(function(r) {
+    var colorIdx = gameOrder.indexOf(r.game) % 8;
+    if (r.game !== lastGame) {
+      lastGame = r.game;
+      var color = gameColorMap[r.game];
+      var teams = r.game.split(' @ ');
+      var away = teams[0] || ''; var home = teams[1] || '';
+      html += '<tr class="game-header-row"><td colspan="12">'
+        +'<div class="game-header-inner">'
+        +'<div class="game-stripe" style="background:'+color+'"></div>'
+        +'<span>'+away+'</span>'
+        +'<span style="color:var(--muted2)">@</span>'
+        +'<span>'+home+'</span>'
+        +'</div></td></tr>';
+    }
+    html += buildRow(r, colorIdx, gameColorMap[r.game]);
+  });
+  document.getElementById('tbody').innerHTML = html;
 }
 
-function buildRow(r) {
+function buildRow(r, colorIdx, gameColor) {
+  colorIdx = colorIdx||0;
+  gameColor = gameColor||'transparent';
   var oddsStr=fmtAmerican(r.american);
   var oddsCls=Number(r.american)>=0?'odds-pos':'odds-neg';
   var lineStr='-';
@@ -429,7 +474,7 @@ function buildRow(r) {
   var fdLinePlaceholder=r.point!=null?r.point:'';
   var lineCls=adjChanged?' line-changed':'';
 
-  return '<tr class="'+(r.edgePct!=null&&r.edgePct>0?'has-edge':'')+'">'
+  return '<tr class="'+(r.edgePct!=null&&r.edgePct>0?'has-edge':'')+' game-row-'+colorIdx+'" style="border-left:3px solid '+gameColor+'">'
     +'<td><div class="game-name">'+r.game+'</div>'+(timeStr?'<div class="game-time">'+timeStr+'</div>':'')+'</td>'
     +'<td><span class="mkt-badge">'+r.market+'</span></td>'
     +'<td>'+r.side+'</td>'
