@@ -42,7 +42,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 .sdot.loading{background:var(--yellow);animation:pulse .8s ease-in-out infinite}
 .sdot.error{background:var(--red)}
 .table-wrap{padding:0 24px;overflow-x:auto}
-table{width:100%;border-collapse:collapse;min-width:900px}
+table{width:100%;border-collapse:collapse;min-width:1100px}
 thead tr{border-bottom:1px solid var(--border2)}
 th{font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:10px 12px;text-align:left;white-space:nowrap}
 th.r{text-align:right}th.c{text-align:center}
@@ -56,10 +56,10 @@ td.r{text-align:right}td.c{text-align:center}
 .mkt-badge{display:inline-block;font-family:var(--mono);font-size:10px;font-weight:600;padding:2px 7px;border-radius:3px;background:var(--bg4);border:1px solid var(--border2);color:var(--muted)}
 .odds-pos{color:#6ee7b7;font-family:var(--mono);font-weight:600}
 .odds-neg{color:var(--text);font-family:var(--mono);font-weight:600}
-.pred-wrap{display:flex;align-items:center;gap:4px;justify-content:center}
-.pred-inp{width:58px;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:12px;padding:5px 6px;border-radius:4px;outline:none;text-align:right}
-.pred-inp:focus{border-color:var(--accent)}
-.pred-inp.filled{border-color:rgba(79,110,247,.5);background:rgba(79,110,247,.05)}
+.cell-inp{width:58px;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:12px;padding:5px 6px;border-radius:4px;outline:none;text-align:right}
+.cell-inp:focus{border-color:var(--accent)}
+.cell-inp.filled{border-color:rgba(79,110,247,.5);background:rgba(79,110,247,.05)}
+.cell-inp.line-changed{border-color:rgba(245,200,66,.5);background:rgba(245,200,66,.04)}
 .pred-unit{font-size:11px;color:var(--muted);font-family:var(--mono)}
 .edge-wrap{display:flex;align-items:center;gap:6px;justify-content:flex-end}
 .edge-bar-bg{width:50px;height:4px;background:var(--bg4);border-radius:2px;overflow:hidden;flex-shrink:0}
@@ -78,7 +78,7 @@ td.r{text-align:right}td.c{text-align:center}
 <header class="header">
   <div class="logo"><span class="logo-dot"></span>EDGE DASHBOARD</div>
   <div style="display:flex;align-items:center;gap:10px">
-    <div class="api-remaining" id="api-remaining">— requests left</div>
+    <div class="api-remaining" id="api-remaining">-- requests left</div>
     <button class="refresh-btn" id="refresh-btn" onclick="loadOdds()">Refresh</button>
   </div>
 </header>
@@ -118,10 +118,18 @@ td.r{text-align:right}td.c{text-align:center}
   <table>
     <thead>
       <tr>
-        <th>Game</th><th>Mkt</th><th>Side</th><th>Line</th>
-        <th class="r">FD Odds</th><th class="r">No-Vig %</th>
-        <th class="c">Your Line</th><th class="c">Mkt Price %</th><th class="r">Adj. Fair %</th><th class="r">Edge</th>
-        <th class="r">Units</th><th class="r">Bet Size</th>
+        <th>Game</th>
+        <th>Mkt</th>
+        <th>Side</th>
+        <th>FD Line</th>
+        <th class="r">FD Odds</th>
+        <th class="r">No-Vig %</th>
+        <th class="c">Your Line</th>
+        <th class="r">Adj. Fair %</th>
+        <th class="c">Mkt Price %</th>
+        <th class="r">Edge</th>
+        <th class="r">Units</th>
+        <th class="r">Bet Size</th>
       </tr>
     </thead>
     <tbody id="tbody"></tbody>
@@ -148,10 +156,10 @@ function americanToImplied(n) {
   return n < 0 ? Math.abs(n) / (Math.abs(n) + 100) : 100 / (n + 100);
 }
 function noVig(iA, iB) {
-  if (iA == null || iB == null) return {fa:null, fb:null};
-  var t = iA + iB;
-  if (!isFinite(t) || t <= 0) return {fa:null, fb:null};
-  return {fa: iA/t, fb: iB/t};
+  if (iA==null||iB==null) return {fa:null,fb:null};
+  var t=iA+iB;
+  if (!isFinite(t)||t<=0) return {fa:null,fb:null};
+  return {fa:iA/t, fb:iB/t};
 }
 function mktLabel(m) {
   if (m==='h2h') return 'ML';
@@ -160,8 +168,8 @@ function mktLabel(m) {
   return m;
 }
 function fmtAmerican(n) {
-  n = Number(n);
-  return !isFinite(n) ? '-' : (n >= 0 ? '+'+n : ''+n);
+  n=Number(n);
+  return !isFinite(n)?'-':(n>=0?'+'+n:''+n);
 }
 function edgeUnits(e) {
   if (e==null||!isFinite(e)) return 0;
@@ -172,30 +180,28 @@ function edgeUnits(e) {
   return 0;
 }
 
-// Each half point on a spread/total is worth ~3% probability
-function adjustFairForLine(fair, fdLine, yourLine, market) {
-  if (fair == null || fdLine == null || yourLine == null) return fair;
-  if (market === 'ML') return fair;
+// Each 0.5 point shift in spread/total = ~3% probability shift
+function adjustFair(fair, fdLine, yourLine, market) {
+  if (fair==null||market==='ML') return fair;
+  if (fdLine==null||yourLine==null||yourLine==='') return fair;
   var diff = parseFloat(yourLine) - parseFloat(fdLine);
-  if (!isFinite(diff) || diff === 0) return fair;
-  // positive diff = your line is higher (easier for favorite, harder for dog)
-  // each 0.5 point = ~3% shift
-  var adjustment = (diff / 0.5) * 0.03;
-  return Math.min(Math.max(fair - adjustment, 0.01), 0.99);
+  if (!isFinite(diff)||diff===0) return fair;
+  var adj = (diff/0.5)*0.03;
+  return Math.min(Math.max(fair - adj, 0.01), 0.99);
 }
 
 function buildTabs() {
-  var nav = document.getElementById('sport-tabs');
-  nav.innerHTML = '';
+  var nav=document.getElementById('sport-tabs');
+  nav.innerHTML='';
   SPORTS.forEach(function(s) {
-    var btn = document.createElement('button');
-    btn.className = 'sport-tab' + (s.key === currentSport ? ' active' : '');
-    btn.textContent = s.label;
-    btn.setAttribute('data-key', s.key);
-    btn.onclick = function() {
-      currentSport = s.key;
-      document.querySelectorAll('.sport-tab').forEach(function(b) {
-        b.classList.toggle('active', b.getAttribute('data-key') === s.key);
+    var btn=document.createElement('button');
+    btn.className='sport-tab'+(s.key===currentSport?' active':'');
+    btn.textContent=s.label;
+    btn.setAttribute('data-key',s.key);
+    btn.onclick=function() {
+      currentSport=s.key;
+      document.querySelectorAll('.sport-tab').forEach(function(b){
+        b.classList.toggle('active',b.getAttribute('data-key')===s.key);
       });
       loadOdds();
     };
@@ -204,160 +210,154 @@ function buildTabs() {
 }
 
 function parseGames(games) {
-  var rows = [];
+  var rows=[];
   games.forEach(function(game) {
-    var fd = null;
-    (game.bookmakers||[]).forEach(function(b){ if(b.key==='fanduel') fd=b; });
-    if (!fd) return;
+    var fd=null;
+    (game.bookmakers||[]).forEach(function(b){if(b.key==='fanduel')fd=b;});
+    if(!fd) return;
     (fd.markets||[]).forEach(function(market) {
-      if (!market.outcomes || market.outcomes.length !== 2) return;
-      var A = market.outcomes[0], B = market.outcomes[1];
-      var lbl = mktLabel(market.key);
-      var gameStr = game.away_team + ' @ ' + game.home_team;
-      var commence = game.commence_time ? new Date(game.commence_time) : null;
-      var pairId = game.id + '-' + market.key;
-      rows.push({id:pairId+'-A', game:gameStr, commence:commence, market:lbl, side:A.name, american:A.price, point:A.point!=null?A.point:null, pairId:pairId, ps:'A'});
-      rows.push({id:pairId+'-B', game:gameStr, commence:commence, market:lbl, side:B.name, american:B.price, point:B.point!=null?B.point:null, pairId:pairId, ps:'B'});
+      if(!market.outcomes||market.outcomes.length!==2) return;
+      var A=market.outcomes[0],B=market.outcomes[1];
+      var lbl=mktLabel(market.key);
+      var gameStr=game.away_team+' @ '+game.home_team;
+      var commence=game.commence_time?new Date(game.commence_time):null;
+      var pairId=game.id+'-'+market.key;
+      rows.push({id:pairId+'-A',game:gameStr,commence:commence,market:lbl,side:A.name,american:A.price,point:A.point!=null?A.point:null,pairId:pairId,ps:'A'});
+      rows.push({id:pairId+'-B',game:gameStr,commence:commence,market:lbl,side:B.name,american:B.price,point:B.point!=null?B.point:null,pairId:pairId,ps:'B'});
     });
   });
   return rows;
 }
 
 function loadOdds() {
-  var btn   = document.getElementById('refresh-btn');
-  var dot   = document.getElementById('sdot');
-  var stxt  = document.getElementById('status-txt');
-  var sport = SPORTS.find(function(s){ return s.key===currentSport; });
-  var label = sport ? sport.label : currentSport;
-
-  btn.disabled = true;
-  dot.className = 'sdot loading';
-  stxt.textContent = 'Fetching ' + label + ' odds...';
-  document.getElementById('tbody').innerHTML = '<tr class="state-row"><td colspan="10">Loading...</td></tr>';
-
-  var selectedMkt = document.getElementById('mkt-filter').value;
+  var btn=document.getElementById('refresh-btn');
+  var dot=document.getElementById('sdot');
+  var stxt=document.getElementById('status-txt');
+  var sport=SPORTS.find(function(s){return s.key===currentSport;});
+  var label=sport?sport.label:currentSport;
+  btn.disabled=true;
+  dot.className='sdot loading';
+  stxt.textContent='Fetching '+label+' odds...';
+  document.getElementById('tbody').innerHTML='<tr class="state-row"><td colspan="12">Loading...</td></tr>';
+  var selectedMkt=document.getElementById('mkt-filter').value;
   var mkts;
-  if (currentSport === 'mma_mixed_martial_arts') {
-    mkts = 'h2h';
-  } else if (selectedMkt === 'ALL') {
-    mkts = 'h2h,spreads,totals';
-  } else {
-    mkts = MARKET_KEYS[selectedMkt] || 'h2h';
-  }
-
-  var url = '/api/odds?sport=' + currentSport + '&markets=' + mkts;
-
+  if(currentSport==='mma_mixed_martial_arts'){mkts='h2h';}
+  else if(selectedMkt==='ALL'){mkts='h2h,spreads,totals';}
+  else{mkts=MARKET_KEYS[selectedMkt]||'h2h';}
+  var url='/api/odds?sport='+currentSport+'&markets='+mkts;
   fetch(url)
-    .then(function(res) {
-      var rem = res.headers.get('x-requests-remaining');
-      if (rem) document.getElementById('api-remaining').textContent = rem + ' requests left';
+    .then(function(res){
+      var rem=res.headers.get('x-requests-remaining');
+      if(rem) document.getElementById('api-remaining').textContent=rem+' requests left';
       return res.json();
     })
-    .then(function(data) {
-      if (Array.isArray(data)) {
-        rawRows = parseGames(data);
-        var now = new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit',second:'2-digit'});
-        if (rawRows.length) {
-          dot.className = 'sdot live';
-          stxt.textContent = 'Updated ' + now + ' - ' + (rawRows.length/2|0) + ' games - FanDuel';
+    .then(function(data){
+      if(Array.isArray(data)){
+        rawRows=parseGames(data);
+        var now=new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit',second:'2-digit'});
+        if(rawRows.length){
+          dot.className='sdot live';
+          stxt.textContent='Updated '+now+' - '+(rawRows.length/2|0)+' games - FanDuel';
         } else {
-          dot.className = 'sdot error';
-          stxt.textContent = 'No ' + label + ' games on FanDuel right now';
+          dot.className='sdot error';
+          stxt.textContent='No '+label+' games on FanDuel right now';
         }
       } else {
-        rawRows = [];
-        dot.className = 'sdot error';
-        stxt.textContent = 'API error: ' + (data.message || JSON.stringify(data));
+        rawRows=[];
+        dot.className='sdot error';
+        stxt.textContent='API error: '+(data.message||JSON.stringify(data));
       }
     })
-    .catch(function(err) {
-      rawRows = [];
-      dot.className = 'sdot error';
-      stxt.textContent = 'Error: ' + err.message;
+    .catch(function(err){
+      rawRows=[];
+      dot.className='sdot error';
+      stxt.textContent='Error: '+err.message;
     })
-    .then(function() {
-      btn.disabled = false;
+    .then(function(){
+      btn.disabled=false;
       renderTable();
     });
 }
 
+function getFair(r) {
+  var pairs={};
+  rawRows.forEach(function(x){if(!pairs[x.pairId])pairs[x.pairId]={};pairs[x.pairId][x.ps]=x;});
+  var pair=pairs[r.pairId]||{};
+  var iA=pair.A?americanToImplied(pair.A.american):null;
+  var iB=pair.B?americanToImplied(pair.B.american):null;
+  var nv=noVig(iA,iB);
+  return r.ps==='A'?nv.fa:nv.fb;
+}
+
 function renderTable() {
-  var unit = parseFloat(document.getElementById('unit-size').value) || 300;
-  var q    = document.getElementById('search').value.trim().toLowerCase();
-
-  if (!rawRows.length) {
-    document.getElementById('tbody').innerHTML = '<tr class="state-row"><td colspan="10">No odds loaded - hit Refresh</td></tr>';
-    document.getElementById('stat-lines').textContent = '0';
-    document.getElementById('stat-edges').textContent = '0';
+  var unit=parseFloat(document.getElementById('unit-size').value)||300;
+  var q=document.getElementById('search').value.trim().toLowerCase();
+  if(!rawRows.length){
+    document.getElementById('tbody').innerHTML='<tr class="state-row"><td colspan="12">No odds loaded - hit Refresh</td></tr>';
+    document.getElementById('stat-lines').textContent='0';
+    document.getElementById('stat-edges').textContent='0';
     return;
   }
-
-  var pairs = {};
-  rawRows.forEach(function(r) {
-    if (!pairs[r.pairId]) pairs[r.pairId] = {};
-    pairs[r.pairId][r.ps] = r;
+  var pairs={};
+  rawRows.forEach(function(r){if(!pairs[r.pairId])pairs[r.pairId]={};pairs[r.pairId][r.ps]=r;});
+  var computed=rawRows.map(function(r){
+    var pair=pairs[r.pairId]||{};
+    var iA=pair.A?americanToImplied(pair.A.american):null;
+    var iB=pair.B?americanToImplied(pair.B.american):null;
+    var nv=noVig(iA,iB);
+    var fair=r.ps==='A'?nv.fa:nv.fb;
+    var yl=yourLines[r.id]!=null?yourLines[r.id]:null;
+    var adjFair=adjustFair(fair,r.point,yl,r.market);
+    var predRaw=preds[r.id];
+    var pred=(predRaw!==undefined&&predRaw!=='')?parseFloat(predRaw)/100:null;
+    var edgePct=(adjFair!=null&&pred!=null&&isFinite(pred))?(adjFair-pred)*100:null;
+    var units=edgeUnits(edgePct);
+    return {id:r.id,game:r.game,commence:r.commence,market:r.market,side:r.side,american:r.american,point:r.point,ps:r.ps,pairId:r.pairId,fair:fair,adjFair:adjFair,yourLine:yl,edgePct:edgePct,units:units,betSize:units*unit};
   });
-
-  var computed = rawRows.map(function(r) {
-    var pair = pairs[r.pairId]||{};
-    var iA   = pair.A ? americanToImplied(pair.A.american) : null;
-    var iB   = pair.B ? americanToImplied(pair.B.american) : null;
-    var nv   = noVig(iA, iB);
-    var fair = r.ps==='A' ? nv.fa : nv.fb;
-    var predRaw  = preds[r.id];
-    var pred     = (predRaw!==undefined && predRaw!=='') ? parseFloat(predRaw)/100 : null;
-    var yourLine = yourLines[r.id] !== undefined ? yourLines[r.id] : null;
-    var adjFair  = adjustFairForLine(fair, r.point, yourLine, r.market);
-    var edgePct  = (adjFair!=null && pred!=null && isFinite(pred)) ? (adjFair-pred)*100 : null;
-    var units    = edgeUnits(edgePct);
-    return {id:r.id, game:r.game, commence:r.commence, market:r.market, side:r.side, american:r.american, point:r.point, ps:r.ps, pairId:r.pairId, fair:fair, adjFair:adjFair, yourLine:yourLine, edgePct:edgePct, units:units, betSize:units*unit};
+  var filtered=computed.filter(function(r){
+    if(!q) return true;
+    return (r.game+' '+r.side+' '+r.market).toLowerCase().indexOf(q)!==-1;
   });
-
-  var filtered = computed.filter(function(r) {
-    if (!q) return true;
-    return (r.game+' '+r.side+' '+r.market).toLowerCase().indexOf(q) !== -1;
+  filtered.sort(function(a,b){
+    return (b.edgePct!=null?b.edgePct:-9999)-(a.edgePct!=null?a.edgePct:-9999);
   });
-
-  filtered.sort(function(a,b) {
-    return (b.edgePct!=null?b.edgePct:-9999) - (a.edgePct!=null?a.edgePct:-9999);
-  });
-
-  var edgeCount = filtered.filter(function(r){ return r.edgePct!=null && r.edgePct>0; }).length;
-  document.getElementById('stat-lines').textContent = filtered.length;
-  document.getElementById('stat-edges').textContent = edgeCount;
-
-  if (!filtered.length) {
-    document.getElementById('tbody').innerHTML = '<tr class="state-row"><td colspan="10">No results for current filters</td></tr>';
+  var edgeCount=filtered.filter(function(r){return r.edgePct!=null&&r.edgePct>0;}).length;
+  document.getElementById('stat-lines').textContent=filtered.length;
+  document.getElementById('stat-edges').textContent=edgeCount;
+  if(!filtered.length){
+    document.getElementById('tbody').innerHTML='<tr class="state-row"><td colspan="12">No results for current filters</td></tr>';
     return;
   }
-  document.getElementById('tbody').innerHTML = filtered.map(buildRow).join('');
+  document.getElementById('tbody').innerHTML=filtered.map(buildRow).join('');
 }
 
 function buildRow(r) {
-  var oddsStr  = fmtAmerican(r.american);
-  var oddsCls  = Number(r.american) >= 0 ? 'odds-pos' : 'odds-neg';
-  var lineStr  = '-';
-  if (r.point != null) {
-    lineStr = r.market==='Total' ? (r.ps==='A'?'O ':'U ')+Math.abs(r.point) : (r.point>=0?'+'+r.point:''+r.point);
+  var oddsStr=fmtAmerican(r.american);
+  var oddsCls=Number(r.american)>=0?'odds-pos':'odds-neg';
+  var lineStr='-';
+  if(r.point!=null){
+    lineStr=r.market==='Total'?(r.ps==='A'?'O ':'U ')+Math.abs(r.point):(r.point>=0?'+'+r.point:''+r.point);
   }
-  var fairStr    = r.fair!=null    ? (r.fair*100).toFixed(1)+'%'    : '-';
-  var adjFairStr = r.adjFair!=null ? (r.adjFair*100).toFixed(1)+'%' : '-';
-  var yourLineVal = (r.yourLine !== null && r.yourLine !== undefined) ? r.yourLine : '';
-  var fdLineDefault = r.point != null ? r.point : '';
-  var edgeStr='-', edgeCls='e-none', barW=0, barC='var(--muted2)';
-  if (r.edgePct!=null) {
-    edgeStr = (r.edgePct>0?'+':'')+r.edgePct.toFixed(1)+'%';
-    if      (r.edgePct>=8) { edgeCls='e-strong'; barC='var(--green)'; }
-    else if (r.edgePct>=5) { edgeCls='e-med';    barC='#7ddfab'; }
-    else if (r.edgePct>0)  { edgeCls='e-weak';   barC='var(--yellow)'; }
-    else                   { edgeCls='e-neg';     barC='var(--red)'; }
-    barW = Math.min(Math.abs(r.edgePct)*5, 50);
+  var fairStr=r.fair!=null?(r.fair*100).toFixed(1)+'%':'-';
+  var adjStr=r.adjFair!=null?(r.adjFair*100).toFixed(1)+'%':'-';
+  var adjChanged=(r.yourLine!=null&&r.point!=null&&parseFloat(r.yourLine)!==parseFloat(r.point));
+  var edgeStr='-',edgeCls='e-none',barW=0,barC='var(--muted2)';
+  if(r.edgePct!=null){
+    edgeStr=(r.edgePct>0?'+':'')+r.edgePct.toFixed(1)+'%';
+    if(r.edgePct>=8){edgeCls='e-strong';barC='var(--green)';}
+    else if(r.edgePct>=5){edgeCls='e-med';barC='#7ddfab';}
+    else if(r.edgePct>0){edgeCls='e-weak';barC='var(--yellow)';}
+    else{edgeCls='e-neg';barC='var(--red)';}
+    barW=Math.min(Math.abs(r.edgePct)*5,50);
   }
-  var unitsHtml = r.units===0 ? '<span class="u-pass">PASS</span>' : '<span class="u-val">'+r.units+'u</span>';
-  var betHtml   = r.units===0 ? '<span class="u-pass">-</span>' : '<span class="bet-val">$'+r.betSize.toFixed(0)+'</span>';
-  var timeStr   = '';
-  if (r.commence) timeStr = r.commence.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' '+r.commence.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
-  var predVal   = preds[r.id]||'';
+  var unitsHtml=r.units===0?'<span class="u-pass">PASS</span>':'<span class="u-val">'+r.units+'u</span>';
+  var betHtml=r.units===0?'<span class="u-pass">-</span>':'<span class="bet-val">$'+r.betSize.toFixed(0)+'</span>';
+  var timeStr='';
+  if(r.commence) timeStr=r.commence.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' '+r.commence.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+  var predVal=preds[r.id]||'';
+  var ylVal=r.yourLine!=null?r.yourLine:'';
+  var fdLinePlaceholder=r.point!=null?r.point:'';
+  var lineCls=adjChanged?' line-changed':'';
 
   return '<tr class="'+(r.edgePct!=null&&r.edgePct>0?'has-edge':'')+'">'
     +'<td><div class="game-name">'+r.game+'</div>'+(timeStr?'<div class="game-time">'+timeStr+'</div>':'')+'</td>'
@@ -366,78 +366,70 @@ function buildRow(r) {
     +'<td style="font-family:var(--mono);color:var(--muted);font-size:12px">'+lineStr+'</td>'
     +'<td class="r"><span class="'+oddsCls+'">'+oddsStr+'</span></td>'
     +'<td class="r" style="font-family:var(--mono);color:var(--muted)">'+fairStr+'</td>'
-    +'<td class="c"><div class="pred-wrap"><input class="pred-inp'+(predVal?' filled':'')+'" type="number" min="1" max="99" step="0.5" placeholder="-" value="'+predVal+'" data-id="'+r.id+'" onblur="setPred(this)" onkeydown="if(event.key===\'Enter\')this.blur()"><span class="pred-unit">%</span></div></td>'
+    +'<td class="c"><input class="cell-inp'+lineCls+'" type="number" step="0.5" placeholder="'+fdLinePlaceholder+'" value="'+ylVal+'" data-id="'+r.id+'" onblur="setLine(this)" onkeydown="if(event.key===\'Enter\')this.blur()" title="Defaults to FD line. Change if your market has a different line."></td>'
+    +'<td class="r" style="font-family:var(--mono);color:'+(adjChanged?'var(--yellow)':'var(--muted)')+'">'+adjStr+'</td>'
+    +'<td class="c"><div style="display:flex;align-items:center;gap:4px;justify-content:center"><input class="cell-inp'+(predVal?' filled':'')+'" type="number" min="1" max="99" step="0.5" placeholder="-" value="'+predVal+'" data-id="'+r.id+'" onblur="setPred(this)" onkeydown="if(event.key===\'Enter\')this.blur()"><span class="pred-unit">%</span></div></td>'
     +'<td class="r"><div class="edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:'+barW+'px;background:'+barC+'"></div></div><span class="edge-val '+edgeCls+'">'+edgeStr+'</span></div></td>'
     +'<td class="r">'+unitsHtml+'</td>'
     +'<td class="r">'+betHtml+'</td>'
     +'</tr>';
 }
 
+function setLine(input) {
+  var id=input.getAttribute('data-id');
+  yourLines[id]=input.value!==''?parseFloat(input.value):null;
+  var r=rawRows.find(function(x){return x.id===id;});
+  if(!r) return;
+  var fair=getFair(r);
+  var yl=yourLines[id];
+  var adjFair=adjustFair(fair,r.point,yl,r.market);
+  var adjChanged=(yl!=null&&r.point!=null&&parseFloat(yl)!==parseFloat(r.point));
+  input.classList.toggle('line-changed',adjChanged);
+  var tr=input.closest('tr');
+  if(!tr) return;
+  var tds=tr.querySelectorAll('td');
+  tds[7].textContent=adjFair!=null?(adjFair*100).toFixed(1)+'%':'-';
+  tds[7].style.color=adjChanged?'var(--yellow)':'var(--muted)';
+  tds[7].style.textAlign='right';
+  tds[7].style.fontFamily='var(--mono)';
+  var predInput=tr.querySelector('input[data-id="'+id+'"].cell-inp:not(.line-changed)');
+  if(!predInput){
+    var all=tr.querySelectorAll('input[data-id="'+id+'"]');
+    if(all.length>1) predInput=all[all.length-1];
+  }
+  if(predInput) setPred(predInput);
+}
+
 function setPred(input) {
-  var id = input.getAttribute('data-id');
-  preds[id] = input.value;
-  input.classList.toggle('filled', !!input.value);
-  var tr = input.closest('tr');
-  if (!tr) return;
-  var r = rawRows.find(function(x){ return x.id===id; });
-  if (!r) return;
-  var pairs = {};
-  rawRows.forEach(function(x){ if(!pairs[x.pairId]) pairs[x.pairId]={}; pairs[x.pairId][x.ps]=x; });
-  var pair = pairs[r.pairId]||{};
-  var iA   = pair.A ? americanToImplied(pair.A.american) : null;
-  var iB   = pair.B ? americanToImplied(pair.B.american) : null;
-  var nv   = noVig(iA, iB);
-  var fair = r.ps==='A' ? nv.fa : nv.fb;
-  var pred     = input.value!=='' ? parseFloat(input.value)/100 : null;
-  var yourLine = yourLines[id] !== undefined ? yourLines[id] : null;
-  var adjFair  = adjustFairForLine(fair, r.point, yourLine, r.market);
-  var edgePct  = (adjFair!=null&&pred!=null&&isFinite(pred)) ? (adjFair-pred)*100 : null;
-  var units   = edgeUnits(edgePct);
-  var unit    = parseFloat(document.getElementById('unit-size').value)||300;
-  var edgeStr='-', edgeCls='e-none', barW=0, barC='var(--muted2)';
-  if (edgePct!=null) {
+  var id=input.getAttribute('data-id');
+  preds[id]=input.value;
+  input.classList.toggle('filled',!!input.value);
+  var tr=input.closest('tr');
+  if(!tr) return;
+  var r=rawRows.find(function(x){return x.id===id;});
+  if(!r) return;
+  var fair=getFair(r);
+  var yl=yourLines[id]!=null?yourLines[id]:null;
+  var adjFair=adjustFair(fair,r.point,yl,r.market);
+  var pred=input.value!==''?parseFloat(input.value)/100:null;
+  var edgePct=(adjFair!=null&&pred!=null&&isFinite(pred))?(adjFair-pred)*100:null;
+  var units=edgeUnits(edgePct);
+  var unit=parseFloat(document.getElementById('unit-size').value)||300;
+  var edgeStr='-',edgeCls='e-none',barW=0,barC='var(--muted2)';
+  if(edgePct!=null){
     edgeStr=(edgePct>0?'+':'')+edgePct.toFixed(1)+'%';
-    if      (edgePct>=8) { edgeCls='e-strong'; barC='var(--green)'; }
-    else if (edgePct>=5) { edgeCls='e-med';    barC='#7ddfab'; }
-    else if (edgePct>0)  { edgeCls='e-weak';   barC='var(--yellow)'; }
-    else                 { edgeCls='e-neg';     barC='var(--red)'; }
+    if(edgePct>=8){edgeCls='e-strong';barC='var(--green)';}
+    else if(edgePct>=5){edgeCls='e-med';barC='#7ddfab';}
+    else if(edgePct>0){edgeCls='e-weak';barC='var(--yellow)';}
+    else{edgeCls='e-neg';barC='var(--red)';}
     barW=Math.min(Math.abs(edgePct)*5,50);
   }
   var tds=tr.querySelectorAll('td');
   tds[9].innerHTML='<div class="edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:'+barW+'px;background:'+barC+'"></div></div><span class="edge-val '+edgeCls+'">'+edgeStr+'</span></div>';
   tds[10].innerHTML=units===0?'<span class="u-pass">PASS</span>':'<span class="u-val">'+units+'u</span>';
   tds[11].innerHTML=units===0?'<span class="u-pass">-</span>':'<span class="bet-val">$'+(units*unit).toFixed(0)+'</span>';
-  tr.classList.toggle('has-edge', edgePct!=null&&edgePct>0);
+  tr.classList.toggle('has-edge',edgePct!=null&&edgePct>0);
   document.getElementById('stat-edges').textContent=document.querySelectorAll('tr.has-edge').length;
-}
-
-function setLine(input) {
-  var id = input.getAttribute('data-id');
-  yourLines[id] = input.value !== '' ? parseFloat(input.value) : null;
-
-  var tr = input.closest('tr');
-  if (!tr) return;
-  var r = rawRows.find(function(x){ return x.id===id; });
-  if (!r) return;
-
-  var pairs = {};
-  rawRows.forEach(function(x){ if(!pairs[x.pairId]) pairs[x.pairId]={}; pairs[x.pairId][x.ps]=x; });
-  var pair = pairs[r.pairId]||{};
-  var iA   = pair.A ? americanToImplied(pair.A.american) : null;
-  var iB   = pair.B ? americanToImplied(pair.B.american) : null;
-  var nv   = noVig(iA, iB);
-  var fair = r.ps==='A' ? nv.fa : nv.fb;
-  var yourLine = yourLines[id];
-  var adjFair  = adjustFairForLine(fair, r.point, yourLine, r.market);
-
-  // Update adj fair cell (index 8)
-  var tds = tr.querySelectorAll('td');
-  tds[8].textContent = adjFair != null ? (adjFair*100).toFixed(1)+'%' : '-';
-  tds[8].style.cssText = 'text-align:right;font-family:var(--mono);color:var(--muted)';
-
-  // Re-trigger edge calc using existing pred input
-  var predInput = tr.querySelector('.pred-inp');
-  if (predInput) setPred(predInput);
 }
 
 buildTabs();
