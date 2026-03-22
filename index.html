@@ -181,6 +181,9 @@ function edgeUnits(e) {
 }
 
 // Each 0.5 point shift in spread/total = ~3% probability shift
+// A better line (more points for you) increases your fair value
+// e.g. FD: -9 (fav), Your line: -7 (easier) -> fair goes UP for fav
+// e.g. FD: +9 (dog), Your line: +7 (worse)  -> fair goes DOWN for dog
 function adjustFair(fair, fdLine, yourLine, market) {
   if (fair==null||market==='ML') return fair;
   if (fdLine==null||yourLine==null||yourLine===''||yourLine===undefined) return fair;
@@ -189,10 +192,15 @@ function adjustFair(fair, fdLine, yourLine, market) {
   if (!isFinite(yl)||!isFinite(fd)) return fair;
   var diff = yl - fd;
   if (diff===0) return fair;
-  // cap adjustment at +/- 10 points to prevent runaway values
+  // cap at 10 points
   diff = Math.max(Math.min(diff, 10), -10);
+  // If favorite (fd < 0): getting fewer points (diff > 0) = better = fair goes up
+  // If underdog (fd > 0): getting fewer points (diff < 0) = worse = fair goes down
+  // In both cases: more points = better, so diff > 0 means your line is more points
+  // For favorite: yl=-7, fd=-9, diff=+2 -> easier -> fair UP -> subtract negative
+  // For underdog: yl=+7, fd=+9, diff=-2 -> worse -> fair DOWN -> subtract positive
   var adj = (diff/0.5)*0.03;
-  return Math.min(Math.max(fair - adj, 0.01), 0.99);
+  return Math.min(Math.max(fair + adj, 0.01), 0.99);
 }
 
 function buildTabs() {
