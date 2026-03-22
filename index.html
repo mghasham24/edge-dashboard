@@ -269,63 +269,53 @@ function buildTabs(){
 
 function parseGames(games){
   var rows=[];
+  function amToDec(a){return a>=0?(a/100)+1:(100/Math.abs(a))+1;}
+  function decToAm(d){return d>=2?Math.round((d-1)*100):Math.round(-100/(d-1));}
+  function filterOutcomes(outcomes,mk){
+    if(mk==='h2h'&&outcomes.length===3)
+      return outcomes.filter(function(o){return o.name.toLowerCase()!=='draw';});
+    return outcomes;
+  }
+
   games.forEach(function(g){
     var books=g.bookmakers||[];if(!books.length)return;
-    var mkts={};books.forEach(function(b){(b.markets||[]).forEach(function(m){mkts[m.key]=true;});});
-    Object.keys(mkts).forEach(function(mk){
-      var oA=[],oB=[],pA=[],pB=[],nA=null,nB=null;
+
+    // Use FanDuel as the anchor book for lines
+    var fdBook=books.find(function(b){return b.key==='fanduel';});
+    if(!fdBook)return;
+
+    (fdBook.markets||[]).forEach(function(fdMkt){
+      var mk=fdMkt.key;
+      var fdOutcomes=filterOutcomes(fdMkt.outcomes||[],mk);
+      if(fdOutcomes.length!==2)return;
+
+      var fdA=fdOutcomes[0],fdB=fdOutcomes[1];
+      var nA=fdA.name,nB=fdB.name;
+      var fdPtA=fdA.point!=null?fdA.point:null;
+      var fdPtB=fdB.point!=null?fdB.point:null;
+
+      // Collect odds from ALL books that have the SAME line as FanDuel
+      var oA=[amToDec(fdA.price)],oB=[amToDec(fdB.price)];
       books.forEach(function(b){
+        if(b.key==='fanduel')return;
         var m=(b.markets||[]).find(function(x){return x.key===mk;});
-        if(!m||!m.outcomes||m.outcomes.length<2)return;
-        // Handle 3-way soccer markets - skip draw, use home/away only for h2h
-        var outcomes=m.outcomes;
-        if(mk==='h2h'&&outcomes.length===3){
-          // find draw and exclude it
-          outcomes=outcomes.filter(function(o){return o.name.toLowerCase()!=='draw';});
-        }
+        if(!m)return;
+        var outcomes=filterOutcomes(m.outcomes||[],mk);
         if(outcomes.length!==2)return;
         var A=outcomes[0],B=outcomes[1];
-        if(!nA){nA=A.name;nB=B.name;}
-        oA.push(A.price);oB.push(B.price);
-        if(A.point!=null)pA.push(A.point);
-        if(B.point!=null)pB.push(B.point);
+        // Only include if line matches FD exactly
+        var sameLineA=(fdPtA==null&&A.point==null)||(fdPtA!=null&&A.point!=null&&Math.round(A.point*2)/2===Math.round(fdPtA*2)/2);
+        if(sameLineA){oA.push(amToDec(A.price));oB.push(amToDec(B.price));}
       });
-      if(!oA.length)return;
-      // Fix: only average odds from books that have matching lines
-      // to avoid mixing odds from different spread/total numbers
-      function amToDecimal(a){return a>=0?(a/100)+1:(100/Math.abs(a))+1;}
-      function decimalToAm(d){return d>=2?Math.round((d-1)*100):Math.round(-100/(d-1));}
 
-      // Find most common line for side A
-      if(pA.length>0){
-        var lineCountA={};
-        pA.forEach(function(p){var k=Math.round(p*2)/2;lineCountA[k]=(lineCountA[k]||0)+1;});
-        var modeLineA=parseFloat(Object.keys(lineCountA).reduce(function(a,b){return lineCountA[a]>lineCountA[b]?a:b;}));
-        // only use odds from books where lineA matches mode
-        var filtOA=[],filtOB=[];
-        books.forEach(function(b){
-          var m=(b.markets||[]).find(function(x){return x.key===mk;});
-          if(!m||!m.outcomes||m.outcomes.length!==2)return;
-          var A=m.outcomes[0],B=m.outcomes[1];
-          if(A.point!=null&&Math.round(A.point*2)/2===modeLineA){
-            filtOA.push(A.price);filtOB.push(B.price);
-          }
-        });
-        if(filtOA.length){oA=filtOA;oB=filtOB;}
-      }
-
-      var avgDecA=oA.map(amToDecimal).reduce(function(s,v){return s+v;},0)/oA.length;
-      var avgDecB=oB.map(amToDecimal).reduce(function(s,v){return s+v;},0)/oB.length;
-      var avgA=decimalToAm(avgDecA);
-      var avgB=decimalToAm(avgDecB);
-      var ptA=pA.length?pA.reduce(function(s,v){return s+v;},0)/pA.length:null;
-      var ptB=pB.length?pB.reduce(function(s,v){return s+v;},0)/pB.length:null;
+      var avgA=decToAm(oA.reduce(function(s,v){return s+v;},0)/oA.length);
+      var avgB=decToAm(oB.reduce(function(s,v){return s+v;},0)/oB.length);
       var lbl=mktLbl(mk);
       var gs=g.away_team+' @ '+g.home_team;
       var cm=g.commence_time?new Date(g.commence_time):null;
       var pid=g.id+'-'+mk;
-      rows.push({id:pid+'-A',game:gs,cm:cm,mkt:lbl,side:nA,am:Math.round(avgA),pt:ptA!=null?Math.round(ptA*2)/2:null,pid:pid,ps:'A'});
-      rows.push({id:pid+'-B',game:gs,cm:cm,mkt:lbl,side:nB,am:Math.round(avgB),pt:ptB!=null?Math.round(ptB*2)/2:null,pid:pid,ps:'B'});
+      rows.push({id:pid+'-A',game:gs,cm:cm,mkt:lbl,side:nA,am:avgA,pt:fdPtA,pid:pid,ps:'A'});
+      rows.push({id:pid+'-B',game:gs,cm:cm,mkt:lbl,side:nB,am:avgB,pt:fdPtB,pid:pid,ps:'B'});
     });
   });
   return rows;
