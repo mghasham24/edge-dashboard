@@ -168,7 +168,7 @@ td.r{text-align:right}td.c{text-align:center}
 </div>
 
 <script>
-var SPORTS=[{key:'basketball_nba',label:'NBA'},{key:'basketball_ncaab',label:'NCAAB'},{key:'icehockey_nhl',label:'NHL'},{key:'baseball_mlb',label:'MLB'},{key:'mma_mixed_martial_arts',label:'UFC/MMA'}];
+var SPORTS=[{key:'basketball_nba',label:'NBA'},{key:'basketball_ncaab',label:'NCAAB'},{key:'icehockey_nhl',label:'NHL'},{key:'baseball_mlb',label:'MLB'},{key:'mma_mixed_martial_arts',label:'UFC/MMA'},{key:'soccer_epl',label:'EPL'},{key:'soccer_uefa_champs_league',label:'UCL'}];
 var MARKET_KEYS={ML:'h2h',Spread:'spreads',Total:'totals'};
 var COLORS=['#4f6ef7','#2dcc7e','#f5c842','#f05252','#a78bfa','#38bdf8','#fb923c','#e879f9','#34d399','#f87171','#60a5fa','#fbbf24','#a3e635','#c084fc','#fb7185','#22d3ee'];
 var currentSport='basketball_nba';
@@ -276,8 +276,15 @@ function parseGames(games){
       var oA=[],oB=[],pA=[],pB=[],nA=null,nB=null;
       books.forEach(function(b){
         var m=(b.markets||[]).find(function(x){return x.key===mk;});
-        if(!m||!m.outcomes||m.outcomes.length!==2)return;
-        var A=m.outcomes[0],B=m.outcomes[1];
+        if(!m||!m.outcomes||m.outcomes.length<2)return;
+        // Handle 3-way soccer markets - skip draw, use home/away only for h2h
+        var outcomes=m.outcomes;
+        if(mk==='h2h'&&outcomes.length===3){
+          // find draw and exclude it
+          outcomes=outcomes.filter(function(o){return o.name.toLowerCase()!=='draw';});
+        }
+        if(outcomes.length!==2)return;
+        var A=outcomes[0],B=outcomes[1];
         if(!nA){nA=A.name;nB=B.name;}
         oA.push(A.price);oB.push(B.price);
         if(A.point!=null)pA.push(A.point);
@@ -331,7 +338,8 @@ function loadOdds(){
   btn.disabled=true;dot.className='sdot loading';stxt.textContent='Fetching '+lbl+'...';
   document.getElementById('tbody').innerHTML='<tr class="state-row"><td colspan="12">Loading...</td></tr>';
   var sel=document.getElementById('mkt-filter').value;
-  var mkts=currentSport==='mma_mixed_martial_arts'?'h2h':sel==='ALL'?'h2h,spreads,totals':(MARKET_KEYS[sel]||'h2h');
+  var noSpread=['mma_mixed_martial_arts'];
+var mkts=noSpread.indexOf(currentSport)!==-1?'h2h':sel==='ALL'?'h2h,spreads,totals':(MARKET_KEYS[sel]||'h2h');
   fetch('/api/odds?sport='+currentSport+'&markets='+mkts+'&bookmakers=fanduel,draftkings,betmgm,caesars')
     .then(function(r){var rem=r.headers.get('x-requests-remaining');if(rem)document.getElementById('api-remaining').textContent=rem+' requests left';return r.json();})
     .then(function(d){
