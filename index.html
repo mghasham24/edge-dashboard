@@ -153,7 +153,7 @@ td.r{text-align:right}td.c{text-align:center}
         <th>Mkt</th>
         <th>Side</th>
         <th>Consensus Line</th>
-        <th class="r">Consensus</th>
+        <th class="r">FD Odds</th>
         <th class="r">No-Vig %</th>
         <th class="c">Your Line</th>
         <th class="r">Adj. Fair %</th>
@@ -269,53 +269,26 @@ function buildTabs(){
 
 function parseGames(games){
   var rows=[];
-  function amToDec(a){return a>=0?(a/100)+1:(100/Math.abs(a))+1;}
-  function decToAm(d){return d>=2?Math.round((d-1)*100):Math.round(-100/(d-1));}
   function filterOutcomes(outcomes,mk){
     if(mk==='h2h'&&outcomes.length===3)
       return outcomes.filter(function(o){return o.name.toLowerCase()!=='draw';});
     return outcomes;
   }
-
   games.forEach(function(g){
     var books=g.bookmakers||[];if(!books.length)return;
-
-    // Use FanDuel as the anchor book for lines
-    var fdBook=books.find(function(b){return b.key==='fanduel';});
-    if(!fdBook)return;
-
-    (fdBook.markets||[]).forEach(function(fdMkt){
+    var fd=books.find(function(b){return b.key==='fanduel';});
+    if(!fd)return;
+    (fd.markets||[]).forEach(function(fdMkt){
       var mk=fdMkt.key;
-      var fdOutcomes=filterOutcomes(fdMkt.outcomes||[],mk);
-      if(fdOutcomes.length!==2)return;
-
-      var fdA=fdOutcomes[0],fdB=fdOutcomes[1];
-      var nA=fdA.name,nB=fdB.name;
-      var fdPtA=fdA.point!=null?fdA.point:null;
-      var fdPtB=fdB.point!=null?fdB.point:null;
-
-      // Collect odds from ALL books that have the SAME line as FanDuel
-      var oA=[amToDec(fdA.price)],oB=[amToDec(fdB.price)];
-      books.forEach(function(b){
-        if(b.key==='fanduel')return;
-        var m=(b.markets||[]).find(function(x){return x.key===mk;});
-        if(!m)return;
-        var outcomes=filterOutcomes(m.outcomes||[],mk);
-        if(outcomes.length!==2)return;
-        var A=outcomes[0],B=outcomes[1];
-        // Only include if line matches FD exactly
-        var sameLineA=(fdPtA==null&&A.point==null)||(fdPtA!=null&&A.point!=null&&Math.round(A.point*2)/2===Math.round(fdPtA*2)/2);
-        if(sameLineA){oA.push(amToDec(A.price));oB.push(amToDec(B.price));}
-      });
-
-      var avgA=decToAm(oA.reduce(function(s,v){return s+v;},0)/oA.length);
-      var avgB=decToAm(oB.reduce(function(s,v){return s+v;},0)/oB.length);
+      var outcomes=filterOutcomes(fdMkt.outcomes||[],mk);
+      if(outcomes.length!==2)return;
+      var A=outcomes[0],B=outcomes[1];
       var lbl=mktLbl(mk);
       var gs=g.away_team+' @ '+g.home_team;
       var cm=g.commence_time?new Date(g.commence_time):null;
       var pid=g.id+'-'+mk;
-      rows.push({id:pid+'-A',game:gs,cm:cm,mkt:lbl,side:nA,am:avgA,pt:fdPtA,pid:pid,ps:'A'});
-      rows.push({id:pid+'-B',game:gs,cm:cm,mkt:lbl,side:nB,am:avgB,pt:fdPtB,pid:pid,ps:'B'});
+      rows.push({id:pid+'-A',game:gs,cm:cm,mkt:lbl,side:A.name,am:A.price,pt:A.point!=null?A.point:null,pid:pid,ps:'A'});
+      rows.push({id:pid+'-B',game:gs,cm:cm,mkt:lbl,side:B.name,am:B.price,pt:B.point!=null?B.point:null,pid:pid,ps:'B'});
     });
   });
   return rows;
@@ -336,7 +309,7 @@ var mkts=noSpread.indexOf(currentSport)!==-1?'h2h':sel==='ALL'?'h2h,spreads,tota
       if(Array.isArray(d)){
         rawRows=parseGames(d);
         var now=new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit',second:'2-digit'});
-        if(rawRows.length){dot.className='sdot live';stxt.textContent='Updated '+now+' - '+(rawRows.length/2|0)+' games - Consensus';}
+        if(rawRows.length){dot.className='sdot live';stxt.textContent='Updated '+now+' - '+(rawRows.length/2|0)+' games - FanDuel';}
         else{dot.className='sdot error';stxt.textContent='No '+lbl+' games right now';}
       }else{rawRows=[];dot.className='sdot error';stxt.textContent='API error';}
     })
@@ -446,7 +419,7 @@ function buildRow(r,color,isC){
   var uH=r.u===0?'<span class="u-pass">PASS</span>':'<span class="u-val">'+r.u+'u</span>';
   var bH=r.u===0?'<span class="u-pass">-</span>':'<span class="bet-val">$'+r.bet.toFixed(0)+'</span>';
   var pv=preds[r.id]||'';
-  var ylv=r.yl!=null?r.yl:'';
+  var ylv=(r.yl!=null&&r.yl!=='')?r.yl:'';
   var ph=r.pt!=null?r.pt:'';
   var lc=afChanged?' line-changed':'';
   var ylCell=r.mkt==='ML'
