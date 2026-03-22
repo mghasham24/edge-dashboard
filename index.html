@@ -361,7 +361,10 @@ function getFair(r){
 function toggleGame(gameKey){
   collapsedGames[gameKey]=!collapsedGames[gameKey];
   document.querySelectorAll('[data-game="'+CSS.escape(gameKey)+'"]').forEach(function(tr){
-    tr.classList.toggle('collapsed-row',!!collapsedGames[gameKey]);
+    // Only hide non-header rows
+    if(!tr.classList.contains('game-header-row')){
+      tr.classList.toggle('collapsed-row',!!collapsedGames[gameKey]);
+    }
   });
   var btn=document.querySelector('[data-toggle="'+CSS.escape(gameKey)+'"]');
   if(btn)btn.classList.toggle('collapsed',!!collapsedGames[gameKey]);
@@ -466,6 +469,7 @@ function buildRow(r,gameColor,isCollapsed){
   var betHtml=r.units===0?'<span class="u-pass">-</span>':'<span class="bet-val">$'+r.betSize.toFixed(0)+'</span>';
   var predVal=preds[r.id]||'';
   var ylVal=r.yourLine!=null?r.yourLine:'';
+  var fdPlaceholderDisplay=r.point!=null?r.point:'';
   var fdPlaceholder=r.point!=null?r.point:'';
   var lineCls=adjChanged?' line-changed':'';
   var yourLineCell=r.market==='ML'
