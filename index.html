@@ -194,13 +194,21 @@ function novig(a,b){if(a==null||b==null)return{fa:null,fb:null};var t=a+b;if(!is
 function mktLbl(m){return m==='h2h'?'ML':m==='spreads'?'Spread':m==='totals'?'Total':m;}
 function fmtAm(n){n=Number(n);return!isFinite(n)?'-':n>=0?'+'+n:''+n;}
 function units(e){if(e==null||!isFinite(e))return 0;if(e>=12)return 3;if(e>=8)return 2;if(e>=5)return 1;if(e>=3)return 0.5;return 0;}
-function adjFair(fair,fd,yl,mkt){
+function adjFair(fair,fd,yl,mkt,ps){
   if(fair==null||mkt==='ML')return fair;
   if(fd==null||yl==null||yl==='')return fair;
   var d=parseFloat(yl)-parseFloat(fd);
   if(!isFinite(d)||d===0)return fair;
   d=Math.max(Math.min(d,10),-10);
-  return Math.min(Math.max(fair+(d/0.5)*0.03,0.01),0.99);
+  var adj=(d/0.5)*0.03;
+  if(mkt==='Total'){
+    // For Over: higher line = harder = fair goes DOWN
+    // For Under: higher line = easier = fair goes UP
+    // ps='A' is always Over, ps='B' is always Under
+    adj = ps==='A' ? -adj : adj;
+  }
+  // For Spread: more points = better for that side = fair goes UP
+  return Math.min(Math.max(fair+adj,0.01),0.99);
 }
 function timeInfo(c){
   if(!c)return{lbl:'TBD',cls:''};
@@ -365,7 +373,7 @@ function renderTable(){
     var nv=novig(p.A?imp(p.A.am):null,p.B?imp(p.B.am):null);
     var fair=r.ps==='A'?nv.fa:nv.fb;
     var yl=yourLines[r.id]!=null?yourLines[r.id]:null;
-    var af=adjFair(fair,r.pt,yl,r.mkt);
+    var af=adjFair(fair,r.pt,yl,r.mkt,r.ps);
     var pr=preds[r.id];
     var pred=(pr!==undefined&&pr!=='')?parseFloat(pr)/100:null;
     var edge=(af!=null&&pred!=null&&isFinite(pred))?(af-pred)*100:null;
@@ -470,7 +478,7 @@ function setLine(input){
   var tr=input.closest('tr');if(!tr)return;
   var r=rawRows.find(function(x){return x.id===id;});if(!r)return;
   var fair=getFair(r);
-  var af=adjFair(fair,r.pt,yourLines[id],r.mkt);
+  var af=adjFair(fair,r.pt,yourLines[id],r.mkt,r.ps);
   var changed=(yourLines[id]!=null&&r.pt!=null&&parseFloat(yourLines[id])!==parseFloat(r.pt));
   var tds=tr.querySelectorAll('td');
   // col 7 = Adj. Fair (0-indexed: Game=0,Mkt=1,Side=2,FDLine=3,Consensus=4,NoVig=5,YourLine=6,AdjFair=7)
@@ -488,7 +496,7 @@ function setPred(input){
   var r=rawRows.find(function(x){return x.id===id;});if(!r)return;
   var fair=getFair(r);
   var yl=yourLines[id]!=null?yourLines[id]:null;
-  var af=adjFair(fair,r.pt,yl,r.mkt);
+  var af=adjFair(fair,r.pt,yl,r.mkt,r.ps);
   var pred=input.value!==''?parseFloat(input.value)/100:null;
   var edge=(af!=null&&pred!=null&&isFinite(pred))?(af-pred)*100:null;
   var u=units(edge);
