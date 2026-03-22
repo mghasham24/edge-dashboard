@@ -13,24 +13,19 @@
   --text:#f0eff5;--muted:#7a7990;--muted2:#4a4960;
   --accent:#4f6ef7;--green:#2dcc7e;--yellow:#f5c842;--red:#f05252;
   --mono:'IBM Plex Mono',monospace;--sans:'Barlow',system-ui,sans-serif;
+  --header-h:60px;
 }
 body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;min-height:100vh;padding:0 0 80px}
-
-/* HEADER */
-.header{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:60px;position:sticky;top:0;z-index:100}
+.header{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:var(--header-h);position:sticky;top:0;z-index:200}
 .logo{font-family:var(--mono);font-weight:600;font-size:15px;letter-spacing:.08em;display:flex;align-items:center;gap:8px}
 .logo-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:pulse 2s ease-in-out infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 .api-remaining{font-family:var(--mono);font-size:11px;color:var(--muted);padding:4px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:4px}
 .refresh-btn{background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:.05em;padding:7px 16px;border-radius:5px;cursor:pointer;text-transform:uppercase}
 .refresh-btn:hover{opacity:.85}.refresh-btn:disabled{opacity:.4;cursor:not-allowed}
-
-/* TABS */
 .sport-tabs{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 24px;display:flex;overflow-x:auto}
 .sport-tab{font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);padding:14px 18px;cursor:pointer;border:none;border-bottom:2px solid transparent;background:none;white-space:nowrap}
 .sport-tab:hover{color:var(--text)}.sport-tab.active{color:var(--text);border-bottom-color:var(--accent)}
-
-/* CONTROLS */
 .controls{padding:16px 24px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;border-bottom:1px solid var(--border);background:var(--bg2)}
 .ctrl-lbl{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
 .ctrl-sel,.ctrl-inp{background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--sans);font-size:13px;padding:6px 10px;border-radius:5px;outline:none}
@@ -42,15 +37,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 .stat-item{display:flex;flex-direction:column;align-items:flex-end}
 .stat-val{font-family:var(--mono);font-size:16px;font-weight:600;line-height:1}
 .stat-lbl{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-top:2px}
-
-/* STATUS */
 .status-bar{padding:8px 24px;font-family:var(--mono);font-size:11px;color:var(--muted);display:flex;align-items:center;gap:8px}
 .sdot{width:6px;height:6px;border-radius:50%;background:var(--muted2);flex-shrink:0}
 .sdot.live{background:var(--green);animation:pulse 1.5s ease-in-out infinite}
 .sdot.loading{background:var(--yellow);animation:pulse .8s ease-in-out infinite}
 .sdot.error{background:var(--red)}
-
-/* TABLE — desktop */
 .table-wrap{padding:0 24px;overflow-x:auto}
 table{width:100%;border-collapse:collapse;min-width:1100px}
 thead tr{border-bottom:1px solid var(--border2)}
@@ -59,12 +50,9 @@ th.r{text-align:right}th.c{text-align:center}
 tbody tr{border-bottom:1px solid var(--border);transition:background .1s}
 tbody tr:hover{background:var(--bg2)}
 tbody tr.has-edge{background:rgba(45,204,126,.03)}
+tbody tr.collapsed-row{display:none}
 td{padding:10px 12px;vertical-align:middle;font-size:13px}
 td.r{text-align:right}td.c{text-align:center}
-.game-name{font-weight:600;font-size:13px}
-.game-time{font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px}
-.time-urgent{color:var(--red)!important}
-.time-soon{color:var(--yellow)!important}
 .mkt-badge{display:inline-block;font-family:var(--mono);font-size:10px;font-weight:600;padding:2px 7px;border-radius:3px;background:var(--bg4);border:1px solid var(--border2);color:var(--muted)}
 .odds-pos{color:#6ee7b7;font-family:var(--mono);font-weight:600}
 .odds-neg{color:var(--text);font-family:var(--mono);font-weight:600}
@@ -82,38 +70,32 @@ td.r{text-align:right}td.c{text-align:center}
 .u-val{font-family:var(--mono);font-weight:600;color:var(--green)}
 .bet-val{font-family:var(--mono);font-size:13px;font-weight:600}
 .state-row td{padding:60px 0;text-align:center;color:var(--muted)}
-
-/* GAME HEADER ROW — sticky */
-.game-header-row{position:sticky;top:60px;z-index:10}
-.game-header-row td{padding:7px 12px;background:var(--bg3);border-top:2px solid var(--bg);border-bottom:1px solid var(--border2);cursor:pointer;user-select:none}
-.game-header-row:hover td{background:var(--bg4)}
-.game-header-inner{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
-.game-stripe{width:3px;height:14px;border-radius:2px;flex-shrink:0}
-.game-toggle{margin-left:auto;font-size:14px;color:var(--muted2);transition:transform .2s}
-.game-toggle.collapsed{transform:rotate(-90deg)}
-.game-time-badge{font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:3px;background:var(--bg4);border:1px solid var(--border2)}
-.game-time-badge.urgent{color:var(--red);border-color:rgba(240,82,82,.3);background:rgba(240,82,82,.08)}
-.game-time-badge.soon{color:var(--yellow);border-color:rgba(245,200,66,.3);background:rgba(245,200,66,.08)}
-.game-time-badge.normal{color:var(--muted)}
-tr.collapsed-row{display:none}
-
+/* GAME HEADER */
+.ghrow{background:var(--bg3)!important;cursor:pointer;border-top:2px solid var(--bg)!important}
+.ghrow:hover{background:var(--bg4)!important}
+.ghrow td{padding:7px 12px}
+.gh-inner{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.gh-stripe{width:3px;height:14px;border-radius:2px;flex-shrink:0}
+.gh-badge{font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:3px;background:var(--bg4);border:1px solid var(--border2);color:var(--muted)}
+.gh-badge.urgent{color:var(--red);border-color:rgba(240,82,82,.3);background:rgba(240,82,82,.08)}
+.gh-badge.soon{color:var(--yellow);border-color:rgba(245,200,66,.3);background:rgba(245,200,66,.08)}
+.gh-arrow{margin-left:auto;font-size:12px;color:var(--muted2);transition:transform .2s}
+.gh-arrow.up{transform:rotate(-180deg)}
 /* GATE */
 .gate{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:9999}
 .gate-box{background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:40px;display:flex;flex-direction:column;align-items:center;gap:20px;min-width:320px}
 .gate-logo{font-family:var(--mono);font-weight:600;font-size:18px;letter-spacing:.08em;display:flex;align-items:center;gap:8px}
-.gate-inp{background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:14px;padding:10px 16px;border-radius:6px;outline:none;width:100%;text-align:center;letter-spacing:.05em}
+.gate-inp{background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:14px;padding:10px 16px;border-radius:6px;outline:none;width:100%;text-align:center}
 .gate-inp:focus{border-color:var(--accent)}
-.gate-btn{background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:13px;font-weight:600;padding:10px 32px;border-radius:6px;cursor:pointer;width:100%;letter-spacing:.05em;text-transform:uppercase}
+.gate-btn{background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:13px;font-weight:600;padding:10px 32px;border-radius:6px;cursor:pointer;width:100%;text-transform:uppercase}
 .gate-btn:hover{opacity:.85}
 .gate-err{color:var(--red);font-family:var(--mono);font-size:12px;display:none}
-
 /* MOBILE */
 @media(max-width:768px){
   .header{padding:0 16px;height:52px}
-  .logo{font-size:13px}
   .api-remaining{display:none}
-  .sport-tabs{padding:0 16px}
-  .sport-tab{padding:12px 14px;font-size:11px}
+  .sport-tabs{padding:0 12px}
+  .sport-tab{padding:11px 12px;font-size:11px}
   .controls{padding:12px 16px;gap:8px}
   .search-inp{width:100%}
   .stats-pill{margin-left:0}
@@ -121,34 +103,27 @@ tr.collapsed-row{display:none}
   .table-wrap{padding:0;overflow-x:hidden}
   table,thead,tbody,th,td,tr{display:block}
   thead{display:none}
-  tbody tr.game-header-row{position:sticky;top:52px;z-index:10}
-  tbody tr.game-header-row td{padding:8px 16px}
-  tbody tr:not(.game-header-row):not(.state-row){
-    margin:0 16px 8px;
-    border-radius:8px;
-    border:1px solid var(--border2);
-    border-left:3px solid var(--game-color,var(--border2));
-    background:var(--bg2);
-    overflow:hidden;
+  tbody tr:not(.ghrow):not(.state-row){
+    margin:0 16px 8px;border-radius:8px;
+    border:1px solid var(--border2)!important;
+    background:var(--bg2);overflow:hidden;
   }
-  tbody tr:not(.game-header-row):not(.state-row) td{
+  tbody tr:not(.ghrow):not(.state-row) td{
     display:flex;justify-content:space-between;align-items:center;
     padding:8px 12px;border:none;font-size:13px;
-    border-bottom:1px solid var(--border);
+    border-bottom:1px solid var(--border)!important;
   }
-  tbody tr:not(.game-header-row):not(.state-row) td:last-child{border-bottom:none}
-  tbody tr:not(.game-header-row):not(.state-row) td::before{
+  tbody tr:not(.ghrow):not(.state-row) td:last-child{border-bottom:none!important}
+  tbody tr:not(.ghrow):not(.state-row) td[data-label]::before{
     content:attr(data-label);
-    font-size:10px;font-weight:600;letter-spacing:.08em;
+    font-size:10px;font-weight:600;letter-spacing:.07em;
     text-transform:uppercase;color:var(--muted);
-    flex-shrink:0;margin-right:12px;
+    flex-shrink:0;margin-right:12px;min-width:80px;
   }
-  tbody tr:not(.game-header-row):not(.state-row) td.game-td{flex-direction:column;align-items:flex-start}
-  tbody tr:not(.game-header-row):not(.state-row) td.game-td::before{display:none}
-  .cell-inp{width:70px}
   .edge-bar-bg{display:none}
+  .cell-inp{width:72px}
+  .ghrow td{padding:8px 16px}
 }
-
 ::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
 </style>
 </head>
@@ -203,14 +178,21 @@ tr.collapsed-row{display:none}
 </div>
 
 <div class="table-wrap">
-  <table>
+  <table id="main-table">
     <thead>
       <tr>
-        <th>Game</th><th>Mkt</th><th>Side</th><th>FD Line</th>
-        <th class="r">Consensus</th><th class="r">No-Vig %</th>
-        <th class="c">Your Line</th><th class="r">Adj. Fair %</th>
-        <th class="c">Mkt Price %</th><th class="r">Edge</th>
-        <th class="r">Units</th><th class="r">Bet Size</th>
+        <th>Game</th>
+        <th>Mkt</th>
+        <th>Side</th>
+        <th>FD Line</th>
+        <th class="r">Consensus</th>
+        <th class="r">No-Vig %</th>
+        <th class="c">Your Line</th>
+        <th class="r">Adj. Fair %</th>
+        <th class="c">Mkt Price %</th>
+        <th class="r">Edge</th>
+        <th class="r">Units</th>
+        <th class="r">Bet Size</th>
       </tr>
     </thead>
     <tbody id="tbody"></tbody>
@@ -220,275 +202,246 @@ tr.collapsed-row{display:none}
 <script>
 var SPORTS=[{key:'basketball_nba',label:'NBA'},{key:'basketball_ncaab',label:'NCAAB'},{key:'icehockey_nhl',label:'NHL'},{key:'baseball_mlb',label:'MLB'},{key:'mma_mixed_martial_arts',label:'UFC/MMA'}];
 var MARKET_KEYS={ML:'h2h',Spread:'spreads',Total:'totals'};
-var GAME_COLORS=['#4f6ef7','#2dcc7e','#f5c842','#f05252','#a78bfa','#38bdf8','#fb923c','#e879f9','#34d399','#f87171','#60a5fa','#fbbf24','#a3e635','#c084fc','#fb7185','#22d3ee'];
+var COLORS=['#4f6ef7','#2dcc7e','#f5c842','#f05252','#a78bfa','#38bdf8','#fb923c','#e879f9','#34d399','#f87171','#60a5fa','#fbbf24','#a3e635','#c084fc','#fb7185','#22d3ee'];
 var currentSport='basketball_nba';
 var rawRows=[];
 var preds={};
 var yourLines={};
-var collapsedGames={};
+var collapsed={};
 
 function checkPass(){
   var inp=document.getElementById('gate-inp');
-  var err=document.getElementById('gate-err');
   if(inp.value==='realoddmoe24'){
     document.getElementById('gate').style.display='none';
     sessionStorage.setItem('auth','1');
     loadOdds();
   } else {
-    err.style.display='block';
+    document.getElementById('gate-err').style.display='block';
     inp.value='';inp.focus();
   }
 }
 
-function americanToImplied(n){n=Number(n);if(!isFinite(n))return null;return n<0?Math.abs(n)/(Math.abs(n)+100):100/(n+100);}
-function noVig(iA,iB){if(iA==null||iB==null)return{fa:null,fb:null};var t=iA+iB;if(!isFinite(t)||t<=0)return{fa:null,fb:null};return{fa:iA/t,fb:iB/t};}
-function mktLabel(m){if(m==='h2h')return'ML';if(m==='spreads')return'Spread';if(m==='totals')return'Total';return m;}
-function fmtAmerican(n){n=Number(n);return!isFinite(n)?'-':(n>=0?'+'+n:''+n);}
-function edgeUnits(e){if(e==null||!isFinite(e))return 0;if(e>=12)return 3;if(e>=8)return 2;if(e>=5)return 1;if(e>=3)return 0.5;return 0;}
-function adjustFair(fair,fdLine,yourLine,market){
-  if(fair==null||market==='ML')return fair;
-  if(fdLine==null||yourLine==null||yourLine===''||yourLine===undefined)return fair;
-  var yl=parseFloat(yourLine),fd=parseFloat(fdLine);
-  if(!isFinite(yl)||!isFinite(fd))return fair;
-  var diff=yl-fd;if(diff===0)return fair;
-  diff=Math.max(Math.min(diff,10),-10);
-  return Math.min(Math.max(fair+(diff/0.5)*0.03,0.01),0.99);
+function imp(n){n=Number(n);if(!isFinite(n))return null;return n<0?Math.abs(n)/(Math.abs(n)+100):100/(n+100);}
+function novig(a,b){if(a==null||b==null)return{fa:null,fb:null};var t=a+b;if(!isFinite(t)||t<=0)return{fa:null,fb:null};return{fa:a/t,fb:b/t};}
+function mktLbl(m){return m==='h2h'?'ML':m==='spreads'?'Spread':m==='totals'?'Total':m;}
+function fmtAm(n){n=Number(n);return!isFinite(n)?'-':n>=0?'+'+n:''+n;}
+function units(e){if(e==null||!isFinite(e))return 0;if(e>=12)return 3;if(e>=8)return 2;if(e>=5)return 1;if(e>=3)return 0.5;return 0;}
+function adjFair(fair,fd,yl,mkt){
+  if(fair==null||mkt==='ML')return fair;
+  if(fd==null||yl==null||yl==='')return fair;
+  var d=parseFloat(yl)-parseFloat(fd);
+  if(!isFinite(d)||d===0)return fair;
+  d=Math.max(Math.min(d,10),-10);
+  return Math.min(Math.max(fair+(d/0.5)*0.03,0.01),0.99);
 }
-
-function getTimeInfo(commence){
-  if(!commence)return{label:'TBD',cls:'normal'};
-  var now=new Date();
-  var diff=(commence-now)/60000;
-  if(diff<0){var elapsed=Math.abs(diff);return{label:elapsed<120?Math.round(elapsed)+'m ago':'LIVE',cls:elapsed<120?'urgent':'urgent'};}
-  if(diff<120)return{label:Math.round(diff)+'m',cls:'urgent'};
-  if(diff<360)return{label:Math.round(diff/60*10)/10+'h',cls:'soon'};
-  return{label:commence.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' '+commence.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}),cls:'normal'};
+function timeInfo(c){
+  if(!c)return{lbl:'TBD',cls:''};
+  var m=(c-new Date())/60000;
+  if(m<-120)return{lbl:'LIVE',cls:'urgent'};
+  if(m<0)return{lbl:Math.round(-m)+'m ago',cls:'urgent'};
+  if(m<120)return{lbl:Math.round(m)+'m',cls:'urgent'};
+  if(m<360)return{lbl:(Math.round(m/6)/10)+'h',cls:'soon'};
+  return{lbl:c.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' '+c.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}),cls:''};
+}
+function getFair(r){
+  var pairs={};
+  rawRows.forEach(function(x){if(!pairs[x.pid])pairs[x.pid]={};pairs[x.pid][x.ps]=x;});
+  var p=pairs[r.pid]||{};
+  var nv=novig(p.A?imp(p.A.am):null,p.B?imp(p.B.am):null);
+  return r.ps==='A'?nv.fa:nv.fb;
 }
 
 function buildTabs(){
-  var nav=document.getElementById('sport-tabs');
-  nav.innerHTML='';
+  var nav=document.getElementById('sport-tabs');nav.innerHTML='';
   SPORTS.forEach(function(s){
-    var btn=document.createElement('button');
-    btn.className='sport-tab'+(s.key===currentSport?' active':'');
-    btn.textContent=s.label;
-    btn.setAttribute('data-key',s.key);
-    btn.onclick=function(){
+    var b=document.createElement('button');
+    b.className='sport-tab'+(s.key===currentSport?' active':'');
+    b.textContent=s.label;b.setAttribute('data-key',s.key);
+    b.onclick=function(){
       currentSport=s.key;
-      document.querySelectorAll('.sport-tab').forEach(function(b){b.classList.toggle('active',b.getAttribute('data-key')===s.key);});
+      document.querySelectorAll('.sport-tab').forEach(function(x){x.classList.toggle('active',x.getAttribute('data-key')===s.key);});
       loadOdds();
     };
-    nav.appendChild(btn);
+    nav.appendChild(b);
   });
 }
 
 function parseGames(games){
   var rows=[];
-  games.forEach(function(game){
-    var books=game.bookmakers||[];
-    if(!books.length)return;
-    var marketKeys={};
-    books.forEach(function(b){(b.markets||[]).forEach(function(m){marketKeys[m.key]=true;});});
-    Object.keys(marketKeys).forEach(function(mkey){
-      var oddsA=[],oddsB=[],pointsA=[],pointsB=[],nameA=null,nameB=null;
+  games.forEach(function(g){
+    var books=g.bookmakers||[];if(!books.length)return;
+    var mkts={};books.forEach(function(b){(b.markets||[]).forEach(function(m){mkts[m.key]=true;});});
+    Object.keys(mkts).forEach(function(mk){
+      var oA=[],oB=[],pA=[],pB=[],nA=null,nB=null;
       books.forEach(function(b){
-        var mkt=(b.markets||[]).find(function(m){return m.key===mkey;});
-        if(!mkt||!mkt.outcomes||mkt.outcomes.length!==2)return;
-        var A=mkt.outcomes[0],B=mkt.outcomes[1];
-        if(!nameA){nameA=A.name;nameB=B.name;}
-        oddsA.push(A.price);oddsB.push(B.price);
-        if(A.point!=null)pointsA.push(A.point);
-        if(B.point!=null)pointsB.push(B.point);
+        var m=(b.markets||[]).find(function(x){return x.key===mk;});
+        if(!m||!m.outcomes||m.outcomes.length!==2)return;
+        var A=m.outcomes[0],B=m.outcomes[1];
+        if(!nA){nA=A.name;nB=B.name;}
+        oA.push(A.price);oB.push(B.price);
+        if(A.point!=null)pA.push(A.point);
+        if(B.point!=null)pB.push(B.point);
       });
-      if(!oddsA.length)return;
-      var avgA=oddsA.reduce(function(s,v){return s+v;},0)/oddsA.length;
-      var avgB=oddsB.reduce(function(s,v){return s+v;},0)/oddsB.length;
-      var pointA=pointsA.length?pointsA.reduce(function(s,v){return s+v;},0)/pointsA.length:null;
-      var pointB=pointsB.length?pointsB.reduce(function(s,v){return s+v;},0)/pointsB.length:null;
-      var lbl=mktLabel(mkey);
-      var gameStr=game.away_team+' @ '+game.home_team;
-      var commence=game.commence_time?new Date(game.commence_time):null;
-      var pairId=game.id+'-'+mkey;
-      rows.push({id:pairId+'-A',game:gameStr,commence:commence,market:lbl,side:nameA,american:Math.round(avgA),point:pointA!=null?Math.round(pointA*2)/2:null,pairId:pairId,ps:'A'});
-      rows.push({id:pairId+'-B',game:gameStr,commence:commence,market:lbl,side:nameB,american:Math.round(avgB),point:pointB!=null?Math.round(pointB*2)/2:null,pairId:pairId,ps:'B'});
+      if(!oA.length)return;
+      var avgA=oA.reduce(function(s,v){return s+v;},0)/oA.length;
+      var avgB=oB.reduce(function(s,v){return s+v;},0)/oB.length;
+      var ptA=pA.length?pA.reduce(function(s,v){return s+v;},0)/pA.length:null;
+      var ptB=pB.length?pB.reduce(function(s,v){return s+v;},0)/pB.length:null;
+      var lbl=mktLbl(mk);
+      var gs=g.away_team+' @ '+g.home_team;
+      var cm=g.commence_time?new Date(g.commence_time):null;
+      var pid=g.id+'-'+mk;
+      rows.push({id:pid+'-A',game:gs,cm:cm,mkt:lbl,side:nA,am:Math.round(avgA),pt:ptA!=null?Math.round(ptA*2)/2:null,pid:pid,ps:'A'});
+      rows.push({id:pid+'-B',game:gs,cm:cm,mkt:lbl,side:nB,am:Math.round(avgB),pt:ptB!=null?Math.round(ptB*2)/2:null,pid:pid,ps:'B'});
     });
   });
   return rows;
 }
 
 function loadOdds(){
-  var btn=document.getElementById('refresh-btn');
-  var dot=document.getElementById('sdot');
-  var stxt=document.getElementById('status-txt');
-  var sport=SPORTS.find(function(s){return s.key===currentSport;});
-  var label=sport?sport.label:currentSport;
-  btn.disabled=true;dot.className='sdot loading';
-  stxt.textContent='Fetching '+label+' odds...';
+  var btn=document.getElementById('refresh-btn'),dot=document.getElementById('sdot'),stxt=document.getElementById('status-txt');
+  var sp=SPORTS.find(function(s){return s.key===currentSport;});
+  var lbl=sp?sp.label:currentSport;
+  btn.disabled=true;dot.className='sdot loading';stxt.textContent='Fetching '+lbl+'...';
   document.getElementById('tbody').innerHTML='<tr class="state-row"><td colspan="12">Loading...</td></tr>';
-  var selectedMkt=document.getElementById('mkt-filter').value;
-  var mkts;
-  if(currentSport==='mma_mixed_martial_arts'){mkts='h2h';}
-  else if(selectedMkt==='ALL'){mkts='h2h,spreads,totals';}
-  else{mkts=MARKET_KEYS[selectedMkt]||'h2h';}
+  var sel=document.getElementById('mkt-filter').value;
+  var mkts=currentSport==='mma_mixed_martial_arts'?'h2h':sel==='ALL'?'h2h,spreads,totals':(MARKET_KEYS[sel]||'h2h');
   fetch('/api/odds?sport='+currentSport+'&markets='+mkts+'&bookmakers=fanduel,draftkings,betmgm,caesars')
-    .then(function(res){
-      var rem=res.headers.get('x-requests-remaining');
-      if(rem)document.getElementById('api-remaining').textContent=rem+' requests left';
-      return res.json();
-    })
-    .then(function(data){
-      if(Array.isArray(data)){
-        rawRows=parseGames(data);
+    .then(function(r){var rem=r.headers.get('x-requests-remaining');if(rem)document.getElementById('api-remaining').textContent=rem+' requests left';return r.json();})
+    .then(function(d){
+      if(Array.isArray(d)){
+        rawRows=parseGames(d);
         var now=new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit',second:'2-digit'});
-        if(rawRows.length){dot.className='sdot live';stxt.textContent='Updated '+now+' - '+(rawRows.length/2|0)+' games - Consensus (FD/DK/MGM/Caesars)';}
-        else{dot.className='sdot error';stxt.textContent='No '+label+' games right now';}
-      } else {rawRows=[];dot.className='sdot error';stxt.textContent='API error: '+(data.message||'Unknown');}
+        if(rawRows.length){dot.className='sdot live';stxt.textContent='Updated '+now+' - '+(rawRows.length/2|0)+' games - Consensus';}
+        else{dot.className='sdot error';stxt.textContent='No '+lbl+' games right now';}
+      }else{rawRows=[];dot.className='sdot error';stxt.textContent='API error';}
     })
-    .catch(function(err){rawRows=[];dot.className='sdot error';stxt.textContent='Error: '+err.message;})
+    .catch(function(e){rawRows=[];dot.className='sdot error';stxt.textContent='Error: '+e.message;})
     .then(function(){btn.disabled=false;renderTable();});
 }
 
-function getFair(r){
-  var pairs={};
-  rawRows.forEach(function(x){if(!pairs[x.pairId])pairs[x.pairId]={};pairs[x.pairId][x.ps]=x;});
-  var pair=pairs[r.pairId]||{};
-  var iA=pair.A?americanToImplied(pair.A.american):null;
-  var iB=pair.B?americanToImplied(pair.B.american):null;
-  var nv=noVig(iA,iB);
-  return r.ps==='A'?nv.fa:nv.fb;
-}
-
-function toggleGame(gameKey){
-  collapsedGames[gameKey]=!collapsedGames[gameKey];
-  document.querySelectorAll('[data-game="'+CSS.escape(gameKey)+'"]').forEach(function(tr){
-    // Only hide non-header rows
-    if(!tr.classList.contains('game-header-row')){
-      tr.classList.toggle('collapsed-row',!!collapsedGames[gameKey]);
+function toggleGame(gk){
+  collapsed[gk]=!collapsed[gk];
+  var isC=collapsed[gk];
+  document.querySelectorAll('tr[data-gk]').forEach(function(tr){
+    if(tr.getAttribute('data-gk')===gk&&!tr.classList.contains('ghrow')){
+      tr.classList.toggle('collapsed-row',isC);
     }
   });
-  var btn=document.querySelector('[data-toggle="'+CSS.escape(gameKey)+'"]');
-  if(btn)btn.classList.toggle('collapsed',!!collapsedGames[gameKey]);
+  document.querySelectorAll('.gh-arrow[data-gk="'+gk+'"]').forEach(function(el){el.classList.toggle('up',!isC);});
 }
 
 function renderTable(){
   var unit=parseFloat(document.getElementById('unit-size').value)||300;
   var q=document.getElementById('search').value.trim().toLowerCase();
   if(!rawRows.length){
-    document.getElementById('tbody').innerHTML='<tr class="state-row"><td colspan="12">No odds loaded - hit Refresh</td></tr>';
+    document.getElementById('tbody').innerHTML='<tr class="state-row"><td colspan="12">No odds - hit Refresh</td></tr>';
     document.getElementById('stat-lines').textContent='0';
     document.getElementById('stat-edges').textContent='0';
     return;
   }
   var pairs={};
-  rawRows.forEach(function(r){if(!pairs[r.pairId])pairs[r.pairId]={};pairs[r.pairId][r.ps]=r;});
-  var computed=rawRows.map(function(r){
-    var pair=pairs[r.pairId]||{};
-    var iA=pair.A?americanToImplied(pair.A.american):null;
-    var iB=pair.B?americanToImplied(pair.B.american):null;
-    var nv=noVig(iA,iB);
+  rawRows.forEach(function(r){if(!pairs[r.pid])pairs[r.pid]={};pairs[r.pid][r.ps]=r;});
+  var rows=rawRows.map(function(r){
+    var p=pairs[r.pid]||{};
+    var nv=novig(p.A?imp(p.A.am):null,p.B?imp(p.B.am):null);
     var fair=r.ps==='A'?nv.fa:nv.fb;
     var yl=yourLines[r.id]!=null?yourLines[r.id]:null;
-    var adjFair=adjustFair(fair,r.point,yl,r.market);
-    var predRaw=preds[r.id];
-    var pred=(predRaw!==undefined&&predRaw!=='')?parseFloat(predRaw)/100:null;
-    var edgePct=(adjFair!=null&&pred!=null&&isFinite(pred))?(adjFair-pred)*100:null;
-    var units=edgeUnits(edgePct);
-    return{id:r.id,game:r.game,commence:r.commence,market:r.market,side:r.side,american:r.american,point:r.point,ps:r.ps,pairId:r.pairId,fair:fair,adjFair:adjFair,yourLine:yl,edgePct:edgePct,units:units,betSize:units*unit};
+    var af=adjFair(fair,r.pt,yl,r.mkt);
+    var pr=preds[r.id];
+    var pred=(pr!==undefined&&pr!=='')?parseFloat(pr)/100:null;
+    var edge=(af!=null&&pred!=null&&isFinite(pred))?(af-pred)*100:null;
+    var u=units(edge);
+    return{id:r.id,game:r.game,cm:r.cm,mkt:r.mkt,side:r.side,am:r.am,pt:r.pt,ps:r.ps,pid:r.pid,fair:fair,af:af,yl:yl,edge:edge,u:u,bet:u*unit};
   });
-  var filtered=computed.filter(function(r){
+  var filtered=rows.filter(function(r){
     if(!q)return true;
-    return(r.game+' '+r.side+' '+r.market).toLowerCase().indexOf(q)!==-1;
+    return(r.game+' '+r.side+' '+r.mkt).toLowerCase().indexOf(q)!==-1;
   });
+  // sort by game time then market order
+  var mO={ML:0,Spread:1,Total:2};
   filtered.sort(function(a,b){
-    if(a.game!==b.game){
-      var ta=a.commence?a.commence.getTime():9e12;
-      var tb=b.commence?b.commence.getTime():9e12;
-      return ta-tb;
-    }
-    var mOrder={ML:0,Spread:1,Total:2};
-    if(a.market!==b.market)return(mOrder[a.market]||0)-(mOrder[b.market]||0);
+    var ta=a.cm?a.cm.getTime():9e12,tb=b.cm?b.cm.getTime():9e12;
+    if(a.game!==b.game)return ta-tb;
+    if(a.mkt!==b.mkt)return(mO[a.mkt]||0)-(mO[b.mkt]||0);
     return 0;
   });
-  var edgeCount=filtered.filter(function(r){return r.edgePct!=null&&r.edgePct>0;}).length;
+  var ec=filtered.filter(function(r){return r.edge!=null&&r.edge>0;}).length;
   document.getElementById('stat-lines').textContent=filtered.length;
-  document.getElementById('stat-edges').textContent=edgeCount;
-  if(!filtered.length){
-    document.getElementById('tbody').innerHTML='<tr class="state-row"><td colspan="12">No results</td></tr>';
-    return;
-  }
-  var gameOrder=[],gameSeen={};
-  filtered.forEach(function(r){if(!gameSeen[r.game]){gameSeen[r.game]=true;gameOrder.push(r.game);}});
-  var gameColorMap={},gameCommenceMap={};
-  gameOrder.forEach(function(g,i){
-    gameColorMap[g]=GAME_COLORS[i%GAME_COLORS.length];
+  document.getElementById('stat-edges').textContent=ec;
+  if(!filtered.length){document.getElementById('tbody').innerHTML='<tr class="state-row"><td colspan="12">No results</td></tr>';return;}
+  // build color map
+  var gOrder=[],gSeen={};
+  filtered.forEach(function(r){if(!gSeen[r.game]){gSeen[r.game]=true;gOrder.push(r.game);}});
+  var gColor={},gCm={};
+  gOrder.forEach(function(g,i){
+    gColor[g]=COLORS[i%COLORS.length];
     var row=filtered.find(function(r){return r.game===g;});
-    gameCommenceMap[g]=row?row.commence:null;
+    gCm[g]=row?row.cm:null;
   });
-  var html='',lastGame=null;
+  var html='',lastG=null;
   filtered.forEach(function(r){
-    var color=gameColorMap[r.game];
-    var isCollapsed=!!collapsedGames[r.game];
-    if(r.game!==lastGame){
-      lastGame=r.game;
+    var color=gColor[r.game];
+    var isC=!!collapsed[r.game];
+    if(r.game!==lastG){
+      lastG=r.game;
+      var ti=timeInfo(gCm[r.game]);
       var teams=r.game.split(' @ ');
-      var ti=getTimeInfo(gameCommenceMap[r.game]);
-      html+='<tr class="game-header-row" onclick="toggleGame(\''+r.game.replace(/'/g,"\\'")+'\')">'
-        +'<td colspan="12"><div class="game-header-inner">'
-        +'<div class="game-stripe" style="background:'+color+'"></div>'
-        +'<span>'+teams[0]+'</span>'
-        +'<span style="color:var(--muted2)">@</span>'
-        +'<span>'+(teams[1]||'')+'</span>'
-        +'<span class="game-time-badge '+ti.cls+'">'+ti.label+'</span>'
-        +'<span class="game-toggle'+(isCollapsed?' collapsed':'')+('" data-toggle="'+r.game.replace(/'/g,"\\'")+'">')+'&#9660;</span>'
+      // escape game key for use in onclick
+      var gk=r.game.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      html+='<tr class="ghrow" data-gk="'+r.game.replace(/"/g,'&quot;')+'" onclick="toggleGame(\''+gk+'\')">'
+        +'<td colspan="12"><div class="gh-inner">'
+        +'<div class="gh-stripe" style="background:'+color+'"></div>'
+        +'<span>'+teams[0]+'</span><span style="color:var(--muted2)">@</span><span>'+(teams[1]||'')+'</span>'
+        +(ti.lbl?'<span class="gh-badge '+ti.cls+'">'+ti.lbl+'</span>':'')
+        +'<span class="gh-arrow'+(isC?'':' up')+'" data-gk="'+r.game.replace(/"/g,'&quot;')+'">&#9660;</span>'
         +'</div></td></tr>';
     }
-    html+=buildRow(r,color,isCollapsed);
+    html+=buildRow(r,color,isC);
   });
   document.getElementById('tbody').innerHTML=html;
 }
 
-function buildRow(r,gameColor,isCollapsed){
-  gameColor=gameColor||'transparent';
-  var oddsStr=fmtAmerican(r.american);
-  var oddsCls=Number(r.american)>=0?'odds-pos':'odds-neg';
+function buildRow(r,color,isC){
+  var am=fmtAm(r.am);
+  var aCls=Number(r.am)>=0?'odds-pos':'odds-neg';
   var lineStr='-';
-  if(r.point!=null){lineStr=r.market==='Total'?(r.ps==='A'?'O ':'U ')+Math.abs(r.point):(r.point>=0?'+'+r.point:''+r.point);}
+  if(r.pt!=null)lineStr=r.mkt==='Total'?(r.ps==='A'?'O ':'U ')+Math.abs(r.pt):(r.pt>=0?'+'+r.pt:''+r.pt);
   var fairStr=r.fair!=null?(r.fair*100).toFixed(1)+'%':'-';
-  var adjStr=r.adjFair!=null?(r.adjFair*100).toFixed(1)+'%':'-';
-  var adjChanged=(r.yourLine!=null&&r.point!=null&&parseFloat(r.yourLine)!==parseFloat(r.point));
-  var edgeStr='-',edgeCls='e-none',barW=0,barC='var(--muted2)';
-  if(r.edgePct!=null){
-    edgeStr=(r.edgePct>0?'+':'')+r.edgePct.toFixed(1)+'%';
-    if(r.edgePct>=8){edgeCls='e-strong';barC='var(--green)';}
-    else if(r.edgePct>=5){edgeCls='e-med';barC='#7ddfab';}
-    else if(r.edgePct>0){edgeCls='e-weak';barC='var(--yellow)';}
-    else{edgeCls='e-neg';barC='var(--red)';}
-    barW=Math.min(Math.abs(r.edgePct)*5,50);
+  var afStr=r.af!=null?(r.af*100).toFixed(1)+'%':'-';
+  var afChanged=(r.yl!=null&&r.pt!=null&&parseFloat(r.yl)!==parseFloat(r.pt));
+  var es='-',ec='e-none',bw=0,bc='var(--muted2)';
+  if(r.edge!=null){
+    es=(r.edge>0?'+':'')+r.edge.toFixed(1)+'%';
+    if(r.edge>=8){ec='e-strong';bc='var(--green)';}
+    else if(r.edge>=5){ec='e-med';bc='#7ddfab';}
+    else if(r.edge>0){ec='e-weak';bc='var(--yellow)';}
+    else{ec='e-neg';bc='var(--red)';}
+    bw=Math.min(Math.abs(r.edge)*5,50);
   }
-  var unitsHtml=r.units===0?'<span class="u-pass">PASS</span>':'<span class="u-val">'+r.units+'u</span>';
-  var betHtml=r.units===0?'<span class="u-pass">-</span>':'<span class="bet-val">$'+r.betSize.toFixed(0)+'</span>';
-  var predVal=preds[r.id]||'';
-  var ylVal=r.yourLine!=null?r.yourLine:'';
-  var fdPlaceholderDisplay=r.point!=null?r.point:'';
-  var fdPlaceholder=r.point!=null?r.point:'';
-  var lineCls=adjChanged?' line-changed':'';
-  var yourLineCell=r.market==='ML'
+  var uH=r.u===0?'<span class="u-pass">PASS</span>':'<span class="u-val">'+r.u+'u</span>';
+  var bH=r.u===0?'<span class="u-pass">-</span>':'<span class="bet-val">$'+r.bet.toFixed(0)+'</span>';
+  var pv=preds[r.id]||'';
+  var ylv=r.yl!=null?r.yl:'';
+  var ph=r.pt!=null?r.pt:'';
+  var lc=afChanged?' line-changed':'';
+  var ylCell=r.mkt==='ML'
     ?'<td class="c" data-label="Your Line"></td>'
-    :'<td class="c" data-label="Your Line"><input class="cell-inp'+lineCls+'" type="number" step="0.5" placeholder="'+fdPlaceholder+'" value="'+ylVal+'" data-id="'+r.id+'" onblur="setLine(this)" onkeydown="if(event.key===\'Enter\')this.blur()"></td>';
-  var gameKey=r.game.replace(/'/g,"\\'");
-  return '<tr class="'+(r.edgePct!=null&&r.edgePct>0?'has-edge':'')+(isCollapsed?' collapsed-row':'')+'" style="border-left:3px solid '+gameColor+';--game-color:'+gameColor+'" data-game="'+r.game+'">'
-    +'<td class="game-td" data-label="Game"><div class="game-name">'+r.side+'</div><div class="game-time" style="color:var(--muted)">'+r.game+'</div></td>'
-    +'<td data-label="Market"><span class="mkt-badge">'+r.market+'</span></td>'
-    +'<td data-label="Side" style="display:none">'+r.side+'</td>'
+    :'<td class="c" data-label="Your Line"><input class="cell-inp'+lc+'" type="number" step="0.5" placeholder="'+ph+'" value="'+ylv+'" data-id="'+r.id+'" onblur="setLine(this)" onkeydown="if(event.key===\'Enter\')this.blur()"></td>';
+  var gk=r.game.replace(/"/g,'&quot;');
+  return '<tr class="'+(r.edge!=null&&r.edge>0?'has-edge':'')+(isC?' collapsed-row':'')+'" data-gk="'+gk+'" style="border-left:3px solid '+color+'">'
+    +'<td class="game-td" data-label="Game"><div style="font-weight:600">'+r.side+'</div><div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px">'+r.game+'</div></td>'
+    +'<td data-label="Market"><span class="mkt-badge">'+r.mkt+'</span></td>'
+    +'<td data-label="Side" style="color:var(--muted);font-size:12px">'+r.side+'</td>'
     +'<td data-label="FD Line" style="font-family:var(--mono);color:var(--muted);font-size:12px">'+lineStr+'</td>'
-    +'<td class="r" data-label="Consensus"><span class="'+oddsCls+'">'+oddsStr+'</span></td>'
+    +'<td class="r" data-label="Consensus"><span class="'+aCls+'">'+am+'</span></td>'
     +'<td class="r" data-label="No-Vig %" style="font-family:var(--mono);color:var(--muted)">'+fairStr+'</td>'
-    +yourLineCell
-    +'<td class="r" data-label="Adj. Fair %" style="font-family:var(--mono);color:'+(adjChanged?'var(--yellow)':'var(--muted)')+'">'+adjStr+'</td>'
-    +'<td class="c" data-label="Mkt Price %"><div style="display:flex;align-items:center;gap:4px;justify-content:center"><input class="cell-inp'+(predVal?' filled':'')+'" type="number" min="1" max="99" step="0.5" placeholder="-" value="'+predVal+'" data-id="'+r.id+'" onblur="setPred(this)" onkeydown="if(event.key===\'Enter\')this.blur()"><span class="pred-unit">%</span></div></td>'
-    +'<td class="r" data-label="Edge"><div class="edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:'+barW+'px;background:'+barC+'"></div></div><span class="edge-val '+edgeCls+'">'+edgeStr+'</span></div></td>'
-    +'<td class="r" data-label="Units">'+unitsHtml+'</td>'
-    +'<td class="r" data-label="Bet Size">'+betHtml+'</td>'
+    +ylCell
+    +'<td class="r" data-label="Adj. Fair %" style="font-family:var(--mono);color:'+(afChanged?'var(--yellow)':'var(--muted)')+'">'+afStr+'</td>'
+    +'<td class="c" data-label="Mkt Price %"><div style="display:flex;align-items:center;gap:4px;justify-content:center"><input class="cell-inp'+(pv?' filled':'')+'" type="number" min="1" max="99" step="0.5" placeholder="-" value="'+pv+'" data-id="'+r.id+'" onblur="setPred(this)" onkeydown="if(event.key===\'Enter\')this.blur()"><span class="pred-unit">%</span></div></td>'
+    +'<td class="r" data-label="Edge"><div class="edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:'+bw+'px;background:'+bc+'"></div></div><span class="edge-val '+ec+'">'+es+'</span></div></td>'
+    +'<td class="r" data-label="Units">'+uH+'</td>'
+    +'<td class="r" data-label="Bet">'+bH+'</td>'
     +'</tr>';
 }
 
@@ -499,12 +452,12 @@ function setLine(input){
   var tr=input.closest('tr');if(!tr)return;
   var r=rawRows.find(function(x){return x.id===id;});if(!r)return;
   var fair=getFair(r);
-  var adjFair=adjustFair(fair,r.point,yourLines[id],r.market);
-  var adjChanged=(yourLines[id]!=null&&r.point!=null&&parseFloat(yourLines[id])!==parseFloat(r.point));
+  var af=adjFair(fair,r.pt,yourLines[id],r.mkt);
+  var changed=(yourLines[id]!=null&&r.pt!=null&&parseFloat(yourLines[id])!==parseFloat(r.pt));
   var tds=tr.querySelectorAll('td');
-  tds[7].textContent=adjFair!=null?(adjFair*100).toFixed(1)+'%':'-';
-  tds[7].style.textAlign='right';tds[7].style.fontFamily='var(--mono)';
-  tds[7].style.color=adjChanged?'var(--yellow)':'var(--muted)';
+  // col 7 = Adj. Fair (0-indexed: Game=0,Mkt=1,Side=2,FDLine=3,Consensus=4,NoVig=5,YourLine=6,AdjFair=7)
+  tds[7].textContent=af!=null?(af*100).toFixed(1)+'%':'-';
+  tds[7].style.cssText='text-align:right;font-family:var(--mono);color:'+(changed?'var(--yellow)':'var(--muted)');
   var inputs=tr.querySelectorAll('input[data-id="'+id+'"]');
   if(inputs.length>1)setPred(inputs[inputs.length-1]);
 }
@@ -517,25 +470,26 @@ function setPred(input){
   var r=rawRows.find(function(x){return x.id===id;});if(!r)return;
   var fair=getFair(r);
   var yl=yourLines[id]!=null?yourLines[id]:null;
-  var adjFair=adjustFair(fair,r.point,yl,r.market);
+  var af=adjFair(fair,r.pt,yl,r.mkt);
   var pred=input.value!==''?parseFloat(input.value)/100:null;
-  var edgePct=(adjFair!=null&&pred!=null&&isFinite(pred))?(adjFair-pred)*100:null;
-  var units=edgeUnits(edgePct);
+  var edge=(af!=null&&pred!=null&&isFinite(pred))?(af-pred)*100:null;
+  var u=units(edge);
   var unit=parseFloat(document.getElementById('unit-size').value)||300;
-  var edgeStr='-',edgeCls='e-none',barW=0,barC='var(--muted2)';
-  if(edgePct!=null){
-    edgeStr=(edgePct>0?'+':'')+edgePct.toFixed(1)+'%';
-    if(edgePct>=8){edgeCls='e-strong';barC='var(--green)';}
-    else if(edgePct>=5){edgeCls='e-med';barC='#7ddfab';}
-    else if(edgePct>0){edgeCls='e-weak';barC='var(--yellow)';}
-    else{edgeCls='e-neg';barC='var(--red)';}
-    barW=Math.min(Math.abs(edgePct)*5,50);
+  var es='-',ec='e-none',bw=0,bc='var(--muted2)';
+  if(edge!=null){
+    es=(edge>0?'+':'')+edge.toFixed(1)+'%';
+    if(edge>=8){ec='e-strong';bc='var(--green)';}
+    else if(edge>=5){ec='e-med';bc='#7ddfab';}
+    else if(edge>0){ec='e-weak';bc='var(--yellow)';}
+    else{ec='e-neg';bc='var(--red)';}
+    bw=Math.min(Math.abs(edge)*5,50);
   }
   var tds=tr.querySelectorAll('td');
-  tds[9].innerHTML='<div class="edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:'+barW+'px;background:'+barC+'"></div></div><span class="edge-val '+edgeCls+'">'+edgeStr+'</span></div>';
-  tds[10].innerHTML=units===0?'<span class="u-pass">PASS</span>':'<span class="u-val">'+units+'u</span>';
-  tds[11].innerHTML=units===0?'<span class="u-pass">-</span>':'<span class="bet-val">$'+(units*unit).toFixed(0)+'</span>';
-  tr.classList.toggle('has-edge',edgePct!=null&&edgePct>0);
+  // col indices: Edge=9, Units=10, Bet=11
+  tds[9].innerHTML='<div class="edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:'+bw+'px;background:'+bc+'"></div></div><span class="edge-val '+ec+'">'+es+'</span></div>';
+  tds[10].innerHTML=u===0?'<span class="u-pass">PASS</span>':'<span class="u-val">'+u+'u</span>';
+  tds[11].innerHTML=u===0?'<span class="u-pass">-</span>':'<span class="bet-val">$'+(u*unit).toFixed(0)+'</span>';
+  tr.classList.toggle('has-edge',edge!=null&&edge>0);
   document.getElementById('stat-edges').textContent=document.querySelectorAll('tr.has-edge').length;
 }
 
