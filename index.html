@@ -130,7 +130,7 @@ td.r{text-align:right}td.c{text-align:center}
         <th>Mkt</th>
         <th>Side</th>
         <th>FD Line</th>
-        <th class="r">FD Odds</th>
+        <th class="r">Consensus</th>
         <th class="r">No-Vig %</th>
         <th class="c">Your Line</th>
         <th class="r">Adj. Fair %</th>
@@ -256,18 +256,44 @@ function buildTabs() {
 function parseGames(games) {
   var rows=[];
   games.forEach(function(game) {
-    var fd=null;
-    (game.bookmakers||[]).forEach(function(b){if(b.key==='fanduel')fd=b;});
-    if(!fd) return;
-    (fd.markets||[]).forEach(function(market) {
-      if(!market.outcomes||market.outcomes.length!==2) return;
-      var A=market.outcomes[0],B=market.outcomes[1];
-      var lbl=mktLabel(market.key);
+    // collect all available bookmakers
+    var books = game.bookmakers || [];
+    if (!books.length) return;
+
+    // get all unique market keys from any book
+    var marketKeys = {};
+    books.forEach(function(b) {
+      (b.markets||[]).forEach(function(m) { marketKeys[m.key]=true; });
+    });
+
+    Object.keys(marketKeys).forEach(function(mkey) {
+      // collect odds for this market from all books
+      var oddsA=[], oddsB=[], pointsA=[], pointsB=[], nameA=null, nameB=null;
+      books.forEach(function(b) {
+        var mkt=(b.markets||[]).find(function(m){return m.key===mkey;});
+        if(!mkt||!mkt.outcomes||mkt.outcomes.length!==2) return;
+        var A=mkt.outcomes[0], B=mkt.outcomes[1];
+        if(!nameA){nameA=A.name;nameB=B.name;}
+        oddsA.push(A.price);
+        oddsB.push(B.price);
+        if(A.point!=null) pointsA.push(A.point);
+        if(B.point!=null) pointsB.push(B.point);
+      });
+      if(!oddsA.length) return;
+
+      // average the american odds across books
+      var avgA = oddsA.reduce(function(s,v){return s+v;},0)/oddsA.length;
+      var avgB = oddsB.reduce(function(s,v){return s+v;},0)/oddsB.length;
+      var pointA = pointsA.length ? pointsA.reduce(function(s,v){return s+v;},0)/pointsA.length : null;
+      var pointB = pointsB.length ? pointsB.reduce(function(s,v){return s+v;},0)/pointsB.length : null;
+
+      var lbl=mktLabel(mkey);
       var gameStr=game.away_team+' @ '+game.home_team;
       var commence=game.commence_time?new Date(game.commence_time):null;
-      var pairId=game.id+'-'+market.key;
-      rows.push({id:pairId+'-A',game:gameStr,commence:commence,market:lbl,side:A.name,american:A.price,point:A.point!=null?A.point:null,pairId:pairId,ps:'A'});
-      rows.push({id:pairId+'-B',game:gameStr,commence:commence,market:lbl,side:B.name,american:B.price,point:B.point!=null?B.point:null,pairId:pairId,ps:'B'});
+      var pairId=game.id+'-'+mkey;
+
+      rows.push({id:pairId+'-A',game:gameStr,commence:commence,market:lbl,side:nameA,american:Math.round(avgA),point:pointA!=null?Math.round(pointA*2)/2:null,pairId:pairId,ps:'A',bookCount:oddsA.length});
+      rows.push({id:pairId+'-B',game:gameStr,commence:commence,market:lbl,side:nameB,american:Math.round(avgB),point:pointB!=null?Math.round(pointB*2)/2:null,pairId:pairId,ps:'B',bookCount:oddsB.length});
     });
   });
   return rows;
@@ -288,7 +314,7 @@ function loadOdds() {
   if(currentSport==='mma_mixed_martial_arts'){mkts='h2h';}
   else if(selectedMkt==='ALL'){mkts='h2h,spreads,totals';}
   else{mkts=MARKET_KEYS[selectedMkt]||'h2h';}
-  var url='/api/odds?sport='+currentSport+'&markets='+mkts;
+  var url='/api/odds?sport='+currentSport+'&markets='+mkts+'&bookmakers=fanduel,draftkings,betmgm,caesars';
   fetch(url)
     .then(function(res){
       var rem=res.headers.get('x-requests-remaining');
@@ -301,7 +327,7 @@ function loadOdds() {
         var now=new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit',second:'2-digit'});
         if(rawRows.length){
           dot.className='sdot live';
-          stxt.textContent='Updated '+now+' - '+(rawRows.length/2|0)+' games - FanDuel';
+          stxt.textContent='Updated '+now+' - '+(rawRows.length/2|0)+' games - Consensus (FD/DK/MGM/Caesars)';
         } else {
           dot.className='sdot error';
           stxt.textContent='No '+label+' games on FanDuel right now';
