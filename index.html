@@ -183,9 +183,14 @@ function edgeUnits(e) {
 // Each 0.5 point shift in spread/total = ~3% probability shift
 function adjustFair(fair, fdLine, yourLine, market) {
   if (fair==null||market==='ML') return fair;
-  if (fdLine==null||yourLine==null||yourLine==='') return fair;
-  var diff = parseFloat(yourLine) - parseFloat(fdLine);
-  if (!isFinite(diff)||diff===0) return fair;
+  if (fdLine==null||yourLine==null||yourLine===''||yourLine===undefined) return fair;
+  var yl = parseFloat(yourLine);
+  var fd = parseFloat(fdLine);
+  if (!isFinite(yl)||!isFinite(fd)) return fair;
+  var diff = yl - fd;
+  if (diff===0) return fair;
+  // cap adjustment at +/- 10 points to prevent runaway values
+  diff = Math.max(Math.min(diff, 10), -10);
   var adj = (diff/0.5)*0.03;
   return Math.min(Math.max(fair - adj, 0.01), 0.99);
 }
@@ -377,7 +382,12 @@ function buildRow(r) {
 
 function setLine(input) {
   var id=input.getAttribute('data-id');
-  yourLines[id]=input.value!==''?parseFloat(input.value):null;
+  if (input.value===''||input.value===null) {
+    yourLines[id]=null;
+  } else {
+    var parsed=parseFloat(input.value);
+    yourLines[id]=isFinite(parsed)?parsed:null;
+  }
   var r=rawRows.find(function(x){return x.id===id;});
   if(!r) return;
   var fair=getFair(r);
