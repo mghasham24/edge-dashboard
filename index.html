@@ -90,40 +90,7 @@ td.r{text-align:right}td.c{text-align:center}
 .gate-btn{background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:13px;font-weight:600;padding:10px 32px;border-radius:6px;cursor:pointer;width:100%;text-transform:uppercase}
 .gate-btn:hover{opacity:.85}
 .gate-err{color:var(--red);font-family:var(--mono);font-size:12px;display:none}
-/* MOBILE */
-@media(max-width:768px){
-  .header{padding:0 16px;height:52px}
-  .api-remaining{display:none}
-  .sport-tabs{padding:0 12px}
-  .sport-tab{padding:11px 12px;font-size:11px}
-  .controls{padding:12px 16px;gap:8px}
-  .search-inp{width:100%}
-  .stats-pill{margin-left:0}
-  .status-bar{padding:6px 16px}
-  .table-wrap{padding:0;overflow-x:hidden}
-  table,thead,tbody,th,td,tr{display:block}
-  thead{display:none}
-  tbody tr:not(.ghrow):not(.state-row){
-    margin:0 16px 8px;border-radius:8px;
-    border:1px solid var(--border2)!important;
-    background:var(--bg2);overflow:hidden;
-  }
-  tbody tr:not(.ghrow):not(.state-row) td{
-    display:flex;justify-content:space-between;align-items:center;
-    padding:8px 12px;border:none;font-size:13px;
-    border-bottom:1px solid var(--border)!important;
-  }
-  tbody tr:not(.ghrow):not(.state-row) td:last-child{border-bottom:none!important}
-  tbody tr:not(.ghrow):not(.state-row) td[data-label]::before{
-    content:attr(data-label);
-    font-size:10px;font-weight:600;letter-spacing:.07em;
-    text-transform:uppercase;color:var(--muted);
-    flex-shrink:0;margin-right:12px;min-width:80px;
-  }
-  .edge-bar-bg{display:none}
-  .cell-inp{width:72px}
-  .ghrow td{padding:8px 16px}
-}
+
 ::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
 </style>
 </head>
@@ -142,6 +109,7 @@ td.r{text-align:right}td.c{text-align:center}
   <div class="logo"><span class="logo-dot"></span>EDGE DASHBOARD</div>
   <div style="display:flex;align-items:center;gap:10px">
     <div class="api-remaining" id="api-remaining">-- requests left</div>
+    <button class="refresh-btn" id="collapse-btn" onclick="toggleAll()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted)">Collapse All</button>
     <button class="refresh-btn" id="refresh-btn" onclick="loadOdds()">Refresh</button>
   </div>
 </header>
@@ -184,7 +152,7 @@ td.r{text-align:right}td.c{text-align:center}
         <th>Game</th>
         <th>Mkt</th>
         <th>Side</th>
-        <th>FD Line</th>
+        <th>Consensus Line</th>
         <th class="r">Consensus</th>
         <th class="r">No-Vig %</th>
         <th class="c">Your Line</th>
@@ -241,7 +209,9 @@ function timeInfo(c){
   if(m<0)return{lbl:Math.round(-m)+'m ago',cls:'urgent'};
   if(m<120)return{lbl:Math.round(m)+'m',cls:'urgent'};
   if(m<360)return{lbl:(Math.round(m/6)/10)+'h',cls:'soon'};
-  return{lbl:c.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' '+c.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}),cls:''};
+  var tz=Intl.DateTimeFormat().resolvedOptions().timeZone;
+  var tzShort=c.toLocaleTimeString('en-US',{timeZoneName:'short',hour:'numeric',minute:'2-digit'}).split(' ').pop();
+  return{lbl:c.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' '+c.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})+' '+tzShort,cls:''};
 }
 function getFair(r){
   var pairs={};
@@ -249,6 +219,29 @@ function getFair(r){
   var p=pairs[r.pid]||{};
   var nv=novig(p.A?imp(p.A.am):null,p.B?imp(p.B.am):null);
   return r.ps==='A'?nv.fa:nv.fb;
+}
+
+function toggleAll(){
+  var btn=document.getElementById('collapse-btn');
+  var allCollapsed=Object.keys(collapsed).length>0&&Object.values(collapsed).every(function(v){return v;});
+  if(allCollapsed){
+    // expand all
+    Object.keys(collapsed).forEach(function(k){collapsed[k]=false;});
+    document.querySelectorAll('tr[data-gk]:not(.ghrow)').forEach(function(tr){tr.classList.remove('collapsed-row');});
+    document.querySelectorAll('.gh-arrow').forEach(function(el){el.classList.add('up');});
+    btn.textContent='Collapse All';
+  } else {
+    // collapse all
+    var gOrder=[];
+    document.querySelectorAll('tr.ghrow').forEach(function(tr){
+      var gk=tr.getAttribute('data-gk');
+      if(gk&&gOrder.indexOf(gk)===-1)gOrder.push(gk);
+    });
+    gOrder.forEach(function(k){collapsed[k]=true;});
+    document.querySelectorAll('tr[data-gk]:not(.ghrow)').forEach(function(tr){tr.classList.add('collapsed-row');});
+    document.querySelectorAll('.gh-arrow').forEach(function(el){el.classList.remove('up');});
+    btn.textContent='Expand All';
+  }
 }
 
 function buildTabs(){
@@ -433,7 +426,7 @@ function buildRow(r,color,isC){
     +'<td class="game-td" data-label="Game"><div style="font-weight:600">'+r.side+'</div><div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px">'+r.game+'</div></td>'
     +'<td data-label="Market"><span class="mkt-badge">'+r.mkt+'</span></td>'
     +'<td data-label="Side" style="color:var(--muted);font-size:12px">'+r.side+'</td>'
-    +'<td data-label="FD Line" style="font-family:var(--mono);color:var(--muted);font-size:12px">'+lineStr+'</td>'
+    +'<td data-label="Cons. Line" style="font-family:var(--mono);color:var(--muted);font-size:12px">'+lineStr+'</td>'
     +'<td class="r" data-label="Consensus"><span class="'+aCls+'">'+am+'</span></td>'
     +'<td class="r" data-label="No-Vig %" style="font-family:var(--mono);color:var(--muted)">'+fairStr+'</td>'
     +ylCell
