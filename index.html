@@ -175,6 +175,7 @@ var currentSport='basketball_nba';
 var rawRows=[];
 var preds={};
 var yourLines={};
+var kalshiPrices={};
 var collapsed={};
 
 function checkPass(){
@@ -249,6 +250,138 @@ function toggleAll(){
     document.querySelectorAll('tr[data-gk]:not(.ghrow)').forEach(function(tr){tr.classList.add('collapsed-row');});
     document.querySelectorAll('.gh-arrow').forEach(function(el){el.classList.remove('up');});
     btn.textContent='Expand All';
+  }
+}
+
+
+// ─── KALSHI INTEGRATION ──────────────────────────────
+var KALSHI_SERIES = {
+  basketball_nba:         {ml:'KXNBAGAME',    spread:'KXNBASPREAD',    total:'KXNBATOTAL'},
+  basketball_ncaab:       {ml:'KXNCAAMBGAME', spread:'KXNCAAMBSPREAD', total:'KXNCAAMBTOTAL'},
+  icehockey_nhl:          {ml:'KXNHLGAME',    spread:'KXNHLSPREAD',    total:'KXNHLTOTAL'},
+  baseball_mlb:           {ml:'KXMLBGAME',    spread:'KXMLBSPREAD',    total:'KXMLBTOTAL'},
+  mma_mixed_martial_arts: {ml:'KXUFCFIGHT',   spread:null,             total:null}
+};
+
+var TEAM_ABBREV = {
+  // NBA
+  'Atlanta Hawks':'ATL','Boston Celtics':'BOS','Brooklyn Nets':'BKN',
+  'Charlotte Hornets':'CHA','Chicago Bulls':'CHI','Cleveland Cavaliers':'CLE',
+  'Dallas Mavericks':'DAL','Denver Nuggets':'DEN','Detroit Pistons':'DET',
+  'Golden State Warriors':'GSW','Houston Rockets':'HOU','Indiana Pacers':'IND',
+  'Los Angeles Clippers':'LAC','Los Angeles Lakers':'LAL','Memphis Grizzlies':'MEM',
+  'Miami Heat':'MIA','Milwaukee Bucks':'MIL','Minnesota Timberwolves':'MIN',
+  'New Orleans Pelicans':'NOP','New York Knicks':'NYK','Oklahoma City Thunder':'OKC',
+  'Orlando Magic':'ORL','Philadelphia 76ers':'PHI','Phoenix Suns':'PHX',
+  'Portland Trail Blazers':'POR','Sacramento Kings':'SAC','San Antonio Spurs':'SAS',
+  'Toronto Raptors':'TOR','Utah Jazz':'UTA','Washington Wizards':'WAS',
+  // NHL
+  'Anaheim Ducks':'ANA','Arizona Coyotes':'ARI','Boston Bruins':'BOS',
+  'Buffalo Sabres':'BUF','Calgary Flames':'CGY','Carolina Hurricanes':'CAR',
+  'Chicago Blackhawks':'CHI','Colorado Avalanche':'COL','Columbus Blue Jackets':'CBJ',
+  'Dallas Stars':'DAL','Detroit Red Wings':'DET','Edmonton Oilers':'EDM',
+  'Florida Panthers':'FLA','Los Angeles Kings':'LAK','Minnesota Wild':'MIN',
+  'Montreal Canadiens':'MTL','Nashville Predators':'NSH','New Jersey Devils':'NJD',
+  'New York Islanders':'NYI','New York Rangers':'NYR','Ottawa Senators':'OTT',
+  'Philadelphia Flyers':'PHI','Pittsburgh Penguins':'PIT','San Jose Sharks':'SJS',
+  'Seattle Kraken':'SEA','St. Louis Blues':'STL','Tampa Bay Lightning':'TBL',
+  'Toronto Maple Leafs':'TOR','Vancouver Canucks':'VAN','Vegas Golden Knights':'VGK',
+  'Washington Capitals':'WSH','Winnipeg Jets':'WPG',
+  // MLB
+  'Arizona Diamondbacks':'ARI','Atlanta Braves':'ATL','Baltimore Orioles':'BAL',
+  'Boston Red Sox':'BOS','Chicago Cubs':'CHC','Chicago White Sox':'CWS',
+  'Cincinnati Reds':'CIN','Cleveland Guardians':'CLE','Colorado Rockies':'COL',
+  'Detroit Tigers':'DET','Houston Astros':'HOU','Kansas City Royals':'KCR',
+  'Los Angeles Angels':'LAA','Los Angeles Dodgers':'LAD','Miami Marlins':'MIA',
+  'Milwaukee Brewers':'MIL','Minnesota Twins':'MIN','New York Mets':'NYM',
+  'New York Yankees':'NYY','Oakland Athletics':'OAK','Philadelphia Phillies':'PHI',
+  'Pittsburgh Pirates':'PIT','San Diego Padres':'SDP','San Francisco Giants':'SFG',
+  'Seattle Mariners':'SEA','St. Louis Cardinals':'STL','Tampa Bay Rays':'TBR',
+  'Texas Rangers':'TEX','Toronto Blue Jays':'TOR','Washington Nationals':'WSN',
+  // NCAAB common teams
+  'Duke':'DUKE','North Carolina':'UNC','Kansas':'KAN','Kentucky':'KEN',
+  'Villanova':'NOVA','Gonzaga':'GON','Michigan State':'MSU','UCLA':'UCLA',
+  'Arizona':'ARIZ','Houston':'HOU','Purdue':'PUR','Tennessee':'TENN',
+  'Alabama':'ALA','Baylor':'BAY','UConn':'CONN','San Diego State':'SDST',
+  'Creighton':'CRE','Xavier':'XAV','Marquette':'MARQ','Providence':'PROV',
+  'Iowa State':'IAST','Miami':'MIA','Arkansas':'ARK','Virginia':'UVA',
+  'Illinois':'ILL','Indiana':'IND','Ohio State':'OSU','Michigan':'MICH',
+  'Florida':'FLA','Auburn':'AUB','Missouri':'MIZ','Texas':'TEX',
+  'TCU':'TCU','Iowa':'IOWA','St. John's':'SJU','Utah State':'UTST',
+  'Grand Canyon':'GCU','Vermont':'VER','Colgate':'COL','Princeton':'PRIN',
+  'Drake':'DRK','Penn State':'PSU','Oral Roberts':'ORA','North Texas':'NTX',
+  'Memphis':'MEM','Wake Forest':'WAKE','Notre Dame':'ND','Clemson':'CLEM',
+  'Virginia Tech':'VT','NC State':'NCST','Louisville':'LOU','Syracuse':'SYR',
+  'Pittsburgh':'PITT','Boston College':'BC','Georgia Tech':'GT','Miami (FL)':'MIA',
+  'Florida State':'FSU','Duke Blue Devils':'DUKE'
+};
+
+function getAbbrev(teamName) {
+  if (!teamName) return '';
+  if (TEAM_ABBREV[teamName]) return TEAM_ABBREV[teamName];
+  // fallback: first 3 letters uppercase
+  return teamName.replace(/[^a-zA-Z]/g,'').substring(0,3).toUpperCase();
+}
+
+function buildKalshiTicker(sport, mkt, awayTeam, homeTeam, commence, fdLine) {
+  var series = KALSHI_SERIES[sport];
+  if (!series) return null;
+  var seriesKey = mkt==='ML'?'ml':mkt==='Spread'?'spread':'total';
+  var seriesTicker = series[seriesKey];
+  if (!seriesTicker) return null;
+
+  if (!commence) return null;
+  var d = commence;
+  var yy = String(d.getFullYear()).slice(2);
+  var months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+  var mm = months[d.getMonth()];
+  var dd = String(d.getDate()).padStart(2,'0');
+  var dateStr = yy + mm + dd;
+
+  // MLB includes time
+  var timeStr = '';
+  if (sport === 'baseball_mlb') {
+    var hh = String(d.getHours()).padStart(2,'0');
+    var min = String(d.getMinutes()).padStart(2,'0');
+    timeStr = hh + min;
+  }
+
+  var away = getAbbrev(awayTeam);
+  var home = getAbbrev(homeTeam);
+
+  return seriesTicker + '-' + dateStr + timeStr + away + home;
+}
+
+var kalshiCache = {};
+
+async function fetchKalshiPrice(ticker, mkt, fdLine, ps) {
+  if (!ticker) return null;
+  if (kalshiCache[ticker]) return kalshiCache[ticker];
+
+  try {
+    var url = '/api/kalshi?ticker=' + encodeURIComponent(ticker);
+    if ((mkt==='Spread'||mkt==='Total') && fdLine!=null) {
+      // For spread/total we need the event to find the right line
+      // Try fetching the event to get all markets
+      var eventTicker = ticker.replace(/^KX[A-Z]+(SPREAD|TOTAL)/, function(m) {
+        return m.replace('SPREAD','GAME').replace('TOTAL','GAME');
+      });
+    }
+    var res = await fetch(url);
+    if (!res.ok) return null;
+    var data = await res.json();
+    var market = data.market;
+    if (!market) return null;
+
+    // yes_bid_dollars is a string like "0.5600"
+    var price = parseFloat(market.yes_bid_dollars) * 100;
+    // For ML: Yes = team wins. ps=A is away team, ps=B is home team
+    // For Spread: Yes = favorite covers. Need to map ps to yes/no
+    var result = isFinite(price) ? Math.round(price) : null;
+    kalshiCache[ticker] = result;
+    return result;
+  } catch(e) {
+    return null;
   }
 }
 
@@ -397,6 +530,34 @@ function renderTable(){
     html+=buildRow(r,color,isC);
   });
   document.getElementById('tbody').innerHTML=html;
+  // Fetch Kalshi prices async after render
+  fetchAllKalshi(filtered);
+}
+
+async function fetchAllKalshi(rows) {
+  var done = {};
+  for (var i=0; i<rows.length; i++) {
+    var r = rows[i];
+    if (done[r.id]) continue;
+    done[r.id] = true;
+
+    var teams = r.game.split(' @ ');
+    var away = teams[0]||'', home = teams[1]||'';
+    var ticker = buildKalshiTicker(currentSport, r.mkt, away, home, r.cm, r.pt);
+    if (!ticker) continue;
+
+    var price = await fetchKalshiPrice(ticker, r.mkt, r.pt, r.ps);
+    if (price != null) {
+      kalshiPrices[r.id] = price;
+      var cell = document.getElementById('kalshi-'+r.id);
+      if (cell) {
+        cell.innerHTML = '<span style="font-family:var(--mono);color:#2dcc7e;font-weight:600">'+price+'%</span>';
+      }
+    } else {
+      var cell = document.getElementById('kalshi-'+r.id);
+      if (cell) cell.innerHTML = '<span style="color:var(--muted2);font-family:var(--mono);font-size:11px">-</span>';
+    }
+  }
 }
 
 function buildRow(r,color,isC){
@@ -483,9 +644,9 @@ function setPred(input){
   }
   var tds=tr.querySelectorAll('td');
   // col indices: Edge=9, Units=10, Bet=11
-  tds[9].innerHTML='<div class="edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:'+bw+'px;background:'+bc+'"></div></div><span class="edge-val '+ec+'">'+es+'</span></div>';
-  tds[10].innerHTML=u===0?'<span class="u-pass">PASS</span>':'<span class="u-val">'+u+'u</span>';
-  tds[11].innerHTML=u===0?'<span class="u-pass">-</span>':'<span class="bet-val">$'+(u*unit).toFixed(0)+'</span>';
+  tds[10].innerHTML='<div class="edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:'+bw+'px;background:'+bc+'"></div></div><span class="edge-val '+ec+'">'+es+'</span></div>';
+  tds[11].innerHTML=u===0?'<span class="u-pass">PASS</span>':'<span class="u-val">'+u+'u</span>';
+  tds[12].innerHTML=u===0?'<span class="u-pass">-</span>':'<span class="bet-val">$'+(u*unit).toFixed(0)+'</span>';
   tr.classList.toggle('has-edge',edge!=null&&edge>0);
   document.getElementById('stat-edges').textContent=document.querySelectorAll('tr.has-edge').length;
 }
