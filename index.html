@@ -152,7 +152,7 @@ td.r{text-align:right}td.c{text-align:center}
         <th>Game</th>
         <th>Mkt</th>
         <th>Side</th>
-        <th>Consensus Line</th>
+        <th>FD Line</th>
         <th class="r">FD Odds</th>
         <th class="r">No-Vig %</th>
         <th class="c">Your Line</th>
@@ -578,11 +578,12 @@ function buildRow(r,color,isC){
     +'<td class="game-td" data-label="Game"><div style="font-weight:600">'+r.side+'</div><div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px">'+r.game+'</div></td>'
     +'<td data-label="Market"><span class="mkt-badge">'+r.mkt+'</span></td>'
     +'<td data-label="Side" style="color:var(--muted);font-size:12px">'+r.side+'</td>'
-    +'<td data-label="Cons. Line" style="font-family:var(--mono);color:var(--muted);font-size:12px">'+lineStr+'</td>'
+    +'<td data-label="FD Line" style="font-family:var(--mono);color:var(--muted);font-size:12px">'+lineStr+'</td>'
     +'<td class="r" data-label="Consensus"><span class="'+aCls+'">'+am+'</span></td>'
     +'<td class="r" data-label="No-Vig %" style="font-family:var(--mono);color:var(--muted)">'+fairStr+'</td>'
     +ylCell
     +'<td class="r" data-label="Adj. Fair %" style="font-family:var(--mono);color:'+(afChanged?'var(--yellow)':'var(--muted)')+'">'+afStr+'</td>'
+    +'<td class="c" data-label="Kalshi %" id="kalshi-'+r.id+'"><span style="color:var(--muted2);font-family:var(--mono);font-size:11px">...</span></td>'
     +'<td class="c" data-label="Mkt Price %"><div style="display:flex;align-items:center;gap:4px;justify-content:center"><input class="cell-inp'+(pv?' filled':'')+'" type="number" min="1" max="99" step="0.5" placeholder="-" value="'+pv+'" data-id="'+r.id+'" onblur="setPred(this)" onkeydown="if(event.key===\'Enter\')this.blur()"><span class="pred-unit">%</span></div></td>'
     +'<td class="r" data-label="Edge"><div class="edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:'+bw+'px;background:'+bc+'"></div></div><span class="edge-val '+ec+'">'+es+'</span></div></td>'
     +'<td class="r" data-label="Units">'+uH+'</td>'
