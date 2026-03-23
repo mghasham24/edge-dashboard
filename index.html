@@ -307,7 +307,7 @@ var TEAM_ABBREV = {
   'Iowa State':'IAST','Miami':'MIA','Arkansas':'ARK','Virginia':'UVA',
   'Illinois':'ILL','Indiana':'IND','Ohio State':'OSU','Michigan':'MICH',
   'Florida':'FLA','Auburn':'AUB','Missouri':'MIZ','Texas':'TEX',
-  'TCU':'TCU','Iowa':'IOWA','St. John's':'SJU','Utah State':'UTST',
+  'TCU':'TCU','Iowa':'IOWA','Utah State':'UTST',
   'Grand Canyon':'GCU','Vermont':'VER','Colgate':'COL','Princeton':'PRIN',
   'Drake':'DRK','Penn State':'PSU','Oral Roberts':'ORA','North Texas':'NTX',
   'Memphis':'MEM','Wake Forest':'WAKE','Notre Dame':'ND','Clemson':'CLEM',
@@ -354,35 +354,20 @@ function buildKalshiTicker(sport, mkt, awayTeam, homeTeam, commence, fdLine) {
 
 var kalshiCache = {};
 
-async function fetchKalshiPrice(ticker, mkt, fdLine, ps) {
-  if (!ticker) return null;
-  if (kalshiCache[ticker]) return kalshiCache[ticker];
-
-  try {
-    var url = '/api/kalshi?ticker=' + encodeURIComponent(ticker);
-    if ((mkt==='Spread'||mkt==='Total') && fdLine!=null) {
-      // For spread/total we need the event to find the right line
-      // Try fetching the event to get all markets
-      var eventTicker = ticker.replace(/^KX[A-Z]+(SPREAD|TOTAL)/, function(m) {
-        return m.replace('SPREAD','GAME').replace('TOTAL','GAME');
-      });
-    }
-    var res = await fetch(url);
-    if (!res.ok) return null;
-    var data = await res.json();
-    var market = data.market;
-    if (!market) return null;
-
-    // yes_bid_dollars is a string like "0.5600"
-    var price = parseFloat(market.yes_bid_dollars) * 100;
-    // For ML: Yes = team wins. ps=A is away team, ps=B is home team
-    // For Spread: Yes = favorite covers. Need to map ps to yes/no
-    var result = isFinite(price) ? Math.round(price) : null;
-    kalshiCache[ticker] = result;
-    return result;
-  } catch(e) {
-    return null;
-  }
+function fetchKalshiPrice(ticker, callback) {
+  if (!ticker) { callback(null); return; }
+  if (kalshiCache[ticker] !== undefined) { callback(kalshiCache[ticker]); return; }
+  var url = '/api/kalshi?ticker=' + encodeURIComponent(ticker);
+  fetch(url)
+    .then(function(res) { return res.ok ? res.json() : null; })
+    .then(function(data) {
+      if (!data || !data.market) { kalshiCache[ticker]=null; callback(null); return; }
+      var price = parseFloat(data.market.yes_bid_dollars) * 100;
+      var result = isFinite(price) ? Math.round(price) : null;
+      kalshiCache[ticker] = result;
+      callback(result);
+    })
+    .catch(function() { kalshiCache[ticker]=null; callback(null); });
 }
 
 function buildTabs(){
@@ -534,30 +519,31 @@ function renderTable(){
   fetchAllKalshi(filtered);
 }
 
-async function fetchAllKalshi(rows) {
+function fetchAllKalshi(rows) {
   var done = {};
-  for (var i=0; i<rows.length; i++) {
-    var r = rows[i];
-    if (done[r.id]) continue;
+  rows.forEach(function(r) {
+    if (done[r.id]) return;
     done[r.id] = true;
-
     var teams = r.game.split(' @ ');
     var away = teams[0]||'', home = teams[1]||'';
     var ticker = buildKalshiTicker(currentSport, r.mkt, away, home, r.cm, r.pt);
-    if (!ticker) continue;
-
-    var price = await fetchKalshiPrice(ticker, r.mkt, r.pt, r.ps);
-    if (price != null) {
-      kalshiPrices[r.id] = price;
-      var cell = document.getElementById('kalshi-'+r.id);
-      if (cell) {
-        cell.innerHTML = '<span style="font-family:var(--mono);color:#2dcc7e;font-weight:600">'+price+'%</span>';
-      }
-    } else {
+    if (!ticker) {
       var cell = document.getElementById('kalshi-'+r.id);
       if (cell) cell.innerHTML = '<span style="color:var(--muted2);font-family:var(--mono);font-size:11px">-</span>';
+      return;
     }
-  }
+    (function(rowId, t) {
+      fetchKalshiPrice(t, function(price) {
+        if (price != null) kalshiPrices[rowId] = price;
+        var cell = document.getElementById('kalshi-'+rowId);
+        if (cell) {
+          cell.innerHTML = price != null
+            ? '<span style="font-family:var(--mono);color:#2dcc7e;font-weight:600">'+price+'%</span>'
+            : '<span style="color:var(--muted2);font-family:var(--mono);font-size:11px">-</span>';
+        }
+      });
+    })(r.id, ticker);
+  });
 }
 
 function buildRow(r,color,isC){
