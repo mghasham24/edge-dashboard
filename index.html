@@ -781,14 +781,18 @@ function setLineMobile(input) {
   var id = input.getAttribute('data-id');
   yourLines[id] = input.value!==''?parseFloat(input.value):null;
   input.classList.toggle('line-changed', yourLines[id]!=null);
-  // Update both sides of this pair
-  var r = rawRows.find(function(x){return x.id===id;});
-  if (!r) return;
-  var pairs={};
-  rawRows.forEach(function(x){if(!pairs[x.pid])pairs[x.pid]={};pairs[x.pid][x.ps]=x;});
-  var pair = pairs[r.pid]||{};
-  ['A','B'].forEach(function(ps){
-    if (pair[ps]) updateMobileEdge(pair[ps].id);
+  // Re-trigger any pred inputs in same section
+  var inputRow = input.parentElement;
+  while (inputRow && !inputRow.classList.contains('mc-inputs')) {
+    inputRow = inputRow.parentElement;
+  }
+  if (!inputRow) return;
+  // Find pred inputs in this section and recompute
+  var predInputs = inputRow.querySelectorAll('input[data-id]');
+  predInputs.forEach(function(pi){
+    if (pi !== input && preds[pi.getAttribute('data-id')]) {
+      computeAndShowEdge(pi.getAttribute('data-id'), inputRow);
+    }
   });
 }
 
@@ -796,49 +800,48 @@ function setPredMobile(input) {
   var id = input.getAttribute('data-id');
   preds[id] = input.value;
   input.classList.toggle('filled', !!input.value);
-  updateMobileEdge(id);
+  // Find result div - it's a sibling/cousin in the same mc-inputs div
+  var inputRow = input.parentElement;
+  while (inputRow && !inputRow.classList.contains('mc-inputs')) {
+    inputRow = inputRow.parentElement;
+  }
+  if (!inputRow) return;
+  computeAndShowEdge(id, inputRow);
 }
 
-function updateMobileEdge(id) {
+function computeAndShowEdge(id, inputRow) {
   var r = rawRows.find(function(x){return x.id===id;});
   if (!r) return;
   var unit = parseFloat(document.getElementById('unit-size').value)||300;
-
-  // Build pairs
   var pairs={};
   rawRows.forEach(function(x){if(!pairs[x.pid])pairs[x.pid]={};pairs[x.pid][x.ps]=x;});
   var pair=pairs[r.pid]||{};
   var nv=novig(pair.A?imp(pair.A.am):null,pair.B?imp(pair.B.am):null);
   var fair=r.ps==='A'?nv.fa:nv.fb;
-  var yl=yourLines[id]!=null?yourLines[id]:null;
+  var yl=yourLines[r.id]!=null?yourLines[r.id]:null;
   var af=adjFair(fair,r.pt,yl,r.mkt,r.ps);
   var pr=preds[id];
   var pred=(pr!==undefined&&pr!=='')?parseFloat(pr)/100:null;
   var edge=(af!=null&&pred!=null&&isFinite(pred))?(af-pred)*100:null;
   var u=pred!=null?kellyUnits(af,pred):edgeUnits(edge);
   var bet=u*unit;
-
-  // Find the result div for this market section - search in mobile cards only
-  var inp = document.querySelector('#mobile-cards input[data-id="'+id+'"]');
-  if (!inp) return;
-  var inputRow = inp.closest('.mc-inputs');
-  if (!inputRow) return;
-  var resultDiv = inputRow.querySelector('.mc-result');
-  if (!resultDiv) {
-    resultDiv = document.createElement('div');
-    resultDiv.className = 'mc-result';
-    resultDiv.style.cssText = 'margin-left:auto;display:flex;align-items:center;gap:6px;flex-shrink:0';
-    inputRow.appendChild(resultDiv);
+  // Find or create result div
+  var resultDiv=inputRow.querySelector('.mc-result');
+  if(!resultDiv){
+    resultDiv=document.createElement('div');
+    resultDiv.className='mc-result';
+    resultDiv.style.cssText='display:flex;align-items:center;gap:6px;margin-top:8px;flex-wrap:wrap';
+    inputRow.parentElement.appendChild(resultDiv);
   }
-  resultDiv.innerHTML = '';
-  if (edge!=null) {
+  if(edge!=null){
     var edgeStr=(edge>0?'+':'')+edge.toFixed(1)+'%';
-    var edgeCls=edge>=8?'e-strong':edge>=5?'e-med':edge>0?'e-weak':'e-neg';
-    resultDiv.innerHTML='<span class="mc-edge '+edgeCls+'">'+edgeStr+'</span>'
-      +'<span class="mc-units'+(u===0?' pass':'')+'">'+( u===0?'PASS':u+'u')+'</span>'
-      +(u>0?'<span class="mc-bet">$'+bet.toFixed(0)+'</span>':'');
+    var ec=edge>=8?'e-strong':edge>=5?'e-med':edge>0?'e-weak':'e-neg';
+    resultDiv.innerHTML='<span style="font-family:var(--mono);font-size:13px;font-weight:600" class="'+ec+'">'+edgeStr+'</span>'
+      +' <span style="font-family:var(--mono);font-size:12px;font-weight:600;color:'+(u===0?'var(--muted2)':'var(--green)')+'">'+( u===0?'PASS':u+'u')+'</span>'
+      +(u>0?' <span style="font-family:var(--mono);font-size:12px;color:var(--text)">$'+bet.toFixed(0)+'</span>':'');
+  } else {
+    resultDiv.innerHTML='';
   }
-  document.getElementById('stat-edges').textContent = document.querySelectorAll('.mc-edge.e-strong, .mc-edge.e-med, .mc-edge.e-weak').length;
 }
 
 function recomputeAndRenderMobile(unit) {
