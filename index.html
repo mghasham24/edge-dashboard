@@ -546,18 +546,24 @@ function updateScoreBadges() {
 
 function handleEnter(e){ if(e.key==='Enter') e.target.blur(); }
 
-// ── MOBILE CARD RENDER ───────────────────────────────
-var mobileCollapsed = {};
+function mk(tag, attrs, children) {
+  var el = document.createElement(tag);
+  Object.keys(attrs||{}).forEach(function(k){ el.setAttribute(k, attrs[k]); });
+  (children||[]).forEach(function(c){
+    if (typeof c === 'string') el.insertAdjacentHTML('beforeend', c);
+    else if (c) el.appendChild(c);
+  });
+  return el;
+}
 
 function renderMobileCards(filtered) {
   var container = document.getElementById('mobile-cards');
   if (!container) return;
+  container.innerHTML = '';
 
   var unit = parseFloat(document.getElementById('unit-size').value)||300;
-
-  // Group by game
   var gameOrder=[], gameSeen={};
-  filtered.forEach(function(r){if(!gameSeen[r.game]){gameSeen[r.game]=true;gameOrder.push(r.game);}});
+  filtered.forEach(function(r){ if(!gameSeen[r.game]){gameSeen[r.game]=true;gameOrder.push(r.game);} });
 
   var COLORS=['#4f6ef7','#2dcc7e','#f5c842','#f05252','#a78bfa','#38bdf8','#fb923c','#e879f9','#34d399','#f87171','#60a5fa','#fbbf24'];
   var leagueBadgeMap={basketball_nba:'NBA',basketball_ncaab:'NCAAB',icehockey_nhl:'NHL',baseball_mlb:'MLB',mma_mixed_martial_arts:'UFC',soccer_epl:'EPL',soccer_uefa_champs_league:'UCL'};
@@ -565,7 +571,11 @@ function renderMobileCards(filtered) {
   var leagueLbl = leagueBadgeMap[currentSport]||'';
   var leagueClr = leagueColorMap[currentSport]||'var(--muted)';
 
-  var html = '';
+  if (!gameOrder.length) {
+    container.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">No odds loaded</div>';
+    return;
+  }
+
   gameOrder.forEach(function(game, gi) {
     var gameRows = filtered.filter(function(r){return r.game===game;});
     if (!gameRows.length) return;
@@ -573,90 +583,172 @@ function renderMobileCards(filtered) {
     var isC = !!mobileCollapsed[game];
     var ti = timeInfo(gameRows[0].cm);
     var teams = game.split(' @ ');
-    var gk = game.replace(/'/g,"\'");
 
-    html += '<div class="game-card">';
-    html += '<div class="game-card-header" data-gk="'+game.replace(/"/g,'&quot;')+'" onclick="toggleMobileCard(this.getAttribute(\'data-gk\'))">'
-      +'<div class="gc-stripe" style="background:'+color+'"></div>'
-      +(leagueLbl?'<span class="gc-league" style="background:'+leagueClr+'">'+leagueLbl+'</span>':'')
-      +'<span class="gc-title">'+(teams[0]||'')+'<span style="color:var(--muted2);font-weight:400;margin:0 5px">@</span>'+(teams[1]||'')+'</span>'
-      +(ti.lbl?'<span class="gc-time '+ti.cls+'">'+ti.lbl+'</span>':'')
-      +'<span class="gc-arrow'+(isC?'':' up')+'" id="gc-arrow-'+gi+'">&#9660;</span>'
-      +'</div>';
+    // Card
+    var card = document.createElement('div');
+    card.className = 'game-card';
 
-    html += '<div class="game-card-body'+(isC?' collapsed':'')+'" id="gc-body-'+gi+'" data-game="'+game.replace(/"/g,'&quot;')+'">';
+    // Header
+    var hdr = document.createElement('div');
+    hdr.className = 'game-card-header';
+    hdr.dataset.game = game;
+    hdr.addEventListener('click', function(){ toggleMobileCard(this.dataset.game); });
 
-    // Group by market
+    var stripe = document.createElement('div');
+    stripe.className = 'gc-stripe';
+    stripe.style.background = color;
+    hdr.appendChild(stripe);
+
+    if (leagueLbl) {
+      var badge = document.createElement('span');
+      badge.className = 'gc-league';
+      badge.style.background = leagueClr;
+      badge.textContent = leagueLbl;
+      hdr.appendChild(badge);
+    }
+
+    var title = document.createElement('span');
+    title.className = 'gc-title';
+    title.innerHTML = (teams[0]||'') + '<span style="color:var(--muted2);font-weight:400;margin:0 5px">@</span>' + (teams[1]||'');
+    hdr.appendChild(title);
+
+    if (ti.lbl) {
+      var timeBadge = document.createElement('span');
+      timeBadge.className = 'gc-time ' + ti.cls;
+      timeBadge.textContent = ti.lbl;
+      hdr.appendChild(timeBadge);
+    }
+
+    var arrow = document.createElement('span');
+    arrow.className = 'gc-arrow' + (isC ? '' : ' up');
+    arrow.id = 'gc-arrow-' + gi;
+    arrow.innerHTML = '&#9660;';
+    hdr.appendChild(arrow);
+    card.appendChild(hdr);
+
+    // Body
+    var body = document.createElement('div');
+    body.className = 'game-card-body' + (isC ? ' collapsed' : '');
+    body.dataset.game = game;
+
     var mkts = ['ML','Spread','Total'];
-    mkts.forEach(function(mkt){
+    mkts.forEach(function(mkt) {
       var mktRows = gameRows.filter(function(r){return r.mkt===mkt;});
       if (!mktRows.length) return;
 
-      html += '<div class="mc-section">';
-      html += '<div class="mc-label">'+mkt+'</div>';
+      var section = document.createElement('div');
+      section.className = 'mc-section';
 
-      // Show each side
-      mktRows.forEach(function(r){
-        var am = fmtAm(r.am);
-        var amCls = Number(r.am)>=0?'odds-pos':'odds-neg';
-        var fairStr = r.af!=null?(r.af*100).toFixed(1)+'%':'-';
-        html += '<div class="mc-row">'
-          +'<span class="mc-side">'+r.side+'</span>'
-          +'<span class="mc-odds '+amCls+'">'+am+'</span>'
-          +'<span class="mc-fair">'+fairStr+'</span>'
-          +'</div>';
+      var lbl = document.createElement('div');
+      lbl.className = 'mc-label';
+      lbl.textContent = mkt;
+      section.appendChild(lbl);
+
+      // Side rows
+      mktRows.forEach(function(r) {
+        var row = document.createElement('div');
+        row.className = 'mc-row';
+
+        var side = document.createElement('span');
+        side.className = 'mc-side';
+        side.textContent = r.side;
+        row.appendChild(side);
+
+        var odds = document.createElement('span');
+        odds.className = 'mc-odds ' + (Number(r.am)>=0?'odds-pos':'odds-neg');
+        odds.textContent = fmtAm(r.am);
+        row.appendChild(odds);
+
+        var fair = document.createElement('span');
+        fair.className = 'mc-fair';
+        fair.textContent = r.af!=null?(r.af*100).toFixed(1)+'%':'-';
+        row.appendChild(fair);
+
+        section.appendChild(row);
       });
 
-      // Input row — one per market pair (use first row's id as reference)
-      var refRow = mktRows[0]; // A side
-      var refRowB = mktRows[1]; // B side
-      var pv = preds[refRow.id]||'';
-      var pvB = preds[refRowB?refRowB.id:'']||'';
-      var ylv = refRow.yl!=null?refRow.yl:'';
-      var ph = refRow.pt!=null?refRow.pt:'';
+      // Input row
+      var inputRow = document.createElement('div');
+      inputRow.className = 'mc-inputs';
 
-      // Edge display for this market (use first row that has edge)
-      var edgeRow = mktRows.find(function(r){return r.edge!=null;});
-      var edgeStr='-', edgeCls='', uStr='PASS', betStr='';
-      if (edgeRow && edgeRow.edge!=null) {
-        edgeStr=(edgeRow.edge>0?'+':'')+edgeRow.edge.toFixed(1)+'%';
-        if(edgeRow.edge>=8)edgeCls='e-strong';
-        else if(edgeRow.edge>=5)edgeCls='e-med';
-        else if(edgeRow.edge>0)edgeCls='e-weak';
-        else edgeCls='e-neg';
-        if(edgeRow.u>0){uStr=edgeRow.u+'u';betStr='$'+edgeRow.bet.toFixed(0);}
+      // Your Line (Spread/Total only)
+      if (mkt !== 'ML') {
+        var refRow = mktRows[0];
+        var ylv = refRow.yl!=null?String(refRow.yl):'';
+        var ph = refRow.pt!=null?String(refRow.pt):'';
+
+        var lineGrp = document.createElement('div');
+        lineGrp.className = 'mc-inp-group';
+        var lineLbl = document.createElement('span');
+        lineLbl.className = 'mc-inp-lbl';
+        lineLbl.textContent = 'Line';
+        lineGrp.appendChild(lineLbl);
+        var lineInp = document.createElement('input');
+        lineInp.className = 'mc-inp' + (ylv ? ' line-changed' : '');
+        lineInp.type = 'number';
+        lineInp.step = '0.5';
+        lineInp.placeholder = ph;
+        lineInp.value = ylv;
+        lineInp.dataset.id = refRow.id;
+        lineInp.addEventListener('blur', function(){ setLineMobile(this); });
+        lineInp.addEventListener('keydown', function(e){ if(e.key==='Enter') this.blur(); });
+        lineGrp.appendChild(lineInp);
+        inputRow.appendChild(lineGrp);
       }
 
-      html += '<div class="mc-inputs">';
-      // Your Line (only for spread/total)
-      if (mkt!=='ML') {
-        html += '<div class="mc-inp-group">'
-          +'<span class="mc-inp-lbl">Line</span>'
-          +'<input class="mc-inp'+(ylv?' line-changed':'')+'" type="number" step="0.5" placeholder="'+ph+'" value="'+ylv+'" data-id="'+refRow.id+'" data-mtype="line" onblur="setLineMobile(this)" onkeydown="if(event.key==='Enter')this.blur()">'
-          +'</div>';
-      }
-      // Mkt Price
-      mktRows.forEach(function(r){
+      // Mkt Price per side
+      mktRows.forEach(function(r) {
         var pval = preds[r.id]||'';
-        html += '<div class="mc-inp-group">'
-          +'<span class="mc-inp-lbl" style="max-width:60px;overflow:hidden;text-overflow:ellipsis">'+r.side.split(' ').pop()+'</span>'
-          +'<input class="mc-inp" type="number" min="1" max="99" step="0.5" placeholder="%" value="'+pval+'" data-id="'+r.id+'" onblur="setPredMobile(this)" onkeydown="if(event.key===\'Enter\')this.blur()">'
-          +'</div>';
+        var predGrp = document.createElement('div');
+        predGrp.className = 'mc-inp-group';
+        var predLbl = document.createElement('span');
+        predLbl.className = 'mc-inp-lbl';
+        predLbl.textContent = r.side.split(' ').pop();
+        predLbl.style.cssText = 'max-width:60px;overflow:hidden;text-overflow:ellipsis';
+        predGrp.appendChild(predLbl);
+        var predInp = document.createElement('input');
+        predInp.className = 'mc-inp' + (pval ? ' filled' : '');
+        predInp.type = 'number';
+        predInp.min = '1';
+        predInp.max = '99';
+        predInp.step = '0.5';
+        predInp.placeholder = '%';
+        predInp.value = pval;
+        predInp.dataset.id = r.id;
+        predInp.addEventListener('blur', function(){ setPredMobile(this); });
+        predInp.addEventListener('keydown', function(e){ if(e.key==='Enter') this.blur(); });
+        predGrp.appendChild(predInp);
+        inputRow.appendChild(predGrp);
       });
-      // Edge result
+
+      // Edge/Units display
+      var edgeRow = mktRows.find(function(r){return r.edge!=null;});
       if (edgeRow && edgeRow.edge!=null) {
-        html += '<span class="mc-edge '+edgeCls+'">'+edgeStr+'</span>'
-          +(edgeRow.u>0?'<span class="mc-units">'+uStr+'</span><span class="mc-bet">'+betStr+'</span>':'<span class="mc-units pass">PASS</span>');
+        var edgeStr = (edgeRow.edge>0?'+':'')+edgeRow.edge.toFixed(1)+'%';
+        var edgeCls = edgeRow.edge>=8?'e-strong':edgeRow.edge>=5?'e-med':edgeRow.edge>0?'e-weak':'e-neg';
+        var edgeEl = document.createElement('span');
+        edgeEl.className = 'mc-edge ' + edgeCls;
+        edgeEl.textContent = edgeStr;
+        inputRow.appendChild(edgeEl);
+        var uEl = document.createElement('span');
+        uEl.className = 'mc-units' + (edgeRow.u===0?' pass':'');
+        uEl.textContent = edgeRow.u===0?'PASS':edgeRow.u+'u';
+        inputRow.appendChild(uEl);
+        if (edgeRow.u>0) {
+          var betEl = document.createElement('span');
+          betEl.className = 'mc-bet';
+          betEl.textContent = '$'+edgeRow.bet.toFixed(0);
+          inputRow.appendChild(betEl);
+        }
       }
-      html += '</div>'; // mc-inputs
-      html += '</div>'; // mc-section
+
+      section.appendChild(inputRow);
+      body.appendChild(section);
     });
 
-    html += '</div>'; // game-card-body
-    html += '</div>'; // game-card
+    card.appendChild(body);
+    container.appendChild(card);
   });
-
-  container.innerHTML = html || '<div style="padding:40px;text-align:center;color:var(--muted)">No odds loaded</div>';
 }
 
 function toggleMobileCard(game) {
