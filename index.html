@@ -574,7 +574,7 @@ function renderMobileCards(filtered) {
     var gk = game.replace(/'/g,"\'");
 
     html += '<div class="game-card">';
-    html += '<div class="game-card-header" onclick="toggleMobileCard(''+gk+'')">'
+    html += '<div class="game-card-header" data-gk="'+game.replace(/"/g,'&quot;')+'" onclick="toggleMobileCard(this.getAttribute(\'data-gk\'))">'
       +'<div class="gc-stripe" style="background:'+color+'"></div>'
       +(leagueLbl?'<span class="gc-league" style="background:'+leagueClr+'">'+leagueLbl+'</span>':'')
       +'<span class="gc-title">'+(teams[0]||'')+'<span style="color:var(--muted2);font-weight:400;margin:0 5px">@</span>'+(teams[1]||'')+'</span>'
