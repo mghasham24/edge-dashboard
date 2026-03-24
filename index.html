@@ -588,11 +588,14 @@ function renderMobileCards(filtered) {
     // Card
     var card = document.createElement('div');
     card.className = 'game-card';
+    card.style.borderTop = '2px solid ' + color + '66';
 
     // Header
     var hdr = document.createElement('div');
     hdr.className = 'game-card-header';
     hdr.dataset.game = game;
+    hdr.style.borderLeft = '4px solid ' + color;
+    hdr.style.background = 'linear-gradient(90deg, ' + color + '22 0%, var(--bg3) 60%)';
     hdr.addEventListener('click', function(){ toggleMobileCard(this.dataset.game); });
 
     var stripe = document.createElement('div');
@@ -675,7 +678,7 @@ function renderMobileCards(filtered) {
       // Your Line (Spread/Total only)
       if (mkt !== 'ML') {
         var refRow = mktRows[0];
-        var ylv = refRow.yl!=null?String(refRow.yl):'';
+        var ylv = (refRow.yl!=null && refRow.yl!=='')?String(refRow.yl):'';
         var ph = refRow.pt!=null?String(refRow.pt):'';
 
         var lineGrp = document.createElement('div');
@@ -722,26 +725,29 @@ function renderMobileCards(filtered) {
         inputRow.appendChild(predGrp);
       });
 
-      // Edge/Units display
-      var edgeRow = mktRows.find(function(r){return r.edge!=null;});
+      // Edge/Units display - always show result area
+      var edgeRow = mktRows.find(function(r){return r.edge!=null;}) || mktRows[0];
+      var resultDiv = document.createElement('div');
+      resultDiv.style.cssText = 'margin-left:auto;display:flex;align-items:center;gap:6px;flex-shrink:0';
       if (edgeRow && edgeRow.edge!=null) {
         var edgeStr = (edgeRow.edge>0?'+':'')+edgeRow.edge.toFixed(1)+'%';
         var edgeCls = edgeRow.edge>=8?'e-strong':edgeRow.edge>=5?'e-med':edgeRow.edge>0?'e-weak':'e-neg';
         var edgeEl = document.createElement('span');
         edgeEl.className = 'mc-edge ' + edgeCls;
         edgeEl.textContent = edgeStr;
-        inputRow.appendChild(edgeEl);
+        resultDiv.appendChild(edgeEl);
         var uEl = document.createElement('span');
         uEl.className = 'mc-units' + (edgeRow.u===0?' pass':'');
         uEl.textContent = edgeRow.u===0?'PASS':edgeRow.u+'u';
-        inputRow.appendChild(uEl);
+        resultDiv.appendChild(uEl);
         if (edgeRow.u>0) {
           var betEl = document.createElement('span');
           betEl.className = 'mc-bet';
           betEl.textContent = '$'+edgeRow.bet.toFixed(0);
-          inputRow.appendChild(betEl);
+          resultDiv.appendChild(betEl);
         }
       }
+      inputRow.appendChild(resultDiv);
 
       section.appendChild(inputRow);
       body.appendChild(section);
