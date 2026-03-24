@@ -90,6 +90,9 @@ td.r{text-align:right}td.c{text-align:center}
 .gate-btn{background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:13px;font-weight:600;padding:10px 32px;border-radius:6px;cursor:pointer;width:100%;text-transform:uppercase}
 .gate-btn:hover{opacity:.85}
 .gate-err{color:var(--red);font-family:var(--mono);font-size:12px;display:none}
+.live-badge{display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);font-size:10px;font-weight:600;padding:2px 7px;border-radius:3px;background:rgba(240,82,82,.15);border:1px solid rgba(240,82,82,.3);color:var(--red)}
+.live-dot{width:5px;height:5px;border-radius:50%;background:var(--red);animation:pulse .8s ease-in-out infinite}
+.score-info{font-family:var(--mono);font-size:10px;color:var(--muted);margin-left:2px}
 
 ::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
 </style>
@@ -157,7 +160,6 @@ td.r{text-align:right}td.c{text-align:center}
         <th class="r">No-Vig %</th>
         <th class="c">Your Line</th>
         <th class="r">Adj. Fair %</th>
-        <th class="c">Kalshi %</th>
         <th class="c">Mkt Price %</th>
         <th class="r">Edge</th>
         <th class="r">Units</th>
@@ -176,8 +178,10 @@ var currentSport='basketball_nba';
 var rawRows=[];
 var preds={};
 var yourLines={};
-var kalshiPrices={};
 var collapsed={};
+var scoresData={};
+var scoresTimer=null;
+var scoresMap={};
 
 function checkPass(){
   var inp=document.getElementById('gate-inp');
@@ -255,120 +259,146 @@ function toggleAll(){
 }
 
 
-// ─── KALSHI INTEGRATION ──────────────────────────────
-var KALSHI_SERIES = {
-  basketball_nba:         {ml:'KXNBAGAME',    spread:'KXNBASPREAD',    total:'KXNBATOTAL'},
-  basketball_ncaab:       {ml:'KXNCAAMBGAME', spread:'KXNCAAMBSPREAD', total:'KXNCAAMBTOTAL'},
-  icehockey_nhl:          {ml:'KXNHLGAME',    spread:'KXNHLSPREAD',    total:'KXNHLTOTAL'},
-  baseball_mlb:           {ml:'KXMLBGAME',    spread:'KXMLBSPREAD',    total:'KXMLBTOTAL'},
-  mma_mixed_martial_arts: {ml:'KXUFCFIGHT',   spread:null,             total:null}
-};
+// ─── LIVE SCORES ──────────────────────────────────────
+function fetchScores() {
+  // Only fetch for sports that have live scores
+  var scoringSports = ['basketball_nba','basketball_ncaab','icehockey_nhl','baseball_mlb'];
+  if (scoringSports.indexOf(currentSport) === -1) return;
 
-var TEAM_ABBREV = {
-  // NBA
-  'Atlanta Hawks':'ATL','Boston Celtics':'BOS','Brooklyn Nets':'BKN',
-  'Charlotte Hornets':'CHA','Chicago Bulls':'CHI','Cleveland Cavaliers':'CLE',
-  'Dallas Mavericks':'DAL','Denver Nuggets':'DEN','Detroit Pistons':'DET',
-  'Golden State Warriors':'GSW','Houston Rockets':'HOU','Indiana Pacers':'IND',
-  'Los Angeles Clippers':'LAC','Los Angeles Lakers':'LAL','Memphis Grizzlies':'MEM',
-  'Miami Heat':'MIA','Milwaukee Bucks':'MIL','Minnesota Timberwolves':'MIN',
-  'New Orleans Pelicans':'NOP','New York Knicks':'NYK','Oklahoma City Thunder':'OKC',
-  'Orlando Magic':'ORL','Philadelphia 76ers':'PHI','Phoenix Suns':'PHX',
-  'Portland Trail Blazers':'POR','Sacramento Kings':'SAC','San Antonio Spurs':'SAS',
-  'Toronto Raptors':'TOR','Utah Jazz':'UTA','Washington Wizards':'WAS',
-  // NHL
-  'Anaheim Ducks':'ANA','Arizona Coyotes':'ARI','Boston Bruins':'BOS',
-  'Buffalo Sabres':'BUF','Calgary Flames':'CGY','Carolina Hurricanes':'CAR',
-  'Chicago Blackhawks':'CHI','Colorado Avalanche':'COL','Columbus Blue Jackets':'CBJ',
-  'Dallas Stars':'DAL','Detroit Red Wings':'DET','Edmonton Oilers':'EDM',
-  'Florida Panthers':'FLA','Los Angeles Kings':'LAK','Minnesota Wild':'MIN',
-  'Montreal Canadiens':'MTL','Nashville Predators':'NSH','New Jersey Devils':'NJD',
-  'New York Islanders':'NYI','New York Rangers':'NYR','Ottawa Senators':'OTT',
-  'Philadelphia Flyers':'PHI','Pittsburgh Penguins':'PIT','San Jose Sharks':'SJS',
-  'Seattle Kraken':'SEA','St. Louis Blues':'STL','Tampa Bay Lightning':'TBL',
-  'Toronto Maple Leafs':'TOR','Vancouver Canucks':'VAN','Vegas Golden Knights':'VGK',
-  'Washington Capitals':'WSH','Winnipeg Jets':'WPG',
-  // MLB
-  'Arizona Diamondbacks':'ARI','Atlanta Braves':'ATL','Baltimore Orioles':'BAL',
-  'Boston Red Sox':'BOS','Chicago Cubs':'CHC','Chicago White Sox':'CWS',
-  'Cincinnati Reds':'CIN','Cleveland Guardians':'CLE','Colorado Rockies':'COL',
-  'Detroit Tigers':'DET','Houston Astros':'HOU','Kansas City Royals':'KCR',
-  'Los Angeles Angels':'LAA','Los Angeles Dodgers':'LAD','Miami Marlins':'MIA',
-  'Milwaukee Brewers':'MIL','Minnesota Twins':'MIN','New York Mets':'NYM',
-  'New York Yankees':'NYY','Oakland Athletics':'OAK','Philadelphia Phillies':'PHI',
-  'Pittsburgh Pirates':'PIT','San Diego Padres':'SDP','San Francisco Giants':'SFG',
-  'Seattle Mariners':'SEA','St. Louis Cardinals':'STL','Tampa Bay Rays':'TBR',
-  'Texas Rangers':'TEX','Toronto Blue Jays':'TOR','Washington Nationals':'WSN',
-  // NCAAB common teams
-  'Duke':'DUKE','North Carolina':'UNC','Kansas':'KAN','Kentucky':'KEN',
-  'Villanova':'NOVA','Gonzaga':'GON','Michigan State':'MSU','UCLA':'UCLA',
-  'Arizona':'ARIZ','Houston':'HOU','Purdue':'PUR','Tennessee':'TENN',
-  'Alabama':'ALA','Baylor':'BAY','UConn':'CONN','San Diego State':'SDST',
-  'Creighton':'CRE','Xavier':'XAV','Marquette':'MARQ','Providence':'PROV',
-  'Iowa State':'IAST','Miami':'MIA','Arkansas':'ARK','Virginia':'UVA',
-  'Illinois':'ILL','Indiana':'IND','Ohio State':'OSU','Michigan':'MICH',
-  'Florida':'FLA','Auburn':'AUB','Missouri':'MIZ','Texas':'TEX',
-  'TCU':'TCU','Iowa':'IOWA','Utah State':'UTST',
-  'Grand Canyon':'GCU','Vermont':'VER','Colgate':'COL','Princeton':'PRIN',
-  'Drake':'DRK','Penn State':'PSU','Oral Roberts':'ORA','North Texas':'NTX',
-  'Memphis':'MEM','Wake Forest':'WAKE','Notre Dame':'ND','Clemson':'CLEM',
-  'Virginia Tech':'VT','NC State':'NCST','Louisville':'LOU','Syracuse':'SYR',
-  'Pittsburgh':'PITT','Boston College':'BC','Georgia Tech':'GT','Miami (FL)':'MIA',
-  'Florida State':'FSU','Duke Blue Devils':'DUKE'
-};
-
-function getAbbrev(teamName) {
-  if (!teamName) return '';
-  if (TEAM_ABBREV[teamName]) return TEAM_ABBREV[teamName];
-  // fallback: first 3 letters uppercase
-  return teamName.replace(/[^a-zA-Z]/g,'').substring(0,3).toUpperCase();
-}
-
-function buildKalshiTicker(sport, mkt, awayTeam, homeTeam, commence, fdLine) {
-  var series = KALSHI_SERIES[sport];
-  if (!series) return null;
-  var seriesKey = mkt==='ML'?'ml':mkt==='Spread'?'spread':'total';
-  var seriesTicker = series[seriesKey];
-  if (!seriesTicker) return null;
-
-  if (!commence) return null;
-  var d = commence;
-  var yy = String(d.getFullYear()).slice(2);
-  var months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
-  var mm = months[d.getMonth()];
-  var dd = String(d.getDate()).padStart(2,'0');
-  var dateStr = yy + mm + dd;
-
-  // MLB includes time
-  var timeStr = '';
-  if (sport === 'baseball_mlb') {
-    var hh = String(d.getHours()).padStart(2,'0');
-    var min = String(d.getMinutes()).padStart(2,'0');
-    timeStr = hh + min;
-  }
-
-  var away = getAbbrev(awayTeam);
-  var home = getAbbrev(homeTeam);
-
-  return seriesTicker + '-' + dateStr + timeStr + away + home;
-}
-
-var kalshiCache = {};
-
-function fetchKalshiPrice(ticker, callback) {
-  if (!ticker) { callback(null); return; }
-  if (kalshiCache[ticker] !== undefined) { callback(kalshiCache[ticker]); return; }
-  var url = '/api/kalshi?ticker=' + encodeURIComponent(ticker);
-  fetch(url)
-    .then(function(res) { return res.ok ? res.json() : null; })
+  fetch('/api/scores?sport='+currentSport+'&daysFrom=1')
+    .then(function(r){ return r.json(); })
     .then(function(data) {
-      if (!data || !data.market) { kalshiCache[ticker]=null; callback(null); return; }
-      var price = parseFloat(data.market.yes_bid_dollars) * 100;
-      var result = isFinite(price) ? Math.round(price) : null;
-      kalshiCache[ticker] = result;
-      callback(result);
+      if (!Array.isArray(data)) return;
+      scoresMap = {};
+      data.forEach(function(g) {
+        if (!g.completed && g.scores) {
+          // Build game key matching our format
+          var key = g.away_team + ' @ ' + g.home_team;
+          var period = g.period || null;
+          var clock  = g.clock  || null;
+          // Get scores
+          var scoreA = null, scoreB = null;
+          if (g.scores && g.scores.length >= 2) {
+            g.scores.forEach(function(s) {
+              if (s.name === g.away_team) scoreA = s.score;
+              if (s.name === g.home_team) scoreB = s.score;
+            });
+          }
+          scoresMap[key] = {period: period, clock: clock, scoreA: scoreA, scoreB: scoreB, live: true};
+        }
+      });
+      updateScoreBadges();
     })
-    .catch(function() { kalshiCache[ticker]=null; callback(null); });
+    .catch(function(){});
+}
+
+function formatPeriod(sport, period) {
+  if (!period) return null;
+  if (sport === 'basketball_nba' || sport === 'basketball_ncaab') {
+    if (period <= 4) return 'Q' + period;
+    return 'OT' + (period > 5 ? (period-4) : '');
+  }
+  if (sport === 'icehockey_nhl') {
+    if (period <= 3) return ['1st','2nd','3rd'][period-1] || period+'P';
+    return 'OT';
+  }
+  if (sport === 'baseball_mlb') {
+    return 'Inn ' + period;
+  }
+  return 'P' + period;
+}
+
+function updateScoreBadges() {
+  document.querySelectorAll('.ghrow').forEach(function(tr) {
+    var gk = tr.getAttribute('data-gk');
+    if (!gk || !scoresMap[gk]) return;
+    var info = scoresMap[gk];
+    var badge = tr.querySelector('.live-score-badge');
+    if (!badge) return;
+    var periodStr = formatPeriod(currentSport, info.period);
+    var clockStr  = info.clock || '';
+    var scoreStr  = (info.scoreA != null && info.scoreB != null) ? info.scoreA + '-' + info.scoreB : '';
+    var display   = [periodStr, clockStr].filter(Boolean).join(' ');
+    if (scoreStr) display += ' | ' + scoreStr;
+    badge.textContent = display || 'LIVE';
+    badge.style.display = 'inline';
+    badge.style.background = 'rgba(240,82,82,0.15)';
+    badge.style.color = 'var(--red)';
+    badge.style.borderColor = 'rgba(240,82,82,0.3)';
+  });
+}
+
+
+
+// ─── LIVE SCORES ─────────────────────────────────────
+var SCORE_SPORTS = ['basketball_nba','icehockey_nhl'];
+
+function fetchScores() {
+  if (SCORE_SPORTS.indexOf(currentSport) === -1) return;
+  fetch('/api/scores?sport=' + currentSport)
+    .then(function(res){ return res.json(); })
+    .then(function(data){
+      if (!Array.isArray(data)) return;
+      scoresData = {};
+      data.forEach(function(g){
+        // key by away @ home
+        var key = g.away_team + ' @ ' + g.home_team;
+        scoresData[key] = g;
+      });
+      updateGameHeaders();
+    })
+    .catch(function(){});
+}
+
+function updateGameHeaders() {
+  document.querySelectorAll('.ghrow').forEach(function(tr){
+    var gk = tr.getAttribute('data-gk');
+    if (!gk) return;
+    var score = scoresData[gk];
+    if (!score) return;
+
+    var liveEl = tr.querySelector('.live-score-info');
+    if (!liveEl) {
+      liveEl = document.createElement('span');
+      liveEl.className = 'live-score-info';
+      var inner = tr.querySelector('.gh-inner');
+      if (inner) inner.appendChild(liveEl);
+    }
+
+    if (score.completed) {
+      // Game over
+      var home = score.scores ? score.scores.find(function(s){ return s.name === score.home_team; }) : null;
+      var away = score.scores ? score.scores.find(function(s){ return s.name === score.away_team; }) : null;
+      liveEl.innerHTML = '<span class="score-info">FINAL ' + (away?away.score:'?') + '-' + (home?home.score:'?') + '</span>';
+    } else if (score.scores && score.scores.length) {
+      // Live game
+      var period = score.period || '';
+      var clock  = score.clock  || '';
+      var home2 = score.scores.find(function(s){ return s.name === score.home_team; });
+      var away2 = score.scores.find(function(s){ return s.name === score.away_team; });
+      var periodStr = '';
+      if (currentSport === 'basketball_nba') {
+        periodStr = period ? 'Q'+period : '';
+      } else if (currentSport === 'icehockey_nhl') {
+        var pNames = {1:'1st',2:'2nd',3:'3rd',4:'OT'};
+        periodStr = period ? (pNames[period]||'P'+period) : '';
+      }
+      var clockStr = clock ? ' ' + clock : '';
+      var scoreStr = away2 && home2 ? ' · ' + away2.score + '-' + home2.score : '';
+      liveEl.innerHTML = '<span class="live-badge"><span class="live-dot"></span>LIVE</span>'
+        + '<span class="score-info">' + periodStr + clockStr + scoreStr + '</span>';
+    }
+  });
+}
+
+function startScoresTimer() {
+  stopScoresTimer();
+  fetchScores();
+  scoresTimer = setInterval(fetchScores, 30000);
+}
+
+function stopScoresTimer() {
+  if (scoresTimer) { clearInterval(scoresTimer); scoresTimer = null; }
 }
 
 function buildTabs(){
@@ -433,7 +463,12 @@ var mkts=noSpread.indexOf(currentSport)!==-1?'h2h':sel==='ALL'?'h2h,spreads,tota
       }else{rawRows=[];dot.className='sdot error';stxt.textContent='API error';}
     })
     .catch(function(e){rawRows=[];dot.className='sdot error';stxt.textContent='Error: '+e.message;})
-    .then(function(){btn.disabled=false;renderTable();});
+    .then(function(){
+      btn.disabled=false;
+      renderTable();
+      if(SCORE_SPORTS.indexOf(currentSport)!==-1) startScoresTimer();
+      else stopScoresTimer();
+    });
 }
 
 function toggleGame(gk){
@@ -510,41 +545,13 @@ function renderTable(){
         +'<div class="gh-stripe" style="background:'+color+'"></div>'
         +'<span>'+teams[0]+'</span><span style="color:var(--muted2)">@</span><span>'+(teams[1]||'')+'</span>'
         +(ti.lbl?'<span class="gh-badge '+ti.cls+'">'+ti.lbl+'</span>':'')
+        +'<span class="live-score-badge gh-badge" style="display:none"></span>'
         +'<span class="gh-arrow'+(isC?'':' up')+'" data-gk="'+r.game.replace(/"/g,'&quot;')+'">&#9660;</span>'
         +'</div></td></tr>';
     }
     html+=buildRow(r,color,isC);
   });
   document.getElementById('tbody').innerHTML=html;
-  // Fetch Kalshi prices async after render
-  fetchAllKalshi(filtered);
-}
-
-function fetchAllKalshi(rows) {
-  var done = {};
-  rows.forEach(function(r) {
-    if (done[r.id]) return;
-    done[r.id] = true;
-    var teams = r.game.split(' @ ');
-    var away = teams[0]||'', home = teams[1]||'';
-    var ticker = buildKalshiTicker(currentSport, r.mkt, away, home, r.cm, r.pt);
-    if (!ticker) {
-      var cell = document.getElementById('kalshi-'+r.id);
-      if (cell) cell.innerHTML = '<span style="color:var(--muted2);font-family:var(--mono);font-size:11px">-</span>';
-      return;
-    }
-    (function(rowId, t) {
-      fetchKalshiPrice(t, function(price) {
-        if (price != null) kalshiPrices[rowId] = price;
-        var cell = document.getElementById('kalshi-'+rowId);
-        if (cell) {
-          cell.innerHTML = price != null
-            ? '<span style="font-family:var(--mono);color:#2dcc7e;font-weight:600">'+price+'%</span>'
-            : '<span style="color:var(--muted2);font-family:var(--mono);font-size:11px">-</span>';
-        }
-      });
-    })(r.id, ticker);
-  });
 }
 
 function buildRow(r,color,isC){
@@ -583,7 +590,7 @@ function buildRow(r,color,isC){
     +'<td class="r" data-label="No-Vig %" style="font-family:var(--mono);color:var(--muted)">'+fairStr+'</td>'
     +ylCell
     +'<td class="r" data-label="Adj. Fair %" style="font-family:var(--mono);color:'+(afChanged?'var(--yellow)':'var(--muted)')+'">'+afStr+'</td>'
-    +'<td class="c" data-label="Kalshi %" id="kalshi-'+r.id+'"><span style="color:var(--muted2);font-family:var(--mono);font-size:11px">...</span></td>'
+    
     +'<td class="c" data-label="Mkt Price %"><div style="display:flex;align-items:center;gap:4px;justify-content:center"><input class="cell-inp'+(pv?' filled':'')+'" type="number" min="1" max="99" step="0.5" placeholder="-" value="'+pv+'" data-id="'+r.id+'" onblur="setPred(this)" onkeydown="if(event.key===\'Enter\')this.blur()"><span class="pred-unit">%</span></div></td>'
     +'<td class="r" data-label="Edge"><div class="edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:'+bw+'px;background:'+bc+'"></div></div><span class="edge-val '+ec+'">'+es+'</span></div></td>'
     +'<td class="r" data-label="Units">'+uH+'</td>'
@@ -632,14 +639,17 @@ function setPred(input){
   }
   var tds=tr.querySelectorAll('td');
   // col indices: Edge=9, Units=10, Bet=11
-  tds[10].innerHTML='<div class="edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:'+bw+'px;background:'+bc+'"></div></div><span class="edge-val '+ec+'">'+es+'</span></div>';
-  tds[11].innerHTML=u===0?'<span class="u-pass">PASS</span>':'<span class="u-val">'+u+'u</span>';
-  tds[12].innerHTML=u===0?'<span class="u-pass">-</span>':'<span class="bet-val">$'+(u*unit).toFixed(0)+'</span>';
+  tds[9].innerHTML='<div class="edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:'+bw+'px;background:'+bc+'"></div></div><span class="edge-val '+ec+'">'+es+'</span></div>';
+  tds[10].innerHTML=u===0?'<span class="u-pass">PASS</span>':'<span class="u-val">'+u+'u</span>';
+  tds[11].innerHTML=u===0?'<span class="u-pass">-</span>':'<span class="bet-val">$'+(u*unit).toFixed(0)+'</span>';
   tr.classList.toggle('has-edge',edge!=null&&edge>0);
   document.getElementById('stat-edges').textContent=document.querySelectorAll('tr.has-edge').length;
 }
 
 buildTabs();
+setInterval(function(){
+  if(sessionStorage.getItem('auth')==='1' && rawRows.length) fetchScores();
+}, 30000);
 if(sessionStorage.getItem('auth')==='1'){document.getElementById('gate').style.display='none';loadOdds();}
 </script>
 </body>
