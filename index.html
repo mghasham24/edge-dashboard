@@ -401,6 +401,92 @@ function stopScoresTimer() {
   if (scoresTimer) { clearInterval(scoresTimer); scoresTimer = null; }
 }
 
+// ─── LIVE SCORES ─────────────────────────────────────
+var liveScores = {};   // gameId -> score data
+var scoresInterval = null;
+
+function startScoresRefresh() {
+  stopScoresRefresh();
+  fetchScores();
+  scoresInterval = setInterval(fetchScores, 60000); // every 60 seconds
+}
+
+function stopScoresRefresh() {
+  if (scoresInterval) { clearInterval(scoresInterval); scoresInterval = null; }
+}
+
+function fetchScores() {
+  var url = '/api/odds?sport=' + currentSport + '&markets=scores&daysFrom=1';
+  // Use dedicated scores endpoint
+  var scoresUrl = '/api/scores?sport=' + currentSport;
+  fetch(scoresUrl)
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      if (!Array.isArray(data)) return;
+      var hasLive = false;
+      data.forEach(function(g){
+        if (g.completed === false && g.scores) {
+          liveScores[g.id] = g;
+          hasLive = true;
+        } else if (g.completed) {
+          liveScores[g.id] = g;
+        }
+      });
+      updateScoreBadges();
+      if (!hasLive) stopScoresRefresh();
+    })
+    .catch(function(){});
+}
+
+function getLiveInfo(gameStr, commence) {
+  // Find matching score by game name
+  var keys = Object.keys(liveScores);
+  for (var i=0; i<keys.length; i++) {
+    var g = liveScores[keys[i]];
+    var gs = (g.away_team||'') + ' @ ' + (g.home_team||'');
+    if (gs === gameStr) {
+      if (g.completed) return {text:'FINAL', cls:'normal', live:false};
+      if (g.scores && g.last_update) {
+        var period = g.period || '';
+        var time = g.clock || '';
+        var awayScore = g.scores.find(function(s){return s.name===g.away_team;});
+        var homeScore = g.scores.find(function(s){return s.name===g.home_team;});
+        var scoreStr = awayScore&&homeScore ? awayScore.score+'-'+homeScore.score : '';
+        var periodLabel = period ? formatPeriod(period) : '';
+        var text = [periodLabel, time, scoreStr].filter(Boolean).join(' ');
+        return {text:text||'LIVE', cls:'urgent', live:true};
+      }
+      return {text:'LIVE', cls:'urgent', live:true};
+    }
+  }
+  return null;
+}
+
+function formatPeriod(p) {
+  p = String(p);
+  if (p==='1') return 'Q1';
+  if (p==='2') return 'Q2';
+  if (p==='3') return 'Q3';
+  if (p==='4') return 'Q4';
+  if (p==='OT') return 'OT';
+  if (p==='1H') return '1st';
+  if (p==='2H') return '2nd';
+  if (p==='3') return '3rd';
+  return 'P'+p;
+}
+
+function updateScoreBadges() {
+  document.querySelectorAll('.gh-score-badge').forEach(function(el){
+    var game = el.getAttribute('data-game');
+    var commence = el.getAttribute('data-cm') ? new Date(parseInt(el.getAttribute('data-cm'))) : null;
+    var info = getLiveInfo(game, commence);
+    if (info) {
+      el.textContent = info.text;
+      el.className = 'gh-score-badge gh-badge ' + info.cls;
+    }
+  });
+}
+
 function buildTabs(){
   var nav=document.getElementById('sport-tabs');nav.innerHTML='';
   SPORTS.forEach(function(s){
@@ -545,6 +631,7 @@ function renderTable(){
         +'<div class="gh-stripe" style="background:'+color+'"></div>'
         +'<span>'+teams[0]+'</span><span style="color:var(--muted2)">@</span><span>'+(teams[1]||'')+'</span>'
         +(ti.lbl?'<span class="gh-badge '+ti.cls+'">'+ti.lbl+'</span>':'')
+        +'<span class="gh-score-badge gh-badge" data-game="'+r.game.replace(/"/g,'&quot;')+'" data-cm="'+(r.cm?r.cm.getTime():'')+'" style="display:none"></span>'
         +'<span class="live-score-badge gh-badge" style="display:none"></span>'
         +'<span class="gh-arrow'+(isC?'':' up')+'" data-gk="'+r.game.replace(/"/g,'&quot;')+'">&#9660;</span>'
         +'</div></td></tr>';
