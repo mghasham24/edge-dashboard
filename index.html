@@ -728,6 +728,7 @@ function renderMobileCards(filtered) {
       // Edge/Units display - always show result area
       var edgeRow = mktRows.find(function(r){return r.edge!=null;}) || mktRows[0];
       var resultDiv = document.createElement('div');
+      resultDiv.className = 'mc-result';
       resultDiv.style.cssText = 'margin-left:auto;display:flex;align-items:center;gap:6px;flex-shrink:0';
       if (edgeRow && edgeRow.edge!=null) {
         var edgeStr = (edgeRow.edge>0?'+':'')+edgeRow.edge.toFixed(1)+'%';
@@ -817,9 +818,8 @@ function updateMobileEdge(id) {
   var u=pred!=null?kellyUnits(af,pred):edgeUnits(edge);
   var bet=u*unit;
 
-  // Find the result div for this market section
-  // Look for the input, go up to mc-inputs, find the result div
-  var inp = document.querySelector('input[data-id="'+id+'"]');
+  // Find the result div for this market section - search in mobile cards only
+  var inp = document.querySelector('#mobile-cards input[data-id="'+id+'"]');
   if (!inp) return;
   var inputRow = inp.closest('.mc-inputs');
   if (!inputRow) return;
