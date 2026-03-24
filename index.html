@@ -962,6 +962,7 @@ function renderTable(){
     html+=buildRow(r,color,isC);
   });
   document.getElementById('tbody').innerHTML=html;
+  renderMobileCards(filtered);
 }
 
 function buildRow(r,color,isC){
