@@ -678,7 +678,7 @@ function renderMobileCards(filtered) {
       // Your Line (Spread/Total only)
       if (mkt !== 'ML') {
         var refRow = mktRows[0];
-        var ylv = (refRow.yl!=null && refRow.yl!=='')?String(refRow.yl):'';
+        var ylv = (yourLines[refRow.id]!=null)?String(yourLines[refRow.id]):'';
         var ph = refRow.pt!=null?String(refRow.pt):'';
 
         var lineGrp = document.createElement('div');
@@ -692,7 +692,7 @@ function renderMobileCards(filtered) {
         lineInp.type = 'number';
         lineInp.step = '0.5';
         lineInp.placeholder = ph;
-        lineInp.value = ylv;
+        lineInp.value = ylv; // blank unless user typed something
         lineInp.dataset.id = refRow.id;
         lineInp.addEventListener('blur', function(){ setLineMobile(this); });
         lineInp.addEventListener('keydown', function(e){ if(e.key==='Enter') this.blur(); });
@@ -780,17 +780,65 @@ function setLineMobile(input) {
   var id = input.getAttribute('data-id');
   yourLines[id] = input.value!==''?parseFloat(input.value):null;
   input.classList.toggle('line-changed', yourLines[id]!=null);
-  // Rerender mobile cards to update adj fair and edge
-  var unit = parseFloat(document.getElementById('unit-size').value)||300;
-  recomputeAndRenderMobile(unit);
+  // Update both sides of this pair
+  var r = rawRows.find(function(x){return x.id===id;});
+  if (!r) return;
+  var pairs={};
+  rawRows.forEach(function(x){if(!pairs[x.pid])pairs[x.pid]={};pairs[x.pid][x.ps]=x;});
+  var pair = pairs[r.pid]||{};
+  ['A','B'].forEach(function(ps){
+    if (pair[ps]) updateMobileEdge(pair[ps].id);
+  });
 }
 
 function setPredMobile(input) {
   var id = input.getAttribute('data-id');
   preds[id] = input.value;
   input.classList.toggle('filled', !!input.value);
+  updateMobileEdge(id);
+}
+
+function updateMobileEdge(id) {
+  var r = rawRows.find(function(x){return x.id===id;});
+  if (!r) return;
   var unit = parseFloat(document.getElementById('unit-size').value)||300;
-  recomputeAndRenderMobile(unit);
+
+  // Build pairs
+  var pairs={};
+  rawRows.forEach(function(x){if(!pairs[x.pid])pairs[x.pid]={};pairs[x.pid][x.ps]=x;});
+  var pair=pairs[r.pid]||{};
+  var nv=novig(pair.A?imp(pair.A.am):null,pair.B?imp(pair.B.am):null);
+  var fair=r.ps==='A'?nv.fa:nv.fb;
+  var yl=yourLines[id]!=null?yourLines[id]:null;
+  var af=adjFair(fair,r.pt,yl,r.mkt,r.ps);
+  var pr=preds[id];
+  var pred=(pr!==undefined&&pr!=='')?parseFloat(pr)/100:null;
+  var edge=(af!=null&&pred!=null&&isFinite(pred))?(af-pred)*100:null;
+  var u=pred!=null?kellyUnits(af,pred):edgeUnits(edge);
+  var bet=u*unit;
+
+  // Find the result div for this market section
+  // Look for the input, go up to mc-inputs, find the result div
+  var inp = document.querySelector('input[data-id="'+id+'"]');
+  if (!inp) return;
+  var inputRow = inp.closest('.mc-inputs');
+  if (!inputRow) return;
+  var resultDiv = inputRow.querySelector('.mc-result');
+  if (!resultDiv) {
+    resultDiv = document.createElement('div');
+    resultDiv.className = 'mc-result';
+    resultDiv.style.cssText = 'margin-left:auto;display:flex;align-items:center;gap:6px;flex-shrink:0';
+    inputRow.appendChild(resultDiv);
+  }
+  resultDiv.innerHTML = '';
+  if (edge!=null) {
+    var edgeStr=(edge>0?'+':'')+edge.toFixed(1)+'%';
+    var edgeCls=edge>=8?'e-strong':edge>=5?'e-med':edge>0?'e-weak':'e-neg';
+    resultDiv.innerHTML='<span class="mc-edge '+edgeCls+'">'+edgeStr+'</span>'
+      +'<span class="mc-units'+(u===0?' pass':'')+'">'+( u===0?'PASS':u+'u')+'</span>'
+      +(u>0?'<span class="mc-bet">$'+bet.toFixed(0)+'</span>':'');
+  }
+  document.getElementById('stat-edges').textContent = document.querySelectorAll('.mc-edge.e-strong, .mc-edge.e-med, .mc-edge.e-weak').length;
 }
 
 function recomputeAndRenderMobile(unit) {
