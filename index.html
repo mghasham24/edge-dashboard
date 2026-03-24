@@ -800,10 +800,14 @@ function setPredMobile(input) {
   var id = input.getAttribute('data-id');
   preds[id] = input.value;
   input.classList.toggle('filled', !!input.value);
-  // Find result div - it's a sibling/cousin in the same mc-inputs div
-  var inputRow = input.parentElement;
-  while (inputRow && !inputRow.classList.contains('mc-inputs')) {
-    inputRow = inputRow.parentElement;
+  // mc-inputs is grandparent: input > mc-inp-group > mc-inputs
+  var inputRow = input.parentElement && input.parentElement.parentElement;
+  if (!inputRow || !inputRow.classList.contains('mc-inputs')) {
+    // fallback: walk up
+    inputRow = input.parentElement;
+    while (inputRow && !inputRow.classList.contains('mc-inputs')) {
+      inputRow = inputRow.parentElement;
+    }
   }
   if (!inputRow) return;
   computeAndShowEdge(id, inputRow);
@@ -830,8 +834,8 @@ function computeAndShowEdge(id, inputRow) {
   if(!resultDiv){
     resultDiv=document.createElement('div');
     resultDiv.className='mc-result';
-    resultDiv.style.cssText='display:flex;align-items:center;gap:6px;margin-top:8px;flex-wrap:wrap';
-    inputRow.parentElement.appendChild(resultDiv);
+    resultDiv.style.cssText='display:flex;align-items:center;gap:6px;padding:8px 0 0;flex-wrap:wrap';
+    inputRow.appendChild(resultDiv);
   }
   if(edge!=null){
     var edgeStr=(edge>0?'+':'')+edge.toFixed(1)+'%';
