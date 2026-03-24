@@ -544,6 +544,8 @@ function updateScoreBadges() {
   });
 }
 
+function handleEnter(e){ if(e.key==='Enter') e.target.blur(); }
+
 // ── MOBILE CARD RENDER ───────────────────────────────
 var mobileCollapsed = {};
 
@@ -638,7 +640,7 @@ function renderMobileCards(filtered) {
         var pval = preds[r.id]||'';
         html += '<div class="mc-inp-group">'
           +'<span class="mc-inp-lbl" style="max-width:60px;overflow:hidden;text-overflow:ellipsis">'+r.side.split(' ').pop()+'</span>'
-          +'<input class="mc-inp'+(pval?' filled':'')+'" type="number" min="1" max="99" step="0.5" placeholder="%" value="'+pval+'" data-id="'+r.id+'" data-mtype="pred" onblur="setPredMobile(this)" onkeydown="if(event.key==='Enter')this.blur()">'
+          +'<input class="mc-inp" type="number" min="1" max="99" step="0.5" placeholder="%" value="'+pval+'" data-id="'+r.id+'" onblur="setPredMobile(this)" onkeydown="if(event.key===\'Enter\')this.blur()">'
           +'</div>';
       });
       // Edge result
