@@ -6,8 +6,9 @@ export async function onRequest({ request, env, next }) {
   const guarded = ['/api/odds', '/api/scores', '/api/admin', '/api/stripe'];
   if (!guarded.some(p => url.pathname.startsWith(p))) return next();
 
-  // Auth endpoints don't need session
+  // Auth endpoints and stripe webhook don't need session
   if (url.pathname.startsWith('/api/auth')) return next();
+  if (url.pathname === '/api/stripe/webhook') return next();
 
   const token   = getToken(request);
   const session = await getSession(env.DB, token);
