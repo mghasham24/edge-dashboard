@@ -1751,6 +1751,7 @@ function setPred(input){
       if(otherInp&&otherInp!==input){
         otherInp.value=other;
         otherInp.classList.add('filled');
+        setPred(otherInp);
       }
     }
   }
