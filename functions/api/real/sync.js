@@ -1,33 +1,24 @@
 // functions/api/real/sync.js
-// Fetches all Real Sports games + markets for a sport, returns { gameKey -> markets }
-// gameKey format: "LAL @ IND" to match FanDuel game strings
-
-// ── Hashids ───────────────────────────────────────────
 function hashidsEncode(number) {
   const saltChars = Array.from('realwebapp');
   const minLen = 16;
   const keepUnique = c => [...new Set(c)];
   const without = (c, x) => c.filter(ch => !x.includes(ch));
   const only = (c, k) => c.filter(ch => k.includes(ch));
-
   function shuffle(alpha, salt) {
     if (!salt.length) return alpha;
     let int, t = [...alpha];
     for (let i = t.length-1, v=0, p=0; i>0; i--, v++) {
-      v %= salt.length;
-      p += int = salt[v].codePointAt(0);
-      const j = (int+v+p) % i;
-      [t[i],t[j]] = [t[j],t[i]];
+      v %= salt.length; p += int = salt[v].codePointAt(0);
+      const j = (int+v+p) % i; [t[i],t[j]] = [t[j],t[i]];
     }
     return t;
   }
-
   function toAlpha(n, alpha) {
     const id=[]; let v=n;
     do { id.unshift(alpha[v%alpha.length]); v=Math.floor(v/alpha.length); } while(v>0);
     return id;
   }
-
   let alpha = Array.from('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890');
   let seps  = Array.from('cfhistuCFHISTU');
   const uniq = keepUnique(alpha);
@@ -42,7 +33,6 @@ function hashidsEncode(number) {
   let guards;
   if (alpha.length < 3) { guards=seps.slice(0,gc); seps=seps.slice(gc); }
   else { guards=alpha.slice(0,gc); alpha=alpha.slice(gc); }
-
   const numId = number % 100;
   let ret = [alpha[numId % alpha.length]];
   const lottery = [...ret];
@@ -53,15 +43,13 @@ function hashidsEncode(number) {
   const half = Math.floor(alpha.length/2);
   while (ret.length < minLen) {
     alpha = shuffle(alpha, alpha);
-    ret.unshift(...alpha.slice(half));
-    ret.push(...alpha.slice(0,half));
+    ret.unshift(...alpha.slice(half)); ret.push(...alpha.slice(0,half));
     const ex = ret.length-minLen;
     if (ex>0) ret=ret.slice(ex/2, ex/2+minLen);
   }
   return ret.join('');
 }
 
-// ── Auth headers ──────────────────────────────────────
 function buildHeaders(env) {
   return {
     'Accept': 'application/json',
@@ -78,7 +66,6 @@ function buildHeaders(env) {
   };
 }
 
-// ── Sport key mapping ─────────────────────────────────
 const SPORT_MAP = {
   'basketball_nba': 'nba',
   'icehockey_nhl': 'nhl',
@@ -89,7 +76,6 @@ const SPORT_MAP = {
   'soccer_uefa_champs_league': 'ucl'
 };
 
-// ── Session check ─────────────────────────────────────
 async function getSession(request, db) {
   const c = request.headers.get('Cookie') || '';
   const m = c.match(/(?:^|;\s*)session=([^;]+)/);
@@ -100,104 +86,83 @@ async function getSession(request, db) {
   ).bind(m[1], now).first();
 }
 
-// ── Main handler ──────────────────────────────────────
 export async function onRequestGet({ request, env }) {
   const session = await getSession(request, env.DB);
   if (!session) return fail(401, 'Not authenticated');
-  if (!env.REAL_AUTH_TOKEN) return fail(500, 'Real Sports integration not configured');
+  if (!env.REAL_AUTH_TOKEN) return fail(500, 'REAL_AUTH_TOKEN not set');
 
-  const url   = new URL(request.url);
-  const fdKey = url.searchParams.get('sport');
+  const reqUrl = new URL(request.url);
+  const fdKey = reqUrl.searchParams.get('sport');
   const realSport = SPORT_MAP[fdKey] || fdKey;
+  const debugMode = reqUrl.searchParams.get('debug');
 
-  // Debug: return what we're working with
-  if (url.searchParams.get('debug') === '1') {
+  if (debugMode === '1') {
     return new Response(JSON.stringify({ fdKey, realSport, hasToken: !!env.REAL_AUTH_TOKEN }), {
       headers: { 'Content-Type': 'application/json' }
     });
   }
 
   try {
-    // Step 1: Get all games for this sport
-    let nextRes = await fetch(`https://web.realapp.com/home/${realSport}/next?cohort=0`, {
+    const gamesRes = await fetch(`https://web.realapp.com/home/${realSport}/next?cohort=0`, {
       headers: buildHeaders(env)
     });
-    const nextStatus = nextRes.status;
-    const nextBody = await nextRes.text();
+    const gamesStatus = gamesRes.status;
+    const gamesText = await gamesRes.text();
 
-    // Debug mode - return raw response
-    if (url.searchParams.get('debug') === '2') {
-      return new Response(JSON.stringify({ nextStatus, nextBody: nextBody.slice(0, 2000) }), {
+    if (debugMode === '2') {
+      return new Response(JSON.stringify({ gamesStatus, gamesText: gamesText.slice(0, 2000) }), {
         headers: { 'Content-Type': 'application/json' }
       });
     }
 
-    if (!nextRes.ok) {
-      return fail(nextStatus, 'Failed to fetch Real Sports games: ' + nextBody);
+    if (!gamesRes.ok) {
+      return fail(gamesStatus, 'Games fetch failed: ' + gamesText.slice(0, 200));
     }
 
-    const nextData = JSON.parse(nextBody);
-    const games = nextData.games || nextData.data?.games || nextData.items || nextData.predictions || [];
-    if (!games.length) return new Response(JSON.stringify({ ok: true, markets: {} }), {
-      headers: { 'Content-Type': 'application/json' }
-    });
+    const gamesData = JSON.parse(gamesText);
+    const games = gamesData.games || gamesData.data || gamesData.items || gamesData.predictions || [];
 
-    // Step 2: Fetch markets for each game in parallel
-    const marketResults = await Promise.allSettled(
+    if (!games.length) {
+      return new Response(JSON.stringify({ ok: true, markets: {}, debug: 'no games', keys: Object.keys(gamesData) }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    const results = await Promise.allSettled(
       games.map(async (game) => {
         const gameId = game.id || game.gameId;
         const awayKey = game.awayTeamKey || game.awayTeam?.key;
         const homeKey = game.homeTeamKey || game.homeTeam?.key;
         if (!gameId || !awayKey || !homeKey) return null;
-
-        let mRes = await fetch(
-          `https://web.realsports.io/predictions/game/${realSport}/${gameId}/markets`,
+        const mRes = await fetch(
+          `https://web.realapp.com/predictions/game/${realSport}/${gameId}/markets`,
           { headers: buildHeaders(env) }
         );
-        if (!mRes.ok) {
-          mRes = await fetch(
-            `https://web.realapp.com/predictions/game/${realSport}/${gameId}/markets`,
-            { headers: buildHeaders(env) }
-          );
-        }
         if (!mRes.ok) return null;
         const mData = await mRes.json();
-
-        // Build gameKey matching FanDuel format: "LAL @ IND"
-        const gameKey = `${awayKey} @ ${homeKey}`;
-
-        // Map markets to { label -> { outcomes } }
+        const gameKey = awayKey + ' @ ' + homeKey;
         const markets = {};
-        for (const m of (mData.markets || [])) {
-          markets[m.label] = m.outcomes.map(o => ({
-            key: o.key,
-            label: o.label,
-            probability: o.probability,
-            pct: Math.round(o.probability * 100)
+        for (const mk of (mData.markets || [])) {
+          markets[mk.label] = (mk.outcomes || []).map(o => ({
+            key: o.key, label: o.label,
+            probability: o.probability, pct: Math.round(o.probability * 100)
           }));
         }
-
         return { gameKey, markets };
       })
     );
 
-    // Assemble result map: { "LAL @ IND": { "Game Winner": [...], "Spread": [...], "Total": [...] } }
-    const result = {};
-    for (const r of marketResults) {
-      if (r.status === 'fulfilled' && r.value) {
-        result[r.value.gameKey] = r.value.markets;
-      }
+    const marketMap = {};
+    for (const r of results) {
+      if (r.status === 'fulfilled' && r.value) marketMap[r.value.gameKey] = r.value.markets;
     }
 
-    return new Response(JSON.stringify({ ok: true, markets: result }), {
-      headers: {
-        'Content-Type': 'application/json',
-        'Cache-Control': 'public, max-age=60' // cache 60s to avoid hammering
-      }
+    return new Response(JSON.stringify({ ok: true, markets: marketMap }), {
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60' }
     });
 
   } catch(e) {
-    return fail(500, 'Real Sports sync failed: ' + e.message + ' | ' + (e.stack||''));
+    return fail(500, e.message + ' | ' + (e.stack||'').slice(0,300));
   }
 }
 
