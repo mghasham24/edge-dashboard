@@ -38,20 +38,22 @@ export async function onRequest({ request, env, next }) {
 }
 
 // ── Rate limiting ─────────────────────────────────────
-// Free: 30 refreshes/day, Pro: 150 refreshes/day
+// Free: 30 refreshes/day, Pro: unlimited
 async function checkRateLimit(db, userId) {
-  const today     = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-  const row       = await db.prepare(
+  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const row   = await db.prepare(
     'SELECT count, plan FROM rate_limits rl JOIN users u ON u.id=rl.user_id WHERE rl.user_id=? AND rl.date=?'
   ).bind(userId, today).first();
 
-  const plan      = row ? row.plan : 'free';
-  const limit     = plan === 'pro' ? 150 : 30;
-  const count     = row ? row.count : 0;
+  const plan = row ? row.plan : 'free';
 
-  if (count >= limit) return true;
+  // Pro users have no daily limit
+  if (plan === 'pro') return false;
 
-  // Upsert count
+  const count = row ? row.count : 0;
+  if (count >= 30) return true;
+
+  // Upsert count for free users
   await db.prepare(
     'INSERT INTO rate_limits (user_id, date, count) VALUES (?,?,1) ON CONFLICT(user_id, date) DO UPDATE SET count=count+1'
   ).bind(userId, today).run();
