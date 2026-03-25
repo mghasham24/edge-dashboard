@@ -107,14 +107,28 @@ export async function onRequestGet({ request, env }) {
   if (!env.REAL_AUTH_TOKEN) return fail(500, 'Real Sports integration not configured');
 
   const url   = new URL(request.url);
-  const fdKey = url.searchParams.get('sport'); // FanDuel sport key e.g. basketball_nba
+  const fdKey = url.searchParams.get('sport');
   const realSport = SPORT_MAP[fdKey] || fdKey;
+
+  // Debug: return what we're working with
+  if (url.searchParams.get('debug') === '1') {
+    return new Response(JSON.stringify({ fdKey, realSport, hasToken: !!env.REAL_AUTH_TOKEN }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
 
   try {
     // Step 1: Get all games for this sport
-    const nextRes = await fetch(`https://web.realapp.com/home/${realSport}/next?cohort=0`, {
+    // Try the feed endpoint first, fall back to next
+    let nextRes = await fetch(`https://web.realapp.com/home/${realSport}/next?cohort=0`, {
       headers: buildHeaders(env)
     });
+    // If that fails try alternate endpoint
+    if (!nextRes.ok) {
+      nextRes = await fetch(`https://web.realapp.com/predictions/sport/${realSport}`, {
+        headers: buildHeaders(env)
+      });
+    }
     if (!nextRes.ok) {
       const errBody = await nextRes.text();
       return fail(nextRes.status, 'Failed to fetch Real Sports games: ' + errBody);
