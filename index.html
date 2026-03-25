@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Edge Dashboard v2.0.2</title>
+<title>Edge Dashboard v2.0.3</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Barlow:wght@400;500;600;700&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -522,7 +522,7 @@ var yourLines={};
 var collapsed={};
 var mobileCollapsed={};
 
-// ── Auth state ────────────────────────────────────────
+// Auth state
 var currentTab = 'login';
 
 function openGate(tab) {
@@ -598,7 +598,7 @@ async function submitAuth() {
       loadOdds();
     }
   } catch(e) {
-    showGateErr('Network error — please try again');
+    showGateErr('Network error -- please try again');
   } finally {
     btn.disabled = false;
     btn.textContent = currentTab === 'login' ? 'Log In' : 'Create Account';
@@ -627,7 +627,7 @@ async function checkSession() {
       if (data.is_admin) {
         var adminTabBtn = document.createElement('button');
         adminTabBtn.className = 'sport-tab';
-        adminTabBtn.textContent = '⚙ Admin';
+        adminTabBtn.textContent = ' Admin';
         adminTabBtn.style.cssText = 'color:var(--accent);margin-left:auto';
         adminTabBtn.id = 'admin-tab-btn';
         adminTabBtn.onclick = function() {
@@ -948,7 +948,7 @@ function renderMobileCards(filtered) {
         fdLbl.textContent = fdVal!=null?fdVal:'-';
         totalRow.appendChild(fdLbl);
 
-        // Shared Mkt Line input — updates both sides
+        // Shared Mkt Line input -- updates both sides
         var lineInpT = document.createElement('input');
         lineInpT.className = 'mc-inp'+(sharedYlv?' line-changed':'');
         lineInpT.type='number';lineInpT.step='0.5';
@@ -997,7 +997,7 @@ function renderMobileCards(filtered) {
 
         inputRow.appendChild(totalRow);
 
-        // Edge row — shows best edge of the two sides
+        // Edge row -- shows best edge of the two sides
         var edgeRowT = document.createElement('div');
         edgeRowT.style.cssText='display:flex;gap:10px;margin-top:4px;padding-left:118px';
         if(rA){
@@ -1227,7 +1227,7 @@ function recomputeAndRenderMobile(unit) {
   renderMobileCards(filtered);
 }
 
-// ── Admin state ───────────────────────────────────────
+// Admin state
 var currentUser = null;
 var adminSearchTimer = null;
 
@@ -1299,7 +1299,7 @@ function renderAdminUsers(users) {
     var banBtn = u.banned
       ? '<button class="admin-btn unban-btn" onclick="adminSetBanned('+u.id+',false)">Unban</button>'
       : '<button class="admin-btn ban-btn" onclick="adminSetBanned('+u.id+',true)">Ban</button>';
-    var actions = u.is_admin ? '<span style="color:var(--muted2);font-size:12px">—</span>' :
+    var actions = u.is_admin ? '<span style="color:var(--muted2);font-size:12px">--</span>' :
       '<div style="display:flex;gap:6px;flex-wrap:wrap">'
       + '<button class="admin-btn logout-btn" onclick="adminForceLogout('+u.id+')">Logout</button>'
       + banBtn
@@ -1374,14 +1374,14 @@ async function startCheckout() {
     if (data.url) {
       window.location.assign(data.url);
     } else {
-      btn.textContent = 'Upgrade to Pro →';
+      btn.textContent = 'Upgrade to Pro ->';
       btn.disabled = false;
       alert(data.error || 'Something went wrong. Please try again.');
     }
   } catch(e) {
-    btn.textContent = 'Upgrade to Pro →';
+    btn.textContent = 'Upgrade to Pro ->';
     btn.disabled = false;
-    alert('Network error — please try again.');
+    alert('Network error -- please try again.');
   }
 }
 
@@ -1406,7 +1406,7 @@ function showUpgradeModal(msg) {
   document.getElementById('upgrade-msg').textContent = msg;
   document.getElementById('upgrade-modal').style.display = 'flex';
   var btn = document.getElementById('upgrade-btn');
-  btn.textContent = 'Upgrade to Pro →';
+  btn.textContent = 'Upgrade to Pro ->';
   btn.disabled = false;
 }
 function closeUpgradeModal() {
@@ -1423,7 +1423,7 @@ function buildTabs(){
     var locked = !pro && FREE_SPORTS.indexOf(s.key) === -1;
     var b=document.createElement('button');
     b.className='sport-tab'+(s.key===currentSport&&!locked?' active':'')+(locked?' locked':'');
-    b.textContent=(locked?'🔒 ':'')+s.label;
+    b.textContent=(locked?' ':'')+s.label;
     b.setAttribute('data-key',s.key);
     b.onclick=function(){
       if (locked) {
@@ -1480,7 +1480,7 @@ function loadOdds(){
   document.getElementById('tbody').innerHTML='<tr class="state-row"><td colspan="12">Loading...</td></tr>';
   var sel=document.getElementById('mkt-filter').value;
   var noSpread=['mma_mixed_martial_arts'];
-  // Free users fetch ML only (1 credit) — Spread/Total shown as locked teaser with fake data
+  // Free users fetch ML only (1 credit) -- Spread/Total shown as locked teaser with fake data
   var mkts = noSpread.indexOf(currentSport)!==-1 ? 'h2h'
     : (!isPro()) ? 'h2h'
     : sel==='ALL' ? 'h2h,spreads,totals' : (MARKET_KEYS[sel]||'h2h');
