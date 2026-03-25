@@ -674,83 +674,75 @@ function renderMobileCards(filtered) {
       // Input row
       var inputRow = document.createElement('div');
       inputRow.className = 'mc-inputs';
+      inputRow.style.cssText = 'flex-direction:column;gap:6px;display:flex';
 
-      // Your Line (Spread/Total only)
-      if (mkt !== 'ML') {
-        var refRow = mktRows[0];
-        var ylv = (yourLines[refRow.id]!=null)?String(yourLines[refRow.id]):'';
-        var ph = refRow.pt!=null?String(refRow.pt):'';
-
-        var lineGrp = document.createElement('div');
-        lineGrp.className = 'mc-inp-group';
-        var lineLbl = document.createElement('span');
-        lineLbl.className = 'mc-inp-lbl';
-        lineLbl.textContent = 'Line';
-        lineGrp.appendChild(lineLbl);
-        var lineInp = document.createElement('input');
-        lineInp.className = 'mc-inp' + (ylv ? ' line-changed' : '');
-        lineInp.type = 'number';
-        lineInp.step = '0.5';
-        lineInp.placeholder = ph;
-        lineInp.value = ylv; // blank unless user typed something
-        lineInp.dataset.id = refRow.id;
-        lineInp.addEventListener('blur', function(){ setLineMobile(this); });
-        lineInp.addEventListener('keydown', function(e){ if(e.key==='Enter') this.blur(); });
-        lineGrp.appendChild(lineInp);
-        inputRow.appendChild(lineGrp);
+      if (mkt === 'ML') {
+        // ML: one row with both sides
+        var mlRow = document.createElement('div');
+        mlRow.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap';
+        mktRows.forEach(function(r) {
+          var pval = preds[r.id]||'';
+          var grp = document.createElement('div');
+          grp.style.cssText = 'display:flex;align-items:center;gap:4px;flex:1;min-width:110px';
+          var lbl = document.createElement('span');
+          lbl.className = 'mc-inp-lbl';
+          lbl.textContent = r.side.split(' ').pop();
+          lbl.style.cssText = 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:70px';
+          grp.appendChild(lbl);
+          var inp = document.createElement('input');
+          inp.className = 'mc-inp'+(pval?' filled':'');
+          inp.type='number';inp.min='1';inp.max='99';inp.step='0.5';
+          inp.placeholder='%';inp.value=pval;inp.dataset.id=r.id;
+          inp.addEventListener('blur',function(){setPredMobile(this);});
+          inp.addEventListener('input',function(){setPredMobile(this);});
+          inp.addEventListener('keydown',function(e){if(e.key==='Enter')this.blur();});
+          grp.appendChild(inp);
+          mlRow.appendChild(grp);
+        });
+        inputRow.appendChild(mlRow);
+      } else {
+        // Spread/Total: each side gets own row — FD line | your line | % | inline edge
+        mktRows.forEach(function(r) {
+          var ylv = (yourLines[r.id]!=null)?String(yourLines[r.id]):'';
+          var ph = r.pt!=null?String(r.pt):'';
+          var pval = preds[r.id]||'';
+          var sideRow = document.createElement('div');
+          sideRow.style.cssText = 'display:flex;align-items:center;gap:6px';
+          // FD line
+          var fdLbl = document.createElement('span');
+          fdLbl.style.cssText = 'font-family:var(--mono);font-size:11px;color:var(--muted);min-width:34px;text-align:right;flex-shrink:0';
+          fdLbl.textContent = r.pt!=null?(r.pt>0?'+'+r.pt:r.pt):'-';
+          sideRow.appendChild(fdLbl);
+          // Your line input
+          var lineInp = document.createElement('input');
+          lineInp.className='mc-inp'+(ylv?' line-changed':'');
+          lineInp.type='number';lineInp.step='0.5';
+          lineInp.placeholder=ph;lineInp.value=ylv;
+          lineInp.dataset.id=r.id;lineInp.style.width='56px';
+          lineInp.addEventListener('blur',function(){setLineMobile(this);});
+          lineInp.addEventListener('input',function(){setLineMobile(this);});
+          lineInp.addEventListener('keydown',function(e){if(e.key==='Enter')this.blur();});
+          sideRow.appendChild(lineInp);
+          // % input
+          var predInp = document.createElement('input');
+          predInp.className='mc-inp'+(pval?' filled':'');
+          predInp.type='number';predInp.min='1';predInp.max='99';predInp.step='0.5';
+          predInp.placeholder='%';predInp.value=pval;predInp.dataset.id=r.id;
+          predInp.style.width='52px';
+          predInp.addEventListener('blur',function(){setPredMobile(this);});
+          predInp.addEventListener('input',function(){setPredMobile(this);});
+          predInp.addEventListener('keydown',function(e){if(e.key==='Enter')this.blur();});
+          sideRow.appendChild(predInp);
+          // Inline edge
+          var sideEdge = document.createElement('span');
+          sideEdge.className='mc-side-edge';
+          sideEdge.dataset.id=r.id;
+          sideEdge.style.cssText='font-family:var(--mono);font-size:12px;font-weight:600;margin-left:auto;white-space:nowrap;color:var(--muted2)';
+          sideEdge.textContent='-';
+          sideRow.appendChild(sideEdge);
+          inputRow.appendChild(sideRow);
+        });
       }
-
-      // Mkt Price per side
-      mktRows.forEach(function(r) {
-        var pval = preds[r.id]||'';
-        var predGrp = document.createElement('div');
-        predGrp.className = 'mc-inp-group';
-        var predLbl = document.createElement('span');
-        predLbl.className = 'mc-inp-lbl';
-        predLbl.textContent = r.side.split(' ').pop();
-        predLbl.style.cssText = 'max-width:60px;overflow:hidden;text-overflow:ellipsis';
-        predGrp.appendChild(predLbl);
-        var predInp = document.createElement('input');
-        predInp.className = 'mc-inp' + (pval ? ' filled' : '');
-        predInp.type = 'number';
-        predInp.min = '1';
-        predInp.max = '99';
-        predInp.step = '0.5';
-        predInp.placeholder = '%';
-        predInp.value = pval;
-        predInp.dataset.id = r.id;
-        predInp.addEventListener('blur', function(){ setPredMobile(this); });
-        predInp.addEventListener('input', function(){ setPredMobile(this); });
-        predInp.addEventListener('keydown', function(e){ if(e.key==='Enter') this.blur(); });
-        predGrp.appendChild(predInp);
-        inputRow.appendChild(predGrp);
-      });
-
-      // Edge/Units display - always show result area
-      var edgeRow = mktRows.find(function(r){return r.edge!=null;}) || mktRows[0];
-      var resultDiv = document.createElement('div');
-      resultDiv.className = 'mc-result';
-      resultDiv.style.cssText = 'margin-left:auto;display:flex;align-items:center;gap:6px;flex-shrink:0';
-      if (edgeRow && edgeRow.edge!=null) {
-        var edgeStr = (edgeRow.edge>0?'+':'')+edgeRow.edge.toFixed(1)+'%';
-        var edgeCls = edgeRow.edge>=8?'e-strong':edgeRow.edge>=5?'e-med':edgeRow.edge>0?'e-weak':'e-neg';
-        var edgeEl = document.createElement('span');
-        edgeEl.className = 'mc-edge ' + edgeCls;
-        edgeEl.textContent = edgeStr;
-        resultDiv.appendChild(edgeEl);
-        var uEl = document.createElement('span');
-        uEl.className = 'mc-units' + (edgeRow.u===0?' pass':'');
-        uEl.textContent = edgeRow.u===0?'PASS':edgeRow.u+'u';
-        resultDiv.appendChild(uEl);
-        if (edgeRow.u>0) {
-          var betEl = document.createElement('span');
-          betEl.className = 'mc-bet';
-          betEl.textContent = '$'+edgeRow.bet.toFixed(0);
-          resultDiv.appendChild(betEl);
-        }
-      }
-      inputRow.appendChild(resultDiv);
-
       section.appendChild(inputRow);
 
       // Permanent result row - always visible, updates when price entered
