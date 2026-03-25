@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Edge Dashboard</title>
+<title>Edge Dashboard v1.5</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Barlow:wght@400;500;600;700&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -117,7 +117,7 @@ td.r{text-align:right}td.c{text-align:center}
   .game-card-header:active{background:var(--bg4)}
   .gc-stripe{width:3px;height:16px;border-radius:2px;flex-shrink:0}
   .gc-league{font-size:9px;font-weight:700;letter-spacing:.08em;padding:2px 6px;border-radius:3px;color:#fff}
-  .gc-title{font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text);flex:1}
+  .gc-title{font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
   .gc-time{font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:3px;background:var(--bg4);border:1px solid var(--border2)}
   .gc-time.urgent{color:var(--red);border-color:rgba(240,82,82,.3);background:rgba(240,82,82,.08)}
   .gc-time.soon{color:var(--yellow);border-color:rgba(245,200,66,.3);background:rgba(245,200,66,.08)}
@@ -212,7 +212,7 @@ td.r{text-align:right}td.c{text-align:center}
         <th>Side</th>
         <th>FD Line</th>
         <th class="r">FD Odds</th>
-        <th class="r">No-Vig %</th>
+        <th class="r" style="opacity:0.45;font-size:9px">No-Vig %</th>
         <th class="c">Your Line</th>
         <th class="r">Adj. Fair %</th>
         <th class="c">Mkt Price %</th>
@@ -894,6 +894,13 @@ function recomputeAndRenderMobile(unit) {
     if(!q) return true;
     return (r.game+' '+r.side+' '+r.mkt).toLowerCase().indexOf(q)!==-1;
   });
+  var mO2={ML:0,Spread:1,Total:2};
+  filtered.sort(function(a,b){
+    var ta=a.cm?a.cm.getTime():9e12,tb=b.cm?b.cm.getTime():9e12;
+    if(a.game!==b.game)return ta-tb;
+    if(a.mkt!==b.mkt)return(mO2[a.mkt]||0)-(mO2[b.mkt]||0);
+    return 0;
+  });
   renderMobileCards(filtered);
 }
 
@@ -1085,7 +1092,7 @@ function buildRow(r,color,isC){
     +'<td data-label="Side" style="color:var(--muted);font-size:12px">'+r.side+'</td>'
     +'<td data-label="FD Line" style="font-family:var(--mono);color:var(--muted);font-size:12px">'+lineStr+'</td>'
     +'<td class="r" data-label="Consensus"><span class="'+aCls+'">'+am+'</span></td>'
-    +'<td class="r" data-label="No-Vig %" style="font-family:var(--mono);color:var(--muted)">'+fairStr+'</td>'
+    +'<td class="r" data-label="No-Vig %" style="font-family:var(--mono);color:var(--muted2);font-size:11px;opacity:0.5">'+fairStr+'</td>'
     +ylCell
     +'<td class="r" data-label="Adj. Fair %" style="font-family:var(--mono);color:'+(afChanged?'var(--yellow)':'var(--muted)')+'">'+afStr+'</td>'
     
