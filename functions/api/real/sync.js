@@ -115,7 +115,10 @@ export async function onRequestGet({ request, env }) {
     const nextRes = await fetch(`https://web.realapp.com/home/${realSport}/next?cohort=0`, {
       headers: buildHeaders(env)
     });
-    if (!nextRes.ok) return fail(nextRes.status, 'Failed to fetch Real Sports games');
+    if (!nextRes.ok) {
+      const errBody = await nextRes.text();
+      return fail(nextRes.status, 'Failed to fetch Real Sports games: ' + errBody);
+    }
     const nextData = await nextRes.json();
 
     // Extract games array - try common response shapes
@@ -173,7 +176,7 @@ export async function onRequestGet({ request, env }) {
     });
 
   } catch(e) {
-    return fail(500, 'Real Sports sync failed: ' + e.message);
+    return fail(500, 'Real Sports sync failed: ' + e.message + ' | ' + (e.stack||''));
   }
 }
 
