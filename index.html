@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Edge Dashboard v2.0.7</title>
+<title>Edge Dashboard v2.1.0</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Barlow:wght@400;500;600;700&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -1485,7 +1485,14 @@ function loadOdds(){
     : (!isPro()) ? 'h2h'
     : sel==='ALL' ? 'h2h,spreads,totals' : (MARKET_KEYS[sel]||'h2h');
   fetch('/api/odds?sport='+currentSport+'&markets='+mkts+'&bookmakers=fanduel,draftkings,betmgm,caesars')
-    .then(function(r){var rem=r.headers.get('x-requests-remaining');if(rem)document.getElementById('api-remaining').textContent=rem+' requests left';return r.json();})
+    .then(function(r){
+      var rem=r.headers.get('x-requests-remaining');
+      if(rem)document.getElementById('api-remaining').textContent=rem+' requests left';
+      if(r.status===401){dot.className='sdot error';stxt.textContent='Session expired — please log in again.';btn.disabled=false;setTimeout(function(){location.reload();},2000);return Promise.reject('unauth');}
+      if(r.status===429){dot.className='sdot error';stxt.textContent='Daily refresh limit reached. Resets tomorrow.';btn.disabled=false;return Promise.reject('rate');}
+      if(r.status===403){dot.className='sdot error';stxt.textContent='Account suspended.';btn.disabled=false;return Promise.reject('banned');}
+      return r.json();
+    })
     .then(function(d){
       if(Array.isArray(d)){
         rawRows=parseGames(d);
@@ -1494,7 +1501,7 @@ function loadOdds(){
         else{dot.className='sdot error';stxt.textContent='No '+lbl+' games right now';}
       }else{rawRows=[];dot.className='sdot error';stxt.textContent='API error';}
     })
-    .catch(function(e){rawRows=[];dot.className='sdot error';stxt.textContent='Error: '+e.message;})
+    .catch(function(e){if(e==='unauth'||e==='rate'||e==='banned')return;rawRows=[];dot.className='sdot error';stxt.textContent='Error: '+e.message;})
     .then(function(){
       btn.disabled=false;
       renderTable();
