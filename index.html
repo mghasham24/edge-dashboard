@@ -492,7 +492,10 @@ td.r{text-align:right}td.c{text-align:center}
 <div class="mobile-cards" id="mobile-cards"></div>
 
 <div class="admin-panel" id="admin-panel">
-  <!-- Stats row -->
+  <!-- Back button -->
+  <div style="margin-bottom:20px">
+    <button onclick="document.getElementById('admin-tab-btn').click()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:7px 14px;border-radius:5px;cursor:pointer;letter-spacing:.04em">&larr; Back to Dashboard</button>
+  </div>
   <div class="admin-stats">
     <div class="admin-stat"><div class="admin-stat-val" id="adm-total">-</div><div class="admin-stat-lbl">Total Users</div></div>
     <div class="admin-stat"><div class="admin-stat-val" id="adm-week">-</div><div class="admin-stat-lbl">New This Week</div></div>
@@ -662,11 +665,13 @@ async function checkSession() {
           var isActive = this.classList.contains('active');
           if (isActive) {
             this.classList.remove('active');
+            this.textContent = ' Admin';
             hideAdminTab();
             loadOdds();
           } else {
             document.querySelectorAll('.sport-tab').forEach(function(t){ t.classList.remove('active'); });
             this.classList.add('active');
+            this.textContent = '<- Dashboard';
             showAdminTab();
           }
         };
