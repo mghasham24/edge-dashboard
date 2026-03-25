@@ -2636,6 +2636,21 @@
                         mlRow.appendChild(grp);
                         mlInputs.push(inp);
                     });
+                    // ML: add per-side edge display below inputs
+                    var mlEdgeRow = document.createElement('div');
+                    mlEdgeRow.style.cssText = 'display:flex;gap:6px;margin-top:4px;flex-wrap:wrap';
+                    mktRows.forEach(function(r) {
+                        var se = document.createElement('span');
+                        se.className = 'mc-side-edge';
+                        se.dataset.id = r.id;
+                        se.style.cssText = 'font-family:var(--mono);font-size:12px;font-weight:600;flex:1;text-align:center;color:var(--muted2)';
+                        se.textContent = '-';
+                        if (preds[r.id] !== undefined && preds[r.id] !== '') {
+                            (function(id){ setTimeout(function(){ updateSideEdge(id); }, 0); })(r.id);
+                        }
+                        mlEdgeRow.appendChild(se);
+                    });
+                    inputRow.appendChild(mlEdgeRow);
                     inputRow.appendChild(mlRow);
                 } else if (mkt === 'Total') {
                     var rA = mktRows[0], rB = mktRows[1];
@@ -2751,6 +2766,9 @@
                         seA.dataset.id = rA.id;
                         seA.style.cssText = 'font-family:var(--mono);font-size:12px;font-weight:600;flex:1;text-align:center;color:var(--muted2)';
                         seA.textContent = '-';
+                        if (preds[rA.id] !== undefined && preds[rA.id] !== '') {
+                            (function(id){ setTimeout(function(){ updateSideEdge(id); }, 0); })(rA.id);
+                        }
                         edgeRowT.appendChild(seA);
                     }
                     if (rB) {
@@ -2759,6 +2777,9 @@
                         seB.dataset.id = rB.id;
                         seB.style.cssText = 'font-family:var(--mono);font-size:12px;font-weight:600;flex:1;text-align:center;color:var(--muted2)';
                         seB.textContent = '-';
+                        if (preds[rB.id] !== undefined && preds[rB.id] !== '') {
+                            (function(id){ setTimeout(function(){ updateSideEdge(id); }, 0); })(rB.id);
+                        }
                         edgeRowT.appendChild(seB);
                     }
                     inputRow.appendChild(edgeRowT);
@@ -2822,19 +2843,7 @@
                 }
                 section.appendChild(inputRow);
 
-                var resultRow = document.createElement('div');
-                resultRow.className = 'mc-result';
-                var _sectionIds = mktRows.map(function(r) { return r.id; }).join(',');
-                resultRow.setAttribute('data-section-id', _sectionIds);
-                resultRow.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 0 2px;min-height:24px';
-                // If preds already set (auto-fill), compute edge immediately
-                var _firstFilledId = mktRows.map(function(r){return r.id;}).find(function(id){return preds[id]!==undefined&&preds[id]!=='';});
-                if (_firstFilledId) {
-                    computeAndShowEdge(_firstFilledId, resultRow);
-                } else {
-                    resultRow.innerHTML = '<span style="font-size:11px;color:var(--muted2);font-family:var(--mono)">Enter % to see edge</span>';
-                }
-                section.appendChild(resultRow);
+                // No shared bottom result row - edges shown inline per side
 
                 body.appendChild(section);
             });
