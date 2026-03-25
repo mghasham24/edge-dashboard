@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Edge Dashboard v1.5.5</title>
+<title>Edge Dashboard v1.6.0</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Barlow:wght@400;500;600;700&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -83,13 +83,19 @@ td.r{text-align:right}td.c{text-align:center}
 .gh-arrow.up{transform:rotate(-180deg)}
 /* GATE */
 .gate{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:9999}
-.gate-box{background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:40px;display:flex;flex-direction:column;align-items:center;gap:20px;min-width:320px}
-.gate-logo{font-family:var(--mono);font-weight:600;font-size:18px;letter-spacing:.08em;display:flex;align-items:center;gap:8px}
-.gate-inp{background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:14px;padding:10px 16px;border-radius:6px;outline:none;width:100%;text-align:center}
+.gate-box{background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:40px;display:flex;flex-direction:column;align-items:center;gap:20px;min-width:340px;max-width:90vw}
+.gate-logo{font-family:var(--mono);font-weight:600;font-size:18px;letter-spacing:.08em;display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.gate-tabs{display:flex;gap:0;border:1px solid var(--border2);border-radius:6px;overflow:hidden;width:100%}
+.gate-tab{flex:1;padding:8px;font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;border:none;background:none;color:var(--muted);cursor:pointer;transition:all .15s}
+.gate-tab.active{background:var(--accent);color:#fff}
+.gate-fields{display:flex;flex-direction:column;gap:10px;width:100%}
+.gate-inp{background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:14px;padding:10px 16px;border-radius:6px;outline:none;width:100%}
 .gate-inp:focus{border-color:var(--accent)}
-.gate-btn{background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:13px;font-weight:600;padding:10px 32px;border-radius:6px;cursor:pointer;width:100%;text-transform:uppercase}
+.gate-btn{background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:13px;font-weight:600;padding:11px 32px;border-radius:6px;cursor:pointer;width:100%;text-transform:uppercase;letter-spacing:.05em;margin-top:4px}
 .gate-btn:hover{opacity:.85}
-.gate-err{color:var(--red);font-family:var(--mono);font-size:12px;display:none}
+.gate-btn:disabled{opacity:.4;cursor:not-allowed}
+.gate-err{color:var(--red);font-family:var(--mono);font-size:12px;display:none;text-align:center}
+.gate-ok{color:var(--green);font-family:var(--mono);font-size:12px;display:none;text-align:center}
 .live-badge{display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);font-size:10px;font-weight:600;padding:2px 7px;border-radius:3px;background:rgba(240,82,82,.15);border:1px solid rgba(240,82,82,.3);color:var(--red)}
 .live-dot{width:5px;height:5px;border-radius:50%;background:var(--red);animation:pulse .8s ease-in-out infinite}
 .score-info{font-family:var(--mono);font-size:10px;color:var(--muted);margin-left:2px}
@@ -157,9 +163,18 @@ td.r{text-align:right}td.c{text-align:center}
 <div class="gate" id="gate">
   <div class="gate-box">
     <div class="gate-logo"><span class="logo-dot"></span>EDGE DASHBOARD</div>
-    <input class="gate-inp" id="gate-inp" type="password" placeholder="Enter password" onkeydown="if(event.key==='Enter')checkPass()">
-    <button class="gate-btn" onclick="checkPass()">Enter</button>
-    <span class="gate-err" id="gate-err">Incorrect password</span>
+    <div class="gate-tabs">
+      <button class="gate-tab active" id="tab-login" onclick="switchTab('login')">Log In</button>
+      <button class="gate-tab" id="tab-signup" onclick="switchTab('signup')">Sign Up</button>
+    </div>
+    <div class="gate-fields" id="gate-fields">
+      <input class="gate-inp" id="gate-email" type="email" placeholder="Email address" autocomplete="email">
+      <input class="gate-inp" id="gate-pass" type="password" placeholder="Password" autocomplete="current-password">
+      <input class="gate-inp" id="gate-pass2" type="password" placeholder="Confirm password" autocomplete="new-password" style="display:none">
+      <button class="gate-btn" id="gate-btn" onclick="submitAuth()">Log In</button>
+    </div>
+    <span class="gate-err" id="gate-err"></span>
+    <span class="gate-ok"  id="gate-ok"></span>
   </div>
 </div>
 
@@ -169,6 +184,7 @@ td.r{text-align:right}td.c{text-align:center}
     <div class="api-remaining" id="api-remaining">-- requests left</div>
     <button class="refresh-btn" id="collapse-btn" onclick="toggleAll()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted)">Collapse All</button>
     <button class="refresh-btn" id="refresh-btn" onclick="loadOdds()">Refresh</button>
+    <button class="refresh-btn" onclick="logOut()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted)" title="Log out">⏻</button>
   </div>
 </header>
 
@@ -238,17 +254,100 @@ var yourLines={};
 var collapsed={};
 var mobileCollapsed={};
 
-function checkPass(){
-  var inp=document.getElementById('gate-inp');
-  if(inp.value==='realoddmoe24'){
-    document.getElementById('gate').style.display='none';
-    sessionStorage.setItem('auth','1');
-    loadOdds();
-  } else {
-    document.getElementById('gate-err').style.display='block';
-    inp.value='';inp.focus();
+// ── Auth state ────────────────────────────────────────
+var currentTab = 'login';
+
+function switchTab(tab) {
+  currentTab = tab;
+  document.getElementById('tab-login').classList.toggle('active', tab==='login');
+  document.getElementById('tab-signup').classList.toggle('active', tab==='signup');
+  document.getElementById('gate-pass2').style.display = tab==='signup' ? '' : 'none';
+  document.getElementById('gate-btn').textContent = tab==='login' ? 'Log In' : 'Create Account';
+  document.getElementById('gate-err').style.display = 'none';
+  document.getElementById('gate-ok').style.display  = 'none';
+  // flip autocomplete
+  document.getElementById('gate-pass').setAttribute('autocomplete', tab==='login' ? 'current-password' : 'new-password');
+}
+
+function showGateErr(msg) {
+  var el = document.getElementById('gate-err');
+  el.textContent = msg; el.style.display = 'block';
+  document.getElementById('gate-ok').style.display = 'none';
+}
+function showGateOk(msg) {
+  var el = document.getElementById('gate-ok');
+  el.textContent = msg; el.style.display = 'block';
+  document.getElementById('gate-err').style.display = 'none';
+}
+
+async function submitAuth() {
+  var email = document.getElementById('gate-email').value.trim();
+  var pass  = document.getElementById('gate-pass').value;
+  var pass2 = document.getElementById('gate-pass2').value;
+  var btn   = document.getElementById('gate-btn');
+
+  document.getElementById('gate-err').style.display = 'none';
+  document.getElementById('gate-ok').style.display  = 'none';
+
+  if (!email || !pass) { showGateErr('Email and password required'); return; }
+
+  if (currentTab === 'signup') {
+    if (pass.length < 8) { showGateErr('Password must be at least 8 characters'); return; }
+    if (pass !== pass2)  { showGateErr('Passwords do not match'); return; }
+  }
+
+  btn.disabled = true;
+  btn.textContent = currentTab === 'login' ? 'Logging in...' : 'Creating account...';
+
+  try {
+    var endpoint = currentTab === 'login' ? '/api/auth/login' : '/api/auth/register';
+    var res  = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ email, password: pass })
+    });
+    var data = await res.json();
+    if (!res.ok) {
+      showGateErr(data.error || 'Something went wrong');
+    } else {
+      document.getElementById('gate').style.display = 'none';
+      loadOdds();
+    }
+  } catch(e) {
+    showGateErr('Network error — please try again');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = currentTab === 'login' ? 'Log In' : 'Create Account';
   }
 }
+
+async function logOut() {
+  await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+  location.reload();
+}
+
+async function checkSession() {
+  try {
+    var res = await fetch('/api/auth/me', { credentials: 'same-origin' });
+    if (res.ok) {
+      document.getElementById('gate').style.display = 'none';
+      loadOdds();
+    }
+    // else gate stays visible
+  } catch(e) {
+    // gate stays visible
+  }
+}
+
+// Enter key support on gate inputs
+document.addEventListener('DOMContentLoaded', function() {
+  ['gate-email','gate-pass','gate-pass2'].forEach(function(id) {
+    document.getElementById(id).addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') submitAuth();
+    });
+  });
+});
 
 function imp(n){n=Number(n);if(!isFinite(n))return null;return n<0?Math.abs(n)/(Math.abs(n)+100):100/(n+100);}
 function novig(a,b){if(a==null||b==null)return{fa:null,fb:null};var t=a+b;if(!isFinite(t)||t<=0)return{fa:null,fb:null};return{fa:a/t,fb:b/t};}
@@ -1023,7 +1122,7 @@ function setPred(input){
 }
 
 buildTabs();
-if(sessionStorage.getItem('auth')==='1'){document.getElementById('gate').style.display='none';loadOdds();}
+checkSession();
 </script>
 </body>
 </html>
