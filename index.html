@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Edge Dashboard v2.0.6</title>
+<title>Edge Dashboard v2.0.7</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Barlow:wght@400;500;600;700&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -594,7 +594,8 @@ async function submitAuth() {
       document.getElementById('gate').style.display = 'none';
       document.getElementById('landing').classList.remove('visible');
       document.getElementById('dashboard').style.display = 'block';
-      loadOdds();
+      buildTabs();
+      setTimeout(loadOdds, 50);
     }
   } catch(e) {
     showGateErr('Network error -- please try again');
@@ -644,7 +645,7 @@ async function checkSession() {
         document.getElementById('sport-tabs').appendChild(adminTabBtn);
       }
       buildTabs();
-      loadOdds();
+      setTimeout(loadOdds, 50);
     } else {
       document.getElementById('landing').classList.add('visible');
     }
