@@ -3659,28 +3659,49 @@
                 }
             });
             renderTable();
-            // On mobile, re-render cards after auto-fill so edges show immediately
+            // On mobile, update edge result rows after auto-fill
             if (window.innerWidth <= 768) {
+                var _rows = rawRows.slice(); // capture reference
                 setTimeout(function() {
-                    recomputeAndRenderMobile(parseFloat(document.getElementById('unit-size').value) || 300);
-                    // After re-render, update all edge displays
-                    setTimeout(function() {
-                        document.querySelectorAll('.mc-result').forEach(function(rr) {
-                            var ids = (rr.getAttribute('data-section-id') || '').split(',');
-                            ids.forEach(function(id) {
-                                if (id && preds[id] !== undefined && preds[id] !== '') {
-                                    computeAndShowEdge(id, rr);
-                                }
-                            });
+                    document.querySelectorAll('.mc-result').forEach(function(rr) {
+                        var ids = (rr.getAttribute('data-section-id') || '').split(',');
+                        // Find the first id in this section that has a pred
+                        var activeId = null;
+                        ids.forEach(function(id) {
+                            if (id && preds[id] !== undefined && preds[id] !== '') activeId = id;
                         });
-                        document.querySelectorAll('.mc-side-edge[data-id]').forEach(function(el) {
-                            var id = el.getAttribute('data-id');
-                            if (id && preds[id] !== undefined && preds[id] !== '') {
-                                updateSideEdge(id);
-                            }
+                        if (!activeId) return;
+                        // Compute edge inline using captured rawRows
+                        var r = _rows.find(function(x) { return x.id === activeId; });
+                        if (!r) return;
+                        var unit = parseFloat(document.getElementById('unit-size').value) || 300;
+                        var pairs = {};
+                        _rows.forEach(function(x) {
+                            if (!pairs[x.pid]) pairs[x.pid] = {};
+                            pairs[x.pid][x.ps] = x;
                         });
-                    }, 50);
-                }, 100);
+                        var pair = pairs[r.pid] || {};
+                        var nv = novig(pair.A ? imp(pair.A.am) : null, pair.B ? imp(pair.B.am) : null);
+                        var fair = r.ps === 'A' ? nv.fa : nv.fb;
+                        var yl = yourLines[r.id] != null ? yourLines[r.id] : null;
+                        var af = adjFair(fair, r.pt, yl, r.mkt, r.ps);
+                        var pred = parseFloat(preds[activeId]) / 100;
+                        var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
+                        var u = units(edge);
+                        var bet = u * unit;
+                        if (edge != null) {
+                            var col = edge >= 8 ? 'var(--green)' : edge >= 5 ? '#7ddfab' : edge > 0 ? 'var(--yellow)' : 'var(--red)';
+                            rr.innerHTML = '<span style="font-family:var(--mono);font-size:13px;font-weight:600;color:' + col + '">' + (edge > 0 ? '+' : '') + edge.toFixed(1) + '%</span>'
+                                + ' <span style="font-family:var(--mono);font-size:12px;font-weight:600;color:' + (u === 0 ? 'var(--muted2)' : 'var(--green)') + '">' + (u === 0 ? 'PASS' : u + 'u') + '</span>'
+                                + (u > 0 ? ' <span style="font-family:var(--mono);font-size:12px;color:var(--text)">$' + bet.toFixed(0) + '</span>' : '');
+                        }
+                    });
+                    // Update inline side edges for spread
+                    document.querySelectorAll('.mc-side-edge[data-id]').forEach(function(el) {
+                        var id = el.getAttribute('data-id');
+                        if (id && preds[id] !== undefined && preds[id] !== '') updateSideEdge(id);
+                    });
+                }, 150);
             }
         })
         .catch(function() {});
