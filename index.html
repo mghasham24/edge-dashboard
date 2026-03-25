@@ -3659,6 +3659,21 @@
                 }
             });
             renderTable();
+            // On mobile, fire input events on all auto-filled inputs to trigger edge display
+            if (window.innerWidth <= 768) {
+                setTimeout(function() {
+                    document.querySelectorAll('.mc-inp[data-id]').forEach(function(inp) {
+                        var id = inp.getAttribute('data-id');
+                        if (preds[id] !== undefined && preds[id] !== '' && inp.value === '') {
+                            inp.value = preds[id];
+                            inp.classList.add('filled');
+                        }
+                        if (inp.value !== '') {
+                            inp.dispatchEvent(new Event('input', { bubbles: true }));
+                        }
+                    });
+                }, 150);
+            }
             // On mobile, update edge result rows after auto-fill
             if (window.innerWidth <= 768) {
                 var _rows = rawRows.slice(); // capture reference
