@@ -1703,7 +1703,7 @@ function buildRow(r,color,isC){
     +ylCell
     +'<td class="r" data-label="Adj. Fair %" style="font-family:var(--mono);color:'+(afChanged?'var(--yellow)':'var(--muted)')+'">'+afStr+'</td>'
     
-    +'<td class="c" data-label="Mkt Price %"><div style="display:flex;align-items:center;gap:4px;justify-content:center"><input class="cell-inp'+(pv?' filled':'')+'" type="number" min="1" max="99" step="0.5" placeholder="-" value="'+pv+'" data-id="'+r.id+'" onblur="setPred(this)" onkeydown="if(event.key===\'Enter\')this.blur()"><span class="pred-unit">%</span></div></td>'
+    +'<td class="c" data-label="Mkt Price %"><div style="display:flex;align-items:center;gap:4px;justify-content:center"><input class="cell-inp'+(pv?' filled':'')+'" type="number" min="1" max="99" step="0.5" placeholder="-" value="'+pv+'" data-id="'+r.id+'" oninput="setPred(this)" onblur="setPred(this)" onkeydown="if(event.key===\'Enter\')this.blur()"><span class="pred-unit">%</span></div></td>'
     +'<td class="r" data-label="Edge"><div class="edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:'+bw+'px;background:'+bc+'"></div></div><span class="edge-val '+ec+'">'+es+'</span></div></td>'
     +'<td class="r" data-label="Units">'+uH+'</td>'
     +'<td class="r" data-label="Bet">'+bH+'</td>'
@@ -1743,8 +1743,8 @@ function setPred(input){
       var otherId=r.ps==='A' ? id.replace(/-A$/,'-B') : id.replace(/-B$/,'-A');
       var other=(100-v).toFixed(1);
       preds[otherId]=other;
-      var allOther=document.querySelectorAll('input[data-id="'+otherId+'"]');
-      var otherInp=allOther.length?allOther[allOther.length-1]:null;
+      var allOther=document.querySelectorAll('td[data-label="Mkt Price %"] input[data-id="'+otherId+'"]');
+      var otherInp=allOther.length?allOther[0]:null;
       if(otherInp&&otherInp!==input){
         otherInp.value=other;
         otherInp.classList.add('filled');
