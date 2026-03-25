@@ -3659,24 +3659,26 @@
                 }
             });
             renderTable();
-            // On mobile, trigger setPredMobile on each filled input so edge logic fires
+            // On mobile, directly update edge displays after auto-fill
             if (window.innerWidth <= 768) {
                 setTimeout(function() {
-                    document.querySelectorAll('.mc-inp[data-id]').forEach(function(inp) {
-                        var id = inp.getAttribute('data-id');
-                        if (preds[id] !== undefined && preds[id] !== '') {
-                            inp.value = preds[id];
-                            inp.classList.add('filled');
-                            setPredMobile(inp);
+                    rawRows.forEach(function(r) {
+                        if (preds[r.id] === undefined || preds[r.id] === '') return;
+                        updateSideEdge(r.id);
+                        var edgeEl = document.querySelector('.mc-side-edge[data-id="' + r.id + '"]');
+                        if (edgeEl) {
+                            var mcSection = edgeEl.closest('.mc-section');
+                            if (mcSection) {
+                                var resultRow = mcSection.querySelector('.mc-result');
+                                if (resultRow) computeAndShowEdge(r.id, resultRow);
+                            }
                         }
-                    });
-                    // Also update line inputs
-                    document.querySelectorAll('.mc-inp[data-id]').forEach(function(inp) {
-                        var id = inp.getAttribute('data-id');
-                        if (yourLines[id] != null) {
-                            // line inputs don't have data-id in the same way, handled by updateSideEdge
-                            updateSideEdge(id);
-                        }
+                        // For ML: result row is at section level, find via data-section-id
+                        var resultRows = document.querySelectorAll('.mc-result');
+                        resultRows.forEach(function(rr) {
+                            var ids = (rr.getAttribute('data-section-id') || '').split(',');
+                            if (ids.indexOf(r.id) !== -1) computeAndShowEdge(r.id, rr);
+                        });
                     });
                 }, 100);
             }
