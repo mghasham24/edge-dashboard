@@ -428,7 +428,7 @@ td.r{text-align:right}td.c{text-align:center}
 <header class="header">
   <div class="logo"><span class="logo-dot"></span>RAXEDGE <span style="font-size:10px;font-weight:700;letter-spacing:.06em;background:rgba(79,110,247,.15);color:var(--accent);border:1px solid rgba(79,110,247,.3);padding:2px 7px;border-radius:20px;margin-left:8px">by @moe_</span></div>
   <div style="display:flex;align-items:center;gap:10px">
-    <div class="api-remaining" id="api-remaining">-- requests left</div>
+    <div class="api-remaining" id="api-remaining" style="display:none">-- requests left</div>
     <button class="refresh-btn" id="collapse-btn" onclick="toggleAll()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted)">Collapse All</button>
     <button class="refresh-btn" id="refresh-btn" onclick="loadOdds()">Refresh</button>
     <button class="refresh-btn" onclick="logOut()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted)" title="Log out">⏻</button>
@@ -446,10 +446,10 @@ td.r{text-align:right}td.c{text-align:center}
   <div style="display:flex;align-items:center;gap:6px">
     <span class="ctrl-lbl">Market</span>
     <select class="ctrl-sel" id="mkt-filter" onchange="onMktChange()">
-      <option value="ALL">All (3 credits)</option>
-      <option value="ML">Moneyline (1 credit)</option>
-      <option value="Spread">Spread (1 credit)</option>
-      <option value="Total">Total (1 credit)</option>
+      <option value="ALL">All Markets</option>
+      <option value="ML">Moneyline</option>
+      <option value="Spread">Spread</option>
+      <option value="Total">Total</option>
     </select>
   </div>
   <div style="display:flex;align-items:center;gap:6px">
@@ -652,6 +652,7 @@ async function checkSession() {
       }
       // Show admin tab if admin
       if (data.is_admin) {
+        document.getElementById('api-remaining').style.display = '';
         var adminTabBtn = document.createElement('button');
         adminTabBtn.className = 'sport-tab';
         adminTabBtn.textContent = ' Admin';
