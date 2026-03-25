@@ -86,6 +86,36 @@ async function getSession(request, db) {
   ).bind(m[1], now).first();
 }
 
+function extractGames(gamesData) {
+  // Direct arrays
+  if (Array.isArray(gamesData.games) && gamesData.games.length) return gamesData.games;
+  if (Array.isArray(gamesData.data) && gamesData.data.length) return gamesData.data;
+  if (Array.isArray(gamesData.items) && gamesData.items.length) return gamesData.items;
+  if (Array.isArray(gamesData.predictions) && gamesData.predictions.length) return gamesData.predictions;
+
+  // Real Sports /home/{sport}/next structure: games nested inside days array
+  const days = gamesData.days
+    || (gamesData.latestDayContent && gamesData.latestDayContent.days)
+    || (gamesData.latestDay && gamesData.latestDay.days)
+    || [];
+
+  if (Array.isArray(days) && days.length) {
+    const games = days.flatMap(d =>
+      d.games || d.predictions || d.items || d.events || []
+    );
+    if (games.length) return games;
+  }
+
+  // latestDayContent direct games
+  if (gamesData.latestDayContent) {
+    const lcd = gamesData.latestDayContent;
+    const direct = lcd.games || lcd.predictions || lcd.items || lcd.events || [];
+    if (Array.isArray(direct) && direct.length) return direct;
+  }
+
+  return [];
+}
+
 export async function onRequestGet({ request, env }) {
   const session = await getSession(request, env.DB);
   if (!session) return fail(401, 'Not authenticated');
@@ -120,10 +150,15 @@ export async function onRequestGet({ request, env }) {
     }
 
     const gamesData = JSON.parse(gamesText);
-    const days = (gamesData.days || (gamesData.latestDayContent && gamesData.latestDayContent.days) || []);
-    const games = gamesData.games || gamesData.data || gamesData.items || gamesData.predictions || days.reduce((acc, d) => acc.concat(d.games || d.predictions || d.items || []), []);
+    const games = extractGames(gamesData);
 
     if (!games.length) {
+      // Debug mode 3: dump raw structure to diagnose
+      if (debugMode === '3') {
+        return new Response(JSON.stringify({ gamesStatus, gamesData }), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
       return new Response(JSON.stringify({ ok: true, markets: {}, debug: 'no games', keys: Object.keys(gamesData) }), {
         headers: { 'Content-Type': 'application/json' }
       });
