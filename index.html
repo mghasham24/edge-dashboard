@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Edge Dashboard v1.8.2</title>
+<title>Edge Dashboard v1.8.3</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Barlow:wght@400;500;600;700&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -608,7 +608,9 @@ function renderMobileCards(filtered) {
     var mkts = ['ML','Spread','Total'];
     mkts.forEach(function(mkt) {
       var mktRows = gameRows.filter(function(r){return r.mkt===mkt;});
-      if (!mktRows.length) return;
+      // For free users: always show Spread/Total as locked teaser even with no data
+      var isLocked = !isPro() && mkt !== 'ML';
+      if (!mktRows.length && !isLocked) return;
 
       var section = document.createElement('div');
       section.className = 'mc-section';
@@ -619,30 +621,31 @@ function renderMobileCards(filtered) {
       section.appendChild(lbl);
 
       // Free plan: show blurred locked overlay for Spread/Total
-      var isLocked = !isPro() && mkt !== 'ML';
       if (isLocked) {
+        var teams = game.split(' @ ');
         var lockedWrap = document.createElement('div');
         lockedWrap.className = 'mc-locked';
-        // Blurred fake content
         var blurContent = document.createElement('div');
         blurContent.className = 'mc-locked-blur';
-        mktRows.forEach(function(r) {
+        // Fake side rows using team names
+        var fakeRows = mkt === 'Total'
+          ? [{side:'Over',val:'O 224.5'},{side:'Under',val:'U 224.5'}]
+          : [{side:teams[0]||'Home',val:'-3.5'},{side:teams[1]||'Away',val:'+3.5'}];
+        fakeRows.forEach(function(f) {
           var fakeRow = document.createElement('div');
           fakeRow.className = 'mc-row';
           fakeRow.style.cssText = 'margin-bottom:6px';
-          fakeRow.innerHTML = '<span class="mc-side">'+r.side+'</span>'
-            + '<span class="mc-odds" style="filter:blur(5px)">'+(mkt==='Spread'?(r.pt>=0?'+'+r.pt:r.pt):'O/U')+'</span>'
-            + '<span class="mc-fair" style="filter:blur(5px)">--.--%</span>';
+          fakeRow.innerHTML = '<span class="mc-side">'+f.side+'</span>'
+            + '<span class="mc-odds" style="filter:blur(5px)">'+f.val+'</span>'
+            + '<span class="mc-fair" style="filter:blur(5px)">-110</span>';
           blurContent.appendChild(fakeRow);
         });
-        // Fake input row
         var fakeInp = document.createElement('div');
         fakeInp.style.cssText = 'display:flex;gap:8px;padding-top:8px;border-top:1px solid var(--border);filter:blur(4px)';
         fakeInp.innerHTML = '<div style="flex:1;height:32px;background:var(--bg3);border-radius:5px;border:1px solid var(--border2)"></div>'
           + '<div style="flex:1;height:32px;background:var(--bg3);border-radius:5px;border:1px solid var(--border2)"></div>';
         blurContent.appendChild(fakeInp);
         lockedWrap.appendChild(blurContent);
-        // Overlay
         var overlay = document.createElement('div');
         overlay.className = 'mc-locked-overlay';
         overlay.onclick = function(){ showUpgradeModal(mkt + ' markets are available on the Pro plan. Upgrade to unlock Spread and Total betting across all sports.'); };
@@ -650,7 +653,7 @@ function renderMobileCards(filtered) {
         lockedWrap.appendChild(overlay);
         section.appendChild(lockedWrap);
         body.appendChild(section);
-        return; // skip normal rendering
+        return;
       }
 
       // Side rows
@@ -1224,9 +1227,9 @@ function loadOdds(){
   document.getElementById('tbody').innerHTML='<tr class="state-row"><td colspan="12">Loading...</td></tr>';
   var sel=document.getElementById('mkt-filter').value;
   var noSpread=['mma_mixed_martial_arts'];
-  // Free users always fetch all markets so Spread/Total show as locked teaser on mobile
+  // Free users fetch ML only (1 credit) — Spread/Total shown as locked teaser with fake data
   var mkts = noSpread.indexOf(currentSport)!==-1 ? 'h2h'
-    : (!isPro()) ? 'h2h,spreads,totals'
+    : (!isPro()) ? 'h2h'
     : sel==='ALL' ? 'h2h,spreads,totals' : (MARKET_KEYS[sel]||'h2h');
   fetch('/api/odds?sport='+currentSport+'&markets='+mkts+'&bookmakers=fanduel,draftkings,betmgm,caesars')
     .then(function(r){var rem=r.headers.get('x-requests-remaining');if(rem)document.getElementById('api-remaining').textContent=rem+' requests left';return r.json();})
