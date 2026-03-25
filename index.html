@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Edge Dashboard v1.9.1</title>
+<title>Edge Dashboard v2.0.0</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Barlow:wght@400;500;600;700&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -102,7 +102,73 @@ td.r{text-align:right}td.c{text-align:center}
 .live-dot{width:5px;height:5px;border-radius:50%;background:var(--red);animation:pulse .8s ease-in-out infinite}
 .score-info{font-family:var(--mono);font-size:10px;color:var(--muted);margin-left:2px}
 
-/* ── ADMIN PANEL ── */
+/* ── LANDING PAGE ── */
+.landing{display:none;min-height:100vh;background:var(--bg)}
+.landing.visible{display:block}
+.lp-nav{display:flex;align-items:center;justify-content:space-between;padding:20px 40px;border-bottom:1px solid var(--border);position:sticky;top:0;background:rgba(10,10,12,.92);backdrop-filter:blur(12px);z-index:100}
+.lp-logo{font-family:var(--mono);font-weight:600;font-size:15px;letter-spacing:.08em;display:flex;align-items:center;gap:8px}
+.lp-nav-btns{display:flex;gap:10px}
+.lp-btn-ghost{background:none;border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:13px;font-weight:600;padding:8px 18px;border-radius:6px;cursor:pointer;letter-spacing:.04em}
+.lp-btn-ghost:hover{color:var(--text);border-color:var(--border2)}
+.lp-btn-primary{background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:13px;font-weight:600;padding:8px 20px;border-radius:6px;cursor:pointer;letter-spacing:.04em}
+.lp-btn-primary:hover{opacity:.88}
+/* Hero */
+.lp-hero{text-align:center;padding:100px 24px 80px;max-width:760px;margin:0 auto}
+.lp-eyebrow{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:20px}
+.lp-h1{font-size:clamp(36px,6vw,64px);font-weight:700;line-height:1.1;letter-spacing:-.02em;margin-bottom:20px}
+.lp-h1 span{color:var(--accent)}
+.lp-sub{font-size:18px;color:var(--muted);line-height:1.6;max-width:520px;margin:0 auto 36px}
+.lp-hero-btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.lp-cta{background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:15px;font-weight:700;padding:14px 32px;border-radius:8px;cursor:pointer;letter-spacing:.03em}
+.lp-cta:hover{opacity:.88}
+.lp-cta-ghost{background:none;border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:15px;font-weight:600;padding:14px 28px;border-radius:8px;cursor:pointer}
+.lp-cta-ghost:hover{color:var(--text)}
+/* Stats strip */
+.lp-stats{display:flex;justify-content:center;gap:48px;padding:32px 24px;border-top:1px solid var(--border);border-bottom:1px solid var(--border);flex-wrap:wrap}
+.lp-stat{text-align:center}
+.lp-stat-val{font-family:var(--mono);font-size:28px;font-weight:700;color:var(--text)}
+.lp-stat-lbl{font-size:12px;color:var(--muted);margin-top:4px;letter-spacing:.06em;text-transform:uppercase}
+/* How it works */
+.lp-section{padding:80px 24px;max-width:960px;margin:0 auto}
+.lp-section-title{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-family:var(--mono);margin-bottom:12px;text-align:center}
+.lp-section-h2{font-size:clamp(24px,4vw,38px);font-weight:700;letter-spacing:-.02em;text-align:center;margin-bottom:56px}
+.lp-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+.lp-step{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:28px 24px}
+.lp-step-num{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.1em;color:var(--accent);margin-bottom:14px}
+.lp-step-title{font-size:17px;font-weight:700;margin-bottom:8px}
+.lp-step-desc{font-size:14px;color:var(--muted);line-height:1.6}
+/* Features */
+.lp-features{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+.lp-feature{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:24px}
+.lp-feature-icon{font-size:22px;margin-bottom:12px}
+.lp-feature-title{font-size:15px;font-weight:700;margin-bottom:6px}
+.lp-feature-desc{font-size:13px;color:var(--muted);line-height:1.6}
+/* Pricing */
+.lp-pricing{display:grid;grid-template-columns:repeat(2,1fr);gap:20px;max-width:640px;margin:0 auto}
+.lp-plan{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:32px 28px}
+.lp-plan.featured{border-color:var(--accent);background:linear-gradient(135deg,rgba(79,110,247,.08) 0%,var(--bg2) 100%)}
+.lp-plan-name{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:12px}
+.lp-plan.featured .lp-plan-name{color:var(--accent)}
+.lp-plan-price{font-size:40px;font-weight:700;letter-spacing:-.02em;line-height:1;margin-bottom:4px}
+.lp-plan-per{font-size:13px;color:var(--muted);margin-bottom:24px}
+.lp-plan-features{list-style:none;display:flex;flex-direction:column;gap:10px;margin-bottom:28px}
+.lp-plan-features li{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:8px}
+.lp-plan-features li span.check{color:var(--green);font-size:14px;flex-shrink:0}
+.lp-plan-features li span.x{color:var(--muted2);font-size:14px;flex-shrink:0}
+.lp-plan-btn{width:100%;padding:12px;border-radius:7px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;letter-spacing:.04em;border:none}
+.lp-plan-btn.free-btn{background:var(--bg3);color:var(--text);border:1px solid var(--border2)}
+.lp-plan-btn.pro-btn{background:var(--accent);color:#fff}
+/* Footer */
+.lp-footer{text-align:center;padding:40px 24px;border-top:1px solid var(--border);font-size:12px;color:var(--muted2);font-family:var(--mono)}
+@media(max-width:640px){
+  .lp-nav{padding:14px 16px}
+  .lp-hero{padding:60px 20px 48px}
+  .lp-steps{grid-template-columns:1fr}
+  .lp-features{grid-template-columns:1fr}
+  .lp-pricing{grid-template-columns:1fr}
+  .lp-stats{gap:28px}
+}
+
 .admin-panel{display:none;padding:24px}
 .admin-panel.visible{display:block}
 .admin-stats{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:24px}
@@ -195,7 +261,127 @@ td.r{text-align:right}td.c{text-align:center}
 </head>
 <body>
 
-<div class="gate" id="gate">
+<!-- ── LANDING PAGE ── -->
+<div class="landing" id="landing">
+
+  <nav class="lp-nav">
+    <div class="lp-logo"><span class="logo-dot"></span>EDGE DASHBOARD</div>
+    <div class="lp-nav-btns">
+      <button class="lp-btn-ghost" onclick="openGate('login')">Log In</button>
+      <button class="lp-btn-primary" onclick="openGate('signup')">Get Started Free</button>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <div class="lp-hero">
+    <div class="lp-eyebrow">Sports Betting Edge Calculator</div>
+    <h1 class="lp-h1">Find Your <span>Edge</span> Before You Bet</h1>
+    <p class="lp-sub">Real-time FanDuel odds, no-vig fair value, and instant edge calculations across NBA, NHL, MLB and more.</p>
+    <div class="lp-hero-btns">
+      <button class="lp-cta" onclick="openGate('signup')">Start for Free →</button>
+      <button class="lp-cta-ghost" onclick="openGate('login')">Already have an account</button>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="lp-stats">
+    <div class="lp-stat"><div class="lp-stat-val">7</div><div class="lp-stat-lbl">Sports</div></div>
+    <div class="lp-stat"><div class="lp-stat-val">Live</div><div class="lp-stat-lbl">FanDuel Odds</div></div>
+    <div class="lp-stat"><div class="lp-stat-val">No-Vig</div><div class="lp-stat-lbl">Fair Value</div></div>
+    <div class="lp-stat"><div class="lp-stat-val">$5</div><div class="lp-stat-lbl">Pro / Month</div></div>
+  </div>
+
+  <!-- How it works -->
+  <div class="lp-section">
+    <div class="lp-section-title">How It Works</div>
+    <h2 class="lp-section-h2">Three steps to finding value</h2>
+    <div class="lp-steps">
+      <div class="lp-step">
+        <div class="lp-step-num">01</div>
+        <div class="lp-step-title">Pull Live Odds</div>
+        <div class="lp-step-desc">We fetch real-time FanDuel lines across NBA, NHL, MLB, NCAAB, UFC, EPL, and UCL — updated on demand.</div>
+      </div>
+      <div class="lp-step">
+        <div class="lp-step-num">02</div>
+        <div class="lp-step-title">See Fair Value</div>
+        <div class="lp-step-desc">No-vig math strips the bookmaker margin so you see the true implied probability on every side.</div>
+      </div>
+      <div class="lp-step">
+        <div class="lp-step-num">03</div>
+        <div class="lp-step-title">Calculate Your Edge</div>
+        <div class="lp-step-desc">Enter your own market price — Edge Dashboard instantly shows your edge and recommended unit size.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Features -->
+  <div class="lp-section" style="padding-top:0">
+    <div class="lp-section-title">Features</div>
+    <h2 class="lp-section-h2">Everything you need, nothing you don't</h2>
+    <div class="lp-features">
+      <div class="lp-feature">
+        <div class="lp-feature-icon">📊</div>
+        <div class="lp-feature-title">No-Vig Fair Value</div>
+        <div class="lp-feature-desc">Automatically removes the vig from any two-way market to show you the true probability each side should be priced at.</div>
+      </div>
+      <div class="lp-feature">
+        <div class="lp-feature-icon">🎯</div>
+        <div class="lp-feature-title">Your Line Adjustment</div>
+        <div class="lp-feature-desc">Disagree with the FD spread? Enter your own line and the fair value adjusts automatically — direction-aware for totals and spreads.</div>
+      </div>
+      <div class="lp-feature">
+        <div class="lp-feature-icon">⚡</div>
+        <div class="lp-feature-title">Instant Edge + Units</div>
+        <div class="lp-feature-desc">Type your market price % and see edge color-coded live. Unit sizing auto-calculates from 0.5u to 3u based on edge size.</div>
+      </div>
+      <div class="lp-feature">
+        <div class="lp-feature-icon">📱</div>
+        <div class="lp-feature-title">Built for Mobile</div>
+        <div class="lp-feature-desc">Full card-based mobile layout so you can check lines and enter prices directly from your phone while watching games.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pricing -->
+  <div class="lp-section" style="padding-top:0">
+    <div class="lp-section-title">Pricing</div>
+    <h2 class="lp-section-h2">Simple, transparent pricing</h2>
+    <div class="lp-pricing">
+      <div class="lp-plan">
+        <div class="lp-plan-name">Free</div>
+        <div class="lp-plan-price">$0</div>
+        <div class="lp-plan-per">forever</div>
+        <ul class="lp-plan-features">
+          <li><span class="check">✓</span> NBA, NHL & MLB</li>
+          <li><span class="check">✓</span> Moneyline markets</li>
+          <li><span class="check">✓</span> No-vig fair value</li>
+          <li><span class="check">✓</span> Edge calculator</li>
+          <li><span class="x">✗</span> Spread & Total markets</li>
+          <li><span class="x">✗</span> NCAAB, UFC, EPL, UCL</li>
+        </ul>
+        <button class="lp-plan-btn free-btn" onclick="openGate('signup')">Get Started Free</button>
+      </div>
+      <div class="lp-plan featured">
+        <div class="lp-plan-name">Pro</div>
+        <div class="lp-plan-price">$5</div>
+        <div class="lp-plan-per">per month</div>
+        <ul class="lp-plan-features">
+          <li><span class="check">✓</span> All 7 sports</li>
+          <li><span class="check">✓</span> ML + Spread + Total</li>
+          <li><span class="check">✓</span> No-vig fair value</li>
+          <li><span class="check">✓</span> Edge calculator</li>
+          <li><span class="check">✓</span> Your line adjustment</li>
+          <li><span class="check">✓</span> Cancel anytime</li>
+        </ul>
+        <button class="lp-plan-btn pro-btn" onclick="openGate('signup')">Upgrade to Pro →</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="lp-footer">© 2026 Edge Dashboard · Built for sharp bettors</div>
+</div>
+
+<div class="gate" id="gate" style="display:none">
   <div class="gate-box">
     <div class="gate-logo"><span class="logo-dot"></span>EDGE DASHBOARD</div>
     <div class="gate-tabs">
@@ -210,6 +396,7 @@ td.r{text-align:right}td.c{text-align:center}
     </div>
     <span class="gate-err" id="gate-err"></span>
     <span class="gate-ok"  id="gate-ok"></span>
+    <button onclick="closegate()" style="background:none;border:none;color:var(--muted2);font-size:12px;cursor:pointer;margin-top:4px;font-family:var(--sans)">← Back to home</button>
   </div>
 </div>
 
@@ -335,7 +522,19 @@ var mobileCollapsed={};
 // ── Auth state ────────────────────────────────────────
 var currentTab = 'login';
 
-function switchTab(tab) {
+function openGate(tab) {
+  document.getElementById('landing').classList.remove('visible');
+  document.getElementById('gate').style.display = 'flex';
+  switchTab(tab || 'login');
+  document.getElementById('gate-email').focus();
+}
+
+function closegate() {
+  document.getElementById('gate').style.display = 'none';
+  document.getElementById('landing').classList.add('visible');
+}
+
+
   currentTab = tab;
   document.getElementById('tab-login').classList.toggle('active', tab==='login');
   document.getElementById('tab-signup').classList.toggle('active', tab==='signup');
@@ -391,6 +590,7 @@ async function submitAuth() {
     } else {
       currentUser = data;
       document.getElementById('gate').style.display = 'none';
+      document.getElementById('landing').classList.remove('visible');
       loadOdds();
     }
   } catch(e) {
@@ -413,6 +613,7 @@ async function checkSession() {
       var data = await res.json();
       currentUser = data;
       document.getElementById('gate').style.display = 'none';
+      document.getElementById('landing').classList.remove('visible');
       // Show Pro badge for pro users
       if (data.plan === 'pro' && !data.is_admin) {
         document.getElementById('manage-sub-btn').style.display = '';
@@ -438,12 +639,14 @@ async function checkSession() {
         };
         document.getElementById('sport-tabs').appendChild(adminTabBtn);
       }
-      buildTabs(); // rebuild with plan-aware locks
+      buildTabs();
       loadOdds();
+    } else {
+      // Not logged in — show landing page
+      document.getElementById('landing').classList.add('visible');
     }
-    // else gate stays visible
   } catch(e) {
-    // gate stays visible
+    document.getElementById('landing').classList.add('visible');
   }
 }
 
