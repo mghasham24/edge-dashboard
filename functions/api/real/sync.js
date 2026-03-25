@@ -119,28 +119,27 @@ export async function onRequestGet({ request, env }) {
 
   try {
     // Step 1: Get all games for this sport
-    // Try both possible domains
-    let nextRes = await fetch(`https://web.realsports.io/home/${realSport}/next?cohort=0`, {
+    let nextRes = await fetch(`https://web.realapp.com/home/${realSport}/next?cohort=0`, {
       headers: buildHeaders(env)
     });
-    if (!nextRes.ok) {
-      nextRes = await fetch(`https://web.realapp.com/home/${realSport}/next?cohort=0`, {
-        headers: buildHeaders(env)
+    const nextStatus = nextRes.status;
+    const nextBody = await nextRes.text();
+
+    // Debug mode - return raw response
+    if (url.searchParams.get('debug') === '2') {
+      return new Response(JSON.stringify({ nextStatus, nextBody: nextBody.slice(0, 2000) }), {
+        headers: { 'Content-Type': 'application/json' }
       });
     }
+
     if (!nextRes.ok) {
-      nextRes = await fetch(`https://web.realsports.io/predictions/sport/${realSport}`, {
-        headers: buildHeaders(env)
-      });
+      return fail(nextStatus, 'Failed to fetch Real Sports games: ' + nextBody);
     }
-    if (!nextRes.ok) {
-      const errBody = await nextRes.text();
-      return fail(nextRes.status, 'Failed to fetch Real Sports games: ' + errBody);
-    }
+
+    const nextData = JSON.parse(nextBody);
     const nextData = await nextRes.json();
 
-    // Extract games array - try common response shapes
-    const games = nextData.games || nextData.data?.games || nextData.items || [];
+    const games = nextData.games || nextData.data?.games || nextData.items || nextData.predictions || [];
     if (!games.length) return new Response(JSON.stringify({ ok: true, markets: {} }), {
       headers: { 'Content-Type': 'application/json' }
     });
