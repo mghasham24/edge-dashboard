@@ -3659,27 +3659,27 @@
                 }
             });
             renderTable();
-            // On mobile, directly update edge displays after auto-fill
+            // On mobile, re-render cards after auto-fill so edges show immediately
             if (window.innerWidth <= 768) {
                 setTimeout(function() {
-                    rawRows.forEach(function(r) {
-                        if (preds[r.id] === undefined || preds[r.id] === '') return;
-                        updateSideEdge(r.id);
-                        var edgeEl = document.querySelector('.mc-side-edge[data-id="' + r.id + '"]');
-                        if (edgeEl) {
-                            var mcSection = edgeEl.closest('.mc-section');
-                            if (mcSection) {
-                                var resultRow = mcSection.querySelector('.mc-result');
-                                if (resultRow) computeAndShowEdge(r.id, resultRow);
-                            }
-                        }
-                        // For ML: result row is at section level, find via data-section-id
-                        var resultRows = document.querySelectorAll('.mc-result');
-                        resultRows.forEach(function(rr) {
+                    recomputeAndRenderMobile(parseFloat(document.getElementById('unit-size').value) || 300);
+                    // After re-render, update all edge displays
+                    setTimeout(function() {
+                        document.querySelectorAll('.mc-result').forEach(function(rr) {
                             var ids = (rr.getAttribute('data-section-id') || '').split(',');
-                            if (ids.indexOf(r.id) !== -1) computeAndShowEdge(r.id, rr);
+                            ids.forEach(function(id) {
+                                if (id && preds[id] !== undefined && preds[id] !== '') {
+                                    computeAndShowEdge(id, rr);
+                                }
+                            });
                         });
-                    });
+                        document.querySelectorAll('.mc-side-edge[data-id]').forEach(function(el) {
+                            var id = el.getAttribute('data-id');
+                            if (id && preds[id] !== undefined && preds[id] !== '') {
+                                updateSideEdge(id);
+                            }
+                        });
+                    }, 50);
                 }, 100);
             }
         })
