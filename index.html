@@ -835,7 +835,7 @@ function computeAndShowEdge(id, resultRow) {
   var pr=preds[id];
   var pred=(pr!==undefined&&pr!=='')?parseFloat(pr)/100:null;
   var edge=(af!=null&&pred!=null&&isFinite(pred))?(af-pred)*100:null;
-  var u=pred!=null?kellyUnits(af,pred):edgeUnits(edge);
+  var u=units(edge);
   var bet=u*unit;
   if(edge!=null){
     var edgeStr=(edge>0?'+':'')+edge.toFixed(1)+'%';
@@ -862,7 +862,7 @@ function recomputeAndRenderMobile(unit) {
     var pr=preds[r.id];
     var pred=(pr!==undefined&&pr!=='')?parseFloat(pr)/100:null;
     var edge=(af!=null&&pred!=null&&isFinite(pred))?(af-pred)*100:null;
-    var u=pred!=null?kellyUnits(af,pred):edgeUnits(edge);
+    var u=pred!=null?units(edge):units(edge);
     return Object.assign({},r,{fair:fair,af:af,yl:yl,edge:edge,u:u,bet:u*unit});
   });
   var filtered = computed.filter(function(r){
