@@ -1027,10 +1027,19 @@ function renderMobileCards(filtered) {
           var overInp = document.createElement('input');
           overInp.className='mc-inp'+(pvalA?' filled':'');
           overInp.type='number';overInp.min='1';overInp.max='99';overInp.step='0.5';
-          overInp.placeholder='%';overInp.value=pvalA;overInp.dataset.id=rA.id;
+          overInp.placeholder='Over %';overInp.value=pvalA;overInp.dataset.id=rA.id;
           overInp.style.cssText='flex:1;min-width:0';
-          overInp.addEventListener('blur',function(){setPredMobile(this);});
-          overInp.addEventListener('input',function(){setPredMobile(this);});
+          overInp.addEventListener('input',function(){
+            var v=parseFloat(this.value);
+            if(!isNaN(v)&&v>=1&&v<=99&&underInp){
+              var other=(100-v).toFixed(1);
+              underInp.value=other;
+              preds[rB.id]=other;
+              underInp.classList.toggle('filled',true);
+              setPredMobile(underInp);
+            }
+            setPredMobile(this);
+          });
           overInp.addEventListener('keydown',function(e){if(e.key==='Enter')this.blur();});
           totalRow.appendChild(overInp);
         }
@@ -1041,10 +1050,19 @@ function renderMobileCards(filtered) {
           var underInp = document.createElement('input');
           underInp.className='mc-inp'+(pvalB?' filled':'');
           underInp.type='number';underInp.min='1';underInp.max='99';underInp.step='0.5';
-          underInp.placeholder='%';underInp.value=pvalB;underInp.dataset.id=rB.id;
+          underInp.placeholder='Under %';underInp.value=pvalB;underInp.dataset.id=rB.id;
           underInp.style.cssText='flex:1;min-width:0';
-          underInp.addEventListener('blur',function(){setPredMobile(this);});
-          underInp.addEventListener('input',function(){setPredMobile(this);});
+          underInp.addEventListener('input',function(){
+            var v=parseFloat(this.value);
+            if(!isNaN(v)&&v>=1&&v<=99&&overInp){
+              var other=(100-v).toFixed(1);
+              overInp.value=other;
+              preds[rA.id]=other;
+              overInp.classList.toggle('filled',true);
+              setPredMobile(overInp);
+            }
+            setPredMobile(this);
+          });
           underInp.addEventListener('keydown',function(e){if(e.key==='Enter')this.blur();});
           totalRow.appendChild(underInp);
         }
@@ -1713,8 +1731,27 @@ function setPred(input){
   var id=input.getAttribute('data-id');
   preds[id]=input.value;
   input.classList.toggle('filled',!!input.value);
+
+  // Auto-populate other side for Totals (Over+Under must = 100%)
+  var r=rawRows.find(function(x){return x.id===id;});
+  if(r&&r.mkt==='Total'&&input.value!==''){
+    var v=parseFloat(input.value);
+    if(!isNaN(v)&&v>=1&&v<=99){
+      var otherId=r.ps==='A'
+        ? id.replace(/-A$/,'-B')
+        : id.replace(/-B$/,'-A');
+      var other=(100-v).toFixed(1);
+      preds[otherId]=other;
+      var otherInp=document.querySelector('input[data-id="'+otherId+'"]');
+      if(otherInp&&otherInp!==input){
+        otherInp.value=other;
+        otherInp.classList.add('filled');
+      }
+    }
+  }
+
   var tr=input.closest('tr');if(!tr)return;
-  var r=rawRows.find(function(x){return x.id===id;});if(!r)return;
+  if(!r)return;
   var fair=getFair(r);
   var yl=yourLines[id]!=null?yourLines[id]:null;
   var af=adjFair(fair,r.pt,yl,r.mkt,r.ps);
