@@ -2636,22 +2636,22 @@
                         mlRow.appendChild(grp);
                         mlInputs.push(inp);
                     });
-                    // ML: add per-side edge display below inputs
+                    inputRow.appendChild(mlRow);
+                    // ML: per-side edge display below inputs
                     var mlEdgeRow = document.createElement('div');
-                    mlEdgeRow.style.cssText = 'display:flex;gap:6px;margin-top:4px;flex-wrap:wrap';
+                    mlEdgeRow.style.cssText = 'display:flex;gap:6px;margin-top:6px';
                     mktRows.forEach(function(r) {
                         var se = document.createElement('span');
                         se.className = 'mc-side-edge';
                         se.dataset.id = r.id;
                         se.style.cssText = 'font-family:var(--mono);font-size:12px;font-weight:600;flex:1;text-align:center;color:var(--muted2)';
-                        se.textContent = '-';
+                        se.textContent = '';
                         if (preds[r.id] !== undefined && preds[r.id] !== '') {
                             (function(id){ setTimeout(function(){ updateSideEdge(id); }, 0); })(r.id);
                         }
                         mlEdgeRow.appendChild(se);
                     });
                     inputRow.appendChild(mlEdgeRow);
-                    inputRow.appendChild(mlRow);
                 } else if (mkt === 'Total') {
                     var rA = mktRows[0], rB = mktRows[1];
                     var fdVal = rA && rA.pt != null ? rA.pt : null;
@@ -2759,13 +2759,13 @@
                     inputRow.appendChild(totalRow);
 
                     var edgeRowT = document.createElement('div');
-                    edgeRowT.style.cssText = 'display:flex;gap:10px;margin-top:4px;padding-left:118px';
+                    edgeRowT.style.cssText = 'display:flex;gap:10px;margin-top:6px;padding-left:118px';
                     if (rA) {
                         var seA = document.createElement('span');
                         seA.className = 'mc-side-edge';
                         seA.dataset.id = rA.id;
                         seA.style.cssText = 'font-family:var(--mono);font-size:12px;font-weight:600;flex:1;text-align:center;color:var(--muted2)';
-                        seA.textContent = '-';
+                        seA.textContent = '';
                         if (preds[rA.id] !== undefined && preds[rA.id] !== '') {
                             (function(id){ setTimeout(function(){ updateSideEdge(id); }, 0); })(rA.id);
                         }
@@ -2776,7 +2776,7 @@
                         seB.className = 'mc-side-edge';
                         seB.dataset.id = rB.id;
                         seB.style.cssText = 'font-family:var(--mono);font-size:12px;font-weight:600;flex:1;text-align:center;color:var(--muted2)';
-                        seB.textContent = '-';
+                        seB.textContent = '';
                         if (preds[rB.id] !== undefined && preds[rB.id] !== '') {
                             (function(id){ setTimeout(function(){ updateSideEdge(id); }, 0); })(rB.id);
                         }
