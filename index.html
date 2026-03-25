@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Edge Dashboard v1.8.3</title>
+<title>Edge Dashboard v1.9.0</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Barlow:wght@400;500;600;700&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -221,7 +221,7 @@ td.r{text-align:right}td.c{text-align:center}
     <div id="upgrade-msg" style="color:var(--muted);font-size:13px;line-height:1.6;margin-bottom:24px"></div>
     <div style="display:flex;gap:10px;justify-content:center">
       <button onclick="closeUpgradeModal()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:9px 20px;border-radius:6px;cursor:pointer;text-transform:uppercase">Maybe Later</button>
-      <button onclick="closeUpgradeModal()" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:12px;font-weight:600;padding:9px 20px;border-radius:6px;cursor:pointer;text-transform:uppercase">Upgrade to Pro →</button>
+      <button onclick="startCheckout()" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:12px;font-weight:600;padding:9px 20px;border-radius:6px;cursor:pointer;text-transform:uppercase" id="upgrade-btn">Upgrade to Pro →</button>
     </div>
     <div style="margin-top:16px;font-size:11px;color:var(--muted2);font-family:var(--mono)">Free plan: NBA + MLB · Moneyline only</div>
   </div>
@@ -234,6 +234,7 @@ td.r{text-align:right}td.c{text-align:center}
     <button class="refresh-btn" id="collapse-btn" onclick="toggleAll()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted)">Collapse All</button>
     <button class="refresh-btn" id="refresh-btn" onclick="loadOdds()">Refresh</button>
     <button class="refresh-btn" onclick="logOut()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted)" title="Log out">⏻</button>
+    <button id="manage-sub-btn" onclick="openBillingPortal()" style="display:none;background:var(--bg3);border:1px solid rgba(79,110,247,.4);color:var(--accent);font-family:var(--sans);font-size:11px;font-weight:600;padding:6px 12px;border-radius:5px;cursor:pointer;text-transform:uppercase;letter-spacing:.05em">Pro ✦</button>
   </div>
 </header>
 
@@ -412,6 +413,10 @@ async function checkSession() {
       var data = await res.json();
       currentUser = data;
       document.getElementById('gate').style.display = 'none';
+      // Show Pro badge for pro users
+      if (data.plan === 'pro' && !data.is_admin) {
+        document.getElementById('manage-sub-btn').style.display = '';
+      }
       // Show admin tab if admin
       if (data.is_admin) {
         var adminTabBtn = document.createElement('button');
@@ -1152,9 +1157,49 @@ function onMktChange() {
 
 function isPro() { return currentUser && (currentUser.plan === 'pro' || currentUser.is_admin); }
 
+async function startCheckout() {
+  var btn = document.getElementById('upgrade-btn');
+  btn.textContent = 'Redirecting...';
+  btn.disabled = true;
+  try {
+    var res  = await fetch('/api/stripe/checkout', { method: 'POST', credentials: 'same-origin' });
+    var data = await res.json();
+    if (data.url) {
+      window.location.href = data.url;
+    } else {
+      btn.textContent = 'Upgrade to Pro →';
+      btn.disabled = false;
+      showGateErr(data.error || 'Something went wrong');
+    }
+  } catch(e) {
+    btn.textContent = 'Upgrade to Pro →';
+    btn.disabled = false;
+  }
+}
+
+async function openBillingPortal() {
+  var res  = await fetch('/api/stripe/portal', { method: 'POST', credentials: 'same-origin' });
+  var data = await res.json();
+  if (data.url) window.location.href = data.url;
+}
+
+function handleCheckoutReturn() {
+  var params = new URLSearchParams(window.location.search);
+  if (params.get('checkout') === 'success') {
+    // Refresh session to get updated plan
+    history.replaceState({}, '', '/');
+    checkSession();
+  } else if (params.get('checkout') === 'cancel') {
+    history.replaceState({}, '', '/');
+  }
+}
+
 function showUpgradeModal(msg) {
   document.getElementById('upgrade-msg').textContent = msg;
   document.getElementById('upgrade-modal').style.display = 'flex';
+  var btn = document.getElementById('upgrade-btn');
+  btn.textContent = 'Upgrade to Pro →';
+  btn.disabled = false;
 }
 function closeUpgradeModal() {
   document.getElementById('upgrade-modal').style.display = 'none';
@@ -1427,6 +1472,7 @@ function setPred(input){
 }
 
 buildTabs();
+handleCheckoutReturn();
 checkSession();
 </script>
 </body>

@@ -1,0 +1,89 @@
+// functions/api/stripe/checkout.js
+export async function onRequestPost({ request, env }) {
+  const session = await getSession(request, env.DB);
+  if (!session) return fail(401, 'Not authenticated');
+  if (session.plan === 'pro') return fail(400, 'Already on Pro plan');
+
+  const origin = new URL(request.url).origin;
+
+  // Create or retrieve Stripe customer
+  let customerId = session.stripe_customer_id;
+  if (!customerId) {
+    const customer = await stripePost('customers', {
+      email: session.email,
+      metadata: { user_id: String(session.id) }
+    }, env.STRIPE_SECRET_KEY);
+    if (customer.error) return fail(500, 'Failed to create customer');
+    customerId = customer.id;
+    await env.DB.prepare('UPDATE users SET stripe_customer_id=? WHERE id=?')
+      .bind(customerId, session.id).run();
+  }
+
+  // Create Checkout session
+  const checkout = await stripePost('checkout/sessions', {
+    customer: customerId,
+    mode: 'subscription',
+    line_items: [{ price: env.STRIPE_PRICE_ID, quantity: 1 }],
+    success_url: origin + '/?checkout=success',
+    cancel_url:  origin + '/?checkout=cancel',
+    allow_promotion_codes: true,
+  }, env.STRIPE_SECRET_KEY);
+
+  if (checkout.error) return fail(500, 'Failed to create checkout session');
+
+  return new Response(JSON.stringify({ ok: true, url: checkout.url }), {
+    headers: { 'Content-Type': 'application/json' }
+  });
+}
+
+// ── Stripe API helper ─────────────────────────────────
+async function stripePost(endpoint, params, secretKey) {
+  const body = Object.entries(flattenParams(params))
+    .map(([k, v]) => encodeURIComponent(k) + '=' + encodeURIComponent(v))
+    .join('&');
+  const res = await fetch('https://api.stripe.com/v1/' + endpoint, {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer ' + secretKey,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body
+  });
+  return res.json();
+}
+
+function flattenParams(obj, prefix) {
+  return Object.entries(obj).reduce((acc, [k, v]) => {
+    const key = prefix ? prefix + '[' + k + ']' : k;
+    if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
+      Object.assign(acc, flattenParams(v, key));
+    } else if (Array.isArray(v)) {
+      v.forEach(function(item, i) {
+        if (typeof item === 'object') {
+          Object.assign(acc, flattenParams(item, key + '[' + i + ']'));
+        } else {
+          acc[key + '[' + i + ']'] = item;
+        }
+      });
+    } else {
+      acc[key] = v;
+    }
+    return acc;
+  }, {});
+}
+
+async function getSession(request, db) {
+  const c = request.headers.get('Cookie') || '';
+  const m = c.match(/(?:^|;\s*)session=([^;]+)/);
+  if (!m) return null;
+  const now = Math.floor(Date.now() / 1000);
+  return db.prepare(
+    'SELECT u.id, u.email, u.plan, u.stripe_customer_id FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires_at>?'
+  ).bind(m[1], now).first();
+}
+
+function fail(status, msg) {
+  return new Response(JSON.stringify({ error: msg }), {
+    status, headers: { 'Content-Type': 'application/json' }
+  });
+}
