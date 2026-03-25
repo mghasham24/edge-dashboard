@@ -3645,6 +3645,17 @@
                 }
                 if (match && match.pct != null) {
                     preds[r.id] = String(match.pct);
+                    // For Spread and Total: extract the line value from the outcome label
+                    // e.g. "ATL +2.5" -> 2.5, "O 222.5" -> 222.5, "U 222.5" -> 222.5
+                    if (r.mkt === 'Spread' || r.mkt === 'Total') {
+                        var lineMatch = match.label && match.label.match(/([+-]?\d+\.?\d*)\s*$/);
+                        if (lineMatch) {
+                            var lineVal = parseFloat(lineMatch[1]);
+                            if (!isNaN(lineVal)) {
+                                yourLines[r.id] = lineVal;
+                            }
+                        }
+                    }
                 }
             });
             renderTable();
