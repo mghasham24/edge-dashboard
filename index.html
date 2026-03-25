@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Edge Dashboard v1.8.0</title>
+<title>Edge Dashboard v1.8.2</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Barlow:wght@400;500;600;700&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -179,7 +179,11 @@ td.r{text-align:right}td.c{text-align:center}
   .mc-inp:focus{border-color:var(--accent)}
   .mc-inp.filled{border-color:rgba(79,110,247,.5);background:rgba(79,110,247,.05)}
   .mc-inp.line-changed{border-color:rgba(245,200,66,.5);background:rgba(245,200,66,.04)}
-  .mc-edge{font-family:var(--mono);font-size:13px;font-weight:600;margin-left:auto}
+  .mc-locked{position:relative;overflow:hidden;border-radius:6px}
+.mc-locked-blur{filter:blur(4px);pointer-events:none;user-select:none;opacity:.55}
+.mc-locked-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;background:rgba(10,10,12,.5);cursor:pointer;border-radius:6px}
+.mc-locked-badge{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.1em;padding:3px 10px;border-radius:20px;background:var(--accent);color:#fff}
+.mc-locked-msg{font-size:11px;color:var(--muted);font-family:var(--sans)}
   .mc-units{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--green);margin-left:8px}
   .mc-units.pass{color:var(--muted2)}
   .mc-bet{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--text);margin-left:4px}
@@ -613,6 +617,41 @@ function renderMobileCards(filtered) {
       lbl.className = 'mc-label';
       lbl.textContent = mkt;
       section.appendChild(lbl);
+
+      // Free plan: show blurred locked overlay for Spread/Total
+      var isLocked = !isPro() && mkt !== 'ML';
+      if (isLocked) {
+        var lockedWrap = document.createElement('div');
+        lockedWrap.className = 'mc-locked';
+        // Blurred fake content
+        var blurContent = document.createElement('div');
+        blurContent.className = 'mc-locked-blur';
+        mktRows.forEach(function(r) {
+          var fakeRow = document.createElement('div');
+          fakeRow.className = 'mc-row';
+          fakeRow.style.cssText = 'margin-bottom:6px';
+          fakeRow.innerHTML = '<span class="mc-side">'+r.side+'</span>'
+            + '<span class="mc-odds" style="filter:blur(5px)">'+(mkt==='Spread'?(r.pt>=0?'+'+r.pt:r.pt):'O/U')+'</span>'
+            + '<span class="mc-fair" style="filter:blur(5px)">--.--%</span>';
+          blurContent.appendChild(fakeRow);
+        });
+        // Fake input row
+        var fakeInp = document.createElement('div');
+        fakeInp.style.cssText = 'display:flex;gap:8px;padding-top:8px;border-top:1px solid var(--border);filter:blur(4px)';
+        fakeInp.innerHTML = '<div style="flex:1;height:32px;background:var(--bg3);border-radius:5px;border:1px solid var(--border2)"></div>'
+          + '<div style="flex:1;height:32px;background:var(--bg3);border-radius:5px;border:1px solid var(--border2)"></div>';
+        blurContent.appendChild(fakeInp);
+        lockedWrap.appendChild(blurContent);
+        // Overlay
+        var overlay = document.createElement('div');
+        overlay.className = 'mc-locked-overlay';
+        overlay.onclick = function(){ showUpgradeModal(mkt + ' markets are available on the Pro plan. Upgrade to unlock Spread and Total betting across all sports.'); };
+        overlay.innerHTML = '<span class="mc-locked-badge">PRO</span><span class="mc-locked-msg">Tap to unlock '+mkt+'</span>';
+        lockedWrap.appendChild(overlay);
+        section.appendChild(lockedWrap);
+        body.appendChild(section);
+        return; // skip normal rendering
+      }
 
       // Side rows
       mktRows.forEach(function(r) {
@@ -1176,9 +1215,7 @@ function loadOdds(){
   if (!isPro()) {
     currentSport = FREE_SPORTS.indexOf(currentSport) !== -1 ? currentSport : FREE_SPORTS[0];
     var mktEl = document.getElementById('mkt-filter');
-    if (mktEl.value !== 'ML') {
-      mktEl.value = 'ML';
-    }
+    if (mktEl.value !== 'ML') { mktEl.value = 'ML'; }
   }
   var btn=document.getElementById('refresh-btn'),dot=document.getElementById('sdot'),stxt=document.getElementById('status-txt');
   var sp=SPORTS.find(function(s){return s.key===currentSport;});
@@ -1187,7 +1224,10 @@ function loadOdds(){
   document.getElementById('tbody').innerHTML='<tr class="state-row"><td colspan="12">Loading...</td></tr>';
   var sel=document.getElementById('mkt-filter').value;
   var noSpread=['mma_mixed_martial_arts'];
-var mkts=noSpread.indexOf(currentSport)!==-1?'h2h':sel==='ALL'?'h2h,spreads,totals':(MARKET_KEYS[sel]||'h2h');
+  // Free users always fetch all markets so Spread/Total show as locked teaser on mobile
+  var mkts = noSpread.indexOf(currentSport)!==-1 ? 'h2h'
+    : (!isPro()) ? 'h2h,spreads,totals'
+    : sel==='ALL' ? 'h2h,spreads,totals' : (MARKET_KEYS[sel]||'h2h');
   fetch('/api/odds?sport='+currentSport+'&markets='+mkts+'&bookmakers=fanduel,draftkings,betmgm,caesars')
     .then(function(r){var rem=r.headers.get('x-requests-remaining');if(rem)document.getElementById('api-remaining').textContent=rem+' requests left';return r.json();})
     .then(function(d){

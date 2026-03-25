@@ -1,9 +1,8 @@
 // functions/api/_middleware.js
-const FREE_SPORTS  = ['basketball_nba', 'icehockey_nhl', 'baseball_mlb'];
-const FREE_MARKETS = ['h2h']; // moneyline only
+const FREE_SPORTS = ['basketball_nba', 'icehockey_nhl', 'baseball_mlb'];
 
 export async function onRequest({ request, env, next }) {
-  const url    = new URL(request.url);
+  const url     = new URL(request.url);
   const guarded = ['/api/odds', '/api/scores'];
   if (!guarded.some(p => url.pathname.startsWith(p))) return next();
 
@@ -14,14 +13,11 @@ export async function onRequest({ request, env, next }) {
   if (url.pathname.startsWith('/api/odds')) {
     const isPro = session.plan === 'pro' || session.is_admin;
     if (!isPro) {
-      const sport   = url.searchParams.get('sport')   || '';
-      const markets = url.searchParams.get('markets') || '';
-      if (FREE_SPORTS.indexOf(sport) === -1)
+      const sport = url.searchParams.get('sport') || '';
+      // Block locked sports entirely — free sports can fetch all markets for teaser UI
+      if (FREE_SPORTS.indexOf(sport) === -1) {
         return fail(403, 'This sport requires a Pro plan.');
-      const mkts   = markets.split(',').map(function(m){ return m.trim(); });
-      const locked = mkts.filter(function(m){ return FREE_MARKETS.indexOf(m) === -1; });
-      if (locked.length)
-        return fail(403, 'Spread and Total markets require a Pro plan.');
+      }
     }
   }
   return next();
