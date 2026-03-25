@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Edge Dashboard v1.6.0</title>
+<title>Edge Dashboard v1.7.0</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Barlow:wght@400;500;600;700&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -100,7 +100,36 @@ td.r{text-align:right}td.c{text-align:center}
 .live-dot{width:5px;height:5px;border-radius:50%;background:var(--red);animation:pulse .8s ease-in-out infinite}
 .score-info{font-family:var(--mono);font-size:10px;color:var(--muted);margin-left:2px}
 
-::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+/* ── ADMIN PANEL ── */
+.admin-panel{display:none;padding:24px}
+.admin-panel.visible{display:block}
+.admin-stats{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:24px}
+.admin-stat{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:16px 20px;flex:1;min-width:120px}
+.admin-stat-val{font-family:var(--mono);font-size:24px;font-weight:600;line-height:1}
+.admin-stat-lbl{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-top:4px}
+.admin-search{background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--sans);font-size:13px;padding:8px 12px;border-radius:5px;outline:none;width:280px;margin-bottom:16px}
+.admin-search:focus{border-color:var(--accent)}
+.admin-table-wrap{overflow-x:auto}
+.admin-table{width:100%;border-collapse:collapse;min-width:700px}
+.admin-table th{font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:10px 12px;text-align:left;border-bottom:1px solid var(--border2);white-space:nowrap}
+.admin-table td{padding:10px 12px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle}
+.admin-table tr:hover td{background:var(--bg2)}
+.plan-sel{background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:12px;padding:4px 6px;border-radius:4px;outline:none;cursor:pointer}
+.plan-sel:focus{border-color:var(--accent)}
+.admin-btn{font-family:var(--sans);font-size:11px;font-weight:600;padding:4px 10px;border-radius:4px;border:none;cursor:pointer;text-transform:uppercase;letter-spacing:.05em}
+.admin-btn.logout-btn{background:var(--bg4);color:var(--muted);border:1px solid var(--border2)}
+.admin-btn.logout-btn:hover{color:var(--yellow);border-color:rgba(245,200,66,.3)}
+.admin-btn.ban-btn{background:rgba(240,82,82,.1);color:var(--red);border:1px solid rgba(240,82,82,.2)}
+.admin-btn.ban-btn:hover{background:rgba(240,82,82,.2)}
+.admin-btn.del-btn{background:rgba(240,82,82,.1);color:var(--red);border:1px solid rgba(240,82,82,.2)}
+.admin-btn.del-btn:hover{background:rgba(240,82,82,.25)}
+.admin-btn.unban-btn{background:rgba(45,204,126,.1);color:var(--green);border:1px solid rgba(45,204,126,.2)}
+.badge-admin{font-family:var(--mono);font-size:10px;padding:2px 6px;border-radius:3px;background:rgba(79,110,247,.15);color:var(--accent);border:1px solid rgba(79,110,247,.3)}
+.badge-banned{font-family:var(--mono);font-size:10px;padding:2px 6px;border-radius:3px;background:rgba(240,82,82,.15);color:var(--red);border:1px solid rgba(240,82,82,.3)}
+.badge-free{font-family:var(--mono);font-size:10px;padding:2px 6px;border-radius:3px;background:var(--bg4);color:var(--muted);border:1px solid var(--border2)}
+.badge-pro{font-family:var(--mono);font-size:10px;padding:2px 6px;border-radius:3px;background:rgba(45,204,126,.15);color:var(--green);border:1px solid rgba(45,204,126,.3)}
+@media(max-width:768px){.admin-panel{padding:14px}.admin-stats{gap:10px}.admin-stat{padding:12px 14px}}
+
 
 /* ── MOBILE CARD LAYOUT ── */
 @media(max-width:768px){
@@ -243,6 +272,33 @@ td.r{text-align:right}td.c{text-align:center}
 
 <div class="mobile-cards" id="mobile-cards"></div>
 
+<div class="admin-panel" id="admin-panel">
+  <!-- Stats row -->
+  <div class="admin-stats">
+    <div class="admin-stat"><div class="admin-stat-val" id="adm-total">-</div><div class="admin-stat-lbl">Total Users</div></div>
+    <div class="admin-stat"><div class="admin-stat-val" id="adm-week">-</div><div class="admin-stat-lbl">New This Week</div></div>
+    <div class="admin-stat"><div class="admin-stat-val" id="adm-sessions">-</div><div class="admin-stat-lbl">Active Sessions</div></div>
+    <div class="admin-stat"><div class="admin-stat-val" id="adm-pro">-</div><div class="admin-stat-lbl">Pro Users</div></div>
+  </div>
+  <!-- Search -->
+  <input class="admin-search" id="admin-search" type="text" placeholder="Search by email..." oninput="adminSearch()">
+  <!-- User table -->
+  <div class="admin-table-wrap">
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th>Email</th>
+          <th>Plan</th>
+          <th>Sessions</th>
+          <th>Signed Up</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="admin-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
 <script>
 var SPORTS=[{key:'basketball_nba',label:'NBA'},{key:'basketball_ncaab',label:'NCAAB'},{key:'icehockey_nhl',label:'NHL'},{key:'baseball_mlb',label:'MLB'},{key:'mma_mixed_martial_arts',label:'UFC/MMA'},{key:'soccer_epl',label:'EPL'},{key:'soccer_uefa_champs_league',label:'UCL'}];
 var MARKET_KEYS={ML:'h2h',Spread:'spreads',Total:'totals'};
@@ -311,6 +367,7 @@ async function submitAuth() {
     if (!res.ok) {
       showGateErr(data.error || 'Something went wrong');
     } else {
+      currentUser = data;
       document.getElementById('gate').style.display = 'none';
       loadOdds();
     }
@@ -331,7 +388,30 @@ async function checkSession() {
   try {
     var res = await fetch('/api/auth/me', { credentials: 'same-origin' });
     if (res.ok) {
+      var data = await res.json();
+      currentUser = data;
       document.getElementById('gate').style.display = 'none';
+      // Show admin tab if admin
+      if (data.is_admin) {
+        var adminTabBtn = document.createElement('button');
+        adminTabBtn.className = 'sport-tab';
+        adminTabBtn.textContent = '⚙ Admin';
+        adminTabBtn.style.cssText = 'color:var(--accent);margin-left:auto';
+        adminTabBtn.id = 'admin-tab-btn';
+        adminTabBtn.onclick = function() {
+          var isActive = this.classList.contains('active');
+          if (isActive) {
+            this.classList.remove('active');
+            hideAdminTab();
+            loadOdds();
+          } else {
+            document.querySelectorAll('.sport-tab').forEach(function(t){ t.classList.remove('active'); });
+            this.classList.add('active');
+            showAdminTab();
+          }
+        };
+        document.getElementById('sport-tabs').appendChild(adminTabBtn);
+      }
       loadOdds();
     }
     // else gate stays visible
@@ -873,6 +953,131 @@ function recomputeAndRenderMobile(unit) {
     return 0;
   });
   renderMobileCards(filtered);
+}
+
+// ── Admin state ───────────────────────────────────────
+var currentUser = null;
+var adminSearchTimer = null;
+
+function showAdminTab() {
+  // Hide all main dashboard elements, show admin panel
+  document.getElementById('sport-tabs').style.display = 'none';
+  document.querySelector('.controls').style.display = 'none';
+  document.querySelector('.status-bar').style.display = 'none';
+  document.querySelector('.table-wrap').style.display = 'none';
+  document.getElementById('mobile-cards').style.display = 'none';
+  document.getElementById('collapse-btn').style.display = 'none';
+  document.getElementById('refresh-btn').style.display = 'none';
+  document.getElementById('admin-panel').classList.add('visible');
+  loadAdminStats();
+  loadAdminUsers();
+}
+
+function hideAdminTab() {
+  document.getElementById('sport-tabs').style.display = '';
+  document.querySelector('.controls').style.display = '';
+  document.querySelector('.status-bar').style.display = '';
+  document.querySelector('.table-wrap').style.display = '';
+  document.getElementById('mobile-cards').style.display = '';
+  document.getElementById('collapse-btn').style.display = '';
+  document.getElementById('refresh-btn').style.display = '';
+  document.getElementById('admin-panel').classList.remove('visible');
+}
+
+async function loadAdminStats() {
+  try {
+    var res  = await fetch('/api/admin/stats', { credentials: 'same-origin' });
+    var data = await res.json();
+    if (!data.ok) return;
+    document.getElementById('adm-total').textContent    = data.total;
+    document.getElementById('adm-week').textContent     = data.newWeek;
+    document.getElementById('adm-sessions').textContent = data.sessions;
+    var pro = (data.plans || []).find(function(p){ return p.plan === 'pro'; });
+    document.getElementById('adm-pro').textContent = pro ? pro.c : 0;
+  } catch(e) {}
+}
+
+async function loadAdminUsers(q) {
+  var url = '/api/admin/users' + (q ? '?q=' + encodeURIComponent(q) : '');
+  try {
+    var res  = await fetch(url, { credentials: 'same-origin' });
+    var data = await res.json();
+    if (!data.ok) return;
+    renderAdminUsers(data.users || []);
+  } catch(e) {}
+}
+
+function adminSearch() {
+  clearTimeout(adminSearchTimer);
+  adminSearchTimer = setTimeout(function(){
+    loadAdminUsers(document.getElementById('admin-search').value.trim());
+  }, 300);
+}
+
+function renderAdminUsers(users) {
+  var tb = document.getElementById('admin-tbody');
+  if (!users.length) { tb.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:40px">No users found</td></tr>'; return; }
+  tb.innerHTML = users.map(function(u) {
+    var date = new Date(u.created_at * 1000).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+    var planBadge = u.plan === 'pro'
+      ? '<span class="badge-pro">PRO</span>'
+      : '<span class="badge-free">FREE</span>';
+    var adminBadge = u.is_admin ? ' <span class="badge-admin">ADMIN</span>' : '';
+    var bannedBadge = u.banned ? ' <span class="badge-banned">BANNED</span>' : '';
+    var banBtn = u.banned
+      ? '<button class="admin-btn unban-btn" onclick="adminSetBanned('+u.id+',false)">Unban</button>'
+      : '<button class="admin-btn ban-btn" onclick="adminSetBanned('+u.id+',true)">Ban</button>';
+    var actions = u.is_admin ? '<span style="color:var(--muted2);font-size:12px">—</span>' :
+      '<div style="display:flex;gap:6px;flex-wrap:wrap">'
+      + '<button class="admin-btn logout-btn" onclick="adminForceLogout('+u.id+')">Logout</button>'
+      + banBtn
+      + '<button class="admin-btn del-btn" onclick="adminDeleteUser('+u.id+',\''+u.email+'\')">Delete</button>'
+      + '</div>';
+    return '<tr>'
+      + '<td><span style="font-family:var(--mono);font-size:12px">'+u.email+'</span>'+adminBadge+bannedBadge+'</td>'
+      + '<td>'
+        + '<select class="plan-sel" data-uid="'+u.id+'" onchange="adminChangePlan(this)">'
+          + '<option value="free"'+(u.plan==='free'?' selected':'')+'>Free</option>'
+          + '<option value="pro"'+(u.plan==='pro'?' selected':'')+'>Pro</option>'
+        + '</select>'
+      + '</td>'
+      + '<td style="font-family:var(--mono);color:var(--muted)">'+u.sessions+'</td>'
+      + '<td style="font-family:var(--mono);font-size:12px;color:var(--muted)">'+date+'</td>'
+      + '<td>'+actions+'</td>'
+      + '</tr>';
+  }).join('');
+}
+
+async function adminChangePlan(sel) {
+  var id   = sel.getAttribute('data-uid');
+  var plan = sel.value;
+  await fetch('/api/admin/users', {
+    method: 'PATCH', credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: parseInt(id), plan })
+  });
+}
+
+async function adminForceLogout(id) {
+  await fetch('/api/admin/users?id=' + id, { method: 'POST', credentials: 'same-origin' });
+  loadAdminUsers(document.getElementById('admin-search').value.trim());
+  loadAdminStats();
+}
+
+async function adminSetBanned(id, banned) {
+  await fetch('/api/admin/users', {
+    method: 'PATCH', credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id, banned })
+  });
+  loadAdminUsers(document.getElementById('admin-search').value.trim());
+}
+
+async function adminDeleteUser(id, email) {
+  if (!confirm('Permanently delete ' + email + '? This cannot be undone.')) return;
+  await fetch('/api/admin/users?id=' + id, { method: 'DELETE', credentials: 'same-origin' });
+  loadAdminUsers(document.getElementById('admin-search').value.trim());
+  loadAdminStats();
 }
 
 function buildTabs(){
