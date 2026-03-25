@@ -1727,6 +1727,8 @@ function setLine(input){
   if(inputs.length>1)setPred(inputs[inputs.length-1]);
 }
 
+var _settingPred = false;
+
 function setPred(input){
   var id=input.getAttribute('data-id');
   preds[id]=input.value;
@@ -1734,13 +1736,11 @@ function setPred(input){
 
   var r=rawRows.find(function(x){return x.id===id;});
 
-  // Auto-populate other side for Totals (Over+Under must = 100%)
-  if(r&&r.mkt==='Total'&&input.value!==''){
+  // Auto-populate other side for Totals
+  if(!_settingPred && r && r.mkt==='Total' && input.value!==''){
     var v=parseFloat(input.value);
     if(!isNaN(v)&&v>=1&&v<=99){
-      var otherId=r.ps==='A'
-        ? id.replace(/-A$/,'-B')
-        : id.replace(/-B$/,'-A');
+      var otherId=r.ps==='A' ? id.replace(/-A$/,'-B') : id.replace(/-B$/,'-A');
       var other=(100-v).toFixed(1);
       preds[otherId]=other;
       var allOther=document.querySelectorAll('input[data-id="'+otherId+'"]');
@@ -1748,34 +1748,9 @@ function setPred(input){
       if(otherInp&&otherInp!==input){
         otherInp.value=other;
         otherInp.classList.add('filled');
-        // Calculate and update the other row's edge directly
-        var rOther=rawRows.find(function(x){return x.id===otherId;});
-        if(rOther){
-          var fairO=getFair(rOther);
-          var ylO=yourLines[otherId]!=null?yourLines[otherId]:null;
-          var afO=adjFair(fairO,rOther.pt,ylO,rOther.mkt,rOther.ps);
-          var predO=parseFloat(other)/100;
-          var edgeO=(afO!=null&&!isNaN(predO))?(afO-predO)*100:null;
-          var uO=units(edgeO);
-          var unitVal=parseFloat(document.getElementById('unit-size').value)||300;
-          var trO=otherInp.closest('tr');
-          if(trO){
-            var esO='-',ecO='e-none',bwO=0,bcO='var(--muted2)';
-            if(edgeO!=null){
-              esO=(edgeO>0?'+':'')+edgeO.toFixed(1)+'%';
-              if(edgeO>=8){ecO='e-strong';bcO='var(--green)';}
-              else if(edgeO>=5){ecO='e-med';bcO='#7ddfab';}
-              else if(edgeO>0){ecO='e-weak';bcO='var(--yellow)';}
-              else{ecO='e-neg';bcO='var(--red)';}
-              bwO=Math.min(Math.abs(edgeO)*5,50);
-            }
-            var tdsO=trO.querySelectorAll('td');
-            tdsO[9].innerHTML='<div class="edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:'+bwO+'px;background:'+bcO+'"></div></div><span class="edge-val '+ecO+'">'+esO+'</span></div>';
-            tdsO[10].innerHTML=uO===0?'<span class="u-pass">PASS</span>':'<span class="u-val">'+uO+'u</span>';
-            tdsO[11].innerHTML=uO===0?'<span class="u-pass">-</span>':'<span class="bet-val">$'+(uO*unitVal).toFixed(0)+'</span>';
-            trO.classList.toggle('has-edge',edgeO!=null&&edgeO>0);
-          }
-        }
+        _settingPred=true;
+        setPred(otherInp);
+        _settingPred=false;
       }
     }
   }
