@@ -954,6 +954,7 @@ function renderMobileCards(filtered) {
         // ML: one row with both sides
         var mlRow = document.createElement('div');
         mlRow.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap';
+        var mlInputs = [];
         mktRows.forEach(function(r) {
           var pval = preds[r.id]||'';
           var grp = document.createElement('div');
@@ -967,11 +968,25 @@ function renderMobileCards(filtered) {
           inp.className = 'mc-inp'+(pval?' filled':'');
           inp.type='number';inp.min='1';inp.max='99';inp.step='0.5';
           inp.placeholder='%';inp.value=pval;inp.dataset.id=r.id;
-          inp.addEventListener('blur',function(){setPredMobile(this);});
-          inp.addEventListener('input',function(){setPredMobile(this);});
+          inp.addEventListener('input',function(){
+            var v=parseFloat(this.value);
+            if(!isNaN(v)&&v>=1&&v<=99){
+              mlInputs.forEach(function(other){
+                if(other!==inp){
+                  var otherVal=(100-v).toFixed(1);
+                  other.value=otherVal;
+                  preds[other.dataset.id]=otherVal;
+                  other.classList.add('filled');
+                  setPredMobile(other);
+                }
+              });
+            }
+            setPredMobile(this);
+          });
           inp.addEventListener('keydown',function(e){if(e.key==='Enter')this.blur();});
           grp.appendChild(inp);
           mlRow.appendChild(grp);
+          mlInputs.push(inp);
         });
         inputRow.appendChild(mlRow);
       } else if (mkt === 'Total') {
@@ -1196,10 +1211,34 @@ function setLineMobile(input) {
   });
 }
 
+var _settingPredMobile = false;
+
 function setPredMobile(input) {
   var id = input.getAttribute('data-id');
   preds[id] = input.value;
   input.classList.toggle('filled', !!input.value);
+
+  // Auto-populate other side for ML (both sides = 100%)
+  if(!_settingPredMobile && input.value!==''){
+    var r=rawRows.find(function(x){return x.id===id;});
+    if(r && r.mkt==='ML'){
+      var v=parseFloat(input.value);
+      if(!isNaN(v)&&v>=1&&v<=99){
+        var otherId=r.ps==='A' ? id.replace(/-A$/,'-B') : id.replace(/-B$/,'-A');
+        var other=(100-v).toFixed(1);
+        preds[otherId]=other;
+        var otherInp=document.querySelector('.mc-inp[data-id="'+otherId+'"]');
+        if(otherInp&&otherInp!==input){
+          otherInp.value=other;
+          otherInp.classList.add('filled');
+          _settingPredMobile=true;
+          setPredMobile(otherInp);
+          _settingPredMobile=false;
+        }
+      }
+    }
+  }
+
   // Update inline edge for this side
   updateSideEdge(id);
   // Also update the section result row
@@ -1736,8 +1775,8 @@ function setPred(input){
 
   var r=rawRows.find(function(x){return x.id===id;});
 
-  // Auto-populate other side for Totals
-  if(!_settingPred && r && r.mkt==='Total' && input.value!==''){
+  // Auto-populate other side for Totals and ML (both sides must = 100%)
+  if(!_settingPred && r && (r.mkt==='Total'||r.mkt==='ML') && input.value!==''){
     var v=parseFloat(input.value);
     if(!isNaN(v)&&v>=1&&v<=99){
       var otherId=r.ps==='A' ? id.replace(/-A$/,'-B') : id.replace(/-B$/,'-A');
