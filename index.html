@@ -3659,24 +3659,26 @@
                 }
             });
             renderTable();
-            // On mobile, edge displays need explicit update after auto-fill
-            // Use setTimeout to ensure renderMobileCards DOM is ready
+            // On mobile, trigger setPredMobile on each filled input so edge logic fires
             if (window.innerWidth <= 768) {
                 setTimeout(function() {
-                    rawRows.forEach(function(r) {
-                        if (preds[r.id] !== undefined && preds[r.id] !== '') {
-                            updateSideEdge(r.id);
-                            var edgeEl = document.querySelector('.mc-side-edge[data-id="' + r.id + '"]');
-                            if (edgeEl) {
-                                var mcSection = edgeEl.closest('.mc-section');
-                                if (mcSection) {
-                                    var resultRow = mcSection.querySelector('.mc-result');
-                                    if (resultRow) computeAndShowEdge(r.id, resultRow);
-                                }
-                            }
+                    document.querySelectorAll('.mc-inp[data-id]').forEach(function(inp) {
+                        var id = inp.getAttribute('data-id');
+                        if (preds[id] !== undefined && preds[id] !== '') {
+                            inp.value = preds[id];
+                            inp.classList.add('filled');
+                            setPredMobile(inp);
                         }
                     });
-                }, 50);
+                    // Also update line inputs
+                    document.querySelectorAll('.mc-inp[data-id]').forEach(function(inp) {
+                        var id = inp.getAttribute('data-id');
+                        if (yourLines[id] != null) {
+                            // line inputs don't have data-id in the same way, handled by updateSideEdge
+                            updateSideEdge(id);
+                        }
+                    });
+                }, 100);
             }
         })
         .catch(function() {});
