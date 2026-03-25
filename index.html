@@ -802,7 +802,10 @@ function setLineMobile(input) {
   var predInputs = section.querySelectorAll('input[data-id]');
   predInputs.forEach(function(pi){
     var pid = pi.getAttribute('data-id');
-    if (preds[pid]) computeAndShowEdge(pid, resultRow);
+    if (preds[pid]) {
+      updateSideEdge(pid);
+      if(resultRow) computeAndShowEdge(pid, resultRow);
+    }
   });
 }
 
@@ -810,15 +813,45 @@ function setPredMobile(input) {
   var id = input.getAttribute('data-id');
   preds[id] = input.value;
   input.classList.toggle('filled', !!input.value);
-  // Find the mc-section container
+  // Update inline edge for this side
+  updateSideEdge(id);
+  // Also update the section result row
   var section = input.parentElement;
   while (section && !section.classList.contains('mc-section')) {
     section = section.parentElement;
   }
   if (!section) return;
   var resultRow = section.querySelector('.mc-result');
-  if (!resultRow) return;
-  computeAndShowEdge(id, resultRow);
+  if (resultRow) computeAndShowEdge(id, resultRow);
+}
+
+function updateSideEdge(id) {
+  var r = rawRows.find(function(x){return x.id===id;});
+  if (!r) return;
+  var unit = parseFloat(document.getElementById('unit-size').value)||300;
+  var pairs={};
+  rawRows.forEach(function(x){if(!pairs[x.pid])pairs[x.pid]={};pairs[x.pid][x.ps]=x;});
+  var pair=pairs[r.pid]||{};
+  var nv=novig(pair.A?imp(pair.A.am):null,pair.B?imp(pair.B.am):null);
+  var fair=r.ps==='A'?nv.fa:nv.fb;
+  var yl=yourLines[r.id]!=null?yourLines[r.id]:null;
+  var af=adjFair(fair,r.pt,yl,r.mkt,r.ps);
+  var pr=preds[id];
+  var pred=(pr!==undefined&&pr!=='')?parseFloat(pr)/100:null;
+  var edge=(af!=null&&pred!=null&&isFinite(pred))?(af-pred)*100:null;
+  var u=units(edge);
+  var bet=u*unit;
+  var el=document.querySelector('.mc-side-edge[data-id="'+id+'"]');
+  if(!el) return;
+  if(edge!=null){
+    var edgeStr=(edge>0?'+':'')+edge.toFixed(1)+'%';
+    var col=edge>=8?'var(--green)':edge>=5?'#7ddfab':edge>0?'var(--yellow)':'var(--red)';
+    el.style.color=col;
+    el.textContent=edgeStr+(u>0?' '+u+'u $'+bet.toFixed(0):'');
+  } else {
+    el.style.color='var(--muted2)';
+    el.textContent='-';
+  }
 }
 
 function computeAndShowEdge(id, resultRow) {
