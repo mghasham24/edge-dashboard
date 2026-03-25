@@ -720,6 +720,7 @@ function renderMobileCards(filtered) {
         predInp.value = pval;
         predInp.dataset.id = r.id;
         predInp.addEventListener('blur', function(){ setPredMobile(this); });
+        predInp.addEventListener('input', function(){ setPredMobile(this); });
         predInp.addEventListener('keydown', function(e){ if(e.key==='Enter') this.blur(); });
         predGrp.appendChild(predInp);
         inputRow.appendChild(predGrp);
