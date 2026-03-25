@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Edge Dashboard v1.7.0</title>
+<title>Edge Dashboard v1.8.0</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Barlow:wght@400;500;600;700&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -26,6 +26,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 .sport-tabs{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 24px;display:flex;overflow-x:auto}
 .sport-tab{font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);padding:14px 18px;cursor:pointer;border:none;border-bottom:2px solid transparent;background:none;white-space:nowrap}
 .sport-tab:hover{color:var(--text)}.sport-tab.active{color:var(--text);border-bottom-color:var(--accent)}
+.sport-tab.locked{color:var(--muted2);cursor:default;opacity:.5}
+.sport-tab.locked:hover{color:var(--muted2)}
 .controls{padding:16px 24px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;border-bottom:1px solid var(--border);background:var(--bg2)}
 .ctrl-lbl{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
 .ctrl-sel,.ctrl-inp{background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--sans);font-size:13px;padding:6px 10px;border-radius:5px;outline:none}
@@ -207,6 +209,20 @@ td.r{text-align:right}td.c{text-align:center}
   </div>
 </div>
 
+<!-- Upgrade modal -->
+<div id="upgrade-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:8000;display:none;align-items:center;justify-content:center">
+  <div style="background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:36px;max-width:400px;width:90%;text-align:center">
+    <div style="font-size:28px;margin-bottom:12px">🔒</div>
+    <div style="font-family:var(--mono);font-weight:600;font-size:16px;letter-spacing:.06em;margin-bottom:8px">PRO FEATURE</div>
+    <div id="upgrade-msg" style="color:var(--muted);font-size:13px;line-height:1.6;margin-bottom:24px"></div>
+    <div style="display:flex;gap:10px;justify-content:center">
+      <button onclick="closeUpgradeModal()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:9px 20px;border-radius:6px;cursor:pointer;text-transform:uppercase">Maybe Later</button>
+      <button onclick="closeUpgradeModal()" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:12px;font-weight:600;padding:9px 20px;border-radius:6px;cursor:pointer;text-transform:uppercase">Upgrade to Pro →</button>
+    </div>
+    <div style="margin-top:16px;font-size:11px;color:var(--muted2);font-family:var(--mono)">Free plan: NBA + MLB · Moneyline only</div>
+  </div>
+</div>
+
 <header class="header">
   <div class="logo"><span class="logo-dot"></span>EDGE DASHBOARD</div>
   <div style="display:flex;align-items:center;gap:10px">
@@ -226,7 +242,7 @@ td.r{text-align:right}td.c{text-align:center}
   </div>
   <div style="display:flex;align-items:center;gap:6px">
     <span class="ctrl-lbl">Market</span>
-    <select class="ctrl-sel" id="mkt-filter" onchange="loadOdds()">
+    <select class="ctrl-sel" id="mkt-filter" onchange="onMktChange()">
       <option value="ALL">All (3 credits)</option>
       <option value="ML">Moneyline (1 credit)</option>
       <option value="Spread">Spread (1 credit)</option>
@@ -301,6 +317,7 @@ td.r{text-align:right}td.c{text-align:center}
 
 <script>
 var SPORTS=[{key:'basketball_nba',label:'NBA'},{key:'basketball_ncaab',label:'NCAAB'},{key:'icehockey_nhl',label:'NHL'},{key:'baseball_mlb',label:'MLB'},{key:'mma_mixed_martial_arts',label:'UFC/MMA'},{key:'soccer_epl',label:'EPL'},{key:'soccer_uefa_champs_league',label:'UCL'}];
+var FREE_SPORTS=['basketball_nba','icehockey_nhl','baseball_mlb']; // free plan sports
 var MARKET_KEYS={ML:'h2h',Spread:'spreads',Total:'totals'};
 var COLORS=['#4f6ef7','#2dcc7e','#f5c842','#f05252','#a78bfa','#38bdf8','#fb923c','#e879f9','#34d399','#f87171','#60a5fa','#fbbf24','#a3e635','#c084fc','#fb7185','#22d3ee'];
 var currentSport='basketball_nba';
@@ -412,6 +429,7 @@ async function checkSession() {
         };
         document.getElementById('sport-tabs').appendChild(adminTabBtn);
       }
+      buildTabs(); // rebuild with plan-aware locks
       loadOdds();
     }
     // else gate stays visible
@@ -1080,19 +1098,50 @@ async function adminDeleteUser(id, email) {
   loadAdminStats();
 }
 
+function onMktChange() {
+  var sel = document.getElementById('mkt-filter');
+  if (!isPro() && sel.value !== 'ML') {
+    sel.value = 'ML';
+    showUpgradeModal('Spread and Total markets are available on the Pro plan. Upgrade to access all betting markets.');
+    return;
+  }
+  loadOdds();
+}
+
+function isPro() { return currentUser && (currentUser.plan === 'pro' || currentUser.is_admin); }
+
+function showUpgradeModal(msg) {
+  document.getElementById('upgrade-msg').textContent = msg;
+  document.getElementById('upgrade-modal').style.display = 'flex';
+}
+function closeUpgradeModal() {
+  document.getElementById('upgrade-modal').style.display = 'none';
+}
+
 function buildTabs(){
-  var nav=document.getElementById('sport-tabs');nav.innerHTML='';
+  var nav=document.getElementById('sport-tabs');
+  // preserve admin tab if it exists
+  var adminBtn = document.getElementById('admin-tab-btn');
+  nav.innerHTML='';
+  var pro = isPro();
   SPORTS.forEach(function(s){
+    var locked = !pro && FREE_SPORTS.indexOf(s.key) === -1;
     var b=document.createElement('button');
-    b.className='sport-tab'+(s.key===currentSport?' active':'');
-    b.textContent=s.label;b.setAttribute('data-key',s.key);
+    b.className='sport-tab'+(s.key===currentSport&&!locked?' active':'')+(locked?' locked':'');
+    b.textContent=(locked?'🔒 ':'')+s.label;
+    b.setAttribute('data-key',s.key);
     b.onclick=function(){
+      if (locked) {
+        showUpgradeModal(s.label + ' is available on the Pro plan. Upgrade to access all 7 sports including NCAAB, NHL, UFC, EPL, and UCL.');
+        return;
+      }
       currentSport=s.key;
       document.querySelectorAll('.sport-tab').forEach(function(x){x.classList.toggle('active',x.getAttribute('data-key')===s.key);});
       loadOdds();
     };
     nav.appendChild(b);
   });
+  if (adminBtn) nav.appendChild(adminBtn);
 }
 
 function parseGames(games){
@@ -1123,6 +1172,14 @@ function parseGames(games){
 }
 
 function loadOdds(){
+  // Free plan enforcement
+  if (!isPro()) {
+    currentSport = FREE_SPORTS.indexOf(currentSport) !== -1 ? currentSport : FREE_SPORTS[0];
+    var mktEl = document.getElementById('mkt-filter');
+    if (mktEl.value !== 'ML') {
+      mktEl.value = 'ML';
+    }
+  }
   var btn=document.getElementById('refresh-btn'),dot=document.getElementById('sdot'),stxt=document.getElementById('status-txt');
   var sp=SPORTS.find(function(s){return s.key===currentSport;});
   var lbl=sp?sp.label:currentSport;

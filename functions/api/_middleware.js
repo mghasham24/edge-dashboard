@@ -1,13 +1,29 @@
 // functions/api/_middleware.js
+const FREE_SPORTS  = ['basketball_nba', 'icehockey_nhl', 'baseball_mlb'];
+const FREE_MARKETS = ['h2h']; // moneyline only
+
 export async function onRequest({ request, env, next }) {
-  const url = new URL(request.url);
+  const url    = new URL(request.url);
   const guarded = ['/api/odds', '/api/scores'];
   if (!guarded.some(p => url.pathname.startsWith(p))) return next();
 
-  const token = getToken(request);
-  if (!token) return fail(401);
+  const token   = getToken(request);
   const session = await getSession(env.DB, token);
-  if (!session) return fail(401);
+  if (!session) return fail(401, 'Authentication required');
+
+  if (url.pathname.startsWith('/api/odds')) {
+    const isPro = session.plan === 'pro' || session.is_admin;
+    if (!isPro) {
+      const sport   = url.searchParams.get('sport')   || '';
+      const markets = url.searchParams.get('markets') || '';
+      if (FREE_SPORTS.indexOf(sport) === -1)
+        return fail(403, 'This sport requires a Pro plan.');
+      const mkts   = markets.split(',').map(function(m){ return m.trim(); });
+      const locked = mkts.filter(function(m){ return FREE_MARKETS.indexOf(m) === -1; });
+      if (locked.length)
+        return fail(403, 'Spread and Total markets require a Pro plan.');
+    }
+  }
   return next();
 }
 
@@ -18,15 +34,15 @@ function getToken(req) {
 }
 
 async function getSession(db, token) {
+  if (!token) return null;
   const now = Math.floor(Date.now() / 1000);
   return db.prepare(
-    'SELECT user_id FROM sessions WHERE token=? AND expires_at>?'
+    'SELECT u.id, u.plan, u.is_admin FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires_at>?'
   ).bind(token, now).first();
 }
 
-function fail(status) {
-  return new Response(JSON.stringify({ error: 'Authentication required' }), {
-    status,
-    headers: { 'Content-Type': 'application/json' }
+function fail(status, msg) {
+  return new Response(JSON.stringify({ error: msg }), {
+    status, headers: { 'Content-Type': 'application/json' }
   });
 }
