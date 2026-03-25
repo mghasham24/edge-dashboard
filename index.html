@@ -711,9 +711,10 @@ function adjFair(fair,fd,yl,mkt,ps){
   d=Math.max(Math.min(d,10),-10);
   var adj=(d/0.5)*0.0125;
   if(mkt==='Total'){
-    // For Over: higher line = harder = fair goes DOWN
-    // For Under: higher line = easier = fair goes UP
-    // ps='A' is always Over, ps='B' is always Under
+    // Lower your line vs FD = Over easier (fair UP), Under harder (fair DOWN)
+    // d is negative when yl < fd, so adj is negative
+    // For Over (ps='A'): negate adj so it becomes positive = fair goes UP
+    // For Under (ps='B'): keep adj negative = fair goes DOWN
     adj = ps==='A' ? -adj : adj;
   }
   // For Spread: more points = better for that side = fair goes UP
