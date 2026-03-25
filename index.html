@@ -19,6 +19,7 @@
 body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;min-height:100vh;padding:0 0 80px}
 .header{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:var(--header-h);position:sticky;top:0;z-index:200}
 .moe-badge{font-size:10px;font-weight:700;letter-spacing:.04em;background:rgba(79,110,247,.15);color:var(--accent);border:1px solid rgba(79,110,247,.3);padding:2px 7px;border-radius:20px;margin-left:8px;white-space:nowrap}
+.real-autofill{border-color:rgba(79,110,247,.6)!important;background:rgba(79,110,247,.08)!important}
 @media(max-width:768px){.desktop-only{display:none!important}#mobile-collapse-btn{display:block!important}}
 .logo-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:pulse 2s ease-in-out infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
@@ -402,6 +403,7 @@ td.r{text-align:right}td.c{text-align:center}
       <input class="gate-inp" id="gate-email" type="email" placeholder="Email address" autocomplete="email">
       <input class="gate-inp" id="gate-pass" type="password" placeholder="Password" autocomplete="current-password">
       <input class="gate-inp" id="gate-pass2" type="password" placeholder="Confirm password" autocomplete="new-password" style="display:none">
+      <input class="gate-inp" id="gate-ref" type="text" placeholder="Referral code (optional)" style="display:none;text-transform:uppercase" maxlength="12">
       <button class="gate-btn" id="gate-btn" onclick="submitAuth()">Log In</button>
       <button id="forgot-link" onclick="showForgotPassword()" style="background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;font-family:var(--sans);margin-top:2px">Forgot password?</button>
     </div>
@@ -433,7 +435,8 @@ td.r{text-align:right}td.c{text-align:center}
     <button class="refresh-btn" id="collapse-btn" onclick="toggleAll()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted)" class="desktop-only">Collapse All</button>
     <button class="refresh-btn" id="refresh-btn" onclick="loadOdds()">Refresh</button>
     <button class="refresh-btn" onclick="logOut()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted)" title="Log out">⏻</button>
-    <button id="manage-sub-btn" onclick="openBillingPortal()" style="display:none;background:var(--bg3);border:1px solid rgba(79,110,247,.4);color:var(--accent);font-family:var(--sans);font-size:11px;font-weight:600;padding:6px 12px;border-radius:5px;cursor:pointer;text-transform:uppercase;letter-spacing:.05em">Pro ✦</button>
+    <button id="manage-sub-btn" onclick="openBillingPortal()" style="display:none;background:var(--bg3);border:1px solid rgba(79,110,247,.4);color:var(--accent);font-family:var(--sans);font-size:11px;font-weight:600;padding:6px 12px;border-radius:5px;cursor:pointer;text-transform:uppercase;letter-spacing:.05em">Pro</button>
+    <button onclick="toggleReferrals()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:11px;font-weight:600;padding:6px 12px;border-radius:5px;cursor:pointer;text-transform:uppercase;letter-spacing:.05em" id="ref-btn">Refer</button>
   </div>
 </header>
 
@@ -525,6 +528,56 @@ td.r{text-align:right}td.c{text-align:center}
 
 </div><!-- end #dashboard -->
 
+<!-- Referrals Panel -->
+<div id="referrals-panel" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:500;overflow-y:auto;padding:0 0 80px">
+  <div style="max-width:560px;margin:0 auto;padding:32px 24px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:32px">
+      <div style="font-family:var(--mono);font-weight:600;font-size:16px;letter-spacing:.06em">Referrals</div>
+      <button onclick="toggleReferrals()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:7px 14px;border-radius:5px;cursor:pointer">&larr; Back</button>
+    </div>
+
+    <!-- Code card -->
+    <div style="background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:28px;margin-bottom:20px;text-align:center">
+      <div style="font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:12px">Your Referral Code</div>
+      <div id="ref-code-display" style="font-family:var(--mono);font-size:36px;font-weight:700;letter-spacing:.12em;color:var(--accent);margin-bottom:16px">------</div>
+      <button onclick="copyRefCode()" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:12px;font-weight:600;padding:9px 24px;border-radius:6px;cursor:pointer;text-transform:uppercase;letter-spacing:.05em" id="copy-ref-btn">Copy Code</button>
+    </div>
+
+    <!-- Progress card -->
+    <div style="background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:24px;margin-bottom:20px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <div style="font-size:13px;font-weight:600;color:var(--text)">Progress to next reward</div>
+        <div style="font-family:var(--mono);font-size:13px;color:var(--accent)" id="ref-progress-txt">0 / 5</div>
+      </div>
+      <div style="background:var(--bg4);border-radius:4px;height:8px;overflow:hidden;margin-bottom:16px">
+        <div id="ref-progress-bar" style="height:100%;background:var(--accent);border-radius:4px;transition:width .3s;width:0%"></div>
+      </div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.6">Every <strong style="color:var(--text)">5 referrals</strong> earns you <strong style="color:var(--green)">3 months of Pro free</strong>. Rewards stack — 10 referrals = 6 months, etc.</div>
+    </div>
+
+    <!-- Stats card -->
+    <div style="background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:24px;margin-bottom:20px">
+      <div style="display:flex;gap:24px">
+        <div style="flex:1;text-align:center">
+          <div style="font-family:var(--mono);font-size:28px;font-weight:700" id="ref-total">0</div>
+          <div style="font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-top:4px">Total Referrals</div>
+        </div>
+        <div style="flex:1;text-align:center">
+          <div style="font-family:var(--mono);font-size:28px;font-weight:700;color:var(--green)" id="ref-rewards">0</div>
+          <div style="font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-top:4px">Rewards Earned</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Share text -->
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:20px">
+      <div style="font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Share this message</div>
+      <div id="ref-share-text" style="font-size:13px;color:var(--muted);line-height:1.7;font-family:var(--mono)">Loading...</div>
+      <button onclick="copyShareText()" style="margin-top:14px;background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:11px;font-weight:600;padding:7px 16px;border-radius:5px;cursor:pointer;text-transform:uppercase">Copy Message</button>
+    </div>
+  </div>
+</div>
+
 <script>
 var SPORTS=[{key:'basketball_nba',label:'NBA'},{key:'basketball_ncaab',label:'NCAAB'},{key:'icehockey_nhl',label:'NHL'},{key:'baseball_mlb',label:'MLB'},{key:'mma_mixed_martial_arts',label:'UFC/MMA'},{key:'soccer_epl',label:'EPL'},{key:'soccer_uefa_champs_league',label:'UCL'}];
 var FREE_SPORTS=['basketball_nba','icehockey_nhl','baseball_mlb']; // free plan sports
@@ -572,6 +625,7 @@ function switchTab(tab) {
   document.getElementById('tab-login').classList.toggle('active', tab==='login');
   document.getElementById('tab-signup').classList.toggle('active', tab==='signup');
   document.getElementById('gate-pass2').style.display = tab==='signup' ? '' : 'none';
+  document.getElementById('gate-ref').style.display = tab==='signup' ? '' : 'none';
   document.getElementById('gate-btn').textContent = tab==='login' ? 'Log In' : 'Create Account';
   var fl = document.getElementById('forgot-link');
   if (fl) fl.style.display = tab==='login' ? '' : 'none';
@@ -612,11 +666,12 @@ async function submitAuth() {
 
   try {
     var endpoint = currentTab === 'login' ? '/api/auth/login' : '/api/auth/register';
+    var refCode = document.getElementById('gate-ref') ? document.getElementById('gate-ref').value.trim().toUpperCase() : '';
     var res  = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'same-origin',
-      body: JSON.stringify({ email, password: pass })
+      body: JSON.stringify({ email, password: pass, refCode: refCode || undefined })
     });
     var data = await res.json();
     if (!res.ok) {
@@ -1524,6 +1579,155 @@ function closeUpgradeModal() {
   document.getElementById('upgrade-modal').style.display = 'none';
 }
 
+// ── Referrals ─────────────────────────────────────────
+var refData = null;
+
+async function toggleReferrals() {
+  var panel = document.getElementById('referrals-panel');
+  var isOpen = panel.style.display !== 'none';
+  if (isOpen) {
+    panel.style.display = 'none';
+  } else {
+    panel.style.display = 'block';
+    if (!refData) await loadReferralStats();
+  }
+}
+
+async function loadReferralStats() {
+  try {
+    var res  = await fetch('/api/referral/stats', { credentials: 'same-origin' });
+    var data = await res.json();
+    if (!data.ok) return;
+    refData = data;
+    document.getElementById('ref-code-display').textContent = data.code;
+    document.getElementById('ref-progress-txt').textContent = data.progress + ' / ' + data.nextReward;
+    document.getElementById('ref-progress-bar').style.width = ((data.progress / data.nextReward) * 100) + '%';
+    document.getElementById('ref-total').textContent = data.count;
+    document.getElementById('ref-rewards').textContent = data.rewards;
+    document.getElementById('ref-share-text').textContent =
+      'Use my referral code ' + data.code + ' when signing up at raxedge.com to get started! RaxEdge shows you real-time edges on your Real Sports Rax predictions. Free to use.';
+  } catch(e) {}
+}
+
+function copyRefCode() {
+  if (!refData) return;
+  navigator.clipboard.writeText(refData.code).then(function() {
+    var btn = document.getElementById('copy-ref-btn');
+    btn.textContent = 'Copied!';
+    setTimeout(function(){ btn.textContent = 'Copy Code'; }, 2000);
+  });
+}
+
+function copyShareText() {
+  if (!refData) return;
+  var text = document.getElementById('ref-share-text').textContent;
+  navigator.clipboard.writeText(text).then(function() {
+    var btn = event.target;
+    btn.textContent = 'Copied!';
+    setTimeout(function(){ btn.textContent = 'Copy Message'; }, 2000);
+  });
+}
+
+// ── Real Sports Auto-fill ─────────────────────────────
+var realMarketsCache = {};
+
+// FanDuel full name -> Real Sports team key
+var TEAM_KEY_MAP = {
+  // NBA
+  'Atlanta Hawks':'ATL','Boston Celtics':'BOS','Brooklyn Nets':'BKN',
+  'Charlotte Hornets':'CHA','Chicago Bulls':'CHI','Cleveland Cavaliers':'CLE',
+  'Dallas Mavericks':'DAL','Denver Nuggets':'DEN','Detroit Pistons':'DET',
+  'Golden State Warriors':'GSW','Houston Rockets':'HOU','Indiana Pacers':'IND',
+  'LA Clippers':'LAC','Los Angeles Clippers':'LAC','Los Angeles Lakers':'LAL',
+  'Memphis Grizzlies':'MEM','Miami Heat':'MIA','Milwaukee Bucks':'MIL',
+  'Minnesota Timberwolves':'MIN','New Orleans Pelicans':'NOP',
+  'New York Knicks':'NYK','Oklahoma City Thunder':'OKC','Orlando Magic':'ORL',
+  'Philadelphia 76ers':'PHI','Phoenix Suns':'PHX','Portland Trail Blazers':'POR',
+  'Sacramento Kings':'SAC','San Antonio Spurs':'SAS','Toronto Raptors':'TOR',
+  'Utah Jazz':'UTA','Washington Wizards':'WAS',
+  // NHL
+  'Anaheim Ducks':'ANA','Arizona Coyotes':'ARI','Boston Bruins':'BOS',
+  'Buffalo Sabres':'BUF','Calgary Flames':'CGY','Carolina Hurricanes':'CAR',
+  'Chicago Blackhawks':'CHI','Colorado Avalanche':'COL','Columbus Blue Jackets':'CBJ',
+  'Dallas Stars':'DAL','Detroit Red Wings':'DET','Edmonton Oilers':'EDM',
+  'Florida Panthers':'FLA','Los Angeles Kings':'LAK','Minnesota Wild':'MIN',
+  'Montreal Canadiens':'MTL','Nashville Predators':'NSH','New Jersey Devils':'NJD',
+  'New York Islanders':'NYI','New York Rangers':'NYR','Ottawa Senators':'OTT',
+  'Philadelphia Flyers':'PHI','Pittsburgh Penguins':'PIT','San Jose Sharks':'SJS',
+  'Seattle Kraken':'SEA','St. Louis Blues':'STL','Tampa Bay Lightning':'TBL',
+  'Toronto Maple Leafs':'TOR','Utah Hockey Club':'UTA','Vancouver Canucks':'VAN',
+  'Vegas Golden Knights':'VGK','Washington Capitals':'WSH','Winnipeg Jets':'WPG',
+  // MLB
+  'Arizona Diamondbacks':'ARI','Atlanta Braves':'ATL','Baltimore Orioles':'BAL',
+  'Boston Red Sox':'BOS','Chicago Cubs':'CHC','Chicago White Sox':'CWS',
+  'Cincinnati Reds':'CIN','Cleveland Guardians':'CLE','Colorado Rockies':'COL',
+  'Detroit Tigers':'DET','Houston Astros':'HOU','Kansas City Royals':'KC',
+  'Los Angeles Angels':'LAA','Los Angeles Dodgers':'LAD','Miami Marlins':'MIA',
+  'Milwaukee Brewers':'MIL','Minnesota Twins':'MIN','New York Mets':'NYM',
+  'New York Yankees':'NYY','Oakland Athletics':'OAK','Philadelphia Phillies':'PHI',
+  'Pittsburgh Pirates':'PIT','San Diego Padres':'SD','San Francisco Giants':'SF',
+  'Seattle Mariners':'SEA','St. Louis Cardinals':'STL','Tampa Bay Rays':'TB',
+  'Texas Rangers':'TEX','Toronto Blue Jays':'TOR','Washington Nationals':'WSH'
+};
+
+function getTeamKey(fullName) {
+  return TEAM_KEY_MAP[fullName] || fullName;
+}
+
+async function fetchRealMarkets(sport) {
+  try {
+    var res = await fetch('/api/real/sync?sport=' + encodeURIComponent(sport), { credentials: 'same-origin' });
+    if (!res.ok) return;
+    var data = await res.json();
+    if (!data.ok || !data.markets) return;
+    realMarketsCache = data.markets;
+    applyRealMarkets();
+  } catch(e) {}
+}
+
+function applyRealMarkets() {
+  if (!rawRows || !rawRows.length) return;
+
+  rawRows.forEach(function(r) {
+    // FanDuel game string: "Los Angeles Lakers @ Indiana Pacers"
+    // Convert to Real Sports key format: "LAL @ IND"
+    var parts = r.game.split(' @ ');
+    if (parts.length !== 2) return;
+    var awayKey = getTeamKey(parts[0].trim());
+    var homeKey = getTeamKey(parts[1].trim());
+    var realGameKey = awayKey + ' @ ' + homeKey;
+
+    var gameMarkets = realMarketsCache[realGameKey];
+    if (!gameMarkets) return;
+
+    var realLabel = r.mkt === 'ML' ? 'Game Winner' : r.mkt; // 'Spread' or 'Total' match directly
+    var outcomes = gameMarkets[realLabel];
+    if (!outcomes || !outcomes.length) return;
+
+    var outcome;
+    if (r.mkt === 'Total') {
+      outcome = outcomes.find(function(o) { return r.ps === 'A' ? o.key === 'Over' : o.key === 'Under'; });
+    } else {
+      // For ML and Spread: match by team key against side name
+      var sideKey = getTeamKey(r.side);
+      outcome = outcomes.find(function(o) { return o.key === sideKey; });
+    }
+
+    if (!outcome) return;
+    var pct = Math.round(outcome.probability * 100);
+    if (pct < 1 || pct > 99) return;
+
+    preds[r.id] = String(pct);
+    var inp = document.querySelector('td[data-label="Mkt Price %"] input[data-id="' + r.id + '"]');
+    if (inp) {
+      inp.value = pct;
+      inp.classList.add('filled');
+      inp.classList.add('real-autofill');
+      setPred(inp);
+    }
+  });
+}
+
 function buildTabs(){
   var nav=document.getElementById('sport-tabs');
   // preserve admin tab if it exists
@@ -1616,7 +1820,8 @@ function loadOdds(){
     .then(function(){
       btn.disabled=false;
       renderTable();
-
+      // Auto-fill Real Sports market %
+      fetchRealMarkets(sport);
     });
 }
 
