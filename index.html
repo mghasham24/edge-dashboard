@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Edge Dashboard v1.5.2</title>
+<title>Edge Dashboard v1.5.3</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Barlow:wght@400;500;600;700&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -700,8 +700,104 @@ function renderMobileCards(filtered) {
           mlRow.appendChild(grp);
         });
         inputRow.appendChild(mlRow);
+      } else if (mkt === 'Total') {
+        // Total: shared FD line + shared Mkt Line input, then Over % / Under % side by side
+        var rA = mktRows[0], rB = mktRows[1]; // A=Over, B=Under
+        var fdVal = rA&&rA.pt!=null?rA.pt:null;
+        var sharedYlvA = (rA&&yourLines[rA.id]!=null)?String(yourLines[rA.id]):'';
+        var sharedYlvB = (rB&&yourLines[rB.id]!=null)?String(yourLines[rB.id]):'';
+        var sharedYlv = sharedYlvA||sharedYlvB;
+        var sharedPh = fdVal!=null?String(fdVal):'';
+
+        // Column headers
+        var colHdr = document.createElement('div');
+        colHdr.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:5px;padding:0 2px';
+        colHdr.innerHTML = '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);min-width:44px;text-align:center;flex-shrink:0">FD Line</span>'
+          + '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);width:64px;text-align:center;flex-shrink:0">Mkt Line</span>'
+          + '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);flex:1;text-align:center">Over %</span>'
+          + '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);flex:1;text-align:center">Under %</span>';
+        inputRow.appendChild(colHdr);
+
+        // Single shared row
+        var totalRow = document.createElement('div');
+        totalRow.style.cssText = 'display:flex;align-items:center;gap:10px';
+
+        // FD Line static label
+        var fdLbl = document.createElement('span');
+        fdLbl.style.cssText = 'font-family:var(--mono);font-size:12px;color:var(--muted);min-width:44px;text-align:center;flex-shrink:0';
+        fdLbl.textContent = fdVal!=null?fdVal:'-';
+        totalRow.appendChild(fdLbl);
+
+        // Shared Mkt Line input — updates both sides
+        var lineInpT = document.createElement('input');
+        lineInpT.className = 'mc-inp'+(sharedYlv?' line-changed':'');
+        lineInpT.type='number';lineInpT.step='0.5';
+        lineInpT.placeholder=sharedPh;lineInpT.value=sharedYlv;
+        lineInpT.style.cssText='width:64px;flex-shrink:0';
+        lineInpT.addEventListener('input',function(){
+          var v=this.value;
+          // apply to both sides
+          [rA,rB].forEach(function(r){if(!r)return;
+            yourLines[r.id]=v!==''?parseFloat(v):null;
+          });
+          this.classList.toggle('line-changed',this.value!=='');
+          if(rA)updateSideEdge(rA.id);
+          if(rB)updateSideEdge(rB.id);
+        });
+        lineInpT.addEventListener('keydown',function(e){if(e.key==='Enter')this.blur();});
+        totalRow.appendChild(lineInpT);
+
+        // Over % input
+        if (rA) {
+          var pvalA = preds[rA.id]||'';
+          var overInp = document.createElement('input');
+          overInp.className='mc-inp'+(pvalA?' filled':'');
+          overInp.type='number';overInp.min='1';overInp.max='99';overInp.step='0.5';
+          overInp.placeholder='%';overInp.value=pvalA;overInp.dataset.id=rA.id;
+          overInp.style.cssText='flex:1;min-width:0';
+          overInp.addEventListener('blur',function(){setPredMobile(this);});
+          overInp.addEventListener('input',function(){setPredMobile(this);});
+          overInp.addEventListener('keydown',function(e){if(e.key==='Enter')this.blur();});
+          totalRow.appendChild(overInp);
+        }
+
+        // Under % input
+        if (rB) {
+          var pvalB = preds[rB.id]||'';
+          var underInp = document.createElement('input');
+          underInp.className='mc-inp'+(pvalB?' filled':'');
+          underInp.type='number';underInp.min='1';underInp.max='99';underInp.step='0.5';
+          underInp.placeholder='%';underInp.value=pvalB;underInp.dataset.id=rB.id;
+          underInp.style.cssText='flex:1;min-width:0';
+          underInp.addEventListener('blur',function(){setPredMobile(this);});
+          underInp.addEventListener('input',function(){setPredMobile(this);});
+          underInp.addEventListener('keydown',function(e){if(e.key==='Enter')this.blur();});
+          totalRow.appendChild(underInp);
+        }
+
+        inputRow.appendChild(totalRow);
+
+        // Edge row — shows best edge of the two sides
+        var edgeRowT = document.createElement('div');
+        edgeRowT.style.cssText='display:flex;gap:10px;margin-top:4px;padding-left:118px';
+        if(rA){
+          var seA=document.createElement('span');
+          seA.className='mc-side-edge';seA.dataset.id=rA.id;
+          seA.style.cssText='font-family:var(--mono);font-size:12px;font-weight:600;flex:1;text-align:center;color:var(--muted2)';
+          seA.textContent='-';
+          edgeRowT.appendChild(seA);
+        }
+        if(rB){
+          var seB=document.createElement('span');
+          seB.className='mc-side-edge';seB.dataset.id=rB.id;
+          seB.style.cssText='font-family:var(--mono);font-size:12px;font-weight:600;flex:1;text-align:center;color:var(--muted2)';
+          seB.textContent='-';
+          edgeRowT.appendChild(seB);
+        }
+        inputRow.appendChild(edgeRowT);
+
       } else {
-        // Spread/Total: column headers + one row per side
+        // Spread: column headers + one row per side
         var colHdr = document.createElement('div');
         colHdr.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:5px;padding:0 2px';
         colHdr.innerHTML = '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);min-width:44px;text-align:center;flex-shrink:0">FD Line</span>'
