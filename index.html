@@ -3615,7 +3615,17 @@
                     var oLower = o.label.toLowerCase();
                     return sideWords.some(function(w) { return oLower.indexOf(w) !== -1; });
                 });
-                // Pass 2: resolve abbreviation in outcome label then match
+                // Pass 2: resolve full label or leading abbreviation (e.g. "ATL +2.5" -> "Atlanta Hawks")
+                if (!match) {
+                    match = outcomes.find(function(o) {
+                        if (!o.label) return false;
+                        // Extract leading token before space/number (e.g. "ATL" from "ATL +2.5")
+                        var token = o.label.split(/\s+/)[0];
+                        var resolved = resolveTeamName(token).toLowerCase();
+                        return sideWords.some(function(w) { return resolved.indexOf(w) !== -1; });
+                    });
+                }
+                // Pass 3: full label resolve
                 if (!match) {
                     match = outcomes.find(function(o) {
                         if (!o.label) return false;
@@ -3623,12 +3633,13 @@
                         return sideWords.some(function(w) { return resolved.indexOf(w) !== -1; });
                     });
                 }
-                // Pass 3: last word of FD side name matches resolved label
+                // Pass 4: last word of FD side name matches resolved token
                 if (!match) {
                     var sideLastWord = sideLower.split(' ').pop();
                     match = outcomes.find(function(o) {
                         if (!o.label) return false;
-                        var resolved = resolveTeamName(o.label).toLowerCase();
+                        var token = o.label.split(/\s+/)[0];
+                        var resolved = resolveTeamName(token).toLowerCase();
                         return resolved.indexOf(sideLastWord) !== -1;
                     });
                 }
