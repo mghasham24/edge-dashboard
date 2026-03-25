@@ -120,7 +120,8 @@ export async function onRequestGet({ request, env }) {
     }
 
     const gamesData = JSON.parse(gamesText);
-    const games = gamesData.games || gamesData.data || gamesData.items || gamesData.predictions || [];
+    const days = (gamesData.days || (gamesData.latestDayContent && gamesData.latestDayContent.days) || []);
+    const games = gamesData.games || gamesData.data || gamesData.items || gamesData.predictions || days.reduce((acc, d) => acc.concat(d.games || d.predictions || d.items || []), []);
 
     if (!games.length) {
       return new Response(JSON.stringify({ ok: true, markets: {}, debug: 'no games', keys: Object.keys(gamesData) }), {
