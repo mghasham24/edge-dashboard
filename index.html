@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Edge Dashboard v2.1.0</title>
+<title>Edge Dashboard v2.1.1</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230a0a0c'/%3E%3Cpolygon points='16,3 29,16 16,29 3,16' fill='none' stroke='%234f6ef7' stroke-width='2.5'/%3E%3Cpolygon points='16,9 23,16 16,23 9,16' fill='%234f6ef7'/%3E%3C/svg%3E">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Barlow:wght@400;500;600;700&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -265,7 +266,7 @@ td.r{text-align:right}td.c{text-align:center}
 <div class="landing" id="landing">
 
   <nav class="lp-nav">
-    <div class="lp-logo"><span class="logo-dot"></span>EDGE DASHBOARD <span style="font-size:11px;color:var(--muted);font-weight:400;margin-left:8px">made by @moe_</span></div>
+    <div class="lp-logo"><span class="logo-dot"></span>EDGE DASHBOARD <span style="font-size:11px;font-weight:700;letter-spacing:.06em;background:rgba(79,110,247,.15);color:var(--accent);border:1px solid rgba(79,110,247,.3);padding:2px 8px;border-radius:20px;margin-left:10px">by @moe_</span></div>
     <div class="lp-nav-btns">
       <button class="lp-btn-ghost" onclick="openGate('login')">Log In</button>
       <button class="lp-btn-primary" onclick="openGate('signup')">Get Started Free</button>
@@ -378,7 +379,15 @@ td.r{text-align:right}td.c{text-align:center}
     </div>
   </div>
 
-  <div class="lp-footer">© 2026 Edge Dashboard · Built for sharp bettors</div>
+  <div class="lp-footer">
+    © 2026 RaxEdge · Built for Rax bettors
+    <span style="margin:0 10px">·</span>
+    <a href="/terms" style="color:var(--muted);text-decoration:none">Terms of Service</a>
+    <span style="margin:0 10px">·</span>
+    <a href="/privacy" style="color:var(--muted);text-decoration:none">Privacy Policy</a>
+    <span style="margin:0 10px">·</span>
+    <a href="mailto:support@raxedge.com" style="color:var(--muted);text-decoration:none">support@raxedge.com</a>
+  </div>
 </div>
 
 <div class="gate" id="gate" style="display:none">
@@ -393,6 +402,7 @@ td.r{text-align:right}td.c{text-align:center}
       <input class="gate-inp" id="gate-pass" type="password" placeholder="Password" autocomplete="current-password">
       <input class="gate-inp" id="gate-pass2" type="password" placeholder="Confirm password" autocomplete="new-password" style="display:none">
       <button class="gate-btn" id="gate-btn" onclick="submitAuth()">Log In</button>
+      <button id="forgot-link" onclick="showForgotPassword()" style="background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;font-family:var(--sans);margin-top:2px">Forgot password?</button>
     </div>
     <span class="gate-err" id="gate-err"></span>
     <span class="gate-ok"  id="gate-ok"></span>
@@ -537,11 +547,28 @@ function closegate() {
   document.getElementById('landing').classList.add('visible');
 }
 
+function showForgotPassword() {
+  var email = document.getElementById('gate-email').value.trim();
+  var result = prompt('Enter your email address to receive a reset link:', email || '');
+  if (!result) return;
+  fetch('/api/auth/forgot', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: result.trim().toLowerCase() })
+  }).then(function() {
+    showGateOk('If that email exists, a reset link has been sent.');
+  }).catch(function() {
+    showGateOk('If that email exists, a reset link has been sent.');
+  });
+}
+
 function switchTab(tab) {
   document.getElementById('tab-login').classList.toggle('active', tab==='login');
   document.getElementById('tab-signup').classList.toggle('active', tab==='signup');
   document.getElementById('gate-pass2').style.display = tab==='signup' ? '' : 'none';
   document.getElementById('gate-btn').textContent = tab==='login' ? 'Log In' : 'Create Account';
+  var fl = document.getElementById('forgot-link');
+  if (fl) fl.style.display = tab==='login' ? '' : 'none';
   document.getElementById('gate-err').style.display = 'none';
   document.getElementById('gate-ok').style.display  = 'none';
   // flip autocomplete

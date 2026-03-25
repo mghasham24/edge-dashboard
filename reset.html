@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reset Password - RaxEdge</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230a0a0c'/%3E%3Cpolygon points='16,3 29,16 16,29 3,16' fill='none' stroke='%234f6ef7' stroke-width='2.5'/%3E%3Cpolygon points='16,9 23,16 16,23 9,16' fill='%234f6ef7'/%3E%3C/svg%3E">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0a0a0c;color:#f0eff5;font-family:'Barlow',system-ui,sans-serif;font-size:15px;min-height:100vh;display:flex;align-items:center;justify-content:center}
+.box{background:#111116;border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:40px;width:100%;max-width:360px;display:flex;flex-direction:column;gap:16px}
+.logo{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:15px;letter-spacing:.08em;display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.dot{width:8px;height:8px;border-radius:50%;background:#4f6ef7}
+h2{font-size:18px;font-weight:600}
+p{color:#7a7990;font-size:13px}
+input{background:#18181f;border:1px solid rgba(255,255,255,.12);color:#f0eff5;font-family:'IBM Plex Mono',monospace;font-size:14px;padding:10px 16px;border-radius:6px;outline:none;width:100%}
+input:focus{border-color:#4f6ef7}
+button{background:#4f6ef7;border:none;color:#fff;font-family:'Barlow',system-ui,sans-serif;font-size:13px;font-weight:600;padding:11px;border-radius:6px;cursor:pointer;text-transform:uppercase;letter-spacing:.05em;width:100%}
+button:hover{opacity:.88}
+button:disabled{opacity:.4;cursor:not-allowed}
+.msg{font-size:13px;text-align:center;min-height:20px}
+.err{color:#f05252}.ok{color:#2dcc7e}
+a{color:#4f6ef7;font-size:13px;text-align:center;text-decoration:none;display:block}
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="logo"><span class="dot"></span>RAXEDGE</div>
+  <h2>Reset your password</h2>
+  <p>Enter a new password for your account.</p>
+  <input type="password" id="pass" placeholder="New password (min 8 chars)" minlength="8">
+  <input type="password" id="pass2" placeholder="Confirm new password">
+  <button id="btn" onclick="doReset()">Set New Password</button>
+  <div class="msg" id="msg"></div>
+  <a href="/">Back to RaxEdge</a>
+</div>
+<script>
+var token = new URLSearchParams(window.location.search).get('token');
+if (!token) {
+  document.getElementById('msg').textContent = 'Invalid reset link.';
+  document.getElementById('msg').className = 'msg err';
+  document.getElementById('btn').disabled = true;
+}
+
+async function doReset() {
+  var pass  = document.getElementById('pass').value;
+  var pass2 = document.getElementById('pass2').value;
+  var msg   = document.getElementById('msg');
+  var btn   = document.getElementById('btn');
+
+  msg.textContent = '';
+  if (pass.length < 8) { msg.textContent = 'Password must be at least 8 characters.'; msg.className='msg err'; return; }
+  if (pass !== pass2)  { msg.textContent = 'Passwords do not match.'; msg.className='msg err'; return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Setting password...';
+
+  try {
+    var res  = await fetch('/api/auth/reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, password: pass })
+    });
+    var data = await res.json();
+    if (res.ok) {
+      msg.textContent = 'Password updated! Redirecting...';
+      msg.className = 'msg ok';
+      setTimeout(function(){ window.location.href = '/'; }, 1500);
+    } else {
+      msg.textContent = data.error || 'Something went wrong.';
+      msg.className = 'msg err';
+      btn.disabled = false;
+      btn.textContent = 'Set New Password';
+    }
+  } catch(e) {
+    msg.textContent = 'Network error. Please try again.';
+    msg.className = 'msg err';
+    btn.disabled = false;
+    btn.textContent = 'Set New Password';
+  }
+}
+</script>
+</body>
+</html>
