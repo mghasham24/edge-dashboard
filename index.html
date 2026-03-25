@@ -2813,6 +2813,10 @@
                         sideEdge.style.cssText = 'font-family:var(--mono);font-size:12px;font-weight:600;margin-left:auto;white-space:nowrap;color:var(--muted2);text-align:right';
                         sideEdge.textContent = '-';
                         sideRow.appendChild(sideEdge);
+                        // Auto-compute if preds already filled
+                        if (preds[r.id] !== undefined && preds[r.id] !== '') {
+                            (function(id){ setTimeout(function(){ updateSideEdge(id); }, 0); })(r.id);
+                        }
                         inputRow.appendChild(sideRow);
                     });
                 }
@@ -2820,9 +2824,16 @@
 
                 var resultRow = document.createElement('div');
                 resultRow.className = 'mc-result';
-                resultRow.setAttribute('data-section-id', mktRows.map(function(r) { return r.id; }).join(','));
+                var _sectionIds = mktRows.map(function(r) { return r.id; }).join(',');
+                resultRow.setAttribute('data-section-id', _sectionIds);
                 resultRow.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 0 2px;min-height:24px';
-                resultRow.innerHTML = '<span style="font-size:11px;color:var(--muted2);font-family:var(--mono)">Enter % to see edge</span>';
+                // If preds already set (auto-fill), compute edge immediately
+                var _firstFilledId = mktRows.map(function(r){return r.id;}).find(function(id){return preds[id]!==undefined&&preds[id]!=='';});
+                if (_firstFilledId) {
+                    computeAndShowEdge(_firstFilledId, resultRow);
+                } else {
+                    resultRow.innerHTML = '<span style="font-size:11px;color:var(--muted2);font-family:var(--mono)">Enter % to see edge</span>';
+                }
                 section.appendChild(resultRow);
 
                 body.appendChild(section);
