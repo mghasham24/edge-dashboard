@@ -392,7 +392,7 @@ td.r{text-align:right}td.c{text-align:center}
 
 <div class="gate" id="gate" style="display:none">
   <div class="gate-box">
-    <div class="gate-logo"><span class="logo-dot"></span>EDGE DASHBOARD</div>
+    <div class="gate-logo"><span class="logo-dot"></span>RAXEDGE</div>
     <div class="gate-tabs">
       <button class="gate-tab active" id="tab-login" onclick="switchTab('login')">Log In</button>
       <button class="gate-tab" id="tab-signup" onclick="switchTab('signup')">Sign Up</button>
@@ -566,6 +566,7 @@ function showForgotPassword() {
 }
 
 function switchTab(tab) {
+  currentTab = tab;
   document.getElementById('tab-login').classList.toggle('active', tab==='login');
   document.getElementById('tab-signup').classList.toggle('active', tab==='signup');
   document.getElementById('gate-pass2').style.display = tab==='signup' ? '' : 'none';
@@ -574,7 +575,6 @@ function switchTab(tab) {
   if (fl) fl.style.display = tab==='login' ? '' : 'none';
   document.getElementById('gate-err').style.display = 'none';
   document.getElementById('gate-ok').style.display  = 'none';
-  // flip autocomplete
   document.getElementById('gate-pass').setAttribute('autocomplete', tab==='login' ? 'current-password' : 'new-password');
 }
 
