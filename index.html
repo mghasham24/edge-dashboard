@@ -3515,44 +3515,98 @@
     }
 
     // ── REAL SPORTS AUTO-FILL ──
+    var ABBREV_MAP = {
+        'ATL': 'Atlanta Hawks', 'BOS': 'Boston Celtics', 'BKN': 'Brooklyn Nets',
+        'CHA': 'Charlotte Hornets', 'CHI': 'Chicago Bulls', 'CLE': 'Cleveland Cavaliers',
+        'DAL': 'Dallas Mavericks', 'DEN': 'Denver Nuggets', 'DET': 'Detroit Pistons',
+        'GSW': 'Golden State Warriors', 'HOU': 'Houston Rockets', 'IND': 'Indiana Pacers',
+        'LAC': 'LA Clippers', 'LAL': 'Los Angeles Lakers', 'MEM': 'Memphis Grizzlies',
+        'MIA': 'Miami Heat', 'MIL': 'Milwaukee Bucks', 'MIN': 'Minnesota Timberwolves',
+        'NOP': 'New Orleans Pelicans', 'NYK': 'New York Knicks', 'OKC': 'Oklahoma City Thunder',
+        'ORL': 'Orlando Magic', 'PHI': 'Philadelphia 76ers', 'PHX': 'Phoenix Suns',
+        'POR': 'Portland Trail Blazers', 'SAC': 'Sacramento Kings', 'SAS': 'San Antonio Spurs',
+        'TOR': 'Toronto Raptors', 'UTA': 'Utah Jazz', 'WAS': 'Washington Wizards',
+        // NHL
+        'ANA': 'Anaheim Ducks', 'ARI': 'Arizona Coyotes', 'BUF': 'Buffalo Sabres',
+        'CGY': 'Calgary Flames', 'CAR': 'Carolina Hurricanes', 'CBJ': 'Columbus Blue Jackets',
+        'COL': 'Colorado Avalanche', 'DAL': 'Dallas Stars', 'EDM': 'Edmonton Oilers',
+        'FLA': 'Florida Panthers', 'LAK': 'Los Angeles Kings', 'MIN': 'Minnesota Wild',
+        'MTL': 'Montreal Canadiens', 'NSH': 'Nashville Predators', 'NJD': 'New Jersey Devils',
+        'NYI': 'New York Islanders', 'NYR': 'New York Rangers', 'OTT': 'Ottawa Senators',
+        'PHI': 'Philadelphia Flyers', 'PIT': 'Pittsburgh Penguins', 'SEA': 'Seattle Kraken',
+        'SJS': 'San Jose Sharks', 'STL': 'St. Louis Blues', 'TBL': 'Tampa Bay Lightning',
+        'TOR': 'Toronto Maple Leafs', 'VAN': 'Vancouver Canucks', 'VGK': 'Vegas Golden Knights',
+        'WSH': 'Washington Capitals', 'WPG': 'Winnipeg Jets',
+        // MLB
+        'ARI': 'Arizona Diamondbacks', 'ATL': 'Atlanta Braves', 'BAL': 'Baltimore Orioles',
+        'BOS': 'Boston Red Sox', 'CHC': 'Chicago Cubs', 'CWS': 'Chicago White Sox',
+        'CIN': 'Cincinnati Reds', 'CLE': 'Cleveland Guardians', 'COL': 'Colorado Rockies',
+        'DET': 'Detroit Tigers', 'HOU': 'Houston Astros', 'KCR': 'Kansas City Royals',
+        'LAA': 'Los Angeles Angels', 'LAD': 'Los Angeles Dodgers', 'MIA': 'Miami Marlins',
+        'MIL': 'Milwaukee Brewers', 'MIN': 'Minnesota Twins', 'NYM': 'New York Mets',
+        'NYY': 'New York Yankees', 'OAK': 'Oakland Athletics', 'PHI': 'Philadelphia Phillies',
+        'PIT': 'Pittsburgh Pirates', 'SDP': 'San Diego Padres', 'SFG': 'San Francisco Giants',
+        'SEA': 'Seattle Mariners', 'STL': 'St. Louis Cardinals', 'TBR': 'Tampa Bay Rays',
+        'TEX': 'Texas Rangers', 'TOR': 'Toronto Blue Jays', 'WSN': 'Washington Nationals'
+    };
+
+    function resolveTeamName(abbrevOrName) {
+        // If it's already a full name (contains space), return as-is
+        if (abbrevOrName.indexOf(' ') !== -1) return abbrevOrName;
+        return ABBREV_MAP[abbrevOrName.toUpperCase()] || abbrevOrName;
+    }
+
     function fetchRealMarkets(sport) {
         fetch('/api/real/sync?sport=' + sport, { credentials: 'same-origin' })
         .then(function(r) { return r.json(); })
         .then(function(d) {
             if (!d.ok || !d.markets) return;
             var marketKeys = Object.keys(d.markets);
+
+            // Build a resolved map: full name game key -> original Real key
+            var resolvedMap = {};
+            marketKeys.forEach(function(k) {
+                var parts = k.split(' @ ');
+                if (parts.length !== 2) return;
+                var resolvedKey = resolveTeamName(parts[0].trim()) + ' @ ' + resolveTeamName(parts[1].trim());
+                resolvedMap[resolvedKey] = k;
+                resolvedMap[k] = k; // also keep original
+            });
+
             rawRows.forEach(function(r) {
-                // Try exact match first
-                var gameKey = marketKeys.find(function(k) { return k === r.game; });
-                // Fuzzy match: compare last word of each team name
-                if (!gameKey) {
+                // Try exact match first, then resolved abbreviation match
+                var realKey = resolvedMap[r.game];
+
+                // Fallback: fuzzy word match
+                if (!realKey) {
                     var fdTeams = r.game.split(' @ ');
                     var fdAway = fdTeams[0] ? fdTeams[0].toLowerCase() : '';
                     var fdHome = fdTeams[1] ? fdTeams[1].toLowerCase() : '';
-                    gameKey = marketKeys.find(function(k) {
+                    var matched = marketKeys.find(function(k) {
                         var realTeams = k.split(' @ ');
                         if (realTeams.length !== 2) return false;
-                        var rAway = realTeams[0].toLowerCase();
-                        var rHome = realTeams[1].toLowerCase();
-                        // match if any word of real team name appears in fd team name or vice versa
+                        var rAway = resolveTeamName(realTeams[0].trim()).toLowerCase();
+                        var rHome = resolveTeamName(realTeams[1].trim()).toLowerCase();
                         var awayMatch = rAway.split(' ').some(function(w) { return w.length > 2 && fdAway.indexOf(w) !== -1; })
                                      || fdAway.split(' ').some(function(w) { return w.length > 2 && rAway.indexOf(w) !== -1; });
                         var homeMatch = rHome.split(' ').some(function(w) { return w.length > 2 && fdHome.indexOf(w) !== -1; })
                                      || fdHome.split(' ').some(function(w) { return w.length > 2 && rHome.indexOf(w) !== -1; });
                         return awayMatch && homeMatch;
                     });
+                    if (matched) realKey = matched;
                 }
-                if (!gameKey) return;
-                var gameMarkets = d.markets[gameKey];
-                if (!gameMarkets) return;
-                // Map our market type to Real Sports market label
-                var realKey = r.mkt === 'ML' ? 'Game Winner'
-                            : r.mkt === 'Spread' ? 'Spread'
-                            : r.mkt === 'Total' ? 'Total' : null;
+
                 if (!realKey) return;
-                var outcomes = gameMarkets[realKey];
+                var gameMarkets = d.markets[realKey];
+                if (!gameMarkets) return;
+
+                var mktLabel = r.mkt === 'ML' ? 'Game Winner'
+                             : r.mkt === 'Spread' ? 'Spread'
+                             : r.mkt === 'Total' ? 'Total' : null;
+                if (!mktLabel) return;
+                var outcomes = gameMarkets[mktLabel];
                 if (!outcomes || !outcomes.length) return;
-                // Match outcome to side: try word overlap, fallback to A=outcomes[0], B=outcomes[1]
+
                 var sideLower = r.side.toLowerCase();
                 var sideWords = sideLower.split(' ').filter(function(w) { return w.length > 2; });
                 var match = outcomes.find(function(o) {
@@ -3567,7 +3621,6 @@
                     preds[r.id] = String(match.pct);
                 }
             });
-            // Re-render to show filled inputs and computed edges
             renderTable();
         })
         .catch(function() {});
