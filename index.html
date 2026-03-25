@@ -1742,7 +1742,12 @@ function setPred(input){
         : id.replace(/-B$/,'-A');
       var other=(100-v).toFixed(1);
       preds[otherId]=other;
-      var otherInp=document.querySelector('input[data-id="'+otherId+'"]');
+      var otherInp=document.querySelector('td[data-label="Mkt Price %"] input[data-id="'+otherId+'"]');
+      if(!otherInp){
+        // fallback: find all inputs with this id and pick the last one (pred input)
+        var allOther=document.querySelectorAll('input[data-id="'+otherId+'"]');
+        if(allOther.length)otherInp=allOther[allOther.length-1];
+      }
       if(otherInp&&otherInp!==input){
         otherInp.value=other;
         otherInp.classList.add('filled');
