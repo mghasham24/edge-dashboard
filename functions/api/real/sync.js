@@ -137,8 +137,6 @@ export async function onRequestGet({ request, env }) {
     }
 
     const nextData = JSON.parse(nextBody);
-    const nextData = await nextRes.json();
-
     const games = nextData.games || nextData.data?.games || nextData.items || nextData.predictions || [];
     if (!games.length) return new Response(JSON.stringify({ ok: true, markets: {} }), {
       headers: { 'Content-Type': 'application/json' }
