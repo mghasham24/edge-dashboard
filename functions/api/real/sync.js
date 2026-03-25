@@ -119,13 +119,17 @@ export async function onRequestGet({ request, env }) {
 
   try {
     // Step 1: Get all games for this sport
-    // Try the feed endpoint first, fall back to next
-    let nextRes = await fetch(`https://web.realapp.com/home/${realSport}/next?cohort=0`, {
+    // Try both possible domains
+    let nextRes = await fetch(`https://web.realsports.io/home/${realSport}/next?cohort=0`, {
       headers: buildHeaders(env)
     });
-    // If that fails try alternate endpoint
     if (!nextRes.ok) {
-      nextRes = await fetch(`https://web.realapp.com/predictions/sport/${realSport}`, {
+      nextRes = await fetch(`https://web.realapp.com/home/${realSport}/next?cohort=0`, {
+        headers: buildHeaders(env)
+      });
+    }
+    if (!nextRes.ok) {
+      nextRes = await fetch(`https://web.realsports.io/predictions/sport/${realSport}`, {
         headers: buildHeaders(env)
       });
     }
@@ -149,10 +153,16 @@ export async function onRequestGet({ request, env }) {
         const homeKey = game.homeTeamKey || game.homeTeam?.key;
         if (!gameId || !awayKey || !homeKey) return null;
 
-        const mRes = await fetch(
-          `https://web.realapp.com/predictions/game/${realSport}/${gameId}/markets`,
+        let mRes = await fetch(
+          `https://web.realsports.io/predictions/game/${realSport}/${gameId}/markets`,
           { headers: buildHeaders(env) }
         );
+        if (!mRes.ok) {
+          mRes = await fetch(
+            `https://web.realapp.com/predictions/game/${realSport}/${gameId}/markets`,
+            { headers: buildHeaders(env) }
+          );
+        }
         if (!mRes.ok) return null;
         const mData = await mRes.json();
 
