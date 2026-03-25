@@ -19,7 +19,7 @@
 body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;min-height:100vh;padding:0 0 80px}
 .header{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:var(--header-h);position:sticky;top:0;z-index:200}
 .moe-badge{font-size:10px;font-weight:700;letter-spacing:.04em;background:rgba(79,110,247,.15);color:var(--accent);border:1px solid rgba(79,110,247,.3);padding:2px 7px;border-radius:20px;margin-left:8px;white-space:nowrap}
-@media(max-width:768px){.desktop-only{display:none!important}}
+@media(max-width:768px){.desktop-only{display:none!important}#mobile-collapse-btn{display:block!important}}
 .logo-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:pulse 2s ease-in-out infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 .api-remaining{font-family:var(--mono);font-size:11px;color:var(--muted);padding:4px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:4px}
@@ -461,6 +461,7 @@ td.r{text-align:right}td.c{text-align:center}
     <div class="stat-item"><span class="stat-val" id="stat-lines">0</span><span class="stat-lbl">Lines</span></div>
     <div class="stat-item"><span class="stat-val" id="stat-edges">0</span><span class="stat-lbl">Edges</span></div>
   </div>
+  <button onclick="toggleAll()" style="display:none;background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:11px;font-weight:600;padding:6px 12px;border-radius:5px;cursor:pointer;text-transform:uppercase;letter-spacing:.04em;margin-left:auto" id="mobile-collapse-btn">Collapse All</button>
 </div>
 
 <div class="status-bar">
@@ -708,7 +709,7 @@ function adjFair(fair,fd,yl,mkt,ps){
   var d=parseFloat(yl)-parseFloat(fd);
   if(!isFinite(d)||d===0)return fair;
   d=Math.max(Math.min(d,10),-10);
-  var adj=(d/0.5)*0.03;
+  var adj=(d/0.5)*0.0125;
   if(mkt==='Total'){
     // For Over: higher line = harder = fair goes DOWN
     // For Under: higher line = easier = fair goes UP
@@ -740,14 +741,23 @@ function getFair(r){
 function toggleAll(){
   var btn=document.getElementById('collapse-btn');
   var allCollapsed=Object.keys(collapsed).length>0&&Object.values(collapsed).every(function(v){return v;});
-  if(allCollapsed){
-    // expand all
+  var allMobileCollapsed=Object.keys(mobileCollapsed).length>0&&Object.values(mobileCollapsed).every(function(v){return v;});
+  var isCollapsed = allCollapsed && allMobileCollapsed;
+
+  if(isCollapsed){
+    // expand all desktop
     Object.keys(collapsed).forEach(function(k){collapsed[k]=false;});
     document.querySelectorAll('tr[data-gk]:not(.ghrow)').forEach(function(tr){tr.classList.remove('collapsed-row');});
     document.querySelectorAll('.gh-arrow').forEach(function(el){el.classList.add('up');});
-    btn.textContent='Collapse All';
+    // expand all mobile
+    Object.keys(mobileCollapsed).forEach(function(k){mobileCollapsed[k]=false;});
+    document.querySelectorAll('.game-card-body').forEach(function(el){el.classList.remove('collapsed');});
+    document.querySelectorAll('.gc-arrow').forEach(function(el){el.classList.add('up');});
+    if(btn)btn.textContent='Collapse All';
+    var mbtn=document.getElementById('mobile-collapse-btn');
+    if(mbtn)mbtn.textContent='Collapse All';
   } else {
-    // collapse all
+    // collapse all desktop
     var gOrder=[];
     document.querySelectorAll('tr.ghrow').forEach(function(tr){
       var gk=tr.getAttribute('data-gk');
@@ -756,7 +766,16 @@ function toggleAll(){
     gOrder.forEach(function(k){collapsed[k]=true;});
     document.querySelectorAll('tr[data-gk]:not(.ghrow)').forEach(function(tr){tr.classList.add('collapsed-row');});
     document.querySelectorAll('.gh-arrow').forEach(function(el){el.classList.remove('up');});
-    btn.textContent='Expand All';
+    // collapse all mobile
+    document.querySelectorAll('.game-card-body').forEach(function(el){
+      var game=el.getAttribute('data-game');
+      if(game)mobileCollapsed[game]=true;
+      el.classList.add('collapsed');
+    });
+    document.querySelectorAll('.gc-arrow').forEach(function(el){el.classList.remove('up');});
+    if(btn)btn.textContent='Expand All';
+    var mbtn=document.getElementById('mobile-collapse-btn');
+    if(mbtn)mbtn.textContent='Expand All';
   }
 }
 
