@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Edge Dashboard v2.0.0</title>
+<title>Edge Dashboard v2.0.1</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Barlow:wght@400;500;600;700&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -414,6 +414,7 @@ td.r{text-align:right}td.c{text-align:center}
   </div>
 </div>
 
+<div id="dashboard" style="display:none">
 <header class="header">
   <div class="logo"><span class="logo-dot"></span>EDGE DASHBOARD</div>
   <div style="display:flex;align-items:center;gap:10px">
@@ -507,6 +508,8 @@ td.r{text-align:right}td.c{text-align:center}
   </div>
 </div>
 
+</div><!-- end #dashboard -->
+
 <script>
 var SPORTS=[{key:'basketball_nba',label:'NBA'},{key:'basketball_ncaab',label:'NCAAB'},{key:'icehockey_nhl',label:'NHL'},{key:'baseball_mlb',label:'MLB'},{key:'mma_mixed_martial_arts',label:'UFC/MMA'},{key:'soccer_epl',label:'EPL'},{key:'soccer_uefa_champs_league',label:'UCL'}];
 var FREE_SPORTS=['basketball_nba','icehockey_nhl','baseball_mlb']; // free plan sports
@@ -591,6 +594,7 @@ async function submitAuth() {
       currentUser = data;
       document.getElementById('gate').style.display = 'none';
       document.getElementById('landing').classList.remove('visible');
+      document.getElementById('dashboard').style.display = 'block';
       loadOdds();
     }
   } catch(e) {
@@ -614,6 +618,7 @@ async function checkSession() {
       currentUser = data;
       document.getElementById('gate').style.display = 'none';
       document.getElementById('landing').classList.remove('visible');
+      document.getElementById('dashboard').style.display = 'block';
       // Show Pro badge for pro users
       if (data.plan === 'pro' && !data.is_admin) {
         document.getElementById('manage-sub-btn').style.display = '';
