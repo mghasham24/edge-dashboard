@@ -106,12 +106,33 @@ function extractGames(gamesData) {
     if (games.length) return games;
   }
 
-  // latestDayContent direct games
+  // latestDayContent = today's games.
+  // Late games (e.g. 9pm CDT = 2am UTC) fall into tomorrow's UTC date bucket.
+  // Collect from latestDayContent plus any other day-content keys whose date is today or tomorrow.
+  const allGames = [];
+
   if (gamesData.latestDayContent) {
     const lcd = gamesData.latestDayContent;
     const direct = lcd.games || lcd.predictions || lcd.items || lcd.events || [];
-    if (Array.isArray(direct) && direct.length) return direct;
+    if (Array.isArray(direct)) allGames.push(...direct);
   }
+
+  const today    = new Date().toISOString().slice(0, 10);
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+
+  for (const key of Object.keys(gamesData)) {
+    if (key === 'latestDayContent') continue;
+    const val = gamesData[key];
+    if (val && typeof val === 'object' && !Array.isArray(val)) {
+      const dayDate = val.day || val.date;
+      if (dayDate === today || dayDate === tomorrow) {
+        const direct = val.games || val.predictions || val.items || val.events || [];
+        if (Array.isArray(direct)) allGames.push(...direct);
+      }
+    }
+  }
+
+  if (allGames.length) return allGames;
 
   return [];
 }
@@ -188,7 +209,7 @@ export async function onRequestGet({ request, env }) {
     }
 
     const BATCH_SIZE = 3;
-    const BATCH_DELAY = 200; // ms between batches
+    const BATCH_DELAY = 200;
     const allResults = [];
     for (let i = 0; i < games.length; i += BATCH_SIZE) {
       const batch = games.slice(i, i + BATCH_SIZE);
