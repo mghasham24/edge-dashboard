@@ -106,12 +106,23 @@ function extractGames(gamesData) {
     if (games.length) return games;
   }
 
-  // latestDayContent direct games
+  // latestDayContent + nextDayContent — late games (e.g. 9pm CDT = 2am UTC next day)
+  // are bucketed into tomorrow by Real Sports, so we pull both days and merge
+  const allGames = [];
+
   if (gamesData.latestDayContent) {
     const lcd = gamesData.latestDayContent;
     const direct = lcd.games || lcd.predictions || lcd.items || lcd.events || [];
-    if (Array.isArray(direct) && direct.length) return direct;
+    if (Array.isArray(direct)) allGames.push(...direct);
   }
+
+  if (gamesData.nextDayContent) {
+    const ndc = gamesData.nextDayContent;
+    const direct = ndc.games || ndc.predictions || ndc.items || ndc.events || [];
+    if (Array.isArray(direct)) allGames.push(...direct);
+  }
+
+  if (allGames.length) return allGames;
 
   return [];
 }
