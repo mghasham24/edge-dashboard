@@ -2020,6 +2020,7 @@
     var rawRows = [];
     var preds = {};
     var yourLines = {};
+    var altOdds = {}; // gameId -> { spreads: {teamName: {point: price}}, totals: {side: {point: price}} }
 
     var collapsed = {};
     var mobileCollapsed = {};
@@ -2266,14 +2267,13 @@
         });
         var pair = pairs[r.pid] || {};
         var nv = novig(pair.A ? imp(pair.A.am) : null, pair.B ? imp(pair.B.am) : null);
+        var altNV = getAltFair(r, yl, pair.A, pair.B);
+        if (altNV) return r.ps === 'A' ? altNV.fa : altNV.fb;
         var fair = r.ps === 'A' ? nv.fa : nv.fb;
         return adjFair(fair, r.pt, yl, r.mkt, r.ps);
     }
 
-    // Per-half-point adjustment rates by sport.
-    // Hockey/baseball: 1 goal/run is a large fraction of the total, so each 0.5 matters more.
-    // Basketball: totals are ~220+, so 0.5pts is almost nothing.
-    // Soccer: low scoring, each 0.5 goal is significant.
+    // Per-half-point adjustment rates by sport (fallback when no alternate line available)
     var LINE_ADJ_RATE = {
         'icehockey_nhl':             0.025,
         'baseball_mlb':              0.02,
@@ -2299,6 +2299,35 @@
             adj = ps === 'A' ? -adj : adj;
         }
         return Math.min(Math.max(fair + adj, 0.01), 0.99);
+    }
+
+    // Look up FanDuel alternate odds at Real Sports line.
+    // Returns {fa, fb} novig from real alternate prices, or null if not available.
+    function getAltFair(r, yl, pA, pB) {
+        if (yl == null || yl === '' || r.mkt === 'ML') return null;
+        if (!r.gid) return null;
+        var alt = altOdds[r.gid];
+        if (!alt) return null;
+        var realLine = parseFloat(yl);
+        if (!isFinite(realLine)) return null;
+        if (realLine === parseFloat(r.pt)) return null;
+        var priceA, priceB;
+        if (r.mkt === 'Total') {
+            var ov = alt.totals && alt.totals['Over'];
+            var un = alt.totals && alt.totals['Under'];
+            if (!ov || !un) return null;
+            priceA = ov[realLine];
+            priceB = un[realLine];
+        } else if (r.mkt === 'Spread') {
+            if (!pA || !pB || !alt.spreads) return null;
+            var ylA = yourLines[pA.id];
+            var ylB = yourLines[pB.id];
+            if (ylA == null || ylB == null) return null;
+            priceA = alt.spreads[pA.side] && alt.spreads[pA.side][parseFloat(ylA)];
+            priceB = alt.spreads[pB.side] && alt.spreads[pB.side][parseFloat(ylB)];
+        }
+        if (priceA == null || priceB == null) return null;
+        return novig(imp(priceA), imp(priceB));
     }
     function timeInfo(c) {
         if (!c)
@@ -3272,8 +3301,8 @@
                 var gs = g.away_team + ' @ ' + g.home_team;
                 var cm = g.commence_time ? new Date(g.commence_time) : null;
                 var pid = g.id + '-' + mk;
-                rows.push({ id: pid + '-A', game: gs, cm: cm, mkt: lbl, side: A.name, am: A.price, pt: A.point != null ? A.point : null, pid: pid, ps: 'A' });
-                rows.push({ id: pid + '-B', game: gs, cm: cm, mkt: lbl, side: B.name, am: B.price, pt: B.point != null ? B.point : null, pid: pid, ps: 'B' });
+                rows.push({ id: pid + '-A', game: gs, cm: cm, mkt: lbl, side: A.name, am: A.price, pt: A.point != null ? A.point : null, pid: pid, ps: 'A', gid: g.id });
+                rows.push({ id: pid + '-B', game: gs, cm: cm, mkt: lbl, side: B.name, am: B.price, pt: B.point != null ? B.point : null, pid: pid, ps: 'B', gid: g.id });
             });
         });
         return rows;
@@ -3325,8 +3354,12 @@
             return r.json();
         })
         .then(function(d) {
-            if (Array.isArray(d)) {
-                rawRows = parseGames(d);
+            // Handle both old array format and new {games, alternateOdds} format
+            var games = Array.isArray(d) ? d : (d && Array.isArray(d.games) ? d.games : null);
+            if (d && d.alternateOdds) altOdds = d.alternateOdds;
+            else altOdds = {};
+            if (games) {
+                rawRows = parseGames(games);
                 var now = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
                 if (rawRows.length) {
                     dot.className = 'sdot live';
@@ -3337,6 +3370,7 @@
                 }
             } else {
                 rawRows = [];
+                altOdds = {};
                 dot.className = 'sdot error';
                 stxt.textContent = 'API error';
             }
@@ -3384,9 +3418,10 @@
         var rows = rawRows.map(function(r) {
             var p = pairs[r.pid] || {};
             var nv = novig(p.A ? imp(p.A.am) : null, p.B ? imp(p.B.am) : null);
-            var fair = r.ps === 'A' ? nv.fa : nv.fb;
             var yl = yourLines[r.id] != null ? yourLines[r.id] : null;
-            var af = adjFair(fair, r.pt, yl, r.mkt, r.ps);
+            var altNV = getAltFair(r, yl, p.A, p.B);
+            var fair = altNV ? (r.ps === 'A' ? altNV.fa : altNV.fb) : (r.ps === 'A' ? nv.fa : nv.fb);
+            var af = altNV ? fair : adjFair(fair, r.pt, yl, r.mkt, r.ps);
             var pr = preds[r.id];
             var pred = (pr !== undefined && pr !== '') ? parseFloat(pr) / 100 : null;
             var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
