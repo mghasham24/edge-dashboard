@@ -191,17 +191,33 @@ export async function onRequestGet({ request, env }) {
       });
     }
 
-    // Fetch markets in batches of 3 to avoid rate limiting from Real Sports API
+    // Fetch markets with retry logic to handle Real Sports rate limiting
     async function fetchGameMarkets(game) {
       const gameId = game.id || game.gameId;
       const awayKey = game.awayTeamKey || game.awayTeam?.key;
       const homeKey = game.homeTeamKey || game.homeTeam?.key;
       if (!gameId || !awayKey || !homeKey) return null;
-      const mRes = await fetch(
-        `https://web.realapp.com/predictions/game/${realSport}/${gameId}/markets`,
-        { headers: buildHeaders(env) }
-      );
-      if (!mRes.ok) return null;
+
+      const url = `https://web.realapp.com/predictions/game/${realSport}/${gameId}/markets`;
+      let mRes, attempt = 0;
+      while (attempt < 3) {
+        try {
+          mRes = await fetch(url, { headers: buildHeaders(env) });
+          if (mRes.ok) break;
+          // Retry on 429 or 5xx
+          if (mRes.status === 429 || mRes.status >= 500) {
+            await new Promise(r => setTimeout(r, 300 * (attempt + 1)));
+            attempt++;
+            continue;
+          }
+          return null; // 4xx other than 429 - don't retry
+        } catch(e) {
+          attempt++;
+          await new Promise(r => setTimeout(r, 300 * attempt));
+        }
+      }
+      if (!mRes || !mRes.ok) return null;
+
       const mData = await mRes.json();
       const gameKey = awayKey + ' @ ' + homeKey;
       const markets = {};
@@ -214,8 +230,9 @@ export async function onRequestGet({ request, env }) {
       return { gameKey, markets };
     }
 
-    const BATCH_SIZE = 3;
-    const BATCH_DELAY = 200;
+    // Batch size 4 with 150ms delay between batches
+    const BATCH_SIZE = 4;
+    const BATCH_DELAY = 150;
     const allResults = [];
     for (let i = 0; i < games.length; i += BATCH_SIZE) {
       const batch = games.slice(i, i + BATCH_SIZE);
