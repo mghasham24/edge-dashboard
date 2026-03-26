@@ -3682,9 +3682,7 @@
                     });
                 }
                 if (match && match.pct != null) {
-                    preds[r.id] = String(match.pct);
-                    // Store Real's probability as the fair value for this row
-                    // Edge = Real's fair% - FD implied% (bypasses adjFair line math)
+                    // Only set realFair (Adj Fair column) - user enters Mkt Price manually
                     realFair[r.id] = match.pct / 100;
                 }
             });
