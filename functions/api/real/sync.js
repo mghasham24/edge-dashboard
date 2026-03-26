@@ -94,8 +94,9 @@ function extractGames(gamesData) {
   if (Array.isArray(gamesData.predictions) && gamesData.predictions.length) return gamesData.predictions;
 
   // Real Sports /home/{sport}/next structure: games nested inside days array
+  // Note: do NOT include latestDayContent.days here - we handle latestDayContent separately below
+  // to properly merge today + tomorrow UTC buckets for late night games
   const days = gamesData.days
-    || (gamesData.latestDayContent && gamesData.latestDayContent.days)
     || (gamesData.latestDay && gamesData.latestDay.days)
     || [];
 
