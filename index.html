@@ -3378,7 +3378,13 @@
             var u = units(edge);
             return { id: r.id, game: r.game, cm: r.cm, mkt: r.mkt, side: r.side, am: r.am, pt: r.pt, ps: r.ps, pid: r.pid, fair: fair, af: af, yl: yl, edge: edge, u: u, bet: u * unit };
         });
+        var LINE_GAP_THRESHOLD = 4; // hide spread/total if Real line differs from FD by more than this
         var filtered = rows.filter(function(r) {
+            // Hide spread/total rows when line gap between Real and FD exceeds threshold
+            if ((r.mkt === 'Spread' || r.mkt === 'Total') && r.pt != null && yourLines[r.id] != null) {
+                var gap = Math.abs(parseFloat(yourLines[r.id]) - parseFloat(r.pt));
+                if (gap > LINE_GAP_THRESHOLD) return false;
+            }
             if (!q) return true;
             return (r.game + ' ' + r.side + ' ' + r.mkt).toLowerCase().indexOf(q) !== -1;
         });
