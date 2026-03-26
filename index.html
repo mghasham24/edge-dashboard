@@ -2270,6 +2270,20 @@
         return adjFair(fair, r.pt, yl, r.mkt, r.ps);
     }
 
+    // Per-half-point adjustment rates by sport.
+    // Hockey/baseball: 1 goal/run is a large fraction of the total, so each 0.5 matters more.
+    // Basketball: totals are ~220+, so 0.5pts is almost nothing.
+    // Soccer: low scoring, each 0.5 goal is significant.
+    var LINE_ADJ_RATE = {
+        'icehockey_nhl':             0.025,
+        'baseball_mlb':              0.02,
+        'basketball_nba':            0.005,
+        'basketball_ncaab':          0.005,
+        'soccer_epl':                0.03,
+        'soccer_uefa_champs_league': 0.03,
+        'mma_mixed_martial_arts':    0.005
+    };
+
     function adjFair(fair, fd, yl, mkt, ps) {
         if (fair == null || mkt === 'ML')
             return fair;
@@ -2279,7 +2293,8 @@
         if (!isFinite(d) || d === 0)
             return fair;
         d = Math.max(Math.min(d, 3.5), -3.5); // cap at 3.5 pts to prevent large line gap distortion
-        var adj = (d / 0.5) * 0.005;
+        var rate = LINE_ADJ_RATE[currentSport] || 0.005;
+        var adj = (d / 0.5) * rate;
         if (mkt === 'Total') {
             adj = ps === 'A' ? -adj : adj;
         }
