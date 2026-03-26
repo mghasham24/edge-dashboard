@@ -152,13 +152,21 @@ export async function onRequestGet({ request, env }) {
     const gamesData = JSON.parse(gamesText);
     const games = extractGames(gamesData);
 
+    // Debug mode 3: dump latestDayContent structure regardless of game count
+    if (debugMode === '3') {
+      return new Response(JSON.stringify({
+        gamesStatus,
+        topKeys: Object.keys(gamesData),
+        latestDay: gamesData.latestDay,
+        latestDayContentKeys: gamesData.latestDayContent ? Object.keys(gamesData.latestDayContent) : null,
+        latestDayContentDay: gamesData.latestDayContent && gamesData.latestDayContent.day,
+        latestDayContentGamesCount: gamesData.latestDayContent && gamesData.latestDayContent.games && gamesData.latestDayContent.games.length,
+        extractedGamesCount: games.length,
+        extractedGameKeys: games.map(g => (g.awayTeamKey || g.awayTeam?.key || '?') + ' @ ' + (g.homeTeamKey || g.homeTeam?.key || '?'))
+      }), { headers: { 'Content-Type': 'application/json' } });
+    }
+
     if (!games.length) {
-      // Debug mode 3: dump raw structure to diagnose
-      if (debugMode === '3') {
-        return new Response(JSON.stringify({ gamesStatus, gamesData }), {
-          headers: { 'Content-Type': 'application/json' }
-        });
-      }
       return new Response(JSON.stringify({ ok: true, markets: {}, debug: 'no games', keys: Object.keys(gamesData) }), {
         headers: { 'Content-Type': 'application/json' }
       });
@@ -189,39 +197,9 @@ export async function onRequestGet({ request, env }) {
     );
 
     const marketMap = {};
-    const now = Math.floor(Date.now() / 1000);
-    const cacheKey = 'real_sync_' + realSport;
-    const TTL = 120; // 2 minutes
-
-    // Load existing cache first
-    let cached = {};
-    try {
-      const cacheRow = await env.DB.prepare(
-        'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
-      ).bind(cacheKey).first();
-      if (cacheRow && (now - cacheRow.fetched_at) < TTL) {
-        cached = JSON.parse(cacheRow.data);
-      }
-    } catch(e) {}
-
-    // Merge fresh results over cache — fresh wins, but cache fills gaps
     for (const r of results) {
-      if (r.status === 'fulfilled' && r.value) {
-        marketMap[r.value.gameKey] = r.value.markets;
-      }
+      if (r.status === 'fulfilled' && r.value) marketMap[r.value.gameKey] = r.value.markets;
     }
-
-    // Fill in any missing games from cache
-    for (const key of Object.keys(cached)) {
-      if (!marketMap[key]) marketMap[key] = cached[key];
-    }
-
-    // Write merged result back to cache
-    try {
-      await env.DB.prepare(
-        'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at'
-      ).bind(cacheKey, JSON.stringify(marketMap), now).run();
-    } catch(e) {}
 
     return new Response(JSON.stringify({ ok: true, markets: marketMap }), {
       headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60' }
