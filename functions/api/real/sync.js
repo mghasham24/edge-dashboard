@@ -87,60 +87,33 @@ async function getSession(request, db) {
 }
 
 function extractGames(gamesData) {
-  // Collect from ALL possible locations and deduplicate by game ID.
-  // Real Sports API is inconsistent - sometimes games are in latestDayContent,
-  // sometimes in days[], sometimes in both. Never return early.
-  const seen = new Set();
-  const all = [];
+  // Direct arrays
+  if (Array.isArray(gamesData.games) && gamesData.games.length) return gamesData.games;
+  if (Array.isArray(gamesData.data) && gamesData.data.length) return gamesData.data;
+  if (Array.isArray(gamesData.items) && gamesData.items.length) return gamesData.items;
+  if (Array.isArray(gamesData.predictions) && gamesData.predictions.length) return gamesData.predictions;
 
-  function addGame(g) {
-    if (!g) return;
-    const id = g.id || g.gameId;
-    if (!id || seen.has(id)) return;
-    seen.add(id);
-    all.push(g);
-  }
-
-  function addGames(arr) {
-    if (Array.isArray(arr)) arr.forEach(addGame);
-  }
-
-  // Direct top-level arrays
-  addGames(gamesData.games);
-  addGames(gamesData.data);
-  addGames(gamesData.items);
-  addGames(gamesData.predictions);
-
-  // latestDayContent - today's games
-  if (gamesData.latestDayContent) {
-    const lcd = gamesData.latestDayContent;
-    addGames(lcd.games || lcd.predictions || lcd.items || lcd.events);
-  }
-
-  // Any other day-content keys whose date is today or tomorrow UTC
-  const today    = new Date().toISOString().slice(0, 10);
-  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
-  for (const key of Object.keys(gamesData)) {
-    if (key === 'latestDayContent') continue;
-    const val = gamesData[key];
-    if (val && typeof val === 'object' && !Array.isArray(val)) {
-      const dayDate = val.day || val.date;
-      if (dayDate === today || dayDate === tomorrow) {
-        addGames(val.games || val.predictions || val.items || val.events);
-      }
-    }
-  }
-
-  // days[] array - each entry may contain games
+  // Real Sports /home/{sport}/next structure: games nested inside days array
   const days = gamesData.days
     || (gamesData.latestDayContent && gamesData.latestDayContent.days)
     || (gamesData.latestDay && gamesData.latestDay.days)
     || [];
-  if (Array.isArray(days)) {
-    days.forEach(d => addGames(d.games || d.predictions || d.items || d.events));
+
+  if (Array.isArray(days) && days.length) {
+    const games = days.flatMap(d =>
+      d.games || d.predictions || d.items || d.events || []
+    );
+    if (games.length) return games;
   }
 
-  return all;
+  // latestDayContent direct games
+  if (gamesData.latestDayContent) {
+    const lcd = gamesData.latestDayContent;
+    const direct = lcd.games || lcd.predictions || lcd.items || lcd.events || [];
+    if (Array.isArray(direct) && direct.length) return direct;
+  }
+
+  return [];
 }
 
 export async function onRequestGet({ request, env }) {
@@ -191,63 +164,64 @@ export async function onRequestGet({ request, env }) {
       });
     }
 
-    // Fetch markets with retry logic to handle Real Sports rate limiting
-    async function fetchGameMarkets(game) {
-      const gameId = game.id || game.gameId;
-      const awayKey = game.awayTeamKey || game.awayTeam?.key;
-      const homeKey = game.homeTeamKey || game.homeTeam?.key;
-      if (!gameId || !awayKey || !homeKey) return null;
-
-      const url = `https://web.realapp.com/predictions/game/${realSport}/${gameId}/markets`;
-      let mRes, attempt = 0;
-      while (attempt < 3) {
-        try {
-          mRes = await fetch(url, { headers: buildHeaders(env) });
-          if (mRes.ok) break;
-          // Retry on 429 or 5xx
-          if (mRes.status === 429 || mRes.status >= 500) {
-            await new Promise(r => setTimeout(r, 300 * (attempt + 1)));
-            attempt++;
-            continue;
-          }
-          return null; // 4xx other than 429 - don't retry
-        } catch(e) {
-          attempt++;
-          await new Promise(r => setTimeout(r, 300 * attempt));
+    const results = await Promise.allSettled(
+      games.map(async (game) => {
+        const gameId = game.id || game.gameId;
+        const awayKey = game.awayTeamKey || game.awayTeam?.key;
+        const homeKey = game.homeTeamKey || game.homeTeam?.key;
+        if (!gameId || !awayKey || !homeKey) return null;
+        const mRes = await fetch(
+          `https://web.realapp.com/predictions/game/${realSport}/${gameId}/markets`,
+          { headers: buildHeaders(env) }
+        );
+        if (!mRes.ok) return null;
+        const mData = await mRes.json();
+        const gameKey = awayKey + ' @ ' + homeKey;
+        const markets = {};
+        for (const mk of (mData.markets || [])) {
+          markets[mk.label] = (mk.outcomes || []).map(o => ({
+            key: o.key, label: o.label,
+            probability: o.probability, pct: Math.round(o.probability * 100)
+          }));
         }
-      }
-      if (!mRes || !mRes.ok) return null;
-
-      const mData = await mRes.json();
-      const gameKey = awayKey + ' @ ' + homeKey;
-      const markets = {};
-      for (const mk of (mData.markets || [])) {
-        markets[mk.label] = (mk.outcomes || []).map(o => ({
-          key: o.key, label: o.label,
-          probability: o.probability, pct: Math.round(o.probability * 100)
-        }));
-      }
-      return { gameKey, markets };
-    }
-
-    // Batch size 4 with 150ms delay between batches
-    const BATCH_SIZE = 4;
-    const BATCH_DELAY = 150;
-    const allResults = [];
-    for (let i = 0; i < games.length; i += BATCH_SIZE) {
-      const batch = games.slice(i, i + BATCH_SIZE);
-      const batchResults = await Promise.allSettled(batch.map(fetchGameMarkets));
-      allResults.push(...batchResults);
-      if (i + BATCH_SIZE < games.length) {
-        await new Promise(resolve => setTimeout(resolve, BATCH_DELAY));
-      }
-    }
-    const results = allResults;
+        return { gameKey, markets };
+      })
+    );
 
     const marketMap = {};
+    const now = Math.floor(Date.now() / 1000);
+    const cacheKey = 'real_sync_' + realSport;
+    const TTL = 120; // 2 minutes
+
+    // Load existing cache first
+    let cached = {};
+    try {
+      const cacheRow = await env.DB.prepare(
+        'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
+      ).bind(cacheKey).first();
+      if (cacheRow && (now - cacheRow.fetched_at) < TTL) {
+        cached = JSON.parse(cacheRow.data);
+      }
+    } catch(e) {}
+
+    // Merge fresh results over cache — fresh wins, but cache fills gaps
     for (const r of results) {
-      if (r.status === 'fulfilled' && r.value) marketMap[r.value.gameKey] = r.value.markets;
+      if (r.status === 'fulfilled' && r.value) {
+        marketMap[r.value.gameKey] = r.value.markets;
+      }
     }
+
+    // Fill in any missing games from cache
+    for (const key of Object.keys(cached)) {
+      if (!marketMap[key]) marketMap[key] = cached[key];
+    }
+
+    // Write merged result back to cache
+    try {
+      await env.DB.prepare(
+        'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at'
+      ).bind(cacheKey, JSON.stringify(marketMap), now).run();
+    } catch(e) {}
 
     return new Response(JSON.stringify({ ok: true, markets: marketMap }), {
       headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60' }
