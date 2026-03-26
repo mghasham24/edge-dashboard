@@ -3282,6 +3282,14 @@
 
     function parseGames(games) {
         var rows = [];
+        // Deduplicate games by matchup key — Odds API sometimes returns same game twice
+        var seen = {};
+        games = games.filter(function(g) {
+            var key = g.away_team + '@' + g.home_team;
+            if (seen[key]) return false;
+            seen[key] = true;
+            return true;
+        });
         function filterOutcomes(outcomes, mk) {
             if (mk === 'h2h' && outcomes.length === 3)
                 return outcomes.filter(function(o) { return o.name.toLowerCase() !== 'draw'; });
@@ -3825,7 +3833,7 @@
 
     // Fetch FanDuel alternate lines for games where Real Sports line differs from main FD line
     // Only fires for specific games with mismatches — saves API credits
-    window.fetchAltLines = function fetchAltLines(sport) {
+    function fetchAltLines(sport) {
         if (!rawRows.length) return;
 
         // Find unique games with line mismatches
