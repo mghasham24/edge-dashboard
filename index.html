@@ -1928,7 +1928,7 @@
                         <th class="r" style="opacity:0.45;font-size:9px">No-Vig %</th>
                         <th class="c">Your Line</th>
                         <th class="r">Adj. Fair %</th>
-                        <th class="c">Mkt Price %</th>
+                        <th class="c">Real %</th>
                         <th class="r">Edge</th>
                         <th class="r">Units</th>
                         <th class="r">Bet Size</th>
@@ -2676,7 +2676,7 @@
                     var colHdr = document.createElement('div');
                     colHdr.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:5px;padding:0 2px';
                     colHdr.innerHTML = '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);min-width:44px;text-align:center;flex-shrink:0">FD Line</span>'
-                    + '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);width:64px;text-align:center;flex-shrink:0">Mkt Line</span>'
+                    + '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);width:64px;text-align:center;flex-shrink:0">Real Line</span>'
                     + '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);flex:1;text-align:center">Over %</span>'
                     + '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);flex:1;text-align:center">Under %</span>';
                     inputRow.appendChild(colHdr);
@@ -2801,8 +2801,8 @@
                     var colHdr = document.createElement('div');
                     colHdr.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:5px;padding:0 2px';
                     colHdr.innerHTML = '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);min-width:44px;text-align:center;flex-shrink:0">FD Line</span>'
-                    + '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);width:64px;text-align:center;flex-shrink:0">Mkt Line</span>'
-                    + '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);width:58px;text-align:center;flex-shrink:0">Mkt %</span>'
+                    + '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);width:64px;text-align:center;flex-shrink:0">Real Line</span>'
+                    + '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);width:58px;text-align:center;flex-shrink:0">Real %</span>'
                     + '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-left:auto;text-align:right">Edge</span>';
                     inputRow.appendChild(colHdr);
                     mktRows.forEach(function(r) {
@@ -3474,7 +3474,7 @@
         + '<td class="r" data-label="No-Vig %" style="font-family:var(--mono);color:var(--muted2);font-size:11px;opacity:0.5">' + fairStr + '</td>'
         + ylCell
         + '<td class="r" data-label="Adj. Fair %" style="font-family:var(--mono);color:' + (afChanged ? 'var(--yellow)' : 'var(--muted)') + '">' + afStr + '</td>'
-        + '<td class="c" data-label="Mkt Price %"><div style="display:flex;align-items:center;gap:4px;justify-content:center"><input class="cell-inp' + (pv ? ' filled' : '') + '" type="number" min="1" max="99" step="0.5" placeholder="-" value="' + pv + '" data-id="' + r.id + '" oninput="setPred(this)" onblur="setPred(this)" onkeydown="if(event.key===\'Enter\')this.blur()"><span class="pred-unit">%</span></div></td>'
+        + '<td class="c" data-label="Real %"><div style="display:flex;align-items:center;gap:4px;justify-content:center"><input class="cell-inp' + (pv ? ' filled' : '') + '" type="number" min="1" max="99" step="0.5" placeholder="-" value="' + pv + '" data-id="' + r.id + '" oninput="setPred(this)" onblur="setPred(this)" onkeydown="if(event.key===\'Enter\')this.blur()"><span class="pred-unit">%</span></div></td>'
         + '<td class="r" data-label="Edge"><div class="edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:' + bw + 'px;background:' + bc + '"></div></div><span class="edge-val ' + ec + '">' + es + '</span></div></td>'
         + '<td class="r" data-label="Units">' + uH + '</td>'
         + '<td class="r" data-label="Bet">' + bH + '</td>'
@@ -3514,7 +3514,7 @@
                 var otherId = r.ps === 'A' ? id.replace(/-A$/, '-B') : id.replace(/-B$/, '-A');
                 var other = (100 - v).toFixed(1);
                 preds[otherId] = other;
-                var allOther = document.querySelectorAll('td[data-label="Mkt Price %"] input[data-id="' + otherId + '"]');
+                var allOther = document.querySelectorAll('td[data-label="Real %"] input[data-id="' + otherId + '"]');
                 var otherInp = allOther.length ? allOther[0] : null;
                 if (otherInp && otherInp !== input) {
                     otherInp.value = other;
