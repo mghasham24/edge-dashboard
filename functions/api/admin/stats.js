@@ -15,14 +15,15 @@ export async function onRequest({ request, env }) {
   ]);
 
   // Daily signups for last 14 days
+  const todayStart = now - (now % 86400);
   const daily = [];
   for (let i = 13; i >= 0; i--) {
-    const dayStart = now - i * 86400 - (now % 86400);
+    const dayStart = todayStart - i * 86400;
     const dayEnd   = dayStart + 86400;
     const row = await env.DB.prepare(
       'SELECT COUNT(*) as c FROM users WHERE created_at>=? AND created_at<?'
     ).bind(dayStart, dayEnd).first();
-    const d = new Date((dayStart + 86400/2) * 1000);
+    const d = new Date(dayStart * 1000);
     daily.push({
       date: d.toLocaleDateString('en-US', { month:'short', day:'numeric' }),
       count: row ? row.c : 0
