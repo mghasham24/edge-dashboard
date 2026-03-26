@@ -2279,7 +2279,7 @@
         if (!isFinite(d) || d === 0)
             return fair;
         d = Math.max(Math.min(d, 3.5), -3.5); // cap at 3.5 pts to prevent large line gap distortion
-        var adj = (d / 0.5) * 0.0125;
+        var adj = (d / 0.5) * 0.005;
         if (mkt === 'Total') {
             adj = ps === 'A' ? -adj : adj;
         }
