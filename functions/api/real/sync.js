@@ -56,9 +56,9 @@ function buildHeaders(env) {
     'Content-Type': 'application/json',
     'Origin': 'https://realsports.io',
     'Referer': 'https://realsports.io/',
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
     'real-auth-info': env.REAL_AUTH_TOKEN,
-    'real-device-name': 'Chrome on Windows',
+    'real-device-name': '5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
     'real-device-type': 'desktop_web',
     'real-device-uuid': '2e0a38e2-0ee8-4f93-9a34-218ac1d10161',
     'real-request-token': hashidsEncode(Date.now()),
@@ -87,33 +87,49 @@ async function getSession(request, db) {
 }
 
 function extractGames(gamesData) {
-  // Direct arrays
-  if (Array.isArray(gamesData.games) && gamesData.games.length) return gamesData.games;
-  if (Array.isArray(gamesData.data) && gamesData.data.length) return gamesData.data;
-  if (Array.isArray(gamesData.items) && gamesData.items.length) return gamesData.items;
-  if (Array.isArray(gamesData.predictions) && gamesData.predictions.length) return gamesData.predictions;
+  // Collect from ALL possible locations and deduplicate by game ID.
+  const seen = new Set();
+  const all = [];
 
-  // Real Sports /home/{sport}/next structure: games nested inside days array
-  const days = gamesData.days
-    || (gamesData.latestDayContent && gamesData.latestDayContent.days)
-    || (gamesData.latestDay && gamesData.latestDay.days)
-    || [];
-
-  if (Array.isArray(days) && days.length) {
-    const games = days.flatMap(d =>
-      d.games || d.predictions || d.items || d.events || []
-    );
-    if (games.length) return games;
+  function addGame(g) {
+    if (!g) return;
+    const id = g.id || g.gameId;
+    if (!id || seen.has(id)) return;
+    seen.add(id);
+    all.push(g);
   }
 
-  // latestDayContent direct games
+  function addGames(arr) {
+    if (Array.isArray(arr)) arr.forEach(addGame);
+  }
+
+  // Direct top-level arrays
+  addGames(gamesData.games);
+  addGames(gamesData.data);
+  addGames(gamesData.items);
+  addGames(gamesData.predictions);
+
+  // latestDayContent - today's games
   if (gamesData.latestDayContent) {
     const lcd = gamesData.latestDayContent;
-    const direct = lcd.games || lcd.predictions || lcd.items || lcd.events || [];
-    if (Array.isArray(direct) && direct.length) return direct;
+    addGames(lcd.games || lcd.predictions || lcd.items || lcd.events);
   }
 
-  return [];
+  // Any other day-content keys whose date is today or tomorrow UTC
+  const today    = new Date().toISOString().slice(0, 10);
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  for (const key of Object.keys(gamesData)) {
+    if (key === 'latestDayContent') continue;
+    const val = gamesData[key];
+    if (val && typeof val === 'object' && !Array.isArray(val)) {
+      const dayDate = val.day || val.date;
+      if (dayDate === today || dayDate === tomorrow) {
+        addGames(val.games || val.predictions || val.items || val.events);
+      }
+    }
+  }
+
+  return all;
 }
 
 export async function onRequestGet({ request, env }) {
@@ -152,13 +168,10 @@ export async function onRequestGet({ request, env }) {
     const gamesData = JSON.parse(gamesText);
     const games = extractGames(gamesData);
 
-    // Debug mode 3: dump latestDayContent structure regardless of game count
     if (debugMode === '3') {
       return new Response(JSON.stringify({
         gamesStatus,
         topKeys: Object.keys(gamesData),
-        latestDay: gamesData.latestDay,
-        latestDayContentKeys: gamesData.latestDayContent ? Object.keys(gamesData.latestDayContent) : null,
         latestDayContentDay: gamesData.latestDayContent && gamesData.latestDayContent.day,
         latestDayContentGamesCount: gamesData.latestDayContent && gamesData.latestDayContent.games && gamesData.latestDayContent.games.length,
         extractedGamesCount: games.length,
@@ -172,34 +185,72 @@ export async function onRequestGet({ request, env }) {
       });
     }
 
-    const results = await Promise.allSettled(
-      games.map(async (game) => {
-        const gameId = game.id || game.gameId;
-        const awayKey = game.awayTeamKey || game.awayTeam?.key;
-        const homeKey = game.homeTeamKey || game.homeTeam?.key;
-        if (!gameId || !awayKey || !homeKey) return null;
-        const mRes = await fetch(
-          `https://web.realapp.com/predictions/game/${realSport}/${gameId}/markets`,
-          { headers: buildHeaders(env) }
-        );
-        if (!mRes.ok) return null;
-        const mData = await mRes.json();
-        const gameKey = awayKey + ' @ ' + homeKey;
-        const markets = {};
-        for (const mk of (mData.markets || [])) {
-          markets[mk.label] = (mk.outcomes || []).map(o => ({
-            key: o.key, label: o.label,
-            probability: o.probability, pct: Math.round(o.probability * 100)
-          }));
-        }
-        return { gameKey, markets };
-      })
-    );
+    // Fetch market data with retry logic — sequential to avoid rate limiting
+    async function fetchGameMarkets(game) {
+      const gameId = game.id || game.gameId;
+      const awayKey = game.awayTeamKey || game.awayTeam?.key;
+      const homeKey = game.homeTeamKey || game.homeTeam?.key;
+      if (!gameId || !awayKey || !homeKey) return null;
 
-    const marketMap = {};
-    for (const r of results) {
-      if (r.status === 'fulfilled' && r.value) marketMap[r.value.gameKey] = r.value.markets;
+      const url = `https://web.realapp.com/predictions/game/${realSport}/${gameId}/markets`;
+      let attempt = 0;
+      while (attempt < 3) {
+        try {
+          const mRes = await fetch(url, { headers: buildHeaders(env) });
+          if (mRes.ok) {
+            const mData = await mRes.json();
+            const gameKey = awayKey + ' @ ' + homeKey;
+            const markets = {};
+            for (const mk of (mData.markets || [])) {
+              markets[mk.label] = (mk.outcomes || []).map(o => ({
+                key: o.key, label: o.label,
+                probability: o.probability, pct: Math.round(o.probability * 100)
+              }));
+            }
+            return { gameKey, markets };
+          }
+          if (mRes.status === 429 || mRes.status >= 500) {
+            await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
+            attempt++;
+            continue;
+          }
+          return null;
+        } catch(e) {
+          attempt++;
+          await new Promise(r => setTimeout(r, 400 * attempt));
+        }
+      }
+      return null;
     }
+
+    // Sequential fetching with 150ms gap between requests
+    const marketMap = {};
+    const now = Math.floor(Date.now() / 1000);
+    const cacheKey = 'real_sync_' + realSport;
+    const TTL = 300;
+
+    // Load cache first to fill any gaps
+    try {
+      const cacheRow = await env.DB.prepare(
+        'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
+      ).bind(cacheKey).first();
+      if (cacheRow && (now - cacheRow.fetched_at) < TTL) {
+        Object.assign(marketMap, JSON.parse(cacheRow.data));
+      }
+    } catch(e) {}
+
+    for (let i = 0; i < games.length; i++) {
+      const result = await fetchGameMarkets(games[i]);
+      if (result) marketMap[result.gameKey] = result.markets;
+      if (i < games.length - 1) await new Promise(r => setTimeout(r, 150));
+    }
+
+    // Write back to cache
+    try {
+      await env.DB.prepare(
+        'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at'
+      ).bind(cacheKey, JSON.stringify(marketMap), now).run();
+    } catch(e) {}
 
     return new Response(JSON.stringify({ ok: true, markets: marketMap }), {
       headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60' }
