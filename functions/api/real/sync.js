@@ -87,55 +87,60 @@ async function getSession(request, db) {
 }
 
 function extractGames(gamesData) {
-  // Direct arrays
-  if (Array.isArray(gamesData.games) && gamesData.games.length) return gamesData.games;
-  if (Array.isArray(gamesData.data) && gamesData.data.length) return gamesData.data;
-  if (Array.isArray(gamesData.items) && gamesData.items.length) return gamesData.items;
-  if (Array.isArray(gamesData.predictions) && gamesData.predictions.length) return gamesData.predictions;
+  // Collect from ALL possible locations and deduplicate by game ID.
+  // Real Sports API is inconsistent - sometimes games are in latestDayContent,
+  // sometimes in days[], sometimes in both. Never return early.
+  const seen = new Set();
+  const all = [];
 
-  // Real Sports /home/{sport}/next structure: games nested inside days array
-  // Note: do NOT include latestDayContent.days here - we handle latestDayContent separately below
-  // to properly merge today + tomorrow UTC buckets for late night games
-  const days = gamesData.days
-    || (gamesData.latestDay && gamesData.latestDay.days)
-    || [];
-
-  if (Array.isArray(days) && days.length) {
-    const games = days.flatMap(d =>
-      d.games || d.predictions || d.items || d.events || []
-    );
-    if (games.length) return games;
+  function addGame(g) {
+    if (!g) return;
+    const id = g.id || g.gameId;
+    if (!id || seen.has(id)) return;
+    seen.add(id);
+    all.push(g);
   }
 
-  // latestDayContent = today's games.
-  // Late games (e.g. 9pm CDT = 2am UTC) fall into tomorrow's UTC date bucket.
-  // Collect from latestDayContent plus any other day-content keys whose date is today or tomorrow.
-  const allGames = [];
+  function addGames(arr) {
+    if (Array.isArray(arr)) arr.forEach(addGame);
+  }
 
+  // Direct top-level arrays
+  addGames(gamesData.games);
+  addGames(gamesData.data);
+  addGames(gamesData.items);
+  addGames(gamesData.predictions);
+
+  // latestDayContent - today's games
   if (gamesData.latestDayContent) {
     const lcd = gamesData.latestDayContent;
-    const direct = lcd.games || lcd.predictions || lcd.items || lcd.events || [];
-    if (Array.isArray(direct)) allGames.push(...direct);
+    addGames(lcd.games || lcd.predictions || lcd.items || lcd.events);
   }
 
+  // Any other day-content keys whose date is today or tomorrow UTC
   const today    = new Date().toISOString().slice(0, 10);
   const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
-
   for (const key of Object.keys(gamesData)) {
     if (key === 'latestDayContent') continue;
     const val = gamesData[key];
     if (val && typeof val === 'object' && !Array.isArray(val)) {
       const dayDate = val.day || val.date;
       if (dayDate === today || dayDate === tomorrow) {
-        const direct = val.games || val.predictions || val.items || val.events || [];
-        if (Array.isArray(direct)) allGames.push(...direct);
+        addGames(val.games || val.predictions || val.items || val.events);
       }
     }
   }
 
-  if (allGames.length) return allGames;
+  // days[] array - each entry may contain games
+  const days = gamesData.days
+    || (gamesData.latestDayContent && gamesData.latestDayContent.days)
+    || (gamesData.latestDay && gamesData.latestDay.days)
+    || [];
+  if (Array.isArray(days)) {
+    days.forEach(d => addGames(d.games || d.predictions || d.items || d.events));
+  }
 
-  return [];
+  return all;
 }
 
 export async function onRequestGet({ request, env }) {
