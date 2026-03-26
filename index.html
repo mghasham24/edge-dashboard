@@ -3354,10 +3354,9 @@
             return r.json();
         })
         .then(function(d) {
-            // Handle both old array format and new {games, alternateOdds} format
+            // Handle both plain array and {games, alternateOdds} format
             var games = Array.isArray(d) ? d : (d && Array.isArray(d.games) ? d.games : null);
-            if (d && d.alternateOdds) altOdds = d.alternateOdds;
-            else altOdds = {};
+            altOdds = {};
             if (games) {
                 rawRows = parseGames(games);
                 var now = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
@@ -3370,7 +3369,6 @@
                 }
             } else {
                 rawRows = [];
-                altOdds = {};
                 dot.className = 'sdot error';
                 stxt.textContent = 'API error';
             }
@@ -3761,6 +3759,7 @@
                 }
             });
             renderTable();
+            fetchAltLines(sport);
             // On mobile, fire input events on all auto-filled inputs to trigger edge display
             if (window.innerWidth <= 768) {
                 setTimeout(function() {
@@ -3822,6 +3821,37 @@
             }
         })
         .catch(function() {});
+    }
+
+    // Fetch FanDuel alternate lines for games where Real Sports line differs from main FD line
+    // Only fires for specific games with mismatches — saves API credits
+    window.fetchAltLines = function fetchAltLines(sport) {
+        if (!rawRows.length) return;
+
+        // Find unique games with line mismatches
+        var mismatchedGids = {};
+        rawRows.forEach(function(r) {
+            if (r.mkt === 'ML') return;
+            var yl = yourLines[r.id];
+            if (yl == null || yl === '') return;
+            if (parseFloat(yl) === parseFloat(r.pt)) return; // lines match, no need
+            if (r.gid) mismatchedGids[r.gid] = true;
+        });
+
+        var gids = Object.keys(mismatchedGids);
+        if (!gids.length) return;
+
+        // Fetch alternates for each mismatched game
+        gids.forEach(function(gid) {
+            fetch('/api/odds_event?sport=' + sport + '&eventId=' + gid, { credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (!d.ok || !d.altOdds) return;
+                altOdds[gid] = d.altOdds;
+                renderTable();
+            })
+            .catch(function() {});
+        });
     }
 
     handleCheckoutReturn();
