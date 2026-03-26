@@ -106,8 +106,9 @@ function extractGames(gamesData) {
     if (games.length) return games;
   }
 
-  // latestDayContent + nextDayContent — late games (e.g. 9pm CDT = 2am UTC next day)
-  // are bucketed into tomorrow by Real Sports, so we pull both days and merge
+  // latestDayContent = today's games.
+  // Late games (e.g. 9pm CDT = 2am UTC) fall into tomorrow's UTC date bucket.
+  // Collect from latestDayContent plus any other day-content keys whose date is today or tomorrow.
   const allGames = [];
 
   if (gamesData.latestDayContent) {
@@ -116,10 +117,19 @@ function extractGames(gamesData) {
     if (Array.isArray(direct)) allGames.push(...direct);
   }
 
-  if (gamesData.nextDayContent) {
-    const ndc = gamesData.nextDayContent;
-    const direct = ndc.games || ndc.predictions || ndc.items || ndc.events || [];
-    if (Array.isArray(direct)) allGames.push(...direct);
+  const today    = new Date().toISOString().slice(0, 10);
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+
+  for (const key of Object.keys(gamesData)) {
+    if (key === 'latestDayContent') continue;
+    const val = gamesData[key];
+    if (val && typeof val === 'object' && !Array.isArray(val)) {
+      const dayDate = val.day || val.date;
+      if (dayDate === today || dayDate === tomorrow) {
+        const direct = val.games || val.predictions || val.items || val.events || [];
+        if (Array.isArray(direct)) allGames.push(...direct);
+      }
+    }
   }
 
   if (allGames.length) return allGames;
