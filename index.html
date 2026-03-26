@@ -2020,6 +2020,8 @@
     var rawRows = [];
     var preds = {};
     var yourLines = {};
+    var realFairs = {}; // Real Sports probability used as fair value
+    var realFair = {}; // stores Real Sports probability as fair value for auto-filled rows
     var collapsed = {};
     var mobileCollapsed = {};
 
@@ -2257,6 +2259,20 @@
             return 0.5;
         return 0;
     }
+    function getAdjFair(r, yl) {
+        // If Real Sports auto-filled this row, use Real's probability as fair value
+        if (realFair[r.id] != null) return realFair[r.id];
+        var pairs = {};
+        rawRows.forEach(function(x) {
+            if (!pairs[x.pid]) pairs[x.pid] = {};
+            pairs[x.pid][x.ps] = x;
+        });
+        var pair = pairs[r.pid] || {};
+        var nv = novig(pair.A ? imp(pair.A.am) : null, pair.B ? imp(pair.B.am) : null);
+        var fair = r.ps === 'A' ? nv.fa : nv.fb;
+        return adjFair(fair, r.pt, yl, r.mkt, r.ps);
+    }
+
     function adjFair(fair, fd, yl, mkt, ps) {
         if (fair == null || mkt === 'ML')
             return fair;
@@ -2941,7 +2957,7 @@
         var nv = novig(pair.A ? imp(pair.A.am) : null, pair.B ? imp(pair.B.am) : null);
         var fair = r.ps === 'A' ? nv.fa : nv.fb;
         var yl = yourLines[r.id] != null ? yourLines[r.id] : null;
-        var af = adjFair(fair, r.pt, yl, r.mkt, r.ps);
+        var af = realFair[r.id] != null ? realFair[r.id] : adjFair(fair, r.pt, yl, r.mkt, r.ps);
         var pr = preds[id];
         var pred = (pr !== undefined && pr !== '') ? parseFloat(pr) / 100 : null;
         var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
@@ -2973,7 +2989,7 @@
         var nv = novig(pair.A ? imp(pair.A.am) : null, pair.B ? imp(pair.B.am) : null);
         var fair = r.ps === 'A' ? nv.fa : nv.fb;
         var yl = yourLines[r.id] != null ? yourLines[r.id] : null;
-        var af = adjFair(fair, r.pt, yl, r.mkt, r.ps);
+        var af = realFair[r.id] != null ? realFair[r.id] : adjFair(fair, r.pt, yl, r.mkt, r.ps);
         var pr = preds[id];
         var pred = (pr !== undefined && pr !== '') ? parseFloat(pr) / 100 : null;
         var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
@@ -3001,7 +3017,7 @@
             var nv = novig(pair.A ? imp(pair.A.am) : null, pair.B ? imp(pair.B.am) : null);
             var fair = r.ps === 'A' ? nv.fa : nv.fb;
             var yl = yourLines[r.id] != null ? yourLines[r.id] : null;
-            var af = adjFair(fair, r.pt, yl, r.mkt, r.ps);
+            var af = realFair[r.id] != null ? realFair[r.id] : adjFair(fair, r.pt, yl, r.mkt, r.ps);
             var pr = preds[r.id];
             var pred = (pr !== undefined && pr !== '') ? parseFloat(pr) / 100 : null;
             var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
@@ -3358,7 +3374,7 @@
             var nv = novig(p.A ? imp(p.A.am) : null, p.B ? imp(p.B.am) : null);
             var fair = r.ps === 'A' ? nv.fa : nv.fb;
             var yl = yourLines[r.id] != null ? yourLines[r.id] : null;
-            var af = adjFair(fair, r.pt, yl, r.mkt, r.ps);
+            var af = realFair[r.id] != null ? realFair[r.id] : adjFair(fair, r.pt, yl, r.mkt, r.ps);
             var pr = preds[r.id];
             var pred = (pr !== undefined && pr !== '') ? parseFloat(pr) / 100 : null;
             var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
@@ -3426,7 +3442,7 @@
             lineStr = r.mkt === 'Total' ? (r.ps === 'A' ? 'O ' : 'U ') + Math.abs(r.pt) : (r.pt >= 0 ? '+' + r.pt : '' + r.pt);
         var fairStr = r.fair != null ? (r.fair * 100).toFixed(1) + '%' : '-';
         var afStr = r.af != null ? (r.af * 100).toFixed(1) + '%' : '-';
-        var afChanged = (r.yl != null && r.pt != null && parseFloat(r.yl) !== parseFloat(r.pt));
+        var afChanged = realFair[r.id] != null || (r.yl != null && r.pt != null && parseFloat(r.yl) !== parseFloat(r.pt));
         var es = '-', ec = 'e-none', bw = 0, bc = 'var(--muted2)';
         if (r.edge != null) {
             es = (r.edge > 0 ? '+' : '') + r.edge.toFixed(1) + '%';
@@ -3485,6 +3501,8 @@
     function setPred(input) {
         var id = input.getAttribute('data-id');
         preds[id] = input.value;
+        // If user manually edits, clear realFair so adjFair line logic applies
+        if (input._manualEdit) delete realFair[id];
         input.classList.toggle('filled', !!input.value);
 
         var r = rawRows.find(function(x) { return x.id === id; });
@@ -3512,7 +3530,7 @@
         if (!r) return;
         var fair = getFair(r);
         var yl = yourLines[id] != null ? yourLines[id] : null;
-        var af = adjFair(fair, r.pt, yl, r.mkt, r.ps);
+        var af = realFair[id] != null ? realFair[id] : adjFair(fair, r.pt, yl, r.mkt, r.ps);
         var pred = input.value !== '' ? parseFloat(input.value) / 100 : null;
         var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
         var u = units(edge);
@@ -3665,17 +3683,9 @@
                 }
                 if (match && match.pct != null) {
                     preds[r.id] = String(match.pct);
-                    // For Spread and Total: extract the line value from the outcome label
-                    // e.g. "ATL +2.5" -> 2.5, "O 222.5" -> 222.5, "U 222.5" -> 222.5
-                    if (r.mkt === 'Spread' || r.mkt === 'Total') {
-                        var lineMatch = match.label && match.label.match(/([+-]?\d+\.?\d*)\s*$/);
-                        if (lineMatch) {
-                            var lineVal = parseFloat(lineMatch[1]);
-                            if (!isNaN(lineVal)) {
-                                yourLines[r.id] = lineVal;
-                            }
-                        }
-                    }
+                    // Store Real's probability as the fair value for this row
+                    // Edge = Real's fair% - FD implied% (bypasses adjFair line math)
+                    realFair[r.id] = match.pct / 100;
                 }
             });
             renderTable();
@@ -3719,7 +3729,7 @@
                         var nv = novig(pair.A ? imp(pair.A.am) : null, pair.B ? imp(pair.B.am) : null);
                         var fair = r.ps === 'A' ? nv.fa : nv.fb;
                         var yl = yourLines[r.id] != null ? yourLines[r.id] : null;
-                        var af = adjFair(fair, r.pt, yl, r.mkt, r.ps);
+                        var af = realFair[r.id] != null ? realFair[r.id] : adjFair(fair, r.pt, yl, r.mkt, r.ps);
                         var pred = parseFloat(preds[activeId]) / 100;
                         var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
                         var u = units(edge);
