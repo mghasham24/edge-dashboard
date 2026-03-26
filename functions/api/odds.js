@@ -9,11 +9,11 @@ export async function onRequest(context) {
   const sport      = url.searchParams.get('sport')      || 'basketball_nba';
   const markets    = url.searchParams.get('markets')    || 'h2h';
   const bookmakers = url.searchParams.get('bookmakers') || 'fanduel,draftkings,betmgm,caesars';
+  const debug      = url.searchParams.get('debug');
 
   const hasSpread = markets.includes('spreads');
   const hasTotal  = markets.includes('totals');
 
-  // Build alternate markets param if needed
   const altMkts = [
     hasSpread ? 'alternate_spreads' : null,
     hasTotal  ? 'alternate_totals'  : null
@@ -22,13 +22,8 @@ export async function onRequest(context) {
   const baseUrl = `https://api.the-odds-api.com/v4/sports/${sport}/odds/?apiKey=${API_KEY}&regions=us&bookmakers=${bookmakers}&oddsFormat=american`;
 
   try {
-    // Always fetch main odds; fetch alternates in parallel if spreads/totals requested
-    const fetches = [
-      fetch(`${baseUrl}&markets=${markets}`)
-    ];
-    if (altMkts) {
-      fetches.push(fetch(`${baseUrl}&markets=${altMkts}`));
-    }
+    const fetches = [fetch(`${baseUrl}&markets=${markets}`)];
+    if (altMkts) fetches.push(fetch(`${baseUrl}&markets=${altMkts}`));
 
     const responses = await Promise.all(fetches);
     const [mainRes, altRes] = responses;
@@ -36,7 +31,16 @@ export async function onRequest(context) {
     const mainData = await mainRes.json();
     const altData  = altRes ? await altRes.json() : null;
 
-    // Build alternate odds map: gameId -> { 'spreads': { teamName -> { point -> price } }, 'totals': { 'Over'/'Under' -> { point -> price } } }
+    // Debug mode - return raw alt response
+    if (debug === '1') {
+      return new Response(JSON.stringify({
+        altStatus: altRes ? altRes.status : null,
+        altIsArray: Array.isArray(altData),
+        altSample: Array.isArray(altData) ? altData.slice(0,1) : altData,
+        altMkts
+      }), { headers: { 'Content-Type': 'application/json' } });
+    }
+
     const alternateOdds = {};
     if (Array.isArray(altData)) {
       altData.forEach(function(g) {
@@ -49,8 +53,7 @@ export async function onRequest(context) {
               if (!alternateOdds[g.id].spreads[o.name]) alternateOdds[g.id].spreads[o.name] = {};
               alternateOdds[g.id].spreads[o.name][o.point] = o.price;
             } else if (mkt.key === 'alternate_totals') {
-              // o.name is "Over" or "Under", o.description is the total point
-              const side = o.name; // "Over" or "Under"
+              const side = o.name;
               const pt   = o.point;
               if (!alternateOdds[g.id].totals[side]) alternateOdds[g.id].totals[side] = {};
               alternateOdds[g.id].totals[side][pt] = o.price;
@@ -60,9 +63,7 @@ export async function onRequest(context) {
       });
     }
 
-    const responseBody = JSON.stringify({ games: mainData, alternateOdds });
-
-    return new Response(responseBody, {
+    return new Response(JSON.stringify({ games: mainData, alternateOdds }), {
       status: 200,
       headers: {
         'Content-Type': 'application/json',
