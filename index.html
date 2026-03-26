@@ -3282,6 +3282,14 @@
 
     function parseGames(games) {
         var rows = [];
+        // Deduplicate games by matchup — Odds API sometimes returns same game twice
+        var seen = {};
+        games = games.filter(function(g) {
+            var key = g.away_team + '@' + g.home_team;
+            if (seen[key]) return false;
+            seen[key] = true;
+            return true;
+        });
         function filterOutcomes(outcomes, mk) {
             if (mk === 'h2h' && outcomes.length === 3)
                 return outcomes.filter(function(o) { return o.name.toLowerCase() !== 'draw'; });
@@ -3418,16 +3426,13 @@
             var nv = novig(p.A ? imp(p.A.am) : null, p.B ? imp(p.B.am) : null);
             var yl = yourLines[r.id] != null ? yourLines[r.id] : null;
             var altNV = getAltFair(r, yl, p.A, p.B);
-            // mainFair = no-vig from FD main line (always shown in No-Vig % column)
-            var mainFair = r.ps === 'A' ? nv.fa : nv.fb;
-            // af = adjusted fair value — uses alternate line if available, else formula
-            var altFair = altNV ? (r.ps === 'A' ? altNV.fa : altNV.fb) : null;
-            var af = altFair != null ? altFair : adjFair(mainFair, r.pt, yl, r.mkt, r.ps);
+            var fair = altNV ? (r.ps === 'A' ? altNV.fa : altNV.fb) : (r.ps === 'A' ? nv.fa : nv.fb);
+            var af = altNV ? fair : adjFair(fair, r.pt, yl, r.mkt, r.ps);
             var pr = preds[r.id];
             var pred = (pr !== undefined && pr !== '') ? parseFloat(pr) / 100 : null;
             var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
             var u = units(edge);
-            return { id: r.id, game: r.game, cm: r.cm, mkt: r.mkt, side: r.side, am: r.am, pt: r.pt, ps: r.ps, pid: r.pid, fair: mainFair, af: af, yl: yl, edge: edge, u: u, bet: u * unit };
+            return { id: r.id, game: r.game, cm: r.cm, mkt: r.mkt, side: r.side, am: r.am, pt: r.pt, ps: r.ps, pid: r.pid, fair: fair, af: af, yl: yl, edge: edge, u: u, bet: u * unit };
         });
         var LINE_GAP_THRESHOLD = 4; // hide spread/total if Real line differs from FD by more than this
         var filtered = rows.filter(function(r) {
