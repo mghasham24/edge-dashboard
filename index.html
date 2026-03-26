@@ -1926,7 +1926,7 @@
                         <th>FD Line</th>
                         <th class="r">FD Odds</th>
                         <th class="r" style="opacity:0.45;font-size:9px">No-Vig %</th>
-                        <th class="c">Your Line</th>
+                        <th class="c">Real Line</th>
                         <th class="r">Adj. Fair %</th>
                         <th class="c">Real %</th>
                         <th class="r">Edge</th>
@@ -3462,8 +3462,8 @@
         var ph = r.pt != null ? r.pt : '';
         var lc = afChanged ? ' line-changed' : '';
         var ylCell = r.mkt === 'ML'
-            ? '<td class="c" data-label="Your Line"></td>'
-            : '<td class="c" data-label="Your Line"><input class="cell-inp' + lc + '" type="number" step="0.5" placeholder="' + ph + '" value="' + ylv + '" data-id="' + r.id + '" onblur="setLine(this)" onkeydown="if(event.key===\'Enter\')this.blur()"></td>';
+            ? '<td class="c" data-label="Real Line"></td>'
+            : '<td class="c" data-label="Real Line"><input class="cell-inp' + lc + '" type="number" step="0.5" placeholder="' + ph + '" value="' + ylv + '" data-id="' + r.id + '" onblur="setLine(this)" onkeydown="if(event.key===\'Enter\')this.blur()"></td>';
         var gk = r.game.replace(/"/g, '&quot;');
         return '<tr class="' + (r.edge != null && r.edge > 0 ? 'has-edge' : '') + (isC ? ' collapsed-row' : '') + '" data-gk="' + gk + '" style="border-left:3px solid ' + color + '">'
         + '<td class="game-td" data-label="Game"><div style="font-weight:600">' + r.side + '</div><div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px">' + r.game + '</div></td>'
@@ -3701,7 +3701,7 @@
                 if (match && match.pct != null) {
                     preds[r.id] = String(match.pct);
                 }
-                // Auto-fill Your Line from Real Sports outcome label (e.g. "ATL +6.5" -> 6.5)
+                // Auto-fill Real Line from Real Sports outcome label (e.g. "ATL +6.5" -> 6.5)
                 if (match && match.label && (r.mkt === 'Spread' || r.mkt === 'Total')) {
                     var lineMatch = match.label.match(/([+-]?\d+\.?\d*)\s*$/);
                     if (lineMatch) {
