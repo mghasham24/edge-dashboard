@@ -2675,7 +2675,7 @@
                             if (!isNaN(v) && v >= 1 && v <= 99) {
                                 mlInputs.forEach(function(other) {
                                     if (other !== inp) {
-                                        var otherVal = (100 - v).toFixed(1);
+                                        var otherVal = String(Math.round(100 - v));
                                         other.value = otherVal;
                                         preds[other.dataset.id] = otherVal;
                                         other.classList.add('filled');
@@ -2770,7 +2770,7 @@
                         overInp.addEventListener('input', function() {
                             var v = parseFloat(this.value);
                             if (!isNaN(v) && v >= 1 && v <= 99 && underInp) {
-                                var other = (100 - v).toFixed(1);
+                                var other = String(Math.round(100 - v));
                                 underInp.value = other;
                                 preds[rB.id] = other;
                                 underInp.classList.toggle('filled', true);
@@ -2799,7 +2799,7 @@
                         underInp.addEventListener('input', function() {
                             var v = parseFloat(this.value);
                             if (!isNaN(v) && v >= 1 && v <= 99 && overInp) {
-                                var other = (100 - v).toFixed(1);
+                                var other = String(Math.round(100 - v));
                                 overInp.value = other;
                                 preds[rA.id] = other;
                                 overInp.classList.toggle('filled', true);
@@ -2961,7 +2961,7 @@
                 var v = parseFloat(input.value);
                 if (!isNaN(v) && v >= 1 && v <= 99) {
                     var otherId = r.ps === 'A' ? id.replace(/-A$/, '-B') : id.replace(/-B$/, '-A');
-                    var other = (100 - v).toFixed(1);
+                    var other = String(Math.round(100 - v));
                     preds[otherId] = other;
                     var otherInp = document.querySelector('.mc-inp[data-id="' + otherId + '"]');
                     if (otherInp && otherInp !== input) {
@@ -3565,7 +3565,6 @@
 
     function setPred(input) {
         var id = input.getAttribute('data-id');
-        // Strip decimals — Real % is whole numbers only
         if (input.value && input.value.includes('.')) {
             input.value = String(Math.round(parseFloat(input.value)));
         }
@@ -3578,7 +3577,7 @@
             var v = parseFloat(input.value);
             if (!isNaN(v) && v >= 1 && v <= 99) {
                 var otherId = r.ps === 'A' ? id.replace(/-A$/, '-B') : id.replace(/-B$/, '-A');
-                var other = (100 - v).toFixed(1);
+                var other = String(Math.round(100 - v));
                 preds[otherId] = other;
                 var allOther = document.querySelectorAll('td[data-label="Real %"] input[data-id="' + otherId + '"]');
                 var otherInp = allOther.length ? allOther[0] : null;
