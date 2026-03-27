@@ -1964,7 +1964,14 @@
                 </div>
             </div>
             <!-- Search -->
-            <input class="admin-search" id="admin-search" type="text" placeholder="Search by email..." oninput="adminSearch()">
+            <div style="display:flex;gap:8px;margin-bottom:12px">
+                <input class="admin-search" id="admin-search" type="text" placeholder="Search by email..." oninput="adminSearch()" style="flex:1;margin-bottom:0">
+                <select id="admin-plan-filter" onchange="adminSearch()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:12px;padding:8px 12px;border-radius:6px;cursor:pointer">
+                    <option value="">All Plans</option>
+                    <option value="free">Free</option>
+                    <option value="pro">Pro</option>
+                </select>
+            </div>
             <!-- User table -->
             <div class="admin-table-wrap">
                 <table class="admin-table">
@@ -2171,8 +2178,9 @@
                     document.getElementById('manage-sub-btn').style.display = '';
                 }
                 // Show admin tab if admin
+                window._isAdmin = !!(data.is_admin);
                 if (data.is_admin) {
-                    document.getElementById('api-remaining').style.display = '';
+                    if (window._isAdmin) document.getElementById('api-remaining').style.display = '';
                     var adminTabBtn = document.createElement('button');
                     adminTabBtn.className = 'sport-tab';
                     adminTabBtn.textContent = ' Admin';
@@ -3120,8 +3128,11 @@
         } catch (e) {}
     }
 
-    async function loadAdminUsers(q) {
-        var url = '/api/admin/users' + (q ? '?q=' + encodeURIComponent(q) : '');
+    async function loadAdminUsers(q, plan) {
+        var params = [];
+        if (q) params.push('q=' + encodeURIComponent(q));
+        if (plan) params.push('plan=' + encodeURIComponent(plan));
+        var url = '/api/admin/users' + (params.length ? '?' + params.join('&') : '');
         try {
             var res = await fetch(url, { credentials: 'same-origin' });
             var data = await res.json();
@@ -3133,7 +3144,9 @@
     function adminSearch() {
         clearTimeout(adminSearchTimer);
         adminSearchTimer = setTimeout(function() {
-            loadAdminUsers(document.getElementById('admin-search').value.trim());
+            var q = document.getElementById('admin-search').value.trim();
+            var plan = document.getElementById('admin-plan-filter') ? document.getElementById('admin-plan-filter').value : '';
+            loadAdminUsers(q, plan);
         }, 300);
     }
 
@@ -3144,7 +3157,8 @@
             return;
         }
         tb.innerHTML = users.map(function(u) {
-            var date = new Date(u.created_at * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            var dt = new Date(u.created_at * 1000);
+            var date = dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' + dt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
             var planBadge = u.plan === 'pro' ? '<span class="badge-pro">PRO</span>' : '<span class="badge-free">FREE</span>';
             var adminBadge = u.is_admin ? ' <span class="badge-admin">ADMIN</span>' : '';
             var bannedBadge = u.banned ? ' <span class="badge-banned">BANNED</span>' : '';
@@ -3282,14 +3296,6 @@
 
     function parseGames(games) {
         var rows = [];
-        // Deduplicate games by matchup — Odds API sometimes returns same game twice
-        var seen = {};
-        games = games.filter(function(g) {
-            var key = g.away_team + '@' + g.home_team;
-            if (seen[key]) return false;
-            seen[key] = true;
-            return true;
-        });
         function filterOutcomes(outcomes, mk) {
             if (mk === 'h2h' && outcomes.length === 3)
                 return outcomes.filter(function(o) { return o.name.toLowerCase() !== 'draw'; });
@@ -3339,7 +3345,10 @@
         fetch('/api/odds?sport=' + currentSport + '&markets=' + mkts + '&bookmakers=fanduel,draftkings,betmgm,caesars')
         .then(function(r) {
             var rem = r.headers.get('x-requests-remaining');
-            if (rem && rem !== 'cached') document.getElementById('api-remaining').textContent = rem + ' requests left';
+            if (rem && rem !== 'cached') {
+                document.getElementById('api-remaining').textContent = rem + ' requests left';
+                if (window._isAdmin) document.getElementById('api-remaining').style.display = '';
+            }
             if (r.status === 401) {
                 dot.className = 'sdot error';
                 stxt.textContent = 'Session expired — please log in again.';

@@ -11,13 +11,25 @@ export async function onRequest({ request, env }) {
   // GET /api/admin/users — list all users
   if (method === 'GET') {
     const search = url.searchParams.get('q') || '';
-    const rows = search
-      ? await env.DB.prepare(
-          'SELECT id, email, plan, is_admin, banned, created_at FROM users WHERE email LIKE ? ORDER BY created_at DESC'
-        ).bind('%' + search + '%').all()
-      : await env.DB.prepare(
-          'SELECT id, email, plan, is_admin, banned, created_at FROM users ORDER BY created_at DESC'
-        ).all();
+    const plan   = url.searchParams.get('plan') || '';
+    let rows;
+    if (search && plan) {
+      rows = await env.DB.prepare(
+        'SELECT id, email, plan, is_admin, banned, created_at FROM users WHERE email LIKE ? AND plan=? ORDER BY created_at DESC'
+      ).bind('%' + search + '%', plan).all();
+    } else if (search) {
+      rows = await env.DB.prepare(
+        'SELECT id, email, plan, is_admin, banned, created_at FROM users WHERE email LIKE ? ORDER BY created_at DESC'
+      ).bind('%' + search + '%').all();
+    } else if (plan) {
+      rows = await env.DB.prepare(
+        'SELECT id, email, plan, is_admin, banned, created_at FROM users WHERE plan=? ORDER BY created_at DESC'
+      ).bind(plan).all();
+    } else {
+      rows = await env.DB.prepare(
+        'SELECT id, email, plan, is_admin, banned, created_at FROM users ORDER BY created_at DESC'
+      ).all();
+    }
 
     // Attach active session count per user
     const ids = (rows.results || []).map(r => r.id);
