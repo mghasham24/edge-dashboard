@@ -3282,6 +3282,14 @@
 
     function parseGames(games) {
         var rows = [];
+        // Deduplicate games by matchup — Odds API sometimes returns same game twice
+        var seen = {};
+        games = games.filter(function(g) {
+            var key = g.away_team + '@' + g.home_team;
+            if (seen[key]) return false;
+            seen[key] = true;
+            return true;
+        });
         function filterOutcomes(outcomes, mk) {
             if (mk === 'h2h' && outcomes.length === 3)
                 return outcomes.filter(function(o) { return o.name.toLowerCase() !== 'draw'; });
@@ -3642,11 +3650,11 @@
         'ARI': 'Arizona Diamondbacks', 'ATL': 'Atlanta Braves', 'BAL': 'Baltimore Orioles',
         'BOS': 'Boston Red Sox', 'CHC': 'Chicago Cubs', 'CWS': 'Chicago White Sox',
         'CIN': 'Cincinnati Reds', 'CLE': 'Cleveland Guardians', 'COL': 'Colorado Rockies',
-        'DET': 'Detroit Tigers', 'HOU': 'Houston Astros', 'KC': 'Kansas City Royals', 'KCR': 'Kansas City Royals',
+        'DET': 'Detroit Tigers', 'HOU': 'Houston Astros', 'KCR': 'Kansas City Royals',
         'LAA': 'Los Angeles Angels', 'LAD': 'Los Angeles Dodgers', 'MIA': 'Miami Marlins',
         'MIL': 'Milwaukee Brewers', 'MIN': 'Minnesota Twins', 'NYM': 'New York Mets',
         'NYY': 'New York Yankees', 'OAK': 'Oakland Athletics', 'PHI': 'Philadelphia Phillies',
-        'PIT': 'Pittsburgh Pirates', 'SDP': 'San Diego Padres', 'SD': 'San Diego Padres', 'SFG': 'San Francisco Giants', 'SF': 'San Francisco Giants',
+        'PIT': 'Pittsburgh Pirates', 'SDP': 'San Diego Padres', 'SFG': 'San Francisco Giants',
         'SEA': 'Seattle Mariners', 'STL': 'St. Louis Cardinals', 'TBR': 'Tampa Bay Rays',
         'TEX': 'Texas Rangers', 'TOR': 'Toronto Blue Jays', 'WSN': 'Washington Nationals'
     };
@@ -3843,4 +3851,3 @@
     </script>
 </body>
 </html>
-// staging test
