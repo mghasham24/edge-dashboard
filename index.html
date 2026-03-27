@@ -1964,14 +1964,7 @@
                 </div>
             </div>
             <!-- Search -->
-            <div style="display:flex;gap:8px;margin-bottom:12px">
-                <input class="admin-search" id="admin-search" type="text" placeholder="Search by email..." oninput="adminSearch()" style="flex:1;margin-bottom:0">
-                <select id="admin-plan-filter" onchange="adminSearch()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:12px;padding:8px 12px;border-radius:6px;cursor:pointer">
-                    <option value="">All Plans</option>
-                    <option value="free">Free</option>
-                    <option value="pro">Pro</option>
-                </select>
-            </div>
+            <input class="admin-search" id="admin-search" type="text" placeholder="Search by email..." oninput="adminSearch()">
             <!-- User table -->
             <div class="admin-table-wrap">
                 <table class="admin-table">
@@ -2178,9 +2171,8 @@
                     document.getElementById('manage-sub-btn').style.display = '';
                 }
                 // Show admin tab if admin
-                window._isAdmin = !!(data.is_admin);
                 if (data.is_admin) {
-                    if (window._isAdmin) document.getElementById('api-remaining').style.display = '';
+                    document.getElementById('api-remaining').style.display = '';
                     var adminTabBtn = document.createElement('button');
                     adminTabBtn.className = 'sport-tab';
                     adminTabBtn.textContent = ' Admin';
@@ -3128,11 +3120,8 @@
         } catch (e) {}
     }
 
-    async function loadAdminUsers(q, plan) {
-        var params = [];
-        if (q) params.push('q=' + encodeURIComponent(q));
-        if (plan) params.push('plan=' + encodeURIComponent(plan));
-        var url = '/api/admin/users' + (params.length ? '?' + params.join('&') : '');
+    async function loadAdminUsers(q) {
+        var url = '/api/admin/users' + (q ? '?q=' + encodeURIComponent(q) : '');
         try {
             var res = await fetch(url, { credentials: 'same-origin' });
             var data = await res.json();
@@ -3144,9 +3133,7 @@
     function adminSearch() {
         clearTimeout(adminSearchTimer);
         adminSearchTimer = setTimeout(function() {
-            var q = document.getElementById('admin-search').value.trim();
-            var plan = document.getElementById('admin-plan-filter') ? document.getElementById('admin-plan-filter').value : '';
-            loadAdminUsers(q, plan);
+            loadAdminUsers(document.getElementById('admin-search').value.trim());
         }, 300);
     }
 
@@ -3157,8 +3144,7 @@
             return;
         }
         tb.innerHTML = users.map(function(u) {
-            var dt = new Date(u.created_at * 1000);
-            var date = dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' + dt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+            var date = new Date(u.created_at * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
             var planBadge = u.plan === 'pro' ? '<span class="badge-pro">PRO</span>' : '<span class="badge-free">FREE</span>';
             var adminBadge = u.is_admin ? ' <span class="badge-admin">ADMIN</span>' : '';
             var bannedBadge = u.banned ? ' <span class="badge-banned">BANNED</span>' : '';
@@ -3345,10 +3331,7 @@
         fetch('/api/odds?sport=' + currentSport + '&markets=' + mkts + '&bookmakers=fanduel,draftkings,betmgm,caesars')
         .then(function(r) {
             var rem = r.headers.get('x-requests-remaining');
-            if (rem && rem !== 'cached') {
-                document.getElementById('api-remaining').textContent = rem + ' requests left';
-                if (window._isAdmin) document.getElementById('api-remaining').style.display = '';
-            }
+            if (rem && rem !== 'cached') document.getElementById('api-remaining').textContent = rem + ' requests left';
             if (r.status === 401) {
                 dot.className = 'sdot error';
                 stxt.textContent = 'Session expired — please log in again.';
@@ -3553,7 +3536,7 @@
         + '<td class="r" data-label="No-Vig %" style="font-family:var(--mono);color:var(--muted2);font-size:11px;opacity:0.5">' + fairStr + '</td>'
         + ylCell
         + '<td class="r" data-label="Adj. Fair %" style="font-family:var(--mono);color:' + (afChanged ? 'var(--yellow)' : 'var(--muted)') + '">' + afStr + '</td>'
-        + '<td class="c" data-label="Real %"><div style="display:flex;align-items:center;gap:4px;justify-content:center"><input class="cell-inp' + (pv ? ' filled' : '') + '" type="number" min="1" max="99" step="0.5" placeholder="-" value="' + pv + '" data-id="' + r.id + '" oninput="setPred(this)" onblur="setPred(this)" onkeydown="if(event.key===\'Enter\')this.blur()"><span class="pred-unit">%</span></div></td>'
+        + '<td class="c" data-label="Real %"><div style="display:flex;align-items:center;gap:4px;justify-content:center"><input class="cell-inp' + (pv ? ' filled' : '') + '" type="number" min="1" max="99" step="1" placeholder="-" value="' + pv + '" data-id="' + r.id + '" oninput="setPred(this)" onblur="setPred(this)" onkeydown="if(event.key===\'Enter\')this.blur()"><span class="pred-unit">%</span></div></td>'
         + '<td class="r" data-label="Edge"><div class="edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:' + bw + 'px;background:' + bc + '"></div></div><span class="edge-val ' + ec + '">' + es + '</span></div></td>'
         + '<td class="r" data-label="Units">' + uH + '</td>'
         + '<td class="r" data-label="Bet">' + bH + '</td>'
