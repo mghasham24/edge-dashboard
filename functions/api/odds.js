@@ -45,11 +45,20 @@ export async function onRequest(context) {
     const res  = await fetch(apiUrl);
     const text = await res.text();
 
-    // Write to cache
+    // Write to cache — inject requests-remaining into data for display when cached
     try {
+      const remaining = res.headers.get('x-requests-remaining') || '';
+      let dataToCache = text;
+      try {
+        const parsed = JSON.parse(text);
+        if (Array.isArray(parsed)) {
+          // Wrap array in object to store metadata
+          dataToCache = JSON.stringify({ _data: parsed, _requests_remaining: remaining });
+        }
+      } catch(e) {}
       await env.DB.prepare(
         'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at'
-      ).bind(cacheKey, text, now).run();
+      ).bind(cacheKey, dataToCache, now).run();
     } catch(e) {}
 
     return new Response(text, {

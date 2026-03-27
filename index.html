@@ -3331,7 +3331,7 @@
         fetch('/api/odds?sport=' + currentSport + '&markets=' + mkts + '&bookmakers=fanduel,draftkings,betmgm,caesars')
         .then(function(r) {
             var rem = r.headers.get('x-requests-remaining');
-            if (rem) document.getElementById('api-remaining').textContent = rem + ' requests left';
+            if (rem && rem !== 'cached') document.getElementById('api-remaining').textContent = rem + ' requests left';
             if (r.status === 401) {
                 dot.className = 'sdot error';
                 stxt.textContent = 'Session expired — please log in again.';
