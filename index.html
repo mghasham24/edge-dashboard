@@ -3282,14 +3282,6 @@
 
     function parseGames(games) {
         var rows = [];
-        // Deduplicate games by matchup — Odds API sometimes returns same game twice
-        var seen = {};
-        games = games.filter(function(g) {
-            var key = g.away_team + '@' + g.home_team;
-            if (seen[key]) return false;
-            seen[key] = true;
-            return true;
-        });
         function filterOutcomes(outcomes, mk) {
             if (mk === 'h2h' && outcomes.length === 3)
                 return outcomes.filter(function(o) { return o.name.toLowerCase() !== 'draw'; });
@@ -3434,12 +3426,17 @@
             var u = units(edge);
             return { id: r.id, game: r.game, cm: r.cm, mkt: r.mkt, side: r.side, am: r.am, pt: r.pt, ps: r.ps, pid: r.pid, fair: fair, af: af, yl: yl, edge: edge, u: u, bet: u * unit };
         });
-        var LINE_GAP_THRESHOLD = 4; // hide spread/total if Real line differs from FD by more than this
         var filtered = rows.filter(function(r) {
-            // Hide spread/total rows when line gap between Real and FD exceeds threshold
             if ((r.mkt === 'Spread' || r.mkt === 'Total') && r.pt != null && yourLines[r.id] != null) {
                 var gap = Math.abs(parseFloat(yourLines[r.id]) - parseFloat(r.pt));
-                if (gap > LINE_GAP_THRESHOLD) return false;
+                var isHockey = currentSport === 'icehockey_nhl';
+                if (isHockey) {
+                    // NHL: hide spread/total if Real line differs from FD at all
+                    if (gap > 0) return false;
+                } else {
+                    // All other sports: hide if gap exceeds 4 points
+                    if (gap > 4) return false;
+                }
             }
             if (!q) return true;
             return (r.game + ' ' + r.side + ' ' + r.mkt).toLowerCase().indexOf(q) !== -1;
@@ -3767,7 +3764,6 @@
                 }
             });
             renderTable();
-            fetchAltLines(sport);
             // On mobile, fire input events on all auto-filled inputs to trigger edge display
             if (window.innerWidth <= 768) {
                 setTimeout(function() {
@@ -3833,35 +3829,6 @@
 
     // Fetch FanDuel alternate lines for games where Real Sports line differs from main FD line
     // Only fires for specific games with mismatches — saves API credits
-    function fetchAltLines(sport) {
-        if (!rawRows.length) return;
-
-        // Find unique games with line mismatches
-        var mismatchedGids = {};
-        rawRows.forEach(function(r) {
-            if (r.mkt === 'ML') return;
-            var yl = yourLines[r.id];
-            if (yl == null || yl === '') return;
-            if (parseFloat(yl) === parseFloat(r.pt)) return; // lines match, no need
-            if (r.gid) mismatchedGids[r.gid] = true;
-        });
-
-        var gids = Object.keys(mismatchedGids);
-        if (!gids.length) return;
-
-        // Fetch alternates for each mismatched game
-        gids.forEach(function(gid) {
-            fetch('/api/odds_event?sport=' + sport + '&eventId=' + gid, { credentials: 'same-origin' })
-            .then(function(r) { return r.json(); })
-            .then(function(d) {
-                if (!d.ok || !d.altOdds) return;
-                altOdds[gid] = d.altOdds;
-                renderTable();
-            })
-            .catch(function() {});
-        });
-    }
-
     handleCheckoutReturn();
     checkSession();
     </script>
