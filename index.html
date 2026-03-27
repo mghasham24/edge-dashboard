@@ -2675,7 +2675,7 @@
                             if (!isNaN(v) && v >= 1 && v <= 99) {
                                 mlInputs.forEach(function(other) {
                                     if (other !== inp) {
-                                        var otherVal = String(Math.round(100 - v));
+                                        var otherVal = (100 - v).toFixed(1);
                                         other.value = otherVal;
                                         preds[other.dataset.id] = otherVal;
                                         other.classList.add('filled');
@@ -2770,7 +2770,7 @@
                         overInp.addEventListener('input', function() {
                             var v = parseFloat(this.value);
                             if (!isNaN(v) && v >= 1 && v <= 99 && underInp) {
-                                var other = String(Math.round(100 - v));
+                                var other = (100 - v).toFixed(1);
                                 underInp.value = other;
                                 preds[rB.id] = other;
                                 underInp.classList.toggle('filled', true);
@@ -2799,7 +2799,7 @@
                         underInp.addEventListener('input', function() {
                             var v = parseFloat(this.value);
                             if (!isNaN(v) && v >= 1 && v <= 99 && overInp) {
-                                var other = String(Math.round(100 - v));
+                                var other = (100 - v).toFixed(1);
                                 overInp.value = other;
                                 preds[rA.id] = other;
                                 overInp.classList.toggle('filled', true);
@@ -2961,7 +2961,7 @@
                 var v = parseFloat(input.value);
                 if (!isNaN(v) && v >= 1 && v <= 99) {
                     var otherId = r.ps === 'A' ? id.replace(/-A$/, '-B') : id.replace(/-B$/, '-A');
-                    var other = String(Math.round(100 - v));
+                    var other = (100 - v).toFixed(1);
                     preds[otherId] = other;
                     var otherInp = document.querySelector('.mc-inp[data-id="' + otherId + '"]');
                     if (otherInp && otherInp !== input) {
@@ -3536,7 +3536,7 @@
         + '<td class="r" data-label="No-Vig %" style="font-family:var(--mono);color:var(--muted2);font-size:11px;opacity:0.5">' + fairStr + '</td>'
         + ylCell
         + '<td class="r" data-label="Adj. Fair %" style="font-family:var(--mono);color:' + (afChanged ? 'var(--yellow)' : 'var(--muted)') + '">' + afStr + '</td>'
-        + '<td class="c" data-label="Real %"><div style="display:flex;align-items:center;gap:4px;justify-content:center"><input class="cell-inp' + (pv ? ' filled' : '') + '" type="number" min="1" max="99" step="1" inputmode="numeric" placeholder="-" value="' + pv + '" data-id="' + r.id + '" oninput="setPred(this)" onblur="setPred(this)" onkeydown="if(event.key===\'Enter\')this.blur()"><span class="pred-unit">%</span></div></td>'
+        + '<td class="c" data-label="Real %"><div style="display:flex;align-items:center;gap:4px;justify-content:center"><input class="cell-inp' + (pv ? ' filled' : '') + '" type="number" min="1" max="99" step="0.5" placeholder="-" value="' + pv + '" data-id="' + r.id + '" oninput="setPred(this)" onblur="setPred(this)" onkeydown="if(event.key===\'Enter\')this.blur()"><span class="pred-unit">%</span></div></td>'
         + '<td class="r" data-label="Edge"><div class="edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:' + bw + 'px;background:' + bc + '"></div></div><span class="edge-val ' + ec + '">' + es + '</span></div></td>'
         + '<td class="r" data-label="Units">' + uH + '</td>'
         + '<td class="r" data-label="Bet">' + bH + '</td>'
@@ -3565,9 +3565,6 @@
 
     function setPred(input) {
         var id = input.getAttribute('data-id');
-        if (input.value && input.value.includes('.')) {
-            input.value = String(Math.round(parseFloat(input.value)));
-        }
         preds[id] = input.value;
         input.classList.toggle('filled', !!input.value);
 
@@ -3577,7 +3574,7 @@
             var v = parseFloat(input.value);
             if (!isNaN(v) && v >= 1 && v <= 99) {
                 var otherId = r.ps === 'A' ? id.replace(/-A$/, '-B') : id.replace(/-B$/, '-A');
-                var other = String(Math.round(100 - v));
+                var other = (100 - v).toFixed(1);
                 preds[otherId] = other;
                 var allOther = document.querySelectorAll('td[data-label="Real %"] input[data-id="' + otherId + '"]');
                 var otherInp = allOther.length ? allOther[0] : null;
@@ -3645,11 +3642,11 @@
         'ARI': 'Arizona Diamondbacks', 'ATL': 'Atlanta Braves', 'BAL': 'Baltimore Orioles',
         'BOS': 'Boston Red Sox', 'CHC': 'Chicago Cubs', 'CWS': 'Chicago White Sox',
         'CIN': 'Cincinnati Reds', 'CLE': 'Cleveland Guardians', 'COL': 'Colorado Rockies',
-        'DET': 'Detroit Tigers', 'HOU': 'Houston Astros', 'KCR': 'Kansas City Royals',
+        'DET': 'Detroit Tigers', 'HOU': 'Houston Astros', 'KC': 'Kansas City Royals', 'KCR': 'Kansas City Royals',
         'LAA': 'Los Angeles Angels', 'LAD': 'Los Angeles Dodgers', 'MIA': 'Miami Marlins',
         'MIL': 'Milwaukee Brewers', 'MIN': 'Minnesota Twins', 'NYM': 'New York Mets',
         'NYY': 'New York Yankees', 'OAK': 'Oakland Athletics', 'PHI': 'Philadelphia Phillies',
-        'PIT': 'Pittsburgh Pirates', 'SDP': 'San Diego Padres', 'SFG': 'San Francisco Giants',
+        'PIT': 'Pittsburgh Pirates', 'SDP': 'San Diego Padres', 'SD': 'San Diego Padres', 'SFG': 'San Francisco Giants', 'SF': 'San Francisco Giants',
         'SEA': 'Seattle Mariners', 'STL': 'St. Louis Cardinals', 'TBR': 'Tampa Bay Rays',
         'TEX': 'Texas Rangers', 'TOR': 'Toronto Blue Jays', 'WSN': 'Washington Nationals'
     };
