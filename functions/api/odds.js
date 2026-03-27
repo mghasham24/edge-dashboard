@@ -11,14 +11,11 @@ export async function onRequest(context) {
   const markets    = url.searchParams.get('markets')    || 'h2h';
   const bookmakers = url.searchParams.get('bookmakers') || 'fanduel,draftkings,betmgm,caesars';
 
-  // Check auth to determine cache TTL
   const session = await getSession(request, env.DB);
   if (!session) return fail(401, 'Not authenticated');
-  const isPro = session.plan === 'pro' || session.is_admin;
 
-  // Cache TTL: 60s for pro, 300s for free
   const TTL = 60;
-  const cacheKey = 'odds_' + sport + '_' + markets + '_' + bookmakers;
+  const cacheKey = 'odds_' + sport + '_' + markets;
   const now = Math.floor(Date.now() / 1000);
 
   // Try cache first
@@ -29,11 +26,7 @@ export async function onRequest(context) {
     if (cached && (now - cached.fetched_at) < TTL) {
       return new Response(cached.data, {
         status: 200,
-        headers: {
-          'Content-Type': 'application/json',
-          'x-requests-remaining': 'cached',
-          'x-cache': 'HIT'
-        }
+        headers: { 'Content-Type': 'application/json' }
       });
     }
   } catch(e) {}
@@ -45,28 +38,18 @@ export async function onRequest(context) {
     const res  = await fetch(apiUrl);
     const text = await res.text();
 
-    // Write to cache — inject requests-remaining into data for display when cached
+    // Write to cache
     try {
-      const remaining = res.headers.get('x-requests-remaining') || '';
-      let dataToCache = text;
-      try {
-        const parsed = JSON.parse(text);
-        if (Array.isArray(parsed)) {
-          // Wrap array in object to store metadata
-          dataToCache = JSON.stringify({ _data: parsed, _requests_remaining: remaining });
-        }
-      } catch(e) {}
       await env.DB.prepare(
         'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at'
-      ).bind(cacheKey, dataToCache, now).run();
+      ).bind(cacheKey, text, now).run();
     } catch(e) {}
 
     return new Response(text, {
       status: 200,
       headers: {
         'Content-Type': 'application/json',
-        'x-requests-remaining': res.headers.get('x-requests-remaining') || '',
-        'x-cache': 'MISS'
+        'x-requests-remaining': res.headers.get('x-requests-remaining') || ''
       }
     });
   } catch (err) {
