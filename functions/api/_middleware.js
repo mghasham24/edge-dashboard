@@ -6,7 +6,6 @@ export async function onRequest({ request, env, next }) {
   const guarded = ['/api/odds', '/api/scores', '/api/admin', '/api/stripe'];
   if (!guarded.some(p => url.pathname.startsWith(p))) return next();
 
-  // Auth endpoints and stripe webhook don't need session
   if (url.pathname.startsWith('/api/auth')) return next();
   if (url.pathname === '/api/stripe/webhook') return next();
 
@@ -14,7 +13,6 @@ export async function onRequest({ request, env, next }) {
   const session = await getSession(env.DB, token);
   if (!session) return fail(401, 'Authentication required');
 
-  // Banned user check
   if (session.banned) return fail(403, 'Your account has been suspended. Contact support.');
 
   // Plan enforcement on /api/odds
@@ -28,40 +26,9 @@ export async function onRequest({ request, env, next }) {
     }
   }
 
-  // Rate limiting on /api/odds (not for admins)
-  if (url.pathname.startsWith('/api/odds') && !session.is_admin) {
-    const limited = await checkRateLimit(env.DB, session.user_id);
-    if (limited) return fail(429, 'Daily refresh limit reached. Try again tomorrow.');
-  }
-
   return next();
 }
 
-// ── Rate limiting ─────────────────────────────────────
-// Free: 30 refreshes/day, Pro: unlimited
-async function checkRateLimit(db, userId) {
-  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-  const row   = await db.prepare(
-    'SELECT count, plan FROM rate_limits rl JOIN users u ON u.id=rl.user_id WHERE rl.user_id=? AND rl.date=?'
-  ).bind(userId, today).first();
-
-  const plan = row ? row.plan : 'free';
-
-  // Pro users have no daily limit
-  if (plan === 'pro') return false;
-
-  const count = row ? row.count : 0;
-  if (count >= 30) return true;
-
-  // Upsert count for free users
-  await db.prepare(
-    'INSERT INTO rate_limits (user_id, date, count) VALUES (?,?,1) ON CONFLICT(user_id, date) DO UPDATE SET count=count+1'
-  ).bind(userId, today).run();
-
-  return false;
-}
-
-// ── Helpers ───────────────────────────────────────────
 function getToken(req) {
   const c = req.headers.get('Cookie') || '';
   const m = c.match(/(?:^|;\s*)session=([^;]+)/);
