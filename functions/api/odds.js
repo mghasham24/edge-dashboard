@@ -14,7 +14,7 @@ export async function onRequest(context) {
   const session = await getSession(request, env.DB);
   if (!session) return fail(401, 'Not authenticated');
 
-  const TTL = 60;
+  const TTL = 30;
   const cacheKey = 'odds_' + sport + '_' + markets;
   const now = Math.floor(Date.now() / 1000);
 
