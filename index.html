@@ -3536,7 +3536,7 @@
         + '<td class="r" data-label="No-Vig %" style="font-family:var(--mono);color:var(--muted2);font-size:11px;opacity:0.5">' + fairStr + '</td>'
         + ylCell
         + '<td class="r" data-label="Adj. Fair %" style="font-family:var(--mono);color:' + (afChanged ? 'var(--yellow)' : 'var(--muted)') + '">' + afStr + '</td>'
-        + '<td class="c" data-label="Real %"><div style="display:flex;align-items:center;gap:4px;justify-content:center"><input class="cell-inp' + (pv ? ' filled' : '') + '" type="number" min="1" max="99" step="1" placeholder="-" value="' + pv + '" data-id="' + r.id + '" oninput="setPred(this)" onblur="setPred(this)" onkeydown="if(event.key===\'Enter\')this.blur()"><span class="pred-unit">%</span></div></td>'
+        + '<td class="c" data-label="Real %"><div style="display:flex;align-items:center;gap:4px;justify-content:center"><input class="cell-inp' + (pv ? ' filled' : '') + '" type="number" min="1" max="99" step="1" inputmode="numeric" placeholder="-" value="' + pv + '" data-id="' + r.id + '" oninput="setPred(this)" onblur="setPred(this)" onkeydown="if(event.key===\'Enter\')this.blur()"><span class="pred-unit">%</span></div></td>'
         + '<td class="r" data-label="Edge"><div class="edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:' + bw + 'px;background:' + bc + '"></div></div><span class="edge-val ' + ec + '">' + es + '</span></div></td>'
         + '<td class="r" data-label="Units">' + uH + '</td>'
         + '<td class="r" data-label="Bet">' + bH + '</td>'
@@ -3565,6 +3565,10 @@
 
     function setPred(input) {
         var id = input.getAttribute('data-id');
+        // Strip decimals — Real % is whole numbers only
+        if (input.value && input.value.includes('.')) {
+            input.value = String(Math.round(parseFloat(input.value)));
+        }
         preds[id] = input.value;
         input.classList.toggle('filled', !!input.value);
 
