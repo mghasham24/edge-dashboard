@@ -1,77 +1,82 @@
 // functions/api/odds.js
 export async function onRequest(context) {
-  const API_KEY = context.env.ODDS_API_KEY;
+  const { request, env } = context;
+  const API_KEY = env.ODDS_API_KEY;
   if (!API_KEY) {
     return new Response(JSON.stringify({ error: 'Missing API key' }), { status: 500 });
   }
 
-  const url        = new URL(context.request.url);
+  const url        = new URL(request.url);
   const sport      = url.searchParams.get('sport')      || 'basketball_nba';
   const markets    = url.searchParams.get('markets')    || 'h2h';
   const bookmakers = url.searchParams.get('bookmakers') || 'fanduel,draftkings,betmgm,caesars';
-  const debug      = url.searchParams.get('debug');
 
-  const hasSpread = markets.includes('spreads');
-  const hasTotal  = markets.includes('totals');
+  // Check auth to determine cache TTL
+  const session = await getSession(request, env.DB);
+  if (!session) return fail(401, 'Not authenticated');
+  const isPro = session.plan === 'pro' || session.is_admin;
 
-  const altMkts = [
-    hasSpread ? 'alternate_spreads' : null,
-    hasTotal  ? 'alternate_totals'  : null
-  ].filter(Boolean).join(',');
+  // Cache TTL: 60s for pro, 300s for free
+  const TTL = 60;
+  const cacheKey = 'odds_' + sport + '_' + markets + '_' + bookmakers;
+  const now = Math.floor(Date.now() / 1000);
 
-  const baseUrl = `https://api.the-odds-api.com/v4/sports/${sport}/odds/?apiKey=${API_KEY}&regions=us&bookmakers=${bookmakers}&oddsFormat=american`;
-
+  // Try cache first
   try {
-    const fetches = [fetch(`${baseUrl}&markets=${markets}`)];
-    if (altMkts) fetches.push(fetch(`${baseUrl}&markets=${altMkts}`));
-
-    const responses = await Promise.all(fetches);
-    const [mainRes, altRes] = responses;
-
-    const mainData = await mainRes.json();
-    const altData  = altRes ? await altRes.json() : null;
-
-    // Debug mode - return raw alt response
-    if (debug === '1') {
-      return new Response(JSON.stringify({
-        altStatus: altRes ? altRes.status : null,
-        altIsArray: Array.isArray(altData),
-        altSample: Array.isArray(altData) ? altData.slice(0,1) : altData,
-        altMkts
-      }), { headers: { 'Content-Type': 'application/json' } });
-    }
-
-    const alternateOdds = {};
-    if (Array.isArray(altData)) {
-      altData.forEach(function(g) {
-        const fd = (g.bookmakers || []).find(b => b.key === 'fanduel');
-        if (!fd) return;
-        if (!alternateOdds[g.id]) alternateOdds[g.id] = { spreads: {}, totals: {} };
-        (fd.markets || []).forEach(function(mkt) {
-          (mkt.outcomes || []).forEach(function(o) {
-            if (mkt.key === 'alternate_spreads') {
-              if (!alternateOdds[g.id].spreads[o.name]) alternateOdds[g.id].spreads[o.name] = {};
-              alternateOdds[g.id].spreads[o.name][o.point] = o.price;
-            } else if (mkt.key === 'alternate_totals') {
-              const side = o.name;
-              const pt   = o.point;
-              if (!alternateOdds[g.id].totals[side]) alternateOdds[g.id].totals[side] = {};
-              alternateOdds[g.id].totals[side][pt] = o.price;
-            }
-          });
-        });
+    const cached = await env.DB.prepare(
+      'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
+    ).bind(cacheKey).first();
+    if (cached && (now - cached.fetched_at) < TTL) {
+      return new Response(cached.data, {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-requests-remaining': 'cached',
+          'x-cache': 'HIT'
+        }
       });
     }
+  } catch(e) {}
 
-    return new Response(JSON.stringify({ games: mainData, alternateOdds }), {
+  // Cache miss — fetch from Odds API
+  const apiUrl = `https://api.the-odds-api.com/v4/sports/${sport}/odds/?apiKey=${API_KEY}&regions=us&markets=${markets}&bookmakers=${bookmakers}&oddsFormat=american`;
+
+  try {
+    const res  = await fetch(apiUrl);
+    const text = await res.text();
+
+    // Write to cache
+    try {
+      await env.DB.prepare(
+        'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at'
+      ).bind(cacheKey, text, now).run();
+    } catch(e) {}
+
+    return new Response(text, {
       status: 200,
       headers: {
         'Content-Type': 'application/json',
-        'x-requests-remaining': mainRes.headers.get('x-requests-remaining') || '',
-        'Access-Control-Allow-Origin': '*'
+        'x-requests-remaining': res.headers.get('x-requests-remaining') || '',
+        'x-cache': 'MISS'
       }
     });
   } catch (err) {
     return new Response(JSON.stringify({ error: err.message }), { status: 502 });
   }
+}
+
+async function getSession(request, db) {
+  const c = request.headers.get('Cookie') || '';
+  const m = c.match(/(?:^|;\s*)session=([^;]+)/);
+  if (!m) return null;
+  const now = Math.floor(Date.now() / 1000);
+  return db.prepare(
+    'SELECT u.id as user_id, u.plan, u.is_admin FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires_at>?'
+  ).bind(m[1], now).first();
+}
+
+function fail(status, msg) {
+  return new Response(JSON.stringify({ error: msg }), {
+    status, headers: { 'Content-Type': 'application/json' }
+  });
 }
