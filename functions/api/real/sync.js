@@ -70,11 +70,14 @@ const SPORT_MAP = {
   'basketball_nba': 'nba',
   'icehockey_nhl': 'nhl',
   'baseball_mlb': 'mlb',
-  'basketball_ncaab': 'ncaab',
+  'basketball_ncaab': 'cbb',
   'mma_mixed_martial_arts': 'mma',
   'soccer_epl': 'epl',
   'soccer_uefa_champs_league': 'ucl'
 };
+
+// Sports not supported by Real Sports API
+const UNSUPPORTED_SPORTS = new Set([]);
 
 async function getSession(request, db) {
   const c = request.headers.get('Cookie') || '';
@@ -141,6 +144,13 @@ export async function onRequestGet({ request, env }) {
   const fdKey = reqUrl.searchParams.get('sport');
   const realSport = SPORT_MAP[fdKey] || fdKey;
   const debugMode = reqUrl.searchParams.get('debug');
+
+  // Return empty markets for unsupported sports
+  if (UNSUPPORTED_SPORTS.has(fdKey)) {
+    return new Response(JSON.stringify({ ok: true, markets: {} }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
 
   if (debugMode === '1') {
     return new Response(JSON.stringify({ fdKey, realSport, hasToken: !!env.REAL_AUTH_TOKEN }), {
