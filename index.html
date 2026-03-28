@@ -3654,14 +3654,21 @@
         'MIL': 'Milwaukee Brewers', 'MIN': 'Minnesota Twins', 'NYM': 'New York Mets',
         'NYY': 'New York Yankees', 'OAK': 'Oakland Athletics', 'PHI': 'Philadelphia Phillies',
         'PIT': 'Pittsburgh Pirates', 'SDP': 'San Diego Padres', 'SD': 'San Diego Padres', 'SFG': 'San Francisco Giants', 'SF': 'San Francisco Giants',
-        'SEA': 'Seattle Mariners', 'STL': 'St. Louis Cardinals', 'TBR': 'Tampa Bay Rays',
+        'SEA': 'Seattle Mariners', 'STL': 'St. Louis Cardinals', 'TB': 'Tampa Bay Rays', 'TBR': 'Tampa Bay Rays',
         'TEX': 'Texas Rangers', 'TOR': 'Toronto Blue Jays', 'WSN': 'Washington Nationals'
     };
 
     function resolveTeamName(abbrevOrName) {
         // If it's already a full name (contains space), return as-is
         if (abbrevOrName.indexOf(' ') !== -1) return abbrevOrName;
-        return ABBREV_MAP[abbrevOrName.toUpperCase()] || abbrevOrName;
+        var key = abbrevOrName.toUpperCase();
+        // Sport-specific overrides for conflicting abbreviations
+        var SPORT_OVERRIDES = {
+            'icehockey_nhl': { 'STL': 'St. Louis Blues' },
+            'baseball_mlb':  { 'STL': 'St. Louis Cardinals', 'TB': 'Tampa Bay Rays' }
+        };
+        var overrides = SPORT_OVERRIDES[currentSport] || {};
+        return overrides[key] || ABBREV_MAP[key] || abbrevOrName;
     }
 
     function fetchRealMarkets(sport) {
