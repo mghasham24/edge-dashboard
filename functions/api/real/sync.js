@@ -231,7 +231,18 @@ export async function onRequestGet({ request, env }) {
                 probability: o.probability, pct: Math.round(o.probability * 100)
               }));
             }
-            return { gameKey, markets };
+            // Include spread/total lines from game object
+            // pointSpread is from home team perspective (positive = home is underdog)
+            const lines = {};
+            if (game.pointSpread != null) {
+              const homeSpread = parseFloat(game.pointSpread);
+              lines.homeSpread = homeSpread;
+              lines.awaySpread = -homeSpread;
+            }
+            if (game.overUnder != null) {
+              lines.total = parseFloat(game.overUnder);
+            }
+            return { gameKey, markets, lines };
           }
           if (mRes.status === 429 || mRes.status >= 500) {
             await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
@@ -265,7 +276,12 @@ export async function onRequestGet({ request, env }) {
 
     for (let i = 0; i < games.length; i++) {
       const result = await fetchGameMarkets(games[i]);
-      if (result) marketMap[result.gameKey] = result.markets;
+      if (result) {
+        marketMap[result.gameKey] = result.markets;
+        if (result.lines && Object.keys(result.lines).length) {
+          marketMap[result.gameKey + '__lines'] = result.lines;
+        }
+      }
       if (i < games.length - 1) await new Promise(r => setTimeout(r, 150));
     }
 

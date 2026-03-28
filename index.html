@@ -3767,6 +3767,21 @@
                 var gameMarkets = d.markets[realKey];
                 if (!gameMarkets) return;
 
+                // Auto-fill Real Line from game-level pointSpread/overUnder
+                var gameLines = d.markets[realKey + '__lines'];
+                if (gameLines) {
+                    if (r.mkt === 'Spread' && yourLines[r.id] == null) {
+                        // Determine if this row is home or away side
+                        var gameParts = r.game.split(' @ ');
+                        var isHome = gameParts[1] && r.side.toLowerCase().indexOf(gameParts[1].split(' ').pop().toLowerCase()) !== -1;
+                        var spreadVal = isHome ? gameLines.homeSpread : gameLines.awaySpread;
+                        if (spreadVal != null) yourLines[r.id] = spreadVal;
+                    }
+                    if (r.mkt === 'Total' && yourLines[r.id] == null && gameLines.total != null) {
+                        yourLines[r.id] = gameLines.total;
+                    }
+                }
+
                 var mktLabel = r.mkt === 'ML' ? 'Game Winner'
                              : r.mkt === 'Spread' ? 'Spread'
                              : r.mkt === 'Total' ? 'Total' : null;
