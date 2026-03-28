@@ -3810,7 +3810,12 @@
                     var lineMatch = match.label.match(/([+-]?\d+\.?\d*)\s*$/);
                     if (lineMatch) {
                         var lineVal = parseFloat(lineMatch[1]);
-                        if (!isNaN(lineVal)) yourLines[r.id] = lineVal;
+                        // Sanity check: spreads should be < 30, totals between 30-350
+                        // Values like 53/47 are probabilities, not lines — ignore them
+                        var isValidLine = r.mkt === 'Spread'
+                            ? (!isNaN(lineVal) && Math.abs(lineVal) < 30)
+                            : (!isNaN(lineVal) && lineVal >= 30 && lineVal <= 350);
+                        if (isValidLine) yourLines[r.id] = lineVal;
                     }
                 }
             });
