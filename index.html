@@ -3708,12 +3708,27 @@
             if (!d.ok || !d.markets) return;
             var marketKeys = Object.keys(d.markets);
 
+            // Nickname overrides for Real Sports game keys that don't resolve via ABBREV_MAP
+            var NICKNAME_MAP = {
+                'D-backs': 'Arizona Diamondbacks',
+                'Dbacks': 'Arizona Diamondbacks',
+                'Sox': null, // ambiguous — handled by context
+                'Wolves': 'Minnesota Timberwolves',
+                'Sixers': 'Philadelphia 76ers',
+                'Mavs': 'Dallas Mavericks',
+                'Nugs': 'Denver Nuggets'
+            };
+            function resolveNickname(name) {
+                return NICKNAME_MAP[name] || resolveTeamName(name);
+            }
+
             // Build a resolved map: full name game key -> original Real key
             var resolvedMap = {};
             marketKeys.forEach(function(k) {
+                if (k.endsWith('__lines')) return;
                 var parts = k.split(' @ ');
                 if (parts.length !== 2) return;
-                var resolvedKey = resolveTeamName(parts[0].trim()) + ' @ ' + resolveTeamName(parts[1].trim());
+                var resolvedKey = resolveNickname(parts[0].trim()) + ' @ ' + resolveNickname(parts[1].trim());
                 resolvedMap[resolvedKey] = k;
                 resolvedMap[k] = k; // also keep original
             });
