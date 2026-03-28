@@ -228,19 +228,30 @@ export async function onRequestGet({ request, env }) {
             for (const mk of (mData.markets || [])) {
               markets[mk.label] = (mk.outcomes || []).map(o => ({
                 key: o.key, label: keyToName[o.label] || keyToName[o.key] || o.label,
-                probability: o.probability, pct: Math.round(o.probability * 100)
+                probability: o.probability, pct: Math.round(o.probability * 100),
+                line: (() => {
+                  // Extract line number from label e.g. "CHI -3.5" -> -3.5, "Over 243" -> 243
+                  const m = (o.label || '').match(/([+-]?\d+\.?\d*)\s*$/);
+                  return m ? parseFloat(m[1]) : null;
+                })()
               }));
             }
-            // Include spread/total lines from game object
-            // pointSpread is from home team perspective (positive = home is underdog)
+            // Build lines from spread/total outcome labels (more accurate than game.pointSpread)
             const lines = {};
-            if (game.pointSpread != null) {
-              const homeSpread = parseFloat(game.pointSpread);
-              lines.homeSpread = homeSpread;
-              lines.awaySpread = -homeSpread;
+            const spreadMkt = (mData.markets || []).find(m => m.label === 'Spread');
+            if (spreadMkt && spreadMkt.outcomes) {
+              // away team is first outcome, home is second
+              const awayO = spreadMkt.outcomes[0];
+              const homeO = spreadMkt.outcomes[1];
+              const awayLine = awayO && (awayO.label || '').match(/([+-]?\d+\.?\d*)\s*$/);
+              const homeLine = homeO && (homeO.label || '').match(/([+-]?\d+\.?\d*)\s*$/);
+              if (awayLine) lines.awaySpread = parseFloat(awayLine[1]);
+              if (homeLine) lines.homeSpread = parseFloat(homeLine[1]);
             }
-            if (game.overUnder != null) {
-              lines.total = parseFloat(game.overUnder);
+            const totalMkt = (mData.markets || []).find(m => m.label === 'Total');
+            if (totalMkt && totalMkt.outcomes && totalMkt.outcomes[0]) {
+              const totalLine = (totalMkt.outcomes[0].label || '').match(/(\d+\.?\d*)\s*$/);
+              if (totalLine) lines.total = parseFloat(totalLine[1]);
             }
             return { gameKey, markets, lines };
           }
