@@ -3811,11 +3811,11 @@
                     var lineMatch = match.label.match(/([+-]?\d+\.?\d*)\s*$/);
                     if (lineMatch) {
                         var lineVal = parseFloat(lineMatch[1]);
-                        // Sanity check: spreads should be < 30, totals between 30-350
+                        // Sanity check: spreads should be < 30, totals should end in .5 or be > 20 (NBA range)
                         // Values like 53/47 are probabilities, not lines — ignore them
                         var isValidLine = r.mkt === 'Spread'
                             ? (!isNaN(lineVal) && Math.abs(lineVal) < 30)
-                            : (!isNaN(lineVal) && lineVal >= 30 && lineVal <= 350);
+                            : (!isNaN(lineVal) && (lineVal % 1 === 0.5 || lineVal > 20) && lineVal <= 350);
                         if (isValidLine) yourLines[r.id] = lineVal;
                     }
                 }
