@@ -3299,6 +3299,12 @@
             if (!books.length) return;
             var fd = books.find(function(b) { return b.key === 'fanduel'; });
             if (!fd) return;
+            // For MMA, only show today's fights
+            if (currentSport === 'mma_mixed_martial_arts' && g.commence_time) {
+                var gameDate = new Date(g.commence_time).toDateString();
+                var today = new Date().toDateString();
+                if (gameDate !== today) return;
+            }
             (fd.markets || []).forEach(function(fdMkt) {
                 var mk = fdMkt.key;
                 var outcomes = filterOutcomes(fdMkt.outcomes || [], mk);

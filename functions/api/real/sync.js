@@ -166,7 +166,7 @@ export async function onRequestGet({ request, env }) {
     const gamesText = await gamesRes.text();
 
     if (debugMode === '2') {
-      return new Response(JSON.stringify({ gamesStatus, gamesText: gamesText.slice(0, 2000) }), {
+      return new Response(JSON.stringify({ gamesStatus, gamesText: gamesText.slice(0, 8000) }), {
         headers: { 'Content-Type': 'application/json' }
       });
     }
@@ -185,7 +185,17 @@ export async function onRequestGet({ request, env }) {
         latestDayContentDay: gamesData.latestDayContent && gamesData.latestDayContent.day,
         latestDayContentGamesCount: gamesData.latestDayContent && gamesData.latestDayContent.games && gamesData.latestDayContent.games.length,
         extractedGamesCount: games.length,
-        extractedGameKeys: games.map(g => (g.awayTeamKey || g.awayTeam?.key || '?') + ' @ ' + (g.homeTeamKey || g.homeTeam?.key || '?'))
+        extractedGameKeys: games.map(g => ((g.awayTeam && g.awayTeam.name) || g.awayTeamKey || g.awayTeam?.key || '?') + ' @ ' + ((g.homeTeam && g.homeTeam.name) || g.homeTeamKey || g.homeTeam?.key || '?'))
+      }), { headers: { 'Content-Type': 'application/json' } });
+    }
+
+    if (debugMode === '4') {
+      const lcd = gamesData.latestDayContent || {};
+      return new Response(JSON.stringify({
+        latestDayContentKeys: Object.keys(lcd),
+        firstGame: lcd.games && lcd.games[0],
+        teamsOrPlayers: lcd.teams || lcd.players || lcd.fighters || lcd.athletes || null,
+        topLevelTeams: gamesData.teams || gamesData.players || gamesData.fighters || gamesData.athletes || null
       }), { headers: { 'Content-Type': 'application/json' } });
     }
 
@@ -198,8 +208,8 @@ export async function onRequestGet({ request, env }) {
     // Fetch market data with retry logic — sequential to avoid rate limiting
     async function fetchGameMarkets(game) {
       const gameId = game.id || game.gameId;
-      const awayKey = game.awayTeamKey || game.awayTeam?.key;
-      const homeKey = game.homeTeamKey || game.homeTeam?.key;
+      const awayKey = (game.awayTeam && game.awayTeam.name) || game.awayTeamKey || game.awayTeam?.key;
+      const homeKey = (game.homeTeam && game.homeTeam.name) || game.homeTeamKey || game.homeTeam?.key;
       if (!gameId || !awayKey || !homeKey) return null;
 
       const url = `https://web.realapp.com/predictions/game/${realSport}/${gameId}/markets`;
@@ -210,10 +220,14 @@ export async function onRequestGet({ request, env }) {
           if (mRes.ok) {
             const mData = await mRes.json();
             const gameKey = awayKey + ' @ ' + homeKey;
+            // Build initials -> full name map for this fight
+            const keyToName = {};
+            if (game.awayTeam) keyToName[game.awayTeam.key] = game.awayTeam.name;
+            if (game.homeTeam) keyToName[game.homeTeam.key] = game.homeTeam.name;
             const markets = {};
             for (const mk of (mData.markets || [])) {
               markets[mk.label] = (mk.outcomes || []).map(o => ({
-                key: o.key, label: o.label,
+                key: o.key, label: keyToName[o.label] || keyToName[o.key] || o.label,
                 probability: o.probability, pct: Math.round(o.probability * 100)
               }));
             }
