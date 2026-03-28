@@ -220,10 +220,14 @@ export async function onRequestGet({ request, env }) {
           if (mRes.ok) {
             const mData = await mRes.json();
             const gameKey = awayKey + ' @ ' + homeKey;
+            // Build initials -> full name map for this fight
+            const keyToName = {};
+            if (game.awayTeam) keyToName[game.awayTeam.key] = game.awayTeam.name;
+            if (game.homeTeam) keyToName[game.homeTeam.key] = game.homeTeam.name;
             const markets = {};
             for (const mk of (mData.markets || [])) {
               markets[mk.label] = (mk.outcomes || []).map(o => ({
-                key: o.key, label: o.label,
+                key: o.key, label: keyToName[o.label] || keyToName[o.key] || o.label,
                 probability: o.probability, pct: Math.round(o.probability * 100)
               }));
             }
