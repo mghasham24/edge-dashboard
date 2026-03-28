@@ -3478,6 +3478,13 @@
                     if (gap > 0) return false;
                 }
 
+                // All sports: hide if sign flips (favorite vs underdog reversal)
+                if (r.mkt === 'Spread' && r.pt != null && yourLines[r.id] != null) {
+                    var fdPt = parseFloat(r.pt);
+                    var rlPt = parseFloat(yourLines[r.id]);
+                    if (fdPt !== 0 && rlPt !== 0 && Math.sign(fdPt) !== Math.sign(rlPt)) return false;
+                }
+
                 // All other sports: hide if gap exceeds 4 points
                 if (!isHockey && !isNBA && r.pt != null && yourLines[r.id] != null) {
                     var gap = Math.abs(parseFloat(yourLines[r.id]) - parseFloat(r.pt));
