@@ -71,7 +71,7 @@ const SPORT_MAP = {
   'icehockey_nhl': 'nhl',
   'baseball_mlb': 'mlb',
   'basketball_ncaab': 'cbb',
-  'mma_mixed_martial_arts': 'mma',
+  'mma_mixed_martial_arts': 'ufc',
   'soccer_epl': 'epl',
   'soccer_uefa_champs_league': 'ucl'
 };
