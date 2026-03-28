@@ -1,5 +1,6 @@
 // functions/api/_middleware.js
 const FREE_SPORTS = ['basketball_nba', 'icehockey_nhl', 'baseball_mlb'];
+const FREE_MARKETS = ['h2h'];
 
 export async function onRequest({ request, env, next }) {
   const url     = new URL(request.url);
@@ -19,9 +20,16 @@ export async function onRequest({ request, env, next }) {
   if (url.pathname.startsWith('/api/odds')) {
     const isPro = session.plan === 'pro' || session.is_admin;
     if (!isPro) {
+      // Check sport
       const sport = url.searchParams.get('sport') || '';
       if (FREE_SPORTS.indexOf(sport) === -1) {
         return fail(403, 'This sport requires a Pro plan.');
+      }
+      // Check markets — free users can only access h2h
+      const markets = (url.searchParams.get('markets') || 'h2h').split(',');
+      const hasProMarket = markets.some(m => m.trim() !== 'h2h');
+      if (hasProMarket) {
+        return fail(403, 'Spreads and totals require a Pro plan.');
       }
     }
   }
