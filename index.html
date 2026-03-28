@@ -3807,14 +3807,18 @@
                     }
                 }
 
-                // Pass 1: direct label word match (bidirectional)
+                // Pass 1: exact word match or full label phrase in FD side
                 if (!match) match = outcomes.find(function(o) {
                     if (!o.label) return false;
                     var oLower = o.label.toLowerCase();
                     var oWords = oLower.split(' ').filter(function(w) { return w.length > 2; });
-                    // FD side words inside label OR label words inside FD side
-                    return sideWords.some(function(w) { return oLower.indexOf(w) !== -1; })
-                        || oWords.some(function(w) { return sideLower.indexOf(w) !== -1; });
+                    // Exact word match between label words and FD side words
+                    var exactMatch = oWords.some(function(ow) {
+                        return sideWords.some(function(sw) { return sw === ow; });
+                    });
+                    // Full label phrase is a word-boundary substring of FD side
+                    var phraseMatch = sideLower.indexOf(oLower) !== -1;
+                    return exactMatch || phraseMatch;
                 });
                 // Pass 2: resolve full label or leading abbreviation (e.g. "ATL +2.5" -> "Atlanta Hawks")
                 if (!match) {
