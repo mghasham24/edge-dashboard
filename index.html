@@ -3282,6 +3282,13 @@
 
     function parseGames(games) {
         var rows = [];
+        var seen = {};
+        games = games.filter(function(g) {
+            var key = g.away_team + '@' + g.home_team;
+            if (seen[key]) return false;
+            seen[key] = true;
+            return true;
+        });
         function filterOutcomes(outcomes, mk) {
             if (mk === 'h2h' && outcomes.length === 3)
                 return outcomes.filter(function(o) { return o.name.toLowerCase() !== 'draw'; });
@@ -3536,7 +3543,7 @@
         + '<td class="r" data-label="No-Vig %" style="font-family:var(--mono);color:var(--muted2);font-size:11px;opacity:0.5">' + fairStr + '</td>'
         + ylCell
         + '<td class="r" data-label="Adj. Fair %" style="font-family:var(--mono);color:' + (afChanged ? 'var(--yellow)' : 'var(--muted)') + '">' + afStr + '</td>'
-        + '<td class="c" data-label="Real %"><div style="display:flex;align-items:center;gap:4px;justify-content:center"><input class="cell-inp' + (pv ? ' filled' : '') + '" type="number" min="1" max="99" step="0.5" placeholder="-" value="' + pv + '" data-id="' + r.id + '" oninput="setPred(this)" onblur="setPred(this)" onkeydown="if(event.key===\'Enter\')this.blur()"><span class="pred-unit">%</span></div></td>'
+        + '<td class="c" data-label="Real %"><div style="display:flex;align-items:center;gap:4px;justify-content:center"><input class="cell-inp' + (pv ? ' filled' : '') + '" type="number" min="1" max="99" step="1" inputmode="numeric" placeholder="-" value="' + pv + '" data-id="' + r.id + '" oninput="setPred(this)" onblur="setPred(this)" onkeydown="if(event.key===\'Enter\')this.blur()"><span class="pred-unit">%</span></div></td>'
         + '<td class="r" data-label="Edge"><div class="edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:' + bw + 'px;background:' + bc + '"></div></div><span class="edge-val ' + ec + '">' + es + '</span></div></td>'
         + '<td class="r" data-label="Units">' + uH + '</td>'
         + '<td class="r" data-label="Bet">' + bH + '</td>'
@@ -3843,4 +3850,3 @@
     </script>
 </body>
 </html>
-// staging test
