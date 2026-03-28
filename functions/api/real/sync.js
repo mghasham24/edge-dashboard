@@ -166,7 +166,7 @@ export async function onRequestGet({ request, env }) {
     const gamesText = await gamesRes.text();
 
     if (debugMode === '2') {
-      return new Response(JSON.stringify({ gamesStatus, gamesText: gamesText.slice(0, 2000) }), {
+      return new Response(JSON.stringify({ gamesStatus, gamesText: gamesText.slice(0, 8000) }), {
         headers: { 'Content-Type': 'application/json' }
       });
     }
@@ -186,6 +186,16 @@ export async function onRequestGet({ request, env }) {
         latestDayContentGamesCount: gamesData.latestDayContent && gamesData.latestDayContent.games && gamesData.latestDayContent.games.length,
         extractedGamesCount: games.length,
         extractedGameKeys: games.map(g => (g.awayTeamKey || g.awayTeam?.key || '?') + ' @ ' + (g.homeTeamKey || g.homeTeam?.key || '?'))
+      }), { headers: { 'Content-Type': 'application/json' } });
+    }
+
+    if (debugMode === '4') {
+      const lcd = gamesData.latestDayContent || {};
+      return new Response(JSON.stringify({
+        latestDayContentKeys: Object.keys(lcd),
+        firstGame: lcd.games && lcd.games[0],
+        teamsOrPlayers: lcd.teams || lcd.players || lcd.fighters || lcd.athletes || null,
+        topLevelTeams: gamesData.teams || gamesData.players || gamesData.fighters || gamesData.athletes || null
       }), { headers: { 'Content-Type': 'application/json' } });
     }
 
