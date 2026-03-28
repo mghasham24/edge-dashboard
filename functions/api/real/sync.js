@@ -185,7 +185,7 @@ export async function onRequestGet({ request, env }) {
         latestDayContentDay: gamesData.latestDayContent && gamesData.latestDayContent.day,
         latestDayContentGamesCount: gamesData.latestDayContent && gamesData.latestDayContent.games && gamesData.latestDayContent.games.length,
         extractedGamesCount: games.length,
-        extractedGameKeys: games.map(g => (g.awayTeamKey || g.awayTeam?.key || '?') + ' @ ' + (g.homeTeamKey || g.homeTeam?.key || '?'))
+        extractedGameKeys: games.map(g => ((g.awayTeam && g.awayTeam.name) || g.awayTeamKey || g.awayTeam?.key || '?') + ' @ ' + ((g.homeTeam && g.homeTeam.name) || g.homeTeamKey || g.homeTeam?.key || '?'))
       }), { headers: { 'Content-Type': 'application/json' } });
     }
 
@@ -208,8 +208,8 @@ export async function onRequestGet({ request, env }) {
     // Fetch market data with retry logic — sequential to avoid rate limiting
     async function fetchGameMarkets(game) {
       const gameId = game.id || game.gameId;
-      const awayKey = game.awayTeamKey || game.awayTeam?.key;
-      const homeKey = game.homeTeamKey || game.homeTeam?.key;
+      const awayKey = (game.awayTeam && game.awayTeam.name) || game.awayTeamKey || game.awayTeam?.key;
+      const homeKey = (game.homeTeam && game.homeTeam.name) || game.homeTeamKey || game.homeTeam?.key;
       if (!gameId || !awayKey || !homeKey) return null;
 
       const url = `https://web.realapp.com/predictions/game/${realSport}/${gameId}/markets`;
