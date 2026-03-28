@@ -3691,6 +3691,53 @@
     function resolveTeamName(abbrevOrName) {
         // If it's already a full name (contains space), return as-is
         if (abbrevOrName.indexOf(' ') !== -1) return abbrevOrName;
+        // Case-sensitive nickname map for hyphenated/mixed-case names Real Sports uses
+        var NICKNAMES = {
+            'D-backs': 'Arizona Diamondbacks',
+            'Dbacks': 'Arizona Diamondbacks',
+            'Dodgers': 'Los Angeles Dodgers',
+            'Yankees': 'New York Yankees',
+            'Mets': 'New York Mets',
+            'Cubs': 'Chicago Cubs',
+            'Sox': null, // ambiguous, skip
+            'Red Sox': 'Boston Red Sox',
+            'White Sox': 'Chicago White Sox',
+            'Wolves': 'Minnesota Timberwolves',
+            'Sixers': 'Philadelphia 76ers',
+            'Mavs': 'Dallas Mavericks',
+            'Spurs': 'San Antonio Spurs',
+            'Bulls': 'Chicago Bulls',
+            'Pistons': 'Detroit Pistons',
+            'Bucks': 'Milwaukee Bucks',
+            'Grizzlies': 'Memphis Grizzlies',
+            'Hornets': 'Charlotte Hornets',
+            'Hawks': 'Atlanta Hawks',
+            'Heat': 'Miami Heat',
+            'Magic': 'Orlando Magic',
+            'Nets': 'Brooklyn Nets',
+            'Knicks': 'New York Knicks',
+            'Celtics': 'Boston Celtics',
+            'Raptors': 'Toronto Raptors',
+            'Wizards': 'Washington Wizards',
+            'Cavaliers': 'Cleveland Cavaliers',
+            'Pacers': 'Indiana Pacers',
+            'Pistons': 'Detroit Pistons',
+            'Nuggets': 'Denver Nuggets',
+            'Thunder': 'Oklahoma City Thunder',
+            'Blazers': 'Portland Trail Blazers',
+            'Kings': 'Sacramento Kings',
+            'Suns': 'Phoenix Suns',
+            'Jazz': 'Utah Jazz',
+            'Clippers': 'LA Clippers',
+            'Lakers': 'Los Angeles Lakers',
+            'Warriors': 'Golden State Warriors',
+            'Rockets': 'Houston Rockets',
+            'Pelicans': 'New Orleans Pelicans',
+            'Timberwolves': 'Minnesota Timberwolves'
+        };
+        if (NICKNAMES.hasOwnProperty(abbrevOrName) && NICKNAMES[abbrevOrName]) {
+            return NICKNAMES[abbrevOrName];
+        }
         var key = abbrevOrName.toUpperCase();
         // Sport-specific overrides for conflicting abbreviations
         var SPORT_OVERRIDES = {
