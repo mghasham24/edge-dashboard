@@ -2866,6 +2866,7 @@
                         lineInp.placeholder = ph;
                         lineInp.value = ylv;
                         lineInp.dataset.id = r.id;
+                        lineInp.dataset.type = 'line';
                         lineInp.style.cssText = 'width:64px;flex-shrink:0';
                         lineInp.addEventListener('blur', function() { setLineMobile(this); });
                         lineInp.addEventListener('input', function() { setLineMobile(this); });
@@ -2880,8 +2881,8 @@
                         predInp.placeholder = '%';
                         predInp.value = pval;
                         predInp.dataset.id = r.id;
+                        predInp.dataset.type = 'pred';
                         predInp.style.cssText = 'width:58px;flex-shrink:0';
-                        predInp.addEventListener('blur', function() { setPredMobile(this); });
                         predInp.addEventListener('input', function() { setPredMobile(this); });
                         predInp.addEventListener('keydown', function(e) { if (e.key === 'Enter') this.blur(); });
                         sideRow.appendChild(predInp);
@@ -3823,7 +3824,7 @@
             // On mobile, fire input events on all auto-filled inputs to trigger edge display
             if (window.innerWidth <= 768) {
                 setTimeout(function() {
-                    document.querySelectorAll('.mc-inp[data-id]').forEach(function(inp) {
+                    document.querySelectorAll('.mc-inp[data-id][data-type="pred"]').forEach(function(inp) {
                         var id = inp.getAttribute('data-id');
                         if (preds[id] !== undefined && preds[id] !== '' && inp.value === '') {
                             inp.value = preds[id];
