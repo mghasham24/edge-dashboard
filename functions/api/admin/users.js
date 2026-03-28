@@ -12,22 +12,29 @@ export async function onRequest({ request, env }) {
   if (method === 'GET') {
     const search = url.searchParams.get('q') || '';
     const plan   = url.searchParams.get('plan') || '';
+    const sort   = url.searchParams.get('sort') || 'signup_desc';
+
+    const orderBy = sort === 'signup_asc'  ? 'created_at ASC'
+                  : sort === 'pro_desc'    ? 'pro_expires_at DESC NULLS LAST'
+                  : sort === 'pro_asc'     ? 'pro_expires_at ASC NULLS LAST'
+                  : 'created_at DESC';
+
     let rows;
     if (search && plan) {
       rows = await env.DB.prepare(
-        'SELECT id, email, plan, is_admin, banned, created_at FROM users WHERE email LIKE ? AND plan=? ORDER BY created_at DESC'
+        `SELECT id, email, plan, is_admin, banned, created_at, pro_expires_at FROM users WHERE email LIKE ? AND plan=? ORDER BY ${orderBy}`
       ).bind('%' + search + '%', plan).all();
     } else if (search) {
       rows = await env.DB.prepare(
-        'SELECT id, email, plan, is_admin, banned, created_at FROM users WHERE email LIKE ? ORDER BY created_at DESC'
+        `SELECT id, email, plan, is_admin, banned, created_at, pro_expires_at FROM users WHERE email LIKE ? ORDER BY ${orderBy}`
       ).bind('%' + search + '%').all();
     } else if (plan) {
       rows = await env.DB.prepare(
-        'SELECT id, email, plan, is_admin, banned, created_at FROM users WHERE plan=? ORDER BY created_at DESC'
+        `SELECT id, email, plan, is_admin, banned, created_at, pro_expires_at FROM users WHERE plan=? ORDER BY ${orderBy}`
       ).bind(plan).all();
     } else {
       rows = await env.DB.prepare(
-        'SELECT id, email, plan, is_admin, banned, created_at FROM users ORDER BY created_at DESC'
+        `SELECT id, email, plan, is_admin, banned, created_at, pro_expires_at FROM users ORDER BY ${orderBy}`
       ).all();
     }
 

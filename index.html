@@ -1965,6 +1965,20 @@
             </div>
             <!-- Search -->
             <input class="admin-search" id="admin-search" type="text" placeholder="Search by email..." oninput="adminSearch()">
+            <!-- Filters -->
+            <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+                <select id="admin-plan-filter" onchange="adminSearch()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;padding:6px 10px;border-radius:5px;cursor:pointer">
+                    <option value="">All Plans</option>
+                    <option value="free">Free</option>
+                    <option value="pro">Pro</option>
+                </select>
+                <select id="admin-sort" onchange="adminSearch()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;padding:6px 10px;border-radius:5px;cursor:pointer">
+                    <option value="signup_desc">Newest Signup</option>
+                    <option value="signup_asc">Oldest Signup</option>
+                    <option value="pro_desc">Pro Expires Soonest</option>
+                    <option value="pro_asc">Pro Expires Latest</option>
+                </select>
+            </div>
             <!-- User table -->
             <div class="admin-table-wrap">
                 <table class="admin-table">
@@ -1974,6 +1988,7 @@
                             <th>Plan</th>
                             <th>Sessions</th>
                             <th>Signed Up</th>
+                            <th>Pro Expires</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -3122,7 +3137,13 @@
     }
 
     async function loadAdminUsers(q) {
-        var url = '/api/admin/users' + (q ? '?q=' + encodeURIComponent(q) : '');
+        var plan = document.getElementById('admin-plan-filter') ? document.getElementById('admin-plan-filter').value : '';
+        var sort = document.getElementById('admin-sort') ? document.getElementById('admin-sort').value : '';
+        var params = [];
+        if (q) params.push('q=' + encodeURIComponent(q));
+        if (plan) params.push('plan=' + encodeURIComponent(plan));
+        if (sort) params.push('sort=' + encodeURIComponent(sort));
+        var url = '/api/admin/users' + (params.length ? '?' + params.join('&') : '');
         try {
             var res = await fetch(url, { credentials: 'same-origin' });
             var data = await res.json();
@@ -3146,6 +3167,7 @@
         }
         tb.innerHTML = users.map(function(u) {
             var date = new Date(u.created_at * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            var proExpires = (u.plan === 'pro' && u.pro_expires_at) ? new Date(u.pro_expires_at * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
             var planBadge = u.plan === 'pro' ? '<span class="badge-pro">PRO</span>' : '<span class="badge-free">FREE</span>';
             var adminBadge = u.is_admin ? ' <span class="badge-admin">ADMIN</span>' : '';
             var bannedBadge = u.banned ? ' <span class="badge-banned">BANNED</span>' : '';
@@ -3163,6 +3185,7 @@
                 + '<td><select class="plan-sel" data-uid="' + u.id + '" onchange="adminChangePlan(this)"><option value="free"' + (u.plan === 'free' ? ' selected' : '') + '>Free</option><option value="pro"' + (u.plan === 'pro' ? ' selected' : '') + '>Pro</option></select></td>'
                 + '<td style="font-family:var(--mono);color:var(--muted)">' + u.sessions + '</td>'
                 + '<td style="font-family:var(--mono);font-size:12px;color:var(--muted)">' + date + '</td>'
+                + '<td style="font-family:var(--mono);font-size:12px;color:var(--muted)">' + proExpires + '</td>'
                 + '<td>' + actions + '</td>'
                 + '</tr>';
         }).join('');
