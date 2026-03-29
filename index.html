@@ -3046,7 +3046,13 @@
             if (pred && r2 && r2.af != null) {
                 var realPct = parseFloat(pred) / 100;
                 if (realPct > 0 && realPct < 1) {
-                    var ev = (r2.af * (1 / realPct) * 0.966 - 1) * 100;
+                    var volNum2 = 0;
+                    if (vols[id]) {
+                        var vs2 = vols[id];
+                        volNum2 = vs2.endsWith('k') ? parseFloat(vs2) * 1000 : vs2.endsWith('m') ? parseFloat(vs2) * 1000000 : parseFloat(vs2);
+                    }
+                    var rake2 = volNum2 > 100000 ? 0.034 : volNum2 > 10000 ? 0.032 : volNum2 > 1000 ? 0.035 : volNum2 > 0 ? 0.04 : 0.034;
+                    var ev = (r2.af * (1 / realPct) * (1 - rake2) - 1) * 100;
                     evStr = ' EV:' + (ev > 0 ? '+' : '') + ev.toFixed(1) + '%';
                 }
             }
@@ -3580,13 +3586,22 @@
         }
         var uH = r.u === 0 ? '<span class="u-pass">PASS</span>' : '<span class="u-val">' + r.u + 'u</span>';
         var bH = r.u === 0 ? '<span class="u-pass">-</span>' : '<span class="bet-val">$' + r.bet.toFixed(0) + '</span>';
-        // EV calculation: (fair% × payout_ratio × 0.966) - 1, expressed as % return on stake
+        // EV calculation: (fair% × payout_ratio × (1-rake)) - 1, expressed as % return on stake
+        // Rake is tiered by volume — thinner markets have higher effective rake
         var evH = '-';
         var pred = preds[r.id];
         if (pred && r.af != null) {
             var realPct = parseFloat(pred) / 100;
             if (realPct > 0 && realPct < 1) {
-                var payoutRatio = (1 / realPct) * 0.966;
+                var vol = vols[r.id] ? parseFloat(vols[r.id]) * (vols[r.id].endsWith ? 1 : 1) : 0;
+                // Parse volume string e.g. "291.3k" -> 291300
+                var volNum = 0;
+                if (vols[r.id]) {
+                    var vs = vols[r.id];
+                    volNum = vs.endsWith('k') ? parseFloat(vs) * 1000 : vs.endsWith('m') ? parseFloat(vs) * 1000000 : parseFloat(vs);
+                }
+                var rake = volNum > 100000 ? 0.034 : volNum > 10000 ? 0.032 : volNum > 1000 ? 0.035 : volNum > 0 ? 0.04 : 0.034;
+                var payoutRatio = (1 / realPct) * (1 - rake);
                 var ev = (r.af * payoutRatio - 1) * 100;
                 var evColor = ev >= 5 ? 'var(--green)' : ev > 0 ? 'var(--yellow)' : 'var(--red)';
                 evH = '<span style="font-family:var(--mono);font-size:12px;font-weight:600;color:' + evColor + '">' + (ev > 0 ? '+' : '') + ev.toFixed(1) + '%</span>';
