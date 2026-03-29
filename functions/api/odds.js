@@ -14,20 +14,37 @@ export async function onRequest(context) {
   const session = await getSession(request, env.DB);
   if (!session) return fail(401, 'Not authenticated');
 
-  const TTL = 30;
-  const cacheKey = 'odds_' + sport + '_' + markets;
   const now = Math.floor(Date.now() / 1000);
+
+  // Dynamic TTL: 30s if any game is live, 300s if all games are pregame
+  function getTTL(responseText) {
+    try {
+      const games = JSON.parse(responseText);
+      if (!Array.isArray(games)) return 300;
+      const hasLive = games.some(function(g) {
+        return g.commence_time && new Date(g.commence_time).getTime() / 1000 <= now;
+      });
+      return hasLive ? 30 : 300;
+    } catch(e) {
+      return 30;
+    }
+  }
+
+  const cacheKey = 'odds_' + sport + '_' + markets;
 
   // Try cache first
   try {
     const cached = await env.DB.prepare(
       'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
     ).bind(cacheKey).first();
-    if (cached && (now - cached.fetched_at) < TTL) {
-      return new Response(cached.data, {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' }
-      });
+    if (cached) {
+      const ttl = getTTL(cached.data);
+      if ((now - cached.fetched_at) < ttl) {
+        return new Response(cached.data, {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
     }
   } catch(e) {}
 
