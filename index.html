@@ -2599,7 +2599,17 @@
 
                 var lbl = document.createElement('div');
                 lbl.className = 'mc-label';
-                lbl.textContent = mkt;
+                lbl.style.cssText = 'display:flex;align-items:center;justify-content:space-between';
+                var lblTxt = document.createElement('span');
+                lblTxt.textContent = mkt;
+                lbl.appendChild(lblTxt);
+                var firstRow = mktRows[0];
+                if (firstRow && vols[firstRow.id]) {
+                    var volTag = document.createElement('span');
+                    volTag.style.cssText = 'font-size:9px;color:var(--muted2);font-family:var(--mono);font-weight:400';
+                    volTag.textContent = vols[firstRow.id] + ' vol';
+                    lbl.appendChild(volTag);
+                }
                 section.appendChild(lbl);
 
                 if (isLocked) {
@@ -2686,18 +2696,7 @@
                         inp.placeholder = '%';
                         inp.value = pval;
                         inp.dataset.id = r.id;
-                        if (vols[r.id]) {
-                            var volSpan = document.createElement('span');
-                            volSpan.style.cssText = 'font-size:9px;color:var(--muted2);font-family:var(--mono);white-space:nowrap;text-align:center;display:block';
-                            volSpan.textContent = vols[r.id] + ' vol';
-                            var inpWrap = document.createElement('div');
-                            inpWrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:1px';
-                            inpWrap.appendChild(inp);
-                            inpWrap.appendChild(volSpan);
-                            grp.appendChild(inpWrap);
-                        } else {
-                            grp.appendChild(inp);
-                        }
+                        grp.appendChild(inp);
                         inp.addEventListener('input', function() {
                             var v = parseFloat(this.value);
                             if (!isNaN(v) && v >= 1 && v <= 99) {
@@ -2809,19 +2808,7 @@
                         overInp.addEventListener('keydown', function(e) {
                             if (e.key === 'Enter') this.blur();
                         });
-                        if (vols[rA.id]) {
-                            var overWrap = document.createElement('div');
-                            overWrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:1px;flex:1';
-                            overInp.style.cssText = 'width:100%';
-                            overWrap.appendChild(overInp);
-                            var volSpanT = document.createElement('span');
-                            volSpanT.style.cssText = 'font-size:9px;color:var(--muted2);font-family:var(--mono);white-space:nowrap;text-align:center';
-                            volSpanT.textContent = vols[rA.id] + ' vol';
-                            overWrap.appendChild(volSpanT);
-                            totalRow.appendChild(overWrap);
-                        } else {
-                            totalRow.appendChild(overInp);
-                        }
+                        totalRow.appendChild(overInp);
                     }
 
                     if (rB) {
@@ -2925,16 +2912,7 @@
                         predInp.style.cssText = 'width:58px;flex-shrink:0';
                         predInp.addEventListener('input', function() { setPredMobile(this); });
                         predInp.addEventListener('keydown', function(e) { if (e.key === 'Enter') this.blur(); });
-                        var predWrap = document.createElement('div');
-                        predWrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;flex-shrink:0';
-                        predWrap.appendChild(predInp);
-                        if (vols[r.id]) {
-                            var volLbl = document.createElement('span');
-                            volLbl.style.cssText = 'font-size:9px;color:var(--muted2);font-family:var(--mono)';
-                            volLbl.textContent = vols[r.id] + ' vol';
-                            predWrap.appendChild(volLbl);
-                        }
-                        sideRow.appendChild(predWrap);
+                        sideRow.appendChild(predInp);
                         var sideEdge = document.createElement('span');
                         sideEdge.className = 'mc-side-edge';
                         sideEdge.dataset.id = r.id;
