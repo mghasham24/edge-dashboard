@@ -199,6 +199,19 @@ export async function onRequestGet({ request, env }) {
       }), { headers: { 'Content-Type': 'application/json' } });
     }
 
+    if (debugMode === '5') {
+      // Fetch raw markets response for first game to inspect volume fields
+      const firstGame = games[0];
+      if (!firstGame) return new Response(JSON.stringify({ error: 'no games' }), { headers: { 'Content-Type': 'application/json' } });
+      const gameId = firstGame.id || firstGame.gameId;
+      const mUrl = `https://web.realapp.com/predictions/game/${realSport}/${gameId}/markets`;
+      const mRes = await fetch(mUrl, { headers: buildHeaders(env) });
+      const mText = await mRes.text();
+      return new Response(JSON.stringify({ gameId, rawMarkets: JSON.parse(mText) }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
     if (!games.length) {
       return new Response(JSON.stringify({ ok: true, markets: {}, debug: 'no games', keys: Object.keys(gamesData) }), {
         headers: { 'Content-Type': 'application/json' }
