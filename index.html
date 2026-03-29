@@ -2702,7 +2702,7 @@
                         grp.appendChild(lbl);
                         var inp = document.createElement('input');
                         inp.className = 'mc-inp' + (pval ? ' filled' : '');
-                        inp.type = 'number';
+                        inp.type = 'text';
                         inp.min = '1';
                         inp.max = '99';
                         inp.step = '1';
@@ -2803,7 +2803,7 @@
                         var pvalA = preds[rA.id] ? String(Math.round(parseFloat(preds[rA.id]))) : '';
                         var overInp = document.createElement('input');
                         overInp.className = 'mc-inp' + (pvalA ? ' filled' : '');
-                        overInp.type = 'number';
+                        overInp.type = 'text';
                         overInp.min = '1';
                         overInp.max = '99';
                         overInp.step = '1';
@@ -2836,7 +2836,7 @@
                         var pvalB = preds[rB.id] ? String(Math.round(parseFloat(preds[rB.id]))) : '';
                         var underInp = document.createElement('input');
                         underInp.className = 'mc-inp' + (pvalB ? ' filled' : '');
-                        underInp.type = 'number';
+                        underInp.type = 'text';
                         underInp.min = '1';
                         underInp.max = '99';
                         underInp.step = '1';
@@ -2926,7 +2926,7 @@
                         sideRow.appendChild(lineInp);
                         var predInp = document.createElement('input');
                         predInp.className = 'mc-inp' + (pval ? ' filled' : '');
-                        predInp.type = 'number';
+                        predInp.type = 'text';
                         predInp.min = '1';
                         predInp.max = '99';
                         predInp.step = '1';
