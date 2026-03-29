@@ -2276,12 +2276,16 @@
             return 0.5;
         return 0;
     }
-    function unitsEV(ev) {
+    function unitsEV(ev, realPct) {
         if (ev == null || !isFinite(ev)) return 0;
-        if (ev >= 35) return 3;
-        if (ev >= 20) return 2;
-        if (ev >= 10) return 1;
-        if (ev >= 5)  return 0.5;
+        // Cap longshots — high payout multiplier inflates EV but variance is too high
+        var maxU = (realPct != null && realPct < 0.15) ? 0.5
+                 : (realPct != null && realPct < 0.25) ? 1
+                 : 3;
+        if (ev >= 35) return Math.min(3, maxU);
+        if (ev >= 20) return Math.min(2, maxU);
+        if (ev >= 10) return Math.min(1, maxU);
+        if (ev >= 5)  return Math.min(0.5, maxU);
         return 0;
     }
     function getAdjFair(r, yl) {
@@ -3509,7 +3513,7 @@
                 var rake3 = volNum3 > 100000 ? 0.034 : volNum3 > 10000 ? 0.032 : volNum3 > 1000 ? 0.035 : volNum3 > 0 ? 0.04 : 0.034;
                 evForUnits = (af * (1 / pred) * (1 - rake3) - 1) * 100;
             }
-            var u = unitsEV(evForUnits);
+            var u = unitsEV(evForUnits, pred);
             return { id: r.id, game: r.game, cm: r.cm, mkt: r.mkt, side: r.side, am: r.am, pt: r.pt, ps: r.ps, pid: r.pid, fair: fair, af: af, yl: yl, edge: edge, u: u, bet: u * unit };
         });
         var now = new Date();
