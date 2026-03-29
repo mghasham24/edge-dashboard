@@ -2692,7 +2692,7 @@
                     mlRow.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap';
                     var mlInputs = [];
                     mktRows.forEach(function(r) {
-                        var pval = preds[r.id] || '';
+                        var pval = preds[r.id] ? String(Math.round(parseFloat(preds[r.id]))) : '';
                         var grp = document.createElement('div');
                         grp.style.cssText = 'display:flex;align-items:center;gap:4px;flex:1;min-width:110px';
                         var lbl = document.createElement('span');
@@ -2798,7 +2798,7 @@
                     totalRow.appendChild(lineInpT);
 
                     if (rA) {
-                        var pvalA = preds[rA.id] || '';
+                        var pvalA = preds[rA.id] ? String(Math.round(parseFloat(preds[rA.id]))) : '';
                         var overInp = document.createElement('input');
                         overInp.className = 'mc-inp' + (pvalA ? ' filled' : '');
                         overInp.type = 'number';
@@ -2829,7 +2829,7 @@
                     }
 
                     if (rB) {
-                        var pvalB = preds[rB.id] || '';
+                        var pvalB = preds[rB.id] ? String(Math.round(parseFloat(preds[rB.id]))) : '';
                         var underInp = document.createElement('input');
                         underInp.className = 'mc-inp' + (pvalB ? ' filled' : '');
                         underInp.type = 'number';
@@ -2898,7 +2898,7 @@
                     mktRows.forEach(function(r) {
                         var ylv = (yourLines[r.id] != null) ? String(yourLines[r.id]) : '';
                         var ph = r.pt != null ? String(r.pt) : '';
-                        var pval = preds[r.id] || '';
+                        var pval = preds[r.id] ? String(Math.round(parseFloat(preds[r.id]))) : '';
                         var sideRow = document.createElement('div');
                         sideRow.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:4px';
                         var fdLbl = document.createElement('span');
@@ -4031,7 +4031,7 @@
                     document.querySelectorAll('.mc-inp[data-id][data-type="pred"]').forEach(function(inp) {
                         var id = inp.getAttribute('data-id');
                         if (preds[id] !== undefined && preds[id] !== '' && inp.value === '') {
-                            inp.value = preds[id];
+                            inp.value = Math.round(parseFloat(preds[id]));
                             inp.classList.add('filled');
                         }
                         if (inp.value !== '') {
