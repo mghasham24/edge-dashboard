@@ -3006,6 +3006,10 @@
 
     function setPredMobile(input) {
         var id = input.getAttribute('data-id');
+        // Strip decimals — whole numbers only
+        if (input.value && input.value.indexOf('.') !== -1) {
+            input.value = input.value.replace(/\.\d*/, '');
+        }
         preds[id] = input.value;
         input.classList.toggle('filled', !!input.value);
 
