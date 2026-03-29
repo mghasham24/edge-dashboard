@@ -3923,7 +3923,12 @@
                 }
                 if (match && match.pct != null) {
                     preds[r.id] = String(match.pct);
-                    if (mktData && mktData.volumeDisplay) vols[r.id] = mktData.volumeDisplay;
+                    if (mktData && mktData.volumeDisplay) {
+                        vols[r.id] = mktData.volumeDisplay;
+                        // Also set for the paired side (same game/market, opposite team)
+                        var pairedId = r.id.endsWith('-A') ? r.id.slice(0, -2) + '-B' : r.id.slice(0, -2) + '-A';
+                        vols[pairedId] = mktData.volumeDisplay;
+                    }
                 }
                 // Auto-fill Real Line from Real Sports outcome label (e.g. "ATL +6.5" -> 6.5)
                 if (match && match.label && (r.mkt === 'Spread' || r.mkt === 'Total')) {
