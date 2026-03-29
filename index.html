@@ -2276,6 +2276,14 @@
             return 0.5;
         return 0;
     }
+    function unitsEV(ev) {
+        if (ev == null || !isFinite(ev)) return 0;
+        if (ev >= 35) return 3;
+        if (ev >= 20) return 2;
+        if (ev >= 10) return 1;
+        if (ev >= 5)  return 0.5;
+        return 0;
+    }
     function getAdjFair(r, yl) {
         var pairs = {};
         rawRows.forEach(function(x) {
@@ -3490,7 +3498,18 @@
             var pr = preds[r.id];
             var pred = (pr !== undefined && pr !== '') ? parseFloat(pr) / 100 : null;
             var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
-            var u = units(edge);
+            // EV-based unit sizing
+            var evForUnits = null;
+            if (af != null && pred != null && pred > 0 && pred < 1) {
+                var volNum3 = 0;
+                if (vols[r.id]) {
+                    var vs3 = vols[r.id];
+                    volNum3 = vs3.endsWith('k') ? parseFloat(vs3) * 1000 : vs3.endsWith('m') ? parseFloat(vs3) * 1000000 : parseFloat(vs3);
+                }
+                var rake3 = volNum3 > 100000 ? 0.034 : volNum3 > 10000 ? 0.032 : volNum3 > 1000 ? 0.035 : volNum3 > 0 ? 0.04 : 0.034;
+                evForUnits = (af * (1 / pred) * (1 - rake3) - 1) * 100;
+            }
+            var u = unitsEV(evForUnits);
             return { id: r.id, game: r.game, cm: r.cm, mkt: r.mkt, side: r.side, am: r.am, pt: r.pt, ps: r.ps, pid: r.pid, fair: fair, af: af, yl: yl, edge: edge, u: u, bet: u * unit };
         });
         var now = new Date();
