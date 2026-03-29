@@ -2809,16 +2809,18 @@
                         overInp.addEventListener('keydown', function(e) {
                             if (e.key === 'Enter') this.blur();
                         });
-                        totalRow.appendChild(overInp);
                         if (vols[rA.id]) {
-                            var volSpanT = document.createElement('span');
-                            volSpanT.style.cssText = 'font-size:9px;color:var(--muted2);font-family:var(--mono);white-space:nowrap;text-align:center;display:block;margin-top:1px';
-                            volSpanT.textContent = vols[rA.id] + ' vol';
                             var overWrap = document.createElement('div');
                             overWrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:1px;flex:1';
+                            overInp.style.cssText = 'width:100%';
                             overWrap.appendChild(overInp);
+                            var volSpanT = document.createElement('span');
+                            volSpanT.style.cssText = 'font-size:9px;color:var(--muted2);font-family:var(--mono);white-space:nowrap;text-align:center';
+                            volSpanT.textContent = vols[rA.id] + ' vol';
                             overWrap.appendChild(volSpanT);
-                            totalRow.replaceChild(overWrap, overInp);
+                            totalRow.appendChild(overWrap);
+                        } else {
+                            totalRow.appendChild(overInp);
                         }
                     }
 
