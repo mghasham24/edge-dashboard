@@ -227,7 +227,7 @@ export async function onRequestGet({ request, env }) {
 
       const url = `https://web.realapp.com/predictions/game/${realSport}/${gameId}/markets`;
       let attempt = 0;
-      while (attempt < 3) {
+      while (attempt < 5) {
         try {
           const mRes = await fetch(url, { headers: buildHeaders(env) });
           if (mRes.ok) {
@@ -313,7 +313,7 @@ export async function onRequestGet({ request, env }) {
           marketMap[result.gameKey + '__lines'] = result.lines;
         }
       }
-      if (i < games.length - 1) await new Promise(r => setTimeout(r, 150));
+      if (i < games.length - 1) await new Promise(r => setTimeout(r, 250));
     }
 
     // Write back to cache
