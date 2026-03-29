@@ -2711,8 +2711,10 @@
                         inp.value = pval;
                         inp.dataset.id = r.id;
                         grp.appendChild(inp);
+                        inp.addEventListener('blur', function() {
+                            if (this.value) this.value = Math.round(parseFloat(this.value));
+                        });
                         inp.addEventListener('input', function() {
-                            this.value = this.value ? Math.round(parseFloat(this.value)) : '';
                             var v = parseFloat(this.value);
                             if (!isNaN(v) && v >= 1 && v <= 99) {
                                 mlInputs.forEach(function(other) {
@@ -2811,7 +2813,6 @@
                         overInp.dataset.id = rA.id;
                         overInp.style.cssText = 'flex:1;min-width:0';
                         overInp.addEventListener('input', function() {
-                            this.value = this.value ? Math.round(parseFloat(this.value)) : '';
                             var v = parseFloat(this.value);
                             if (!isNaN(v) && v >= 1 && v <= 99 && underInp) {
                                 var other = (100 - v).toFixed(0);
@@ -2821,6 +2822,9 @@
                                 setPredMobile(underInp);
                             }
                             setPredMobile(this);
+                        });
+                        overInp.addEventListener('blur', function() {
+                            if (this.value) this.value = Math.round(parseFloat(this.value));
                         });
                         overInp.addEventListener('keydown', function(e) {
                             if (e.key === 'Enter') this.blur();
@@ -2842,7 +2846,6 @@
                         underInp.dataset.id = rB.id;
                         underInp.style.cssText = 'flex:1;min-width:0';
                         underInp.addEventListener('input', function() {
-                            this.value = this.value ? Math.round(parseFloat(this.value)) : '';
                             var v = parseFloat(this.value);
                             if (!isNaN(v) && v >= 1 && v <= 99 && overInp) {
                                 var other = (100 - v).toFixed(0);
@@ -2852,6 +2855,9 @@
                                 setPredMobile(overInp);
                             }
                             setPredMobile(this);
+                        });
+                        underInp.addEventListener('blur', function() {
+                            if (this.value) this.value = Math.round(parseFloat(this.value));
                         });
                         underInp.addEventListener('keydown', function(e) {
                             if (e.key === 'Enter') this.blur();
