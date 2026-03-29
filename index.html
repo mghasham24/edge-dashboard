@@ -1930,6 +1930,7 @@
                         <th class="r">Adj. Fair %</th>
                         <th class="c">Real %</th>
                         <th class="r">Edge</th>
+                        <th class="r">EV</th>
                         <th class="r">Units</th>
                         <th class="r">Bet Size</th>
                     </tr>
@@ -3038,7 +3039,18 @@
             var edgeStr = (edge > 0 ? '+' : '') + edge.toFixed(1) + '%';
             var col = edge >= 8 ? 'var(--green)' : edge >= 5 ? '#7ddfab' : edge > 0 ? 'var(--yellow)' : 'var(--red)';
             el.style.color = col;
-            el.textContent = edgeStr + (u > 0 ? ' ' + u + 'u $' + bet.toFixed(0) : '');
+            // Compute EV
+            var evStr = '';
+            var pred = preds[id];
+            var r2 = rawRows.find(function(x) { return x.id === id; });
+            if (pred && r2 && r2.af != null) {
+                var realPct = parseFloat(pred) / 100;
+                if (realPct > 0 && realPct < 1) {
+                    var ev = (r2.af * (1 / realPct) * 0.966 - 1) * 100;
+                    evStr = ' EV:' + (ev > 0 ? '+' : '') + ev.toFixed(1) + '%';
+                }
+            }
+            el.textContent = edgeStr + (u > 0 ? ' ' + u + 'u $' + bet.toFixed(0) : '') + evStr;
         } else {
             el.style.color = 'var(--muted2)';
             el.textContent = '-';
@@ -3568,6 +3580,18 @@
         }
         var uH = r.u === 0 ? '<span class="u-pass">PASS</span>' : '<span class="u-val">' + r.u + 'u</span>';
         var bH = r.u === 0 ? '<span class="u-pass">-</span>' : '<span class="bet-val">$' + r.bet.toFixed(0) + '</span>';
+        // EV calculation: (fair% × payout_ratio × 0.966) - 1, expressed as % return on stake
+        var evH = '-';
+        var pred = preds[r.id];
+        if (pred && r.af != null) {
+            var realPct = parseFloat(pred) / 100;
+            if (realPct > 0 && realPct < 1) {
+                var payoutRatio = (1 / realPct) * 0.966;
+                var ev = (r.af * payoutRatio - 1) * 100;
+                var evColor = ev >= 5 ? 'var(--green)' : ev > 0 ? 'var(--yellow)' : 'var(--red)';
+                evH = '<span style="font-family:var(--mono);font-size:12px;font-weight:600;color:' + evColor + '">' + (ev > 0 ? '+' : '') + ev.toFixed(1) + '%</span>';
+            }
+        }
         var pv = preds[r.id] || '';
         var ylv = (r.yl != null && r.yl !== '') ? r.yl : '';
         var ph = r.pt != null ? r.pt : '';
@@ -3587,6 +3611,7 @@
         + '<td class="r" data-label="Adj. Fair %" style="font-family:var(--mono);color:' + (afChanged ? 'var(--yellow)' : 'var(--muted)') + '">' + afStr + '</td>'
         + '<td class="c" data-label="Real %"><div style="display:flex;flex-direction:column;align-items:center;gap:2px;justify-content:center"><div style="display:flex;align-items:center;gap:4px;justify-content:center"><input class="cell-inp' + (pv ? ' filled' : '') + '" type="number" min="1" max="99" step="1" inputmode="numeric" placeholder="-" value="' + pv + '" data-id="' + r.id + '" oninput="setPred(this)" onblur="setPred(this)" onkeydown="if(event.key===\'Enter\')this.blur()"><span class="pred-unit">%</span></div>' + (vols[r.id] ? '<span style="font-size:9px;color:var(--muted2);font-family:var(--mono)">' + vols[r.id] + ' vol</span>' : '') + '</div></td>'
         + '<td class="r" data-label="Edge"><div class="edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:' + bw + 'px;background:' + bc + '"></div></div><span class="edge-val ' + ec + '">' + es + '</span></div></td>'
+        + '<td class="r" data-label="EV">' + evH + '</td>'
         + '<td class="r" data-label="Units">' + uH + '</td>'
         + '<td class="r" data-label="Bet">' + bH + '</td>'
         + '</tr>';
