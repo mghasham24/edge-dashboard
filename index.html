@@ -3484,6 +3484,14 @@
                 // NBA: hide spread/total once game has started
                 if (isNBA && r.cm && r.cm <= now) return false;
 
+                // All sports: hide spread if signs are opposite AND gap > 2 (sign flip = bad data)
+                if (r.mkt === 'Spread' && r.pt != null && yourLines[r.id] != null) {
+                    var fdPt = parseFloat(r.pt);
+                    var rlPt = parseFloat(yourLines[r.id]);
+                    var gap = Math.abs(rlPt - fdPt);
+                    if (fdPt !== 0 && rlPt !== 0 && Math.sign(fdPt) !== Math.sign(rlPt) && gap > 2) return false;
+                }
+
                 // NHL: hide spread/total if Real line differs from FD at all
                 if (isHockey && r.pt != null && yourLines[r.id] != null) {
                     var gap = Math.abs(parseFloat(yourLines[r.id]) - parseFloat(r.pt));
