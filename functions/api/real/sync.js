@@ -239,21 +239,28 @@ export async function onRequestGet({ request, env }) {
             if (game.homeTeam) keyToName[game.homeTeam.key] = game.homeTeam.name;
             const markets = {};
             for (const mk of (mData.markets || [])) {
-              markets[mk.label] = (mk.outcomes || []).map(o => ({
-                key: o.key, label: keyToName[o.label] || keyToName[o.key] || o.label,
-                probability: o.probability, pct: Math.round(o.probability * 100),
-                line: (() => {
-                  // Extract line number from label e.g. "CHI -3.5" -> -3.5, "Over 243" -> 243
-                  const m = (o.label || '').match(/([+-]?\d+\.?\d*)\s*$/);
-                  return m ? parseFloat(m[1]) : null;
-                })()
-              }));
+              // Parse volumeDisplay e.g. "213.7k" -> 213700, "1.9k" -> 1900
+              const volStr = mk.volumeDisplay || '';
+              const volNum = volStr.endsWith('k') ? parseFloat(volStr) * 1000
+                           : volStr.endsWith('m') ? parseFloat(volStr) * 1000000
+                           : parseFloat(volStr) || 0;
+              markets[mk.label] = {
+                volume: volNum,
+                volumeDisplay: volStr,
+                outcomes: (mk.outcomes || []).map(o => ({
+                  key: o.key, label: keyToName[o.label] || keyToName[o.key] || o.label,
+                  probability: o.probability, pct: Math.round(o.probability * 100),
+                  line: (() => {
+                    const m = (o.label || '').match(/([+-]?\d+\.?\d*)\s*$/);
+                    return m ? parseFloat(m[1]) : null;
+                  })()
+                }))
+              };
             }
             // Build lines from spread/total outcome labels (more accurate than game.pointSpread)
             const lines = {};
             const spreadMkt = (mData.markets || []).find(m => m.label === 'Spread');
             if (spreadMkt && spreadMkt.outcomes) {
-              // away team is first outcome, home is second
               const awayO = spreadMkt.outcomes[0];
               const homeO = spreadMkt.outcomes[1];
               const awayLine = awayO && (awayO.label || '').match(/([+-]?\d+\.?\d*)\s*$/);

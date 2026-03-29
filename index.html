@@ -2034,6 +2034,7 @@
     var currentSport = 'basketball_nba';
     var rawRows = [];
     var preds = {};
+    var vols = {}; // volume display per row id
     var yourLines = {};
     var altOdds = {}; // gameId -> { spreads: {teamName: {point: price}}, totals: {side: {point: price}} }
 
@@ -3573,7 +3574,7 @@
         + '<td class="r" data-label="No-Vig %" style="font-family:var(--mono);color:var(--muted2);font-size:11px;opacity:0.5">' + fairStr + '</td>'
         + ylCell
         + '<td class="r" data-label="Adj. Fair %" style="font-family:var(--mono);color:' + (afChanged ? 'var(--yellow)' : 'var(--muted)') + '">' + afStr + '</td>'
-        + '<td class="c" data-label="Real %"><div style="display:flex;align-items:center;gap:4px;justify-content:center"><input class="cell-inp' + (pv ? ' filled' : '') + '" type="number" min="1" max="99" step="1" inputmode="numeric" placeholder="-" value="' + pv + '" data-id="' + r.id + '" oninput="setPred(this)" onblur="setPred(this)" onkeydown="if(event.key===\'Enter\')this.blur()"><span class="pred-unit">%</span></div></td>'
+        + '<td class="c" data-label="Real %"><div style="display:flex;flex-direction:column;align-items:center;gap:2px;justify-content:center"><div style="display:flex;align-items:center;gap:4px;justify-content:center"><input class="cell-inp' + (pv ? ' filled' : '') + '" type="number" min="1" max="99" step="1" inputmode="numeric" placeholder="-" value="' + pv + '" data-id="' + r.id + '" oninput="setPred(this)" onblur="setPred(this)" onkeydown="if(event.key===\'Enter\')this.blur()"><span class="pred-unit">%</span></div>' + (vols[r.id] ? '<span style="font-size:9px;color:var(--muted2);font-family:var(--mono)">' + vols[r.id] + ' vol</span>' : '') + '</div></td>'
         + '<td class="r" data-label="Edge"><div class="edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:' + bw + 'px;background:' + bc + '"></div></div><span class="edge-val ' + ec + '">' + es + '</span></div></td>'
         + '<td class="r" data-label="Units">' + uH + '</td>'
         + '<td class="r" data-label="Bet">' + bH + '</td>'
@@ -3848,7 +3849,8 @@
                              : r.mkt === 'Spread' ? 'Spread'
                              : r.mkt === 'Total' ? 'Total' : null;
                 if (!mktLabel) return;
-                var outcomes = gameMarkets[mktLabel];
+                var mktData = gameMarkets[mktLabel];
+                var outcomes = mktData ? (mktData.outcomes || mktData) : null;
                 if (!outcomes || !outcomes.length) return;
 
                 var sideLower = r.side.toLowerCase();
@@ -3912,6 +3914,7 @@
                 }
                 if (match && match.pct != null) {
                     preds[r.id] = String(match.pct);
+                    if (mktData && mktData.volumeDisplay) vols[r.id] = mktData.volumeDisplay;
                 }
                 // Auto-fill Real Line from Real Sports outcome label (e.g. "ATL +6.5" -> 6.5)
                 if (match && match.label && (r.mkt === 'Spread' || r.mkt === 'Total')) {
