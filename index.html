@@ -3365,7 +3365,7 @@
         var mkts = noSpread.indexOf(currentSport) !== -1 ? 'h2h'
             : (!isPro()) ? 'h2h'
             : sel === 'ALL' ? 'h2h,spreads,totals' : (MARKET_KEYS[sel] || 'h2h');
-        fetch('/api/odds?sport=' + currentSport + '&markets=' + mkts + '&bookmakers=fanduel,draftkings,betmgm,caesars')
+        fetch('/api/odds?sport=' + currentSport + '&markets=' + mkts + '&bookmakers=fanduel')
         .then(function(r) {
             var rem = r.headers.get('x-requests-remaining');
             if (rem && rem !== 'cached') document.getElementById('api-remaining').textContent = rem + ' requests left';
