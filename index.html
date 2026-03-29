@@ -2686,6 +2686,12 @@
                         inp.placeholder = '%';
                         inp.value = pval;
                         inp.dataset.id = r.id;
+                        if (vols[r.id]) {
+                            var volSpan = document.createElement('span');
+                            volSpan.style.cssText = 'font-size:9px;color:var(--muted2);font-family:var(--mono);white-space:nowrap';
+                            volSpan.textContent = vols[r.id] + ' vol';
+                            grp.appendChild(volSpan);
+                        }
                         inp.addEventListener('input', function() {
                             var v = parseFloat(this.value);
                             if (!isNaN(v) && v >= 1 && v <= 99) {
@@ -2798,6 +2804,12 @@
                             if (e.key === 'Enter') this.blur();
                         });
                         totalRow.appendChild(overInp);
+                        if (vols[rA.id]) {
+                            var volSpanT = document.createElement('span');
+                            volSpanT.style.cssText = 'font-size:9px;color:var(--muted2);font-family:var(--mono);white-space:nowrap;align-self:center';
+                            volSpanT.textContent = vols[rA.id] + ' vol';
+                            totalRow.appendChild(volSpanT);
+                        }
                     }
 
                     if (rB) {
