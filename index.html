@@ -2688,9 +2688,15 @@
                         inp.dataset.id = r.id;
                         if (vols[r.id]) {
                             var volSpan = document.createElement('span');
-                            volSpan.style.cssText = 'font-size:9px;color:var(--muted2);font-family:var(--mono);white-space:nowrap';
+                            volSpan.style.cssText = 'font-size:9px;color:var(--muted2);font-family:var(--mono);white-space:nowrap;text-align:center;display:block';
                             volSpan.textContent = vols[r.id] + ' vol';
-                            grp.appendChild(volSpan);
+                            var inpWrap = document.createElement('div');
+                            inpWrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:1px';
+                            inpWrap.appendChild(inp);
+                            inpWrap.appendChild(volSpan);
+                            grp.appendChild(inpWrap);
+                        } else {
+                            grp.appendChild(inp);
                         }
                         inp.addEventListener('input', function() {
                             var v = parseFloat(this.value);
@@ -2806,9 +2812,13 @@
                         totalRow.appendChild(overInp);
                         if (vols[rA.id]) {
                             var volSpanT = document.createElement('span');
-                            volSpanT.style.cssText = 'font-size:9px;color:var(--muted2);font-family:var(--mono);white-space:nowrap;align-self:center';
+                            volSpanT.style.cssText = 'font-size:9px;color:var(--muted2);font-family:var(--mono);white-space:nowrap;text-align:center;display:block;margin-top:1px';
                             volSpanT.textContent = vols[rA.id] + ' vol';
-                            totalRow.appendChild(volSpanT);
+                            var overWrap = document.createElement('div');
+                            overWrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:1px;flex:1';
+                            overWrap.appendChild(overInp);
+                            overWrap.appendChild(volSpanT);
+                            totalRow.replaceChild(overWrap, overInp);
                         }
                     }
 
