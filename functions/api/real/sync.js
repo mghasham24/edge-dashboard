@@ -306,7 +306,10 @@ export async function onRequestGet({ request, env }) {
             return { gameKey, markets, lines };
           }
           if (mRes.status === 429 || mRes.status >= 500) {
-            await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
+            const backoff = mRes.status === 429
+              ? 1000 * Math.pow(2, attempt) // exponential: 1s, 2s, 4s, 8s, 16s
+              : 400 * (attempt + 1);
+            await new Promise(r => setTimeout(r, backoff));
             attempt++;
             continue;
           }
