@@ -79,6 +79,26 @@ export async function onRequestPost({ request, env }) {
         await env.DB.prepare(
           'UPDATE users SET plan=\'pro\', stripe_sub_id=? WHERE stripe_customer_id=?'
         ).bind(obj.subscription, obj.customer).run();
+
+        // Check if this user was referred — if so, reward referrer with +1 month Pro
+        const newPro = await env.DB.prepare(
+          'SELECT id, referred_by FROM users WHERE stripe_customer_id=?'
+        ).bind(obj.customer).first();
+        if (newPro && newPro.referred_by) {
+          const referrer = await env.DB.prepare(
+            'SELECT id, plan, pro_expires_at FROM users WHERE id=?'
+          ).bind(newPro.referred_by).first();
+          if (referrer) {
+            const now = Math.floor(Date.now() / 1000);
+            const base = (referrer.pro_expires_at && referrer.pro_expires_at > now)
+              ? referrer.pro_expires_at
+              : now;
+            const newExpiry = base + 30 * 86400; // +1 month
+            await env.DB.prepare(
+              'UPDATE users SET plan=\'pro\', pro_expires_at=? WHERE id=?'
+            ).bind(newExpiry, referrer.id).run();
+          }
+        }
       }
       break;
     }

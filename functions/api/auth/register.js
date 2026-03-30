@@ -1,7 +1,5 @@
 // functions/api/auth/register.js
 const SESSION_DAYS = 30;
-const REFERRALS_FOR_REWARD = 5;
-const REWARD_MONTHS = 3;
 
 export async function onRequestPost({ request, env }) {
   let body;
@@ -37,32 +35,15 @@ export async function onRequestPost({ request, env }) {
 
   const newUserId = meta.last_row_id;
 
-  // Track referral and check for reward
+  // Track referral — reward is granted when referred user upgrades to Pro (via Stripe webhook)
   if (referrerId) {
     await env.DB.prepare(
       'INSERT OR IGNORE INTO referrals (referrer_id, referred_id) VALUES (?,?)'
     ).bind(referrerId, newUserId).run();
-
-    // Count referrer's total referrals
-    const countRow = await env.DB.prepare(
-      'SELECT COUNT(*) as c FROM referrals WHERE referrer_id=?'
-    ).bind(referrerId).first();
-    const total = countRow ? countRow.c : 0;
-
-    // Every 5 referrals = 3 months Pro
-    if (total % REFERRALS_FOR_REWARD === 0) {
-      const referrer = await env.DB.prepare(
-        'SELECT plan, pro_expires_at FROM users WHERE id=?'
-      ).bind(referrerId).first();
-      const now = Math.floor(Date.now() / 1000);
-      const base = (referrer && referrer.pro_expires_at && referrer.pro_expires_at > now)
-        ? referrer.pro_expires_at
-        : now;
-      const newExpiry = base + REWARD_MONTHS * 30 * 86400;
-      await env.DB.prepare(
-        'UPDATE users SET plan=\'pro\', pro_expires_at=? WHERE id=?'
-      ).bind(newExpiry, referrerId).run();
-    }
+    // Also store referred_by on the new user for webhook lookup
+    await env.DB.prepare(
+      'UPDATE users SET referred_by=? WHERE id=?'
+    ).bind(referrerId, newUserId).run();
   }
 
   const token = genToken();

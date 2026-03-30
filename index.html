@@ -1930,7 +1930,6 @@
                         <th class="r">Adj. Fair %</th>
                         <th class="c">Real %</th>
                         <th class="r">Edge</th>
-                        <th class="r" title="Estimated return on stake at small bet sizes (~$10-50). Overstates EV for larger bets due to slippage." style="cursor:help">EV *</th>
                         <th class="r">Units</th>
                         <th class="r">Bet Size</th>
                     </tr>
@@ -1996,6 +1995,41 @@
                     <tbody id="admin-tbody"></tbody>
                 </table>
             </div>
+        </div>
+
+        <!-- Referral Panel -->
+        <div class="admin-panel" id="referral-panel">
+            <div style="margin-bottom:20px">
+                <button onclick="document.getElementById('referral-tab-btn').click()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:7px 14px;border-radius:5px;cursor:pointer;letter-spacing:.04em">&larr; Back to Dashboard</button>
+            </div>
+            <div style="margin-bottom:28px">
+                <div style="font-size:20px;font-weight:700;margin-bottom:6px">Refer & Earn</div>
+                <div style="font-size:13px;color:var(--muted)">For every friend who upgrades to Pro using your link, you get <strong style="color:var(--fg)">1 month free Pro</strong>.</div>
+            </div>
+            <!-- Stats -->
+            <div class="admin-stats" style="margin-bottom:28px">
+                <div class="admin-stat">
+                    <div class="admin-stat-val" id="ref-count">-</div>
+                    <div class="admin-stat-lbl">Paid Referrals</div>
+                </div>
+                <div class="admin-stat">
+                    <div class="admin-stat-val" id="ref-months">-</div>
+                    <div class="admin-stat-lbl">Months Earned</div>
+                </div>
+                <div class="admin-stat">
+                    <div class="admin-stat-val" id="ref-expiry">-</div>
+                    <div class="admin-stat-lbl">Pro Expires</div>
+                </div>
+            </div>
+            <!-- Referral link -->
+            <div style="margin-bottom:16px">
+                <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:8px">Your Referral Link</div>
+                <div style="display:flex;gap:8px;align-items:center">
+                    <input id="ref-link-input" readonly style="flex:1;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--mono);font-size:12px;padding:10px 12px;border-radius:6px;outline:none" value="">
+                    <button onclick="copyRefLink()" style="background:var(--accent);color:#fff;border:none;font-family:var(--sans);font-size:12px;font-weight:600;padding:10px 16px;border-radius:6px;cursor:pointer;white-space:nowrap" id="ref-copy-btn">Copy Link</button>
+                </div>
+            </div>
+            <div style="font-size:12px;color:var(--muted);margin-top:8px">Share this link and earn 1 month Pro for each friend who subscribes.</div>
         </div>
 
     </div>
@@ -2134,16 +2168,18 @@
 
         try {
             var endpoint = currentTab === 'login' ? '/api/auth/login' : '/api/auth/register';
+            var regBody = { email, password: pass };
+            if (currentTab === 'register') {
+                var refParam = new URLSearchParams(window.location.search).get('ref');
+                if (refParam) regBody.refCode = refParam.toUpperCase();
+            }
             var res = await fetch(endpoint, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
                 credentials: 'same-origin',
-                body: JSON.stringify({
-                    email,
-                    password: pass
-                })
+                body: JSON.stringify(regBody)
             });
             var data = await res.json();
             if (!res.ok) {
@@ -2213,6 +2249,29 @@
                     };
                     document.getElementById('sport-tabs').appendChild(adminTabBtn);
                 }
+                // Referral tab for all users
+                var refTabBtn = document.createElement('button');
+                refTabBtn.className = 'sport-tab';
+                refTabBtn.textContent = '🎁 Refer';
+                refTabBtn.style.cssText = data.is_admin ? 'color:var(--green)' : 'color:var(--green);margin-left:auto';
+                refTabBtn.id = 'referral-tab-btn';
+                refTabBtn.onclick = function() {
+                    var isActive = this.classList.contains('active');
+                    if (isActive) {
+                        this.classList.remove('active');
+                        this.textContent = '🎁 Refer';
+                        hideReferralTab();
+                        loadOdds();
+                    } else {
+                        document.querySelectorAll('.sport-tab').forEach(function(t) {
+                            t.classList.remove('active');
+                        });
+                        this.classList.add('active');
+                        this.textContent = '<- Dashboard';
+                        showReferralTab();
+                    }
+                };
+                document.getElementById('sport-tabs').appendChild(refTabBtn);
                 buildTabs();
                 setTimeout(loadOdds, 50);
             } else {
@@ -2274,18 +2333,6 @@
             return 1;
         if (e >= 3)
             return 0.5;
-        return 0;
-    }
-    function unitsEV(ev, realPct) {
-        if (ev == null || !isFinite(ev)) return 0;
-        // Cap longshots — high payout multiplier inflates EV but variance is too high
-        var maxU = (realPct != null && realPct < 0.15) ? 0.5
-                 : (realPct != null && realPct < 0.25) ? 1
-                 : 3;
-        if (ev >= 35) return Math.min(3, maxU);
-        if (ev >= 20) return Math.min(2, maxU);
-        if (ev >= 10) return Math.min(1, maxU);
-        if (ev >= 5)  return Math.min(0.5, maxU);
         return 0;
     }
     function getAdjFair(r, yl) {
@@ -2692,7 +2739,7 @@
                     mlRow.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap';
                     var mlInputs = [];
                     mktRows.forEach(function(r) {
-                        var pval = preds[r.id] ? String(Math.round(parseFloat(preds[r.id]))) : '';
+                        var pval = preds[r.id] || '';
                         var grp = document.createElement('div');
                         grp.style.cssText = 'display:flex;align-items:center;gap:4px;flex:1;min-width:110px';
                         var lbl = document.createElement('span');
@@ -2702,18 +2749,14 @@
                         grp.appendChild(lbl);
                         var inp = document.createElement('input');
                         inp.className = 'mc-inp' + (pval ? ' filled' : '');
-                        inp.type = 'text';
+                        inp.type = 'number';
                         inp.min = '1';
                         inp.max = '99';
-                        inp.step = '1';
-                        inp.setAttribute('inputmode', 'numeric');
+                        inp.step = '0.5';
                         inp.placeholder = '%';
                         inp.value = pval;
                         inp.dataset.id = r.id;
                         grp.appendChild(inp);
-                        inp.addEventListener('blur', function() {
-                            if (this.value) this.value = Math.round(parseFloat(this.value));
-                        });
                         inp.addEventListener('input', function() {
                             var v = parseFloat(this.value);
                             if (!isNaN(v) && v >= 1 && v <= 99) {
@@ -2800,14 +2843,13 @@
                     totalRow.appendChild(lineInpT);
 
                     if (rA) {
-                        var pvalA = preds[rA.id] ? String(Math.round(parseFloat(preds[rA.id]))) : '';
+                        var pvalA = preds[rA.id] || '';
                         var overInp = document.createElement('input');
                         overInp.className = 'mc-inp' + (pvalA ? ' filled' : '');
-                        overInp.type = 'text';
+                        overInp.type = 'number';
                         overInp.min = '1';
                         overInp.max = '99';
-                        overInp.step = '1';
-                        overInp.setAttribute('inputmode', 'numeric');
+                        overInp.step = '0.5';
                         overInp.placeholder = 'Over %';
                         overInp.value = pvalA;
                         overInp.dataset.id = rA.id;
@@ -2815,16 +2857,13 @@
                         overInp.addEventListener('input', function() {
                             var v = parseFloat(this.value);
                             if (!isNaN(v) && v >= 1 && v <= 99 && underInp) {
-                                var other = (100 - v).toFixed(0);
+                                var other = (100 - v).toFixed(1);
                                 underInp.value = other;
                                 preds[rB.id] = other;
                                 underInp.classList.toggle('filled', true);
                                 setPredMobile(underInp);
                             }
                             setPredMobile(this);
-                        });
-                        overInp.addEventListener('blur', function() {
-                            if (this.value) this.value = Math.round(parseFloat(this.value));
                         });
                         overInp.addEventListener('keydown', function(e) {
                             if (e.key === 'Enter') this.blur();
@@ -2833,14 +2872,13 @@
                     }
 
                     if (rB) {
-                        var pvalB = preds[rB.id] ? String(Math.round(parseFloat(preds[rB.id]))) : '';
+                        var pvalB = preds[rB.id] || '';
                         var underInp = document.createElement('input');
                         underInp.className = 'mc-inp' + (pvalB ? ' filled' : '');
-                        underInp.type = 'text';
+                        underInp.type = 'number';
                         underInp.min = '1';
                         underInp.max = '99';
-                        underInp.step = '1';
-                        underInp.setAttribute('inputmode', 'numeric');
+                        underInp.step = '0.5';
                         underInp.placeholder = 'Under %';
                         underInp.value = pvalB;
                         underInp.dataset.id = rB.id;
@@ -2848,16 +2886,13 @@
                         underInp.addEventListener('input', function() {
                             var v = parseFloat(this.value);
                             if (!isNaN(v) && v >= 1 && v <= 99 && overInp) {
-                                var other = (100 - v).toFixed(0);
+                                var other = (100 - v).toFixed(1);
                                 overInp.value = other;
                                 preds[rA.id] = other;
                                 overInp.classList.toggle('filled', true);
                                 setPredMobile(overInp);
                             }
                             setPredMobile(this);
-                        });
-                        underInp.addEventListener('blur', function() {
-                            if (this.value) this.value = Math.round(parseFloat(this.value));
                         });
                         underInp.addEventListener('keydown', function(e) {
                             if (e.key === 'Enter') this.blur();
@@ -2904,7 +2939,7 @@
                     mktRows.forEach(function(r) {
                         var ylv = (yourLines[r.id] != null) ? String(yourLines[r.id]) : '';
                         var ph = r.pt != null ? String(r.pt) : '';
-                        var pval = preds[r.id] ? String(Math.round(parseFloat(preds[r.id]))) : '';
+                        var pval = preds[r.id] || '';
                         var sideRow = document.createElement('div');
                         sideRow.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:4px';
                         var fdLbl = document.createElement('span');
@@ -2926,11 +2961,10 @@
                         sideRow.appendChild(lineInp);
                         var predInp = document.createElement('input');
                         predInp.className = 'mc-inp' + (pval ? ' filled' : '');
-                        predInp.type = 'text';
+                        predInp.type = 'number';
                         predInp.min = '1';
                         predInp.max = '99';
-                        predInp.step = '1';
-                        predInp.setAttribute('inputmode', 'numeric');
+                        predInp.step = '0.5';
                         predInp.placeholder = '%';
                         predInp.value = pval;
                         predInp.dataset.id = r.id;
@@ -3060,18 +3094,7 @@
         var pr = preds[id];
         var pred = (pr !== undefined && pr !== '') ? parseFloat(pr) / 100 : null;
         var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
-        // EV-based unit sizing with longshot cap
-        var evForU = null;
-        if (af != null && pred != null && pred > 0 && pred < 1) {
-            var volNumU = 0;
-            if (vols[id]) {
-                var vsU = vols[id];
-                volNumU = vsU.endsWith('k') ? parseFloat(vsU) * 1000 : vsU.endsWith('m') ? parseFloat(vsU) * 1000000 : parseFloat(vsU);
-            }
-            var rakeU = volNumU > 100000 ? 0.034 : volNumU > 10000 ? 0.032 : volNumU > 1000 ? 0.035 : volNumU > 0 ? 0.04 : 0.034;
-            evForU = (af * (1 / pred) * (1 - rakeU) - 1) * 100;
-        }
-        var u = unitsEV(evForU, pred);
+        var u = units(edge);
         var bet = u * unit;
         var el = document.querySelector('.mc-side-edge[data-id="' + id + '"]');
         if (!el) return;
@@ -3079,24 +3102,7 @@
             var edgeStr = (edge > 0 ? '+' : '') + edge.toFixed(1) + '%';
             var col = edge >= 8 ? 'var(--green)' : edge >= 5 ? '#7ddfab' : edge > 0 ? 'var(--yellow)' : 'var(--red)';
             el.style.color = col;
-            // Compute EV
-            var evStr = '';
-            var pred = preds[id];
-            var r2 = rawRows.find(function(x) { return x.id === id; });
-            if (pred && r2 && r2.af != null) {
-                var realPct = parseFloat(pred) / 100;
-                if (realPct > 0 && realPct < 1) {
-                    var volNum2 = 0;
-                    if (vols[id]) {
-                        var vs2 = vols[id];
-                        volNum2 = vs2.endsWith('k') ? parseFloat(vs2) * 1000 : vs2.endsWith('m') ? parseFloat(vs2) * 1000000 : parseFloat(vs2);
-                    }
-                    var rake2 = volNum2 > 100000 ? 0.034 : volNum2 > 10000 ? 0.032 : volNum2 > 1000 ? 0.035 : volNum2 > 0 ? 0.04 : 0.034;
-                    var ev = (r2.af * (1 / realPct) * (1 - rake2) - 1) * 100;
-                    evStr = ' EV:' + (ev > 0 ? '+' : '') + ev.toFixed(1) + '%';
-                }
-            }
-            el.textContent = edgeStr + (u > 0 ? ' ' + u + 'u $' + bet.toFixed(0) : '') + evStr;
+            el.textContent = edgeStr + (u > 0 ? ' ' + u + 'u $' + bet.toFixed(0) : '');
         } else {
             el.style.color = 'var(--muted2)';
             el.textContent = '-';
@@ -3191,6 +3197,60 @@
         document.getElementById('collapse-btn').style.display = '';
         document.getElementById('refresh-btn').style.display = '';
         document.getElementById('admin-panel').classList.remove('visible');
+    }
+
+    function showReferralTab() {
+        document.getElementById('sport-tabs').style.display = 'none';
+        document.querySelector('.controls').style.display = 'none';
+        document.querySelector('.status-bar').style.display = 'none';
+        document.querySelector('.table-wrap').style.display = 'none';
+        document.getElementById('mobile-cards').style.display = 'none';
+        document.getElementById('collapse-btn').style.display = 'none';
+        document.getElementById('refresh-btn').style.display = 'none';
+        document.getElementById('referral-panel').classList.add('visible');
+        loadReferralStats();
+    }
+
+    function hideReferralTab() {
+        document.getElementById('sport-tabs').style.display = '';
+        document.querySelector('.controls').style.display = '';
+        document.querySelector('.status-bar').style.display = '';
+        document.querySelector('.table-wrap').style.display = '';
+        document.getElementById('mobile-cards').style.display = '';
+        document.getElementById('collapse-btn').style.display = '';
+        document.getElementById('refresh-btn').style.display = '';
+        document.getElementById('referral-panel').classList.remove('visible');
+    }
+
+    async function loadReferralStats() {
+        try {
+            var res = await fetch('/api/referral/stats', { credentials: 'same-origin' });
+            var data = await res.json();
+            if (!data.ok) return;
+            document.getElementById('ref-count').textContent = data.paidReferrals || 0;
+            document.getElementById('ref-months').textContent = data.paidReferrals || 0;
+            var expiry = data.proExpiresAt;
+            if (expiry) {
+                var d = new Date(expiry * 1000);
+                document.getElementById('ref-expiry').textContent = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            } else {
+                document.getElementById('ref-expiry').textContent = data.plan === 'pro' ? 'Active' : '—';
+            }
+            var refLink = 'https://raxedge.com/?ref=' + (data.referralCode || '');
+            document.getElementById('ref-link-input').value = refLink;
+        } catch(e) {}
+    }
+
+    function copyRefLink() {
+        var input = document.getElementById('ref-link-input');
+        navigator.clipboard.writeText(input.value).then(function() {
+            var btn = document.getElementById('ref-copy-btn');
+            btn.textContent = 'Copied!';
+            setTimeout(function() { btn.textContent = 'Copy Link'; }, 2000);
+        }).catch(function() {
+            input.select();
+            document.execCommand('copy');
+        });
     }
 
     async function loadAdminStats() {
@@ -3530,18 +3590,7 @@
             var pr = preds[r.id];
             var pred = (pr !== undefined && pr !== '') ? parseFloat(pr) / 100 : null;
             var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
-            // EV-based unit sizing
-            var evForUnits = null;
-            if (af != null && pred != null && pred > 0 && pred < 1) {
-                var volNum3 = 0;
-                if (vols[r.id]) {
-                    var vs3 = vols[r.id];
-                    volNum3 = vs3.endsWith('k') ? parseFloat(vs3) * 1000 : vs3.endsWith('m') ? parseFloat(vs3) * 1000000 : parseFloat(vs3);
-                }
-                var rake3 = volNum3 > 100000 ? 0.034 : volNum3 > 10000 ? 0.032 : volNum3 > 1000 ? 0.035 : volNum3 > 0 ? 0.04 : 0.034;
-                evForUnits = (af * (1 / pred) * (1 - rake3) - 1) * 100;
-            }
-            var u = unitsEV(evForUnits, pred);
+            var u = units(edge);
             return { id: r.id, game: r.game, cm: r.cm, mkt: r.mkt, side: r.side, am: r.am, pt: r.pt, ps: r.ps, pid: r.pid, fair: fair, af: af, yl: yl, edge: edge, u: u, bet: u * unit };
         });
         var now = new Date();
@@ -3645,27 +3694,6 @@
         }
         var uH = r.u === 0 ? '<span class="u-pass">PASS</span>' : '<span class="u-val">' + r.u + 'u</span>';
         var bH = r.u === 0 ? '<span class="u-pass">-</span>' : '<span class="bet-val">$' + r.bet.toFixed(0) + '</span>';
-        // EV calculation: (fair% × payout_ratio × (1-rake)) - 1, expressed as % return on stake
-        // Rake is tiered by volume — thinner markets have higher effective rake
-        var evH = '-';
-        var pred = preds[r.id];
-        if (pred && r.af != null) {
-            var realPct = parseFloat(pred) / 100;
-            if (realPct > 0 && realPct < 1) {
-                var vol = vols[r.id] ? parseFloat(vols[r.id]) * (vols[r.id].endsWith ? 1 : 1) : 0;
-                // Parse volume string e.g. "291.3k" -> 291300
-                var volNum = 0;
-                if (vols[r.id]) {
-                    var vs = vols[r.id];
-                    volNum = vs.endsWith('k') ? parseFloat(vs) * 1000 : vs.endsWith('m') ? parseFloat(vs) * 1000000 : parseFloat(vs);
-                }
-                var rake = volNum > 100000 ? 0.034 : volNum > 10000 ? 0.032 : volNum > 1000 ? 0.035 : volNum > 0 ? 0.04 : 0.034;
-                var payoutRatio = (1 / realPct) * (1 - rake);
-                var ev = (r.af * payoutRatio - 1) * 100;
-                var evColor = ev >= 5 ? 'var(--green)' : ev > 0 ? 'var(--yellow)' : 'var(--red)';
-                evH = '<span style="font-family:var(--mono);font-size:12px;font-weight:600;color:' + evColor + '">' + (ev > 0 ? '+' : '') + ev.toFixed(1) + '%</span>';
-            }
-        }
         var pv = preds[r.id] || '';
         var ylv = (r.yl != null && r.yl !== '') ? r.yl : '';
         var ph = r.pt != null ? r.pt : '';
@@ -3685,7 +3713,6 @@
         + '<td class="r" data-label="Adj. Fair %" style="font-family:var(--mono);color:' + (afChanged ? 'var(--yellow)' : 'var(--muted)') + '">' + afStr + '</td>'
         + '<td class="c" data-label="Real %"><div style="display:flex;flex-direction:column;align-items:center;gap:2px;justify-content:center"><div style="display:flex;align-items:center;gap:4px;justify-content:center"><input class="cell-inp' + (pv ? ' filled' : '') + '" type="number" min="1" max="99" step="1" inputmode="numeric" placeholder="-" value="' + pv + '" data-id="' + r.id + '" oninput="setPred(this)" onblur="setPred(this)" onkeydown="if(event.key===\'Enter\')this.blur()"><span class="pred-unit">%</span></div>' + (vols[r.id] ? '<span style="font-size:9px;color:var(--muted2);font-family:var(--mono)">' + vols[r.id] + ' vol</span>' : '') + '</div></td>'
         + '<td class="r" data-label="Edge"><div class="edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:' + bw + 'px;background:' + bc + '"></div></div><span class="edge-val ' + ec + '">' + es + '</span></div></td>'
-        + '<td class="r" data-label="EV">' + evH + '</td>'
         + '<td class="r" data-label="Units">' + uH + '</td>'
         + '<td class="r" data-label="Bet">' + bH + '</td>'
         + '</tr>';
@@ -4052,7 +4079,7 @@
                     document.querySelectorAll('.mc-inp[data-id][data-type="pred"]').forEach(function(inp) {
                         var id = inp.getAttribute('data-id');
                         if (preds[id] !== undefined && preds[id] !== '' && inp.value === '') {
-                            inp.value = Math.round(parseFloat(preds[id]));
+                            inp.value = preds[id];
                             inp.classList.add('filled');
                         }
                         if (inp.value !== '') {
