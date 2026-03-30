@@ -2171,7 +2171,7 @@
         try {
             var endpoint = currentTab === 'login' ? '/api/auth/login' : '/api/auth/register';
             var regBody = { email, password: pass };
-            if (currentTab === 'register') {
+            if (currentTab === 'signup') {
                 var refInput = document.getElementById('gate-refcode');
                 var refVal = refInput ? refInput.value.trim().toUpperCase() : '';
                 if (!refVal) {
