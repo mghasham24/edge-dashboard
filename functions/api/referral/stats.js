@@ -3,15 +3,26 @@ export async function onRequestGet({ request, env }) {
   const session = await getSession(request, env.DB);
   if (!session) return fail(401, 'Not authenticated');
 
-  const user = await env.DB.prepare(
+  let user = await env.DB.prepare(
     'SELECT id, plan, referral_code, pro_expires_at FROM users WHERE id=?'
   ).bind(session.user_id).first();
 
   if (!user) return fail(404, 'User not found');
 
+  // Auto-generate referral code if missing
+  if (!user.referral_code) {
+    const emailRow = await env.DB.prepare('SELECT email FROM users WHERE id=?').bind(user.id).first();
+    const email = emailRow ? emailRow.email : 'user';
+    const prefix = email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 6);
+    const suffix = Math.floor(1000 + Math.random() * 9000);
+    const newCode = prefix + suffix;
+    await env.DB.prepare('UPDATE users SET referral_code=? WHERE id=?').bind(newCode, user.id).run();
+    user = { ...user, referral_code: newCode };
+  }
+
   // Count paid referrals — users referred by this user who are on pro plan
   const paidRow = await env.DB.prepare(
-    'SELECT COUNT(*) as c FROM referrals r JOIN users u ON u.id=r.referred_id WHERE r.referrer_id=? AND u.plan=\'pro\''
+    "SELECT COUNT(*) as c FROM referrals r JOIN users u ON u.id=r.referred_id WHERE r.referrer_id=? AND u.plan='pro'"
   ).bind(user.id).first();
 
   const paidReferrals = paidRow ? paidRow.c : 0;
