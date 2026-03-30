@@ -16,11 +16,14 @@ export async function onRequest(context) {
 
   const now = Math.floor(Date.now() / 1000);
 
-  // Dynamic TTL: 30s if any game is live, 300s if all games are pregame
+  // Dynamic TTL based on game state:
+  // - No games today: 3600s (1 hour) — don't waste credits on empty sports
+  // - All pregame: 300s (5 min)
+  // - Any live game: 30s
   function getTTL(responseText) {
     try {
       const games = JSON.parse(responseText);
-      if (!Array.isArray(games)) return 300;
+      if (!Array.isArray(games) || games.length === 0) return 3600;
       const hasLive = games.some(function(g) {
         return g.commence_time && new Date(g.commence_time).getTime() / 1000 <= now;
       });
