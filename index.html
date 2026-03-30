@@ -1931,6 +1931,7 @@
                         <th class="r">Adj. Fair %</th>
                         <th class="c">Real %</th>
                         <th class="r">Edge</th>
+                        <th class="r" title="Estimated return on stake at small bet sizes (~$10-50). Overstates EV for larger bets due to slippage." style="cursor:help">EV *</th>
                         <th class="r">Units</th>
                         <th class="r">Bet Size</th>
                     </tr>
@@ -2317,6 +2318,17 @@
             return 1;
         if (e >= 3)
             return 0.5;
+        return 0;
+    }
+    function unitsEV(ev, realPct) {
+        if (ev == null || !isFinite(ev)) return 0;
+        var maxU = (realPct != null && realPct < 0.15) ? 0.5
+                 : (realPct != null && realPct < 0.25) ? 1
+                 : 3;
+        if (ev >= 35) return Math.min(3, maxU);
+        if (ev >= 20) return Math.min(2, maxU);
+        if (ev >= 10) return Math.min(1, maxU);
+        if (ev >= 5)  return Math.min(0.5, maxU);
         return 0;
     }
     function getAdjFair(r, yl) {
@@ -3078,7 +3090,14 @@
         var pr = preds[id];
         var pred = (pr !== undefined && pr !== '') ? parseFloat(pr) / 100 : null;
         var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
-        var u = units(edge);
+        var evForU = null;
+        if (af != null && pred != null && pred > 0 && pred < 1) {
+            var volNumU = 0;
+            if (vols[id]) { var vsU = vols[id]; volNumU = vsU.endsWith('k') ? parseFloat(vsU)*1000 : vsU.endsWith('m') ? parseFloat(vsU)*1000000 : parseFloat(vsU); }
+            var rakeU = volNumU > 100000 ? 0.034 : volNumU > 10000 ? 0.032 : volNumU > 1000 ? 0.035 : volNumU > 0 ? 0.04 : 0.034;
+            evForU = (af * (1/pred) * (1-rakeU) - 1) * 100;
+        }
+        var u = unitsEV(evForU, pred);
         var bet = u * unit;
         var el = document.querySelector('.mc-side-edge[data-id="' + id + '"]');
         if (!el) return;
@@ -3086,7 +3105,9 @@
             var edgeStr = (edge > 0 ? '+' : '') + edge.toFixed(1) + '%';
             var col = edge >= 8 ? 'var(--green)' : edge >= 5 ? '#7ddfab' : edge > 0 ? 'var(--yellow)' : 'var(--red)';
             el.style.color = col;
-            el.textContent = edgeStr + (u > 0 ? ' ' + u + 'u $' + bet.toFixed(0) : '');
+            var evStr = '';
+            if (evForU != null) evStr = ' EV:' + (evForU > 0 ? '+' : '') + evForU.toFixed(1) + '%';
+            el.textContent = edgeStr + (u > 0 ? ' ' + u + 'u $' + bet.toFixed(0) : '') + evStr;
         } else {
             el.style.color = 'var(--muted2)';
             el.textContent = '-';
@@ -3602,7 +3623,14 @@
             var pr = preds[r.id];
             var pred = (pr !== undefined && pr !== '') ? parseFloat(pr) / 100 : null;
             var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
-            var u = units(edge);
+            var evForUnits = null;
+            if (af != null && pred != null && pred > 0 && pred < 1) {
+                var volNum3 = 0;
+                if (vols[r.id]) { var vs3 = vols[r.id]; volNum3 = vs3.endsWith('k') ? parseFloat(vs3)*1000 : vs3.endsWith('m') ? parseFloat(vs3)*1000000 : parseFloat(vs3); }
+                var rake3 = volNum3 > 100000 ? 0.034 : volNum3 > 10000 ? 0.032 : volNum3 > 1000 ? 0.035 : volNum3 > 0 ? 0.04 : 0.034;
+                evForUnits = (af * (1/pred) * (1-rake3) - 1) * 100;
+            }
+            var u = unitsEV(evForUnits, pred);
             return { id: r.id, game: r.game, cm: r.cm, mkt: r.mkt, side: r.side, am: r.am, pt: r.pt, ps: r.ps, pid: r.pid, fair: fair, af: af, yl: yl, edge: edge, u: u, bet: u * unit };
         });
         var now = new Date();
@@ -3706,6 +3734,20 @@
         }
         var uH = r.u === 0 ? '<span class="u-pass">PASS</span>' : '<span class="u-val">' + r.u + 'u</span>';
         var bH = r.u === 0 ? '<span class="u-pass">-</span>' : '<span class="bet-val">$' + r.bet.toFixed(0) + '</span>';
+        // EV calculation with volume-tiered rake
+        var evH = '-';
+        var predEV = preds[r.id];
+        if (predEV && r.af != null) {
+            var realPctEV = parseFloat(predEV) / 100;
+            if (realPctEV > 0 && realPctEV < 1) {
+                var volNumEV = 0;
+                if (vols[r.id]) { var vsEV = vols[r.id]; volNumEV = vsEV.endsWith('k') ? parseFloat(vsEV)*1000 : vsEV.endsWith('m') ? parseFloat(vsEV)*1000000 : parseFloat(vsEV); }
+                var rakeEV = volNumEV > 100000 ? 0.034 : volNumEV > 10000 ? 0.032 : volNumEV > 1000 ? 0.035 : volNumEV > 0 ? 0.04 : 0.034;
+                var ev = (r.af * (1/realPctEV) * (1-rakeEV) - 1) * 100;
+                var evColor = ev >= 5 ? 'var(--green)' : ev > 0 ? 'var(--yellow)' : 'var(--red)';
+                evH = '<span style="font-family:var(--mono);font-size:12px;font-weight:600;color:' + evColor + '">' + (ev > 0 ? '+' : '') + ev.toFixed(1) + '%</span>';
+            }
+        }
         var pv = preds[r.id] || '';
         var ylv = (r.yl != null && r.yl !== '') ? r.yl : '';
         var ph = r.pt != null ? r.pt : '';
@@ -3725,6 +3767,7 @@
         + '<td class="r" data-label="Adj. Fair %" style="font-family:var(--mono);color:' + (afChanged ? 'var(--yellow)' : 'var(--muted)') + '">' + afStr + '</td>'
         + '<td class="c" data-label="Real %"><div style="display:flex;flex-direction:column;align-items:center;gap:2px;justify-content:center"><div style="display:flex;align-items:center;gap:4px;justify-content:center"><input class="cell-inp' + (pv ? ' filled' : '') + '" type="number" min="1" max="99" step="1" inputmode="numeric" placeholder="-" value="' + pv + '" data-id="' + r.id + '" oninput="setPred(this)" onblur="setPred(this)" onkeydown="if(event.key===\'Enter\')this.blur()"><span class="pred-unit">%</span></div>' + (vols[r.id] ? '<span style="font-size:9px;color:var(--muted2);font-family:var(--mono)">' + vols[r.id] + ' vol</span>' : '') + '</div></td>'
         + '<td class="r" data-label="Edge"><div class="edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:' + bw + 'px;background:' + bc + '"></div></div><span class="edge-val ' + ec + '">' + es + '</span></div></td>'
+        + '<td class="r" data-label="EV">' + evH + '</td>'
         + '<td class="r" data-label="Units">' + uH + '</td>'
         + '<td class="r" data-label="Bet">' + bH + '</td>'
         + '</tr>';
