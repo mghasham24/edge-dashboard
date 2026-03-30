@@ -212,6 +212,25 @@ export async function onRequestGet({ request, env }) {
       });
     }
 
+    if (debugMode === '6') {
+      // Find specific game by away/home key and fetch its markets
+      const targetAway = reqUrl.searchParams.get('away') || '';
+      const targetHome = reqUrl.searchParams.get('home') || '';
+      const targetGame = games.find(g => {
+        const away = (g.awayTeam?.name || g.awayTeamKey || '').toLowerCase();
+        const home = (g.homeTeam?.name || g.homeTeamKey || '').toLowerCase();
+        return away.includes(targetAway.toLowerCase()) || home.includes(targetHome.toLowerCase());
+      });
+      if (!targetGame) return new Response(JSON.stringify({ error: 'game not found', keys: games.map(g => (g.awayTeam?.name || g.awayTeamKey) + ' @ ' + (g.homeTeam?.name || g.homeTeamKey)) }), { headers: { 'Content-Type': 'application/json' } });
+      const gameId = targetGame.id || targetGame.gameId;
+      const mUrl = `https://web.realapp.com/predictions/game/${realSport}/${gameId}/markets`;
+      const mRes = await fetch(mUrl, { headers: buildHeaders(env) });
+      const mText = await mRes.text();
+      return new Response(JSON.stringify({ gameId, status: mRes.status, rawMarkets: mText.slice(0, 2000) }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
     if (!games.length) {
       return new Response(JSON.stringify({ ok: true, markets: {}, debug: 'no games', keys: Object.keys(gamesData) }), {
         headers: { 'Content-Type': 'application/json' }
