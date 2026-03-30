@@ -3060,7 +3060,18 @@
         var pr = preds[id];
         var pred = (pr !== undefined && pr !== '') ? parseFloat(pr) / 100 : null;
         var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
-        var u = units(edge);
+        // EV-based unit sizing with longshot cap
+        var evForU = null;
+        if (af != null && pred != null && pred > 0 && pred < 1) {
+            var volNumU = 0;
+            if (vols[id]) {
+                var vsU = vols[id];
+                volNumU = vsU.endsWith('k') ? parseFloat(vsU) * 1000 : vsU.endsWith('m') ? parseFloat(vsU) * 1000000 : parseFloat(vsU);
+            }
+            var rakeU = volNumU > 100000 ? 0.034 : volNumU > 10000 ? 0.032 : volNumU > 1000 ? 0.035 : volNumU > 0 ? 0.04 : 0.034;
+            evForU = (af * (1 / pred) * (1 - rakeU) - 1) * 100;
+        }
+        var u = unitsEV(evForU, pred);
         var bet = u * unit;
         var el = document.querySelector('.mc-side-edge[data-id="' + id + '"]');
         if (!el) return;
