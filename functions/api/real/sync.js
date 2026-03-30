@@ -300,6 +300,8 @@ export async function onRequestGet({ request, env }) {
             attempt++;
             continue;
           }
+          // Log non-retryable failures to market map for debugging
+          marketMap[gameKey + '__error'] = { status: mRes.status, attempt };
           return null;
         } catch(e) {
           attempt++;
