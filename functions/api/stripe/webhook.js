@@ -63,22 +63,34 @@ export async function onRequestPost({ request, env }) {
     case 'customer.subscription.updated': {
       const status = obj.status;
       const plan   = (status === 'active' || status === 'trialing') ? 'pro' : 'free';
+      // Store subscription period end as pro_expires_at for Stripe subscribers
+      const proExpiresAt = (plan === 'pro' && obj.current_period_end) ? obj.current_period_end : null;
       await env.DB.prepare(
-        'UPDATE users SET plan=?, stripe_sub_id=? WHERE stripe_customer_id=?'
-      ).bind(plan, obj.id, obj.customer).run();
+        'UPDATE users SET plan=?, stripe_sub_id=?, pro_expires_at=? WHERE stripe_customer_id=?'
+      ).bind(plan, obj.id, proExpiresAt, obj.customer).run();
       break;
     }
     case 'customer.subscription.deleted': {
       await env.DB.prepare(
-        'UPDATE users SET plan=\'free\', stripe_sub_id=NULL WHERE stripe_customer_id=?'
+        'UPDATE users SET plan=\'free\', stripe_sub_id=NULL, pro_expires_at=NULL WHERE stripe_customer_id=?'
       ).bind(obj.customer).run();
       break;
     }
     case 'checkout.session.completed': {
       if (obj.mode === 'subscription' && obj.payment_status === 'paid') {
+        // Fetch subscription to get current_period_end
+        let proExpiresAt = null;
+        try {
+          const subRes = await fetch('https://api.stripe.com/v1/subscriptions/' + obj.subscription, {
+            headers: { 'Authorization': 'Bearer ' + env.STRIPE_SECRET_KEY }
+          });
+          const subData = await subRes.json();
+          if (subData.current_period_end) proExpiresAt = subData.current_period_end;
+        } catch(e) {}
+
         await env.DB.prepare(
-          'UPDATE users SET plan=\'pro\', stripe_sub_id=? WHERE stripe_customer_id=?'
-        ).bind(obj.subscription, obj.customer).run();
+          'UPDATE users SET plan=\'pro\', stripe_sub_id=?, pro_expires_at=? WHERE stripe_customer_id=?'
+        ).bind(obj.subscription, proExpiresAt, obj.customer).run();
 
         // Check if this user was referred — if so, reward referrer with +1 month Pro
         const newPro = await env.DB.prepare(
