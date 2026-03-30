@@ -2249,29 +2249,6 @@
                     };
                     document.getElementById('sport-tabs').appendChild(adminTabBtn);
                 }
-                // Referral tab for all users
-                var refTabBtn = document.createElement('button');
-                refTabBtn.className = 'sport-tab';
-                refTabBtn.textContent = '🎁 Refer';
-                refTabBtn.style.cssText = data.is_admin ? 'color:var(--green)' : 'color:var(--green);margin-left:auto';
-                refTabBtn.id = 'referral-tab-btn';
-                refTabBtn.onclick = function() {
-                    var isActive = this.classList.contains('active');
-                    if (isActive) {
-                        this.classList.remove('active');
-                        this.textContent = '🎁 Refer';
-                        hideReferralTab();
-                        loadOdds();
-                    } else {
-                        document.querySelectorAll('.sport-tab').forEach(function(t) {
-                            t.classList.remove('active');
-                        });
-                        this.classList.add('active');
-                        this.textContent = '<- Dashboard';
-                        showReferralTab();
-                    }
-                };
-                document.getElementById('sport-tabs').appendChild(refTabBtn);
                 buildTabs();
                 setTimeout(loadOdds, 50);
             } else {
@@ -3432,8 +3409,31 @@
             nav.appendChild(b);
         });
         if (adminBtn) nav.appendChild(adminBtn);
-        var refBtn = document.getElementById('referral-tab-btn');
-        if (refBtn) nav.appendChild(refBtn);
+        // Referral tab — recreate since innerHTML wipe destroys it
+        if (!document.getElementById('referral-tab-btn')) {
+            var refTabBtn = document.createElement('button');
+            refTabBtn.className = 'sport-tab';
+            refTabBtn.textContent = '🎁 Refer';
+            refTabBtn.style.cssText = document.getElementById('admin-tab-btn') ? 'color:var(--green)' : 'color:var(--green);margin-left:auto';
+            refTabBtn.id = 'referral-tab-btn';
+            refTabBtn.onclick = function() {
+                var isActive = this.classList.contains('active');
+                if (isActive) {
+                    this.classList.remove('active');
+                    this.textContent = '🎁 Refer';
+                    hideReferralTab();
+                    loadOdds();
+                } else {
+                    document.querySelectorAll('.sport-tab').forEach(function(t) { t.classList.remove('active'); });
+                    this.classList.add('active');
+                    this.textContent = '<- Dashboard';
+                    showReferralTab();
+                }
+            };
+            nav.appendChild(refTabBtn);
+        } else {
+            nav.appendChild(document.getElementById('referral-tab-btn'));
+        }
     }
 
     function parseGames(games) {
