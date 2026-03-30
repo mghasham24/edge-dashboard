@@ -3129,7 +3129,7 @@
             var rakeU = volNumU > 100000 ? 0.034 : volNumU > 10000 ? 0.032 : volNumU > 1000 ? 0.035 : volNumU > 0 ? 0.04 : 0.034;
             evForU = (af * (1/pred) * (1-rakeU) - 1) * 100;
         }
-        var u = unitsEV(evForU, pred);
+        var u = isPro() ? unitsEV(evForU, pred) : units(edge);
         var bet = u * unit;
         var el = document.querySelector('.mc-side-edge[data-id="' + id + '"]');
         if (!el) return;
@@ -3142,10 +3142,17 @@
             // Show EV on separate line only when positive
             if (evEl) {
                 if (evForU != null && evForU > 0) {
-                    var evColor = evForU >= 5 ? 'var(--green)' : 'var(--yellow)';
-                    evEl.style.color = evColor;
-                    evEl.textContent = 'EV:+' + evForU.toFixed(1) + '%';
                     evEl.style.display = '';
+                    if (isPro()) {
+                        var evColor = evForU >= 5 ? 'var(--green)' : 'var(--yellow)';
+                        evEl.style.color = evColor;
+                        evEl.style.filter = '';
+                        evEl.textContent = 'EV:+' + evForU.toFixed(1) + '%';
+                    } else {
+                        evEl.style.color = 'var(--green)';
+                        evEl.style.filter = 'blur(4px)';
+                        evEl.textContent = 'EV:+8.4%';
+                    }
                 } else {
                     evEl.style.display = 'none';
                 }
@@ -3673,7 +3680,7 @@
                 var rake3 = volNum3 > 100000 ? 0.034 : volNum3 > 10000 ? 0.032 : volNum3 > 1000 ? 0.035 : volNum3 > 0 ? 0.04 : 0.034;
                 evForUnits = (af * (1/pred) * (1-rake3) - 1) * 100;
             }
-            var u = unitsEV(evForUnits, pred);
+            var u = isPro() ? unitsEV(evForUnits, pred) : units(edge);
             return { id: r.id, game: r.game, cm: r.cm, mkt: r.mkt, side: r.side, am: r.am, pt: r.pt, ps: r.ps, pid: r.pid, fair: fair, af: af, yl: yl, edge: edge, u: u, bet: u * unit };
         });
         var now = new Date();
@@ -3810,7 +3817,7 @@
         + '<td class="r" data-label="Adj. Fair %" style="font-family:var(--mono);color:' + (afChanged ? 'var(--yellow)' : 'var(--muted)') + '">' + afStr + '</td>'
         + '<td class="c" data-label="Real %"><div style="display:flex;flex-direction:column;align-items:center;gap:2px;justify-content:center"><div style="display:flex;align-items:center;gap:4px;justify-content:center"><input class="cell-inp' + (pv ? ' filled' : '') + '" type="number" min="1" max="99" step="1" inputmode="numeric" placeholder="-" value="' + pv + '" data-id="' + r.id + '" oninput="setPred(this)" onblur="setPred(this)" onkeydown="if(event.key===\'Enter\')this.blur()"><span class="pred-unit">%</span></div>' + (vols[r.id] ? '<span style="font-size:9px;color:var(--muted2);font-family:var(--mono)">' + vols[r.id] + ' vol</span>' : '') + '</div></td>'
         + '<td class="r" data-label="Edge"><div class="edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:' + bw + 'px;background:' + bc + '"></div></div><span class="edge-val ' + ec + '">' + es + '</span></div></td>'
-        + '<td class="r" data-label="EV">' + evH + '</td>'
+        + '<td class="r" data-label="EV">' + (isPro() ? evH : '<span style="filter:blur(4px);font-family:var(--mono);font-size:12px;font-weight:600;color:var(--green);user-select:none">+8.4%</span><span style="font-size:9px;font-weight:700;background:var(--accent);color:#fff;border-radius:3px;padding:1px 4px;margin-left:3px;vertical-align:middle">PRO</span>') + '</td>'
         + '<td class="r" data-label="Units">' + uH + '</td>'
         + '<td class="r" data-label="Bet">' + bH + '</td>'
         + '</tr>';
