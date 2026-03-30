@@ -26,7 +26,7 @@ export async function onRequestPost({ request, env }) {
   }
 
   // Generate referral code for new user
-  const newRefCode = generateCode(email);
+  const newRefCode = generateCode();
 
   const hash = await hashPassword(password);
   const { meta } = await env.DB.prepare(
@@ -79,10 +79,10 @@ export async function onRequestPost({ request, env }) {
   return ok({ email, plan: 'free' }, 201, cookie(token, exp));
 }
 
-function generateCode(email) {
-  const prefix = email.split('@')[0].replace(/[^a-zA-Z0-9]/g,'').toUpperCase().slice(0, 6);
-  const suffix = Math.floor(1000 + Math.random() * 9000);
-  return prefix + suffix;
+function generateCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return Array.from(crypto.getRandomValues(new Uint8Array(5)))
+    .map(b => chars[b % chars.length]).join('');
 }
 
 // ── Helpers ───────────────────────────────────────────

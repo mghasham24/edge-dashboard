@@ -9,15 +9,19 @@ export async function onRequestGet({ request, env }) {
 
   if (!user) return fail(404, 'User not found');
 
-  // Auto-generate referral code if missing
+  // Auto-generate random 5-char alphanumeric code if missing
   if (!user.referral_code) {
-    const emailRow = await env.DB.prepare('SELECT email FROM users WHERE id=?').bind(user.id).first();
-    const email = emailRow ? emailRow.email : 'user';
-    const prefix = email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 6);
-    const suffix = Math.floor(1000 + Math.random() * 9000);
-    const newCode = prefix + suffix;
-    await env.DB.prepare('UPDATE users SET referral_code=? WHERE id=?').bind(newCode, user.id).run();
-    user = { ...user, referral_code: newCode };
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no confusing chars like 0/O, 1/I
+    let code;
+    // Retry until unique
+    for (let attempt = 0; attempt < 10; attempt++) {
+      code = Array.from(crypto.getRandomValues(new Uint8Array(5)))
+        .map(b => chars[b % chars.length]).join('');
+      const existing = await env.DB.prepare('SELECT id FROM users WHERE referral_code=?').bind(code).first();
+      if (!existing) break;
+    }
+    await env.DB.prepare('UPDATE users SET referral_code=? WHERE id=?').bind(code, user.id).run();
+    user = { ...user, referral_code: code };
   }
 
   // Count paid referrals — users referred by this user who are on pro plan
