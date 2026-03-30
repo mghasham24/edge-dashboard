@@ -232,7 +232,15 @@ export async function onRequestGet({ request, env }) {
       });
     }
 
-    if (!games.length) {
+    if (debugMode === '7') {
+      const testId = reqUrl.searchParams.get('id') || '23560';
+      const mUrl = `https://web.realapp.com/predictions/game/${realSport}/${testId}/markets`;
+      const mRes = await fetch(mUrl, { headers: buildHeaders(env) });
+      const mText = await mRes.text();
+      return new Response(JSON.stringify({ status: mRes.status, body: mText.slice(0, 3000) }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
       return new Response(JSON.stringify({ ok: true, markets: {}, debug: 'no games', keys: Object.keys(gamesData) }), {
         headers: { 'Content-Type': 'application/json' }
       });
