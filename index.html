@@ -1839,6 +1839,7 @@
                 <input class="gate-inp" id="gate-email" type="email" placeholder="Email address" autocomplete="email">
                 <input class="gate-inp" id="gate-pass" type="password" placeholder="Password" autocomplete="current-password">
                 <input class="gate-inp" id="gate-pass2" type="password" placeholder="Confirm password" autocomplete="new-password" style="display:none">
+                <input class="gate-inp" id="gate-refcode" type="text" placeholder="Referral code (optional)" autocomplete="off" style="display:none;text-transform:uppercase;letter-spacing:.08em">
                 <button class="gate-btn" id="gate-btn" onclick="submitAuth()">Log In</button>
                 <button id="forgot-link" onclick="showForgotPassword()" style="background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;font-family:var(--sans);margin-top:2px">Forgot password?</button>
             </div>
@@ -2021,15 +2022,15 @@
                     <div class="admin-stat-lbl">Pro Expires</div>
                 </div>
             </div>
-            <!-- Referral link -->
+            <!-- Referral code -->
             <div style="margin-bottom:16px">
-                <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:8px">Your Referral Link</div>
+                <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:8px">Your Referral Code</div>
                 <div style="display:flex;gap:8px;align-items:center">
-                    <input id="ref-link-input" readonly style="flex:1;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--mono);font-size:12px;padding:10px 12px;border-radius:6px;outline:none" value="">
-                    <button onclick="copyRefLink()" style="background:var(--accent);color:#fff;border:none;font-family:var(--sans);font-size:12px;font-weight:600;padding:10px 16px;border-radius:6px;cursor:pointer;white-space:nowrap" id="ref-copy-btn">Copy Link</button>
+                    <div id="ref-code-display" style="flex:1;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--mono);font-size:22px;font-weight:700;padding:14px 16px;border-radius:6px;letter-spacing:.12em;text-align:center">—</div>
+                    <button onclick="copyRefCode()" style="background:var(--accent);color:#fff;border:none;font-family:var(--sans);font-size:12px;font-weight:600;padding:14px 16px;border-radius:6px;cursor:pointer;white-space:nowrap" id="ref-copy-btn">Copy Code</button>
                 </div>
             </div>
-            <div style="font-size:12px;color:var(--muted);margin-top:8px">Share this link and earn 1 month Pro for each friend who subscribes.</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:8px">Share this code with friends — they enter it when signing up. You earn 1 month Pro for each friend who subscribes.</div>
         </div>
 
     </div>
@@ -2116,6 +2117,7 @@
         document.getElementById('tab-login').classList.toggle('active', tab === 'login');
         document.getElementById('tab-signup').classList.toggle('active', tab === 'signup');
         document.getElementById('gate-pass2').style.display = tab === 'signup' ? '' : 'none';
+        document.getElementById('gate-refcode').style.display = tab === 'signup' ? '' : 'none';
         document.getElementById('gate-btn').textContent = tab === 'login' ? 'Log In' : 'Create Account';
         var fl = document.getElementById('forgot-link');
         if (fl)
@@ -2170,8 +2172,13 @@
             var endpoint = currentTab === 'login' ? '/api/auth/login' : '/api/auth/register';
             var regBody = { email, password: pass };
             if (currentTab === 'register') {
-                var refParam = new URLSearchParams(window.location.search).get('ref');
-                if (refParam) regBody.refCode = refParam.toUpperCase();
+                var refInput = document.getElementById('gate-refcode');
+                var refVal = refInput ? refInput.value.trim().toUpperCase() : '';
+                if (!refVal) {
+                    // Fallback to URL param
+                    refVal = new URLSearchParams(window.location.search).get('ref') || '';
+                }
+                if (refVal) regBody.refCode = refVal;
             }
             var res = await fetch(endpoint, {
                 method: 'POST',
@@ -2261,7 +2268,7 @@
 
     // Enter key support on gate inputs
     document.addEventListener('DOMContentLoaded', function() {
-        ['gate-email', 'gate-pass', 'gate-pass2'].forEach(function(id) {
+        ['gate-email', 'gate-pass', 'gate-pass2', 'gate-refcode'].forEach(function(id) {
             document.getElementById(id).addEventListener('keydown', function(e) {
                 if (e.key === 'Enter')
                     submitAuth();
@@ -3213,20 +3220,23 @@
             } else {
                 document.getElementById('ref-expiry').textContent = data.plan === 'pro' ? 'Active' : '—';
             }
-            var refLink = 'https://raxedge.com/?ref=' + (data.referralCode || '');
-            document.getElementById('ref-link-input').value = refLink;
+            document.getElementById('ref-code-display').textContent = data.referralCode || '—';
         } catch(e) {}
     }
 
-    function copyRefLink() {
-        var input = document.getElementById('ref-link-input');
-        navigator.clipboard.writeText(input.value).then(function() {
+    function copyRefCode() {
+        var code = document.getElementById('ref-code-display').textContent;
+        navigator.clipboard.writeText(code).then(function() {
             var btn = document.getElementById('ref-copy-btn');
             btn.textContent = 'Copied!';
-            setTimeout(function() { btn.textContent = 'Copy Link'; }, 2000);
+            setTimeout(function() { btn.textContent = 'Copy Code'; }, 2000);
         }).catch(function() {
-            input.select();
+            var el = document.createElement('textarea');
+            el.value = code;
+            document.body.appendChild(el);
+            el.select();
             document.execCommand('copy');
+            document.body.removeChild(el);
         });
     }
 
