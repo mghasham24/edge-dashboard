@@ -262,6 +262,10 @@ export async function onRequestGet({ request, env }) {
           const mRes = await fetch(url, { headers: buildHeaders(env) });
           if (mRes.ok) {
             const mData = await mRes.json();
+            // Real Sports sometimes wraps 429 in a 200 response
+            if (mData.statusCode === 429 || mData.error === 'Too Many Requests') {
+              break; // Skip this game, rely on merge cache
+            }
             const gameKey = awayKey + ' @ ' + homeKey;
             // Build initials -> full name map for this fight
             const keyToName = {};
@@ -305,11 +309,12 @@ export async function onRequestGet({ request, env }) {
             }
             return { gameKey, markets, lines };
           }
-          if (mRes.status === 429 || mRes.status >= 500) {
-            const backoff = mRes.status === 429
-              ? 1000 * Math.pow(2, attempt) // exponential: 1s, 2s, 4s, 8s, 16s
-              : 400 * (attempt + 1);
-            await new Promise(r => setTimeout(r, backoff));
+          if (mRes.status === 429) {
+            // Rate limited on this specific game — skip and rely on D1 merge cache
+            break;
+          }
+          if (mRes.status >= 500) {
+            await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
             attempt++;
             continue;
           }
