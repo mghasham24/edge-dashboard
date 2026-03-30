@@ -2781,15 +2781,23 @@
                     var mlEdgeRow = document.createElement('div');
                     mlEdgeRow.style.cssText = 'display:flex;gap:6px;margin-top:6px';
                     mktRows.forEach(function(r) {
+                        var col = document.createElement('div');
+                        col.style.cssText = 'display:flex;flex-direction:column;align-items:center;flex:1;gap:1px';
                         var se = document.createElement('span');
                         se.className = 'mc-side-edge';
                         se.dataset.id = r.id;
-                        se.style.cssText = 'font-family:var(--mono);font-size:12px;font-weight:600;flex:1;text-align:center;color:var(--muted2)';
+                        se.style.cssText = 'font-family:var(--mono);font-size:12px;font-weight:600;text-align:center;color:var(--muted2)';
                         se.textContent = '';
+                        var sev = document.createElement('span');
+                        sev.className = 'mc-side-ev';
+                        sev.dataset.id = r.id;
+                        sev.style.cssText = 'font-family:var(--mono);font-size:10px;font-weight:600;text-align:center;color:var(--muted2);display:none';
+                        col.appendChild(se);
+                        col.appendChild(sev);
                         if (preds[r.id] !== undefined && preds[r.id] !== '') {
                             (function(id){ setTimeout(function(){ updateSideEdge(id); }, 0); })(r.id);
                         }
-                        mlEdgeRow.appendChild(se);
+                        mlEdgeRow.appendChild(col);
                     });
                     inputRow.appendChild(mlEdgeRow);
                 } else if (mkt === 'Total') {
@@ -2901,26 +2909,42 @@
                     var edgeRowT = document.createElement('div');
                     edgeRowT.style.cssText = 'display:flex;gap:10px;margin-top:6px;padding-left:118px';
                     if (rA) {
+                        var colA = document.createElement('div');
+                        colA.style.cssText = 'display:flex;flex-direction:column;align-items:center;flex:1;gap:1px';
                         var seA = document.createElement('span');
                         seA.className = 'mc-side-edge';
                         seA.dataset.id = rA.id;
-                        seA.style.cssText = 'font-family:var(--mono);font-size:12px;font-weight:600;flex:1;text-align:center;color:var(--muted2)';
+                        seA.style.cssText = 'font-family:var(--mono);font-size:12px;font-weight:600;text-align:center;color:var(--muted2)';
                         seA.textContent = '';
+                        var sevA = document.createElement('span');
+                        sevA.className = 'mc-side-ev';
+                        sevA.dataset.id = rA.id;
+                        sevA.style.cssText = 'font-family:var(--mono);font-size:10px;font-weight:600;text-align:center;color:var(--muted2);display:none';
+                        colA.appendChild(seA);
+                        colA.appendChild(sevA);
                         if (preds[rA.id] !== undefined && preds[rA.id] !== '') {
                             (function(id){ setTimeout(function(){ updateSideEdge(id); }, 0); })(rA.id);
                         }
-                        edgeRowT.appendChild(seA);
+                        edgeRowT.appendChild(colA);
                     }
                     if (rB) {
+                        var colB = document.createElement('div');
+                        colB.style.cssText = 'display:flex;flex-direction:column;align-items:center;flex:1;gap:1px';
                         var seB = document.createElement('span');
                         seB.className = 'mc-side-edge';
                         seB.dataset.id = rB.id;
-                        seB.style.cssText = 'font-family:var(--mono);font-size:12px;font-weight:600;flex:1;text-align:center;color:var(--muted2)';
+                        seB.style.cssText = 'font-family:var(--mono);font-size:12px;font-weight:600;text-align:center;color:var(--muted2)';
                         seB.textContent = '';
+                        var sevB = document.createElement('span');
+                        sevB.className = 'mc-side-ev';
+                        sevB.dataset.id = rB.id;
+                        sevB.style.cssText = 'font-family:var(--mono);font-size:10px;font-weight:600;text-align:center;color:var(--muted2);display:none';
+                        colB.appendChild(seB);
+                        colB.appendChild(sevB);
                         if (preds[rB.id] !== undefined && preds[rB.id] !== '') {
                             (function(id){ setTimeout(function(){ updateSideEdge(id); }, 0); })(rB.id);
                         }
-                        edgeRowT.appendChild(seB);
+                        edgeRowT.appendChild(colB);
                     }
                     inputRow.appendChild(edgeRowT);
 
@@ -2974,7 +2998,15 @@
                         sideEdge.dataset.id = r.id;
                         sideEdge.style.cssText = 'font-family:var(--mono);font-size:12px;font-weight:600;margin-left:auto;white-space:nowrap;color:var(--muted2);text-align:right';
                         sideEdge.textContent = '-';
-                        sideRow.appendChild(sideEdge);
+                        var evWrap = document.createElement('div');
+                        evWrap.style.cssText = 'display:flex;flex-direction:column;align-items:flex-end;margin-left:auto;gap:1px';
+                        evWrap.appendChild(sideEdge);
+                        var sideEV = document.createElement('span');
+                        sideEV.className = 'mc-side-ev';
+                        sideEV.dataset.id = r.id;
+                        sideEV.style.cssText = 'font-family:var(--mono);font-size:10px;font-weight:600;color:var(--muted2);text-align:right;display:none';
+                        evWrap.appendChild(sideEV);
+                        sideRow.appendChild(evWrap);
                         // Auto-compute if preds already filled
                         if (preds[r.id] !== undefined && preds[r.id] !== '') {
                             (function(id){ setTimeout(function(){ updateSideEdge(id); }, 0); })(r.id);
@@ -3101,16 +3133,27 @@
         var bet = u * unit;
         var el = document.querySelector('.mc-side-edge[data-id="' + id + '"]');
         if (!el) return;
+        var evEl = document.querySelector('.mc-side-ev[data-id="' + id + '"]');
         if (edge != null) {
             var edgeStr = (edge > 0 ? '+' : '') + edge.toFixed(1) + '%';
             var col = edge >= 8 ? 'var(--green)' : edge >= 5 ? '#7ddfab' : edge > 0 ? 'var(--yellow)' : 'var(--red)';
             el.style.color = col;
-            var evStr = '';
-            if (evForU != null) evStr = ' EV:' + (evForU > 0 ? '+' : '') + evForU.toFixed(1) + '%';
-            el.textContent = edgeStr + (u > 0 ? ' ' + u + 'u $' + bet.toFixed(0) : '') + evStr;
+            el.textContent = edgeStr + (u > 0 ? ' ' + u + 'u $' + bet.toFixed(0) : '');
+            // Show EV on separate line only when positive
+            if (evEl) {
+                if (evForU != null && evForU > 0) {
+                    var evColor = evForU >= 5 ? 'var(--green)' : 'var(--yellow)';
+                    evEl.style.color = evColor;
+                    evEl.textContent = 'EV:+' + evForU.toFixed(1) + '%';
+                    evEl.style.display = '';
+                } else {
+                    evEl.style.display = 'none';
+                }
+            }
         } else {
             el.style.color = 'var(--muted2)';
             el.textContent = '-';
+            if (evEl) evEl.style.display = 'none';
         }
     }
 
