@@ -241,6 +241,8 @@ export async function onRequestGet({ request, env }) {
         headers: { 'Content-Type': 'application/json' }
       });
     }
+
+    if (!games.length) {
       return new Response(JSON.stringify({ ok: true, markets: {}, debug: 'no games', keys: Object.keys(gamesData) }), {
         headers: { 'Content-Type': 'application/json' }
       });
