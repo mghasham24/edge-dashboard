@@ -3150,8 +3150,8 @@
                         evEl.textContent = 'EV:+' + evForU.toFixed(1) + '%';
                     } else {
                         evEl.style.color = 'var(--green)';
-                        evEl.style.filter = 'blur(4px)';
-                        evEl.textContent = 'EV:+8.4%';
+                        evEl.style.filter = '';
+                        evEl.innerHTML = 'EV:<span style="filter:blur(4px);display:inline-block">+8.4%</span>';
                     }
                 } else {
                     evEl.style.display = 'none';
