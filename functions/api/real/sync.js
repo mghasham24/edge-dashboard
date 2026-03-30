@@ -185,7 +185,8 @@ export async function onRequestGet({ request, env }) {
         latestDayContentDay: gamesData.latestDayContent && gamesData.latestDayContent.day,
         latestDayContentGamesCount: gamesData.latestDayContent && gamesData.latestDayContent.games && gamesData.latestDayContent.games.length,
         extractedGamesCount: games.length,
-        extractedGameKeys: games.map(g => ((g.awayTeam && g.awayTeam.name) || g.awayTeamKey || g.awayTeam?.key || '?') + ' @ ' + ((g.homeTeam && g.homeTeam.name) || g.homeTeamKey || g.homeTeam?.key || '?'))
+        extractedGameKeys: games.map(g => ((g.awayTeam && g.awayTeam.name) || g.awayTeamKey || '?') + ' @ ' + ((g.homeTeam && g.homeTeam.name) || g.homeTeamKey || '?')),
+        gameIds: games.map(g => ({ id: g.id, away: (g.awayTeam?.name || g.awayTeamKey), home: (g.homeTeam?.name || g.homeTeamKey) }))
       }), { headers: { 'Content-Type': 'application/json' } });
     }
 
