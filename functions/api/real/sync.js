@@ -135,7 +135,8 @@ function extractGames(gamesData) {
   return all;
 }
 
-export async function onRequestGet({ request, env }) {
+export async function onRequestGet(context) {
+  const { request, env } = context;
   const session = await getSession(request, env.DB);
   if (!session) return fail(401, 'Not authenticated');
   if (!env.REAL_AUTH_TOKEN) return fail(500, 'REAL_AUTH_TOKEN not set');
@@ -232,6 +233,30 @@ export async function onRequestGet({ request, env }) {
       });
     }
 
+    if (debugMode === '7') {
+      const testId = reqUrl.searchParams.get('id') || '23560';
+      const mUrl = `https://web.realapp.com/predictions/game/${realSport}/${testId}/markets`;
+      const mRes = await fetch(mUrl, { headers: buildHeaders(env) });
+      const mText = await mRes.text();
+      return new Response(JSON.stringify({ status: mRes.status, body: mText.slice(0, 10000) }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    if (debugMode === '8') {
+      // Dump raw game objects to inspect structure
+      const targetId = parseInt(reqUrl.searchParams.get('id') || '0');
+      const game = targetId ? games.find(g => (g.id || g.gameId) === targetId) : games[0];
+      return new Response(JSON.stringify({ game: game ? JSON.parse(JSON.stringify(game)) : null, allIds: games.map(g => g.id || g.gameId) }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    if (debugMode === '9') {
+      // Run fetchGameMarkets for a specific game — defined below, so we fall through
+      // This is handled after fetchGameMarkets definition
+    }
+
     if (!games.length) {
       return new Response(JSON.stringify({ ok: true, markets: {}, debug: 'no games', keys: Object.keys(gamesData) }), {
         headers: { 'Content-Type': 'application/json' }
@@ -239,19 +264,35 @@ export async function onRequestGet({ request, env }) {
     }
 
     // Fetch market data with retry logic — sequential to avoid rate limiting
-    async function fetchGameMarkets(game) {
+    async function fetchGameMarkets(game, tokenOffset) {
       const gameId = game.id || game.gameId;
       const awayKey = (game.awayTeam && game.awayTeam.name) || game.awayTeamKey || game.awayTeam?.key;
       const homeKey = (game.homeTeam && game.homeTeam.name) || game.homeTeamKey || game.homeTeam?.key;
-      if (!gameId || !awayKey || !homeKey) return null;
+      if (!gameId || !awayKey || !homeKey) return { _err: 'no keys', gameId };
+      const headers = buildHeaders(env);
+      if (tokenOffset) headers['real-request-token'] = hashidsEncode(Date.now() + (tokenOffset || 0));
 
       const url = `https://web.realapp.com/predictions/game/${realSport}/${gameId}/markets`;
       let attempt = 0;
+      let lastStatus = null;
+      let lastErr = null;
       while (attempt < 3) {
         try {
-          const mRes = await fetch(url, { headers: buildHeaders(env) });
+          const mRes = await fetch(url, { headers: attempt === 0 ? headers : buildHeaders(env) });
+          lastStatus = mRes.status;
           if (mRes.ok) {
-            const mData = await mRes.json();
+            let mData;
+            try {
+              mData = await mRes.json();
+            } catch(jsonErr) {
+              // JSON parse failed — try text to debug
+              attempt++;
+              continue;
+            }
+            // Real Sports sometimes wraps 429 in a 200 response
+            if (mData.statusCode === 429 || mData.error === 'Too Many Requests') {
+              break; // Skip this game, rely on merge cache
+            }
             const gameKey = awayKey + ' @ ' + homeKey;
             // Build initials -> full name map for this fight
             const keyToName = {};
@@ -260,7 +301,7 @@ export async function onRequestGet({ request, env }) {
             const markets = {};
             for (const mk of (mData.markets || [])) {
               // Parse volumeDisplay e.g. "213.7k" -> 213700, "1.9k" -> 1900
-              const volStr = mk.volumeDisplay || '';
+              const volStr = String(mk.volumeDisplay || '');
               const volNum = volStr.endsWith('k') ? parseFloat(volStr) * 1000
                            : volStr.endsWith('m') ? parseFloat(volStr) * 1000000
                            : parseFloat(volStr) || 0;
@@ -295,45 +336,124 @@ export async function onRequestGet({ request, env }) {
             }
             return { gameKey, markets, lines };
           }
-          if (mRes.status === 429 || mRes.status >= 500) {
+          if (mRes.status === 429) {
+            // Rate limited on this specific game — skip and rely on D1 merge cache
+            break;
+          }
+          if (mRes.status >= 500) {
             await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
             attempt++;
             continue;
           }
+          // Log non-retryable failures
           return null;
         } catch(e) {
+          lastErr = e.message;
           attempt++;
           await new Promise(r => setTimeout(r, 400 * attempt));
         }
       }
-      return null;
+      return { _err: 'exhausted', lastStatus, lastErr, gameId };
     }
 
-    // Sequential fetching with 150ms gap between requests
+    // Two-phase fetch: return cached data immediately, fetch missing games in background
     const marketMap = {};
     const now = Math.floor(Date.now() / 1000);
     const cacheKey = 'real_sync_' + realSport;
     const TTL = 300;
 
-    // Load cache first to fill any gaps
+    // Phase 1: Load cache
     try {
       const cacheRow = await env.DB.prepare(
         'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
       ).bind(cacheKey).first();
-      if (cacheRow && (now - cacheRow.fetched_at) < TTL) {
+      if (cacheRow) {
         Object.assign(marketMap, JSON.parse(cacheRow.data));
+        if ((now - cacheRow.fetched_at) < TTL) {
+          // Cache fresh — check for missing games
+          const missingGames = games.filter(g => {
+            const awayKey = (g.awayTeam && g.awayTeam.name) || g.awayTeamKey;
+            const homeKey = (g.homeTeam && g.homeTeam.name) || g.homeTeamKey;
+            return !marketMap[awayKey + ' @ ' + homeKey];
+          });
+          if (missingGames.length === 0) {
+            return new Response(JSON.stringify({ ok: true, markets: marketMap }), {
+              headers: { 'Content-Type': 'application/json' }
+            });
+          }
+          // Fetch missing games with 3s timeout per game, then return combined result
+          const bgMap = { ...marketMap };
+          const bgResults = [];
+          for (let i = 0; i < missingGames.length; i++) {
+            const result = await Promise.race([
+              fetchGameMarkets(missingGames[i], i * 100),
+              new Promise(r => setTimeout(() => r({ _err: 'timeout' }), 5000))
+            ]);
+            bgResults.push(result);
+            if (i < missingGames.length - 1) await new Promise(r => setTimeout(r, 300));
+          }
+          const bgDebug = bgResults.map((r, i) => {
+            const g = missingGames[i];
+            return { game: (g.awayTeam?.name||'?') + ' @ ' + (g.homeTeam?.name||'?'), got: !!(r && !r._err), err: r?._err, status: r?.lastStatus, lastErr: r?.lastErr };
+          });
+          for (const result of bgResults) {
+            if (result && !result._err) {
+              bgMap[result.gameKey] = result.markets;
+              if (result.lines && Object.keys(result.lines).length) bgMap[result.gameKey + '__lines'] = result.lines;
+            }
+          }
+          // Write updated cache
+          try {
+            await env.DB.prepare(
+              'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at'
+            ).bind(cacheKey, JSON.stringify(bgMap), now).run();
+          } catch(e) {}
+          return new Response(JSON.stringify({ ok: true, markets: bgMap, bgDebug }), {
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
       }
     } catch(e) {}
 
+    // Phase 2: Cache stale or empty — fetch all games in parallel with 8s timeout each
+    if (debugMode === '9') {
+      const targetId = parseInt(reqUrl.searchParams.get('id') || '0');
+      const game = targetId ? games.find(g => (g.id || g.gameId) === targetId) : games[0];
+      if (!game) return new Response(JSON.stringify({ error: 'game not found' }), { headers: { 'Content-Type': 'application/json' } });
+      const gameId = game.id || game.gameId;
+      const url = `https://web.realapp.com/predictions/game/${realSport}/${gameId}/markets`;
+      const mRes = await fetch(url, { headers: buildHeaders(env) });
+      const mText = await mRes.text();
+      let mData = null;
+      let parseErr = null;
+      try { mData = JSON.parse(mText); } catch(e) { parseErr = e.message; }
+      return new Response(JSON.stringify({
+        status: mRes.status,
+        ok: mRes.ok,
+        parseErr,
+        hasMarkets: !!(mData && mData.markets),
+        marketsLength: mData?.markets?.length,
+        firstMarketLabel: mData?.markets?.[0]?.label,
+        awayKey: (game.awayTeam?.name || game.awayTeamKey),
+        homeKey: (game.homeTeam?.name || game.homeTeamKey)
+      }), { headers: { 'Content-Type': 'application/json' } });
+    }
+    const results = [];
     for (let i = 0; i < games.length; i++) {
-      const result = await fetchGameMarkets(games[i]);
-      if (result) {
+      const result = await Promise.race([
+        fetchGameMarkets(games[i], i * 100),
+        new Promise(r => setTimeout(() => r({ _err: 'timeout' }), 5000))
+      ]);
+      results.push(result);
+      if (i < games.length - 1) await new Promise(r => setTimeout(r, 300));
+    }
+    for (const result of results) {
+      if (result && !result._err) {
         marketMap[result.gameKey] = result.markets;
         if (result.lines && Object.keys(result.lines).length) {
           marketMap[result.gameKey + '__lines'] = result.lines;
         }
       }
-      if (i < games.length - 1) await new Promise(r => setTimeout(r, 150));
     }
 
     // Write back to cache
@@ -344,7 +464,7 @@ export async function onRequestGet({ request, env }) {
     } catch(e) {}
 
     return new Response(JSON.stringify({ ok: true, markets: marketMap }), {
-      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60' }
+      headers: { 'Content-Type': 'application/json' }
     });
 
   } catch(e) {
