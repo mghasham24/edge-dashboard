@@ -3632,7 +3632,7 @@
         .then(function() {
             btn.disabled = false;
             renderTable();
-            fetchRealMarkets(currentSport);
+            if (rawRows.length > 0) fetchRealMarkets(currentSport);
         });
     }
 
@@ -3876,7 +3876,21 @@
         var af = adjFair(fair, r.pt, yl, r.mkt, r.ps);
         var pred = input.value !== '' ? parseFloat(input.value) / 100 : null;
         var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
-        var u = units(edge);
+        // EV calculation (volume-tiered rake) — mirrors buildRow logic
+        var evForUnits = null, evH = '-';
+        if (af != null && pred != null && pred > 0 && pred < 1) {
+            var volNumP = 0;
+            if (vols[id]) { var vsP = vols[id]; volNumP = vsP.endsWith('k') ? parseFloat(vsP)*1000 : vsP.endsWith('m') ? parseFloat(vsP)*1000000 : parseFloat(vsP); }
+            var rakeP = volNumP > 100000 ? 0.034 : volNumP > 10000 ? 0.032 : volNumP > 1000 ? 0.035 : volNumP > 0 ? 0.04 : 0.034;
+            evForUnits = (af * (1/pred) * (1-rakeP) - 1) * 100;
+            if (isPro()) {
+                var evColor = evForUnits >= 5 ? 'var(--green)' : evForUnits > 0 ? 'var(--yellow)' : 'var(--red)';
+                evH = '<span style="font-family:var(--mono);font-size:12px;font-weight:600;color:' + evColor + '">' + (evForUnits > 0 ? '+' : '') + evForUnits.toFixed(1) + '%</span>';
+            } else {
+                evH = '<span style="filter:blur(4px);font-family:var(--mono);font-size:12px;font-weight:600;color:var(--green);user-select:none">+8.4%</span><span style="font-size:9px;font-weight:700;background:var(--accent);color:#fff;border-radius:3px;padding:1px 4px;margin-left:3px;vertical-align:middle">PRO</span>';
+            }
+        }
+        var u = isPro() ? unitsEV(evForUnits, pred) : units(edge);
         var unit = parseFloat(document.getElementById('unit-size').value) || 300;
         var es = '-', ec = 'e-none', bw = 0, bc = 'var(--muted2)';
         if (edge != null) {
@@ -3889,8 +3903,9 @@
         }
         var tds = tr.querySelectorAll('td');
         tds[9].innerHTML = '<div class="edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:' + bw + 'px;background:' + bc + '"></div></div><span class="edge-val ' + ec + '">' + es + '</span></div>';
-        tds[10].innerHTML = u === 0 ? '<span class="u-pass">PASS</span>' : '<span class="u-val">' + u + 'u</span>';
-        tds[11].innerHTML = u === 0 ? '<span class="u-pass">-</span>' : '<span class="bet-val">$' + (u * unit).toFixed(0) + '</span>';
+        tds[10].innerHTML = evH;
+        tds[11].innerHTML = u === 0 ? '<span class="u-pass">PASS</span>' : '<span class="u-val">' + u + 'u</span>';
+        tds[12].innerHTML = u === 0 ? '<span class="u-pass">-</span>' : '<span class="bet-val">$' + (u * unit).toFixed(0) + '</span>';
         tr.classList.toggle('has-edge', edge != null && edge > 0);
         document.getElementById('stat-edges').textContent = document.querySelectorAll('tr.has-edge').length;
     }
