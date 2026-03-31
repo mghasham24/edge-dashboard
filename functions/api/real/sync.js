@@ -135,7 +135,8 @@ function extractGames(gamesData) {
   return all;
 }
 
-export async function onRequestGet({ request, env }) {
+export async function onRequestGet(context) {
+  const { request, env } = context;
   const session = await getSession(request, env.DB);
   if (!session) return fail(401, 'Not authenticated');
   if (!env.REAL_AUTH_TOKEN) return fail(500, 'REAL_AUTH_TOKEN not set');
@@ -329,22 +330,57 @@ export async function onRequestGet({ request, env }) {
       return null;
     }
 
-    // Sequential fetching with 150ms gap between requests
+    // Two-phase fetch: return cached data immediately, fetch missing games in background
     const marketMap = {};
     const now = Math.floor(Date.now() / 1000);
     const cacheKey = 'real_sync_' + realSport;
     const TTL = 300;
 
-    // Load cache first to fill any gaps
+    // Phase 1: Load cache
     try {
       const cacheRow = await env.DB.prepare(
         'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
       ).bind(cacheKey).first();
-      if (cacheRow && (now - cacheRow.fetched_at) < TTL) {
+      if (cacheRow) {
         Object.assign(marketMap, JSON.parse(cacheRow.data));
+        if ((now - cacheRow.fetched_at) < TTL) {
+          // Cache fresh — check for missing games
+          const missingGames = games.filter(g => {
+            const awayKey = (g.awayTeam && g.awayTeam.name) || g.awayTeamKey;
+            const homeKey = (g.homeTeam && g.homeTeam.name) || g.homeTeamKey;
+            return !marketMap[awayKey + ' @ ' + homeKey];
+          });
+          if (missingGames.length === 0) {
+            return new Response(JSON.stringify({ ok: true, markets: marketMap }), {
+              headers: { 'Content-Type': 'application/json' }
+            });
+          }
+          // Return cached data immediately, fetch missing in background
+          const response = new Response(JSON.stringify({ ok: true, markets: marketMap }), {
+            headers: { 'Content-Type': 'application/json' }
+          });
+          context.waitUntil((async () => {
+            const bgMap = { ...marketMap };
+            for (let i = 0; i < missingGames.length; i++) {
+              const result = await fetchGameMarkets(missingGames[i]);
+              if (result) {
+                bgMap[result.gameKey] = result.markets;
+                if (result.lines && Object.keys(result.lines).length) bgMap[result.gameKey + '__lines'] = result.lines;
+              }
+              if (i < missingGames.length - 1) await new Promise(r => setTimeout(r, 250));
+            }
+            try {
+              await env.DB.prepare(
+                'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at'
+              ).bind(cacheKey, JSON.stringify(bgMap), Math.floor(Date.now() / 1000)).run();
+            } catch(e) {}
+          })());
+          return response;
+        }
       }
     } catch(e) {}
 
+    // Phase 2: Cache stale or empty — fetch all games sequentially
     for (let i = 0; i < games.length; i++) {
       const result = await fetchGameMarkets(games[i]);
       if (result) {
@@ -364,7 +400,7 @@ export async function onRequestGet({ request, env }) {
     } catch(e) {}
 
     return new Response(JSON.stringify({ ok: true, markets: marketMap }), {
-      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60' }
+      headers: { 'Content-Type': 'application/json' }
     });
 
   } catch(e) {
