@@ -4120,15 +4120,9 @@
                 var gameMarkets = d.markets[realKey];
                 if (!gameMarkets) return;
 
-                // Auto-fill Real Line from game-level pointSpread/overUnder
+                // Auto-fill Real Line from game-level total only (spread handled via match.line below)
                 var gameLines = d.markets[realKey + '__lines'];
                 if (gameLines) {
-                    if (r.mkt === 'Spread' && yourLines[r.id] == null) {
-                        // Determine if this row is home or away side
-                        var gameParts = r.game.split(' @ ');
-                        var spreadVal = r.ps === 'B' ? gameLines.homeSpread : gameLines.awaySpread;
-                        if (spreadVal != null) yourLines[r.id] = spreadVal;
-                    }
                     if (r.mkt === 'Total' && yourLines[r.id] == null && gameLines.total != null) {
                         yourLines[r.id] = gameLines.total;
                     }
@@ -4210,18 +4204,13 @@
                         vols[pairedId] = mktData.volumeDisplay;
                     }
                 }
-                // Auto-fill Real Line from Real Sports outcome label (e.g. "ATL +6.5" -> 6.5)
-                if (match && match.label && (r.mkt === 'Spread' || r.mkt === 'Total')) {
-                    var lineMatch = match.label.match(/([+-]?\d+\.?\d*)\s*$/);
-                    if (lineMatch) {
-                        var lineVal = parseFloat(lineMatch[1]);
-                        // Sanity check: spreads should be < 30, totals should end in .5 or be > 20 (NBA range)
-                        // Values like 53/47 are probabilities, not lines — ignore them
-                        var isValidLine = r.mkt === 'Spread'
-                            ? (!isNaN(lineVal) && Math.abs(lineVal) < 30)
-                            : (!isNaN(lineVal) && (lineVal % 1 === 0.5 || lineVal > 20) && lineVal <= 350);
-                        if (isValidLine) yourLines[r.id] = lineVal;
-                    }
+                // Auto-fill Real Line from matched outcome's line field (computed from original label before name resolution)
+                if (match && match.line != null && (r.mkt === 'Spread' || r.mkt === 'Total')) {
+                    var lineVal = match.line;
+                    var isValidLine = r.mkt === 'Spread'
+                        ? (!isNaN(lineVal) && Math.abs(lineVal) < 30)
+                        : (!isNaN(lineVal) && (lineVal % 1 === 0.5 || lineVal > 20) && lineVal <= 350);
+                    if (isValidLine) yourLines[r.id] = lineVal;
                 }
             });
             renderTable();
