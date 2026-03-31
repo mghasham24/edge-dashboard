@@ -408,10 +408,23 @@ export async function onRequestGet(context) {
       const targetId = parseInt(reqUrl.searchParams.get('id') || '0');
       const game = targetId ? games.find(g => (g.id || g.gameId) === targetId) : games[0];
       if (!game) return new Response(JSON.stringify({ error: 'game not found' }), { headers: { 'Content-Type': 'application/json' } });
-      const result = await fetchGameMarkets(game);
-      return new Response(JSON.stringify({ result, awayKey: (game.awayTeam?.name || game.awayTeamKey), homeKey: (game.homeTeam?.name || game.homeTeamKey) }), {
-        headers: { 'Content-Type': 'application/json' }
-      });
+      const gameId = game.id || game.gameId;
+      const url = `https://web.realapp.com/predictions/game/${realSport}/${gameId}/markets`;
+      const mRes = await fetch(url, { headers: buildHeaders(env) });
+      const mText = await mRes.text();
+      let mData = null;
+      let parseErr = null;
+      try { mData = JSON.parse(mText); } catch(e) { parseErr = e.message; }
+      return new Response(JSON.stringify({
+        status: mRes.status,
+        ok: mRes.ok,
+        parseErr,
+        hasMarkets: !!(mData && mData.markets),
+        marketsLength: mData?.markets?.length,
+        firstMarketLabel: mData?.markets?.[0]?.label,
+        awayKey: (game.awayTeam?.name || game.awayTeamKey),
+        homeKey: (game.homeTeam?.name || game.homeTeamKey)
+      }), { headers: { 'Content-Type': 'application/json' } });
     }
     const results = await Promise.all(games.map(game =>
       Promise.race([
