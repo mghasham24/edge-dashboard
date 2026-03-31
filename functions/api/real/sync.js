@@ -342,8 +342,7 @@ export async function onRequestGet(context) {
             attempt++;
             continue;
           }
-          // Log non-retryable failures to market map for debugging
-          marketMap[gameKey + '__error'] = { status: mRes.status, attempt };
+          // Log non-retryable failures
           return null;
         } catch(e) {
           attempt++;
@@ -386,7 +385,10 @@ export async function onRequestGet(context) {
               new Promise(r => setTimeout(() => r(null), 8000))
             ])
           ));
-          const bgDebug = bgResults.map((r, i) => ({ game: (missingGames[i].awayTeam?.name||'?') + ' @ ' + (missingGames[i].homeTeam?.name||'?'), got: !!r, gameKey: r?.gameKey }));
+          const bgDebug = bgResults.map((r, i) => {
+            const g = missingGames[i];
+            return { game: (g.awayTeam?.name||'?') + ' @ ' + (g.homeTeam?.name||'?'), got: !!r, gameKey: r?.gameKey };
+          });
           for (const result of bgResults) {
             if (result) {
               bgMap[result.gameKey] = result.markets;
