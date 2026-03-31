@@ -264,17 +264,19 @@ export async function onRequestGet(context) {
     }
 
     // Fetch market data with retry logic — sequential to avoid rate limiting
-    async function fetchGameMarkets(game) {
+    async function fetchGameMarkets(game, tokenOffset) {
       const gameId = game.id || game.gameId;
       const awayKey = (game.awayTeam && game.awayTeam.name) || game.awayTeamKey || game.awayTeam?.key;
       const homeKey = (game.homeTeam && game.homeTeam.name) || game.homeTeamKey || game.homeTeam?.key;
       if (!gameId || !awayKey || !homeKey) return null;
+      const headers = buildHeaders(env);
+      if (tokenOffset) headers['real-request-token'] = hashidsEncode(Date.now() + (tokenOffset || 0));
 
       const url = `https://web.realapp.com/predictions/game/${realSport}/${gameId}/markets`;
       let attempt = 0;
       while (attempt < 3) {
         try {
-          const mRes = await fetch(url, { headers: buildHeaders(env) });
+          const mRes = await fetch(url, { headers: attempt === 0 ? headers : buildHeaders(env) });
           if (mRes.ok) {
             let mData;
             try {
@@ -378,9 +380,9 @@ export async function onRequestGet(context) {
           }
           // Fetch missing games with 3s timeout per game, then return combined result
           const bgMap = { ...marketMap };
-          const bgResults = await Promise.all(missingGames.map(game =>
+          const bgResults = await Promise.all(missingGames.map((game, i) =>
             Promise.race([
-              fetchGameMarkets(game),
+              fetchGameMarkets(game, i * 50),
               new Promise(r => setTimeout(() => r(null), 8000))
             ])
           ));
@@ -427,9 +429,9 @@ export async function onRequestGet(context) {
         homeKey: (game.homeTeam?.name || game.homeTeamKey)
       }), { headers: { 'Content-Type': 'application/json' } });
     }
-    const results = await Promise.all(games.map(game =>
+    const results = await Promise.all(games.map((game, i) =>
       Promise.race([
-        fetchGameMarkets(game),
+        fetchGameMarkets(game, i * 50),
         new Promise(r => setTimeout(() => r(null), 8000))
       ])
     ));
