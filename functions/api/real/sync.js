@@ -355,27 +355,26 @@ export async function onRequestGet(context) {
               headers: { 'Content-Type': 'application/json' }
             });
           }
-          // Return cached data immediately, fetch missing in background
-          const response = new Response(JSON.stringify({ ok: true, markets: marketMap }), {
+          // Fetch missing games with 3s timeout per game, then return combined result
+          const bgMap = { ...marketMap };
+          for (let i = 0; i < missingGames.length; i++) {
+            const timeoutPromise = new Promise(r => setTimeout(() => r(null), 3000));
+            const result = await Promise.race([fetchGameMarkets(missingGames[i]), timeoutPromise]);
+            if (result) {
+              bgMap[result.gameKey] = result.markets;
+              if (result.lines && Object.keys(result.lines).length) bgMap[result.gameKey + '__lines'] = result.lines;
+            }
+            if (i < missingGames.length - 1) await new Promise(r => setTimeout(r, 150));
+          }
+          // Write updated cache
+          try {
+            await env.DB.prepare(
+              'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at'
+            ).bind(cacheKey, JSON.stringify(bgMap), now).run();
+          } catch(e) {}
+          return new Response(JSON.stringify({ ok: true, markets: bgMap }), {
             headers: { 'Content-Type': 'application/json' }
           });
-          context.waitUntil((async () => {
-            const bgMap = { ...marketMap };
-            for (let i = 0; i < missingGames.length; i++) {
-              const result = await fetchGameMarkets(missingGames[i]);
-              if (result) {
-                bgMap[result.gameKey] = result.markets;
-                if (result.lines && Object.keys(result.lines).length) bgMap[result.gameKey + '__lines'] = result.lines;
-              }
-              if (i < missingGames.length - 1) await new Promise(r => setTimeout(r, 250));
-            }
-            try {
-              await env.DB.prepare(
-                'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at'
-              ).bind(cacheKey, JSON.stringify(bgMap), Math.floor(Date.now() / 1000)).run();
-            } catch(e) {}
-          })());
-          return response;
         }
       }
     } catch(e) {}
