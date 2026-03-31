@@ -268,15 +268,18 @@ export async function onRequestGet(context) {
       const gameId = game.id || game.gameId;
       const awayKey = (game.awayTeam && game.awayTeam.name) || game.awayTeamKey || game.awayTeam?.key;
       const homeKey = (game.homeTeam && game.homeTeam.name) || game.homeTeamKey || game.homeTeam?.key;
-      if (!gameId || !awayKey || !homeKey) return null;
+      if (!gameId || !awayKey || !homeKey) return { _err: 'no keys', gameId };
       const headers = buildHeaders(env);
       if (tokenOffset) headers['real-request-token'] = hashidsEncode(Date.now() + (tokenOffset || 0));
 
       const url = `https://web.realapp.com/predictions/game/${realSport}/${gameId}/markets`;
       let attempt = 0;
+      let lastStatus = null;
+      let lastErr = null;
       while (attempt < 3) {
         try {
           const mRes = await fetch(url, { headers: attempt === 0 ? headers : buildHeaders(env) });
+          lastStatus = mRes.status;
           if (mRes.ok) {
             let mData;
             try {
@@ -345,11 +348,12 @@ export async function onRequestGet(context) {
           // Log non-retryable failures
           return null;
         } catch(e) {
+          lastErr = e.message;
           attempt++;
           await new Promise(r => setTimeout(r, 400 * attempt));
         }
       }
-      return null;
+      return { _err: 'exhausted', lastStatus, lastErr, gameId };
     }
 
     // Two-phase fetch: return cached data immediately, fetch missing games in background
@@ -387,10 +391,10 @@ export async function onRequestGet(context) {
           ));
           const bgDebug = bgResults.map((r, i) => {
             const g = missingGames[i];
-            return { game: (g.awayTeam?.name||'?') + ' @ ' + (g.homeTeam?.name||'?'), got: !!r, gameKey: r?.gameKey };
+            return { game: (g.awayTeam?.name||'?') + ' @ ' + (g.homeTeam?.name||'?'), got: !!(r && !r._err), err: r?._err, status: r?.lastStatus, lastErr: r?.lastErr };
           });
           for (const result of bgResults) {
-            if (result) {
+            if (result && !result._err) {
               bgMap[result.gameKey] = result.markets;
               if (result.lines && Object.keys(result.lines).length) bgMap[result.gameKey + '__lines'] = result.lines;
             }
