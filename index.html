@@ -4126,8 +4126,7 @@
                     if (r.mkt === 'Spread' && yourLines[r.id] == null) {
                         // Determine if this row is home or away side
                         var gameParts = r.game.split(' @ ');
-                        var isHome = gameParts[1] && r.side.toLowerCase().indexOf(gameParts[1].split(' ').pop().toLowerCase()) !== -1;
-                        var spreadVal = isHome ? gameLines.homeSpread : gameLines.awaySpread;
+                        var spreadVal = r.ps === 'B' ? gameLines.homeSpread : gameLines.awaySpread;
                         if (spreadVal != null) yourLines[r.id] = spreadVal;
                     }
                     if (r.mkt === 'Total' && yourLines[r.id] == null && gameLines.total != null) {
