@@ -258,7 +258,7 @@ export async function onRequestGet(context) {
 
       const url = `https://web.realapp.com/predictions/game/${realSport}/${gameId}/markets`;
       let attempt = 0;
-      while (attempt < 5) {
+      while (attempt < 3) {
         try {
           const mRes = await fetch(url, { headers: buildHeaders(env) });
           if (mRes.ok) {
@@ -357,14 +357,17 @@ export async function onRequestGet(context) {
           }
           // Fetch missing games with 3s timeout per game, then return combined result
           const bgMap = { ...marketMap };
+          const bgDeadline = Date.now() + 20000;
           for (let i = 0; i < missingGames.length; i++) {
-            const timeoutPromise = new Promise(r => setTimeout(() => r(null), 3000));
+            if (Date.now() > bgDeadline) break;
+            const remaining = bgDeadline - Date.now();
+            const timeoutPromise = new Promise(r => setTimeout(() => r(null), Math.min(remaining, 4000)));
             const result = await Promise.race([fetchGameMarkets(missingGames[i]), timeoutPromise]);
             if (result) {
               bgMap[result.gameKey] = result.markets;
               if (result.lines && Object.keys(result.lines).length) bgMap[result.gameKey + '__lines'] = result.lines;
             }
-            if (i < missingGames.length - 1) await new Promise(r => setTimeout(r, 150));
+            if (i < missingGames.length - 1) await new Promise(r => setTimeout(r, 100));
           }
           // Write updated cache
           try {
@@ -379,16 +382,20 @@ export async function onRequestGet(context) {
       }
     } catch(e) {}
 
-    // Phase 2: Cache stale or empty — fetch all games sequentially
+    // Phase 2: Cache stale or empty — fetch all games with 20s total budget
+    const deadline = Date.now() + 20000;
     for (let i = 0; i < games.length; i++) {
-      const result = await fetchGameMarkets(games[i]);
+      if (Date.now() > deadline) break;
+      const remaining = deadline - Date.now();
+      const timeoutPromise = new Promise(r => setTimeout(() => r(null), Math.min(remaining, 4000)));
+      const result = await Promise.race([fetchGameMarkets(games[i]), timeoutPromise]);
       if (result) {
         marketMap[result.gameKey] = result.markets;
         if (result.lines && Object.keys(result.lines).length) {
           marketMap[result.gameKey + '__lines'] = result.lines;
         }
       }
-      if (i < games.length - 1) await new Promise(r => setTimeout(r, 250));
+      if (i < games.length - 1) await new Promise(r => setTimeout(r, 100));
     }
 
     // Write back to cache
