@@ -252,6 +252,18 @@ export async function onRequestGet(context) {
       });
     }
 
+    if (debugMode === '9') {
+      // Run fetchGameMarkets for a specific game and return result
+      const targetId = parseInt(reqUrl.searchParams.get('id') || '0');
+      const game = targetId ? games.find(g => (g.id || g.gameId) === targetId) : games[0];
+      if (!game) return new Response(JSON.stringify({ error: 'game not found' }), { headers: { 'Content-Type': 'application/json' } });
+      // Need to define fetchGameMarkets first — call after it's defined
+      const marker = '__debug9__';
+      return new Response(JSON.stringify({ marker, gameId: game.id, awayTeam: game.awayTeam, homeTeam: game.homeTeam }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
     if (!games.length) {
       return new Response(JSON.stringify({ ok: true, markets: {}, debug: 'no games', keys: Object.keys(gamesData) }), {
         headers: { 'Content-Type': 'application/json' }
@@ -271,7 +283,14 @@ export async function onRequestGet(context) {
         try {
           const mRes = await fetch(url, { headers: buildHeaders(env) });
           if (mRes.ok) {
-            const mData = await mRes.json();
+            let mData;
+            try {
+              mData = await mRes.json();
+            } catch(jsonErr) {
+              // JSON parse failed — try text to debug
+              attempt++;
+              continue;
+            }
             // Real Sports sometimes wraps 429 in a 200 response
             if (mData.statusCode === 429 || mData.error === 'Too Many Requests') {
               break; // Skip this game, rely on merge cache
