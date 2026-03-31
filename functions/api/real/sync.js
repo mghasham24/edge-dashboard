@@ -243,6 +243,15 @@ export async function onRequestGet(context) {
       });
     }
 
+    if (debugMode === '8') {
+      // Dump raw game objects to inspect structure
+      const targetId = parseInt(reqUrl.searchParams.get('id') || '0');
+      const game = targetId ? games.find(g => (g.id || g.gameId) === targetId) : games[0];
+      return new Response(JSON.stringify({ game: game ? JSON.parse(JSON.stringify(game)) : null, allIds: games.map(g => g.id || g.gameId) }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
     if (!games.length) {
       return new Response(JSON.stringify({ ok: true, markets: {}, debug: 'no games', keys: Object.keys(gamesData) }), {
         headers: { 'Content-Type': 'application/json' }
