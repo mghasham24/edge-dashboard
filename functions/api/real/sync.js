@@ -301,7 +301,7 @@ export async function onRequestGet(context) {
             const markets = {};
             for (const mk of (mData.markets || [])) {
               // Parse volumeDisplay e.g. "213.7k" -> 213700, "1.9k" -> 1900
-              const volStr = mk.volumeDisplay || '';
+              const volStr = String(mk.volumeDisplay || '');
               const volNum = volStr.endsWith('k') ? parseFloat(volStr) * 1000
                            : volStr.endsWith('m') ? parseFloat(volStr) * 1000000
                            : parseFloat(volStr) || 0;
@@ -383,12 +383,15 @@ export async function onRequestGet(context) {
           }
           // Fetch missing games with 3s timeout per game, then return combined result
           const bgMap = { ...marketMap };
-          const bgResults = await Promise.all(missingGames.map((game, i) =>
-            Promise.race([
-              fetchGameMarkets(game, i * 50),
-              new Promise(r => setTimeout(() => r(null), 8000))
-            ])
-          ));
+          const bgResults = [];
+          for (let i = 0; i < missingGames.length; i++) {
+            const result = await Promise.race([
+              fetchGameMarkets(missingGames[i], i * 100),
+              new Promise(r => setTimeout(() => r({ _err: 'timeout' }), 5000))
+            ]);
+            bgResults.push(result);
+            if (i < missingGames.length - 1) await new Promise(r => setTimeout(r, 300));
+          }
           const bgDebug = bgResults.map((r, i) => {
             const g = missingGames[i];
             return { game: (g.awayTeam?.name||'?') + ' @ ' + (g.homeTeam?.name||'?'), got: !!(r && !r._err), err: r?._err, status: r?.lastStatus, lastErr: r?.lastErr };
@@ -435,14 +438,17 @@ export async function onRequestGet(context) {
         homeKey: (game.homeTeam?.name || game.homeTeamKey)
       }), { headers: { 'Content-Type': 'application/json' } });
     }
-    const results = await Promise.all(games.map((game, i) =>
-      Promise.race([
-        fetchGameMarkets(game, i * 50),
-        new Promise(r => setTimeout(() => r(null), 8000))
-      ])
-    ));
+    const results = [];
+    for (let i = 0; i < games.length; i++) {
+      const result = await Promise.race([
+        fetchGameMarkets(games[i], i * 100),
+        new Promise(r => setTimeout(() => r({ _err: 'timeout' }), 5000))
+      ]);
+      results.push(result);
+      if (i < games.length - 1) await new Promise(r => setTimeout(r, 300));
+    }
     for (const result of results) {
-      if (result) {
+      if (result && !result._err) {
         marketMap[result.gameKey] = result.markets;
         if (result.lines && Object.keys(result.lines).length) {
           marketMap[result.gameKey + '__lines'] = result.lines;
