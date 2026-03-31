@@ -253,15 +253,8 @@ export async function onRequestGet(context) {
     }
 
     if (debugMode === '9') {
-      // Run fetchGameMarkets for a specific game and return result
-      const targetId = parseInt(reqUrl.searchParams.get('id') || '0');
-      const game = targetId ? games.find(g => (g.id || g.gameId) === targetId) : games[0];
-      if (!game) return new Response(JSON.stringify({ error: 'game not found' }), { headers: { 'Content-Type': 'application/json' } });
-      // Need to define fetchGameMarkets first — call after it's defined
-      const marker = '__debug9__';
-      return new Response(JSON.stringify({ marker, gameId: game.id, awayTeam: game.awayTeam, homeTeam: game.homeTeam }), {
-        headers: { 'Content-Type': 'application/json' }
-      });
+      // Run fetchGameMarkets for a specific game — defined below, so we fall through
+      // This is handled after fetchGameMarkets definition
     }
 
     if (!games.length) {
@@ -411,6 +404,15 @@ export async function onRequestGet(context) {
     } catch(e) {}
 
     // Phase 2: Cache stale or empty — fetch all games in parallel with 8s timeout each
+    if (debugMode === '9') {
+      const targetId = parseInt(reqUrl.searchParams.get('id') || '0');
+      const game = targetId ? games.find(g => (g.id || g.gameId) === targetId) : games[0];
+      if (!game) return new Response(JSON.stringify({ error: 'game not found' }), { headers: { 'Content-Type': 'application/json' } });
+      const result = await fetchGameMarkets(game);
+      return new Response(JSON.stringify({ result, awayKey: (game.awayTeam?.name || game.awayTeamKey), homeKey: (game.homeTeam?.name || game.homeTeamKey) }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
     const results = await Promise.all(games.map(game =>
       Promise.race([
         fetchGameMarkets(game),
