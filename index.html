@@ -3932,8 +3932,6 @@
     };
 
     function resolveTeamName(abbrevOrName) {
-        // If it's already a full name (contains space), return as-is
-        if (abbrevOrName.indexOf(' ') !== -1) return abbrevOrName;
         // Case-sensitive nickname map for hyphenated/mixed-case names Real Sports uses
         var NICKNAMES = {
             'D-backs': 'Arizona Diamondbacks',
@@ -4014,6 +4012,8 @@
         if (NICKNAMES.hasOwnProperty(abbrevOrName) && NICKNAMES[abbrevOrName]) {
             return NICKNAMES[abbrevOrName];
         }
+        // If it's already a full name (contains space) and not in NICKNAMES, return as-is
+        if (abbrevOrName.indexOf(' ') !== -1) return abbrevOrName;
         var key = abbrevOrName.toUpperCase();
         // Sport-specific overrides for conflicting abbreviations
         var SPORT_OVERRIDES = {
