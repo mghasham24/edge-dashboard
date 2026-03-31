@@ -238,7 +238,7 @@ export async function onRequestGet(context) {
       const mUrl = `https://web.realapp.com/predictions/game/${realSport}/${testId}/markets`;
       const mRes = await fetch(mUrl, { headers: buildHeaders(env) });
       const mText = await mRes.text();
-      return new Response(JSON.stringify({ status: mRes.status, body: mText.slice(0, 3000) }), {
+      return new Response(JSON.stringify({ status: mRes.status, body: mText.slice(0, 10000) }), {
         headers: { 'Content-Type': 'application/json' }
       });
     }
