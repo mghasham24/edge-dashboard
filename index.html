@@ -3143,7 +3143,7 @@
             if (evEl) {
                 if (evForU != null && evForU > 0) {
                     evEl.style.display = '';
-                    if (isPro()) {
+                    if (isPro() || r.mkt === 'ML') {
                         var evColor = evForU >= 5 ? 'var(--green)' : 'var(--yellow)';
                         evEl.style.color = evColor;
                         evEl.style.filter = '';
@@ -3817,7 +3817,7 @@
         + '<td class="r" data-label="Adj. Fair %" style="font-family:var(--mono);color:' + (afChanged ? 'var(--yellow)' : 'var(--muted)') + '">' + afStr + '</td>'
         + '<td class="c" data-label="Real %"><div style="display:flex;flex-direction:column;align-items:center;gap:2px;justify-content:center"><div style="display:flex;align-items:center;gap:4px;justify-content:center"><input class="cell-inp' + (pv ? ' filled' : '') + '" type="number" min="1" max="99" step="1" inputmode="numeric" placeholder="-" value="' + pv + '" data-id="' + r.id + '" oninput="setPred(this)" onblur="setPred(this)" onkeydown="if(event.key===\'Enter\')this.blur()"><span class="pred-unit">%</span></div>' + (vols[r.id] ? '<span style="font-size:9px;color:var(--muted2);font-family:var(--mono)">' + vols[r.id] + ' vol</span>' : '') + '</div></td>'
         + '<td class="r" data-label="Edge"><div class="edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:' + bw + 'px;background:' + bc + '"></div></div><span class="edge-val ' + ec + '">' + es + '</span></div></td>'
-        + '<td class="r" data-label="EV">' + (isPro() ? evH : '<span style="filter:blur(4px);font-family:var(--mono);font-size:12px;font-weight:600;color:var(--green);user-select:none">+8.4%</span><span style="font-size:9px;font-weight:700;background:var(--accent);color:#fff;border-radius:3px;padding:1px 4px;margin-left:3px;vertical-align:middle">PRO</span>') + '</td>'
+        + '<td class="r" data-label="EV">' + (isPro() || r.mkt === 'ML' ? evH : '<span style="filter:blur(4px);font-family:var(--mono);font-size:12px;font-weight:600;color:var(--green);user-select:none">+8.4%</span><span style="font-size:9px;font-weight:700;background:var(--accent);color:#fff;border-radius:3px;padding:1px 4px;margin-left:3px;vertical-align:middle">PRO</span>') + '</td>'
         + '<td class="r" data-label="Units">' + uH + '</td>'
         + '<td class="r" data-label="Bet">' + bH + '</td>'
         + '</tr>';
@@ -3883,7 +3883,7 @@
             if (vols[id]) { var vsP = vols[id]; volNumP = vsP.endsWith('k') ? parseFloat(vsP)*1000 : vsP.endsWith('m') ? parseFloat(vsP)*1000000 : parseFloat(vsP); }
             var rakeP = volNumP > 100000 ? 0.034 : volNumP > 10000 ? 0.032 : volNumP > 1000 ? 0.035 : volNumP > 0 ? 0.04 : 0.034;
             evForUnits = (af * (1/pred) * (1-rakeP) - 1) * 100;
-            if (isPro()) {
+            if (isPro() || r.mkt === 'ML') {
                 var evColor = evForUnits >= 5 ? 'var(--green)' : evForUnits > 0 ? 'var(--yellow)' : 'var(--red)';
                 evH = '<span style="font-family:var(--mono);font-size:12px;font-weight:600;color:' + evColor + '">' + (evForUnits > 0 ? '+' : '') + evForUnits.toFixed(1) + '%</span>';
             } else {
