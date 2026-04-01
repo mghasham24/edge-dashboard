@@ -2950,6 +2950,12 @@
                         sevA.style.cssText = 'font-family:var(--mono);font-size:10px;font-weight:600;text-align:center;color:var(--muted2);display:none';
                         colA.appendChild(seA);
                         colA.appendChild(sevA);
+                        var cbA = document.createElement('input');
+                        cbA.type = 'checkbox'; cbA.className = 'mc-bet-check'; cbA.dataset.id = rA.id;
+                        cbA.checked = !!betTaken[rA.id]; cbA.title = 'Mark bet taken';
+                        cbA.style.cssText = 'width:16px;height:16px;cursor:pointer;accent-color:var(--green);margin-top:4px';
+                        cbA.addEventListener('change', function() { toggleBet(this.dataset.id); });
+                        colA.appendChild(cbA);
                         if (preds[rA.id] !== undefined && preds[rA.id] !== '') {
                             (function(id){ setTimeout(function(){ updateSideEdge(id); }, 0); })(rA.id);
                         }
@@ -2969,6 +2975,12 @@
                         sevB.style.cssText = 'font-family:var(--mono);font-size:10px;font-weight:600;text-align:center;color:var(--muted2);display:none';
                         colB.appendChild(seB);
                         colB.appendChild(sevB);
+                        var cbB = document.createElement('input');
+                        cbB.type = 'checkbox'; cbB.className = 'mc-bet-check'; cbB.dataset.id = rB.id;
+                        cbB.checked = !!betTaken[rB.id]; cbB.title = 'Mark bet taken';
+                        cbB.style.cssText = 'width:16px;height:16px;cursor:pointer;accent-color:var(--green);margin-top:4px';
+                        cbB.addEventListener('change', function() { toggleBet(this.dataset.id); });
+                        colB.appendChild(cbB);
                         if (preds[rB.id] !== undefined && preds[rB.id] !== '') {
                             (function(id){ setTimeout(function(){ updateSideEdge(id); }, 0); })(rB.id);
                         }
