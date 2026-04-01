@@ -1934,6 +1934,7 @@
                         <th class="r" title="Estimated return on stake at small bet sizes (~$10-50). Overstates EV for larger bets due to slippage." style="cursor:help">EV *</th>
                         <th class="r">Units</th>
                         <th class="r">Bet Size</th>
+                        <th class="c" style="width:36px" title="Mark bet as taken">✓</th>
                     </tr>
                 </thead>
                 <tbody id="tbody"></tbody>
@@ -2074,6 +2075,24 @@
     var vols = {}; // volume display per row id
     var yourLines = {};
     var altOdds = {}; // gameId -> { spreads: {teamName: {point: price}}, totals: {side: {point: price}} }
+    var betTaken = JSON.parse(localStorage.getItem('raxedge_bets_taken') || '{}');
+
+    function toggleBet(id) {
+        betTaken[id] = !betTaken[id];
+        if (!betTaken[id]) delete betTaken[id];
+        localStorage.setItem('raxedge_bets_taken', JSON.stringify(betTaken));
+        // Update row styling live without full re-render
+        var cb = document.querySelector('input[type="checkbox"][data-id="' + id + '"]');
+        if (cb) cb.checked = !!betTaken[id];
+        var tr = cb && cb.closest('tr');
+        if (tr) tr.style.opacity = betTaken[id] ? '0.4' : '';
+        // Mobile
+        document.querySelectorAll('.mc-bet-check[data-id="' + id + '"]').forEach(function(el) {
+            el.checked = !!betTaken[id];
+            var card = el.closest('.mc-section');
+            if (card) card.style.opacity = betTaken[id] ? '0.4' : '';
+        });
+    }
 
     var collapsed = {};
     var mobileCollapsed = {};
@@ -3008,6 +3027,16 @@
                         sideEV.style.cssText = 'font-family:var(--mono);font-size:10px;font-weight:600;color:var(--muted2);text-align:right;display:none';
                         evWrap.appendChild(sideEV);
                         sideRow.appendChild(evWrap);
+                        // Bet taken checkbox
+                        var betCb = document.createElement('input');
+                        betCb.type = 'checkbox';
+                        betCb.className = 'mc-bet-check';
+                        betCb.dataset.id = r.id;
+                        betCb.checked = !!betTaken[r.id];
+                        betCb.style.cssText = 'width:16px;height:16px;cursor:pointer;accent-color:var(--green);flex-shrink:0;margin-left:6px';
+                        betCb.addEventListener('change', function() { toggleBet(this.dataset.id); });
+                        sideRow.appendChild(betCb);
+                        if (betTaken[r.id]) sideRow.style.opacity = '0.4';
                         // Auto-compute if preds already filled
                         if (preds[r.id] !== undefined && preds[r.id] !== '') {
                             (function(id){ setTimeout(function(){ updateSideEdge(id); }, 0); })(r.id);
@@ -3573,7 +3602,7 @@
         btn.disabled = true;
         dot.className = 'sdot loading';
         stxt.textContent = 'Fetching ' + lbl + '...';
-        document.getElementById('tbody').innerHTML = '<tr class="state-row"><td colspan="12">Loading...</td></tr>';
+        document.getElementById('tbody').innerHTML = '<tr class="state-row"><td colspan="13">Loading...</td></tr>';
         var sel = document.getElementById('mkt-filter').value;
         var noSpread = ['mma_mixed_martial_arts'];
         var mkts = noSpread.indexOf(currentSport) !== -1 ? 'h2h'
@@ -3654,7 +3683,7 @@
         var unit = parseFloat(document.getElementById('unit-size').value) || 300;
         var q = document.getElementById('search').value.trim().toLowerCase();
         if (!rawRows.length) {
-            document.getElementById('tbody').innerHTML = '<tr class="state-row"><td colspan="12">No odds - hit Refresh</td></tr>';
+            document.getElementById('tbody').innerHTML = '<tr class="state-row"><td colspan="13">No odds - hit Refresh</td></tr>';
             document.getElementById('stat-lines').textContent = '0';
             document.getElementById('stat-edges').textContent = '0';
             return;
@@ -3727,7 +3756,7 @@
         document.getElementById('stat-lines').textContent = filtered.length;
         document.getElementById('stat-edges').textContent = ec;
         if (!filtered.length) {
-            document.getElementById('tbody').innerHTML = '<tr class="state-row"><td colspan="12">No results</td></tr>';
+            document.getElementById('tbody').innerHTML = '<tr class="state-row"><td colspan="13">No results</td></tr>';
             return;
         }
         var gOrder = [], gSeen = {};
@@ -3750,7 +3779,7 @@
                 var teams = r.game.split(' @ ');
                 var gk = r.game.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
                 html += '<tr class="ghrow" data-gk="' + r.game.replace(/"/g, '&quot;') + '" onclick="toggleGame(\'' + gk + '\')">'
-                + '<td colspan="12"><div class="gh-inner">'
+                + '<td colspan="13"><div class="gh-inner">'
                 + '<div class="gh-stripe" style="background:' + color + '"></div>'
                 + '<span>' + teams[0] + '</span><span style="color:var(--muted2)">@</span><span>' + (teams[1] || '') + '</span>'
                 + (ti.lbl ? '<span class="gh-badge ' + ti.cls + '">' + ti.lbl + '</span>' : '')
@@ -3807,7 +3836,7 @@
             ? '<td class="c" data-label="Real Line"></td>'
             : '<td class="c" data-label="Real Line"><input class="cell-inp' + lc + '" type="number" step="0.5" placeholder="' + ph + '" value="' + ylv + '" data-id="' + r.id + '" onblur="setLine(this)" onkeydown="if(event.key===\'Enter\')this.blur()"></td>';
         var gk = r.game.replace(/"/g, '&quot;');
-        return '<tr class="' + (r.edge != null && r.edge > 0 ? 'has-edge' : '') + (isC ? ' collapsed-row' : '') + '" data-gk="' + gk + '" style="border-left:3px solid ' + color + '">'
+        return '<tr class="' + (r.edge != null && r.edge > 0 ? 'has-edge' : '') + (isC ? ' collapsed-row' : '') + '" data-gk="' + gk + '" style="border-left:3px solid ' + color + ';' + (betTaken[r.id] ? 'opacity:0.4' : '') + '">'
         + '<td class="game-td" data-label="Game"><div style="font-weight:600">' + r.side + '</div><div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px">' + r.game + '</div></td>'
         + '<td data-label="Market"><span class="mkt-badge">' + r.mkt + '</span></td>'
         + '<td data-label="Side" style="color:var(--muted);font-size:12px">' + r.side + '</td>'
@@ -3821,6 +3850,7 @@
         + '<td class="r" data-label="EV">' + (isPro() || r.mkt === 'ML' ? evH : '<span style="filter:blur(4px);font-family:var(--mono);font-size:12px;font-weight:600;color:var(--green);user-select:none">+8.4%</span><span style="font-size:9px;font-weight:700;background:var(--accent);color:#fff;border-radius:3px;padding:1px 4px;margin-left:3px;vertical-align:middle">PRO</span>') + '</td>'
         + '<td class="r" data-label="Units">' + uH + '</td>'
         + '<td class="r" data-label="Bet">' + bH + '</td>'
+        + '<td class="c" data-label="Taken"><input type="checkbox" data-id="' + r.id + '" ' + (betTaken[r.id] ? 'checked' : '') + ' onchange="toggleBet(\'' + r.id + '\')" style="width:16px;height:16px;cursor:pointer;accent-color:var(--green)"></td>'
         + '</tr>';
     }
 
