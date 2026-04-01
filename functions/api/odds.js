@@ -56,12 +56,35 @@ export async function onRequest(context) {
     }
   } catch(e) {}
 
-  // Cache miss — fetch from Odds API
-  const apiUrl = `https://api.the-odds-api.com/v4/sports/${sport}/odds/?apiKey=${API_KEY}&regions=us&markets=${markets}&bookmakers=${bookmakers}&oddsFormat=american`;
+  // Cache miss — fetch from Odds API, with DraftKings fallback if FanDuel is empty
+  async function fetchOdds(bookmakerList) {
+    const apiUrl = `https://api.the-odds-api.com/v4/sports/${sport}/odds/?apiKey=${API_KEY}&regions=us&markets=${markets}&bookmakers=${bookmakerList}&oddsFormat=american`;
+    const res = await fetch(apiUrl);
+    const text = await res.text();
+    return { res, text };
+  }
+
+  function hasBookmakerOdds(text) {
+    try {
+      const games = JSON.parse(text);
+      return Array.isArray(games) && games.some(g => g.bookmakers && g.bookmakers.length > 0);
+    } catch(e) { return false; }
+  }
 
   try {
-    const res  = await fetch(apiUrl);
-    const text = await res.text();
+    // First try FanDuel
+    let { res, text } = await fetchOdds('fanduel');
+
+    // If FanDuel has no odds, fall back to DraftKings
+    if (!hasBookmakerOdds(text)) {
+      const fallback = await fetchOdds('draftkings');
+      if (hasBookmakerOdds(fallback.text)) {
+        res = fallback.res;
+        text = fallback.text;
+        // Normalize DraftKings key to fanduel so frontend works unchanged
+        text = text.replace(/"key":"draftkings"/g, '"key":"fanduel"').replace(/"title":"DraftKings"/g, '"title":"FanDuel (DK)"');
+      }
+    }
 
     // Write to cache
     try {
