@@ -24,6 +24,11 @@ export async function onRequest(context) {
     try {
       const games = JSON.parse(responseText);
       if (!Array.isArray(games) || games.length === 0) return 3600;
+      // If games exist but no bookmaker data yet (e.g. API reset), use short TTL
+      const hasOdds = games.some(function(g) {
+        return g.bookmakers && g.bookmakers.length > 0;
+      });
+      if (!hasOdds) return 30;
       const hasLive = games.some(function(g) {
         return g.commence_time && new Date(g.commence_time).getTime() / 1000 <= now;
       });
