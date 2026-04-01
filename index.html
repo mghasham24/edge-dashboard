@@ -4120,9 +4120,16 @@
                 var gameMarkets = d.markets[realKey];
                 if (!gameMarkets) return;
 
-                // Auto-fill Real Line from game-level total only (spread handled via match.line below)
+                // Auto-fill Real Line from game-level pointSpread/overUnder
                 var gameLines = d.markets[realKey + '__lines'];
                 if (gameLines) {
+                    if (r.mkt === 'Spread' && yourLines[r.id] == null) {
+                        // Determine if this row is home or away side
+                        var gameParts = r.game.split(' @ ');
+                        var isHome = gameParts[1] && r.side.toLowerCase().indexOf(gameParts[1].split(' ').pop().toLowerCase()) !== -1;
+                        var spreadVal = isHome ? gameLines.homeSpread : gameLines.awaySpread;
+                        if (spreadVal != null) yourLines[r.id] = spreadVal;
+                    }
                     if (r.mkt === 'Total' && yourLines[r.id] == null && gameLines.total != null) {
                         yourLines[r.id] = gameLines.total;
                     }
@@ -4204,13 +4211,18 @@
                         vols[pairedId] = mktData.volumeDisplay;
                     }
                 }
-                // Auto-fill Real Line from matched outcome's line field (computed from original label before name resolution)
-                if (match && match.line != null && (r.mkt === 'Spread' || r.mkt === 'Total')) {
-                    var lineVal = match.line;
-                    var isValidLine = r.mkt === 'Spread'
-                        ? (!isNaN(lineVal) && Math.abs(lineVal) < 30)
-                        : (!isNaN(lineVal) && (lineVal % 1 === 0.5 || lineVal > 20) && lineVal <= 350);
-                    if (isValidLine) yourLines[r.id] = lineVal;
+                // Auto-fill Real Line from Real Sports outcome label (e.g. "ATL +6.5" -> 6.5)
+                if (match && match.label && (r.mkt === 'Spread' || r.mkt === 'Total')) {
+                    var lineMatch = match.label.match(/([+-]?\d+\.?\d*)\s*$/);
+                    if (lineMatch) {
+                        var lineVal = parseFloat(lineMatch[1]);
+                        // Sanity check: spreads should be < 30, totals should end in .5 or be > 20 (NBA range)
+                        // Values like 53/47 are probabilities, not lines — ignore them
+                        var isValidLine = r.mkt === 'Spread'
+                            ? (!isNaN(lineVal) && Math.abs(lineVal) < 30)
+                            : (!isNaN(lineVal) && (lineVal % 1 === 0.5 || lineVal > 20) && lineVal <= 350);
+                        if (isValidLine) yourLines[r.id] = lineVal;
+                    }
                 }
             });
             renderTable();
@@ -4281,6 +4293,25 @@
     // Only fires for specific games with mismatches — saves API credits
     handleCheckoutReturn();
     checkSession();
+
+    // ── GROUP JOIN BANNER ──
+    (function() {
+        var BANNER_KEY = 'raxedge_group_banner_dismissed';
+        if (localStorage.getItem(BANNER_KEY)) return;
+        var banner = document.createElement('div');
+        banner.id = 'group-banner';
+        banner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:9999;background:linear-gradient(90deg,#1a1a2e 0%,#16213e 100%);border-top:1px solid rgba(79,110,247,0.35);padding:13px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;box-shadow:0 -4px 24px rgba(0,0,0,0.4)';
+        banner.innerHTML = ''
+            + '<div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">'
+            +   '<div style="width:8px;height:8px;border-radius:50%;background:var(--accent);flex-shrink:0;animation:pulse 2s ease-in-out infinite"></div>'
+            +   '<span style="font-family:var(--sans);font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Join the RaxEdge group for updates, edges &amp; community!</span>'
+            + '</div>'
+            + '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0">'
+            +   '<a href="https://www.realapp.com/nlvcQFNFg4k" target="_blank" rel="noopener" style="background:var(--accent);color:#fff;font-family:var(--sans);font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:7px 16px;border-radius:5px;text-decoration:none;white-space:nowrap">Join Group</a>'
+            +   '<button onclick="(function(){localStorage.setItem(\'raxedge_group_banner_dismissed\',\'1\');document.getElementById(\'group-banner\').style.display=\'none\';})()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px;line-height:1;padding:2px 4px" aria-label="Dismiss">&times;</button>'
+            + '</div>';
+        document.body.appendChild(banner);
+    })();
     </script>
 </body>
 </html>
