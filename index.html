@@ -2329,6 +2329,7 @@
         if (ev >= 20) return Math.min(2, maxU);
         if (ev >= 10) return Math.min(1, maxU);
         if (ev >= 5)  return Math.min(0.5, maxU);
+        if (ev >= 3)  return Math.min(0.25, maxU);
         return 0;
     }
     function getAdjFair(r, yl) {
