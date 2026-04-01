@@ -2081,16 +2081,14 @@
         betTaken[id] = !betTaken[id];
         if (!betTaken[id]) delete betTaken[id];
         localStorage.setItem('raxedge_bets_taken', JSON.stringify(betTaken));
-        // Update row styling live without full re-render
-        var cb = document.querySelector('input[type="checkbox"][data-id="' + id + '"]');
-        if (cb) cb.checked = !!betTaken[id];
-        var tr = cb && cb.closest('tr');
+        document.querySelectorAll('input[type="checkbox"][data-id="' + id + '"]').forEach(function(cb) {
+            cb.checked = !!betTaken[id];
+        });
+        var tr = document.querySelector('tr[data-row-id="' + id + '"]');
         if (tr) tr.style.opacity = betTaken[id] ? '0.4' : '';
-        // Mobile
         document.querySelectorAll('.mc-bet-check[data-id="' + id + '"]').forEach(function(el) {
-            el.checked = !!betTaken[id];
-            var card = el.closest('.mc-section');
-            if (card) card.style.opacity = betTaken[id] ? '0.4' : '';
+            var sideRow = el.closest('div[style*="display:flex"]');
+            if (sideRow) sideRow.style.opacity = betTaken[id] ? '0.4' : '';
         });
     }
 
@@ -2797,7 +2795,7 @@
                         mlInputs.push(inp);
                     });
                     inputRow.appendChild(mlRow);
-                    // ML: per-side edge display below inputs
+                    // ML: per-side edge + checkbox below inputs
                     var mlEdgeRow = document.createElement('div');
                     mlEdgeRow.style.cssText = 'display:flex;gap:6px;margin-top:6px';
                     mktRows.forEach(function(r) {
@@ -2814,6 +2812,16 @@
                         sev.style.cssText = 'font-family:var(--mono);font-size:10px;font-weight:600;text-align:center;color:var(--muted2);display:none';
                         col.appendChild(se);
                         col.appendChild(sev);
+                        // Bet taken checkbox for ML
+                        var mlCb = document.createElement('input');
+                        mlCb.type = 'checkbox';
+                        mlCb.className = 'mc-bet-check';
+                        mlCb.dataset.id = r.id;
+                        mlCb.checked = !!betTaken[r.id];
+                        mlCb.title = 'Mark bet taken';
+                        mlCb.style.cssText = 'width:16px;height:16px;cursor:pointer;accent-color:var(--green);margin-top:4px';
+                        mlCb.addEventListener('change', function() { toggleBet(this.dataset.id); });
+                        col.appendChild(mlCb);
                         if (preds[r.id] !== undefined && preds[r.id] !== '') {
                             (function(id){ setTimeout(function(){ updateSideEdge(id); }, 0); })(r.id);
                         }
@@ -3033,6 +3041,7 @@
                         betCb.className = 'mc-bet-check';
                         betCb.dataset.id = r.id;
                         betCb.checked = !!betTaken[r.id];
+                        betCb.title = 'Mark bet taken';
                         betCb.style.cssText = 'width:16px;height:16px;cursor:pointer;accent-color:var(--green);flex-shrink:0;margin-left:6px';
                         betCb.addEventListener('change', function() { toggleBet(this.dataset.id); });
                         sideRow.appendChild(betCb);
@@ -3836,7 +3845,7 @@
             ? '<td class="c" data-label="Real Line"></td>'
             : '<td class="c" data-label="Real Line"><input class="cell-inp' + lc + '" type="number" step="0.5" placeholder="' + ph + '" value="' + ylv + '" data-id="' + r.id + '" onblur="setLine(this)" onkeydown="if(event.key===\'Enter\')this.blur()"></td>';
         var gk = r.game.replace(/"/g, '&quot;');
-        return '<tr class="' + (r.edge != null && r.edge > 0 ? 'has-edge' : '') + (isC ? ' collapsed-row' : '') + '" data-gk="' + gk + '" style="border-left:3px solid ' + color + ';' + (betTaken[r.id] ? 'opacity:0.4' : '') + '">'
+        return '<tr class="' + (r.edge != null && r.edge > 0 ? 'has-edge' : '') + (isC ? ' collapsed-row' : '') + '" data-gk="' + gk + '" data-row-id="' + r.id + '" style="border-left:3px solid ' + color + ';' + (betTaken[r.id] ? 'opacity:0.4' : '') + '">'
         + '<td class="game-td" data-label="Game"><div style="font-weight:600">' + r.side + '</div><div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px">' + r.game + '</div></td>'
         + '<td data-label="Market"><span class="mkt-badge">' + r.mkt + '</span></td>'
         + '<td data-label="Side" style="color:var(--muted);font-size:12px">' + r.side + '</td>'
@@ -3850,7 +3859,7 @@
         + '<td class="r" data-label="EV">' + (isPro() || r.mkt === 'ML' ? evH : '<span style="filter:blur(4px);font-family:var(--mono);font-size:12px;font-weight:600;color:var(--green);user-select:none">+8.4%</span><span style="font-size:9px;font-weight:700;background:var(--accent);color:#fff;border-radius:3px;padding:1px 4px;margin-left:3px;vertical-align:middle">PRO</span>') + '</td>'
         + '<td class="r" data-label="Units">' + uH + '</td>'
         + '<td class="r" data-label="Bet">' + bH + '</td>'
-        + '<td class="c" data-label="Taken"><input type="checkbox" data-id="' + r.id + '" ' + (betTaken[r.id] ? 'checked' : '') + ' onchange="toggleBet(\'' + r.id + '\')" style="width:16px;height:16px;cursor:pointer;accent-color:var(--green)"></td>'
+        + '<td class="c"><input type="checkbox" data-id="' + r.id + '" ' + (betTaken[r.id] ? 'checked' : '') + ' onchange="toggleBet(\'' + r.id + '\')" style="width:16px;height:16px;cursor:pointer;accent-color:var(--green)"></td>'
         + '</tr>';
     }
 
