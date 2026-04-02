@@ -18,7 +18,9 @@ export async function onRequest({ request, env, next }) {
 
   // Plan enforcement on /api/odds
   if (url.pathname.startsWith('/api/odds')) {
-    const isPro = session.plan === 'pro' || session.is_admin;
+    // 1000 member celebration — free weekend until Sun Apr 6 11:59 PM CT
+    const FREE_WEEKEND_END = new Date('2026-04-07T04:59:00Z');
+    const isPro = session.plan === 'pro' || session.is_admin || new Date() < FREE_WEEKEND_END;
     if (!isPro) {
       // Check sport
       const sport = url.searchParams.get('sport') || '';
