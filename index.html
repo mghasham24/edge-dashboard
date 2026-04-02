@@ -1899,6 +1899,7 @@
                 <span class="ctrl-lbl">Unit $</span>
                 <input class="ctrl-inp" id="unit-size" type="number" value="300" min="1" step="1" oninput="renderTable()">
             </div>
+            <button id="ev-only-btn" onclick="toggleEVOnly()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:.05em;padding:6px 14px;border-radius:5px;cursor:pointer;white-space:nowrap">+EV Only</button>
             <div class="stats-pill">
                 <div class="stat-item">
                     <span class="stat-val" id="stat-lines">0</span>
@@ -2093,6 +2094,18 @@
     }
 
     var collapsed = {};
+    var showEVOnly = false;
+
+    function toggleEVOnly() {
+        showEVOnly = !showEVOnly;
+        var btn = document.getElementById('ev-only-btn');
+        if (btn) {
+            btn.style.background = showEVOnly ? 'var(--green)' : 'var(--bg3)';
+            btn.style.color = showEVOnly ? '#fff' : 'var(--muted)';
+            btn.style.borderColor = showEVOnly ? 'var(--green)' : 'var(--border2)';
+        }
+        renderTable();
+    }
     var mobileCollapsed = {};
 
     // Auth state
@@ -3769,6 +3782,20 @@
             if (!q) return true;
             return (r.game + ' ' + r.side + ' ' + r.mkt).toLowerCase().indexOf(q) !== -1;
         });
+        // EV-only filter
+        if (showEVOnly) {
+            filtered = filtered.filter(function(r) {
+                var pr = preds[r.id];
+                if (!pr || r.af == null) return false;
+                var pred = parseFloat(pr) / 100;
+                if (pred <= 0 || pred >= 1) return false;
+                var volNum = 0;
+                if (vols[r.id]) { var vs = vols[r.id]; volNum = vs.endsWith('k') ? parseFloat(vs)*1000 : vs.endsWith('m') ? parseFloat(vs)*1000000 : parseFloat(vs); }
+                var rake = volNum > 100000 ? 0.034 : volNum > 10000 ? 0.032 : volNum > 1000 ? 0.035 : volNum > 0 ? 0.04 : 0.034;
+                var ev = (r.af * (1/pred) * (1-rake) - 1) * 100;
+                return ev >= 5;
+            });
+        }
         var mO = { ML: 0, Spread: 1, Total: 2 };
         filtered.sort(function(a, b) {
             var ta = a.cm ? a.cm.getTime() : 9e12, tb = b.cm ? b.cm.getTime() : 9e12;
