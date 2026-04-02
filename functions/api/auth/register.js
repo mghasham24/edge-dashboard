@@ -1,7 +1,25 @@
 // functions/api/auth/register.js
 const SESSION_DAYS = 30;
+const MAX_REGS_PER_HOUR = 3;
 
 export async function onRequestPost({ request, env }) {
+  // IP-based rate limiting — max 3 registrations per IP per hour
+  const ip = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || 'unknown';
+  const hourKey = 'reg_ip_' + ip + '_' + Math.floor(Date.now() / 3600000);
+  try {
+    const ipRow = await env.DB.prepare(
+      'SELECT data FROM odds_cache WHERE cache_key=?'
+    ).bind(hourKey).first();
+    const count = ipRow ? parseInt(ipRow.data) : 0;
+    if (count >= MAX_REGS_PER_HOUR) {
+      return err('Too many accounts created from this IP. Please try again later.', 429);
+    }
+    // Increment counter
+    await env.DB.prepare(
+      'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data'
+    ).bind(hourKey, String(count + 1), Math.floor(Date.now() / 1000)).run();
+  } catch(e) {}
+
   let body;
   try { body = await request.json(); } catch { return err('Invalid JSON'); }
 
