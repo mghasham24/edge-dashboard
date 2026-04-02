@@ -23,9 +23,25 @@ export async function onRequestPost({ request, env }) {
   let body;
   try { body = await request.json(); } catch { return err('Invalid JSON'); }
 
-  const email   = (body.email    || '').trim().toLowerCase();
+  const email    = (body.email    || '').trim().toLowerCase();
   const password = (body.password || '').trim();
   const refCode  = (body.refCode  || '').trim().toUpperCase();
+  const rcToken  = (body.rcToken  || '').trim();
+
+  // reCAPTCHA v3 verification
+  if (env.RECAPTCHA_SECRET) {
+    try {
+      const rcRes = await fetch('https://www.google.com/recaptcha/api/siteverify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `secret=${env.RECAPTCHA_SECRET}&response=${rcToken}`
+      });
+      const rcData = await rcRes.json();
+      if (!rcData.success || rcData.score < 0.5) {
+        return err('Registration blocked. Please try again.', 403);
+      }
+    } catch(e) {}
+  }
 
   if (!email || !password) return err('Email and password required');
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return err('Invalid email address');

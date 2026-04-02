@@ -1634,6 +1634,7 @@
         }
     }
     </style>
+    <script src="https://www.google.com/recaptcha/api.js?render=6Let4qMsAAAAAFhvh6wy6Ai_Ruzq2j4MIlMhqRnl"></script>
 </head>
 <body>
 
@@ -2210,6 +2211,11 @@
                     refVal = new URLSearchParams(window.location.search).get('ref') || '';
                 }
                 if (refVal) regBody.refCode = refVal;
+                // reCAPTCHA v3 token
+                try {
+                    var rcToken = await grecaptcha.execute('6Let4qMsAAAAAFhvh6wy6Ai_Ruzq2j4MIlMhqRnl', { action: 'register' });
+                    regBody.rcToken = rcToken;
+                } catch(e) {}
             }
             var res = await fetch(endpoint, {
                 method: 'POST',
