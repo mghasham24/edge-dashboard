@@ -4376,6 +4376,13 @@
     handleCheckoutReturn();
     checkSession();
 
+    // Auto-refresh Real % every 60s in background
+    setInterval(function() {
+        if (rawRows.length > 0) {
+            fetchRealMarkets(currentSport);
+        }
+    }, 60000);
+
     // ── GROUP JOIN BANNER ──
     (function() {
         var BANNER_KEY = 'raxedge_group_banner_dismissed';
