@@ -31,6 +31,49 @@ export async function onRequestPost({ request, env }) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return err('Invalid email address');
   if (password.length < 8) return err('Password must be at least 8 characters');
 
+  // Block disposable email domains
+  const BLOCKED_DOMAINS = new Set([
+    'mailinator.com','guerrillamail.com','tempmail.com','throwam.com','sharklasers.com',
+    'guerrillamailblock.com','grr.la','guerrillamail.info','guerrillamail.biz','guerrillamail.de',
+    'guerrillamail.net','guerrillamail.org','spam4.me','trashmail.com','trashmail.me',
+    'trashmail.net','dispostable.com','maildrop.cc','yopmail.com','yopmail.fr',
+    'cool.fr.nf','jetable.fr.nf','nospam.ze.tc','nomail.xl.cx','mega.zik.dj',
+    'speed.1s.fr','courriel.fr.nf','moncourrier.fr.nf','monemail.fr.nf','monmail.fr.nf',
+    'spamgourmet.com','spamgourmet.net','spamgourmet.org','spamgourmet.me',
+    'spamgourmet.net','jnxjn.com','tnef.com','10minutemail.com','10minutemail.net',
+    'fakeinbox.com','filzmail.com','gowiki.com','humaility.com','incognitomail.com',
+    'mail-temporaire.fr','mytrashmail.com','nobulk.com','nospamfor.us','nowmymail.com',
+    'objectmail.com','obobbo.com','proxymail.eu','rcpt.at','recursor.net','shiftmail.com',
+    'skeefmail.com','slopsbox.com','smellfear.com','snkmail.com','sofimail.com',
+    'sogetthis.com','spamevader.com','spamfree24.org','spamhole.com','spamify.com',
+    'spamoff.de','spamobox.com','spamthisplease.com','supergreatmail.com','suremail.info',
+    'tempemail.net','tempinbox.co.uk','tempinbox.com','thanksnospam.info','thisisnotmyrealemail.com',
+    'throwam.com','tradermail.info','trash-mail.at','trash-mail.com','trash-mail.de',
+    'trash-mail.io','trash-mail.me','trash-mail.net','trash2009.com','trashdevil.com',
+    'trashdevil.de','trashemail.de','trashimail.com','trashmail.at','travestimail.com',
+    'trbvm.com','turual.com','twinmail.de','tyldd.com','uggsrock.com','uroid.com',
+    'us.af','venompen.com','veryrealemail.com','vidchart.com','viditag.com','vipikings.com',
+    'vmani.com','vomoto.com','vpn.st','vsimcard.com','vubby.com','wasteland.rfc822.org',
+    'webemail.me','webm4il.info','weg-werf-email.de','wegwerf-emails.de','wegwerfadresse.de',
+    'wegwerfemail.com','wegwerfemail.de','wegwerfmail.de','wegwerfmail.info','wegwerfmail.net',
+    'wegwerfmail.org','wetrainbayarea.com','wetrainbayarea.org','whyspam.me','willhackforfood.biz',
+    'willselfdestruct.com','winemaven.info','wronghead.com','wuzup.net','wuzupmail.net',
+    'www.e4ward.com','www.mailinator.com','wwwnew.eu','x.ip6.li','xagloo.co','xagloo.com',
+    'xemaps.com','xents.com','xmaily.com','xoxy.net','xup.in','xww.ro','xy9ce.at',
+    'yapped.net','yep.it','yet.com','yomail.info','yopmail.pp.ua','yourdomain.com',
+    'ypmail.webarnak.fr.eu.org','yuurok.com','z1p.biz','za.com','zebins.com','zebins.eu',
+    'zehnminuten.de','zehnminutenmail.de','zetmail.com','zippymail.info','zoemail.net',
+    'zoemail.org','zomg.info','jsncos.com','1951addd11f8.com','4218cd4d6883.com',
+    'add746fba024.com','9d927fc60518.com','3f6bfd335f37.com','5cbb551b1faa.com'
+  ]);
+  const emailDomain = email.split('@')[1];
+  if (BLOCKED_DOMAINS.has(emailDomain)) return err('Please use a valid email address.');
+
+  // Block offensive email prefixes
+  const localPart = email.split('@')[0];
+  const BLOCKED_PREFIXES = ['fuckpalestine','fuckisrael','fuckjews','fuckarab','fuckmuslim','fuckchrist'];
+  if (BLOCKED_PREFIXES.some(p => localPart.includes(p))) return err('Invalid email address.');
+
   const existing = await env.DB.prepare('SELECT id FROM users WHERE email=?').bind(email).first();
   if (existing) return err('An account with that email already exists', 409);
 
