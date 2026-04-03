@@ -2,7 +2,7 @@
 // Fetches KXMLBRFI markets from Kalshi public API, returns devigged fair values per game
 
 const KALSHI_URL = 'https://api.elections.kalshi.com/trade-api/v2/markets?series_ticker=KXMLBRFI&limit=100';
-const CACHE_TTL = 300;
+const CACHE_TTL = 30;
 const MAX_SPREAD = 0.20; // skip markets where spread > 20 cents
 
 async function getSession(request, db) {
