@@ -1898,7 +1898,7 @@
             </div>
             <div style="display:flex;align-items:center;gap:6px">
                 <span class="ctrl-lbl">Unit $</span>
-                <input class="ctrl-inp" id="unit-size" type="number" value="300" min="1" step="1" oninput="renderTable()">
+                <input class="ctrl-inp" id="unit-size" type="number" value="300" min="1" step="1" oninput="localStorage.setItem('raxedge_unit_size',this.value);renderTable()">
             </div>
             <button id="ev-only-btn" onclick="toggleEVOnly()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:.05em;padding:6px 14px;border-radius:5px;cursor:pointer;white-space:nowrap">+EV Only</button>
             <div class="stats-pill">
@@ -2078,6 +2078,15 @@
     var yourLines = {};
     var altOdds = {}; // gameId -> { spreads: {teamName: {point: price}}, totals: {side: {point: price}} }
     var betTaken = JSON.parse(localStorage.getItem('raxedge_bets_taken') || '{}');
+
+    // Restore saved unit size
+    (function() {
+        var saved = localStorage.getItem('raxedge_unit_size');
+        if (saved && !isNaN(parseFloat(saved))) {
+            var el = document.getElementById('unit-size');
+            if (el) el.value = saved;
+        }
+    })();
 
     function toggleBet(id) {
         betTaken[id] = !betTaken[id];
