@@ -28,8 +28,8 @@ export async function onRequestPost({ request, env }) {
   const refCode  = (body.refCode  || '').trim().toUpperCase();
   const rcToken  = (body.rcToken  || '').trim();
 
-  // reCAPTCHA v3 verification
-  if (env.RECAPTCHA_SECRET) {
+  // reCAPTCHA v3 verification — fail open to avoid blocking real users
+  if (env.RECAPTCHA_SECRET && rcToken) {
     try {
       const rcRes = await fetch('https://www.google.com/recaptcha/api/siteverify', {
         method: 'POST',
@@ -37,7 +37,8 @@ export async function onRequestPost({ request, env }) {
         body: `secret=${env.RECAPTCHA_SECRET}&response=${rcToken}`
       });
       const rcData = await rcRes.json();
-      if (!rcData.success || rcData.score < 0.5) {
+      // Only hard block obvious bots (score 0.1 or below) — fail open for everything else
+      if (rcData.success && rcData.score <= 0.1) {
         return err('Registration blocked. Please try again.', 403);
       }
     } catch(e) {}
