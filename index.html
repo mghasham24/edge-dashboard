@@ -3207,7 +3207,7 @@
 
         if (!_settingPredMobile && input.value !== '') {
             var r = rawRows.find(function(x) { return x.id === id; });
-            if (r && r.mkt === 'ML') {
+            if (r && (r.mkt === 'ML' || r.mkt === 'RFI' || r.mkt === 'Spread')) {
                 var v = parseFloat(input.value);
                 if (!isNaN(v) && v >= 1 && v <= 99) {
                     var otherId = r.ps === 'A' ? id.replace(/-A$/, '-B') : id.replace(/-B$/, '-A');
@@ -4015,7 +4015,7 @@
 
         var r = rawRows.find(function(x) { return x.id === id; });
 
-        if (!_settingPred && r && (r.mkt === 'Total' || r.mkt === 'ML') && input.value !== '') {
+        if (!_settingPred && r && (r.mkt === 'Total' || r.mkt === 'ML' || r.mkt === 'RFI' || r.mkt === 'Spread') && input.value !== '') {
             var v = parseFloat(input.value);
             if (!isNaN(v) && v >= 1 && v <= 99) {
                 var otherId = r.ps === 'A' ? id.replace(/-A$/, '-B') : id.replace(/-B$/, '-A');
