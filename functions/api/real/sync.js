@@ -360,7 +360,7 @@ export async function onRequestGet(context) {
     const marketMap = {};
     const now = Math.floor(Date.now() / 1000);
     const cacheKey = 'real_sync_' + realSport;
-    const TTL = 60;
+    const TTL = 300;
 
     // Phase 1: Load cache
     try {
