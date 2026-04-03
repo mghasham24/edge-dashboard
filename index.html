@@ -3776,8 +3776,6 @@
         });
         var now = new Date();
         var filtered = rows.filter(function(r) {
-            // RFI: hide once game has started — market resolves in 1st inning
-            if (r.mkt === 'RFI' && r.cm && r.cm <= now) return false;
             if (r.mkt === 'Spread' || r.mkt === 'Total') {
                 var isHockey = currentSport === 'icehockey_nhl';
                 var isNBA = currentSport === 'basketball_nba';
@@ -4182,17 +4180,26 @@
             rawRows.forEach(function(r) {
                 if (gamesSeen[r.game] || r.mkt === 'RFI') return;
                 gamesSeen[r.game] = true;
-                var fdTeams = r.game.split(' @ ');
-                var fdAway = fdTeams[0] || '';
-                var fdHome = fdTeams[1] || '';
-                var kAway = KALSHI_MLB_MAP[fdAway] || fdAway.split(' ').slice(0, 2).join(' ');
-                var kHome = KALSHI_MLB_MAP[fdHome] || fdHome.split(' ').slice(0, 2).join(' ');
 
+                // 1. Direct lookup — worker now outputs FD-compatible full names
+                if (d.rfi[r.game]) {
+                    rfiOdds[r.game] = d.rfi[r.game];
+                    return;
+                }
+
+                // 2. Fuzzy fallback — last word of each team name
+                var fdTeams = r.game.split(' @ ');
+                var fdAway = (fdTeams[0] || '').toLowerCase();
+                var fdHome = (fdTeams[1] || '').toLowerCase();
                 var match = kalshiKeys.find(function(k) {
                     var p = k.split(' @ ');
                     if (p.length !== 2) return false;
                     var ka = p[0].toLowerCase(), kh = p[1].toLowerCase();
-                    return ka.indexOf(kAway.toLowerCase()) !== -1 && kh.indexOf(kHome.toLowerCase()) !== -1;
+                    var awayMatch = ka.split(' ').some(function(w) { return w.length > 2 && fdAway.indexOf(w) !== -1; })
+                                 || fdAway.split(' ').some(function(w) { return w.length > 2 && ka.indexOf(w) !== -1; });
+                    var homeMatch = kh.split(' ').some(function(w) { return w.length > 2 && fdHome.indexOf(w) !== -1; })
+                                 || fdHome.split(' ').some(function(w) { return w.length > 2 && kh.indexOf(w) !== -1; });
+                    return awayMatch && homeMatch;
                 });
                 if (match) rfiOdds[r.game] = d.rfi[match];
             });
