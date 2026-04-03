@@ -2688,12 +2688,12 @@
             body.className = 'game-card-body' + (isC ? ' collapsed' : '');
             body.dataset.game = game;
 
-            var mkts = ['ML', 'Spread', 'Total'];
+            var mkts = currentSport === 'baseball_mlb' ? ['ML', 'RFI'] : ['ML', 'Spread', 'Total'];
             mkts.forEach(function(mkt) {
                 var mktRows = gameRows.filter(function(r) {
                     return r.mkt === mkt;
                 });
-                var isLocked = !isPro() && mkt !== 'ML';
+                var isLocked = !isPro() && mkt !== 'ML' && mkt !== 'RFI';
                 if (!mktRows.length && !isLocked)
                     return;
 
@@ -3016,6 +3016,56 @@
                         edgeRowT.appendChild(colB);
                     }
                     inputRow.appendChild(edgeRowT);
+
+                } else if (mkt === 'RFI') {
+                    // RFI: Yes (YRFI) / No (NRFI) with Real % and edge
+                    var colHdrR = document.createElement('div');
+                    colHdrR.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:5px;padding:0 2px';
+                    colHdrR.innerHTML = '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);flex-shrink:0">KALSHI</span>'
+                    + '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);width:58px;text-align:center;flex-shrink:0">Real %</span>'
+                    + '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-left:auto;text-align:right">Edge</span>';
+                    inputRow.appendChild(colHdrR);
+                    mktRows.forEach(function(r) {
+                        var pval = preds[r.id] || '';
+                        var sideRow = document.createElement('div');
+                        sideRow.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:4px' + (betTaken[r.id] ? ';opacity:0.4' : '');
+                        var sideLbl = document.createElement('span');
+                        sideLbl.style.cssText = 'font-family:var(--sans);font-size:12px;font-weight:600;color:var(--text);flex-shrink:0;min-width:80px';
+                        sideLbl.textContent = r.ps === 'A' ? 'Yes (YRFI)' : 'No (NRFI)';
+                        sideRow.appendChild(sideLbl);
+                        var predInp = document.createElement('input');
+                        predInp.className = 'mc-inp' + (pval ? ' filled' : '');
+                        predInp.type = 'number'; predInp.min = '1'; predInp.max = '99'; predInp.step = '0.5';
+                        predInp.placeholder = '%'; predInp.value = pval;
+                        predInp.dataset.id = r.id; predInp.dataset.type = 'pred';
+                        predInp.style.cssText = 'width:58px;flex-shrink:0';
+                        predInp.addEventListener('input', function() { setPredMobile(this); });
+                        predInp.addEventListener('keydown', function(e) { if (e.key === 'Enter') this.blur(); });
+                        sideRow.appendChild(predInp);
+                        var evWrap = document.createElement('div');
+                        evWrap.style.cssText = 'display:flex;flex-direction:column;align-items:flex-end;margin-left:auto;gap:1px';
+                        var sideEdge = document.createElement('span');
+                        sideEdge.className = 'mc-side-edge';
+                        sideEdge.dataset.id = r.id;
+                        sideEdge.style.cssText = 'font-family:var(--mono);font-size:12px;font-weight:600;white-space:nowrap;color:var(--muted2);text-align:right';
+                        sideEdge.textContent = '-';
+                        var sideEV = document.createElement('span');
+                        sideEV.className = 'mc-side-ev';
+                        sideEV.dataset.id = r.id;
+                        sideEV.style.cssText = 'font-family:var(--mono);font-size:10px;font-weight:600;color:var(--muted2);text-align:right;display:none';
+                        evWrap.appendChild(sideEdge); evWrap.appendChild(sideEV);
+                        sideRow.appendChild(evWrap);
+                        var betCbR = document.createElement('input');
+                        betCbR.type = 'checkbox'; betCbR.className = 'mc-bet-check'; betCbR.dataset.id = r.id;
+                        betCbR.checked = !!betTaken[r.id]; betCbR.title = 'Mark bet taken';
+                        betCbR.style.cssText = 'width:16px;height:16px;cursor:pointer;accent-color:var(--green);flex-shrink:0;margin-left:6px';
+                        betCbR.addEventListener('change', function() { toggleBet(this.dataset.id); });
+                        sideRow.appendChild(betCbR);
+                        if (preds[r.id] !== undefined && preds[r.id] !== '') {
+                            (function(id){ setTimeout(function(){ updateSideEdge(id); }, 0); })(r.id);
+                        }
+                        inputRow.appendChild(sideRow);
+                    });
 
                 } else {
                     var colHdr = document.createElement('div');
