@@ -21,13 +21,30 @@ function fail(status, msg) {
   });
 }
 
+const KALSHI_TEAM = {
+  'St. Louis': 'St. Louis Cardinals', 'Detroit': 'Detroit Tigers',
+  'New York M': 'New York Mets', 'San Francisco': 'San Francisco Giants',
+  'Seattle': 'Seattle Mariners', 'Los Angeles A': 'Los Angeles Angels',
+  'Atlanta': 'Atlanta Braves', 'Arizona': 'Arizona Diamondbacks',
+  'Houston': 'Houston Astros', "A's": 'Athletics',
+  'Philadelphia': 'Philadelphia Phillies', 'Colorado': 'Colorado Rockies',
+  'Cincinnati': 'Cincinnati Reds', 'Texas': 'Texas Rangers',
+  'Milwaukee': 'Milwaukee Brewers', 'Kansas City': 'Kansas City Royals',
+  'Toronto': 'Toronto Blue Jays', 'Chicago WS': 'Chicago White Sox',
+  'Tampa Bay': 'Tampa Bay Rays', 'Minnesota': 'Minnesota Twins',
+  'Chicago C': 'Chicago Cubs', 'Cleveland': 'Cleveland Guardians',
+  'Los Angeles D': 'Los Angeles Dodgers', 'Washington': 'Washington Nationals',
+  'Miami': 'Miami Marlins', 'New York Y': 'New York Yankees',
+  'Baltimore': 'Baltimore Orioles', 'Pittsburgh': 'Pittsburgh Pirates',
+  'San Diego': 'San Diego Padres', 'Boston': 'Boston Red Sox',
+};
+
 function parseTitle(title) {
   const m = title.match(/^(.+?) vs (.+?) First Inning Run\??$/i);
   if (!m) return null;
-  // Normalize Kalshi aliases to full names
-  const ALIASES = { "A's": 'Athletics', 'Los Angeles A': 'Athletics', 'New York M': 'Mets', 'New York Y': 'Yankees', 'Chicago WS': 'White Sox', 'Chicago C': 'Cubs', 'Los Angeles D': 'Dodgers', 'Los Angeles An': 'Angels', 'San Francisco': 'Giants', 'San Diego': 'Padres' };
-  const normalize = s => ALIASES[s.trim()] || s.trim();
-  return { away: normalize(m[1]), home: normalize(m[2]) };
+  const away = KALSHI_TEAM[m[1].trim()] || m[1].trim();
+  const home  = KALSHI_TEAM[m[2].trim()] || m[2].trim();
+  return { away, home };
 }
 
 function toAm(p) {
