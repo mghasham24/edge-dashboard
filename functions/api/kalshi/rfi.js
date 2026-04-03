@@ -2,7 +2,7 @@
 // Fetches KXMLBRFI markets from Kalshi public API, returns devigged fair values per game
 
 const KALSHI_URL = 'https://api.elections.kalshi.com/trade-api/v2/markets?series_ticker=KXMLBRFI&limit=100';
-const CACHE_TTL = 30;
+const CACHE_TTL = 300;
 const MAX_SPREAD = 0.20; // skip markets where spread > 20 cents
 
 async function getSession(request, db) {
@@ -24,7 +24,10 @@ function fail(status, msg) {
 function parseTitle(title) {
   const m = title.match(/^(.+?) vs (.+?) First Inning Run\??$/i);
   if (!m) return null;
-  return { away: m[1].trim(), home: m[2].trim() };
+  // Normalize Kalshi aliases to full names
+  const ALIASES = { "A's": 'Athletics', 'Los Angeles A': 'Athletics', 'New York M': 'Mets', 'New York Y': 'Yankees', 'Chicago WS': 'White Sox', 'Chicago C': 'Cubs', 'Los Angeles D': 'Dodgers', 'Los Angeles An': 'Angels', 'San Francisco': 'Giants', 'San Diego': 'Padres' };
+  const normalize = s => ALIASES[s.trim()] || s.trim();
+  return { away: normalize(m[1]), home: normalize(m[2]) };
 }
 
 function toAm(p) {
