@@ -2078,6 +2078,7 @@
     var yourLines = {};
     var altOdds = {}; // gameId -> { spreads: {teamName: {point: price}}, totals: {side: {point: price}} }
     var betTaken = JSON.parse(localStorage.getItem('raxedge_bets_taken') || '{}');
+    var rfiOdds = {}; // game key -> {yesFair, noFair, yesAm, noAm}
 
     // Restore saved unit size
     (function() {
@@ -3656,7 +3657,7 @@
         stxt.textContent = 'Fetching ' + lbl + '...';
         document.getElementById('tbody').innerHTML = '<tr class="state-row"><td colspan="13">Loading...</td></tr>';
         var sel = document.getElementById('mkt-filter').value;
-        var noSpread = ['mma_mixed_martial_arts'];
+        var noSpread = ['mma_mixed_martial_arts', 'baseball_mlb'];
         var mkts = noSpread.indexOf(currentSport) !== -1 ? 'h2h'
             : (!isPro()) ? 'h2h'
             : sel === 'ALL' ? 'h2h,spreads,totals' : (MARKET_KEYS[sel] || 'h2h');
@@ -3715,6 +3716,7 @@
             btn.disabled = false;
             renderTable();
             if (rawRows.length > 0) fetchRealMarkets(currentSport);
+            if (currentSport === 'baseball_mlb') fetchKalshiRFI();
         });
     }
 
@@ -3750,8 +3752,15 @@
             var nv = novig(p.A ? imp(p.A.am) : null, p.B ? imp(p.B.am) : null);
             var yl = yourLines[r.id] != null ? yourLines[r.id] : null;
             var altNV = getAltFair(r, yl, p.A, p.B);
-            var fair = altNV ? (r.ps === 'A' ? altNV.fa : altNV.fb) : (r.ps === 'A' ? nv.fa : nv.fb);
-            var af = altNV ? fair : adjFair(fair, r.pt, yl, r.mkt, r.ps);
+            // RFI uses Kalshi devigged fair value, not FD no-vig
+            var fair, af;
+            if (r.mkt === 'RFI' && r.rfiFair != null) {
+                fair = r.rfiFair;
+                af = r.rfiFair;
+            } else {
+                fair = altNV ? (r.ps === 'A' ? altNV.fa : altNV.fb) : (r.ps === 'A' ? nv.fa : nv.fb);
+                af = altNV ? fair : adjFair(fair, r.pt, yl, r.mkt, r.ps);
+            }
             var pr = preds[r.id];
             var pred = (pr !== undefined && pr !== '') ? parseFloat(pr) / 100 : null;
             var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
@@ -3811,7 +3820,7 @@
                 return ev >= 5;
             });
         }
-        var mO = { ML: 0, Spread: 1, Total: 2 };
+        var mO = { ML: 0, Spread: 1, Total: 2, RFI: 3 };
         filtered.sort(function(a, b) {
             var ta = a.cm ? a.cm.getTime() : 9e12, tb = b.cm ? b.cm.getTime() : 9e12;
             if (a.game !== b.game) return ta - tb;
@@ -3898,22 +3907,28 @@
         var ylv = (r.yl != null && r.yl !== '') ? r.yl : '';
         var ph = r.pt != null ? r.pt : '';
         var lc = afChanged ? ' line-changed' : '';
-        var ylCell = r.mkt === 'ML'
+        var ylCell = r.mkt === 'ML' || r.mkt === 'RFI'
             ? '<td class="c" data-label="Real Line"></td>'
             : '<td class="c" data-label="Real Line"><input class="cell-inp' + lc + '" type="number" step="0.5" placeholder="' + ph + '" value="' + ylv + '" data-id="' + r.id + '" onblur="setLine(this)" onkeydown="if(event.key===\'Enter\')this.blur()"></td>';
+        // RFI: FD Line col shows Kalshi label, No-Vig shows Kalshi fair, Adj Fair same
+        var isRFI = r.mkt === 'RFI';
+        var fdLineCell = isRFI
+            ? '<td data-label="FD Line" style="font-family:var(--mono);font-size:10px;color:var(--accent)">KALSHI</td>'
+            : '<td data-label="FD Line" style="font-family:var(--mono);color:var(--muted);font-size:12px">' + lineStr + '</td>';
+        var evGated = isPro() || r.mkt === 'ML' || r.mkt === 'RFI';
         var gk = r.game.replace(/"/g, '&quot;');
         return '<tr class="' + (r.edge != null && r.edge > 0 ? 'has-edge' : '') + (isC ? ' collapsed-row' : '') + '" data-gk="' + gk + '" data-row-id="' + r.id + '" style="border-left:3px solid ' + color + ';' + (betTaken[r.id] ? 'opacity:0.4' : '') + '">'
         + '<td class="game-td" data-label="Game"><div style="font-weight:600">' + r.side + '</div><div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px">' + r.game + '</div></td>'
         + '<td data-label="Market"><span class="mkt-badge">' + r.mkt + '</span></td>'
         + '<td data-label="Side" style="color:var(--muted);font-size:12px">' + r.side + '</td>'
-        + '<td data-label="FD Line" style="font-family:var(--mono);color:var(--muted);font-size:12px">' + lineStr + '</td>'
+        + fdLineCell
         + '<td class="r" data-label="Consensus"><span class="' + aCls + '">' + am + '</span></td>'
         + '<td class="r" data-label="No-Vig %" style="font-family:var(--mono);color:var(--muted2);font-size:11px;opacity:0.5">' + fairStr + '</td>'
         + ylCell
         + '<td class="r" data-label="Adj. Fair %" style="font-family:var(--mono);color:' + (afChanged ? 'var(--yellow)' : 'var(--muted)') + '">' + afStr + '</td>'
         + '<td class="c" data-label="Real %"><div style="display:flex;flex-direction:column;align-items:center;gap:2px;justify-content:center"><div style="display:flex;align-items:center;gap:4px;justify-content:center"><input class="cell-inp' + (pv ? ' filled' : '') + '" type="number" min="1" max="99" step="1" inputmode="numeric" placeholder="-" value="' + pv + '" data-id="' + r.id + '" oninput="setPred(this)" onblur="setPred(this)" onkeydown="if(event.key===\'Enter\')this.blur()"><span class="pred-unit">%</span></div>' + (vols[r.id] ? '<span style="font-size:9px;color:var(--muted2);font-family:var(--mono)">' + vols[r.id] + ' vol</span>' : '') + '</div></td>'
         + '<td class="r" data-label="Edge"><div class="edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:' + bw + 'px;background:' + bc + '"></div></div><span class="edge-val ' + ec + '">' + es + '</span></div></td>'
-        + '<td class="r" data-label="EV">' + (isPro() || r.mkt === 'ML' ? evH : '<span style="filter:blur(4px);font-family:var(--mono);font-size:12px;font-weight:600;color:var(--green);user-select:none">+8.4%</span><span style="font-size:9px;font-weight:700;background:var(--accent);color:#fff;border-radius:3px;padding:1px 4px;margin-left:3px;vertical-align:middle">PRO</span>') + '</td>'
+        + '<td class="r" data-label="EV">' + (evGated ? evH : '<span style="filter:blur(4px);font-family:var(--mono);font-size:12px;font-weight:600;color:var(--green);user-select:none">+8.4%</span><span style="font-size:9px;font-weight:700;background:var(--accent);color:#fff;border-radius:3px;padding:1px 4px;margin-left:3px;vertical-align:middle">PRO</span>') + '</td>'
         + '<td class="r" data-label="Units">' + uH + '</td>'
         + '<td class="r" data-label="Bet">' + bH + '</td>'
         + '<td class="c"><input type="checkbox" data-id="' + r.id + '" ' + (betTaken[r.id] ? 'checked' : '') + ' onchange="toggleBet(\'' + r.id + '\')" style="width:16px;height:16px;cursor:pointer;accent-color:var(--green)"></td>'
@@ -4136,6 +4151,67 @@
         return overrides[key] || ABBREV_MAP[key] || abbrevOrName;
     }
 
+    // MLB team name -> Kalshi title name (first word or two of city)
+    var KALSHI_MLB_MAP = {
+        'Arizona Diamondbacks': 'Arizona', 'Atlanta Braves': 'Atlanta', 'Baltimore Orioles': 'Baltimore',
+        'Boston Red Sox': 'Boston', 'Chicago Cubs': 'Chicago', 'Chicago White Sox': 'Chicago',
+        'Cincinnati Reds': 'Cincinnati', 'Cleveland Guardians': 'Cleveland', 'Colorado Rockies': 'Colorado',
+        'Detroit Tigers': 'Detroit', 'Houston Astros': 'Houston', 'Kansas City Royals': 'Kansas City',
+        'Los Angeles Angels': 'Los Angeles', 'Los Angeles Dodgers': 'Los Angeles', 'Miami Marlins': 'Miami',
+        'Milwaukee Brewers': 'Milwaukee', 'Minnesota Twins': 'Minnesota', 'New York Mets': 'New York',
+        'New York Yankees': 'New York', 'Oakland Athletics': 'Oakland', 'Philadelphia Phillies': 'Philadelphia',
+        'Pittsburgh Pirates': 'Pittsburgh', 'San Diego Padres': 'San Diego', 'San Francisco Giants': 'San Francisco',
+        'Seattle Mariners': 'Seattle', 'St. Louis Cardinals': 'St. Louis', 'Tampa Bay Rays': 'Tampa Bay',
+        'Texas Rangers': 'Texas', 'Toronto Blue Jays': 'Toronto', 'Washington Nationals': 'Washington',
+        'Athletics': 'Oakland'
+    };
+
+    function fetchKalshiRFI() {
+        fetch('/api/kalshi/rfi', { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            if (!d.ok || !d.rfi) return;
+            rfiOdds = {};
+            var kalshiKeys = Object.keys(d.rfi);
+
+            // Match each FD game to a Kalshi RFI entry
+            var gamesSeen = {};
+            rawRows.forEach(function(r) {
+                if (gamesSeen[r.game] || r.mkt === 'RFI') return;
+                gamesSeen[r.game] = true;
+                var fdTeams = r.game.split(' @ ');
+                var fdAway = fdTeams[0] || '';
+                var fdHome = fdTeams[1] || '';
+                var kAway = KALSHI_MLB_MAP[fdAway] || fdAway.split(' ').slice(0, 2).join(' ');
+                var kHome = KALSHI_MLB_MAP[fdHome] || fdHome.split(' ').slice(0, 2).join(' ');
+
+                var match = kalshiKeys.find(function(k) {
+                    var p = k.split(' @ ');
+                    if (p.length !== 2) return false;
+                    var ka = p[0].toLowerCase(), kh = p[1].toLowerCase();
+                    return ka.indexOf(kAway.toLowerCase()) !== -1 && kh.indexOf(kHome.toLowerCase()) !== -1;
+                });
+                if (match) rfiOdds[r.game] = d.rfi[match];
+            });
+
+            // Synthesize RFI rows — remove stale ones first
+            rawRows = rawRows.filter(function(r) { return r.mkt !== 'RFI'; });
+            Object.keys(rfiOdds).forEach(function(game) {
+                var rfi = rfiOdds[game];
+                var existing = rawRows.find(function(r) { return r.game === game; });
+                if (!existing) return;
+                var pid = 'rfi-' + game.replace(/[^a-z0-9]/gi, '');
+                rawRows.push({ id: pid + '-A', game: game, cm: existing.cm, mkt: 'RFI', side: 'Yes (YRFI)', am: rfi.yesAm, pt: null, pid: pid, ps: 'A', gid: existing.gid, rfiFair: rfi.yesFair });
+                rawRows.push({ id: pid + '-B', game: game, cm: existing.cm, mkt: 'RFI', side: 'No (NRFI)',  am: rfi.noAm,  pt: null, pid: pid, ps: 'B', gid: existing.gid, rfiFair: rfi.noFair });
+            });
+
+            renderTable();
+            // Trigger Real Sports auto-fill for new RFI rows
+            if (rawRows.length > 0) fetchRealMarkets(currentSport);
+        })
+        .catch(function() {});
+    }
+
     function fetchRealMarkets(sport) {
         fetch('/api/real/sync?sport=' + sport, { credentials: 'same-origin' })
         .then(function(r) { return r.json(); })
@@ -4234,7 +4310,9 @@
 
                 var mktLabel = r.mkt === 'ML' ? 'Game Winner'
                              : r.mkt === 'Spread' ? 'Spread'
-                             : r.mkt === 'Total' ? 'Total' : null;
+                             : r.mkt === 'Total' ? 'Total'
+                             : r.mkt === 'RFI' ? 'Run in 1st inning?'
+                             : null;
                 if (!mktLabel) return;
                 var mktData = gameMarkets[mktLabel];
                 var outcomes = mktData ? (mktData.outcomes || mktData) : null;
@@ -4243,9 +4321,19 @@
                 var sideLower = r.side.toLowerCase();
                 var sideWords = sideLower.split(' ').filter(function(w) { return w.length > 2; });
 
-                // Pass 0: Total-specific matching - "Over" matches "O ..." and "Under" matches "U ..."
+                // Pass 0: RFI-specific matching — Yes/No
                 var match = null;
-                if (r.mkt === 'Total') {
+                if (r.mkt === 'RFI') {
+                    var isYes = r.ps === 'A'; // A=Yes(YRFI), B=No(NRFI)
+                    match = outcomes.find(function(o) {
+                        if (!o.label) return false;
+                        return isYes ? o.label.toLowerCase() === 'yes' : o.label.toLowerCase() === 'no';
+                    });
+                    if (!match) match = isYes ? outcomes[1] : outcomes[0]; // Real Sports: No=0, Yes=1
+                }
+
+                // Pass 0b: Total-specific matching
+                if (!match && r.mkt === 'Total') {
                     var isOver = sideLower === 'over';
                     match = outcomes.find(function(o) {
                         if (!o.label) return false;
