@@ -3823,7 +3823,8 @@
         var mO = { ML: 0, Spread: 1, Total: 2, RFI: 3 };
         filtered.sort(function(a, b) {
             var ta = a.cm ? a.cm.getTime() : 9e12, tb = b.cm ? b.cm.getTime() : 9e12;
-            if (a.game !== b.game) return ta - tb;
+            if (ta !== tb) return ta - tb;
+            if (a.game !== b.game) return a.game < b.game ? -1 : 1;
             if (a.mkt !== b.mkt) return (mO[a.mkt] || 0) - (mO[b.mkt] || 0);
             return 0;
         });
