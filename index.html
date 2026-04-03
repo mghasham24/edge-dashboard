@@ -3826,6 +3826,8 @@
         });
         var now = new Date();
         var filtered = rows.filter(function(r) {
+            // MLB: hide all rows once game has been going for 3+ hours (game is over)
+            if (currentSport === 'baseball_mlb' && r.cm && (now - r.cm) > 3 * 60 * 60 * 1000) return false;
             // RFI: hide once game has started — market resolves in 1st inning
             if (r.mkt === 'RFI' && r.cm && r.cm <= now) return false;
             if (r.mkt === 'Spread' || r.mkt === 'Total') {
