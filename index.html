@@ -4350,11 +4350,23 @@
                     var fdTeams = r.game.split(' @ ');
                     var fdAway = fdTeams[0] ? fdTeams[0].toLowerCase() : '';
                     var fdHome = fdTeams[1] ? fdTeams[1].toLowerCase() : '';
+                    var fdAwayLast = fdAway.split(' ').pop();
+                    var fdHomeLast = fdHome.split(' ').pop();
                     var matched = marketKeys.find(function(k) {
                         var realTeams = k.split(' @ ');
                         if (realTeams.length !== 2) return false;
                         var rAway = resolveTeamName(realTeams[0].trim()).toLowerCase();
                         var rHome = resolveTeamName(realTeams[1].trim()).toLowerCase();
+                        var rAwayLast = rAway.split(' ').pop();
+                        var rHomeLast = rHome.split(' ').pop();
+                        // For MMA: check last names in both orientations
+                        if (sport === 'mma_mixed_martial_arts') {
+                            var normalMatch = (rAwayLast.indexOf(fdAwayLast) !== -1 || fdAwayLast.indexOf(rAwayLast) !== -1)
+                                           && (rHomeLast.indexOf(fdHomeLast) !== -1 || fdHomeLast.indexOf(rHomeLast) !== -1);
+                            var flippedMatch = (rAwayLast.indexOf(fdHomeLast) !== -1 || fdHomeLast.indexOf(rAwayLast) !== -1)
+                                            && (rHomeLast.indexOf(fdAwayLast) !== -1 || fdAwayLast.indexOf(rHomeLast) !== -1);
+                            return normalMatch || flippedMatch;
+                        }
                         var awayMatch = rAway.split(' ').some(function(w) { return w.length > 2 && fdAway.indexOf(w) !== -1; })
                                      || fdAway.split(' ').some(function(w) { return w.length > 2 && rAway.indexOf(w) !== -1; });
                         var homeMatch = rHome.split(' ').some(function(w) { return w.length > 2 && fdHome.indexOf(w) !== -1; })
@@ -4405,6 +4417,16 @@
                         return isYes ? o.label.toLowerCase() === 'yes' : o.label.toLowerCase() === 'no';
                     });
                     if (!match) match = isYes ? outcomes[1] : outcomes[0]; // Real Sports: No=0, Yes=1
+                }
+
+                // Pass 0c: MMA last-name matching
+                if (!match && sport === 'mma_mixed_martial_arts') {
+                    var sideLast = sideLower.split(' ').pop();
+                    match = outcomes.find(function(o) {
+                        if (!o.label) return false;
+                        var oLast = o.label.toLowerCase().split(' ').pop();
+                        return oLast.indexOf(sideLast) !== -1 || sideLast.indexOf(oLast) !== -1;
+                    });
                 }
 
                 // Pass 0b: Total-specific matching
