@@ -4321,7 +4321,6 @@
                     var fdTeams = r.game.split(' @ ');
                     var fdAway = fdTeams[0] ? fdTeams[0].toLowerCase() : '';
                     var fdHome = fdTeams[1] ? fdTeams[1].toLowerCase() : '';
-                    // Use last name only for MMA — more reliable than full name fuzzy match
                     var fdAwayLast = fdAway.split(' ').pop();
                     var fdHomeLast = fdHome.split(' ').pop();
                     return marketKeys.some(function(k) {
@@ -4329,9 +4328,14 @@
                         if (realTeams.length !== 2) return false;
                         var rAway = realTeams[0].trim().toLowerCase();
                         var rHome = realTeams[1].trim().toLowerCase();
-                        var awayMatch = rAway.indexOf(fdAwayLast) !== -1 || fdAway.indexOf(rAway.split(' ').pop()) !== -1;
-                        var homeMatch = rHome.indexOf(fdHomeLast) !== -1 || fdHome.indexOf(rHome.split(' ').pop()) !== -1;
-                        return awayMatch && homeMatch;
+                        var rAwayLast = rAway.split(' ').pop();
+                        var rHomeLast = rHome.split(' ').pop();
+                        // Check both orientations — FD and Real Sports sometimes flip home/away
+                        var normalMatch = (rAwayLast.indexOf(fdAwayLast) !== -1 || fdAwayLast.indexOf(rAwayLast) !== -1)
+                                       && (rHomeLast.indexOf(fdHomeLast) !== -1 || fdHomeLast.indexOf(rHomeLast) !== -1);
+                        var flippedMatch = (rAwayLast.indexOf(fdHomeLast) !== -1 || fdHomeLast.indexOf(rAwayLast) !== -1)
+                                        && (rHomeLast.indexOf(fdAwayLast) !== -1 || fdAwayLast.indexOf(rHomeLast) !== -1);
+                        return normalMatch || flippedMatch;
                     });
                 });
                 renderTable();
