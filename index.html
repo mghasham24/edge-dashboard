@@ -2708,7 +2708,7 @@
                 var rsLink = document.createElement('a');
                 rsLink.href = rsUrl;
                 rsLink.target = '_blank';
-                rsLink.textContent = '↗';
+                rsLink.innerHTML = '&#8599;';
                 rsLink.title = 'View on Real Sports';
                 rsLink.style.cssText = 'color:var(--muted2);font-size:12px;text-decoration:none;opacity:0.7;flex-shrink:0;margin-left:4px';
                 rsLink.addEventListener('click', function(e) { e.stopPropagation(); });
@@ -3969,7 +3969,7 @@
                 + '<div class="gh-stripe" style="background:' + color + '"></div>'
                 + '<span>' + teams[0] + '</span><span style="color:var(--muted2)">@</span><span>' + (teams[1] || '') + '</span>'
                 + (ti.lbl ? '<span class="gh-badge ' + ti.cls + '">' + ti.lbl + '</span>' : '')
-                + (rsGameIds[r.game] ? (function(){ var u = getRealSportsUrl(rsGameIds[r.game], currentSport); return u ? '<a href="' + u + '" target="_blank" onclick="event.stopPropagation();event.preventDefault();window.open(this.href,\'_blank\');return false;" style="margin-left:6px;color:var(--muted2);font-size:11px;text-decoration:none;opacity:0.7;flex-shrink:0" title="View on Real Sports">↗</a>' : ''; })() : '')
+                + (rsGameIds[r.game] ? (function(){ var u = getRealSportsUrl(rsGameIds[r.game], currentSport); return u ? '<a href="' + u + '" target="_blank" onclick="event.stopPropagation();event.preventDefault();window.open(this.href,\'_blank\');return false;" style="margin-left:6px;color:var(--muted2);font-size:11px;text-decoration:none;opacity:0.7;flex-shrink:0" title="View on Real Sports">&#8599;</a>' : ''; })() : '')
                 + '<span class="gh-score-badge gh-badge" data-game="' + r.game.replace(/"/g, '&quot;') + '" data-cm="' + (r.cm ? r.cm.getTime() : '') + '" style="display:none"></span>'
                 + '<span class="live-score-badge gh-badge" style="display:none"></span>'
                 + '<span class="gh-arrow' + (isC ? '' : ' up') + '" data-gk="' + r.game.replace(/"/g, '&quot;') + '">&#9660;</span>'
