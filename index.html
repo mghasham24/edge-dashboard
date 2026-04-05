@@ -3778,7 +3778,7 @@
         stxt.textContent = 'Fetching ' + lbl + '...';
         document.getElementById('tbody').innerHTML = '<tr class="state-row"><td colspan="13">Loading...</td></tr>';
         var sel = document.getElementById('mkt-filter').value;
-        var noSpread = ['mma_mixed_martial_arts', 'baseball_mlb'];
+        var noSpread = ['mma_mixed_martial_arts', 'baseball_mlb', 'icehockey_nhl'];
         var mkts = noSpread.indexOf(currentSport) !== -1 ? 'h2h'
             : (!isPro()) ? 'h2h'
             : sel === 'ALL' ? 'h2h,spreads,totals' : (MARKET_KEYS[sel] || 'h2h');
