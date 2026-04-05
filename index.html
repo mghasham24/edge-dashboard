@@ -3021,7 +3021,7 @@
                     // RFI: Yes (YRFI) / No (NRFI) with Real % and edge
                     var colHdrR = document.createElement('div');
                     colHdrR.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:5px;padding:0 2px';
-                    colHdrR.innerHTML = '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);flex-shrink:0">KALSHI</span>'
+                    colHdrR.innerHTML = '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);flex-shrink:0">FD RFI</span>'
                     + '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);width:58px;text-align:center;flex-shrink:0">Real %</span>'
                     + '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-left:auto;text-align:right">Edge</span>';
                     inputRow.appendChild(colHdrR);
@@ -3974,7 +3974,7 @@
         // RFI: FD Line col shows Kalshi label, No-Vig shows Kalshi fair, Adj Fair same
         var isRFI = r.mkt === 'RFI';
         var fdLineCell = isRFI
-            ? '<td data-label="FD Line" style="font-family:var(--mono);font-size:10px;color:var(--accent)">KALSHI</td>'
+            ? '<td data-label="FD Line" style="font-family:var(--mono);font-size:10px;color:var(--accent)">FD</td>'
             : '<td data-label="FD Line" style="font-family:var(--mono);color:var(--muted);font-size:12px">' + lineStr + '</td>';
         var evGated = isPro() || r.mkt === 'ML' || r.mkt === 'RFI';
         var gk = r.game.replace(/"/g, '&quot;');
@@ -4228,7 +4228,7 @@
     };
 
     function fetchKalshiRFI() {
-        fetch('/api/kalshi/rfi', { credentials: 'same-origin' })
+        fetch('/api/fd/rfi', { credentials: 'same-origin' })
         .then(function(r) { return r.json(); })
         .then(function(d) {
             if (!d.ok || !d.rfi) return;
