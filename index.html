@@ -1635,7 +1635,7 @@
     }
     </style>
     <script src="https://www.google.com/recaptcha/api.js?render=6Let4qMsAAAAAFhvh6wy6Ai_Ruzq2j4MIlMhqRnl"></script>
-    <script src="https://unpkg.com/hashids@2/dist/hashids.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/hashids/2.3.0/hashids.min.js"></script>
 </head>
 <body>
 
@@ -3969,7 +3969,7 @@
                 + '<div class="gh-stripe" style="background:' + color + '"></div>'
                 + '<span>' + teams[0] + '</span><span style="color:var(--muted2)">@</span><span>' + (teams[1] || '') + '</span>'
                 + (ti.lbl ? '<span class="gh-badge ' + ti.cls + '">' + ti.lbl + '</span>' : '')
-                + (r.gid ? (function(){ var u = getRealSportsUrl(rsGameIds[r.game], currentSport); return u ? '<a href="' + u + '" target="_blank" onclick="event.stopPropagation()" style="margin-left:6px;color:var(--muted2);font-size:11px;text-decoration:none;opacity:0.7;flex-shrink:0" title="View on Real Sports">↗</a>' : ''; })() : '')
+                + (rsGameIds[r.game] ? (function(){ var u = getRealSportsUrl(rsGameIds[r.game], currentSport); return u ? '<a href="' + u + '" target="_blank" onclick="event.stopPropagation()" style="margin-left:6px;color:var(--muted2);font-size:11px;text-decoration:none;opacity:0.7;flex-shrink:0" title="View on Real Sports">↗</a>' : ''; })() : '')
                 + '<span class="gh-score-badge gh-badge" data-game="' + r.game.replace(/"/g, '&quot;') + '" data-cm="' + (r.cm ? r.cm.getTime() : '') + '" style="display:none"></span>'
                 + '<span class="live-score-badge gh-badge" style="display:none"></span>'
                 + '<span class="gh-arrow' + (isC ? '' : ' up') + '" data-gk="' + r.game.replace(/"/g, '&quot;') + '">&#9660;</span>'
