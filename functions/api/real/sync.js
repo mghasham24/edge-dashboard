@@ -334,7 +334,7 @@ export async function onRequestGet(context) {
               const totalLine = (totalMkt.outcomes[0].label || '').match(/(\d+\.?\d*)\s*$/);
               if (totalLine) lines.total = parseFloat(totalLine[1]);
             }
-            return { gameKey, markets, lines };
+            return { gameKey, markets, lines, gameId };
           }
           if (mRes.status === 429) {
             // Rate limited on this specific game — skip and rely on D1 merge cache
@@ -400,6 +400,7 @@ export async function onRequestGet(context) {
             if (result && !result._err) {
               bgMap[result.gameKey] = result.markets;
               if (result.lines && Object.keys(result.lines).length) bgMap[result.gameKey + '__lines'] = result.lines;
+              if (result.gameId) bgMap[result.gameKey + '__gid'] = result.gameId;
             }
           }
           // Write updated cache
@@ -453,6 +454,7 @@ export async function onRequestGet(context) {
         if (result.lines && Object.keys(result.lines).length) {
           marketMap[result.gameKey + '__lines'] = result.lines;
         }
+        if (result.gameId) marketMap[result.gameKey + '__gid'] = result.gameId;
       }
     }
 
