@@ -2079,7 +2079,7 @@
     var altOdds = {}; // gameId -> { spreads: {teamName: {point: price}}, totals: {side: {point: price}} }
     var betTaken = JSON.parse(localStorage.getItem('raxedge_bets_taken') || '{}');
     var rfiOdds = {}; // game key -> {yesFair, noFair, yesAm, noAm}
-    var RAX_ICON = '<svg viewBox="0 0 512 512" style="width:13px;height:13px;vertical-align:-2px;display:inline-block;margin-right:1px" aria-hidden="true"><g fill="currentColor"><path d="M128.1,141.1h356.8C442.8,57.4,356.1,0,256,0C192,0,133.5,23.5,88.6,62.3L128.1,141.1z"/><polygon points="355.3,193.2 154.2,193.2 254.7,394"/><path d="M413.6,193.2L253.9,512c0.7,0,1.4,0,2.1,0c141.4,0,256-114.6,256-256c0-21.7-2.7-42.7-7.8-62.8H413.6z"/><path d="M225.6,452.1L50.7,103C18.9,145.7,0,198.6,0,256c0,121.7,85,223.6,198.8,249.6L225.6,452.1z"/></g></svg>';
+    var RAX_ICON = '<svg viewBox="0 0 512 512" style="width:13px;height:13px;vertical-align:-2px;display:inline-block;margin-right:1px" aria-hidden="true"><g fill="currentColor"><path d="M128.1,141.1h356.8C442.8,57.4,356.1,0,256,0C192,0,133.5,23.5,88.6,62.3L128.1,141.1z"/><polygon points="355.3,193.2 154.2,193.2 254.7,394"/><path d="M413.6,193.2L253.9,512c0.7,0,1.4,0,2.1,0c141.4,0,256-114.6,256-256c0-21.7-2.7-42.7-7.8-62.8H413.6z"/><path d="M225.6,452.1L50.7,103C18.9,145.7,0,198.6,0,256c0,121.7,85,223.6,198.8,249.6L225.6,452.1z"/></g></svg> ';
 
     // Restore saved unit size
     (function() {
@@ -2094,6 +2094,13 @@
         betTaken[id] = !betTaken[id];
         if (!betTaken[id]) delete betTaken[id];
         localStorage.setItem('raxedge_bets_taken', JSON.stringify(betTaken));
+        // Sync to server so state persists across devices
+        fetch('/api/bets/taken', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: id, taken: !!betTaken[id] })
+        }).catch(function() {});
         document.querySelectorAll('input[type="checkbox"][data-id="' + id + '"]').forEach(function(cb) {
             cb.checked = !!betTaken[id];
         });
@@ -2107,6 +2114,17 @@
 
     var collapsed = {};
     var showEVOnly = false;
+
+    async function loadBetsTaken() {
+        try {
+            var res = await fetch('/api/bets/taken', { credentials: 'same-origin' });
+            if (!res.ok) return;
+            var data = await res.json();
+            // Server wins — merge into local state
+            data.bet_ids.forEach(function(id) { betTaken[id] = true; });
+            localStorage.setItem('raxedge_bets_taken', JSON.stringify(betTaken));
+        } catch(e) {}
+    }
 
     function toggleEVOnly() {
         showEVOnly = !showEVOnly;
@@ -2245,6 +2263,7 @@
                 document.getElementById('landing').classList.remove('visible');
                 document.getElementById('dashboard').style.display = 'block';
                 buildTabs();
+                await loadBetsTaken();
                 setTimeout(loadOdds, 50);
             }
         } catch (e) {
@@ -2305,6 +2324,7 @@
                     document.getElementById('sport-tabs').appendChild(adminTabBtn);
                 }
                 buildTabs();
+                await loadBetsTaken();
                 setTimeout(loadOdds, 50);
             } else {
                 document.getElementById('landing').classList.add('visible');
