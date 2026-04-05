@@ -1897,7 +1897,7 @@
                 </select>
             </div>
             <div style="display:flex;align-items:center;gap:6px">
-                <span class="ctrl-lbl">Unit $</span>
+                <span class="ctrl-lbl">Unit <svg viewBox="0 0 512 512" style="width:12px;height:12px;vertical-align:-1px;display:inline-block" aria-hidden="true"><g fill="currentColor"><path d="M128.1,141.1h356.8C442.8,57.4,356.1,0,256,0C192,0,133.5,23.5,88.6,62.3L128.1,141.1z"/><polygon points="355.3,193.2 154.2,193.2 254.7,394"/><path d="M413.6,193.2L253.9,512c0.7,0,1.4,0,2.1,0c141.4,0,256-114.6,256-256c0-21.7-2.7-42.7-7.8-62.8H413.6z"/><path d="M225.6,452.1L50.7,103C18.9,145.7,0,198.6,0,256c0,121.7,85,223.6,198.8,249.6L225.6,452.1z"/></g></svg></span>
                 <input class="ctrl-inp" id="unit-size" type="number" value="300" min="1" step="1" oninput="localStorage.setItem('raxedge_unit_size',this.value);renderTable()">
             </div>
             <button id="ev-only-btn" onclick="toggleEVOnly()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:.05em;padding:6px 14px;border-radius:5px;cursor:pointer;white-space:nowrap">+EV Only</button>
@@ -2079,6 +2079,7 @@
     var altOdds = {}; // gameId -> { spreads: {teamName: {point: price}}, totals: {side: {point: price}} }
     var betTaken = JSON.parse(localStorage.getItem('raxedge_bets_taken') || '{}');
     var rfiOdds = {}; // game key -> {yesFair, noFair, yesAm, noAm}
+    var RAX_ICON = '<svg viewBox="0 0 512 512" style="width:13px;height:13px;vertical-align:-2px;display:inline-block;margin-right:1px" aria-hidden="true"><g fill="currentColor"><path d="M128.1,141.1h356.8C442.8,57.4,356.1,0,256,0C192,0,133.5,23.5,88.6,62.3L128.1,141.1z"/><polygon points="355.3,193.2 154.2,193.2 254.7,394"/><path d="M413.6,193.2L253.9,512c0.7,0,1.4,0,2.1,0c141.4,0,256-114.6,256-256c0-21.7-2.7-42.7-7.8-62.8H413.6z"/><path d="M225.6,452.1L50.7,103C18.9,145.7,0,198.6,0,256c0,121.7,85,223.6,198.8,249.6L225.6,452.1z"/></g></svg>';
 
     // Restore saved unit size
     (function() {
@@ -3321,7 +3322,7 @@
         if (edge != null) {
             resultRow.innerHTML = '<span style="font-family:var(--mono);font-size:13px;font-weight:600;color:' + (edge >= 8 ? 'var(--green)' : edge >= 5 ? '#7ddfab' : edge > 0 ? 'var(--yellow)' : 'var(--red)') + '">' + (edge > 0 ? '+' : '') + edge.toFixed(1) + '%</span>'
             + ' <span style="font-family:var(--mono);font-size:12px;font-weight:600;color:' + (u === 0 ? 'var(--muted2)' : 'var(--green)') + '">' + (u === 0 ? 'PASS' : u + 'u') + '</span>'
-            + (u > 0 ? ' <span style="font-family:var(--mono);font-size:12px;color:var(--text)">$' + bet.toFixed(0) + '</span>' : '');
+            + (u > 0 ? ' <span style="font-family:var(--mono);font-size:12px;color:var(--text)">' + RAX_ICON + bet.toFixed(0) + '</span>' : '');
         } else {
             resultRow.innerHTML = '<span style="font-size:11px;color:var(--muted2);font-family:var(--mono)">Enter % to see edge</span>';
         }
@@ -3954,7 +3955,7 @@
             bw = Math.min(Math.abs(r.edge) * 5, 50);
         }
         var uH = r.u === 0 ? '<span class="u-pass">PASS</span>' : '<span class="u-val">' + r.u + 'u</span>';
-        var bH = r.u === 0 ? '<span class="u-pass">-</span>' : '<span class="bet-val">$' + r.bet.toFixed(0) + '</span>';
+        var bH = r.u === 0 ? '<span class="u-pass">-</span>' : '<span class="bet-val">' + RAX_ICON + r.bet.toFixed(0) + '</span>';
         // EV calculation with volume-tiered rake
         var evH = '-';
         var predEV = preds[r.id];
@@ -4083,7 +4084,7 @@
         tds[9].innerHTML = '<div class="edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:' + bw + 'px;background:' + bc + '"></div></div><span class="edge-val ' + ec + '">' + es + '</span></div>';
         tds[10].innerHTML = evH;
         tds[11].innerHTML = u === 0 ? '<span class="u-pass">PASS</span>' : '<span class="u-val">' + u + 'u</span>';
-        tds[12].innerHTML = u === 0 ? '<span class="u-pass">-</span>' : '<span class="bet-val">$' + (u * unit).toFixed(0) + '</span>';
+        tds[12].innerHTML = u === 0 ? '<span class="u-pass">-</span>' : '<span class="bet-val">' + RAX_ICON + (u * unit).toFixed(0) + '</span>';
         tr.classList.toggle('has-edge', edge != null && edge > 0);
         document.getElementById('stat-edges').textContent = document.querySelectorAll('tr.has-edge').length;
     }
@@ -4562,7 +4563,7 @@
                             var col = edge >= 8 ? 'var(--green)' : edge >= 5 ? '#7ddfab' : edge > 0 ? 'var(--yellow)' : 'var(--red)';
                             rr.innerHTML = '<span style="font-family:var(--mono);font-size:13px;font-weight:600;color:' + col + '">' + (edge > 0 ? '+' : '') + edge.toFixed(1) + '%</span>'
                                 + ' <span style="font-family:var(--mono);font-size:12px;font-weight:600;color:' + (u === 0 ? 'var(--muted2)' : 'var(--green)') + '">' + (u === 0 ? 'PASS' : u + 'u') + '</span>'
-                                + (u > 0 ? ' <span style="font-family:var(--mono);font-size:12px;color:var(--text)">$' + bet.toFixed(0) + '</span>' : '');
+                                + (u > 0 ? ' <span style="font-family:var(--mono);font-size:12px;color:var(--text)">' + RAX_ICON + bet.toFixed(0) + '</span>' : '');
                         }
                     });
                     // Update inline side edges for spread
