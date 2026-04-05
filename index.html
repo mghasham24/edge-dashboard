@@ -2058,12 +2058,14 @@
     }, {
         key: 'mma_mixed_martial_arts',
         label: 'UFC/MMA'
-    // }, {
-    //     key: 'soccer_epl',
-    //     label: 'EPL'
-    // }, {
-    //     key: 'soccer_uefa_champs_league',
-    //     label: 'UCL'
+    }, {
+        key: 'soccer_epl',
+        label: 'EPL',
+        noFetch: true
+    }, {
+        key: 'soccer_uefa_champs_league',
+        label: 'UCL',
+        noFetch: true
     }];
     var FREE_SPORTS = ['basketball_nba', 'icehockey_nhl', 'baseball_mlb']; // free plan sports
     var MARKET_KEYS = {
@@ -3760,6 +3762,17 @@
             stxt = document.getElementById('status-txt');
         var sp = SPORTS.find(function(s) { return s.key === currentSport; });
         var lbl = sp ? sp.label : currentSport;
+
+        // EPL/UCL — show placeholder, no fetch
+        if (sp && sp.noFetch) {
+            btn.disabled = false;
+            dot.className = 'sdot';
+            stxt.textContent = lbl + ' — coming soon';
+            rawRows = []; rsGameIds = {};
+            document.getElementById('tbody').innerHTML = '<tr class="state-row"><td colspan="13" style="text-align:center;color:var(--muted2);padding:40px">No ' + lbl + ' markets available right now.</td></tr>';
+            renderMobileCards([]);
+            return;
+        }
         btn.disabled = true;
         dot.className = 'sdot loading';
         stxt.textContent = 'Fetching ' + lbl + '...';
