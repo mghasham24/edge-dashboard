@@ -3294,7 +3294,7 @@
             var edgeStr = (edge > 0 ? '+' : '') + edge.toFixed(1) + '%';
             var col = edge >= 8 ? 'var(--green)' : edge >= 5 ? '#7ddfab' : edge > 0 ? 'var(--yellow)' : 'var(--red)';
             el.style.color = col;
-            el.textContent = edgeStr + (u > 0 ? ' ' + u + 'u $' + bet.toFixed(0) : '');
+            el.innerHTML = edgeStr + (u > 0 ? ' ' + u + 'u ' + RAX_ICON + bet.toFixed(0) : '');
             // Show EV on separate line only when positive
             if (evEl) {
                 if (evForU != null && evForU > 0) {
