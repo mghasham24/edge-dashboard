@@ -4296,7 +4296,8 @@
                 var rfi = rfiOdds[game];
                 var existing = rawRows.find(function(r) { return r.game === game; });
                 if (!existing) return;
-                var pid = 'rfi-' + game.replace(/[^a-z0-9]/gi, '');
+                var today = new Date(); var dateStr = today.getFullYear() + '' + (today.getMonth()+1) + '' + today.getDate();
+                var pid = 'rfi-' + game.replace(/[^a-z0-9]/gi, '') + '-' + dateStr;
                 rawRows.push({ id: pid + '-A', game: game, cm: existing.cm, mkt: 'RFI', side: 'Yes (YRFI)', am: rfi.yesAm, pt: null, pid: pid, ps: 'A', gid: existing.gid, rfiFair: rfi.yesFair });
                 rawRows.push({ id: pid + '-B', game: game, cm: existing.cm, mkt: 'RFI', side: 'No (NRFI)',  am: rfi.noAm,  pt: null, pid: pid, ps: 'B', gid: existing.gid, rfiFair: rfi.noFair });
             });
