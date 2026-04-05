@@ -370,11 +370,12 @@ export async function onRequestGet(context) {
       if (cacheRow) {
         Object.assign(marketMap, JSON.parse(cacheRow.data));
         if ((now - cacheRow.fetched_at) < TTL) {
-          // Cache fresh — check for missing games
+          // Cache fresh — check for missing games or games missing __gid
           const missingGames = games.filter(g => {
             const awayKey = (g.awayTeam && g.awayTeam.name) || g.awayTeamKey;
             const homeKey = (g.homeTeam && g.homeTeam.name) || g.homeTeamKey;
-            return !marketMap[awayKey + ' @ ' + homeKey];
+            const gameKey = awayKey + ' @ ' + homeKey;
+            return !marketMap[gameKey] || !marketMap[gameKey + '__gid'];
           });
           if (missingGames.length === 0) {
             return new Response(JSON.stringify({ ok: true, markets: marketMap }), {
