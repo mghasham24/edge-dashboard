@@ -335,7 +335,7 @@
     }
 
     tbody tr.has-edge {
-        background: rgba(45, 204, 126, .03)
+        background: transparent
     }
 
     tbody tr.collapsed-row {
@@ -2082,6 +2082,12 @@
     var rfiOdds = {}; // game key -> {yesFair, noFair, yesAm, noAm}
     var rsGameIds = {}; // game string -> Real Sports numeric gameId
 
+    function edgeBg(edge) {
+        if (edge == null || edge <= 0) return '';
+        var opacity = Math.min(edge / 10, 1) * 0.08;
+        return 'background:rgba(45,204,126,' + opacity.toFixed(3) + ');';
+    }
+
     var _hashids = null;
     var REAL_SPORT_IDS = { nba:1, nfl:2, ncaam:3, mlb:4, epl:5, ucl:6, nhl:7, mls:8, fifa:9, ufc:10, ncaaf:11, wnba:12, soccer:14, golf:15 };
     function getRealSportsUrl(gid, sport) {
@@ -3319,6 +3325,8 @@
             var col = edge >= 8 ? 'var(--green)' : edge >= 5 ? '#7ddfab' : edge > 0 ? 'var(--yellow)' : 'var(--red)';
             el.style.color = col;
             el.innerHTML = edgeStr + (u > 0 ? ' ' + u + 'u ' + RAX_ICON + bet.toFixed(0) : '');
+            var sideRowEl = el.closest('div[style*="display:flex"]');
+            if (sideRowEl && edge > 0) sideRowEl.style.background = 'rgba(45,204,126,' + (Math.min(edge / 10, 1) * 0.08).toFixed(3) + ')';
             // Show EV on separate line only when positive
             if (evEl) {
                 if (evForU != null && evForU > 0) {
@@ -4029,7 +4037,7 @@
             : '<td data-label="FD Line" style="font-family:var(--mono);color:var(--muted);font-size:12px">' + lineStr + '</td>';
         var evGated = isPro() || r.mkt === 'ML' || r.mkt === 'RFI';
         var gk = r.game.replace(/"/g, '&quot;');
-        return '<tr class="' + (r.edge != null && r.edge > 0 ? 'has-edge' : '') + (isC ? ' collapsed-row' : '') + '" data-gk="' + gk + '" data-row-id="' + r.id + '" style="border-left:3px solid ' + color + ';' + (betTaken[r.id] ? 'opacity:0.4' : '') + '">'
+        return '<tr class="' + (r.edge != null && r.edge > 0 ? 'has-edge' : '') + (isC ? ' collapsed-row' : '') + '" data-gk="' + gk + '" data-row-id="' + r.id + '" style="border-left:3px solid ' + color + ';' + edgeBg(r.edge) + (betTaken[r.id] ? 'opacity:0.4' : '') + '">'
         + '<td class="game-td" data-label="Game"><div style="font-weight:600">' + r.side + '</div><div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px">' + r.game + '</div></td>'
         + '<td data-label="Market"><span class="mkt-badge">' + r.mkt + '</span></td>'
         + '<td data-label="Side" style="color:var(--muted);font-size:12px">' + r.side + '</td>'
@@ -4131,6 +4139,7 @@
         tds[11].innerHTML = u === 0 ? '<span class="u-pass">PASS</span>' : '<span class="u-val">' + u + 'u</span>';
         tds[12].innerHTML = u === 0 ? '<span class="u-pass">-</span>' : '<span class="bet-val">' + RAX_ICON + (u * unit).toFixed(0) + '</span>';
         tr.classList.toggle('has-edge', edge != null && edge > 0);
+        tr.style.background = edge != null && edge > 0 ? 'rgba(45,204,126,' + (Math.min(edge / 10, 1) * 0.08).toFixed(3) + ')' : '';
         document.getElementById('stat-edges').textContent = document.querySelectorAll('tr.has-edge').length;
     }
 
