@@ -2208,6 +2208,9 @@
                         </div>
                     </div>
 
+                    <!-- P&L sparkline -->
+                    <div id="port-sparkline" style="margin:-8px 0 20px;opacity:0.7"></div>
+
                     <!-- Open positions -->
                     <div style="margin-bottom:28px">
                         <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:12px">Open Positions</div>
@@ -3820,152 +3823,142 @@
     }
 
     function renderPortfolio(data) {
-        // portfolioperformance: { summary: { pnl, pnlPercent }, history: [...] }
         var summary = (data.performance && data.performance.summary) || {};
-        // openpositions: { positions: [...] }
-        var openPos = (data.open && data.open.positions) || [];
-        // historyrollup: varies — store raw for display
-        var histRollup = data.history || {};
+        var perfHistory = (data.performance && data.performance.history) || [];
+        var openPos  = (data.open && data.open.positions) || [];
+        var histItems = (data.history && data.history.items) || [];
 
-        // --- Performance stat cards ---
+        // --- Stat cards ---
         var pnl    = summary.pnl != null ? Number(summary.pnl) : null;
         var roiPct = summary.pnlPercent != null ? Number(summary.pnlPercent) : null;
 
         var pnlEl = document.getElementById('port-pnl');
-        if (pnl != null) {
-            pnlEl.textContent = (pnl >= 0 ? '+' : '') + fmtRax(pnl);
-            pnlEl.style.color = pnl >= 0 ? 'var(--green)' : 'var(--red)';
-        } else {
-            pnlEl.textContent = '—';
-            pnlEl.style.color = 'var(--muted)';
-        }
+        pnlEl.textContent = pnl != null ? (pnl >= 0 ? '+' : '') + fmtRax(pnl) : '—';
+        pnlEl.style.color = pnl == null ? 'var(--muted)' : pnl >= 0 ? 'var(--green)' : 'var(--red)';
 
         var roiEl = document.getElementById('port-roi');
-        if (roiPct != null) {
-            roiEl.textContent = (roiPct >= 0 ? '+' : '') + roiPct.toFixed(1) + '%';
-            roiEl.style.color = roiPct >= 0 ? 'var(--green)' : 'var(--red)';
-        } else {
-            roiEl.textContent = '—';
-            roiEl.style.color = 'var(--muted)';
-        }
+        roiEl.textContent = roiPct != null ? (roiPct >= 0 ? '+' : '') + roiPct.toFixed(1) + '%' : '—';
+        roiEl.style.color = roiPct == null ? 'var(--muted)' : roiPct >= 0 ? 'var(--green)' : 'var(--red)';
 
-        document.getElementById('port-open-count').textContent = openPos.length || '0';
+        var activePos = openPos.filter(function(p) { return !p.isSettled; });
+        document.getElementById('port-open-count').textContent = activePos.length;
+        document.getElementById('port-settled-count').textContent = histItems.length + (data.history && data.history.hasMore ? '+' : '');
 
-        // settled count from historyrollup if it has a count field, else show settled positions from open list
-        var settledCount = openPos.filter(function(p) { return p.isSettled; }).length;
-        var histCount = histRollup.totalBets != null ? histRollup.totalBets
-                      : histRollup.count != null ? histRollup.count
-                      : histRollup.positions ? histRollup.positions.length
-                      : settledCount || '—';
-        document.getElementById('port-settled-count').textContent = histCount;
+        // --- P&L sparkline ---
+        renderSparkline(perfHistory, pnl);
 
         // --- Build gameId → rawRows map for edge matching ---
         var gidToRows = {};
-        if (typeof rsGameIds !== 'undefined') {
-            Object.keys(rsGameIds).forEach(function(gameKey) {
-                var gid = String(rsGameIds[gameKey]);
-                if (!gidToRows[gid]) gidToRows[gid] = [];
-                (rawRows || []).forEach(function(r) {
-                    if (r.game === gameKey) gidToRows[gid].push(r);
-                });
+        Object.keys(rsGameIds || {}).forEach(function(gameKey) {
+            var gid = String(rsGameIds[gameKey]);
+            if (!gidToRows[gid]) gidToRows[gid] = [];
+            (rawRows || []).forEach(function(r) {
+                if (r.game === gameKey) gidToRows[gid].push(r);
             });
-        }
+        });
 
-        // --- Open positions table ---
-        // Each position: marketId, outcomeId, gameId, sport, marketType, outcomeLabel,
-        //   headerLabel, marketDisplay.display, sharesValue, details[{label,value}],
-        //   currentPriceDisplay, isSettled, leftFooterText
+        // marketType → mkt normalisation
+        var mktMap = { gamewinner: 'ML', pointspread: 'Spread', total: 'Total', moneyline: 'ML' };
+
+        // strip trailing probability from outcomeLabel e.g. "GSW +4.5 99%" → "GSW +4.5"
+        function stripProb(s) { return (s || '').replace(/\s+\d+%$/, ''); }
+
+        // --- Open positions ---
+        var openHead = document.querySelector('#port-open-tbody').closest('table').querySelector('thead tr');
+        if (openHead) openHead.innerHTML = '<th>Matchup</th><th>Market</th><th>Side</th><th class="r">Avg</th><th class="r" title="Rax spent">Cost</th><th class="r" title="Rax if wins">Pays</th><th class="r">Now</th><th>Status</th>';
+
         var openTbody = document.getElementById('port-open-tbody');
-        var activePos = openPos.filter(function(p) { return !p.isSettled; });
         if (!activePos.length) {
-            openTbody.innerHTML = '<tr><td colspan="7" style="color:var(--muted);padding:20px 12px">No open positions</td></tr>';
+            openTbody.innerHTML = '<tr><td colspan="8" style="color:var(--muted);padding:20px 12px">No open positions</td></tr>';
         } else {
             openTbody.innerHTML = activePos.map(function(p) {
-                var game    = p.headerLabel || '—';
-                var market  = p.marketType || (p.marketDisplay && p.marketDisplay.display) || '—';
-                var side    = p.outcomeLabel || '—';
-                var gid     = p.gameId != null ? String(p.gameId) : null;
+                var matchup  = (p.marketDisplay && p.marketDisplay.display) || '—';
+                var market   = p.marketLabel || mktMap[p.marketType] || p.marketType || '—';
+                var side     = stripProb(p.outcomeLabel) || '—';
+                var gid      = p.gameId != null ? String(p.gameId) : null;
+                var details  = Array.isArray(p.details) ? p.details : [];
+                var avg      = (details.find(function(d){ return d.label==='Avg';  }) || {}).display || '—';
+                var cost     = (details.find(function(d){ return d.label==='Cost'; }) || {}).display || '—';
+                var pays     = (details.find(function(d){ return d.label==='Pays'; }) || {}).display || '—';
+                var cur      = p.currentPriceDisplay || '—';
+                var status   = p.leftFooterText || '—';
 
-                // Parse details array for Avg / Cost / Pays
-                var details = Array.isArray(p.details) ? p.details : [];
-                var avgDet  = details.find(function(d) { return d.label === 'Avg'; });
-                var costDet = details.find(function(d) { return d.label === 'Cost'; });
-                var paysDet = details.find(function(d) { return d.label === 'Pays'; });
-                var avg     = avgDet  ? avgDet.value  : null;
-                var cost    = costDet ? costDet.value : null;
-                var pays    = paysDet ? paysDet.value : null;
-                var curPrice = p.currentPriceDisplay || null;
-
-                // Edge match
-                var mktNorm = market.toLowerCase().replace('moneyline','ml').replace('money line','ml');
+                // Edge match: normalise marketType to our mkt labels
+                var mktNorm  = (mktMap[p.marketType] || '').toLowerCase();
                 var matchedRow = gid && gidToRows[gid] ? gidToRows[gid].find(function(r) {
                     return r.mkt && r.mkt.toLowerCase() === mktNorm;
                 }) : null;
-                var matchBadge = matchedRow && matchedRow.edge != null
+                var edgeBadge = matchedRow && matchedRow.edge != null
                     ? '<span class="port-match-badge">' + (matchedRow.edge > 0 ? '+' : '') + matchedRow.edge.toFixed(1) + '% edge</span>'
                     : '';
 
                 return '<tr>'
-                    + '<td style="max-width:180px">' + escHtml(game) + matchBadge + '</td>'
+                    + '<td>' + escHtml(matchup) + '</td>'
                     + '<td><span class="mkt-badge">' + escHtml(market) + '</span></td>'
-                    + '<td>' + escHtml(side) + '</td>'
-                    + '<td class="r" style="font-family:var(--mono)">' + (avg  != null ? escHtml(String(avg))  : '—') + '</td>'
-                    + '<td class="r" style="font-family:var(--mono)">' + (cost != null ? escHtml(String(cost)) : '—') + '</td>'
-                    + '<td class="r" style="font-family:var(--mono)">' + (pays != null ? escHtml(String(pays)) : '—') + '</td>'
-                    + '<td class="r" style="font-family:var(--mono);color:var(--muted)">' + (curPrice != null ? escHtml(String(curPrice)) : '—') + '</td>'
+                    + '<td>' + escHtml(side) + edgeBadge + '</td>'
+                    + '<td class="r" style="font-family:var(--mono);color:var(--muted)">' + escHtml(avg) + '</td>'
+                    + '<td class="r" style="font-family:var(--mono)">' + escHtml(cost) + '</td>'
+                    + '<td class="r" style="font-family:var(--mono);color:var(--green)">' + escHtml(pays) + '</td>'
+                    + '<td class="r" style="font-family:var(--mono);color:var(--muted)">' + escHtml(cur) + '</td>'
+                    + '<td style="color:var(--muted);font-size:11px">' + escHtml(status) + '</td>'
                     + '</tr>';
             }).join('');
         }
 
-        // Update open positions table headers to match new columns
-        var openHead = document.querySelector('#port-open-tbody').closest('table').querySelector('thead tr');
-        if (openHead) {
-            openHead.innerHTML = '<th>Game</th><th>Market</th><th>Side</th><th class="r">Avg</th><th class="r">Cost</th><th class="r">Pays</th><th class="r">Current</th>';
-        }
-
-        // --- History rollup ---
-        // historyrollup shape unknown — render what we can, show settled positions from openpositions too
-        var histTbody = document.getElementById('port-history-tbody');
-        var settledPos = openPos.filter(function(p) { return p.isSettled; });
-
-        // Try historyrollup.positions first, then fall back to settled from openpositions
-        var histPositions = (histRollup.positions || histRollup.bets || histRollup.history || []);
-        var histRows = histPositions.length ? histPositions : settledPos;
-
-        if (!histRows.length) {
-            histTbody.innerHTML = '<tr><td colspan="7" style="color:var(--muted);padding:20px 12px">No settled bets yet</td></tr>';
-        } else {
-            histTbody.innerHTML = histRows.map(function(p) {
-                var game    = p.headerLabel || p.gameName || p.game || '—';
-                var market  = p.marketType  || (p.marketDisplay && p.marketDisplay.display) || p.market || '—';
-                var side    = p.outcomeLabel || p.side || '—';
-                var details = Array.isArray(p.details) ? p.details : [];
-                var costDet = details.find(function(d) { return d.label === 'Cost'; });
-                var paysDet = details.find(function(d) { return d.label === 'Pays'; });
-                var cost    = costDet ? costDet.value : (p.entryAmount || p.cost || null);
-                var pays    = paysDet ? paysDet.value : (p.payout || p.pays || null);
-                var result  = p.leftFooterText || p.result || p.status || '';
-                var resCls  = /win/i.test(result) ? 'port-win' : /loss|lose/i.test(result) ? 'port-loss' : 'port-push';
-                return '<tr>'
-                    + '<td style="max-width:180px">' + escHtml(game) + '</td>'
-                    + '<td><span class="mkt-badge">' + escHtml(market) + '</span></td>'
-                    + '<td>' + escHtml(side) + '</td>'
-                    + '<td class="r" style="font-family:var(--mono)">' + (cost != null ? escHtml(String(cost)) : '—') + '</td>'
-                    + '<td class="r" style="font-family:var(--mono)">' + (pays != null ? escHtml(String(pays)) : '—') + '</td>'
-                    + '<td class="' + resCls + '">' + escHtml(result) + '</td>'
-                    + '</tr>';
-            }).join('');
-        }
-
-        // Update history table headers
+        // --- History (historyrollup.items) ---
+        // Win/loss: details[Paid].color === 'green' → win, 'default' → loss
         var histHead = document.querySelector('#port-history-tbody').closest('table').querySelector('thead tr');
-        if (histHead) {
-            histHead.innerHTML = '<th>Game</th><th>Market</th><th>Side</th><th class="r">Cost</th><th class="r">Pays</th><th>Result</th>';
+        if (histHead) histHead.innerHTML = '<th>Matchup</th><th>Market</th><th>Side</th><th class="r" title="Rax spent">Cost</th><th class="r" title="Rax received">Paid</th><th>Result</th>';
+
+        var histTbody = document.getElementById('port-history-tbody');
+        if (!histItems.length) {
+            histTbody.innerHTML = '<tr><td colspan="6" style="color:var(--muted);padding:20px 12px">No settled bets yet</td></tr>';
+        } else {
+            histTbody.innerHTML = histItems.map(function(p) {
+                var matchup  = (p.marketDisplay && p.marketDisplay.display) || '—';
+                var market   = p.headerLabel || '—';
+                var side     = p.outcomeLabel || '—';
+                var details  = Array.isArray(p.details) ? p.details : [];
+                var costDet  = details.find(function(d){ return d.label==='Cost'; }) || {};
+                var paidDet  = details.find(function(d){ return d.label==='Paid'; }) || {};
+                var cost     = costDet.display || '—';
+                var paid     = paidDet.display || '—';
+                var isWin    = paidDet.color === 'green';
+                var isLoss   = paidDet.color === 'default' || (!isWin && paidDet.display === '0');
+                var resCls   = isWin ? 'port-win' : isLoss ? 'port-loss' : 'port-push';
+                var resLbl   = isWin ? 'Win' : isLoss ? 'Loss' : '—';
+                return '<tr>'
+                    + '<td>' + escHtml(matchup) + '</td>'
+                    + '<td><span class="mkt-badge" style="font-size:10px">' + escHtml(market) + '</span></td>'
+                    + '<td>' + escHtml(side) + '</td>'
+                    + '<td class="r" style="font-family:var(--mono)">' + escHtml(cost) + '</td>'
+                    + '<td class="r ' + (isWin ? 'port-win' : '') + '" style="font-family:var(--mono)">' + escHtml(paid) + '</td>'
+                    + '<td class="' + resCls + '" style="font-weight:600;font-size:12px">' + resLbl + '</td>'
+                    + '</tr>';
+            }).join('');
         }
 
-        // Always show raw debug so you can see the full shape
-        document.getElementById('port-debug').style.display = '';
-        document.getElementById('port-debug-pre').textContent = JSON.stringify(data, null, 2);
+        // Hide debug now that structure is known
+        document.getElementById('port-debug').style.display = 'none';
+    }
+
+    function renderSparkline(history, currentPnl) {
+        var el = document.getElementById('port-sparkline');
+        if (!el || !history.length) return;
+        var vals = history.map(function(h) { return h.v; });
+        var min = Math.min.apply(null, vals);
+        var max = Math.max.apply(null, vals);
+        var range = max - min || 1;
+        var W = 200, H = 40, pad = 2;
+        var pts = vals.map(function(v, i) {
+            var x = pad + (i / (vals.length - 1)) * (W - pad * 2);
+            var y = pad + (1 - (v - min) / range) * (H - pad * 2);
+            return x.toFixed(1) + ',' + y.toFixed(1);
+        }).join(' ');
+        var color = currentPnl >= 0 ? 'var(--green)' : 'var(--red)';
+        el.innerHTML = '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" style="display:block">'
+            + '<polyline points="' + pts + '" fill="none" stroke="' + color + '" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>'
+            + '</svg>';
     }
 
     function getField(obj, keys) {
