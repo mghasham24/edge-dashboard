@@ -4712,10 +4712,26 @@
                 return Promise.reject('rate');
             }
             if (r.status === 403) {
-                dot.className = 'sdot error';
-                stxt.textContent = 'Account suspended.';
-                btn.disabled = false;
-                return Promise.reject('banned');
+                return r.json().then(function(d) {
+                    var msg = d && d.error ? d.error : '';
+                    if (msg.toLowerCase().includes('suspended')) {
+                        dot.className = 'sdot error';
+                        stxt.textContent = 'Account suspended.';
+                        return Promise.reject('banned');
+                    }
+                    // Plan restriction — show upgrade prompt, not "suspended"
+                    dot.className = 'sdot error';
+                    stxt.textContent = 'Pro required for this sport/market.';
+                    btn.disabled = false;
+                    showUpgradeModal(msg || 'Upgrade to Pro to access this sport and market.');
+                    return Promise.reject('banned');
+                }).catch(function(e) {
+                    if (e === 'banned') return Promise.reject('banned');
+                    dot.className = 'sdot error';
+                    stxt.textContent = 'Access denied.';
+                    btn.disabled = false;
+                    return Promise.reject('banned');
+                });
             }
             return r.json();
         })
