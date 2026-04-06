@@ -1303,6 +1303,126 @@
         border: 1px solid rgba(45, 204, 126, .3)
     }
 
+    .port-connect-card {
+        background: var(--bg2);
+        border: 1px solid var(--border2);
+        border-radius: 10px;
+        padding: 32px;
+        max-width: 540px
+    }
+
+    .port-connect-card h2 {
+        font-size: 18px;
+        font-weight: 700;
+        margin: 0 0 8px
+    }
+
+    .port-connect-card p {
+        font-size: 13px;
+        color: var(--muted);
+        margin: 0 0 24px;
+        line-height: 1.6
+    }
+
+    .port-steps {
+        counter-reset: step;
+        list-style: none;
+        padding: 0;
+        margin: 0 0 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px
+    }
+
+    .port-steps li {
+        counter-increment: step;
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        font-size: 13px;
+        line-height: 1.5
+    }
+
+    .port-steps li::before {
+        content: counter(step);
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        background: rgba(79,110,247,.2);
+        color: var(--accent);
+        font-size: 11px;
+        font-weight: 700;
+        font-family: var(--mono);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        margin-top: 1px
+    }
+
+    .port-bookmarklet {
+        display: inline-block;
+        background: var(--accent);
+        color: #fff;
+        font-family: var(--sans);
+        font-size: 13px;
+        font-weight: 700;
+        padding: 9px 18px;
+        border-radius: 6px;
+        text-decoration: none;
+        cursor: grab;
+        border: none;
+        user-select: none
+    }
+
+    .port-bookmarklet:hover {
+        background: #6280f8
+    }
+
+    .port-table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 600px;
+        font-size: 13px
+    }
+
+    .port-table th {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: .1em;
+        text-transform: uppercase;
+        color: var(--muted);
+        padding: 10px 12px;
+        text-align: left;
+        border-bottom: 1px solid var(--border2);
+        white-space: nowrap
+    }
+
+    .port-table td {
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border);
+        vertical-align: middle
+    }
+
+    .port-table tr:hover td { background: var(--bg2) }
+
+    .port-win  { color: var(--green) }
+    .port-loss { color: var(--red) }
+    .port-push { color: var(--muted) }
+
+    .port-match-badge {
+        font-size: 9px;
+        font-weight: 700;
+        background: rgba(79,110,247,.15);
+        color: var(--accent);
+        border: 1px solid rgba(79,110,247,.3);
+        border-radius: 3px;
+        padding: 1px 5px;
+        margin-left: 5px;
+        vertical-align: middle;
+        white-space: nowrap
+    }
+
     @media (max-width: 768px) {
         .admin-panel {
             padding:14px
@@ -2038,6 +2158,107 @@
             <div style="font-size:12px;color:var(--muted);margin-top:8px">Share this code with friends — they enter it when signing up. You earn 1 month Pro for each friend who subscribes.</div>
         </div>
 
+        <!-- Portfolio Panel -->
+        <div class="admin-panel" id="portfolio-panel">
+            <div style="margin-bottom:20px;display:flex;align-items:center;gap:12px">
+                <button onclick="document.getElementById('portfolio-tab-btn').click()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:7px 14px;border-radius:5px;cursor:pointer;letter-spacing:.04em">&larr; Back to Dashboard</button>
+                <button onclick="loadPortfolio(true)" id="port-refresh-btn" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:7px 14px;border-radius:5px;cursor:pointer;letter-spacing:.04em;display:none">&#8635; Refresh</button>
+                <button onclick="disconnectRealSports()" id="port-disconnect-btn" style="background:var(--bg3);border:1px solid rgba(240,82,82,.3);color:var(--red);font-family:var(--sans);font-size:11px;font-weight:600;padding:7px 14px;border-radius:5px;cursor:pointer;letter-spacing:.04em;display:none">Disconnect</button>
+            </div>
+
+            <!-- Not-connected view -->
+            <div id="portfolio-connect-view">
+                <div class="port-connect-card">
+                    <h2>Connect Real Sports</h2>
+                    <p>Link your Real Sports account to automatically track your open positions, settled bets, P&amp;L, and ROI — all in one place.</p>
+                    <ol class="port-steps">
+                        <li>Log in to <strong>realsports.io</strong> in your browser</li>
+                        <li>Drag the button below to your bookmarks bar:<br>
+                            <span style="display:inline-block;margin-top:10px">
+                                <a id="port-bookmarklet-link" class="port-bookmarklet" title="Drag me to your bookmarks bar">&#128279; RaxEdge Connect</a>
+                            </span>
+                        </li>
+                        <li>While on any page on realsports.io, click the <strong>RaxEdge Connect</strong> bookmark — it will redirect you back here and connect your account automatically</li>
+                    </ol>
+                    <div style="font-size:11px;color:var(--muted2)">Your Real Sports token is stored securely and only used to fetch your own portfolio data.</div>
+                </div>
+            </div>
+
+            <!-- Connected/loading view -->
+            <div id="portfolio-data-view" style="display:none">
+                <div id="portfolio-loading" style="color:var(--muted);font-size:13px;padding:20px 0">Loading portfolio...</div>
+                <div id="portfolio-content" style="display:none">
+                    <!-- Stats row -->
+                    <div class="admin-stats" style="margin-bottom:28px">
+                        <div class="admin-stat">
+                            <div class="admin-stat-val" id="port-pnl" style="color:var(--green)">-</div>
+                            <div class="admin-stat-lbl">Total P&amp;L</div>
+                        </div>
+                        <div class="admin-stat">
+                            <div class="admin-stat-val" id="port-roi">-</div>
+                            <div class="admin-stat-lbl">ROI</div>
+                        </div>
+                        <div class="admin-stat">
+                            <div class="admin-stat-val" id="port-open-count">-</div>
+                            <div class="admin-stat-lbl">Open Positions</div>
+                        </div>
+                        <div class="admin-stat">
+                            <div class="admin-stat-val" id="port-settled-count">-</div>
+                            <div class="admin-stat-lbl">Settled</div>
+                        </div>
+                    </div>
+
+                    <!-- Open positions -->
+                    <div style="margin-bottom:28px">
+                        <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:12px">Open Positions</div>
+                        <div class="admin-table-wrap">
+                            <table class="port-table">
+                                <thead>
+                                    <tr>
+                                        <th>Game</th>
+                                        <th>Market</th>
+                                        <th>Side</th>
+                                        <th class="r">Shares</th>
+                                        <th class="r">Entry</th>
+                                        <th class="r">Value</th>
+                                        <th class="r">Unrealized P&amp;L</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="port-open-tbody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Settled history -->
+                    <div>
+                        <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:12px">Settled History</div>
+                        <div class="admin-table-wrap">
+                            <table class="port-table">
+                                <thead>
+                                    <tr>
+                                        <th>Game</th>
+                                        <th>Market</th>
+                                        <th>Side</th>
+                                        <th class="r">Amount</th>
+                                        <th class="r">Payout</th>
+                                        <th class="r">P&amp;L</th>
+                                        <th>Result</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="port-history-tbody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Raw debug (hidden, shows on error) -->
+                    <div id="port-debug" style="display:none;margin-top:24px">
+                        <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:8px">Raw API Response</div>
+                        <pre id="port-debug-pre" style="background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:14px;font-size:11px;font-family:var(--mono);overflow-x:auto;white-space:pre-wrap;max-height:300px;overflow-y:auto"></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+
     </div>
     <!-- end #dashboard -->
 
@@ -2081,6 +2302,7 @@
     var yourLines = {};
     var altOdds = {}; // gameId -> { spreads: {teamName: {point: price}}, totals: {side: {point: price}} }
     var betTaken = JSON.parse(localStorage.getItem('raxedge_bets_taken') || '{}');
+    var portfolioConnected = false;
     var rfiOdds = {}; // game key -> {yesFair, noFair, yesAm, noAm}
     var rsGameIds = {}; // game string -> Real Sports numeric gameId
 
@@ -2285,7 +2507,13 @@
                 document.getElementById('dashboard').style.display = 'block';
                 buildTabs();
                 await loadBetsTaken();
-                setTimeout(loadOdds, 50);
+                // If redirected back from bookmarklet, open portfolio tab
+                if (sessionStorage.getItem('pending_rs_token')) {
+                    var portBtn = document.getElementById('portfolio-tab-btn');
+                    if (portBtn) { setTimeout(function(){ portBtn.click(); }, 100); }
+                } else {
+                    setTimeout(loadOdds, 50);
+                }
             }
         } catch (e) {
             showGateErr('Network error -- please try again');
@@ -2346,7 +2574,13 @@
                 }
                 buildTabs();
                 await loadBetsTaken();
-                setTimeout(loadOdds, 50);
+                // If redirected back from bookmarklet, open portfolio tab
+                if (sessionStorage.getItem('pending_rs_token')) {
+                    var portBtn2 = document.getElementById('portfolio-tab-btn');
+                    if (portBtn2) { setTimeout(function(){ portBtn2.click(); }, 100); }
+                } else {
+                    setTimeout(loadOdds, 50);
+                }
             } else {
                 document.getElementById('landing').classList.add('visible');
             }
@@ -2363,6 +2597,23 @@
                     submitAuth();
             });
         });
+
+        // Handle ?rs_token=...&rs_uuid=... redirect from bookmarklet
+        var urlParams = new URLSearchParams(window.location.search);
+        var rsToken = urlParams.get('rs_token');
+        var rsUuid  = urlParams.get('rs_uuid');
+        if (rsToken) {
+            // Store in sessionStorage so we can send it after auth is confirmed
+            sessionStorage.setItem('pending_rs_token', rsToken);
+            sessionStorage.setItem('pending_rs_uuid', rsUuid || '');
+            // Clean URL
+            history.replaceState({}, '', '/');
+        }
+
+        // Set bookmarklet href
+        var bmCode = '(function(){try{var raw=localStorage.getItem(\'e-accounts\');if(!raw){alert(\'Not logged in to Real Sports\');return;}var d=JSON.parse(raw);var ai=Array.isArray(d)?(d[0]&&d[0].authInfo)||null:d.authInfo||null;if(!ai||!ai.token){alert(\'Auth not found — try logging out and back in on Real Sports\');return;}var tok=ai.userId+\'!\'+ai.deviceId+\'!\'+ai.token;var uuid=localStorage.getItem(\'realdeviceuuid\')||\'\';;window.location=\'https://raxedge.com/?rs_token=\'+encodeURIComponent(tok)+\'&rs_uuid=\'+encodeURIComponent(uuid);}catch(e){alert(\'Error: \'+e.message);}})();';
+        var bmLink = document.getElementById('port-bookmarklet-link');
+        if (bmLink) bmLink.href = 'javascript:' + bmCode;
     });
 
     function imp(n) {
@@ -3467,6 +3718,243 @@
         document.getElementById('referral-panel').classList.remove('visible');
     }
 
+    function showPortfolioTab() {
+        document.getElementById('sport-tabs').style.display = 'none';
+        document.querySelector('.controls').style.display = 'none';
+        document.querySelector('.status-bar').style.display = 'none';
+        document.querySelector('.table-wrap').style.display = 'none';
+        document.getElementById('mobile-cards').style.display = 'none';
+        document.getElementById('collapse-btn').style.display = 'none';
+        document.getElementById('refresh-btn').style.display = 'none';
+        document.getElementById('portfolio-panel').classList.add('visible');
+        loadPortfolio(false);
+    }
+
+    function hidePortfolioTab() {
+        document.getElementById('sport-tabs').style.display = '';
+        document.querySelector('.controls').style.display = '';
+        document.querySelector('.status-bar').style.display = '';
+        document.querySelector('.table-wrap').style.display = '';
+        document.getElementById('mobile-cards').style.display = '';
+        document.getElementById('collapse-btn').style.display = '';
+        document.getElementById('refresh-btn').style.display = '';
+        document.getElementById('portfolio-panel').classList.remove('visible');
+    }
+
+    async function disconnectRealSports() {
+        if (!confirm('Disconnect your Real Sports account from RaxEdge?')) return;
+        try {
+            await fetch('/api/real/connect', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ auth_token: 'disconnected!0!0' })
+            });
+        } catch(e) {}
+        portfolioConnected = false;
+        document.getElementById('portfolio-data-view').style.display = 'none';
+        document.getElementById('portfolio-connect-view').style.display = '';
+        document.getElementById('port-refresh-btn').style.display = 'none';
+        document.getElementById('port-disconnect-btn').style.display = 'none';
+    }
+
+    async function loadPortfolio(forceRefresh) {
+        try {
+            // Check if there's a pending token from bookmarklet redirect
+            var pendingToken = sessionStorage.getItem('pending_rs_token');
+            if (pendingToken) {
+                var pendingUuid = sessionStorage.getItem('pending_rs_uuid') || '';
+                sessionStorage.removeItem('pending_rs_token');
+                sessionStorage.removeItem('pending_rs_uuid');
+                var connRes = await fetch('/api/real/connect', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ auth_token: pendingToken, device_uuid: pendingUuid })
+                });
+                var connData = await connRes.json();
+                if (!connData.ok) {
+                    alert('Failed to save Real Sports token: ' + (connData.error || 'Unknown error'));
+                    return;
+                }
+                portfolioConnected = true;
+                // Show the portfolio tab automatically
+                var portBtn = document.getElementById('portfolio-tab-btn');
+                if (portBtn && !portBtn.classList.contains('active')) {
+                    portBtn.click();
+                    return;
+                }
+            }
+
+            var connectView = document.getElementById('portfolio-connect-view');
+            var dataView    = document.getElementById('portfolio-data-view');
+            var loadingEl   = document.getElementById('portfolio-loading');
+            var contentEl   = document.getElementById('portfolio-content');
+
+            // Show loading state
+            connectView.style.display = 'none';
+            dataView.style.display = '';
+            loadingEl.style.display = '';
+            contentEl.style.display = 'none';
+
+            var res = await fetch('/api/real/portfolio', { credentials: 'same-origin' });
+            var data = await res.json();
+
+            loadingEl.style.display = 'none';
+
+            if (!data.connected) {
+                connectView.style.display = '';
+                dataView.style.display = 'none';
+                document.getElementById('port-refresh-btn').style.display = 'none';
+                document.getElementById('port-disconnect-btn').style.display = 'none';
+                return;
+            }
+
+            portfolioConnected = true;
+            document.getElementById('port-refresh-btn').style.display = '';
+            document.getElementById('port-disconnect-btn').style.display = '';
+            contentEl.style.display = '';
+
+            renderPortfolio(data);
+
+        } catch(e) {
+            var loadingEl = document.getElementById('portfolio-loading');
+            if (loadingEl) loadingEl.textContent = 'Error loading portfolio: ' + e.message;
+        }
+    }
+
+    function renderPortfolio(data) {
+        var perf    = data.performance || {};
+        var openPos = (data.open && (data.open.positions || data.open.data || [])) || [];
+        var history = (data.history && (data.history.positions || data.history.data || [])) || [];
+
+        // Performance stats
+        var pnl = perf.totalPnl != null ? perf.totalPnl : perf.pnl != null ? perf.pnl : null;
+        var roi = perf.roi != null ? perf.roi : perf.roiPct != null ? perf.roiPct / 100 : null;
+
+        var pnlEl = document.getElementById('port-pnl');
+        if (pnl != null) {
+            pnlEl.textContent = (pnl >= 0 ? '+' : '') + fmtRax(pnl);
+            pnlEl.style.color = pnl >= 0 ? 'var(--green)' : 'var(--red)';
+        } else {
+            pnlEl.textContent = '—';
+            pnlEl.style.color = 'var(--muted)';
+        }
+
+        var roiEl = document.getElementById('port-roi');
+        if (roi != null) {
+            roiEl.textContent = (roi >= 0 ? '+' : '') + (roi * 100).toFixed(1) + '%';
+            roiEl.style.color = roi >= 0 ? 'var(--green)' : 'var(--red)';
+        } else {
+            roiEl.textContent = '—';
+        }
+
+        document.getElementById('port-open-count').textContent = openPos.length || (perf.openPositions != null ? perf.openPositions : '—');
+        document.getElementById('port-settled-count').textContent = history.length || (perf.settledBets != null ? perf.settledBets : '—');
+
+        // Build gameId -> rawRow map for edge matching
+        var gidToRows = {};
+        if (typeof rsGameIds !== 'undefined') {
+            Object.keys(rsGameIds).forEach(function(gameKey) {
+                var gid = rsGameIds[gameKey];
+                if (!gidToRows[gid]) gidToRows[gid] = [];
+                (rawRows || []).forEach(function(r) {
+                    if (r.game === gameKey) gidToRows[gid].push(r);
+                });
+            });
+        }
+
+        // Open positions table
+        var openTbody = document.getElementById('port-open-tbody');
+        if (!openPos.length) {
+            openTbody.innerHTML = '<tr><td colspan="7" style="color:var(--muted);padding:20px 12px">No open positions</td></tr>';
+        } else {
+            openTbody.innerHTML = openPos.map(function(p) {
+                var game    = getField(p, ['gameName','game','title','name','match']) || '—';
+                var market  = getField(p, ['marketType','market','label']) || '—';
+                var side    = getField(p, ['side','outcome','selection','label','name']) || '—';
+                var shares  = getField(p, ['shares','quantity','amount','numShares']);
+                var entry   = getField(p, ['entryPrice','avgEntryPrice','averagePrice','price']);
+                var value   = getField(p, ['currentValue','value','marketValue']);
+                var upnl    = getField(p, ['unrealizedPnl','unrealizedPL','unrealized','pnl']);
+                var gid     = getField(p, ['gameId','game_id','id']);
+                var matchedRow = gid && gidToRows[gid] ? gidToRows[gid].find(function(r) {
+                    return r.mkt && market && r.mkt.toLowerCase() === market.toLowerCase().replace('moneyline','ml');
+                }) : null;
+                var matchBadge = matchedRow && matchedRow.edge != null
+                    ? '<span class="port-match-badge">' + (matchedRow.edge > 0 ? '+' : '') + matchedRow.edge.toFixed(1) + '% edge</span>'
+                    : '';
+                var upnlCls = upnl > 0 ? 'port-win' : upnl < 0 ? 'port-loss' : '';
+                return '<tr>'
+                    + '<td>' + escHtml(game) + matchBadge + '</td>'
+                    + '<td><span class="mkt-badge">' + escHtml(market) + '</span></td>'
+                    + '<td>' + escHtml(side) + '</td>'
+                    + '<td class="r" style="font-family:var(--mono)">' + (shares != null ? fmtNum(shares) : '—') + '</td>'
+                    + '<td class="r" style="font-family:var(--mono)">' + (entry != null ? fmtRax(entry) : '—') + '</td>'
+                    + '<td class="r" style="font-family:var(--mono)">' + (value != null ? fmtRax(value) : '—') + '</td>'
+                    + '<td class="r ' + upnlCls + '" style="font-family:var(--mono)">' + (upnl != null ? (upnl >= 0 ? '+' : '') + fmtRax(upnl) : '—') + '</td>'
+                    + '</tr>';
+            }).join('');
+        }
+
+        // Settled history table
+        var histTbody = document.getElementById('port-history-tbody');
+        if (!history.length) {
+            histTbody.innerHTML = '<tr><td colspan="7" style="color:var(--muted);padding:20px 12px">No settled bets yet</td></tr>';
+        } else {
+            histTbody.innerHTML = history.map(function(p) {
+                var game    = getField(p, ['gameName','game','title','name','match']) || '—';
+                var market  = getField(p, ['marketType','market','label']) || '—';
+                var side    = getField(p, ['side','outcome','selection','label','name']) || '—';
+                var amount  = getField(p, ['entryAmount','amount','wagered','invested']);
+                var payout  = getField(p, ['payout','payoutAmount','winnings']);
+                var pnl     = getField(p, ['pnl','profit','realizedPnl','realizedPL']);
+                var result  = getField(p, ['result','outcome','status','settlementResult']) || '';
+                var resCls  = result.toLowerCase().includes('win') ? 'port-win' : result.toLowerCase().includes('loss') ? 'port-loss' : 'port-push';
+                var pnlCls  = pnl > 0 ? 'port-win' : pnl < 0 ? 'port-loss' : '';
+                return '<tr>'
+                    + '<td>' + escHtml(game) + '</td>'
+                    + '<td><span class="mkt-badge">' + escHtml(market) + '</span></td>'
+                    + '<td>' + escHtml(side) + '</td>'
+                    + '<td class="r" style="font-family:var(--mono)">' + (amount != null ? fmtRax(amount) : '—') + '</td>'
+                    + '<td class="r" style="font-family:var(--mono)">' + (payout != null ? fmtRax(payout) : '—') + '</td>'
+                    + '<td class="r ' + pnlCls + '" style="font-family:var(--mono)">' + (pnl != null ? (pnl >= 0 ? '+' : '') + fmtRax(pnl) : '—') + '</td>'
+                    + '<td class="' + resCls + '" style="text-transform:capitalize">' + escHtml(result) + '</td>'
+                    + '</tr>';
+            }).join('');
+        }
+
+        // Show raw debug if no meaningful data came back
+        var hasData = pnl != null || openPos.length || history.length;
+        if (!hasData) {
+            document.getElementById('port-debug').style.display = '';
+            document.getElementById('port-debug-pre').textContent = JSON.stringify(data, null, 2);
+        }
+    }
+
+    function getField(obj, keys) {
+        for (var i = 0; i < keys.length; i++) {
+            if (obj[keys[i]] != null) return obj[keys[i]];
+        }
+        return null;
+    }
+
+    function fmtRax(n) {
+        n = Number(n);
+        if (Math.abs(n) >= 1000) return (n / 1000).toFixed(1) + 'k';
+        return n.toFixed(2);
+    }
+
+    function fmtNum(n) {
+        n = Number(n);
+        if (Number.isInteger(n)) return n.toString();
+        return n.toFixed(2);
+    }
+
+    function escHtml(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
     async function loadReferralStats() {
         try {
             var res = await fetch('/api/referral/stats', { credentials: 'same-origin' });
@@ -3707,6 +4195,30 @@
             nav.appendChild(refTabBtn);
         } else {
             nav.appendChild(document.getElementById('referral-tab-btn'));
+        }
+        // Portfolio tab — for all users
+        if (!document.getElementById('portfolio-tab-btn')) {
+            var portTabBtn = document.createElement('button');
+            portTabBtn.className = 'sport-tab';
+            portTabBtn.textContent = '📊 Portfolio';
+            portTabBtn.id = 'portfolio-tab-btn';
+            portTabBtn.onclick = function() {
+                var isActive = this.classList.contains('active');
+                if (isActive) {
+                    this.classList.remove('active');
+                    this.textContent = '📊 Portfolio';
+                    hidePortfolioTab();
+                    loadOdds();
+                } else {
+                    document.querySelectorAll('.sport-tab').forEach(function(t) { t.classList.remove('active'); });
+                    this.classList.add('active');
+                    this.textContent = '<- Dashboard';
+                    showPortfolioTab();
+                }
+            };
+            nav.appendChild(portTabBtn);
+        } else {
+            nav.appendChild(document.getElementById('portfolio-tab-btn'));
         }
     }
 
