@@ -2270,6 +2270,10 @@
                             <div class="admin-stat-val" id="port-settled-count">-</div>
                             <div class="admin-stat-lbl">Settled</div>
                         </div>
+                        <div class="admin-stat">
+                            <div class="admin-stat-val" id="port-settled-profit" style="font-size:18px">-</div>
+                            <div class="admin-stat-lbl">Realised P&amp;L</div>
+                        </div>
                     </div>
 
                     <!-- P&L sparkline -->
@@ -4000,26 +4004,7 @@
             histTbody.innerHTML = '<tr><td colspan="6" style="color:var(--muted);padding:20px 12px">No settled bets yet</td></tr>';
         } else {
             histTbody.innerHTML = histItems.map(function(p) {
-                var matchup  = (p.marketDisplay && p.marketDisplay.display) || '—';
-                var market   = p.headerLabel || '—';
-                var side     = p.outcomeLabel || '—';
-                var details  = Array.isArray(p.details) ? p.details : [];
-                var costDet  = details.find(function(d){ return d.label==='Cost'; }) || {};
-                var paidDet  = details.find(function(d){ return d.label==='Paid'; }) || {};
-                var cost     = costDet.display || '—';
-                var paid     = paidDet.display || '—';
-                var isWin    = paidDet.color === 'green';
-                var isLoss   = paidDet.color === 'default' || (!isWin && paidDet.display === '0');
-                var resCls   = isWin ? 'port-win' : isLoss ? 'port-loss' : 'port-push';
-                var resLbl   = isWin ? 'Win' : isLoss ? 'Loss' : '—';
-                return '<tr>'
-                    + '<td>' + escHtml(matchup) + '</td>'
-                    + '<td><span class="mkt-badge" style="font-size:10px">' + escHtml(market) + '</span></td>'
-                    + '<td>' + escHtml(side) + '</td>'
-                    + '<td class="r" style="font-family:var(--mono)">' + escHtml(cost) + '</td>'
-                    + '<td class="r ' + (isWin ? 'port-win' : '') + '" style="font-family:var(--mono)">' + escHtml(paid) + '</td>'
-                    + '<td class="' + resCls + '" style="font-weight:600;font-size:12px">' + resLbl + '</td>'
-                    + '</tr>';
+                return '<tr>' + histRowHtml(p) + '</tr>';
             }).join('');
         }
 
@@ -4027,6 +4012,7 @@
         portHistoryAll    = histItems.slice();
         portHistoryCursor = histItems.length ? histItems[histItems.length - 1].id : null;
         portHistoryMore   = !!(data.history && data.history.hasMore);
+        updatePortProfit();
         document.getElementById('port-load-more-wrap').style.display = portHistoryMore ? '' : 'none';
 
         // Init calendar to current month and render
@@ -4128,53 +4114,83 @@
     }
 
     async function loadMoreHistory(silent) {
-        if (!portHistoryCursor && !portHistoryMore) return;
+        if (!portHistoryMore) return;
         var btn = document.getElementById('port-load-more-btn');
-        if (btn) { btn.textContent = 'Loading...'; btn.disabled = true; }
+        if (btn && !silent) { btn.textContent = 'Loading...'; btn.disabled = true; }
         try {
-            var url = '/api/real/portfolio?cursor=' + encodeURIComponent(portHistoryCursor || '');
-            var res = await fetch(url, { credentials: 'same-origin' });
+            var fetchUrl = '/api/real/portfolio?after=' + encodeURIComponent(portHistoryCursor || '');
+            var res = await fetch(fetchUrl, { credentials: 'same-origin' });
             var data = await res.json();
             var newItems = (data.history && data.history.items) || [];
-            portHistoryAll = portHistoryAll.concat(newItems);
+            portHistoryAll    = portHistoryAll.concat(newItems);
             portHistoryCursor = newItems.length ? newItems[newItems.length - 1].id : null;
             portHistoryMore   = !!(data.history && data.history.hasMore);
 
-            // Append new rows to history table
             appendHistoryRows(newItems);
+            updatePortProfit();
             renderCalendar();
 
             document.getElementById('port-load-more-wrap').style.display = portHistoryMore ? '' : 'none';
+            if (!portHistoryMore) {
+                var wrap = document.getElementById('port-load-more-wrap');
+                if (wrap) wrap.innerHTML = '<div style="text-align:center;color:var(--muted2);font-size:12px;padding:8px">All bets loaded</div>';
+            }
         } catch(e) {
             if (btn) btn.textContent = 'Error — Retry';
         } finally {
-            if (btn) { btn.textContent = 'Load More'; btn.disabled = false; }
+            if (btn && !silent) { btn.textContent = 'Load More'; btn.disabled = false; }
         }
+    }
+
+    function updatePortProfit() {
+        // Recalculate total realised profit from all loaded history items
+        var total = 0;
+        portHistoryAll.forEach(function(p) {
+            var details = Array.isArray(p.details) ? p.details : [];
+            var costDet = details.find(function(d){ return d.label === 'Cost'; }) || {};
+            var paidDet = details.find(function(d){ return d.label === 'Paid'; }) || {};
+            var cost = parseRaxDisplay(costDet.display);
+            var paid = parseRaxDisplay(paidDet.display);
+            total += paid - cost;
+        });
+        var el = document.getElementById('port-settled-profit');
+        if (el) {
+            el.textContent = (total >= 0 ? '+' : '') + fmtRax(total) + ' rax';
+            el.style.color = total >= 0 ? 'var(--green)' : 'var(--red)';
+        }
+        // Update settled count
+        var cnt = document.getElementById('port-settled-count');
+        if (cnt) cnt.textContent = portHistoryAll.length + (portHistoryMore ? '+' : '');
+    }
+
+    function histRowHtml(p) {
+        var matchup  = (p.marketDisplay && p.marketDisplay.display) || '—';
+        var market   = p.headerLabel || '—';
+        var side     = p.outcomeLabel || '—';
+        var details  = Array.isArray(p.details) ? p.details : [];
+        var costDet  = details.find(function(d){ return d.label === 'Cost'; }) || {};
+        var paidDet  = details.find(function(d){ return d.label === 'Paid'; }) || {};
+        var costDisp = costDet.display || '—';
+        var paidDisp = paidDet.display || '—';
+        var paidNum  = parseRaxDisplay(paidDet.display);
+        var isWin    = paidDet.color === 'green' && paidNum > 0;
+        var isLoss   = paidDet.display === '0' || (!isWin && paidDet.color === 'default');
+        var resCls   = isWin ? 'port-win' : isLoss ? 'port-loss' : '';
+        var resLbl   = isWin ? 'Win' : isLoss ? 'Loss' : '—';
+        return '<td>' + escHtml(matchup) + '</td>'
+            + '<td><span class="mkt-badge" style="font-size:10px">' + escHtml(market) + '</span></td>'
+            + '<td>' + escHtml(side) + '</td>'
+            + '<td class="r" style="font-family:var(--mono);color:var(--muted)">' + escHtml(costDisp) + '</td>'
+            + '<td class="r ' + (isWin ? 'port-win' : 'port-loss') + '" style="font-family:var(--mono)">' + escHtml(paidDisp) + '</td>'
+            + '<td class="' + resCls + '" style="font-weight:700;font-size:12px">' + resLbl + '</td>';
     }
 
     function appendHistoryRows(items) {
         var tbody = document.getElementById('port-history-tbody');
         if (!tbody) return;
         items.forEach(function(p) {
-            var matchup  = (p.marketDisplay && p.marketDisplay.display) || '—';
-            var market   = p.headerLabel || '—';
-            var side     = p.outcomeLabel || '—';
-            var details  = Array.isArray(p.details) ? p.details : [];
-            var costDet  = details.find(function(d){ return d.label==='Cost'; }) || {};
-            var paidDet  = details.find(function(d){ return d.label==='Paid'; }) || {};
-            var cost     = costDet.display || '—';
-            var paid     = paidDet.display || '—';
-            var isWin    = paidDet.color === 'green';
-            var isLoss   = paidDet.color === 'default';
-            var resCls   = isWin ? 'port-win' : isLoss ? 'port-loss' : 'port-push';
-            var resLbl   = isWin ? 'Win' : isLoss ? 'Loss' : '—';
             var tr = document.createElement('tr');
-            tr.innerHTML = '<td>' + escHtml(matchup) + '</td>'
-                + '<td><span class="mkt-badge" style="font-size:10px">' + escHtml(market) + '</span></td>'
-                + '<td>' + escHtml(side) + '</td>'
-                + '<td class="r" style="font-family:var(--mono)">' + escHtml(cost) + '</td>'
-                + '<td class="r ' + (isWin ? 'port-win' : '') + '" style="font-family:var(--mono)">' + escHtml(paid) + '</td>'
-                + '<td class="' + resCls + '" style="font-weight:600;font-size:12px">' + resLbl + '</td>';
+            tr.innerHTML = histRowHtml(p);
             tbody.appendChild(tr);
         });
     }

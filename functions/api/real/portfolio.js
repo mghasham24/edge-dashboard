@@ -160,15 +160,15 @@ export async function onRequestGet({ request, env }) {
     return json({ ok: true, probeId, results });
   }
 
-  // cursor param — for paginating through historyrollup
-  const cursor    = url.searchParams.get('cursor') || '';
+  // after param — cursor-based pagination for historyrollup (?after=LAST_ITEM_ID)
+  const after     = url.searchParams.get('after') || '';
   const timeframe = url.searchParams.get('timeframe') || '1m';
-  const histUrl   = cursor
-    ? `${base}/predictions/historyrollup?cursor=${encodeURIComponent(cursor)}`
+  const histUrl   = after
+    ? `${base}/predictions/historyrollup?after=${encodeURIComponent(after)}`
     : `${base}/predictions/historyrollup`;
 
-  // Only fetch performance + open on first load (no cursor); history always
-  if (cursor) {
+  // Pagination-only request — skip perf + open
+  if (after) {
     const history = await safeFetch(histUrl, hdrs);
     return json({ ok: true, connected: true, history });
   }
