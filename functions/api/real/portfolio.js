@@ -145,19 +145,35 @@ export async function onRequestGet({ request, env }) {
     return json({ ok: true, connected: true, path: testPath, status: r.status, body: r.body });
   }
 
-  // ?probepagination=LAST_ID — try every common pagination param to find which works
+  // ?probepagination=LAST_ITEM_ID&ts=LAST_TRANSACTED_AT — targeted pagination probe
+  // e.g. /api/real/portfolio?probepagination=history-3187-6373&ts=2026-04-06T01:40:32.355Z
   const probeId = url.searchParams.get('probepagination');
   if (probeId) {
-    const paramNames = ['cursor', 'before', 'after', 'offset', 'page', 'lastId', 'fromId', 'startAfter', 'sinceId', 'pageToken'];
+    const ts = url.searchParams.get('ts') || '';
+    // Only 6 candidates, sequential, 3s abort each = max ~18s
+    const candidates = [
+      ['after',       probeId],
+      ['cursor',      probeId],
+      ['before',      ts || probeId],
+      ['offset',      '10'],
+      ['page',        '2'],
+      ['lastItemId',  probeId],
+    ];
+    const baselineItems = (await probe(`${base}/predictions/historyrollup`, hdrs, 3000)).body?.items || [];
+    const baselineFirst = baselineItems[0]?.id || null;
     const results = {};
-    for (const p of paramNames) {
-      const val = p === 'offset' ? '10' : p === 'page' ? '2' : probeId;
-      const r = await probe(`${base}/predictions/historyrollup?${p}=${encodeURIComponent(val)}`, hdrs, 4000);
-      // Compare item count and first item id to detect if pagination worked
-      const items = r.body && r.body.items;
-      results[p] = { status: r.status, count: items ? items.length : null, firstId: items && items[0] ? items[0].id : null };
+    for (const [param, val] of candidates) {
+      const r = await probe(`${base}/predictions/historyrollup?${param}=${encodeURIComponent(val)}`, hdrs, 3000);
+      const items = r.body?.items || [];
+      const firstId = items[0]?.id || null;
+      results[param] = {
+        status: r.status,
+        count: items.length,
+        firstId,
+        paginationWorked: firstId !== null && firstId !== baselineFirst
+      };
     }
-    return json({ ok: true, probeId, results });
+    return json({ ok: true, baselineFirst, results });
   }
 
   // after param — cursor-based pagination for historyrollup (?after=LAST_ITEM_ID)
