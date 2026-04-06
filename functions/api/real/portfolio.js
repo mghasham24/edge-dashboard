@@ -145,11 +145,11 @@ export async function onRequestGet({ request, env }) {
     return json({ ok: true, connected: true, path: testPath, status: r.status, body: r.body });
   }
 
-  // Normal fetch — update these paths once debug reveals the correct ones
+  // Fetch all three portfolio endpoints concurrently
   const [perf, open, history] = await Promise.all([
-    safeFetch(`${base}/portfolio`, hdrs),
-    safeFetch(`${base}/portfolio/positions/open`, hdrs),
-    safeFetch(`${base}/portfolio/positions/history`, hdrs),
+    safeFetch(`${base}/predictions/portfolioperformance?timeframe=1w`, hdrs),
+    safeFetch(`${base}/predictions/openpositions`, hdrs),
+    safeFetch(`${base}/predictions/historyrollup`, hdrs),
   ]);
 
   return json({ ok: true, connected: true, performance: perf, open, history });

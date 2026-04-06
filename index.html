@@ -3820,13 +3820,16 @@
     }
 
     function renderPortfolio(data) {
-        var perf    = data.performance || {};
-        var openPos = (data.open && (data.open.positions || data.open.data || [])) || [];
-        var history = (data.history && (data.history.positions || data.history.data || [])) || [];
+        // portfolioperformance: { summary: { pnl, pnlPercent }, history: [...] }
+        var summary = (data.performance && data.performance.summary) || {};
+        // openpositions: { positions: [...] }
+        var openPos = (data.open && data.open.positions) || [];
+        // historyrollup: varies — store raw for display
+        var histRollup = data.history || {};
 
-        // Performance stats
-        var pnl = perf.totalPnl != null ? perf.totalPnl : perf.pnl != null ? perf.pnl : null;
-        var roi = perf.roi != null ? perf.roi : perf.roiPct != null ? perf.roiPct / 100 : null;
+        // --- Performance stat cards ---
+        var pnl    = summary.pnl != null ? Number(summary.pnl) : null;
+        var roiPct = summary.pnlPercent != null ? Number(summary.pnlPercent) : null;
 
         var pnlEl = document.getElementById('port-pnl');
         if (pnl != null) {
@@ -3838,21 +3841,29 @@
         }
 
         var roiEl = document.getElementById('port-roi');
-        if (roi != null) {
-            roiEl.textContent = (roi >= 0 ? '+' : '') + (roi * 100).toFixed(1) + '%';
-            roiEl.style.color = roi >= 0 ? 'var(--green)' : 'var(--red)';
+        if (roiPct != null) {
+            roiEl.textContent = (roiPct >= 0 ? '+' : '') + roiPct.toFixed(1) + '%';
+            roiEl.style.color = roiPct >= 0 ? 'var(--green)' : 'var(--red)';
         } else {
             roiEl.textContent = '—';
+            roiEl.style.color = 'var(--muted)';
         }
 
-        document.getElementById('port-open-count').textContent = openPos.length || (perf.openPositions != null ? perf.openPositions : '—');
-        document.getElementById('port-settled-count').textContent = history.length || (perf.settledBets != null ? perf.settledBets : '—');
+        document.getElementById('port-open-count').textContent = openPos.length || '0';
 
-        // Build gameId -> rawRow map for edge matching
+        // settled count from historyrollup if it has a count field, else show settled positions from open list
+        var settledCount = openPos.filter(function(p) { return p.isSettled; }).length;
+        var histCount = histRollup.totalBets != null ? histRollup.totalBets
+                      : histRollup.count != null ? histRollup.count
+                      : histRollup.positions ? histRollup.positions.length
+                      : settledCount || '—';
+        document.getElementById('port-settled-count').textContent = histCount;
+
+        // --- Build gameId → rawRows map for edge matching ---
         var gidToRows = {};
         if (typeof rsGameIds !== 'undefined') {
             Object.keys(rsGameIds).forEach(function(gameKey) {
-                var gid = rsGameIds[gameKey];
+                var gid = String(rsGameIds[gameKey]);
                 if (!gidToRows[gid]) gidToRows[gid] = [];
                 (rawRows || []).forEach(function(r) {
                     if (r.game === gameKey) gidToRows[gid].push(r);
@@ -3860,72 +3871,101 @@
             });
         }
 
-        // Open positions table
+        // --- Open positions table ---
+        // Each position: marketId, outcomeId, gameId, sport, marketType, outcomeLabel,
+        //   headerLabel, marketDisplay.display, sharesValue, details[{label,value}],
+        //   currentPriceDisplay, isSettled, leftFooterText
         var openTbody = document.getElementById('port-open-tbody');
-        if (!openPos.length) {
+        var activePos = openPos.filter(function(p) { return !p.isSettled; });
+        if (!activePos.length) {
             openTbody.innerHTML = '<tr><td colspan="7" style="color:var(--muted);padding:20px 12px">No open positions</td></tr>';
         } else {
-            openTbody.innerHTML = openPos.map(function(p) {
-                var game    = getField(p, ['gameName','game','title','name','match']) || '—';
-                var market  = getField(p, ['marketType','market','label']) || '—';
-                var side    = getField(p, ['side','outcome','selection','label','name']) || '—';
-                var shares  = getField(p, ['shares','quantity','amount','numShares']);
-                var entry   = getField(p, ['entryPrice','avgEntryPrice','averagePrice','price']);
-                var value   = getField(p, ['currentValue','value','marketValue']);
-                var upnl    = getField(p, ['unrealizedPnl','unrealizedPL','unrealized','pnl']);
-                var gid     = getField(p, ['gameId','game_id','id']);
+            openTbody.innerHTML = activePos.map(function(p) {
+                var game    = p.headerLabel || '—';
+                var market  = p.marketType || (p.marketDisplay && p.marketDisplay.display) || '—';
+                var side    = p.outcomeLabel || '—';
+                var gid     = p.gameId != null ? String(p.gameId) : null;
+
+                // Parse details array for Avg / Cost / Pays
+                var details = Array.isArray(p.details) ? p.details : [];
+                var avgDet  = details.find(function(d) { return d.label === 'Avg'; });
+                var costDet = details.find(function(d) { return d.label === 'Cost'; });
+                var paysDet = details.find(function(d) { return d.label === 'Pays'; });
+                var avg     = avgDet  ? avgDet.value  : null;
+                var cost    = costDet ? costDet.value : null;
+                var pays    = paysDet ? paysDet.value : null;
+                var curPrice = p.currentPriceDisplay || null;
+
+                // Edge match
+                var mktNorm = market.toLowerCase().replace('moneyline','ml').replace('money line','ml');
                 var matchedRow = gid && gidToRows[gid] ? gidToRows[gid].find(function(r) {
-                    return r.mkt && market && r.mkt.toLowerCase() === market.toLowerCase().replace('moneyline','ml');
+                    return r.mkt && r.mkt.toLowerCase() === mktNorm;
                 }) : null;
                 var matchBadge = matchedRow && matchedRow.edge != null
                     ? '<span class="port-match-badge">' + (matchedRow.edge > 0 ? '+' : '') + matchedRow.edge.toFixed(1) + '% edge</span>'
                     : '';
-                var upnlCls = upnl > 0 ? 'port-win' : upnl < 0 ? 'port-loss' : '';
+
                 return '<tr>'
-                    + '<td>' + escHtml(game) + matchBadge + '</td>'
+                    + '<td style="max-width:180px">' + escHtml(game) + matchBadge + '</td>'
                     + '<td><span class="mkt-badge">' + escHtml(market) + '</span></td>'
                     + '<td>' + escHtml(side) + '</td>'
-                    + '<td class="r" style="font-family:var(--mono)">' + (shares != null ? fmtNum(shares) : '—') + '</td>'
-                    + '<td class="r" style="font-family:var(--mono)">' + (entry != null ? fmtRax(entry) : '—') + '</td>'
-                    + '<td class="r" style="font-family:var(--mono)">' + (value != null ? fmtRax(value) : '—') + '</td>'
-                    + '<td class="r ' + upnlCls + '" style="font-family:var(--mono)">' + (upnl != null ? (upnl >= 0 ? '+' : '') + fmtRax(upnl) : '—') + '</td>'
+                    + '<td class="r" style="font-family:var(--mono)">' + (avg  != null ? escHtml(String(avg))  : '—') + '</td>'
+                    + '<td class="r" style="font-family:var(--mono)">' + (cost != null ? escHtml(String(cost)) : '—') + '</td>'
+                    + '<td class="r" style="font-family:var(--mono)">' + (pays != null ? escHtml(String(pays)) : '—') + '</td>'
+                    + '<td class="r" style="font-family:var(--mono);color:var(--muted)">' + (curPrice != null ? escHtml(String(curPrice)) : '—') + '</td>'
                     + '</tr>';
             }).join('');
         }
 
-        // Settled history table
+        // Update open positions table headers to match new columns
+        var openHead = document.querySelector('#port-open-tbody').closest('table').querySelector('thead tr');
+        if (openHead) {
+            openHead.innerHTML = '<th>Game</th><th>Market</th><th>Side</th><th class="r">Avg</th><th class="r">Cost</th><th class="r">Pays</th><th class="r">Current</th>';
+        }
+
+        // --- History rollup ---
+        // historyrollup shape unknown — render what we can, show settled positions from openpositions too
         var histTbody = document.getElementById('port-history-tbody');
-        if (!history.length) {
+        var settledPos = openPos.filter(function(p) { return p.isSettled; });
+
+        // Try historyrollup.positions first, then fall back to settled from openpositions
+        var histPositions = (histRollup.positions || histRollup.bets || histRollup.history || []);
+        var histRows = histPositions.length ? histPositions : settledPos;
+
+        if (!histRows.length) {
             histTbody.innerHTML = '<tr><td colspan="7" style="color:var(--muted);padding:20px 12px">No settled bets yet</td></tr>';
         } else {
-            histTbody.innerHTML = history.map(function(p) {
-                var game    = getField(p, ['gameName','game','title','name','match']) || '—';
-                var market  = getField(p, ['marketType','market','label']) || '—';
-                var side    = getField(p, ['side','outcome','selection','label','name']) || '—';
-                var amount  = getField(p, ['entryAmount','amount','wagered','invested']);
-                var payout  = getField(p, ['payout','payoutAmount','winnings']);
-                var pnl     = getField(p, ['pnl','profit','realizedPnl','realizedPL']);
-                var result  = getField(p, ['result','outcome','status','settlementResult']) || '';
-                var resCls  = result.toLowerCase().includes('win') ? 'port-win' : result.toLowerCase().includes('loss') ? 'port-loss' : 'port-push';
-                var pnlCls  = pnl > 0 ? 'port-win' : pnl < 0 ? 'port-loss' : '';
+            histTbody.innerHTML = histRows.map(function(p) {
+                var game    = p.headerLabel || p.gameName || p.game || '—';
+                var market  = p.marketType  || (p.marketDisplay && p.marketDisplay.display) || p.market || '—';
+                var side    = p.outcomeLabel || p.side || '—';
+                var details = Array.isArray(p.details) ? p.details : [];
+                var costDet = details.find(function(d) { return d.label === 'Cost'; });
+                var paysDet = details.find(function(d) { return d.label === 'Pays'; });
+                var cost    = costDet ? costDet.value : (p.entryAmount || p.cost || null);
+                var pays    = paysDet ? paysDet.value : (p.payout || p.pays || null);
+                var result  = p.leftFooterText || p.result || p.status || '';
+                var resCls  = /win/i.test(result) ? 'port-win' : /loss|lose/i.test(result) ? 'port-loss' : 'port-push';
                 return '<tr>'
-                    + '<td>' + escHtml(game) + '</td>'
+                    + '<td style="max-width:180px">' + escHtml(game) + '</td>'
                     + '<td><span class="mkt-badge">' + escHtml(market) + '</span></td>'
                     + '<td>' + escHtml(side) + '</td>'
-                    + '<td class="r" style="font-family:var(--mono)">' + (amount != null ? fmtRax(amount) : '—') + '</td>'
-                    + '<td class="r" style="font-family:var(--mono)">' + (payout != null ? fmtRax(payout) : '—') + '</td>'
-                    + '<td class="r ' + pnlCls + '" style="font-family:var(--mono)">' + (pnl != null ? (pnl >= 0 ? '+' : '') + fmtRax(pnl) : '—') + '</td>'
-                    + '<td class="' + resCls + '" style="text-transform:capitalize">' + escHtml(result) + '</td>'
+                    + '<td class="r" style="font-family:var(--mono)">' + (cost != null ? escHtml(String(cost)) : '—') + '</td>'
+                    + '<td class="r" style="font-family:var(--mono)">' + (pays != null ? escHtml(String(pays)) : '—') + '</td>'
+                    + '<td class="' + resCls + '">' + escHtml(result) + '</td>'
                     + '</tr>';
             }).join('');
         }
 
-        // Show raw debug if no meaningful data came back
-        var hasData = pnl != null || openPos.length || history.length;
-        if (!hasData) {
-            document.getElementById('port-debug').style.display = '';
-            document.getElementById('port-debug-pre').textContent = JSON.stringify(data, null, 2);
+        // Update history table headers
+        var histHead = document.querySelector('#port-history-tbody').closest('table').querySelector('thead tr');
+        if (histHead) {
+            histHead.innerHTML = '<th>Game</th><th>Market</th><th>Side</th><th class="r">Cost</th><th class="r">Pays</th><th>Result</th>';
         }
+
+        // Always show raw debug so you can see the full shape
+        document.getElementById('port-debug').style.display = '';
+        document.getElementById('port-debug-pre').textContent = JSON.stringify(data, null, 2);
     }
 
     function getField(obj, keys) {
