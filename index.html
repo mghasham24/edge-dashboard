@@ -2287,8 +2287,6 @@
                     </div>
 
                     <!-- P&L sparkline -->
-                    <div id="port-sparkline" style="margin:-8px 0 20px;opacity:0.7"></div>
-
                     <!-- Open positions -->
                     <div style="margin-bottom:28px">
                         <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:12px">Open Positions</div>
@@ -3996,8 +3994,6 @@
         var activePos = openPos.filter(function(p) { return !p.isSettled; });
         document.getElementById('port-open-count').textContent = activePos.length;
 
-        // --- P&L sparkline (uses API history series) ---
-        renderSparkline(perfHistory, summary.pnl != null ? Number(summary.pnl) : null);
 
         // --- Build gameId → rawRows map for edge matching ---
         var gidToRows = {};
@@ -4325,25 +4321,6 @@
             + '<td class="r" style="font-family:var(--mono);color:var(--muted)">' + escHtml(costDisp) + '</td>'
             + '<td class="r ' + (isWin ? 'port-win' : 'port-loss') + '" style="font-family:var(--mono)">' + escHtml(paidDisp) + '</td>'
             + '<td class="' + resCls + '" style="font-weight:700;font-size:12px">' + resLbl + '</td>';
-    }
-
-    function renderSparkline(history, currentPnl) {
-        var el = document.getElementById('port-sparkline');
-        if (!el || !history.length) return;
-        var vals = history.map(function(h) { return h.v; });
-        var min = Math.min.apply(null, vals);
-        var max = Math.max.apply(null, vals);
-        var range = max - min || 1;
-        var W = 200, H = 40, pad = 2;
-        var pts = vals.map(function(v, i) {
-            var x = pad + (i / (vals.length - 1)) * (W - pad * 2);
-            var y = pad + (1 - (v - min) / range) * (H - pad * 2);
-            return x.toFixed(1) + ',' + y.toFixed(1);
-        }).join(' ');
-        var color = currentPnl >= 0 ? 'var(--green)' : 'var(--red)';
-        el.innerHTML = '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" style="display:block">'
-            + '<polyline points="' + pts + '" fill="none" stroke="' + color + '" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>'
-            + '</svg>';
     }
 
     function getField(obj, keys) {
