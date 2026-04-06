@@ -70,10 +70,23 @@ function buildHeaders(authToken, deviceUuid) {
 async function safeFetch(url, headers) {
   try {
     const res = await fetch(url, { headers });
+    const text = await res.text();
     if (!res.ok) return { _err: res.status, _url: url };
-    return await res.json();
+    try { return JSON.parse(text); } catch { return { _err: 'json_parse', _url: url, _body: text.slice(0, 200) }; }
   } catch (e) {
     return { _err: e.message, _url: url };
+  }
+}
+
+async function probe(url, headers) {
+  try {
+    const res = await fetch(url, { headers });
+    const text = await res.text();
+    let body = null;
+    try { body = JSON.parse(text); } catch { body = text.slice(0, 300); }
+    return { status: res.status, body };
+  } catch (e) {
+    return { status: 'err', body: e.message };
   }
 }
 
@@ -81,14 +94,12 @@ export async function onRequestGet({ request, env }) {
   const session = await getSession(request, env.DB);
   if (!session) return fail(401, 'Authentication required');
 
-  // Check if table exists and user has connected
   let authRow = null;
   try {
     authRow = await env.DB.prepare(
       'SELECT auth_token, device_uuid FROM real_auth WHERE user_id = ?'
     ).bind(session.user_id).first();
   } catch {
-    // Table doesn't exist yet
     return json({ ok: true, connected: false });
   }
 
@@ -96,8 +107,44 @@ export async function onRequestGet({ request, env }) {
 
   const hdrs = buildHeaders(authRow.auth_token, authRow.device_uuid);
   const base = 'https://web.realapp.com';
+  const url  = new URL(request.url);
 
-  // Fetch all three endpoints concurrently
+  // ?debug=1 — probe many candidate paths to find the real ones
+  if (url.searchParams.get('debug') === '1') {
+    const candidates = [
+      '/portfolio',
+      '/portfolio/overview',
+      '/portfolio/summary',
+      '/portfolio/positions',
+      '/portfolio/positions/open',
+      '/portfolio/positions/settled',
+      '/portfolio/positions/history',
+      '/portfolio/history',
+      '/portfolio/bets',
+      '/account/portfolio',
+      '/account/positions',
+      '/account/bets',
+      '/user/portfolio',
+      '/user/positions',
+      '/predictions/portfolio',
+      '/predictions/positions',
+      '/positions',
+      '/positions/open',
+      '/positions/history',
+      '/bets',
+      '/bets/open',
+      '/bets/settled',
+    ];
+    const results = {};
+    for (const path of candidates) {
+      results[path] = await probe(`${base}${path}`, hdrs);
+      // small delay to avoid hammering
+      await new Promise(r => setTimeout(r, 150));
+    }
+    return json({ ok: true, connected: true, probe: results });
+  }
+
+  // Normal fetch — update these paths once debug reveals the correct ones
   const [perf, open, history] = await Promise.all([
     safeFetch(`${base}/portfolio`, hdrs),
     safeFetch(`${base}/portfolio/positions/open`, hdrs),
