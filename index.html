@@ -2272,15 +2272,33 @@
                 <div class="port-connect-card">
                     <h2>Connect Real Sports</h2>
                     <p>Link your Real Sports account to automatically track your open positions, settled bets, P&amp;L, and ROI — all in one place.</p>
-                    <ol class="port-steps">
-                        <li>Log in to <strong>realsports.io</strong> in your browser</li>
-                        <li>Drag the button below to your bookmarks bar:<br>
-                            <span style="display:inline-block;margin-top:10px">
-                                <a id="port-bookmarklet-link" class="port-bookmarklet" title="Drag me to your bookmarks bar">&#128279; RaxEdge Connect</a>
-                            </span>
-                        </li>
-                        <li>While on any page on realsports.io, click the <strong>RaxEdge Connect</strong> bookmark — it will redirect you back here and connect your account automatically</li>
-                    </ol>
+
+                    <!-- Desktop instructions -->
+                    <div style="margin-bottom:20px">
+                        <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:10px">Desktop</div>
+                        <ol class="port-steps">
+                            <li>Log in to <strong>realsports.io</strong> in your browser</li>
+                            <li>Drag the button below to your bookmarks bar:<br>
+                                <span style="display:inline-block;margin-top:10px">
+                                    <a id="port-bookmarklet-link" class="port-bookmarklet" title="Drag me to your bookmarks bar">&#128279; RaxEdge Connect</a>
+                                </span>
+                            </li>
+                            <li>While on realsports.io, click the <strong>RaxEdge Connect</strong> bookmark — it will redirect you back here and connect automatically</li>
+                        </ol>
+                    </div>
+
+                    <!-- Mobile instructions -->
+                    <div style="border-top:1px solid var(--border);padding-top:20px;margin-bottom:20px">
+                        <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:10px">Mobile (iOS / Android)</div>
+                        <ol class="port-steps">
+                            <li>Log in to <strong>realsports.io</strong> in your mobile browser</li>
+                            <li>Tap the button below to copy the connect script:<br>
+                                <button id="port-copy-js-btn" onclick="copyBmScript()" style="margin-top:10px;background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:12px;font-weight:600;padding:9px 16px;border-radius:6px;cursor:pointer">Copy Script</button>
+                            </li>
+                            <li>In your browser, tap the address bar, <strong>clear it</strong>, paste the copied script, then tap Go — it will redirect you back here automatically</li>
+                        </ol>
+                    </div>
+
                     <div style="font-size:11px;color:var(--muted2)">Your Real Sports token is stored securely and only used to fetch your own portfolio data.</div>
                 </div>
             </div>
@@ -2783,7 +2801,28 @@
         var bmCode = '(function(){try{var raw=localStorage.getItem(\'e-accounts\');if(!raw){alert(\'Not logged in to Real Sports\');return;}var d=JSON.parse(raw);var ai=Array.isArray(d)?(d[0]&&d[0].authInfo)||null:d.authInfo||null;if(!ai||!ai.token){alert(\'Auth not found \u2014 try logging out and back in on Real Sports\');return;}var tok=ai.userId+\'!\'+ai.deviceId+\'!\'+ai.token;var uuid=localStorage.getItem(\'realdeviceuuid\')||\'\';window.location=\'' + dashOrigin + '/?rs_token=\'+encodeURIComponent(tok)+\'&rs_uuid=\'+encodeURIComponent(uuid);}catch(e){alert(\'Error: \'+e.message);}})();';
         var bmLink = document.getElementById('port-bookmarklet-link');
         if (bmLink) bmLink.href = 'javascript:' + bmCode;
+
+        window._bmScript = 'javascript:' + bmCode;
     });
+
+    function copyBmScript() {
+        var script = window._bmScript;
+        if (!script) return;
+        var btn = document.getElementById('port-copy-js-btn');
+        navigator.clipboard.writeText(script).then(function() {
+            if (btn) { btn.textContent = 'Copied!'; setTimeout(function(){ btn.textContent = 'Copy Script'; }, 2000); }
+        }).catch(function() {
+            // Fallback for browsers without clipboard API
+            var ta = document.createElement('textarea');
+            ta.value = script;
+            ta.style.cssText = 'position:fixed;opacity:0';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            if (btn) { btn.textContent = 'Copied!'; setTimeout(function(){ btn.textContent = 'Copy Script'; }, 2000); }
+        });
+    }
 
     function imp(n) {
         n = Number(n);
