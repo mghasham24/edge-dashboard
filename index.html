@@ -2408,6 +2408,25 @@
     var portHistoryMore   = false;
     var portSelectedDate  = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
     var portTimeframe     = '1m';
+    var PORT_CACHE_KEY    = 'rax_port_history_v1';
+
+    function saveHistoryCache() {
+        try {
+            localStorage.setItem(PORT_CACHE_KEY, JSON.stringify({
+                items: portHistoryAll,
+                cursor: portHistoryCursor,
+                hasMore: portHistoryMore,
+                savedAt: Date.now()
+            }));
+        } catch(e) {}
+    }
+
+    function loadHistoryCache() {
+        try {
+            var raw = localStorage.getItem(PORT_CACHE_KEY);
+            return raw ? JSON.parse(raw) : null;
+        } catch(e) { return null; }
+    }
     var portCalYear       = new Date().getFullYear();
     var portCalMonth      = new Date().getMonth(); // 0-based
     var rfiOdds = {}; // game key -> {yesFair, noFair, yesAm, noAm}
@@ -3860,6 +3879,8 @@
             });
         } catch(e) {}
         portfolioConnected = false;
+        portHistoryAll = []; portHistoryCursor = null; portHistoryMore = false;
+        try { localStorage.removeItem(PORT_CACHE_KEY); } catch(e) {}
         document.getElementById('portfolio-data-view').style.display = 'none';
         document.getElementById('portfolio-connect-view').style.display = '';
         document.getElementById('port-refresh-btn').style.display = 'none';
@@ -3894,12 +3915,34 @@
             var loadingEl   = document.getElementById('portfolio-loading');
             var contentEl   = document.getElementById('portfolio-content');
 
-            // Show loading state
             connectView.style.display = 'none';
             dataView.style.display = '';
-            loadingEl.style.display = '';
-            contentEl.style.display = 'none';
 
+            // Restore from cache immediately — content appears without waiting for API
+            var cache = !forceRefresh ? loadHistoryCache() : null;
+            if (cache && cache.items && cache.items.length) {
+                portHistoryAll    = cache.items;
+                portHistoryCursor = cache.cursor;
+                portHistoryMore   = cache.hasMore;
+                portSelectedDate  = new Date().toISOString().slice(0, 10);
+                var _di = document.getElementById('port-date-filter');
+                if (_di) _di.value = portSelectedDate;
+                loadingEl.style.display = 'none';
+                contentEl.style.display = '';
+                portfolioConnected = true;
+                document.getElementById('port-refresh-btn').style.display = '';
+                document.getElementById('port-disconnect-btn').style.display = '';
+                updatePortProfit();
+                renderHistoryForDate(portSelectedDate);
+                portCalYear  = new Date().getFullYear();
+                portCalMonth = new Date().getMonth();
+                renderCalendar();
+            } else {
+                loadingEl.style.display = '';
+                contentEl.style.display = 'none';
+            }
+
+            // Fetch fresh data (perf, open positions, and page 1 of history for new bets)
             var res = await fetch('/api/real/portfolio?timeframe=' + portTimeframe, { credentials: 'same-origin' });
             var data = await res.json();
 
@@ -3917,6 +3960,15 @@
             document.getElementById('port-refresh-btn').style.display = '';
             document.getElementById('port-disconnect-btn').style.display = '';
             contentEl.style.display = '';
+
+            // Merge fresh page 1: prepend any bets not already in cache
+            if (cache && cache.items && cache.items.length) {
+                var freshItems = (data.history && data.history.items) || [];
+                var existingIds = new Set(portHistoryAll.map(function(p){ return p.id; }));
+                var newItems = freshItems.filter(function(p){ return !existingIds.has(p.id); });
+                if (newItems.length) portHistoryAll = newItems.concat(portHistoryAll);
+                data._historyMerged = true; // signal renderPortfolio to skip overwriting history state
+            }
 
             renderPortfolio(data);
 
@@ -3946,7 +3998,6 @@
 
         var activePos = openPos.filter(function(p) { return !p.isSettled; });
         document.getElementById('port-open-count').textContent = activePos.length;
-        document.getElementById('port-settled-count').textContent = histItems.length + (data.history && data.history.hasMore ? '+' : '');
 
         // --- P&L sparkline ---
         renderSparkline(perfHistory, pnl);
@@ -4009,13 +4060,16 @@
             }).join('');
         }
 
-        // Store history state for pagination + calendar
-        // cursor = latestLedgerTimestamp of last item (Real Sports uses ?before=TIMESTAMP)
-        portHistoryAll    = histItems.slice();
-        portHistoryCursor = histItems.length
-            ? (histItems[histItems.length - 1].latestLedgerTimestamp || histItems[histItems.length - 1].transactedAt)
-            : null;
-        portHistoryMore   = !!(data.history && data.history.hasMore);
+        // Update history state — skip if we merged from cache (state already set)
+        if (!data._historyMerged) {
+            portHistoryAll    = histItems.slice();
+            portHistoryCursor = histItems.length
+                ? (histItems[histItems.length - 1].latestLedgerTimestamp || histItems[histItems.length - 1].transactedAt)
+                : null;
+            portHistoryMore   = !!(data.history && data.history.hasMore);
+        }
+
+        document.getElementById('port-settled-count').textContent = portHistoryAll.length + (portHistoryMore ? '+' : '');
 
         // Default date filter to today, set input value
         portSelectedDate = new Date().toISOString().slice(0, 10);
@@ -4030,7 +4084,7 @@
         portCalMonth = new Date().getMonth();
         renderCalendar();
 
-        // Auto-load all remaining history pages in background
+        // Auto-load all remaining history pages in background, then save to cache
         autoLoadAllHistory();
 
         document.getElementById('port-debug').style.display = 'none';
@@ -4175,14 +4229,19 @@
             updatePortProfit();
             renderCalendar();
             renderHistoryForDate(portSelectedDate);
+            var cntEl = document.getElementById('port-settled-count');
+            if (cntEl) cntEl.textContent = portHistoryAll.length + (portHistoryMore ? '+' : '');
             if (statusEl) statusEl.textContent = portHistoryMore ? 'Loading ' + portHistoryAll.length + ' bets…' : '';
-            // Small yield between pages to keep UI responsive
             await new Promise(function(r){ setTimeout(r, 150); });
         }
         if (statusEl) statusEl.textContent = '';
+        var cntEl = document.getElementById('port-settled-count');
+        if (cntEl) cntEl.textContent = portHistoryAll.length;
         updatePortProfit();
         renderCalendar();
         renderHistoryForDate(portSelectedDate);
+        // Save everything to cache so next visit is instant
+        saveHistoryCache();
     }
 
     function renderHistoryForDate(dateKey) {
