@@ -4673,8 +4673,8 @@
         } else {
             nav.appendChild(document.getElementById('referral-tab-btn'));
         }
-        // Portfolio tab — for all users
-        if (!document.getElementById('portfolio-tab-btn')) {
+        // Portfolio tab — staging only
+        if (window.location.hostname.includes('staging') && !document.getElementById('portfolio-tab-btn')) {
             var portTabBtn = document.createElement('button');
             portTabBtn.className = 'sport-tab';
             portTabBtn.textContent = '📊 Portfolio';
@@ -4694,7 +4694,7 @@
                 }
             };
             nav.appendChild(portTabBtn);
-        } else {
+        } else if (window.location.hostname.includes('staging')) {
             nav.appendChild(document.getElementById('portfolio-tab-btn'));
         }
     }
