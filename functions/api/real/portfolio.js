@@ -109,38 +109,29 @@ export async function onRequestGet({ request, env }) {
   const base = 'https://web.realapp.com';
   const url  = new URL(request.url);
 
-  // ?debug=1 — probe many candidate paths to find the real ones
+  // ?debug=1 — probe candidate paths in parallel with timeout
   if (url.searchParams.get('debug') === '1') {
     const candidates = [
       '/portfolio',
       '/portfolio/overview',
-      '/portfolio/summary',
       '/portfolio/positions',
       '/portfolio/positions/open',
-      '/portfolio/positions/settled',
       '/portfolio/positions/history',
       '/portfolio/history',
-      '/portfolio/bets',
       '/account/portfolio',
-      '/account/positions',
-      '/account/bets',
       '/user/portfolio',
-      '/user/positions',
       '/predictions/portfolio',
-      '/predictions/positions',
       '/positions',
-      '/positions/open',
-      '/positions/history',
       '/bets',
-      '/bets/open',
-      '/bets/settled',
     ];
-    const results = {};
-    for (const path of candidates) {
-      results[path] = await probe(`${base}${path}`, hdrs);
-      // small delay to avoid hammering
-      await new Promise(r => setTimeout(r, 150));
-    }
+    const timeout = (ms) => new Promise(r => setTimeout(() => r({ status: 'timeout', body: null }), ms));
+    const entries = await Promise.all(
+      candidates.map(path =>
+        Promise.race([probe(`${base}${path}`, hdrs), timeout(5000)])
+          .then(result => [path, result])
+      )
+    );
+    const results = Object.fromEntries(entries);
     return json({ ok: true, connected: true, probe: results });
   }
 
