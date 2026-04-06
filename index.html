@@ -2610,8 +2610,9 @@
             history.replaceState({}, '', '/');
         }
 
-        // Set bookmarklet href
-        var bmCode = '(function(){try{var raw=localStorage.getItem(\'e-accounts\');if(!raw){alert(\'Not logged in to Real Sports\');return;}var d=JSON.parse(raw);var ai=Array.isArray(d)?(d[0]&&d[0].authInfo)||null:d.authInfo||null;if(!ai||!ai.token){alert(\'Auth not found — try logging out and back in on Real Sports\');return;}var tok=ai.userId+\'!\'+ai.deviceId+\'!\'+ai.token;var uuid=localStorage.getItem(\'realdeviceuuid\')||\'\';;window.location=\'https://raxedge.com/?rs_token=\'+encodeURIComponent(tok)+\'&rs_uuid=\'+encodeURIComponent(uuid);}catch(e){alert(\'Error: \'+e.message);}})();';
+        // Set bookmarklet href — uses current origin so it works on staging and prod
+        var dashOrigin = window.location.origin;
+        var bmCode = '(function(){try{var raw=localStorage.getItem(\'e-accounts\');if(!raw){alert(\'Not logged in to Real Sports\');return;}var d=JSON.parse(raw);var ai=Array.isArray(d)?(d[0]&&d[0].authInfo)||null:d.authInfo||null;if(!ai||!ai.token){alert(\'Auth not found \u2014 try logging out and back in on Real Sports\');return;}var tok=ai.userId+\'!\'+ai.deviceId+\'!\'+ai.token;var uuid=localStorage.getItem(\'realdeviceuuid\')||\'\';window.location=\'' + dashOrigin + '/?rs_token=\'+encodeURIComponent(tok)+\'&rs_uuid=\'+encodeURIComponent(uuid);}catch(e){alert(\'Error: \'+e.message);}})();';
         var bmLink = document.getElementById('port-bookmarklet-link');
         if (bmLink) bmLink.href = 'javascript:' + bmCode;
     });
@@ -3760,7 +3761,7 @@
 
     async function loadPortfolio(forceRefresh) {
         try {
-            // Check if there's a pending token from bookmarklet redirect
+            // If redirected back from bookmarklet, save the token first then fall through to fetch
             var pendingToken = sessionStorage.getItem('pending_rs_token');
             if (pendingToken) {
                 var pendingUuid = sessionStorage.getItem('pending_rs_uuid') || '';
@@ -3778,12 +3779,7 @@
                     return;
                 }
                 portfolioConnected = true;
-                // Show the portfolio tab automatically
-                var portBtn = document.getElementById('portfolio-tab-btn');
-                if (portBtn && !portBtn.classList.contains('active')) {
-                    portBtn.click();
-                    return;
-                }
+                // Fall through — continue to fetch and render portfolio below
             }
 
             var connectView = document.getElementById('portfolio-connect-view');
