@@ -176,15 +176,15 @@ export async function onRequestGet({ request, env }) {
     return json({ ok: true, baselineFirst, results });
   }
 
-  // after param — cursor-based pagination for historyrollup (?after=LAST_ITEM_ID)
-  const after     = url.searchParams.get('after') || '';
+  // before param — cursor pagination for historyrollup (?before=LAST_LATEST_LEDGER_TIMESTAMP)
+  const before    = url.searchParams.get('before') || '';
   const timeframe = url.searchParams.get('timeframe') || '1m';
-  const histUrl   = after
-    ? `${base}/predictions/historyrollup?after=${encodeURIComponent(after)}`
+  const histUrl   = before
+    ? `${base}/predictions/historyrollup?before=${encodeURIComponent(before)}`
     : `${base}/predictions/historyrollup`;
 
   // Pagination-only request — skip perf + open
-  if (after) {
+  if (before) {
     const history = await safeFetch(histUrl, hdrs);
     return json({ ok: true, connected: true, history });
   }

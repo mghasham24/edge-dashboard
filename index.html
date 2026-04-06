@@ -4009,8 +4009,11 @@
         }
 
         // Store history state for pagination + calendar
+        // cursor = latestLedgerTimestamp of last item (Real Sports uses ?before=TIMESTAMP)
         portHistoryAll    = histItems.slice();
-        portHistoryCursor = histItems.length ? histItems[histItems.length - 1].id : null;
+        portHistoryCursor = histItems.length
+            ? (histItems[histItems.length - 1].latestLedgerTimestamp || histItems[histItems.length - 1].transactedAt)
+            : null;
         portHistoryMore   = !!(data.history && data.history.hasMore);
         updatePortProfit();
         document.getElementById('port-load-more-wrap').style.display = portHistoryMore ? '' : 'none';
@@ -4118,12 +4121,14 @@
         var btn = document.getElementById('port-load-more-btn');
         if (btn && !silent) { btn.textContent = 'Loading...'; btn.disabled = true; }
         try {
-            var fetchUrl = '/api/real/portfolio?after=' + encodeURIComponent(portHistoryCursor || '');
+            var fetchUrl = '/api/real/portfolio?before=' + encodeURIComponent(portHistoryCursor || '');
             var res = await fetch(fetchUrl, { credentials: 'same-origin' });
             var data = await res.json();
             var newItems = (data.history && data.history.items) || [];
             portHistoryAll    = portHistoryAll.concat(newItems);
-            portHistoryCursor = newItems.length ? newItems[newItems.length - 1].id : null;
+            portHistoryCursor = newItems.length
+                ? (newItems[newItems.length - 1].latestLedgerTimestamp || newItems[newItems.length - 1].transactedAt)
+                : null;
             portHistoryMore   = !!(data.history && data.history.hasMore);
 
             appendHistoryRows(newItems);
