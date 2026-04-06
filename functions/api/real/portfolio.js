@@ -145,6 +145,21 @@ export async function onRequestGet({ request, env }) {
     return json({ ok: true, connected: true, path: testPath, status: r.status, body: r.body });
   }
 
+  // ?probepagination=LAST_ID — try every common pagination param to find which works
+  const probeId = url.searchParams.get('probepagination');
+  if (probeId) {
+    const paramNames = ['cursor', 'before', 'after', 'offset', 'page', 'lastId', 'fromId', 'startAfter', 'sinceId', 'pageToken'];
+    const results = {};
+    for (const p of paramNames) {
+      const val = p === 'offset' ? '10' : p === 'page' ? '2' : probeId;
+      const r = await probe(`${base}/predictions/historyrollup?${p}=${encodeURIComponent(val)}`, hdrs, 4000);
+      // Compare item count and first item id to detect if pagination worked
+      const items = r.body && r.body.items;
+      results[p] = { status: r.status, count: items ? items.length : null, firstId: items && items[0] ? items[0].id : null };
+    }
+    return json({ ok: true, probeId, results });
+  }
+
   // cursor param — for paginating through historyrollup
   const cursor    = url.searchParams.get('cursor') || '';
   const timeframe = url.searchParams.get('timeframe') || '1m';
