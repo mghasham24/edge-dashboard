@@ -4486,9 +4486,6 @@
     }
 
     function isPro() {
-        // 1000 member celebration — free weekend until Sunday Apr 6 11:59 PM CT
-        var FREE_WEEKEND_END = new Date('2026-04-07T04:59:00Z'); // Apr 6 11:59 PM CT = Apr 7 04:59 UTC
-        if (new Date() < FREE_WEEKEND_END) return true;
         return currentUser && (currentUser.plan === 'pro' || currentUser.is_admin);
     }
 
