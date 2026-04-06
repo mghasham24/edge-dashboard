@@ -3997,7 +3997,7 @@
         // --- History (historyrollup.items) ---
         // Win/loss: details[Paid].color === 'green' → win, 'default' → loss
         var histHead = document.querySelector('#port-history-tbody').closest('table').querySelector('thead tr');
-        if (histHead) histHead.innerHTML = '<th>Date</th><th>Matchup</th><th>Market</th><th>Side</th><th class="r">Entry %</th><th class="r" title="Rax spent">Cost</th><th class="r" title="Rax received">Paid</th><th>Result</th>';
+        if (histHead) histHead.innerHTML = '<th>Date</th><th>Matchup</th><th>Market</th><th>Side</th><th class="r" title="Rax spent">Cost</th><th class="r" title="Rax received">Paid</th><th>Result</th>';
 
         var histTbody = document.getElementById('port-history-tbody');
         if (!histItems.length) {
@@ -4184,11 +4184,8 @@
         var market   = p.headerLabel || '—';
         var side     = p.outcomeLabel || '—';
         var details  = Array.isArray(p.details) ? p.details : [];
-        if (details.length) console.log('[RS item]', p);
-        var avgDet   = details.find(function(d){ return d.label === 'Avg'; }) || {};
         var costDet  = details.find(function(d){ return d.label === 'Cost'; }) || {};
         var paidDet  = details.find(function(d){ return d.label === 'Paid'; }) || {};
-        var avgDisp  = avgDet.display || '—';
         var costDisp = costDet.display || '—';
         var paidDisp = paidDet.display || '—';
         var paidNum  = parseRaxDisplay(paidDet.display);
@@ -4201,7 +4198,6 @@
             + '<td>' + escHtml(matchup) + '</td>'
             + '<td><span class="mkt-badge" style="font-size:10px">' + escHtml(market) + '</span></td>'
             + '<td>' + escHtml(side) + '</td>'
-            + '<td class="r" style="font-family:var(--mono);color:var(--muted)">' + escHtml(avgDisp) + '</td>'
             + '<td class="r" style="font-family:var(--mono);color:var(--muted)">' + escHtml(costDisp) + '</td>'
             + '<td class="r ' + (isWin ? 'port-win' : 'port-loss') + '" style="font-family:var(--mono)">' + escHtml(paidDisp) + '</td>'
             + '<td class="' + resCls + '" style="font-weight:700;font-size:12px">' + resLbl + '</td>';
