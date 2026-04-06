@@ -1408,6 +1408,8 @@
 
     .port-win  { color: var(--green) }
     .port-loss { color: var(--red) }
+    .port-tf-btn { background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:11px;font-weight:600;padding:3px 10px;border-radius:4px;cursor:pointer;transition:all .15s }
+    .port-tf-btn.port-tf-active { background:var(--accent);border-color:var(--accent);color:#fff }
     .port-push { color: var(--muted) }
 
     .port-match-badge {
@@ -2253,6 +2255,14 @@
                 <div id="portfolio-loading" style="color:var(--muted);font-size:13px;padding:20px 0">Loading portfolio...</div>
                 <div id="portfolio-content" style="display:none">
                     <!-- Stats row -->
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+                        <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2)">Performance</div>
+                        <div style="margin-left:auto;display:flex;gap:4px">
+                            <button onclick="setPortTimeframe('1w')" id="port-tf-1w" class="port-tf-btn">1W</button>
+                            <button onclick="setPortTimeframe('1m')" id="port-tf-1m" class="port-tf-btn port-tf-active">1M</button>
+                            <button onclick="setPortTimeframe('3m')" id="port-tf-3m" class="port-tf-btn">3M</button>
+                        </div>
+                    </div>
                     <div class="admin-stats" style="margin-bottom:28px">
                         <div class="admin-stat">
                             <div class="admin-stat-val" id="port-pnl" style="color:var(--green)">-</div>
@@ -2268,11 +2278,11 @@
                         </div>
                         <div class="admin-stat">
                             <div class="admin-stat-val" id="port-settled-count">-</div>
-                            <div class="admin-stat-lbl">Settled</div>
+                            <div class="admin-stat-lbl">Settled · All Time</div>
                         </div>
                         <div class="admin-stat">
                             <div class="admin-stat-val" id="port-settled-profit" style="font-size:18px">-</div>
-                            <div class="admin-stat-lbl">Realised P&amp;L</div>
+                            <div class="admin-stat-lbl">Realised P&amp;L · All Time</div>
                         </div>
                     </div>
 
@@ -2397,6 +2407,7 @@
     var portHistoryCursor = null; // last item id for next page
     var portHistoryMore   = false;
     var portSelectedDate  = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
+    var portTimeframe     = '1m';
     var portCalYear       = new Date().getFullYear();
     var portCalMonth      = new Date().getMonth(); // 0-based
     var rfiOdds = {}; // game key -> {yesFair, noFair, yesAm, noAm}
@@ -3889,7 +3900,7 @@
             loadingEl.style.display = '';
             contentEl.style.display = 'none';
 
-            var res = await fetch('/api/real/portfolio', { credentials: 'same-origin' });
+            var res = await fetch('/api/real/portfolio?timeframe=' + portTimeframe, { credentials: 'same-origin' });
             var data = await res.json();
 
             loadingEl.style.display = 'none';
@@ -4097,6 +4108,28 @@
         }
         html += '</div>';
         calEl.innerHTML = html;
+    }
+
+    async function setPortTimeframe(tf) {
+        portTimeframe = tf;
+        ['1w','1m','3m'].forEach(function(t) {
+            var btn = document.getElementById('port-tf-' + t);
+            if (btn) btn.classList.toggle('port-tf-active', t === tf);
+        });
+        // Re-fetch performance stats with new timeframe (history stays cached)
+        try {
+            var res = await fetch('/api/real/portfolio?timeframe=' + tf, { credentials: 'same-origin' });
+            var data = await res.json();
+            if (data.performance) {
+                var sum = data.performance.summary || {};
+                var pnl = sum.pnl != null ? sum.pnl : null;
+                var roi = sum.pnlPercent != null ? sum.pnlPercent : null;
+                var pnlEl = document.getElementById('port-pnl');
+                var roiEl = document.getElementById('port-roi');
+                if (pnlEl && pnl != null) { pnlEl.textContent = (pnl >= 0 ? '+' : '') + fmtRax(pnl); pnlEl.style.color = pnl >= 0 ? 'var(--green)' : 'var(--red)'; }
+                if (roiEl && roi != null) { roiEl.textContent = (roi >= 0 ? '+' : '') + roi + '%'; roiEl.style.color = roi >= 0 ? 'var(--green)' : 'var(--red)'; }
+            }
+        } catch(e) {}
     }
 
     function selectCalDay(dateKey) {
