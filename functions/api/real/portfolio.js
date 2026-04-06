@@ -113,7 +113,7 @@ export async function onRequestGet({ request, env }) {
   const base = 'https://web.realapp.com';
   const url  = new URL(request.url);
 
-  // ?debug=1 — probe candidate paths in parallel with timeout
+  // ?debug=1 — probe candidate paths sequentially, stop at first 200
   if (url.searchParams.get('debug') === '1') {
     const candidates = [
       '/portfolio',
@@ -128,13 +128,21 @@ export async function onRequestGet({ request, env }) {
       '/positions',
       '/bets',
     ];
-    const entries = await Promise.all(
-      candidates.map(path =>
-        probe(`${base}${path}`, hdrs, 4000).then(result => [path, result])
-      )
-    );
-    const results = Object.fromEntries(entries);
+    const results = {};
+    for (const path of candidates) {
+      const r = await probe(`${base}${path}`, hdrs, 3000);
+      results[path] = { status: r.status };
+      // include body only for 200s to keep response small
+      if (r.status === 200) results[path].body = r.body;
+    }
     return json({ ok: true, connected: true, probe: results });
+  }
+
+  // ?path=/some/endpoint — test a single specific path and return full body
+  const testPath = url.searchParams.get('path');
+  if (testPath) {
+    const r = await probe(`${base}${testPath}`, hdrs, 5000);
+    return json({ ok: true, connected: true, path: testPath, status: r.status, body: r.body });
   }
 
   // Normal fetch — update these paths once debug reveals the correct ones
