@@ -4184,6 +4184,7 @@
         var market   = p.headerLabel || '—';
         var side     = p.outcomeLabel || '—';
         var details  = Array.isArray(p.details) ? p.details : [];
+        if (details.length) console.log('[RS details labels]', details.map(function(d){ return d.label; }), details);
         var avgDet   = details.find(function(d){ return d.label === 'Avg'; }) || {};
         var costDet  = details.find(function(d){ return d.label === 'Cost'; }) || {};
         var paidDet  = details.find(function(d){ return d.label === 'Paid'; }) || {};
