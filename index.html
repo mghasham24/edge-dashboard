@@ -2359,19 +2359,18 @@
 
                     <!-- Mobile panel -->
                     <div id="port-panel-mobile">
-                        <div style="font-size:13px;color:var(--muted);margin-bottom:18px;line-height:1.6">Real Sports requires their native app to log in — you can't sign in through a mobile browser. The workaround below sometimes works:</div>
+                        <div style="font-size:13px;color:var(--muted);margin-bottom:18px;line-height:1.6">Safari blocks pasting scripts in the address bar, but <strong style="color:var(--fg)">saved bookmarklets still work</strong>. Follow these steps while logged in to realsports.io on Safari:</div>
 
-                        <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:10px">Try: Safari "Request Desktop Site"</div>
                         <ol class="port-steps" style="margin-bottom:18px">
-                            <li>Open <strong>Safari</strong> and go to <strong>realsports.io</strong></li>
-                            <li>Tap the <strong>AA</strong> icon in the address bar → <strong>Request Desktop Website</strong></li>
-                            <li>Try logging in — if it works, copy the script below and paste it in the Safari address bar</li>
+                            <li>Copy the script below — tap <strong>Copy Script</strong></li>
+                            <li>In Safari, tap the <strong>Share</strong> button <span style="font-size:15px">⎋</span> → <strong>Add Bookmark</strong> → name it <em>RaxEdge</em> → <strong>Save</strong></li>
+                            <li>Tap the <strong>Bookmarks</strong> icon <span style="font-size:15px">📖</span>, find <em>RaxEdge</em>, then tap <strong>Edit</strong></li>
+                            <li>Clear the URL field and <strong>paste</strong> the copied script, then tap <strong>Done</strong></li>
+                            <li>Navigate to <strong>realsports.io</strong>, open Bookmarks, and tap <strong>RaxEdge</strong> — it will redirect back here and connect automatically</li>
                         </ol>
 
-                        <div style="display:flex;gap:8px;align-items:center;margin-bottom:18px">
-                            <code id="port-mobile-script-preview" style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:5px;padding:7px 10px;font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:var(--mono)">Loading...</code>
-                            <button id="port-copy-mobile-btn" onclick="copyMobileScript()" style="background:var(--accent);color:#fff;border:none;font-family:var(--sans);font-size:12px;font-weight:700;padding:7px 14px;border-radius:6px;cursor:pointer;white-space:nowrap;flex-shrink:0">Copy</button>
-                        </div>
+                        <button id="port-copy-mobile-btn" onclick="copyMobileScript()" style="width:100%;background:var(--accent);color:#fff;border:none;font-family:var(--sans);font-size:13px;font-weight:700;padding:10px;border-radius:7px;cursor:pointer;margin-bottom:6px">Copy Script</button>
+                        <div style="font-size:11px;color:var(--muted2);text-align:center;margin-bottom:18px" id="port-mobile-script-preview">Loading...</div>
 
                         <div style="border-top:1px solid var(--border);padding-top:14px;font-size:12px;color:var(--muted);line-height:1.5">
                             <strong style="color:var(--fg)">Easier:</strong> Connect once from the <button onclick="switchConnectTab('desktop')" style="background:none;border:none;color:var(--accent);cursor:pointer;padding:0;font-size:inherit;font-weight:700;text-decoration:underline">Desktop tab</button> — your portfolio will load on this phone automatically after that.
@@ -2899,9 +2898,10 @@
 
         window._bmScript = 'javascript:' + bmCode;
 
-        // Populate mobile script preview
+        // Populate mobile script preview (truncated for display)
         var preview = document.getElementById('port-mobile-script-preview');
-        if (preview) preview.textContent = 'javascript:' + bmCode;
+        var fullScript = 'javascript:' + bmCode;
+        if (preview) preview.textContent = fullScript.slice(0, 60) + '…';
     });
 
     function copyBmScript() {
