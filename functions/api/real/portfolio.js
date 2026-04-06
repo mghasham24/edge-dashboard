@@ -145,11 +145,23 @@ export async function onRequestGet({ request, env }) {
     return json({ ok: true, connected: true, path: testPath, status: r.status, body: r.body });
   }
 
-  // Fetch all three portfolio endpoints concurrently
+  // cursor param — for paginating through historyrollup
+  const cursor    = url.searchParams.get('cursor') || '';
+  const timeframe = url.searchParams.get('timeframe') || '1m';
+  const histUrl   = cursor
+    ? `${base}/predictions/historyrollup?cursor=${encodeURIComponent(cursor)}`
+    : `${base}/predictions/historyrollup`;
+
+  // Only fetch performance + open on first load (no cursor); history always
+  if (cursor) {
+    const history = await safeFetch(histUrl, hdrs);
+    return json({ ok: true, connected: true, history });
+  }
+
   const [perf, open, history] = await Promise.all([
-    safeFetch(`${base}/predictions/portfolioperformance?timeframe=1w`, hdrs),
+    safeFetch(`${base}/predictions/portfolioperformance?timeframe=${timeframe}`, hdrs),
     safeFetch(`${base}/predictions/openpositions`, hdrs),
-    safeFetch(`${base}/predictions/historyrollup`, hdrs),
+    safeFetch(histUrl, hdrs),
   ]);
 
   return json({ ok: true, connected: true, performance: perf, open, history });
