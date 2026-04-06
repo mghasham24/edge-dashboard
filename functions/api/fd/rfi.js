@@ -77,10 +77,12 @@ export async function onRequestGet(context) {
     const listData = await listRes.json();
 
     const events = listData?.attachments?.events || {};
-    const todayUTC = new Date().toISOString().slice(0, 10);
+    const nowMs = Date.now();
     const todayEvents = Object.values(events).filter(e => {
       if (!e.openDate) return false;
-      return e.openDate.slice(0, 10) === todayUTC;
+      const t = new Date(e.openDate).getTime();
+      // Include games starting within the next 36 hours
+      return t >= nowMs - 3 * 60 * 60 * 1000 && t <= nowMs + 36 * 60 * 60 * 1000;
     });
 
     if (!todayEvents.length) {
