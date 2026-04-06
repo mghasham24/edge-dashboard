@@ -2358,7 +2358,10 @@
                     <!-- Daily P&L Calendar -->
                     <div style="margin-bottom:28px">
                         <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-                            <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2)">Daily P&amp;L</div>
+                            <div>
+                                <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2)">Daily P&amp;L</div>
+                                <div id="port-cal-monthly-total" style="font-size:13px;font-weight:700;font-family:var(--mono);margin-top:2px"></div>
+                            </div>
                             <div style="display:flex;align-items:center;gap:6px;margin-left:auto">
                                 <button onclick="shiftCalMonth(-1)" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;padding:4px 10px;border-radius:4px;cursor:pointer">&#8592;</button>
                                 <span id="port-cal-label" style="font-size:12px;font-weight:600;font-family:var(--mono);min-width:90px;text-align:center"></span>
@@ -4187,6 +4190,18 @@
         if (nextBtn) nextBtn.disabled = (portCalYear === today.getFullYear() && portCalMonth === today.getMonth());
 
         var dailyMap = buildDailyMap(portHistoryAll);
+
+        // Monthly total
+        var monthTotal = 0;
+        var mm = String(portCalMonth + 1).padStart(2, '0');
+        Object.keys(dailyMap).forEach(function(k) {
+            if (k.startsWith(portCalYear + '-' + mm)) monthTotal += dailyMap[k].pnl;
+        });
+        var monthTotalEl = document.getElementById('port-cal-monthly-total');
+        if (monthTotalEl) {
+            monthTotalEl.textContent = (monthTotal >= 0 ? '+' : '') + fmtRax(monthTotal) + ' rax';
+            monthTotalEl.style.color = monthTotal > 0 ? 'var(--green)' : monthTotal < 0 ? 'var(--red)' : 'var(--muted)';
+        }
 
         var daysInMonth = new Date(portCalYear, portCalMonth + 1, 0).getDate();
         var firstDow = new Date(portCalYear, portCalMonth, 1).getDay(); // 0=Sun
