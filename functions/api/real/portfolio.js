@@ -78,15 +78,19 @@ async function safeFetch(url, headers) {
   }
 }
 
-async function probe(url, headers) {
+async function probe(url, headers, timeoutMs = 4000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const res = await fetch(url, { headers });
+    const res = await fetch(url, { headers, signal: ctrl.signal });
+    clearTimeout(timer);
     const text = await res.text();
     let body = null;
     try { body = JSON.parse(text); } catch { body = text.slice(0, 300); }
     return { status: res.status, body };
   } catch (e) {
-    return { status: 'err', body: e.message };
+    clearTimeout(timer);
+    return { status: e.name === 'AbortError' ? 'timeout' : 'err', body: e.message };
   }
 }
 
@@ -124,11 +128,9 @@ export async function onRequestGet({ request, env }) {
       '/positions',
       '/bets',
     ];
-    const timeout = (ms) => new Promise(r => setTimeout(() => r({ status: 'timeout', body: null }), ms));
     const entries = await Promise.all(
       candidates.map(path =>
-        Promise.race([probe(`${base}${path}`, hdrs), timeout(5000)])
-          .then(result => [path, result])
+        probe(`${base}${path}`, hdrs, 4000).then(result => [path, result])
       )
     );
     const results = Object.fromEntries(entries);
