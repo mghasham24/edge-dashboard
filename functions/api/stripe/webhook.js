@@ -92,20 +92,27 @@ export async function onRequestPost({ request, env }) {
           'UPDATE users SET plan=\'pro\', stripe_sub_id=?, pro_expires_at=? WHERE stripe_customer_id=?'
         ).bind(obj.subscription, proExpiresAt, obj.customer).run();
 
-        // Check if this user was referred — if so, reward referrer with +1 month Pro
+        // Reward referrer with +1 month Pro.
+        // Two sources: referred_by (set at signup) OR metadata.referrer_id (entered at checkout).
+        // Prefer checkout metadata if present, fall back to referred_by.
         const newPro = await env.DB.prepare(
           'SELECT id, referred_by FROM users WHERE stripe_customer_id=?'
         ).bind(obj.customer).first();
-        if (newPro && newPro.referred_by) {
+
+        const referrerIdFromMeta = obj.metadata && obj.metadata.referrer_id
+          ? parseInt(obj.metadata.referrer_id, 10) : null;
+        const referrerId = referrerIdFromMeta || (newPro && newPro.referred_by) || null;
+
+        if (referrerId) {
           const referrer = await env.DB.prepare(
             'SELECT id, plan, pro_expires_at FROM users WHERE id=?'
-          ).bind(newPro.referred_by).first();
+          ).bind(referrerId).first();
           if (referrer) {
             const now = Math.floor(Date.now() / 1000);
             const base = (referrer.pro_expires_at && referrer.pro_expires_at > now)
               ? referrer.pro_expires_at
               : now;
-            const newExpiry = base + 30 * 86400; // +1 month
+            const newExpiry = base + 2592000; // +30 days
             await env.DB.prepare(
               'UPDATE users SET plan=\'pro\', pro_expires_at=? WHERE id=?'
             ).bind(newExpiry, referrer.id).run();
