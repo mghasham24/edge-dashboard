@@ -2353,26 +2353,25 @@
 
                     <!-- Method tabs -->
                     <div class="port-method-tabs">
-                        <button class="port-method-tab active" id="port-tab-username" onclick="switchConnectTab('username')">Username</button>
-                        <button class="port-method-tab" id="port-tab-desktop" onclick="switchConnectTab('desktop')">Desktop</button>
+                        <button class="port-method-tab active" id="port-tab-mobile" onclick="switchConnectTab('mobile')">📱 Mobile</button>
+                        <button class="port-method-tab" id="port-tab-desktop" onclick="switchConnectTab('desktop')">🖥 Desktop</button>
                     </div>
 
-                    <!-- Username lookup panel -->
-                    <div id="port-panel-username">
-                        <p style="font-size:13px;color:var(--muted);margin:0 0 16px;line-height:1.5">Enter your Real Sports username to connect your account — no desktop required.</p>
-                        <input
-                            id="port-username-input"
-                            class="port-username-input"
-                            type="text"
-                            placeholder="Your Real Sports username (e.g. moe_)"
-                            autocomplete="off"
-                            autocorrect="off"
-                            autocapitalize="none"
-                            spellcheck="false"
-                            onkeydown="if(event.key==='Enter')lookupRSUsername()"
-                        >
-                        <button class="port-lookup-btn" id="port-lookup-btn" onclick="lookupRSUsername()">Look Up Account</button>
-                        <div class="port-lookup-result" id="port-lookup-result" style="display:none"></div>
+                    <!-- Mobile panel -->
+                    <div id="port-panel-mobile">
+                        <ol class="port-steps">
+                            <li>Open <strong>Safari</strong> on your iPhone and log in to <strong>realsports.io</strong></li>
+                            <li>
+                                Copy the script below:<br>
+                                <div style="display:flex;gap:8px;align-items:center;margin-top:10px">
+                                    <code id="port-mobile-script-preview" style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:5px;padding:7px 10px;font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:var(--mono)">Loading...</code>
+                                    <button id="port-copy-mobile-btn" onclick="copyMobileScript()" style="background:var(--accent);color:#fff;border:none;font-family:var(--sans);font-size:12px;font-weight:700;padding:7px 14px;border-radius:6px;cursor:pointer;white-space:nowrap;flex-shrink:0">Copy</button>
+                                </div>
+                            </li>
+                            <li>In Safari, tap the <strong>address bar</strong>, type the letter <kbd style="background:var(--bg3);border:1px solid var(--border2);border-radius:3px;padding:1px 5px;font-size:11px">j</kbd> to make it editable, then <strong>select all</strong> and <strong>paste</strong> the copied script</li>
+                            <li>Tap <strong>Go</strong> — it will redirect back here and connect automatically</li>
+                        </ol>
+                        <div style="font-size:11px;color:var(--muted2);margin-top:4px">⚠️ This only works in <strong style="color:var(--fg)">Safari</strong> on iOS. Chrome and Firefox on mobile block javascript: URLs.</div>
                     </div>
 
                     <!-- Desktop bookmarklet panel -->
@@ -2396,15 +2395,6 @@
             <div id="portfolio-data-view" style="display:none">
                 <div id="portfolio-loading" style="color:var(--muted);font-size:13px;padding:20px 0">Loading portfolio...</div>
                 <div id="portfolio-content" style="display:none">
-                    <!-- Public-only upgrade banner (shown when connected via username only) -->
-                    <div id="port-public-banner" style="display:none;background:rgba(79,110,247,.08);border:1px solid rgba(79,110,247,.25);border-radius:8px;padding:12px 16px;margin-bottom:20px;align-items:center;gap:12px;flex-wrap:wrap">
-                        <div style="flex:1;min-width:0">
-                            <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:3px">Limited View</div>
-                            <div style="font-size:12px;color:var(--muted);line-height:1.4">You're connected via username. For full P&amp;L, ROI, and bet history, connect once from a desktop browser using the bookmarklet.</div>
-                        </div>
-                        <button onclick="switchConnectTab('desktop');document.getElementById('portfolio-connect-view').style.display='';document.getElementById('portfolio-data-view').style.display='none'" style="background:var(--accent);color:#fff;border:none;font-family:var(--sans);font-size:11px;font-weight:700;padding:7px 14px;border-radius:6px;cursor:pointer;white-space:nowrap;flex-shrink:0">Upgrade on Desktop</button>
-                    </div>
-
                     <!-- Stats row -->
                     <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
                         <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2)">Performance</div>
@@ -2904,6 +2894,10 @@
         if (bmLink) bmLink.href = 'javascript:' + bmCode;
 
         window._bmScript = 'javascript:' + bmCode;
+
+        // Populate mobile script preview
+        var preview = document.getElementById('port-mobile-script-preview');
+        if (preview) preview.textContent = 'javascript:' + bmCode;
     });
 
     function copyBmScript() {
@@ -4028,64 +4022,29 @@
     }
 
     function switchConnectTab(tab) {
-        var isUsername = tab === 'username';
-        document.getElementById('port-tab-username').classList.toggle('active', isUsername);
-        document.getElementById('port-tab-desktop').classList.toggle('active', !isUsername);
-        document.getElementById('port-panel-username').style.display = isUsername ? '' : 'none';
-        document.getElementById('port-panel-desktop').style.display = isUsername ? 'none' : '';
+        var isMobile = tab === 'mobile';
+        document.getElementById('port-tab-mobile').classList.toggle('active', isMobile);
+        document.getElementById('port-tab-desktop').classList.toggle('active', !isMobile);
+        document.getElementById('port-panel-mobile').style.display = isMobile ? '' : 'none';
+        document.getElementById('port-panel-desktop').style.display = isMobile ? 'none' : '';
     }
 
-    async function lookupRSUsername() {
-        var input = document.getElementById('port-username-input');
-        var btn = document.getElementById('port-lookup-btn');
-        var resultEl = document.getElementById('port-lookup-result');
-        var username = (input.value || '').trim().replace(/^@/, '');
-        if (!username) { input.focus(); return; }
-
-        btn.disabled = true;
-        btn.textContent = 'Looking up...';
-        resultEl.style.display = 'none';
-        resultEl.className = 'port-lookup-result';
-
-        try {
-            var res = await fetch('/api/real/public?username=' + encodeURIComponent(username), { credentials: 'same-origin' });
-            var data = await res.json();
-
-            if (data.ok && data.userId) {
-                // Found a user — now try to connect via userId (store it server-side)
-                var connectRes = await fetch('/api/real/connect', {
-                    method: 'POST',
-                    credentials: 'same-origin',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ rs_username: username, rs_user_id: data.userId })
-                });
-                var connectData = await connectRes.json();
-                if (connectData.ok) {
-                    resultEl.className = 'port-lookup-result success';
-                    resultEl.textContent = 'Connected! Loading your portfolio...';
-                    resultEl.style.display = '';
-                    setTimeout(function() { loadPortfolio(true); }, 800);
-                    return;
-                }
-            }
-
-            // No public data found — show helpful message + suggest desktop connect
-            resultEl.className = 'port-lookup-result error';
-            if (data.ok === false && !data.userId) {
-                resultEl.innerHTML = 'Username <strong>' + username.replace(/</g,'&lt;') + '</strong> not found on Real Sports, or the account isn\'t publicly accessible.<br><br>'
-                    + '<span style="color:var(--muted)">Try the Desktop method for full access.</span>';
-            } else {
-                resultEl.innerHTML = 'Could not connect automatically. Try the <button onclick="switchConnectTab(\'desktop\')" style="background:none;border:none;color:var(--accent);cursor:pointer;padding:0;font-size:inherit;text-decoration:underline">Desktop</button> method instead.';
-            }
-            resultEl.style.display = '';
-        } catch (e) {
-            resultEl.className = 'port-lookup-result error';
-            resultEl.textContent = 'Network error. Please try again.';
-            resultEl.style.display = '';
-        } finally {
-            btn.disabled = false;
-            btn.textContent = 'Look Up Account';
-        }
+    function copyMobileScript() {
+        var script = window._bmScript;
+        if (!script) return;
+        var btn = document.getElementById('port-copy-mobile-btn');
+        navigator.clipboard.writeText(script).then(function() {
+            if (btn) { btn.textContent = 'Copied!'; setTimeout(function(){ btn.textContent = 'Copy'; }, 2000); }
+        }).catch(function() {
+            var ta = document.createElement('textarea');
+            ta.value = script;
+            ta.style.cssText = 'position:fixed;opacity:0';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            if (btn) { btn.textContent = 'Copied!'; setTimeout(function(){ btn.textContent = 'Copy'; }, 2000); }
+        });
     }
 
     function showPortfolioTab() {
