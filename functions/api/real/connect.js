@@ -19,7 +19,24 @@ export async function onRequest({ request, env }) {
     let body;
     try { body = await request.json(); } catch { return fail(400, 'Invalid JSON'); }
 
-    const { auth_token, device_uuid } = body;
+    const { auth_token, device_uuid, rs_username, rs_user_id } = body;
+
+    // Username-based connect (mobile public lookup path)
+    if (rs_username && rs_user_id) {
+      await ensureUsernameColumns(env.DB);
+      const now = Math.floor(Date.now() / 1000);
+      await env.DB.prepare(
+        `INSERT INTO real_auth (user_id, rs_username, rs_user_id, updated_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(user_id) DO UPDATE SET
+           rs_username = excluded.rs_username,
+           rs_user_id  = excluded.rs_user_id,
+           updated_at  = excluded.updated_at`
+      ).bind(session.user_id, String(rs_username), String(rs_user_id), now).run();
+      return json({ ok: true, method: 'username' });
+    }
+
+    // Token-based connect (desktop bookmarklet path)
     if (!auth_token || typeof auth_token !== 'string' || !auth_token.includes('!')) {
       return fail(400, 'Invalid auth_token format');
     }
@@ -29,12 +46,12 @@ export async function onRequest({ request, env }) {
       `INSERT INTO real_auth (user_id, auth_token, device_uuid, updated_at)
        VALUES (?, ?, ?, ?)
        ON CONFLICT(user_id) DO UPDATE SET
-         auth_token = excluded.auth_token,
+         auth_token  = excluded.auth_token,
          device_uuid = excluded.device_uuid,
-         updated_at = excluded.updated_at`
+         updated_at  = excluded.updated_at`
     ).bind(session.user_id, auth_token, device_uuid || null, now).run();
 
-    return json({ ok: true });
+    return json({ ok: true, method: 'token' });
   }
 
   return fail(405, 'Method not allowed');
@@ -44,11 +61,19 @@ async function ensureTable(db) {
   await db.prepare(`
     CREATE TABLE IF NOT EXISTS real_auth (
       user_id    INTEGER PRIMARY KEY,
-      auth_token TEXT    NOT NULL,
+      auth_token TEXT,
       device_uuid TEXT,
+      rs_username TEXT,
+      rs_user_id  TEXT,
       updated_at INTEGER NOT NULL
     )
   `).run().catch(() => {});
+}
+
+async function ensureUsernameColumns(db) {
+  // Add columns if they don't exist yet (safe to call repeatedly)
+  await db.prepare(`ALTER TABLE real_auth ADD COLUMN rs_username TEXT`).run().catch(() => {});
+  await db.prepare(`ALTER TABLE real_auth ADD COLUMN rs_user_id TEXT`).run().catch(() => {});
 }
 
 function getToken(req) {

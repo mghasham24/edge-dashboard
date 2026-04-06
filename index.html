@@ -1379,6 +1379,84 @@
         background: #6280f8
     }
 
+    .port-method-tabs {
+        display: flex;
+        gap: 0;
+        margin-bottom: 20px;
+        border-bottom: 1px solid var(--border2)
+    }
+
+    .port-method-tab {
+        background: none;
+        border: none;
+        border-bottom: 2px solid transparent;
+        color: var(--muted);
+        font-family: var(--sans);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: .06em;
+        text-transform: uppercase;
+        padding: 8px 14px;
+        cursor: pointer;
+        margin-bottom: -1px;
+        transition: color .15s, border-color .15s
+    }
+
+    .port-method-tab.active {
+        color: var(--accent);
+        border-bottom-color: var(--accent)
+    }
+
+    .port-method-tab:hover:not(.active) {
+        color: var(--fg)
+    }
+
+    .port-username-input {
+        width: 100%;
+        background: var(--bg3);
+        border: 1px solid var(--border2);
+        color: var(--fg);
+        font-family: var(--sans);
+        font-size: 14px;
+        padding: 10px 14px;
+        border-radius: 7px;
+        outline: none;
+        box-sizing: border-box;
+        transition: border-color .15s
+    }
+
+    .port-username-input:focus {
+        border-color: var(--accent)
+    }
+
+    .port-lookup-btn {
+        width: 100%;
+        background: var(--accent);
+        color: #fff;
+        border: none;
+        font-family: var(--sans);
+        font-size: 13px;
+        font-weight: 700;
+        padding: 10px;
+        border-radius: 7px;
+        cursor: pointer;
+        margin-top: 10px;
+        transition: background .15s
+    }
+
+    .port-lookup-btn:hover { background: #6280f8 }
+    .port-lookup-btn:disabled { opacity: .5; cursor: default }
+
+    .port-lookup-result {
+        margin-top: 12px;
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.6
+    }
+
+    .port-lookup-result.error { color: var(--red) }
+    .port-lookup-result.success { color: var(--green) }
+
     .port-table {
         width: 100%;
         border-collapse: collapse;
@@ -2273,9 +2351,32 @@
                     <h2>Connect Real Sports</h2>
                     <p>Link your Real Sports account to automatically track your open positions, settled bets, P&amp;L, and ROI — all in one place.</p>
 
-                    <!-- Desktop instructions -->
-                    <div style="margin-bottom:20px">
-                        <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:10px">Desktop</div>
+                    <!-- Method tabs -->
+                    <div class="port-method-tabs">
+                        <button class="port-method-tab active" id="port-tab-username" onclick="switchConnectTab('username')">Username</button>
+                        <button class="port-method-tab" id="port-tab-desktop" onclick="switchConnectTab('desktop')">Desktop</button>
+                    </div>
+
+                    <!-- Username lookup panel -->
+                    <div id="port-panel-username">
+                        <p style="font-size:13px;color:var(--muted);margin:0 0 16px;line-height:1.5">Enter your Real Sports username to connect your account — no desktop required.</p>
+                        <input
+                            id="port-username-input"
+                            class="port-username-input"
+                            type="text"
+                            placeholder="Your Real Sports username (e.g. moe_)"
+                            autocomplete="off"
+                            autocorrect="off"
+                            autocapitalize="none"
+                            spellcheck="false"
+                            onkeydown="if(event.key==='Enter')lookupRSUsername()"
+                        >
+                        <button class="port-lookup-btn" id="port-lookup-btn" onclick="lookupRSUsername()">Look Up Account</button>
+                        <div class="port-lookup-result" id="port-lookup-result" style="display:none"></div>
+                    </div>
+
+                    <!-- Desktop bookmarklet panel -->
+                    <div id="port-panel-desktop" style="display:none">
                         <ol class="port-steps">
                             <li>Log in to <strong>realsports.io</strong> in your browser</li>
                             <li>Drag the button below to your bookmarks bar:<br>
@@ -2287,13 +2388,7 @@
                         </ol>
                     </div>
 
-                    <!-- Mobile note -->
-                    <div style="border-top:1px solid var(--border);padding-top:16px;margin-bottom:20px;display:flex;gap:10px;align-items:flex-start">
-                        <div style="font-size:16px;flex-shrink:0">📱</div>
-                        <div style="font-size:12px;color:var(--muted)"><strong style="color:var(--fg)">On mobile?</strong> Connect once from a desktop browser — after that your portfolio loads on any device automatically.</div>
-                    </div>
-
-                    <div style="font-size:11px;color:var(--muted2)">Your Real Sports token is stored securely and only used to fetch your own portfolio data.</div>
+                    <div style="font-size:11px;color:var(--muted2);margin-top:20px">Your Real Sports token is stored securely and only used to fetch your own portfolio data.</div>
                 </div>
             </div>
 
@@ -2301,6 +2396,15 @@
             <div id="portfolio-data-view" style="display:none">
                 <div id="portfolio-loading" style="color:var(--muted);font-size:13px;padding:20px 0">Loading portfolio...</div>
                 <div id="portfolio-content" style="display:none">
+                    <!-- Public-only upgrade banner (shown when connected via username only) -->
+                    <div id="port-public-banner" style="display:none;background:rgba(79,110,247,.08);border:1px solid rgba(79,110,247,.25);border-radius:8px;padding:12px 16px;margin-bottom:20px;align-items:center;gap:12px;flex-wrap:wrap">
+                        <div style="flex:1;min-width:0">
+                            <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:3px">Limited View</div>
+                            <div style="font-size:12px;color:var(--muted);line-height:1.4">You're connected via username. For full P&amp;L, ROI, and bet history, connect once from a desktop browser using the bookmarklet.</div>
+                        </div>
+                        <button onclick="switchConnectTab('desktop');document.getElementById('portfolio-connect-view').style.display='';document.getElementById('portfolio-data-view').style.display='none'" style="background:var(--accent);color:#fff;border:none;font-family:var(--sans);font-size:11px;font-weight:700;padding:7px 14px;border-radius:6px;cursor:pointer;white-space:nowrap;flex-shrink:0">Upgrade on Desktop</button>
+                    </div>
+
                     <!-- Stats row -->
                     <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
                         <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2)">Performance</div>
@@ -3923,6 +4027,67 @@
         document.getElementById('referral-panel').classList.remove('visible');
     }
 
+    function switchConnectTab(tab) {
+        var isUsername = tab === 'username';
+        document.getElementById('port-tab-username').classList.toggle('active', isUsername);
+        document.getElementById('port-tab-desktop').classList.toggle('active', !isUsername);
+        document.getElementById('port-panel-username').style.display = isUsername ? '' : 'none';
+        document.getElementById('port-panel-desktop').style.display = isUsername ? 'none' : '';
+    }
+
+    async function lookupRSUsername() {
+        var input = document.getElementById('port-username-input');
+        var btn = document.getElementById('port-lookup-btn');
+        var resultEl = document.getElementById('port-lookup-result');
+        var username = (input.value || '').trim().replace(/^@/, '');
+        if (!username) { input.focus(); return; }
+
+        btn.disabled = true;
+        btn.textContent = 'Looking up...';
+        resultEl.style.display = 'none';
+        resultEl.className = 'port-lookup-result';
+
+        try {
+            var res = await fetch('/api/real/public?username=' + encodeURIComponent(username), { credentials: 'same-origin' });
+            var data = await res.json();
+
+            if (data.ok && data.userId) {
+                // Found a user — now try to connect via userId (store it server-side)
+                var connectRes = await fetch('/api/real/connect', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ rs_username: username, rs_user_id: data.userId })
+                });
+                var connectData = await connectRes.json();
+                if (connectData.ok) {
+                    resultEl.className = 'port-lookup-result success';
+                    resultEl.textContent = 'Connected! Loading your portfolio...';
+                    resultEl.style.display = '';
+                    setTimeout(function() { loadPortfolio(true); }, 800);
+                    return;
+                }
+            }
+
+            // No public data found — show helpful message + suggest desktop connect
+            resultEl.className = 'port-lookup-result error';
+            if (data.ok === false && !data.userId) {
+                resultEl.innerHTML = 'Username <strong>' + username.replace(/</g,'&lt;') + '</strong> not found on Real Sports, or the account isn\'t publicly accessible.<br><br>'
+                    + '<span style="color:var(--muted)">Try the Desktop method for full access.</span>';
+            } else {
+                resultEl.innerHTML = 'Could not connect automatically. Try the <button onclick="switchConnectTab(\'desktop\')" style="background:none;border:none;color:var(--accent);cursor:pointer;padding:0;font-size:inherit;text-decoration:underline">Desktop</button> method instead.';
+            }
+            resultEl.style.display = '';
+        } catch (e) {
+            resultEl.className = 'port-lookup-result error';
+            resultEl.textContent = 'Network error. Please try again.';
+            resultEl.style.display = '';
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Look Up Account';
+        }
+    }
+
     function showPortfolioTab() {
         document.getElementById('sport-tabs').style.display = 'none';
         document.querySelector('.controls').style.display = 'none';
@@ -4038,6 +4203,10 @@
             document.getElementById('port-refresh-btn').style.display = '';
             document.getElementById('port-disconnect-btn').style.display = '';
             contentEl.style.display = '';
+
+            // Show/hide the public-only upgrade banner
+            var pubBanner = document.getElementById('port-public-banner');
+            if (pubBanner) pubBanner.style.display = data.publicOnly ? 'flex' : 'none';
 
             // Merge fresh page 1: prepend any bets not already in cache
             if (cache && cache.items && cache.items.length) {

@@ -101,13 +101,18 @@ export async function onRequestGet({ request, env }) {
   let authRow = null;
   try {
     authRow = await env.DB.prepare(
-      'SELECT auth_token, device_uuid FROM real_auth WHERE user_id = ?'
+      'SELECT auth_token, device_uuid, rs_username, rs_user_id FROM real_auth WHERE user_id = ?'
     ).bind(session.user_id).first();
   } catch {
     return json({ ok: true, connected: false });
   }
 
   if (!authRow) return json({ ok: true, connected: false });
+
+  // Username-only connection (no token yet) — return limited public data
+  if (!authRow.auth_token && authRow.rs_user_id) {
+    return handlePublicUserPortfolio(authRow.rs_username, authRow.rs_user_id, request);
+  }
 
   const hdrs = buildHeaders(authRow.auth_token, authRow.device_uuid);
   const base = 'https://web.realapp.com';
@@ -196,6 +201,49 @@ export async function onRequestGet({ request, env }) {
   ]);
 
   return json({ ok: true, connected: true, performance: perf, open, history });
+}
+
+// Handle portfolio for users connected via username (no auth token)
+// Returns whatever public data we can find, plus a flag indicating upgrade needed
+async function handlePublicUserPortfolio(rsUsername, rsUserId, request) {
+  const base = 'https://web.realapp.com';
+  const hdrs = {
+    'Accept': 'application/json',
+    'Content-Type': 'application/json',
+    'Origin': 'https://realsports.io',
+    'Referer': 'https://realsports.io/',
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
+    'real-device-type': 'desktop_web',
+    'real-device-uuid': '2e0a38e2-0ee8-4f93-9a34-218ac1d10161',
+    'real-request-token': hashidsEncode(Date.now()),
+    'real-version': '30'
+  };
+
+  // Try to fetch public prediction/user data using the stored userId
+  const predPaths = [
+    `/users/${rsUserId}/predictions`,
+    `/predictions/user/${rsUserId}`,
+    `/users/${rsUserId}/positions`,
+    `/users/${rsUserId}/historyrollup`,
+  ];
+
+  let publicPredictions = null;
+  for (const path of predPaths) {
+    const r = await probe(`${base}${path}`, hdrs, 4000);
+    if (r.status === 200) { publicPredictions = r.body; break; }
+  }
+
+  return json({
+    ok: true,
+    connected: true,
+    publicOnly: true,          // frontend uses this to show upgrade prompt
+    rsUsername,
+    rsUserId,
+    predictions: publicPredictions,
+    performance: null,
+    open: null,
+    history: null,
+  });
 }
 
 function getToken(req) {
