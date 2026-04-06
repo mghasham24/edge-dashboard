@@ -2406,9 +2406,18 @@
     var portHistoryAll    = [];   // accumulated all settled history items
     var portHistoryCursor = null; // last item id for next page
     var portHistoryMore   = false;
-    var portSelectedDate  = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
+    var portSelectedDate  = localDateKey(new Date());
     var portTimeframe     = '1m';
     var PORT_CACHE_KEY    = 'rax_port_history_v1';
+
+    // Returns "YYYY-MM-DD" in LOCAL timezone (not UTC)
+    function localDateKey(dateOrIso) {
+        var d = (dateOrIso instanceof Date) ? dateOrIso : new Date(dateOrIso);
+        var y = d.getFullYear();
+        var m = String(d.getMonth() + 1).padStart(2, '0');
+        var day = String(d.getDate()).padStart(2, '0');
+        return y + '-' + m + '-' + day;
+    }
 
     function saveHistoryCache() {
         try {
@@ -3924,7 +3933,7 @@
                 portHistoryAll    = cache.items;
                 portHistoryCursor = cache.cursor;
                 portHistoryMore   = cache.hasMore;
-                portSelectedDate  = new Date().toISOString().slice(0, 10);
+                portSelectedDate  = localDateKey(new Date());
                 var _di = document.getElementById('port-date-filter');
                 if (_di) _di.value = portSelectedDate;
                 loadingEl.style.display = 'none';
@@ -4072,7 +4081,7 @@
         document.getElementById('port-settled-count').textContent = portHistoryAll.length + (portHistoryMore ? '+' : '');
 
         // Default date filter to today, set input value
-        portSelectedDate = new Date().toISOString().slice(0, 10);
+        portSelectedDate = localDateKey(new Date());
         var dateInput = document.getElementById('port-date-filter');
         if (dateInput) dateInput.value = portSelectedDate;
 
@@ -4101,7 +4110,7 @@
         var map = {};
         items.forEach(function(p) {
             if (!p.transactedAt) return;
-            var dateKey = p.transactedAt.slice(0, 10); // "2026-04-06"
+            var dateKey = localDateKey(p.transactedAt);
             if (!map[dateKey]) map[dateKey] = { pnl: 0, bets: 0 };
             var details = Array.isArray(p.details) ? p.details : [];
             var cost = parseRaxDisplay((details.find(function(d){ return d.label==='Cost'; }) || {}).display);
@@ -4247,7 +4256,7 @@
     function renderHistoryForDate(dateKey) {
         portSelectedDate = dateKey;
         var filtered = portHistoryAll.filter(function(p) {
-            return p.transactedAt && p.transactedAt.slice(0, 10) === dateKey;
+            return p.transactedAt && localDateKey(p.transactedAt) === dateKey;
         });
         var histTbody = document.getElementById('port-history-tbody');
         if (!histTbody) return;
