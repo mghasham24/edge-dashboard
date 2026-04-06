@@ -3993,23 +3993,11 @@
         var openPos  = (data.open && data.open.positions) || [];
         var histItems = (data.history && data.history.items) || [];
 
-        // --- Stat cards ---
-        var pnl    = summary.pnl != null ? Number(summary.pnl) : null;
-        var roiPct = summary.pnlPercent != null ? Number(summary.pnlPercent) : null;
-
-        var pnlEl = document.getElementById('port-pnl');
-        pnlEl.textContent = pnl != null ? (pnl >= 0 ? '+' : '') + fmtRax(pnl) : '—';
-        pnlEl.style.color = pnl == null ? 'var(--muted)' : pnl >= 0 ? 'var(--green)' : 'var(--red)';
-
-        var roiEl = document.getElementById('port-roi');
-        roiEl.textContent = roiPct != null ? (roiPct >= 0 ? '+' : '') + roiPct.toFixed(1) + '%' : '—';
-        roiEl.style.color = roiPct == null ? 'var(--muted)' : roiPct >= 0 ? 'var(--green)' : 'var(--red)';
-
         var activePos = openPos.filter(function(p) { return !p.isSettled; });
         document.getElementById('port-open-count').textContent = activePos.length;
 
-        // --- P&L sparkline ---
-        renderSparkline(perfHistory, pnl);
+        // --- P&L sparkline (uses API history series) ---
+        renderSparkline(perfHistory, summary.pnl != null ? Number(summary.pnl) : null);
 
         // --- Build gameId → rawRows map for edge matching ---
         var gidToRows = {};
@@ -4086,6 +4074,7 @@
         if (dateInput) dateInput.value = portSelectedDate;
 
         updatePortProfit();
+        updatePerfCards();
         renderHistoryForDate(portSelectedDate);
 
         // Init calendar to current month and render
@@ -4173,26 +4162,37 @@
         calEl.innerHTML = html;
     }
 
-    async function setPortTimeframe(tf) {
+    function calcPerfForPeriod(days) {
+        var cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+        var totalCost = 0, totalPaid = 0, count = 0;
+        portHistoryAll.forEach(function(p) {
+            if (!p.transactedAt || new Date(p.transactedAt).getTime() < cutoff) return;
+            var details = Array.isArray(p.details) ? p.details : [];
+            var cost = parseRaxDisplay((details.find(function(d){ return d.label==='Cost'; }) || {}).display);
+            var paid = parseRaxDisplay((details.find(function(d){ return d.label==='Paid'; }) || {}).display);
+            totalCost += cost; totalPaid += paid; count++;
+        });
+        var pnl = totalPaid - totalCost;
+        var roi = totalCost > 0 ? (pnl / totalCost * 100) : 0;
+        return { pnl: pnl, roi: roi, count: count };
+    }
+
+    function updatePerfCards() {
+        var days = portTimeframe === '1w' ? 7 : portTimeframe === '3m' ? 90 : 30;
+        var calc = calcPerfForPeriod(days);
+        var pnlEl = document.getElementById('port-pnl');
+        var roiEl = document.getElementById('port-roi');
+        if (pnlEl) { pnlEl.textContent = (calc.pnl >= 0 ? '+' : '') + fmtRax(calc.pnl); pnlEl.style.color = calc.pnl >= 0 ? 'var(--green)' : 'var(--red)'; }
+        if (roiEl) { roiEl.textContent = (calc.roi >= 0 ? '+' : '') + calc.roi.toFixed(1) + '%'; roiEl.style.color = calc.roi >= 0 ? 'var(--green)' : 'var(--red)'; }
+    }
+
+    function setPortTimeframe(tf) {
         portTimeframe = tf;
         ['1w','1m','3m'].forEach(function(t) {
             var btn = document.getElementById('port-tf-' + t);
             if (btn) btn.classList.toggle('port-tf-active', t === tf);
         });
-        // Re-fetch performance stats with new timeframe (history stays cached)
-        try {
-            var res = await fetch('/api/real/portfolio?timeframe=' + tf, { credentials: 'same-origin' });
-            var data = await res.json();
-            if (data.performance) {
-                var sum = data.performance.summary || {};
-                var pnl = sum.pnl != null ? sum.pnl : null;
-                var roi = sum.pnlPercent != null ? sum.pnlPercent : null;
-                var pnlEl = document.getElementById('port-pnl');
-                var roiEl = document.getElementById('port-roi');
-                if (pnlEl && pnl != null) { pnlEl.textContent = (pnl >= 0 ? '+' : '') + fmtRax(pnl); pnlEl.style.color = pnl >= 0 ? 'var(--green)' : 'var(--red)'; }
-                if (roiEl && roi != null) { roiEl.textContent = (roi >= 0 ? '+' : '') + roi + '%'; roiEl.style.color = roi >= 0 ? 'var(--green)' : 'var(--red)'; }
-            }
-        } catch(e) {}
+        updatePerfCards();
     }
 
     function selectCalDay(dateKey) {
@@ -4247,6 +4247,7 @@
         var cntEl = document.getElementById('port-settled-count');
         if (cntEl) cntEl.textContent = portHistoryAll.length;
         updatePortProfit();
+        updatePerfCards();
         renderCalendar();
         renderHistoryForDate(portSelectedDate);
         // Save everything to cache so next visit is instant
