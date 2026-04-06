@@ -2315,25 +2315,28 @@
 
                     <!-- Settled history -->
                     <div>
-                        <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:12px">Settled History</div>
+                        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+                            <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2)">Settled History</div>
+                            <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+                                <input type="date" id="port-date-filter" onchange="renderHistoryForDate(this.value)" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--mono);font-size:12px;padding:4px 8px;border-radius:5px;cursor:pointer">
+                                <span id="port-load-status" style="font-size:11px;color:var(--muted2)"></span>
+                            </div>
+                        </div>
                         <div class="admin-table-wrap">
                             <table class="port-table">
                                 <thead>
                                     <tr>
-                                        <th>Game</th>
+                                        <th>Date</th>
+                                        <th>Matchup</th>
                                         <th>Market</th>
                                         <th>Side</th>
-                                        <th class="r">Amount</th>
-                                        <th class="r">Payout</th>
-                                        <th class="r">P&amp;L</th>
+                                        <th class="r" title="Rax spent">Cost</th>
+                                        <th class="r" title="Rax received">Paid</th>
                                         <th>Result</th>
                                     </tr>
                                 </thead>
                                 <tbody id="port-history-tbody"></tbody>
                             </table>
-                        </div>
-                        <div id="port-load-more-wrap" style="margin-top:12px;display:none">
-                            <button onclick="loadMoreHistory()" id="port-load-more-btn" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:8px 18px;border-radius:5px;cursor:pointer;width:100%">Load More</button>
                         </div>
                     </div>
 
@@ -2393,6 +2396,7 @@
     var portHistoryAll    = [];   // accumulated all settled history items
     var portHistoryCursor = null; // last item id for next page
     var portHistoryMore   = false;
+    var portSelectedDate  = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
     var portCalYear       = new Date().getFullYear();
     var portCalMonth      = new Date().getMonth(); // 0-based
     var rfiOdds = {}; // game key -> {yesFair, noFair, yesAm, noAm}
@@ -3994,20 +3998,6 @@
             }).join('');
         }
 
-        // --- History (historyrollup.items) ---
-        // Win/loss: details[Paid].color === 'green' → win, 'default' → loss
-        var histHead = document.querySelector('#port-history-tbody').closest('table').querySelector('thead tr');
-        if (histHead) histHead.innerHTML = '<th>Date</th><th>Matchup</th><th>Market</th><th>Side</th><th class="r" title="Rax spent">Cost</th><th class="r" title="Rax received">Paid</th><th>Result</th>';
-
-        var histTbody = document.getElementById('port-history-tbody');
-        if (!histItems.length) {
-            histTbody.innerHTML = '<tr><td colspan="6" style="color:var(--muted);padding:20px 12px">No settled bets yet</td></tr>';
-        } else {
-            histTbody.innerHTML = histItems.map(function(p) {
-                return '<tr>' + histRowHtml(p) + '</tr>';
-            }).join('');
-        }
-
         // Store history state for pagination + calendar
         // cursor = latestLedgerTimestamp of last item (Real Sports uses ?before=TIMESTAMP)
         portHistoryAll    = histItems.slice();
@@ -4015,13 +4005,22 @@
             ? (histItems[histItems.length - 1].latestLedgerTimestamp || histItems[histItems.length - 1].transactedAt)
             : null;
         portHistoryMore   = !!(data.history && data.history.hasMore);
+
+        // Default date filter to today, set input value
+        portSelectedDate = new Date().toISOString().slice(0, 10);
+        var dateInput = document.getElementById('port-date-filter');
+        if (dateInput) dateInput.value = portSelectedDate;
+
         updatePortProfit();
-        document.getElementById('port-load-more-wrap').style.display = portHistoryMore ? '' : 'none';
+        renderHistoryForDate(portSelectedDate);
 
         // Init calendar to current month and render
         portCalYear  = new Date().getFullYear();
         portCalMonth = new Date().getMonth();
         renderCalendar();
+
+        // Auto-load all remaining history pages in background
+        autoLoadAllHistory();
 
         document.getElementById('port-debug').style.display = 'none';
     }
@@ -4090,7 +4089,8 @@
                 pnlHtml = '<span class="port-cal-pnl" style="color:' + pnlColor + '">' + pnlStr + '</span>'
                         + '<span class="port-cal-bets">' + dayData.bets + ' bet' + (dayData.bets !== 1 ? 's' : '') + '</span>';
             }
-            html += '<div class="' + cls + '" title="' + key + '">'
+            var clickable = dayData ? ' style="cursor:pointer" onclick="selectCalDay(\'' + key + '\')"' : '';
+            html += '<div class="' + cls + '" title="' + key + '"' + clickable + '>'
                   + '<span class="port-cal-dn">' + d + '</span>'
                   + pnlHtml
                   + '</div>';
@@ -4099,29 +4099,27 @@
         calEl.innerHTML = html;
     }
 
+    function selectCalDay(dateKey) {
+        portSelectedDate = dateKey;
+        var dateInput = document.getElementById('port-date-filter');
+        if (dateInput) dateInput.value = dateKey;
+        renderHistoryForDate(dateKey);
+        // Scroll history table into view
+        var histEl = document.getElementById('port-history-tbody');
+        if (histEl) histEl.closest('table').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
     function shiftCalMonth(delta) {
         portCalMonth += delta;
         if (portCalMonth > 11) { portCalMonth = 0; portCalYear++; }
         if (portCalMonth < 0)  { portCalMonth = 11; portCalYear--; }
-        // If navigating to a month before our loaded history, try loading more
-        if (portHistoryMore && portHistoryAll.length) {
-            var oldest = portHistoryAll[portHistoryAll.length - 1].transactedAt;
-            var oldestDate = oldest ? new Date(oldest) : null;
-            var viewingDate = new Date(portCalYear, portCalMonth, 1);
-            if (oldestDate && viewingDate < oldestDate) {
-                loadMoreHistory(true); // silent load — re-renders calendar when done
-                return;
-            }
-        }
         renderCalendar();
     }
 
-    async function loadMoreHistory(silent) {
-        if (!portHistoryMore) return;
-        var btn = document.getElementById('port-load-more-btn');
-        if (btn && !silent) { btn.textContent = 'Loading...'; btn.disabled = true; }
+    async function loadMoreHistory() {
+        if (!portHistoryMore || !portHistoryCursor) return false;
         try {
-            var fetchUrl = '/api/real/portfolio?before=' + encodeURIComponent(portHistoryCursor || '');
+            var fetchUrl = '/api/real/portfolio?before=' + encodeURIComponent(portHistoryCursor);
             var res = await fetch(fetchUrl, { credentials: 'same-origin' });
             var data = await res.json();
             var newItems = (data.history && data.history.items) || [];
@@ -4130,20 +4128,44 @@
                 ? (newItems[newItems.length - 1].latestLedgerTimestamp || newItems[newItems.length - 1].transactedAt)
                 : null;
             portHistoryMore   = !!(data.history && data.history.hasMore);
+            return true;
+        } catch(e) {
+            return false;
+        }
+    }
 
-            appendHistoryRows(newItems);
+    async function autoLoadAllHistory() {
+        var statusEl = document.getElementById('port-load-status');
+        while (portHistoryMore) {
+            var ok = await loadMoreHistory();
+            if (!ok) break;
             updatePortProfit();
             renderCalendar();
+            renderHistoryForDate(portSelectedDate);
+            if (statusEl) statusEl.textContent = portHistoryMore ? 'Loading ' + portHistoryAll.length + ' bets…' : '';
+            // Small yield between pages to keep UI responsive
+            await new Promise(function(r){ setTimeout(r, 150); });
+        }
+        if (statusEl) statusEl.textContent = '';
+        updatePortProfit();
+        renderCalendar();
+        renderHistoryForDate(portSelectedDate);
+    }
 
-            document.getElementById('port-load-more-wrap').style.display = portHistoryMore ? '' : 'none';
-            if (!portHistoryMore) {
-                var wrap = document.getElementById('port-load-more-wrap');
-                if (wrap) wrap.innerHTML = '<div style="text-align:center;color:var(--muted2);font-size:12px;padding:8px">All bets loaded</div>';
-            }
-        } catch(e) {
-            if (btn) btn.textContent = 'Error — Retry';
-        } finally {
-            if (btn && !silent) { btn.textContent = 'Load More'; btn.disabled = false; }
+    function renderHistoryForDate(dateKey) {
+        portSelectedDate = dateKey;
+        var filtered = portHistoryAll.filter(function(p) {
+            return p.transactedAt && p.transactedAt.slice(0, 10) === dateKey;
+        });
+        var histTbody = document.getElementById('port-history-tbody');
+        if (!histTbody) return;
+        if (!filtered.length) {
+            var msg = portHistoryMore ? 'Still loading…' : 'No settled bets on this date';
+            histTbody.innerHTML = '<tr><td colspan="7" style="color:var(--muted);padding:20px 12px">' + msg + '</td></tr>';
+        } else {
+            histTbody.innerHTML = filtered.map(function(p) {
+                return '<tr>' + histRowHtml(p) + '</tr>';
+            }).join('');
         }
     }
 
@@ -4201,16 +4223,6 @@
             + '<td class="r" style="font-family:var(--mono);color:var(--muted)">' + escHtml(costDisp) + '</td>'
             + '<td class="r ' + (isWin ? 'port-win' : 'port-loss') + '" style="font-family:var(--mono)">' + escHtml(paidDisp) + '</td>'
             + '<td class="' + resCls + '" style="font-weight:700;font-size:12px">' + resLbl + '</td>';
-    }
-
-    function appendHistoryRows(items) {
-        var tbody = document.getElementById('port-history-tbody');
-        if (!tbody) return;
-        items.forEach(function(p) {
-            var tr = document.createElement('tr');
-            tr.innerHTML = histRowHtml(p);
-            tbody.appendChild(tr);
-        });
     }
 
     function renderSparkline(history, currentPnl) {
