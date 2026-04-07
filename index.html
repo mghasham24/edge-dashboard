@@ -2590,6 +2590,7 @@
                                     <option value="">All Results</option>
                                     <option value="win">Wins</option>
                                     <option value="loss">Losses</option>
+                                    <option value="cashout">Cashouts</option>
                                 </select>
                                 <select id="port-sort-by" onchange="applyPortFilters()" class="port-filter-sel">
                                     <option value="chrono-desc">Newest first</option>
@@ -4482,10 +4483,14 @@
     }
     function getHistResult(p) {
         var details = Array.isArray(p.details) ? p.details : [];
+        var costDet = details.find(function(d){ return d.label === 'Cost'; }) || {};
         var paidDet = details.find(function(d){ return d.label === 'Paid'; }) || {};
         var paidNum = parseRaxDisplay(paidDet.display);
-        if (paidDet.color === 'green' && paidNum > 0) return 'win';
-        if (paidDet.display === '0' || (!( paidDet.color === 'green' && paidNum > 0) && paidDet.color === 'default')) return 'loss';
+        var costNum = parseRaxDisplay(costDet.display);
+        var isGreenWin = paidDet.color === 'green' && paidNum > 0;
+        if (isGreenWin && paidNum >= costNum) return 'win';
+        if (isGreenWin && paidNum < costNum)  return 'cashout'; // early cashout — lost money
+        if (paidDet.display === '0' || paidDet.color === 'default') return 'loss';
         return '';
     }
     function getHistProfit(p) {
@@ -4835,12 +4840,16 @@
         var paidDisp = paidDet.display || '—';
         var paidNum  = parseRaxDisplay(paidDet.display);
         var costNum  = parseRaxDisplay(costDet.display);
-        var isWin    = paidDet.color === 'green' && paidNum > 0;
-        var isLoss   = paidDet.display === '0' || (!isWin && paidDet.color === 'default');
-        var resCls   = isWin ? 'port-win' : isLoss ? 'port-loss' : '';
-        var profit   = isWin ? ' <span style="font-size:11px;font-weight:600">+' + escHtml(fmtRax(paidNum - costNum)) + '</span>' : '';
-        var resLbl   = isWin ? 'Win' : isLoss ? 'Loss' : '—';
-        var trCls    = isWin ? 'port-card-win' : isLoss ? 'port-card-loss' : '';
+        var isWin      = paidDet.color === 'green' && paidNum > 0;
+        var isLoss     = paidDet.display === '0' || (!isWin && paidDet.color === 'default');
+        var profitNum  = paidNum - costNum;
+        // Early cashout: API marks green but paid back less than cost
+        var isCashout  = isWin && profitNum < 0;
+        var resCls     = (isWin && !isCashout) ? 'port-win' : (isLoss || isCashout) ? 'port-loss' : '';
+        var profitStr  = (isWin || isLoss) ? (profitNum >= 0 ? '+' : '') + fmtRax(profitNum) : '';
+        var profit     = profitStr ? ' <span style="font-size:11px;font-weight:600">' + escHtml(profitStr) + '</span>' : '';
+        var resLbl     = isCashout ? 'Cashout' : isWin ? 'Win' : isLoss ? 'Loss' : '—';
+        var trCls      = isCashout ? 'port-card-loss' : isWin ? 'port-card-win' : isLoss ? 'port-card-loss' : '';
         var dateStr  = fmtPortDate(p.transactedAt);
         return '<tr class="' + trCls + '">'
             + '<td data-label="Date" style="white-space:nowrap;font-size:11px;color:var(--muted);font-family:var(--mono)">' + escHtml(dateStr) + '</td>'
@@ -4848,7 +4857,7 @@
             + '<td data-label="Market"><span class="mkt-badge" style="font-size:10px">' + escHtml(market) + '</span></td>'
             + '<td data-label="Side">' + escHtml(side) + '</td>'
             + '<td data-label="Cost" class="r" style="font-family:var(--mono);color:var(--muted)">' + escHtml(costDisp) + '</td>'
-            + '<td data-label="Paid" class="r ' + (isWin ? 'port-win' : 'port-loss') + '" style="font-family:var(--mono)">' + escHtml(paidDisp) + '</td>'
+            + '<td data-label="Paid" class="r ' + ((isWin && !isCashout) ? 'port-win' : 'port-loss') + '" style="font-family:var(--mono)">' + escHtml(paidDisp) + '</td>'
             + '<td data-label="Result" class="' + resCls + '" style="font-weight:700;font-size:12px">' + resLbl + profit + '</td>'
             + '</tr>';
     }
