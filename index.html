@@ -5300,6 +5300,33 @@
         var adminBtn = document.getElementById('admin-tab-btn');
         nav.innerHTML = '';
         var pro = isPro();
+        // Best EV tab — pro users only, shown first (before sport tabs)
+        if (isPro()) {
+            if (!document.getElementById('ev-tab-btn')) {
+                var evTabBtn = document.createElement('button');
+                evTabBtn.className = 'sport-tab';
+                evTabBtn.textContent = '⚡ Best EV';
+                evTabBtn.id = 'ev-tab-btn';
+                evTabBtn.style.cssText = 'color:var(--yellow);font-weight:700';
+                evTabBtn.onclick = function() {
+                    var isActive = this.classList.contains('active');
+                    if (isActive) {
+                        this.classList.remove('active');
+                        this.textContent = '⚡ Best EV';
+                        hideEvTab();
+                        loadOdds();
+                    } else {
+                        document.querySelectorAll('.sport-tab').forEach(function(t) { t.classList.remove('active'); });
+                        this.classList.add('active');
+                        this.textContent = '<- Dashboard';
+                        showEvTab();
+                    }
+                };
+                nav.appendChild(evTabBtn);
+            } else {
+                nav.appendChild(document.getElementById('ev-tab-btn'));
+            }
+        }
         SPORTS.forEach(function(s) {
             var locked = !pro && FREE_SPORTS.indexOf(s.key) === -1;
             var b = document.createElement('button');
@@ -5369,33 +5396,6 @@
             nav.appendChild(portTabBtn);
         } else if (!isProduction) {
             nav.appendChild(document.getElementById('portfolio-tab-btn'));
-        }
-        // Best EV tab — pro users only
-        if (isPro()) {
-            if (!document.getElementById('ev-tab-btn')) {
-                var evTabBtn = document.createElement('button');
-                evTabBtn.className = 'sport-tab';
-                evTabBtn.textContent = '⚡ Best EV';
-                evTabBtn.id = 'ev-tab-btn';
-                evTabBtn.style.cssText = 'color:var(--yellow);font-weight:700';
-                evTabBtn.onclick = function() {
-                    var isActive = this.classList.contains('active');
-                    if (isActive) {
-                        this.classList.remove('active');
-                        this.textContent = '⚡ Best EV';
-                        hideEvTab();
-                        loadOdds();
-                    } else {
-                        document.querySelectorAll('.sport-tab').forEach(function(t) { t.classList.remove('active'); });
-                        this.classList.add('active');
-                        this.textContent = '<- Dashboard';
-                        showEvTab();
-                    }
-                };
-                nav.appendChild(evTabBtn);
-            } else {
-                nav.appendChild(document.getElementById('ev-tab-btn'));
-            }
         }
     }
 
