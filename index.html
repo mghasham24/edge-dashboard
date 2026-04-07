@@ -4259,35 +4259,29 @@
     }
 
     function cacheEvRows(rows, sport) {
-        // Include rows that have a prediction with positive EV, OR any row without a prediction (user can enter one)
-        var withEV = [], withoutEV = [];
+        // Only show rows with a prediction AND positive EV
+        var positive = [];
         rows.forEach(function(r) {
             if (r.af == null) return;
             r._pred = null; r._rake = 0.034; r._ev = null;
             var pr = preds[r.id];
-            if (pr && pr !== '') {
-                var pred = parseFloat(pr) / 100;
-                if (pred > 0 && pred < 1) {
-                    var volNum = 0;
-                    if (vols[r.id]) { var vs = vols[r.id]; volNum = vs.endsWith('k') ? parseFloat(vs)*1000 : vs.endsWith('m') ? parseFloat(vs)*1000000 : parseFloat(vs); }
-                    var rake = volNum > 100000 ? 0.034 : volNum > 10000 ? 0.032 : volNum > 1000 ? 0.035 : volNum > 0 ? 0.04 : 0.034;
-                    r._pred = pred; r._rake = rake;
-                    r._ev   = (r.af * (1/pred) * (1-rake) - 1) * 100;
-                    if (r._ev > 0) { r._sortVal = r._ev; withEV.push(r); }
-                }
-            } else {
-                // No prediction yet — include for display, sort by adj fair desc
-                r._sortVal = r.af;
-                withoutEV.push(r);
-            }
+            if (!pr || pr === '') return;
+            var pred = parseFloat(pr) / 100;
+            if (pred <= 0 || pred >= 1) return;
+            var volNum = 0;
+            if (vols[r.id]) { var vs = vols[r.id]; volNum = vs.endsWith('k') ? parseFloat(vs)*1000 : vs.endsWith('m') ? parseFloat(vs)*1000000 : parseFloat(vs); }
+            var rake = volNum > 100000 ? 0.034 : volNum > 10000 ? 0.032 : volNum > 1000 ? 0.035 : volNum > 0 ? 0.04 : 0.034;
+            r._pred = pred; r._rake = rake;
+            r._ev   = (r.af * (1/pred) * (1-rake) - 1) * 100;
+            if (r._ev > 0) { r._sortVal = r._ev; positive.push(r); }
         });
-        // Sort each group, take top 20 from withoutEV to avoid flooding the table
-        withEV.sort(function(a, b) { return b._sortVal - a._sortVal; });
-        withoutEV.sort(function(a, b) { return b._sortVal - a._sortVal; });
-        var positive = withEV.concat(withoutEV.slice(0, 20));
+        positive.sort(function(a, b) { return b._sortVal - a._sortVal; });
         var sportLabel = (SPORTS.find(function(s) { return s.key === sport; }) || {}).label || sport;
         positive.forEach(function(r) { r._sport = sportLabel; r._sport_key = sport; });
-        evTabCache[sport] = positive;
+        // Preserve existing positive rows if fresh fetch yields nothing (IDs may not match mid-game)
+        if (positive.length > 0 || !evTabCache[sport] || evTabCache[sport].length === 0) {
+            evTabCache[sport] = positive;
+        }
         if (evTabVisible) renderEvTab();
     }
 
@@ -4329,13 +4323,8 @@
         // Flatten all cached sports
         var all = [];
         Object.values(evTabCache).forEach(function(arr) { all = all.concat(arr); });
-        // Sort: rows with positive EV first (desc), then no-prediction rows (by adj fair desc)
-        all.sort(function(a, b) {
-            var aHasEV = a._ev != null, bHasEV = b._ev != null;
-            if (aHasEV && !bHasEV) return -1;
-            if (!aHasEV && bHasEV) return 1;
-            return (b._sortVal || 0) - (a._sortVal || 0);
-        });
+        // All rows have positive EV — sort by EV descending
+        all.sort(function(a, b) { return (b._ev || 0) - (a._ev || 0); });
         if (!all.length) {
             container.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:40px 0">Click "Load All Sports" to fetch odds across every sport, or navigate to a sport tab first.</div>';
             return;
@@ -4373,11 +4362,9 @@
                 if (rsUrl) rsLink = ' <a href="' + rsUrl + '" target="_blank" rel="noopener" onclick="event.stopPropagation()" '
                     + 'style="color:var(--accent);font-size:10px;text-decoration:none" title="View on Real Sports">&#8599;</a>';
             }
-            // edge label when no EV (no prediction entered)
-            var edgeVal = r.af != null ? ((r.af - imp(r.am)) * 100) : null;
             var evCell  = evStr
                 ? '<span style="font-family:var(--mono);font-size:12px;font-weight:800;color:' + evColor + '">' + escHtml(evStr) + '</span>'
-                : (edgeVal != null ? '<span style="font-family:var(--mono);font-size:11px;font-weight:600;color:var(--muted2)" title="No prediction entered — showing no-vig edge">' + (edgeVal > 0 ? '+' : '') + edgeVal.toFixed(1) + '% edge</span>' : '—');
+                : '—';
             var trStyle = ev != null && ev >= 10 ? 'port-card-win' : '';
             html += '<tr class="' + trStyle + '">'
                 + '<td class="r ev-val-td">' + evCell + '</td>'
@@ -4395,15 +4382,8 @@
         });
         html += '</tbody></table></div>';
         container.innerHTML = html;
-        var evCount = all.filter(function(r) { return r._ev != null; }).length;
-        var edgeCount = all.length - evCount;
         var status = document.getElementById('ev-load-status');
-        if (status) {
-            var parts = [];
-            if (evCount)   parts.push(evCount + ' with EV%');
-            if (edgeCount) parts.push(edgeCount + ' edge (enter Real% to calculate EV)');
-            status.textContent = parts.join(' · ') + ' across ' + Object.keys(evTabCache).length + ' sport' + (Object.keys(evTabCache).length !== 1 ? 's' : '');
-        }
+        if (status) status.textContent = all.length + ' positive EV bets across ' + Object.keys(evTabCache).length + ' sport' + (Object.keys(evTabCache).length !== 1 ? 's' : '');
     }
 
     async function loadAllEvSports() {
@@ -4422,8 +4402,8 @@
         for (var i = 0; i < sportsToLoad.length; i++) {
             var s = sportsToLoad[i];
             try {
-                var noSpread = ['mma_mixed_martial_arts', 'baseball_mlb', 'icehockey_nhl'];
-                var mkts = noSpread.indexOf(s.key) !== -1 ? 'h2h' : 'h2h,spreads,totals';
+                // UFC/MMA has no spreads; all other sports fetch full markets so IDs match the main dashboard
+                var mkts = s.key === 'mma_mixed_martial_arts' ? 'h2h' : 'h2h,spreads,totals';
                 var resp = await fetch('/api/odds?sport=' + s.key + '&markets=' + mkts + '&bookmakers=fanduel');
                 if (resp.ok) {
                     var d = await resp.json();
