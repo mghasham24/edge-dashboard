@@ -2663,7 +2663,7 @@
                     <div id="ev-load-status" style="font-size:11px;color:var(--muted2);margin-top:2px">All Sports</div>
                 </div>
                 <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
-                    <button onclick="loadAllEvSports()" id="ev-load-btn" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:11px;font-weight:700;padding:7px 16px;border-radius:6px;cursor:pointer;letter-spacing:.04em">Load All Sports</button>
+                    <button onclick="loadAllEvSports()" id="ev-load-btn" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:11px;font-weight:700;padding:7px 16px;border-radius:6px;cursor:pointer;letter-spacing:.04em">&#8635; Reload</button>
                     <button onclick="document.getElementById('ev-tab-btn').click()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:7px 14px;border-radius:6px;cursor:pointer;letter-spacing:.04em">&larr; Back</button>
                 </div>
             </div>
@@ -4236,8 +4236,8 @@
         document.getElementById('refresh-btn').style.display = 'none';
         document.getElementById('ev-panel').classList.add('visible');
         evTabVisible = true;
-        renderEvTab();
-        // Auto-refresh every 60s while EV tab is open
+        // Auto-load on open, then refresh every 60s
+        loadAllEvSports();
         if (!evAutoRefreshTimer) {
             evAutoRefreshTimer = setInterval(function() {
                 if (evTabVisible) loadAllEvSports();
@@ -4259,16 +4259,16 @@
     }
 
     function cacheEvRows(rows, sport) {
-        // Include any row with positive no-vig edge (adj fair > FD implied), regardless of whether user has a prediction
-        var positive = rows.filter(function(r) {
-            if (r.af == null) return false;
+        var positive = [];
+        rows.forEach(function(r) {
+            if (r.af == null) return;
             var fdImp = imp(r.am);
-            if (fdImp == null) return false;
-            // Positive edge: no-vig fair beats FD implied odds
-            if (r.af <= fdImp) return false;
-            // Compute EV if prediction is available for this row
-            var pr = preds[r.id];
+            if (fdImp == null || fdImp <= 0) return;
+            var noVigEdge = (r.af - fdImp) * 100;
+            if (noVigEdge <= 0) return;
+            // Compute EV if user has a prediction for this row
             r._pred = null; r._rake = 0.034; r._ev = null;
+            var pr = preds[r.id];
             if (pr && pr !== '') {
                 var pred = parseFloat(pr) / 100;
                 if (pred > 0 && pred < 1) {
@@ -4280,11 +4280,9 @@
                     r._ev   = (r.af * (1/pred) * (1-rake) - 1) * 100;
                 }
             }
-            // _sortVal: EV if available, else no-vig edge % for ranking
-            r._sortVal = r._ev != null ? r._ev : (r.af - fdImp) * 100;
-            return r._sortVal > 0;
+            r._sortVal = r._ev != null ? r._ev : noVigEdge;
+            positive.push(r);
         });
-        // Attach sport label and key
         var sportLabel = (SPORTS.find(function(s) { return s.key === sport; }) || {}).label || sport;
         positive.forEach(function(r) { r._sport = sportLabel; r._sport_key = sport; });
         evTabCache[sport] = positive;
