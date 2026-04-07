@@ -179,9 +179,14 @@ export async function onRequestGet({ request, env }) {
   // before param — cursor pagination for historyrollup (?before=LAST_LATEST_LEDGER_TIMESTAMP)
   const before    = url.searchParams.get('before') || '';
   const timeframe = url.searchParams.get('timeframe') || '1m';
+
+  // Try to fetch as many items per page as the API will allow
+  const PAGE_SIZE = 100;
+  const limitParam = `limit=${PAGE_SIZE}&pageSize=${PAGE_SIZE}&size=${PAGE_SIZE}&count=${PAGE_SIZE}`;
+
   const histUrl   = before
-    ? `${base}/predictions/historyrollup?before=${encodeURIComponent(before)}`
-    : `${base}/predictions/historyrollup`;
+    ? `${base}/predictions/historyrollup?before=${encodeURIComponent(before)}&${limitParam}`
+    : `${base}/predictions/historyrollup?${limitParam}`;
 
   // Pagination-only request — skip perf + open
   if (before) {
