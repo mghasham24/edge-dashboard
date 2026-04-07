@@ -3003,36 +3003,6 @@
                 document.getElementById('gate').style.display = 'none';
                 document.getElementById('landing').classList.remove('visible');
                 document.getElementById('dashboard').style.display = 'block';
-                // Show Pro badge for pro users
-                if (data.plan === 'pro' && !data.is_admin) {
-                    document.getElementById('manage-sub-btn').style.display = '';
-                }
-                // Show admin tab if admin
-                if (data.is_admin) {
-                    document.getElementById('api-remaining').style.display = '';
-                    var adminTabBtn = document.createElement('button');
-                    adminTabBtn.className = 'sport-tab';
-                    adminTabBtn.textContent = ' Admin';
-                    adminTabBtn.style.cssText = 'color:var(--accent);margin-left:auto';
-                    adminTabBtn.id = 'admin-tab-btn';
-                    adminTabBtn.onclick = function() {
-                        var isActive = this.classList.contains('active');
-                        if (isActive) {
-                            this.classList.remove('active');
-                            this.textContent = ' Admin';
-                            hideAdminTab();
-                            loadOdds();
-                        } else {
-                            document.querySelectorAll('.sport-tab').forEach(function(t) {
-                                t.classList.remove('active');
-                            });
-                            this.classList.add('active');
-                            this.textContent = '<- Dashboard';
-                            showAdminTab();
-                        }
-                    };
-                    document.getElementById('sport-tabs').appendChild(adminTabBtn);
-                }
                 buildTabs();
                 await loadBetsTaken();
                 // If redirected back from bookmarklet, open portfolio tab
@@ -5297,9 +5267,44 @@
 
     function buildTabs() {
         var nav = document.getElementById('sport-tabs');
-        var adminBtn = document.getElementById('admin-tab-btn');
         nav.innerHTML = '';
         var pro = isPro();
+
+        // Pro badge (manage subscription button)
+        if (currentUser && currentUser.plan === 'pro' && !currentUser.is_admin) {
+            document.getElementById('manage-sub-btn').style.display = '';
+        }
+
+        // Admin setup: show api-remaining and ensure admin tab button exists
+        var adminBtn = null;
+        if (currentUser && currentUser.is_admin) {
+            document.getElementById('api-remaining').style.display = '';
+            adminBtn = document.getElementById('admin-tab-btn');
+            if (!adminBtn) {
+                adminBtn = document.createElement('button');
+                adminBtn.className = 'sport-tab';
+                adminBtn.textContent = ' Admin';
+                adminBtn.style.cssText = 'color:var(--accent);margin-left:auto';
+                adminBtn.id = 'admin-tab-btn';
+                adminBtn.onclick = function() {
+                    var isActive = this.classList.contains('active');
+                    if (isActive) {
+                        this.classList.remove('active');
+                        this.textContent = ' Admin';
+                        hideAdminTab();
+                        loadOdds();
+                    } else {
+                        document.querySelectorAll('.sport-tab').forEach(function(t) {
+                            t.classList.remove('active');
+                        });
+                        this.classList.add('active');
+                        this.textContent = '<- Dashboard';
+                        showAdminTab();
+                    }
+                };
+            }
+        }
+
         // Best EV tab — pro users only, shown first (before sport tabs)
         if (isPro()) {
             if (!document.getElementById('ev-tab-btn')) {
