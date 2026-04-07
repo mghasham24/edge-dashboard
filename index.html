@@ -2710,6 +2710,7 @@
     var COLORS = ['#4f6ef7', '#2dcc7e', '#f5c842', '#f05252', '#a78bfa', '#38bdf8', '#fb923c', '#e879f9', '#34d399', '#f87171', '#60a5fa', '#fbbf24', '#a3e635', '#c084fc', '#fb7185', '#22d3ee'];
     var currentSport = 'basketball_nba';
     var rawRows = [];
+    var rawRowsBySport = {}; // sport key -> parsed rows (same IDs as preds)
     var preds = {};
     var vols = {}; // volume display per row id
     var yourLines = {};
@@ -4402,46 +4403,51 @@
         for (var i = 0; i < sportsToLoad.length; i++) {
             var s = sportsToLoad[i];
             try {
-                // UFC/MMA has no spreads; all other sports fetch full markets so IDs match the main dashboard
-                var mkts = s.key === 'mma_mixed_martial_arts' ? 'h2h' : 'h2h,spreads,totals';
-                var resp = await fetch('/api/odds?sport=' + s.key + '&markets=' + mkts + '&bookmakers=fanduel');
-                if (resp.ok) {
-                    var d = await resp.json();
-                    var games = Array.isArray(d) ? d : (d && Array.isArray(d.games) ? d.games : null);
-                    if (games) {
-                        var savedSport = currentSport;
-                        currentSport = s.key;
-                        var parsedRows = parseGames(games);
-                        // Temporarily swap rawRows to compute
-                        var savedRaw = rawRows;
-                        rawRows = parsedRows;
-                        // Compute rows with edge/EV (inline mini-renderTable)
-                        var unit = parseFloat(document.getElementById('unit-size').value) || 300;
-                        var pairs = {};
-                        parsedRows.forEach(function(r) { if (!pairs[r.pid]) pairs[r.pid] = {}; pairs[r.pid][r.ps] = r; });
-                        var computed = parsedRows.map(function(r) {
-                            var p = pairs[r.pid] || {};
-                            var nv = novig(p.A ? imp(p.A.am) : null, p.B ? imp(p.B.am) : null);
-                            var yl = yourLines[r.id] != null ? yourLines[r.id] : null;
-                            var fair = r.ps === 'A' ? nv.fa : nv.fb;
-                            var af = adjFair(fair, r.pt, yl, r.mkt, r.ps);
-                            var pr = preds[r.id];
-                            var pred = (pr !== undefined && pr !== '') ? parseFloat(pr) / 100 : null;
-                            var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
-                            var evForUnits = null;
-                            if (af != null && pred != null && pred > 0 && pred < 1) {
-                                var volNum3 = 0;
-                                if (vols[r.id]) { var vs3 = vols[r.id]; volNum3 = vs3.endsWith('k') ? parseFloat(vs3)*1000 : vs3.endsWith('m') ? parseFloat(vs3)*1000000 : parseFloat(vs3); }
-                                var rake3 = volNum3 > 100000 ? 0.034 : volNum3 > 10000 ? 0.032 : volNum3 > 1000 ? 0.035 : volNum3 > 0 ? 0.04 : 0.034;
-                                evForUnits = (af * (1/pred) * (1-rake3) - 1) * 100;
-                            }
-                            var u = unitsEV(evForUnits, pred);
-                            return { id: r.id, game: r.game, cm: r.cm, mkt: r.mkt, side: r.side, am: r.am, pt: r.pt, ps: r.ps, pid: r.pid, fair: fair, af: af, yl: yl, edge: edge, u: u };
-                        });
-                        rawRows = savedRaw;
-                        currentSport = savedSport;
-                        cacheEvRows(computed, s.key);
+                var parsedRows = null;
+                // Prefer cached rows (same IDs as preds) — only fetch fresh if not yet visited this session
+                if (rawRowsBySport[s.key] && rawRowsBySport[s.key].length) {
+                    parsedRows = rawRowsBySport[s.key];
+                } else {
+                    var mkts = s.key === 'mma_mixed_martial_arts' ? 'h2h' : 'h2h,spreads,totals';
+                    var resp = await fetch('/api/odds?sport=' + s.key + '&markets=' + mkts + '&bookmakers=fanduel');
+                    if (resp.ok) {
+                        var d = await resp.json();
+                        var games = Array.isArray(d) ? d : (d && Array.isArray(d.games) ? d.games : null);
+                        if (games) {
+                            var savedSport = currentSport;
+                            currentSport = s.key;
+                            parsedRows = parseGames(games);
+                            rawRowsBySport[s.key] = parsedRows;
+                            currentSport = savedSport;
+                        }
                     }
+                }
+                if (parsedRows && parsedRows.length) {
+                    var pairs = {};
+                    parsedRows.forEach(function(r) { if (!pairs[r.pid]) pairs[r.pid] = {}; pairs[r.pid][r.ps] = r; });
+                    var savedSport2 = currentSport;
+                    currentSport = s.key;
+                    var computed = parsedRows.map(function(r) {
+                        var p = pairs[r.pid] || {};
+                        var nv = novig(p.A ? imp(p.A.am) : null, p.B ? imp(p.B.am) : null);
+                        var yl = yourLines[r.id] != null ? yourLines[r.id] : null;
+                        var fair = r.ps === 'A' ? nv.fa : nv.fb;
+                        var af = adjFair(fair, r.pt, yl, r.mkt, r.ps);
+                        var pr = preds[r.id];
+                        var pred = (pr !== undefined && pr !== '') ? parseFloat(pr) / 100 : null;
+                        var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
+                        var evForUnits = null;
+                        if (af != null && pred != null && pred > 0 && pred < 1) {
+                            var volNum3 = 0;
+                            if (vols[r.id]) { var vs3 = vols[r.id]; volNum3 = vs3.endsWith('k') ? parseFloat(vs3)*1000 : vs3.endsWith('m') ? parseFloat(vs3)*1000000 : parseFloat(vs3); }
+                            var rake3 = volNum3 > 100000 ? 0.034 : volNum3 > 10000 ? 0.032 : volNum3 > 1000 ? 0.035 : volNum3 > 0 ? 0.04 : 0.034;
+                            evForUnits = (af * (1/pred) * (1-rake3) - 1) * 100;
+                        }
+                        var u = unitsEV(evForUnits, pred);
+                        return { id: r.id, game: r.game, cm: r.cm, mkt: r.mkt, side: r.side, am: r.am, pt: r.pt, ps: r.ps, pid: r.pid, fair: fair, af: af, yl: yl, edge: edge, u: u };
+                    });
+                    currentSport = savedSport2;
+                    cacheEvRows(computed, s.key);
                 }
             } catch(e) { /* skip sport on error */ }
             done++;
@@ -5678,6 +5684,7 @@
             altOdds = {};
             if (games) {
                 rawRows = parseGames(games);
+                rawRowsBySport[currentSport] = rawRows; // cache for Best EV tab
                 var now = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
                 if (rawRows.length) {
                     dot.className = 'sdot live';
