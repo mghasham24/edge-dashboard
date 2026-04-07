@@ -2759,6 +2759,8 @@
     var portSearchQuery   = '';
     var evTabCache        = {};   // sport key -> array of positive-EV row objects
     var evTabVisible      = false;
+    var evAutoRefreshTimer = null;
+    var EV_REFRESH_MS = 60000; // refresh every 60 seconds
     var rfiOdds = {}; // game key -> {yesFair, noFair, yesAm, noAm}
     var rsGameIds = {}; // game string -> Real Sports numeric gameId
 
@@ -4235,6 +4237,12 @@
         document.getElementById('ev-panel').classList.add('visible');
         evTabVisible = true;
         renderEvTab();
+        // Auto-refresh every 60s while EV tab is open
+        if (!evAutoRefreshTimer) {
+            evAutoRefreshTimer = setInterval(function() {
+                if (evTabVisible) loadAllEvSports();
+            }, EV_REFRESH_MS);
+        }
     }
 
     function hideEvTab() {
@@ -4247,13 +4255,13 @@
         document.getElementById('refresh-btn').style.display = '';
         document.getElementById('ev-panel').classList.remove('visible');
         evTabVisible = false;
+        if (evAutoRefreshTimer) { clearInterval(evAutoRefreshTimer); evAutoRefreshTimer = null; }
     }
 
     function cacheEvRows(rows, sport) {
         // Store only positive-EV rows for this sport
         var positive = rows.filter(function(r) {
             if (r.edge == null) return false;
-            // Compute EV (same formula as renderTable)
             if (r.af == null || r.u == null) return false;
             var pr = preds[r.id];
             if (!pr || pr === '') return false;
@@ -4263,7 +4271,9 @@
             if (vols[r.id]) { var vs = vols[r.id]; volNum = vs.endsWith('k') ? parseFloat(vs)*1000 : vs.endsWith('m') ? parseFloat(vs)*1000000 : parseFloat(vs); }
             var rake = volNum > 100000 ? 0.034 : volNum > 10000 ? 0.032 : volNum > 1000 ? 0.035 : volNum > 0 ? 0.04 : 0.034;
             var ev = (r.af * (1/pred) * (1-rake) - 1) * 100;
-            r._ev = ev;
+            r._ev   = ev;
+            r._pred = pred;   // store base pred for display
+            r._rake = rake;   // store rake for per-card recalc
             return ev > 0;
         });
         // Attach sport label and key
@@ -4271,6 +4281,39 @@
         positive.forEach(function(r) { r._sport = sportLabel; r._sport_key = sport; });
         evTabCache[sport] = positive;
         if (evTabVisible) renderEvTab();
+    }
+
+    // Called when user edits a Real% input on a Best EV card
+    function evCardUpdate(cardId, inputEl) {
+        var val = parseFloat(inputEl.value);
+        if (!isFinite(val) || val <= 0 || val >= 100) return;
+        var pred = val / 100;
+        // Find the row
+        var r = null;
+        Object.values(evTabCache).forEach(function(arr) {
+            arr.forEach(function(x) { if (x.id === cardId) r = x; });
+        });
+        if (!r || r.af == null) return;
+        var rake = r._rake != null ? r._rake : 0.034;
+        var ev = (r.af * (1/pred) * (1-rake) - 1) * 100;
+        var u  = unitsEV(ev, pred);
+        // Update just the EV pill and units text in this card
+        var card = document.getElementById('ev-card-' + CSS.escape(cardId));
+        if (!card) return;
+        var evPill = card.querySelector('.ev-pill-val');
+        var evStr  = (ev >= 0 ? '+' : '') + ev.toFixed(1) + '%';
+        var evColor = ev >= 10 ? 'var(--green)' : ev >= 5 ? '#7ddfab' : ev > 0 ? 'var(--yellow)' : 'var(--red)';
+        var evBg    = ev >= 10 ? 'rgba(45,204,126,0.13)' : ev >= 5 ? 'rgba(45,204,126,0.07)' : ev > 0 ? 'rgba(255,210,77,0.07)' : 'rgba(240,82,82,0.07)';
+        if (evPill) {
+            evPill.textContent = evStr;
+            evPill.style.color = evColor;
+            evPill.closest('.ev-pill-wrap').style.background = evBg;
+            evPill.closest('.ev-pill-wrap').style.borderColor = evColor;
+        }
+        var bar = card.querySelector('.ev-accent-bar');
+        if (bar) bar.style.background = evColor;
+        var uEl = card.querySelector('.ev-units-val');
+        if (uEl) uEl.textContent = u > 0 ? '+' + u.toFixed(2) + 'u' : '—';
     }
 
     function renderEvTab() {
@@ -4290,52 +4333,54 @@
         var html = '';
         all.forEach(function(r, i) {
             var ev = r._ev;
-            var evStr = (ev >= 0 ? '+' : '') + ev.toFixed(1) + '%';
+            var evStr   = (ev >= 0 ? '+' : '') + ev.toFixed(1) + '%';
             var evColor = ev >= 10 ? 'var(--green)' : ev >= 5 ? '#7ddfab' : 'var(--yellow)';
             var evBg    = ev >= 10 ? 'rgba(45,204,126,0.13)' : ev >= 5 ? 'rgba(45,204,126,0.07)' : 'rgba(255,210,77,0.07)';
-            var evUnits = r.u != null ? (r.u > 0 ? '+' : '') + r.u.toFixed(2) + 'u' : null;
+            var u       = r.u != null ? r.u : 0;
+            var uStr    = u > 0 ? '+' + u.toFixed(2) + 'u' : '—';
             var mktLabel = r.mkt + (r.pt != null ? ' ' + (r.pt >= 0 ? '+' : '') + r.pt : '');
             var amStr   = (r.am >= 0 ? '+' : '') + r.am;
+            var afStr   = r.af != null ? (r.af * 100).toFixed(1) + '%' : '—';
+            var predPct = r._pred != null ? (r._pred * 100).toFixed(1) : '';
+            var safeId  = (r.id || '').replace(/['"<>&]/g, '_');
             var teams   = (r.game || '').split(' @ ');
             var away    = teams[0] || r.game || '';
             var home    = teams[1] || '';
             // Real Sports link
-            var rsLink  = '';
+            var rsLink = '';
             if (rsGameIds[r.game]) {
                 var rsUrl = getRealSportsUrl(rsGameIds[r.game], r._sport_key);
-                if (rsUrl) rsLink = '<a href="' + rsUrl + '" target="_blank" rel="noopener" onclick="event.stopPropagation()" '
-                    + 'style="display:inline-flex;align-items:center;gap:4px;color:var(--accent);font-size:11px;font-weight:600;text-decoration:none;'
-                    + 'background:rgba(79,110,247,0.12);padding:3px 8px;border-radius:4px;border:1px solid rgba(79,110,247,0.25);white-space:nowrap">'
-                    + '&#8599; Real Sports</a>';
+                if (rsUrl) rsLink = ' <a href="' + rsUrl + '" target="_blank" rel="noopener" onclick="event.stopPropagation()" '
+                    + 'style="color:var(--accent);font-size:10px;font-weight:600;text-decoration:none;opacity:0.85" title="View on Real Sports">&#8599;</a>';
             }
-            html += '<div style="display:flex;align-items:center;gap:12px;padding:13px 16px;border-radius:9px;background:var(--bg2);border:1px solid var(--border);position:relative;overflow:hidden">'
-                // left accent bar colored by EV strength
-                + '<div style="position:absolute;left:0;top:0;bottom:0;width:3px;background:' + evColor + ';border-radius:9px 0 0 9px"></div>'
-                // rank badge
-                + '<div style="min-width:26px;text-align:center;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--muted2)">#' + (i+1) + '</div>'
+            var cardIdAttr = 'ev-card-' + safeId;
+            html += '<div id="' + cardIdAttr + '" style="display:grid;grid-template-columns:3px 58px 1fr auto;align-items:center;gap:0;border-radius:8px;background:var(--bg2);border:1px solid var(--border);overflow:hidden">'
+                // accent bar
+                + '<div class="ev-accent-bar" style="align-self:stretch;background:' + evColor + '"></div>'
                 // EV pill
-                + '<div style="min-width:62px;padding:5px 10px;border-radius:6px;background:' + evBg + ';border:1px solid ' + evColor + ';text-align:center">'
-                +   '<div style="font-family:var(--mono);font-size:15px;font-weight:800;color:' + evColor + ';line-height:1">' + evStr + '</div>'
-                +   '<div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:var(--muted2);margin-top:2px;text-transform:uppercase">EV</div>'
+                + '<div class="ev-pill-wrap" style="margin:0 10px;padding:5px 0;text-align:center;border-radius:6px;background:' + evBg + ';border:1px solid ' + evColor + '">'
+                +   '<div class="ev-pill-val" style="font-family:var(--mono);font-size:13px;font-weight:800;color:' + evColor + ';line-height:1">' + evStr + '</div>'
+                +   '<div style="font-size:8px;font-weight:700;letter-spacing:.06em;color:var(--muted2);margin-top:1px;text-transform:uppercase">EV</div>'
                 + '</div>'
-                // game + market info
-                + '<div style="flex:1;min-width:0">'
-                +   '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
-                +     '<span style="font-size:9px;font-weight:800;letter-spacing:.08em;color:var(--muted2);text-transform:uppercase;background:var(--bg3);padding:2px 7px;border-radius:4px">' + escHtml(r._sport || '') + '</span>'
-                +     '<span style="font-size:13px;font-weight:700;color:var(--fg)">' + escHtml(away) + '</span>'
-                +     (home ? '<span style="font-size:11px;color:var(--muted2)">@</span><span style="font-size:13px;font-weight:700;color:var(--fg)">' + escHtml(home) + '</span>' : '')
+                // main info
+                + '<div style="padding:8px 0 8px 2px;min-width:0">'
+                +   '<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">'
+                +     '<span style="font-size:8px;font-weight:800;letter-spacing:.07em;color:var(--muted2);text-transform:uppercase;background:var(--bg3);padding:1px 5px;border-radius:3px">' + escHtml(r._sport || '') + '</span>'
+                +     '<span style="font-size:12px;font-weight:700;color:var(--fg)">' + escHtml(away) + (home ? ' @ ' + escHtml(home) : '') + '</span>'
                 +     rsLink
                 +   '</div>'
-                +   '<div style="display:flex;align-items:center;gap:8px;margin-top:5px;flex-wrap:wrap">'
-                +     '<span style="font-size:11px;color:var(--muted);background:var(--bg3);padding:2px 8px;border-radius:4px;border:1px solid var(--border)">' + escHtml(mktLabel) + '</span>'
-                +     '<span style="font-size:12px;font-weight:700;color:var(--fg)">' + escHtml(r.side || '') + '</span>'
+                +   '<div style="display:flex;align-items:center;gap:6px;margin-top:3px;flex-wrap:wrap">'
+                +     '<span style="font-size:10px;color:var(--muted);background:var(--bg3);padding:1px 6px;border-radius:3px;border:1px solid var(--border)">' + escHtml(mktLabel) + '</span>'
+                +     '<span style="font-size:11px;font-weight:700;color:var(--fg)">' + escHtml(r.side || '') + '</span>'
+                +     '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--muted)">' + escHtml(amStr) + '</span>'
                 +   '</div>'
-                + '</div>'
-                // right stats
-                + '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;min-width:70px">'
-                +   '<div style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--fg)">' + escHtml(amStr) + '</div>'
-                +   '<div style="font-size:10px;color:var(--muted2)">FD Odds</div>'
-                +   (evUnits ? '<div style="font-family:var(--mono);font-size:11px;font-weight:600;color:var(--muted);margin-top:2px">' + escHtml(evUnits) + '</div>' : '')
+                +   '<div style="display:flex;align-items:center;gap:10px;margin-top:4px;flex-wrap:wrap">'
+                +     '<span style="font-size:10px;color:var(--muted2)">Adj Fair <span style="color:var(--fg);font-family:var(--mono);font-weight:600">' + escHtml(afStr) + '</span></span>'
+                +     '<span style="font-size:10px;color:var(--muted2)">Real% <input type="number" min="1" max="99" step="0.1" value="' + escHtml(predPct) + '" '
+                +       'oninput="evCardUpdate(' + JSON.stringify(r.id) + ',this)" '
+                +       'style="width:46px;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--mono);font-size:10px;font-weight:600;padding:1px 4px;border-radius:3px;text-align:right" /></span>'
+                +     '<span class="ev-units-val" style="font-family:var(--mono);font-size:10px;font-weight:600;color:var(--muted)">' + escHtml(uStr) + '</span>'
+                +   '</div>'
                 + '</div>'
                 + '</div>';
         });
@@ -4407,6 +4452,16 @@
         }
         if (btn) { btn.disabled = false; btn.textContent = 'Reload All Sports'; }
         renderEvTab();
+        // Start 60s countdown to next auto-refresh in status bar
+        var _evCountdown = EV_REFRESH_MS / 1000;
+        var _evCountdownTick = setInterval(function() {
+            _evCountdown--;
+            var st = document.getElementById('ev-load-status');
+            if (!st || !evTabVisible) { clearInterval(_evCountdownTick); return; }
+            var base = st.textContent.replace(/\s*·.*$/, '');
+            st.textContent = base + ' · refresh in ' + _evCountdown + 's';
+            if (_evCountdown <= 0) clearInterval(_evCountdownTick);
+        }, 1000);
     }
 
     async function disconnectRealSports() {
