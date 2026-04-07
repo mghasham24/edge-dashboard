@@ -4353,8 +4353,9 @@
         positive.sort(function(a, b) { return b._sortVal - a._sortVal; });
         var sportLabel = (SPORTS.find(function(s) { return s.key === sport; }) || {}).label || sport;
         positive.forEach(function(r) { r._sport = sportLabel; r._sport_key = sport; });
-        // Preserve existing positive rows if fresh fetch yields nothing (IDs may not match mid-game)
-        if (positive.length > 0 || !evTabCache[sport] || evTabCache[sport].length === 0) {
+        // Always update cache when we have fresh rows — removes games that finished/left the feed.
+        // Only preserve stale cache when rows array itself is empty (no data loaded yet).
+        if (rows.length > 0 || !evTabCache[sport]) {
             evTabCache[sport] = positive;
         }
         if (evTabVisible) renderEvTab();
