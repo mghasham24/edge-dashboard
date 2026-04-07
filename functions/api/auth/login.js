@@ -2,33 +2,44 @@
 const SESSION_DAYS = 30;
 
 export async function onRequestPost({ request, env }) {
-  let body;
-  try { body = await request.json(); } catch { return err('Invalid JSON'); }
+  try {
+    let body;
+    try { body = await request.json(); } catch { return err('Invalid JSON'); }
 
-  const email    = (body.email    || '').trim().toLowerCase();
-  const password = (body.password || '').trim();
+    const email    = (body.email    || '').trim().toLowerCase();
+    const password = (body.password || '').trim();
 
-  if (!email || !password) return err('Email and password required');
+    if (!email || !password) return err('Email and password required');
 
-  const user = await env.DB.prepare(
-    'SELECT id, email, password_hash, plan FROM users WHERE email=?'
-  ).bind(email).first();
+    const user = await env.DB.prepare(
+      'SELECT id, email, password_hash, plan, is_admin, banned, referral_code FROM users WHERE email=?'
+    ).bind(email).first();
 
-  // Always verify to prevent timing attacks
-  const dummy = 'a'.repeat(32) + ':' + 'a'.repeat(64);
-  const valid  = user
-    ? await verifyPassword(password, user.password_hash)
-    : (await verifyPassword(password, dummy), false);
+    // Always verify to prevent timing attacks
+    const dummy = 'a'.repeat(32) + ':' + 'a'.repeat(64);
+    const valid  = user
+      ? await verifyPassword(password, user.password_hash)
+      : (await verifyPassword(password, dummy), false);
 
-  if (!user || !valid) return err('Incorrect email or password', 401);
+    if (!user || !valid) return err('Incorrect email or password', 401);
 
-  const token = genToken();
-  const exp   = Math.floor(Date.now()/1000) + SESSION_DAYS * 86400;
-  await env.DB.prepare(
-    'INSERT INTO sessions (user_id, token, expires_at) VALUES (?,?,?)'
-  ).bind(user.id, token, exp).run();
+    if (user.banned) return err('Your account has been suspended. Contact support.', 403);
 
-  return ok({ email: user.email, plan: user.plan }, 200, cookie(token, exp));
+    const token = genToken();
+    const exp   = Math.floor(Date.now()/1000) + SESSION_DAYS * 86400;
+    await env.DB.prepare(
+      'INSERT INTO sessions (user_id, token, expires_at) VALUES (?,?,?)'
+    ).bind(user.id, token, exp).run();
+
+    return ok({
+      email: user.email,
+      plan: user.plan,
+      is_admin: user.is_admin || 0,
+      referral_code: user.referral_code || ''
+    }, 200, cookie(token, exp));
+  } catch(e) {
+    return err('Login failed: ' + e.message, 500);
+  }
 }
 
 // ── Helpers ───────────────────────────────────────────
