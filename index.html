@@ -5079,7 +5079,9 @@
         });
         var monthTotalEl = document.getElementById('port-cal-monthly-total');
         if (monthTotalEl) {
-            var totalStr = (monthTotal >= 0 ? '+' : '') + fmtRax(monthTotal) + ' rax';
+            var mUnit    = parseFloat(localStorage.getItem('raxedge_unit_size') || '300') || 300;
+            var mUnitStr = (monthTotal / mUnit);
+            var totalStr = (monthTotal >= 0 ? '+' : '') + fmtRax(monthTotal) + ' rax (' + (mUnitStr >= 0 ? '+' : '') + mUnitStr.toFixed(2) + 'u)';
             var totalColor = monthTotal > 0 ? 'var(--green)' : monthTotal < 0 ? 'var(--red)' : 'var(--muted)';
             if (!isPro()) {
                 monthTotalEl.innerHTML = '<span style="filter:blur(6px);user-select:none;cursor:pointer" onclick="showUpgradeModal(\'Upgrade to Pro to see your monthly P&amp;L totals.\')">' + totalStr + '</span>';
@@ -5124,7 +5126,9 @@
             if (dayData) {
                 var pnl = dayData.pnl;
                 var pnlColor = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--muted)';
-                var pnlStr = (pnl > 0 ? '+' : '') + fmtRax(pnl);
+                var calUnit  = parseFloat(localStorage.getItem('raxedge_unit_size') || '300') || 300;
+                var calUnitStr = (pnl / calUnit);
+                var pnlStr = (pnl > 0 ? '+' : '') + fmtRax(pnl) + ' (' + (calUnitStr >= 0 ? '+' : '') + calUnitStr.toFixed(2) + 'u)';
                 if (isBlurred) {
                     pnlHtml = '<span class="port-cal-pnl" style="filter:blur(5px);color:' + pnlColor + '">' + pnlStr + '</span>'
                             + '<span class="port-cal-bets" style="filter:blur(3px)">' + dayData.bets + ' bet' + (dayData.bets !== 1 ? 's' : '') + '</span>';
@@ -5322,7 +5326,9 @@
         });
         var el = document.getElementById('port-settled-profit');
         if (el) {
-            el.textContent = (total >= 0 ? '+' : '') + fmtRax(total) + ' rax';
+            var spUnit    = parseFloat(localStorage.getItem('raxedge_unit_size') || '300') || 300;
+            var spUnitStr = (total / spUnit);
+            el.textContent = (total >= 0 ? '+' : '') + fmtRax(total) + ' rax (' + (spUnitStr >= 0 ? '+' : '') + spUnitStr.toFixed(2) + 'u)';
             el.style.color = total >= 0 ? 'var(--green)' : 'var(--red)';
         }
         // Update settled count
@@ -5362,7 +5368,12 @@
         // Early cashout: API marks green but paid back less than cost
         var isCashout  = isWin && profitNum < 0;
         var resCls     = (isWin && !isCashout) ? 'port-win' : (isLoss || isCashout) ? 'port-loss' : '';
-        var profitStr  = (isWin || isLoss) ? (profitNum >= 0 ? '+' : '') + fmtRax(profitNum) : '';
+        var unitSize   = parseFloat(localStorage.getItem('raxedge_unit_size') || '300') || 300;
+        var profitStr  = '';
+        if (isWin || isLoss) {
+            var unitStr = (profitNum / unitSize);
+            profitStr = (profitNum >= 0 ? '+' : '') + fmtRax(profitNum) + ' (' + (unitStr >= 0 ? '+' : '') + unitStr.toFixed(2) + 'u)';
+        }
         var profit     = profitStr ? ' <span style="font-size:11px;font-weight:600">' + escHtml(profitStr) + '</span>' : '';
         var resLbl     = isCashout ? 'Cashout' : isWin ? 'Win' : isLoss ? 'Loss' : '—';
         var trCls      = isCashout ? 'port-card-loss' : isWin ? 'port-card-win' : isLoss ? 'port-card-loss' : '';
