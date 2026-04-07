@@ -4352,7 +4352,8 @@
             var rake = volNum > 100000 ? 0.034 : volNum > 10000 ? 0.032 : volNum > 1000 ? 0.035 : volNum > 0 ? 0.04 : 0.034;
             r._pred = pred; r._rake = rake;
             r._ev   = (r.af * (1/pred) * (1-rake) - 1) * 100;
-            if (r._ev > 0) { r._sortVal = r._ev; positive.push(r); }
+            // >100% EV is a post-game artifact (RS knows result, FD market not yet settled)
+            if (r._ev > 0 && r._ev <= 100) { r._sortVal = r._ev; positive.push(r); }
         });
         positive.sort(function(a, b) { return b._sortVal - a._sortVal; });
         var sportLabel = (SPORTS.find(function(s) { return s.key === sport; }) || {}).label || sport;
