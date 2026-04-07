@@ -4357,11 +4357,8 @@
         positive.sort(function(a, b) { return b._sortVal - a._sortVal; });
         var sportLabel = (SPORTS.find(function(s) { return s.key === sport; }) || {}).label || sport;
         positive.forEach(function(r) { r._sport = sportLabel; r._sport_key = sport; });
-        // Always update cache when we have fresh rows — removes games that finished/left the feed.
-        // Only preserve stale cache when rows array itself is empty (no data loaded yet).
-        if (rows.length > 0 || !evTabCache[sport]) {
-            evTabCache[sport] = positive;
-        }
+        // Always overwrite — empty rows means no active games for this sport
+        evTabCache[sport] = positive;
         if (evTabVisible) renderEvTab();
     }
 
@@ -4590,7 +4587,7 @@
                 currentSport = s.key;
                 var parsed = parseGames(games);
                 currentSport = savedSport4;
-                if (parsed.length > 0) rawRowsBySport[s.key] = parsed; // only overwrite if non-empty
+                rawRowsBySport[s.key] = parsed; // always overwrite — empty means no active games
             } catch(e) {}
         }));
 
