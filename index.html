@@ -153,6 +153,12 @@
         overflow-x: auto
     }
 
+    #feature-tabs {
+        background: var(--bg2);
+        overflow-x: auto;
+        flex-shrink: 0
+    }
+
     .sport-tab {
         font-family: var(--sans);
         font-size: 12px;
@@ -2355,6 +2361,8 @@
             <button onclick="toggleAll()" style="display:none;background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:11px;font-weight:600;padding:6px 12px;border-radius:5px;cursor:pointer;text-transform:uppercase;letter-spacing:.04em;margin-left:auto" id="mobile-collapse-btn">Collapse All</button>
         </div>
 
+        <div id="feature-tabs" style="display:flex;gap:6px;padding:6px 12px 0;border-bottom:1px solid var(--border)"></div>
+
         <div class="status-bar">
             <span class="sdot" id="sdot"></span>
             <span id="status-txt">Loading...</span>
@@ -4207,6 +4215,7 @@
 
     function showAdminTab() {
         document.getElementById('sport-tabs').style.display = 'none';
+        document.getElementById('feature-tabs').style.display = 'none';
         document.querySelector('.controls').style.display = 'none';
         document.querySelector('.status-bar').style.display = 'none';
         document.querySelector('.table-wrap').style.display = 'none';
@@ -4220,6 +4229,7 @@
 
     function hideAdminTab() {
         document.getElementById('sport-tabs').style.display = '';
+        document.getElementById('feature-tabs').style.display = '';
         document.querySelector('.controls').style.display = '';
         document.querySelector('.status-bar').style.display = '';
         document.querySelector('.table-wrap').style.display = '';
@@ -4231,6 +4241,7 @@
 
     function showReferralTab() {
         document.getElementById('sport-tabs').style.display = 'none';
+        document.getElementById('feature-tabs').style.display = 'none';
         document.querySelector('.controls').style.display = 'none';
         document.querySelector('.status-bar').style.display = 'none';
         document.querySelector('.table-wrap').style.display = 'none';
@@ -4243,6 +4254,7 @@
 
     function hideReferralTab() {
         document.getElementById('sport-tabs').style.display = '';
+        document.getElementById('feature-tabs').style.display = '';
         document.querySelector('.controls').style.display = '';
         document.querySelector('.status-bar').style.display = '';
         document.querySelector('.table-wrap').style.display = '';
@@ -4280,6 +4292,7 @@
 
     function showPortfolioTab() {
         document.getElementById('sport-tabs').style.display = 'none';
+        document.getElementById('feature-tabs').style.display = 'none';
         document.querySelector('.controls').style.display = 'none';
         document.querySelector('.status-bar').style.display = 'none';
         document.querySelector('.table-wrap').style.display = 'none';
@@ -4292,6 +4305,7 @@
 
     function hidePortfolioTab() {
         document.getElementById('sport-tabs').style.display = '';
+        document.getElementById('feature-tabs').style.display = '';
         document.querySelector('.controls').style.display = '';
         document.querySelector('.status-bar').style.display = '';
         document.querySelector('.table-wrap').style.display = '';
@@ -4303,6 +4317,7 @@
 
     function showEvTab() {
         document.getElementById('sport-tabs').style.display = 'none';
+        document.getElementById('feature-tabs').style.display = 'none';
         document.querySelector('.controls').style.display = 'none';
         document.querySelector('.status-bar').style.display = 'none';
         document.querySelector('.table-wrap').style.display = 'none';
@@ -4326,6 +4341,7 @@
 
     function hideEvTab() {
         document.getElementById('sport-tabs').style.display = '';
+        document.getElementById('feature-tabs').style.display = '';
         document.querySelector('.controls').style.display = '';
         document.querySelector('.status-bar').style.display = '';
         document.querySelector('.table-wrap').style.display = '';
@@ -5741,42 +5757,6 @@
             }
         }
 
-        // Best EV tab — visible to all, pro-gated on click for free users
-        if (!document.getElementById('ev-tab-btn')) {
-            var evTabBtn = document.createElement('button');
-            evTabBtn.className = 'sport-tab';
-            evTabBtn.textContent = '⚡ Best EV';
-            evTabBtn.id = 'ev-tab-btn';
-            if (isPro()) {
-                evTabBtn.style.cssText = 'color:var(--yellow);font-weight:700;opacity:0.45;cursor:not-allowed';
-                evTabBtn.disabled = true;
-                evTabBtn.title = 'Loading all sports…';
-            } else {
-                evTabBtn.style.cssText = 'color:var(--yellow);font-weight:700';
-                evTabBtn.title = 'Pro feature';
-            }
-            evTabBtn.onclick = function() {
-                if (!isPro()) {
-                    showUpgradeModal('⚡ Best EV shows the highest positive-EV bets across all sports simultaneously. Upgrade to Pro to unlock it.');
-                    return;
-                }
-                var isActive = this.classList.contains('active');
-                if (isActive) {
-                    this.classList.remove('active');
-                    this.textContent = '⚡ Best EV';
-                    hideEvTab();
-                    loadOdds();
-                } else {
-                    document.querySelectorAll('.sport-tab').forEach(function(t) { t.classList.remove('active'); });
-                    this.classList.add('active');
-                    this.textContent = '<- Dashboard';
-                    showEvTab();
-                }
-            };
-            nav.appendChild(evTabBtn);
-        } else {
-            nav.appendChild(document.getElementById('ev-tab-btn'));
-        }
         SPORTS.forEach(function(s) {
             var locked = !pro && FREE_SPORTS.indexOf(s.key) === -1;
             var b = document.createElement('button');
@@ -5789,7 +5769,7 @@
                     return;
                 }
                 currentSport = s.key;
-                document.querySelectorAll('.sport-tab').forEach(function(x) {
+                document.querySelectorAll('.sport-tab,.feature-tab').forEach(function(x) {
                     x.classList.toggle('active', x.getAttribute('data-key') === s.key);
                 });
                 loadOdds();
@@ -5797,55 +5777,98 @@
             nav.appendChild(b);
         });
         if (adminBtn) nav.appendChild(adminBtn);
-        // Referral tab — recreate since innerHTML wipe destroys it
-        if (!document.getElementById('referral-tab-btn')) {
-            var refTabBtn = document.createElement('button');
-            refTabBtn.className = 'sport-tab';
-            refTabBtn.textContent = '🎁 Refer';
-            refTabBtn.style.cssText = document.getElementById('admin-tab-btn') ? 'color:var(--green)' : 'color:var(--green);margin-left:auto';
-            refTabBtn.id = 'referral-tab-btn';
-            refTabBtn.onclick = function() {
-                var isActive = this.classList.contains('active');
-                if (isActive) {
-                    this.classList.remove('active');
-                    this.textContent = '🎁 Refer';
-                    hideReferralTab();
-                    loadOdds();
+
+        // ── Feature tabs bar (Best EV / Portfolio / Refer) ──────────────
+        var ftBar = document.getElementById('feature-tabs');
+        if (ftBar) {
+            // Best EV tab — visible to all, pro-gated on click for free users
+            if (!document.getElementById('ev-tab-btn')) {
+                var evTabBtn = document.createElement('button');
+                evTabBtn.className = 'feature-tab sport-tab';
+                evTabBtn.textContent = '⚡ Best EV';
+                evTabBtn.id = 'ev-tab-btn';
+                if (isPro()) {
+                    evTabBtn.style.cssText = 'color:var(--yellow);font-weight:700;opacity:0.45;cursor:not-allowed';
+                    evTabBtn.disabled = true;
+                    evTabBtn.title = 'Loading all sports…';
                 } else {
-                    document.querySelectorAll('.sport-tab').forEach(function(t) { t.classList.remove('active'); });
-                    this.classList.add('active');
-                    this.textContent = '<- Dashboard';
-                    showReferralTab();
+                    evTabBtn.style.cssText = 'color:var(--yellow);font-weight:700';
+                    evTabBtn.title = 'Pro feature';
                 }
-            };
-            nav.appendChild(refTabBtn);
-        } else {
-            nav.appendChild(document.getElementById('referral-tab-btn'));
-        }
-        // Portfolio tab — non-production only (hidden on raxedge.com)
-        var isProduction = window.location.hostname === 'raxedge.com' || window.location.hostname === 'www.raxedge.com';
-        if (!isProduction && !document.getElementById('portfolio-tab-btn')) {
-            var portTabBtn = document.createElement('button');
-            portTabBtn.className = 'sport-tab';
-            portTabBtn.textContent = '📊 Portfolio';
-            portTabBtn.id = 'portfolio-tab-btn';
-            portTabBtn.onclick = function() {
-                var isActive = this.classList.contains('active');
-                if (isActive) {
-                    this.classList.remove('active');
-                    this.textContent = '📊 Portfolio';
-                    hidePortfolioTab();
-                    loadOdds();
-                } else {
-                    document.querySelectorAll('.sport-tab').forEach(function(t) { t.classList.remove('active'); });
-                    this.classList.add('active');
-                    this.textContent = '<- Dashboard';
-                    showPortfolioTab();
-                }
-            };
-            nav.appendChild(portTabBtn);
-        } else if (!isProduction) {
-            nav.appendChild(document.getElementById('portfolio-tab-btn'));
+                evTabBtn.onclick = function() {
+                    if (!isPro()) {
+                        showUpgradeModal('⚡ Best EV shows the highest positive-EV bets across all sports simultaneously. Upgrade to Pro to unlock it.');
+                        return;
+                    }
+                    var isActive = this.classList.contains('active');
+                    if (isActive) {
+                        this.classList.remove('active');
+                        this.textContent = '⚡ Best EV';
+                        hideEvTab();
+                        loadOdds();
+                    } else {
+                        document.querySelectorAll('.sport-tab,.feature-tab').forEach(function(t) { t.classList.remove('active'); });
+                        this.classList.add('active');
+                        this.textContent = '<- Dashboard';
+                        showEvTab();
+                    }
+                };
+                ftBar.appendChild(evTabBtn);
+            } else {
+                ftBar.appendChild(document.getElementById('ev-tab-btn'));
+            }
+
+            // Portfolio tab — non-production only (hidden on raxedge.com)
+            var isProduction = window.location.hostname === 'raxedge.com' || window.location.hostname === 'www.raxedge.com';
+            if (!isProduction && !document.getElementById('portfolio-tab-btn')) {
+                var portTabBtn = document.createElement('button');
+                portTabBtn.className = 'feature-tab sport-tab';
+                portTabBtn.textContent = '📊 Portfolio';
+                portTabBtn.id = 'portfolio-tab-btn';
+                portTabBtn.onclick = function() {
+                    var isActive = this.classList.contains('active');
+                    if (isActive) {
+                        this.classList.remove('active');
+                        this.textContent = '📊 Portfolio';
+                        hidePortfolioTab();
+                        loadOdds();
+                    } else {
+                        document.querySelectorAll('.sport-tab,.feature-tab').forEach(function(t) { t.classList.remove('active'); });
+                        this.classList.add('active');
+                        this.textContent = '<- Dashboard';
+                        showPortfolioTab();
+                    }
+                };
+                ftBar.appendChild(portTabBtn);
+            } else if (!isProduction) {
+                ftBar.appendChild(document.getElementById('portfolio-tab-btn'));
+            }
+
+            // Referral tab — recreate since innerHTML wipe destroys it
+            if (!document.getElementById('referral-tab-btn')) {
+                var refTabBtn = document.createElement('button');
+                refTabBtn.className = 'feature-tab sport-tab';
+                refTabBtn.textContent = '🎁 Refer';
+                refTabBtn.style.cssText = 'color:var(--green)';
+                refTabBtn.id = 'referral-tab-btn';
+                refTabBtn.onclick = function() {
+                    var isActive = this.classList.contains('active');
+                    if (isActive) {
+                        this.classList.remove('active');
+                        this.textContent = '🎁 Refer';
+                        hideReferralTab();
+                        loadOdds();
+                    } else {
+                        document.querySelectorAll('.sport-tab,.feature-tab').forEach(function(t) { t.classList.remove('active'); });
+                        this.classList.add('active');
+                        this.textContent = '<- Dashboard';
+                        showReferralTab();
+                    }
+                };
+                ftBar.appendChild(refTabBtn);
+            } else {
+                ftBar.appendChild(document.getElementById('referral-tab-btn'));
+            }
         }
     }
 
