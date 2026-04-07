@@ -4776,7 +4776,7 @@
             if (openStats) openStats.style.display = 'none';
             openTbody.innerHTML = '<tr><td colspan="9" style="color:var(--muted);padding:20px 12px">No open positions</td></tr>';
         } else {
-            openTbody.innerHTML = activePos.map(function(p) {
+            var rows = activePos.map(function(p) {
                 var matchup  = (p.marketDisplay && p.marketDisplay.display) || '—';
                 var market   = p.marketLabel || mktMap[p.marketType] || p.marketType || '—';
                 var side     = stripProb(p.outcomeLabel) || '—';
