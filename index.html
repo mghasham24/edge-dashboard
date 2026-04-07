@@ -1517,8 +1517,6 @@
     .port-tf-btn { background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:11px;font-weight:600;padding:3px 10px;border-radius:4px;cursor:pointer;transition:all .15s }
     .port-tf-btn.port-tf-active { background:var(--accent);border-color:var(--accent);color:#fff }
     .port-filter-sel { background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:11px;padding:3px 7px;border-radius:5px;cursor:pointer;outline:none }
-    .port-roi-row { display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px }
-    .port-roi-row:last-child { border-bottom:none }
     .port-push { color: var(--muted) }
 
     .port-match-badge {
@@ -2541,17 +2539,6 @@
                     </div>
 
                     <!-- ROI breakdown by market + sport -->
-                    <div id="port-roi-breakdown" style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:24px">
-                        <div style="flex:1;min-width:180px">
-                            <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:8px">ROI by Market</div>
-                            <div id="port-roi-market" style="color:var(--muted);font-size:12px">—</div>
-                        </div>
-                        <div style="flex:1;min-width:180px">
-                            <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:8px">ROI by Sport</div>
-                            <div id="port-roi-sport" style="color:var(--muted);font-size:12px">—</div>
-                        </div>
-                    </div>
-
                     <!-- Open positions -->
                     <div style="margin-bottom:28px">
                         <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:12px">Open Positions</div>
@@ -2597,8 +2584,8 @@
                             <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2)">Settled History</div>
                             <span id="port-load-status" style="font-size:11px;color:var(--muted2)"></span>
                             <div style="margin-left:auto;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-                                <select id="port-filter-sport"  onchange="applyPortFilters()" class="port-filter-sel"><option value="">All Sports</option></select>
-                                <select id="port-filter-market" onchange="applyPortFilters()" class="port-filter-sel"><option value="">All Markets</option></select>
+                                <select id="port-filter-sport"  onchange="onPortSportChange()" class="port-filter-sel"><option value="">All Sports</option></select>
+                                <select id="port-filter-market" onchange="applyPortFilters()" class="port-filter-sel" style="display:none"><option value="">All Markets</option></select>
                                 <select id="port-filter-result" onchange="applyPortFilters()" class="port-filter-sel">
                                     <option value="">All Results</option>
                                     <option value="win">Wins</option>
@@ -4441,7 +4428,6 @@
         updatePortProfit();
         updatePerfCards();
         updatePortFilterOptions();
-        renderRoiBreakdown();
         renderHistoryForDate(portSelectedDate);
 
         // Init calendar to current month and render
@@ -4485,6 +4471,13 @@
         return paid - cost;
     }
 
+    // Known sports whitelist — prevents prop market names leaking into sport filter
+    var KNOWN_SPORTS = (function() {
+        var s = {};
+        Object.values(REAL_SPORT_LABELS).forEach(function(v){ s[v] = 1; });
+        return s;
+    }());
+
     function applyPortFilters() {
         portFilterSport  = (document.getElementById('port-filter-sport')  || {}).value || '';
         portFilterMarket = (document.getElementById('port-filter-market') || {}).value || '';
@@ -4493,59 +4486,50 @@
         renderHistoryForDate(portSelectedDate);
     }
 
-    function updatePortFilterOptions() {
-        var sports = {}, markets = {};
-        portHistoryAll.forEach(function(p) {
-            var s = getHistSport(p);  if (s) sports[s]   = 1;
-            var m = getHistMarket(p); if (m) markets[m] = 1;
-        });
+    function onPortSportChange() {
         var sportSel  = document.getElementById('port-filter-sport');
         var marketSel = document.getElementById('port-filter-market');
+        if (!sportSel || !marketSel) return;
+        var sport = sportSel.value;
+        if (!sport) {
+            // All Sports — hide market filter, reset it
+            marketSel.style.display = 'none';
+            marketSel.value = '';
+            portFilterMarket = '';
+        } else {
+            // Build market options for this sport only
+            var markets = {};
+            portHistoryAll.forEach(function(p) {
+                if (getHistSport(p) !== sport) return;
+                var m = getHistMarket(p); if (m) markets[m] = 1;
+            });
+            var prevMarket = marketSel.value;
+            marketSel.innerHTML = '<option value="">All Markets</option>'
+                + Object.keys(markets).sort().map(function(m){
+                    return '<option value="' + escHtml(m) + '"' + (m===prevMarket?' selected':'') + '>' + escHtml(m) + '</option>';
+                }).join('');
+            marketSel.style.display = '';
+        }
+        applyPortFilters();
+    }
+
+    function updatePortFilterOptions() {
+        var sports = {};
+        portHistoryAll.forEach(function(p) {
+            var s = getHistSport(p);
+            // Only include recognised sports — keeps prop market names out
+            if (s && KNOWN_SPORTS[s]) sports[s] = 1;
+        });
+        var sportSel = document.getElementById('port-filter-sport');
         if (sportSel) {
             var cur = sportSel.value;
             sportSel.innerHTML = '<option value="">All Sports</option>'
-                + Object.keys(sports).sort().map(function(s){ return '<option value="' + escHtml(s) + '"' + (s===cur?' selected':'') + '>' + escHtml(s) + '</option>'; }).join('');
+                + Object.keys(sports).sort().map(function(s){
+                    return '<option value="' + escHtml(s) + '"' + (s===cur?' selected':'') + '>' + escHtml(s) + '</option>';
+                }).join('');
+            // Re-sync market dropdown if a sport was selected
+            if (cur) onPortSportChange();
         }
-        if (marketSel) {
-            var cur = marketSel.value;
-            marketSel.innerHTML = '<option value="">All Markets</option>'
-                + Object.keys(markets).sort().map(function(m){ return '<option value="' + escHtml(m) + '"' + (m===cur?' selected':'') + '>' + escHtml(m) + '</option>'; }).join('');
-        }
-    }
-
-    function renderRoiBreakdown() {
-        var byMarket = {}, bySport = {};
-        portHistoryAll.forEach(function(p) {
-            var details = Array.isArray(p.details) ? p.details : [];
-            var cost = parseRaxDisplay((details.find(function(d){ return d.label==='Cost'; }) || {}).display);
-            var paid = parseRaxDisplay((details.find(function(d){ return d.label==='Paid'; }) || {}).display);
-            var profit = paid - cost;
-            var isWin = getHistResult(p) === 'win';
-            var mkt = getHistMarket(p) || '?';
-            if (!byMarket[mkt]) byMarket[mkt] = { cost:0, profit:0, wins:0, total:0 };
-            byMarket[mkt].cost += cost; byMarket[mkt].profit += profit; byMarket[mkt].total++; if (isWin) byMarket[mkt].wins++;
-            var sport = getHistSport(p) || '?';
-            if (!bySport[sport]) bySport[sport] = { cost:0, profit:0, wins:0, total:0 };
-            bySport[sport].cost += cost; bySport[sport].profit += profit; bySport[sport].total++; if (isWin) bySport[sport].wins++;
-        });
-        function makeHtml(map) {
-            return Object.keys(map).sort(function(a,b){ return map[b].profit - map[a].profit; }).map(function(k) {
-                var d = map[k];
-                var roi = d.cost > 0 ? (d.profit / d.cost * 100) : 0;
-                var wr  = d.total > 0 ? (d.wins / d.total * 100) : 0;
-                var col = roi >= 0 ? 'var(--green)' : 'var(--red)';
-                return '<div class="port-roi-row">'
-                    + '<span style="color:var(--fg)">' + escHtml(k) + '</span>'
-                    + '<span style="font-family:var(--mono);color:' + col + '">'
-                    + (roi >= 0 ? '+' : '') + roi.toFixed(1) + '%'
-                    + ' <span style="color:var(--muted2);font-size:10px">' + wr.toFixed(0) + '% WR</span></span>'
-                    + '</div>';
-            }).join('') || '<span style="color:var(--muted)">No data yet</span>';
-        }
-        var mktEl = document.getElementById('port-roi-market');
-        var sptEl = document.getElementById('port-roi-sport');
-        if (mktEl) mktEl.innerHTML = makeHtml(byMarket);
-        if (sptEl) sptEl.innerHTML = makeHtml(bySport);
     }
 
     // Build a map of dateKey ("2026-04-06") → { pnl, bets }
