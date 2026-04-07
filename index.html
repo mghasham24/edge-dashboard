@@ -4370,6 +4370,7 @@
         var evUnit = parseFloat(document.getElementById('ev-unit-size').value) || 300;
         var html = '<div class="admin-table-wrap"><table class="port-table" style="table-layout:fixed">'
             + '<thead><tr>'
+            + '<th style="width:28px"></th>'
             + '<th style="width:72px" class="r">EV%</th>'
             + '<th style="width:50px">Sport</th>'
             + '<th>Game</th>'
@@ -4406,8 +4407,14 @@
             var evCell = evStr
                 ? '<span style="font-family:var(--mono);font-size:12px;font-weight:800;color:' + evColor + '">' + escHtml(evStr) + '</span>'
                 : '—';
-            var trStyle = ev != null && ev >= 10 ? 'port-card-win' : '';
-            html += '<tr class="' + trStyle + '">'
+            var taken   = !!betTaken[r.id];
+            var trStyle = (ev != null && ev >= 10 ? 'port-card-win' : '') + (taken ? ' ev-row-taken' : '');
+            var cbHtml  = '<input type="checkbox" data-id="' + escHtml(r.id) + '" '
+                + (taken ? 'checked ' : '')
+                + 'onchange="toggleBet(this.dataset.id)" title="Mark bet taken" '
+                + 'style="width:15px;height:15px;cursor:pointer;accent-color:var(--green)">';
+            html += '<tr class="' + trStyle.trim() + '" data-row-id="' + escHtml(r.id) + '" style="' + (taken ? 'opacity:0.4' : '') + '">'
+                + '<td>' + cbHtml + '</td>'
                 + '<td class="r ev-val-td">' + evCell + '</td>'
                 + '<td><span style="font-size:9px;font-weight:800;letter-spacing:.07em;color:var(--muted2);text-transform:uppercase;white-space:nowrap">' + escHtml(r._sport || '') + '</span></td>'
                 + '<td style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escHtml(gameStr) + rsLink + '</td>'
