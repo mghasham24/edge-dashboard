@@ -4448,11 +4448,61 @@
     }
 
     // ── History item helpers ──────────────────────────────────────────
+    var _histItemLogged = false;
+    var KNOWN_SPORTS_LIST = null; // lazy init after REAL_SPORT_LABELS is ready
+
     function getHistSport(p) {
+        if (!KNOWN_SPORTS_LIST) KNOWN_SPORTS_LIST = Object.values(REAL_SPORT_LABELS);
+
+        // Log first item keys once to console for debugging
+        if (!_histItemLogged && p) {
+            _histItemLogged = true;
+            console.log('[RaxEdge] history item keys:', Object.keys(p));
+            console.log('[RaxEdge] history item sample:', JSON.stringify(p).slice(0, 600));
+        }
+
+        // 1. Direct numeric sportId
         if (p.sportId && REAL_SPORT_LABELS[p.sportId]) return REAL_SPORT_LABELS[p.sportId];
-        if (p.sport) return REAL_SPORT_LABELS[REAL_SPORT_IDS[(p.sport||'').toLowerCase()]] || p.sport.toUpperCase();
-        if (p.sportLabel) return p.sportLabel;
-        if (p.leagueLabel) return p.leagueLabel;
+
+        // 2. String sport field — try mapping through REAL_SPORT_IDS then direct
+        if (p.sport) {
+            var sl = String(p.sport).toLowerCase();
+            var mapped = REAL_SPORT_LABELS[REAL_SPORT_IDS[sl]];
+            if (mapped) return mapped;
+            var up = p.sport.toUpperCase();
+            if (KNOWN_SPORTS_LIST.indexOf(up) !== -1) return up;
+        }
+
+        // 3. Various label/name fields
+        var candidates = [
+            p.sportLabel, p.sportName, p.sportType,
+            p.leagueLabel, p.leagueName, p.league,
+            p.category, p.categoryName,
+            p.predictionSport, p.gameSport,
+            p.marketDisplay && p.marketDisplay.subtitle,
+            p.marketDisplay && p.marketDisplay.league,
+            p.marketDisplay && p.marketDisplay.sport,
+            p.marketDisplay && p.marketDisplay.leagueName,
+            p.gameInfo && p.gameInfo.sport,
+            p.gameInfo && p.gameInfo.league,
+            p.predictionInfo && p.predictionInfo.sport
+        ];
+        for (var i = 0; i < candidates.length; i++) {
+            if (!candidates[i]) continue;
+            var val = String(candidates[i]).toUpperCase().trim();
+            for (var j = 0; j < KNOWN_SPORTS_LIST.length; j++) {
+                if (val === KNOWN_SPORTS_LIST[j].toUpperCase() || val.indexOf(KNOWN_SPORTS_LIST[j].toUpperCase()) !== -1) {
+                    return KNOWN_SPORTS_LIST[j];
+                }
+            }
+        }
+
+        // 4. Try extracting from headerLabel (e.g. "NBA - Game Winner")
+        var header = String(p.headerLabel || p.marketLabel || '');
+        for (var j = 0; j < KNOWN_SPORTS_LIST.length; j++) {
+            if (header.toUpperCase().indexOf(KNOWN_SPORTS_LIST[j].toUpperCase()) !== -1) return KNOWN_SPORTS_LIST[j];
+        }
+
         return '';
     }
     function getHistMarket(p) { return p.headerLabel || p.marketLabel || p.marketType || ''; }
@@ -4517,8 +4567,7 @@
         var sports = {};
         portHistoryAll.forEach(function(p) {
             var s = getHistSport(p);
-            // Only include recognised sports — keeps prop market names out
-            if (s && KNOWN_SPORTS[s]) sports[s] = 1;
+            if (s) sports[s] = 1;
         });
         var sportSel = document.getElementById('port-filter-sport');
         if (sportSel) {
