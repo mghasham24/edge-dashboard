@@ -5755,42 +5755,39 @@
     // Never touches rawRows, currentSport, or renderTable
     async function preloadAllSports() {
         if (!isPro()) return;
+        var noSpread = ['mma_mixed_martial_arts', 'baseball_mlb', 'icehockey_nhl'];
         var sportsToLoad = SPORTS.filter(function(s) { return !s.noFetch && s.key !== currentSport; });
         var evBtn = document.getElementById('ev-tab-btn');
 
-        // Fire all network requests in parallel
-        var fetched = await Promise.all(sportsToLoad.map(async function(s) {
-            if (rawRowsBySport[s.key] && rawRowsBySport[s.key].length) return { s: s, skip: true };
+        // Process sports one at a time to avoid currentSport race conditions.
+        // Odds + sync for each sport are fetched in parallel to halve per-sport latency.
+        for (var i = 0; i < sportsToLoad.length; i++) {
+            var s = sportsToLoad[i];
+            if (rawRowsBySport[s.key] && rawRowsBySport[s.key].length) continue;
             try {
-                // Match loadOdds market params so we hit the same D1 cache key
-                var noSpread = ['mma_mixed_martial_arts', 'baseball_mlb', 'icehockey_nhl'];
                 var mkts = noSpread.indexOf(s.key) !== -1 ? 'h2h' : 'h2h,spreads,totals';
-                var results = await Promise.all([
+                var pair = await Promise.all([
                     fetch('/api/odds?sport=' + s.key + '&markets=' + mkts + '&bookmakers=fanduel'),
                     fetch('/api/real/sync?sport=' + s.key, { credentials: 'same-origin' })
                 ]);
-                var oddsResp = results[0], syncResp = results[1];
-                var games = null, syncData = null;
-                if (oddsResp.ok) {
-                    var d = await oddsResp.json();
-                    games = Array.isArray(d) ? d : (d && Array.isArray(d.games) ? d.games : null);
+                var oddsResp = pair[0], syncResp = pair[1];
+                if (!oddsResp.ok) continue;
+                var d = await oddsResp.json();
+                var games = Array.isArray(d) ? d : (d && Array.isArray(d.games) ? d.games : null);
+                if (!games || !games.length) continue;
+                var savedSport = currentSport;
+                currentSport = s.key;
+                var parsed = parseGames(games);
+                currentSport = savedSport;
+                if (!parsed.length) continue;
+                rawRowsBySport[s.key] = parsed;
+                if (syncResp.ok) {
+                    try {
+                        var syncData = await syncResp.json();
+                        fillPredsFromSync(parsed, syncData);
+                    } catch(e) {}
                 }
-                if (syncResp.ok) syncData = await syncResp.json();
-                return { s: s, games: games, syncData: syncData };
-            } catch(e) { return { s: s, games: null, syncData: null }; }
-        }));
-
-        // Parse sequentially — parseGames uses currentSport global, can't run concurrently
-        for (var i = 0; i < fetched.length; i++) {
-            var f = fetched[i];
-            if (f.skip || !f.games || !f.games.length) continue;
-            var savedSport = currentSport;
-            currentSport = f.s.key;
-            var parsed = parseGames(f.games);
-            currentSport = savedSport;
-            if (!parsed.length) continue;
-            rawRowsBySport[f.s.key] = parsed;
-            if (f.syncData) fillPredsFromSync(parsed, f.syncData);
+            } catch(e) {}
         }
 
         // All sports loaded — enable Best EV button
