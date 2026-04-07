@@ -1,5 +1,5 @@
 // functions/api/auth/login.js
-const SESSION_DAYS = 30;
+const SESSION_DAYS = 30; // 30-day sessions
 
 export async function onRequestPost({ request, env }) {
   try {
