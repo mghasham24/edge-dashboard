@@ -2711,6 +2711,7 @@
     var currentSport = 'basketball_nba';
     var rawRows = [];
     var rawRowsBySport = {}; // sport key -> parsed rows (same IDs as preds)
+    var _suppressRenderTable = false; // set true during background preload to prevent UI flicker
     var preds = {};
     var vols = {}; // volume display per row id
     var yourLines = {};
@@ -5699,15 +5700,14 @@
     }
 
     // Silently pre-fetch odds + Real Sports preds for all sports in the background after login
-    // Does NOT call renderTable — zero UI side effects
     async function preloadAllSports() {
         if (!isPro()) return;
         var sportsToLoad = SPORTS.filter(function(s) { return !s.noFetch && s.key !== currentSport; });
+        _suppressRenderTable = true;
         for (var i = 0; i < sportsToLoad.length; i++) {
             var s = sportsToLoad[i];
             if (rawRowsBySport[s.key] && rawRowsBySport[s.key].length) continue;
             try {
-                // 1. Fetch FD odds for this sport
                 var mkts = s.key === 'mma_mixed_martial_arts' ? 'h2h' : 'h2h,spreads,totals';
                 var resp = await fetch('/api/odds?sport=' + s.key + '&markets=' + mkts + '&bookmakers=fanduel');
                 if (!resp.ok) continue;
@@ -5715,69 +5715,17 @@
                 var games = Array.isArray(d) ? d : (d && Array.isArray(d.games) ? d.games : null);
                 if (!games || !games.length) continue;
                 var savedSport = currentSport;
+                var savedRaw = rawRows;
                 currentSport = s.key;
                 var parsed = parseGames(games);
-                currentSport = savedSport;
-                if (!parsed.length) continue;
                 rawRowsBySport[s.key] = parsed;
-
-                // 2. Fetch Real Sports sync data and fill preds inline (no renderTable)
-                try {
-                    var syncResp = await fetch('/api/real/sync?sport=' + s.key, { credentials: 'same-origin' });
-                    if (!syncResp.ok) continue;
-                    var syncData = await syncResp.json();
-                    if (!syncData.ok || !syncData.markets) continue;
-                    // Fill preds for each row using the same matching logic as fetchRealMarkets
-                    parsed.forEach(function(r) {
-                        var mktLabel = r.mkt === 'ML' ? 'Game Winner'
-                                     : r.mkt === 'Spread' ? 'Spread'
-                                     : r.mkt === 'Total' ? 'Total'
-                                     : null;
-                        if (!mktLabel) return;
-                        // Find the game in syncData.markets
-                        var teams = r.game.split(' @ ');
-                        var fdAway = (teams[0] || '').toLowerCase();
-                        var fdHome = (teams[1] || '').toLowerCase();
-                        var gameKey = Object.keys(syncData.markets).find(function(k) {
-                            if (k.endsWith('__lines') || k.endsWith('__gid')) return false;
-                            var parts = k.split(' @ ');
-                            if (parts.length !== 2) return false;
-                            var ra = parts[0].toLowerCase(), rh = parts[1].toLowerCase();
-                            var awayMatch = ra.split(' ').some(function(w){ return w.length > 2 && fdAway.indexOf(w) !== -1; })
-                                        || fdAway.split(' ').some(function(w){ return w.length > 2 && ra.indexOf(w) !== -1; });
-                            var homeMatch = rh.split(' ').some(function(w){ return w.length > 2 && fdHome.indexOf(w) !== -1; })
-                                        || fdHome.split(' ').some(function(w){ return w.length > 2 && rh.indexOf(w) !== -1; });
-                            return awayMatch && homeMatch;
-                        });
-                        if (!gameKey) return;
-                        var mktData = syncData.markets[gameKey];
-                        if (!mktData) return;
-                        var outcomes = mktData.outcomes || mktData;
-                        if (!outcomes || !outcomes.length) return;
-                        var match = null;
-                        if (r.mkt === 'Total') {
-                            var isOver = r.side.toLowerCase() === 'over';
-                            match = outcomes.find(function(o) {
-                                var first = (o.label||'').trim().charAt(0).toUpperCase();
-                                return isOver ? first === 'O' : first === 'U';
-                            });
-                            if (!match) match = isOver ? outcomes[0] : outcomes[1];
-                        } else {
-                            var sideLower = r.side.toLowerCase();
-                            match = outcomes.find(function(o) {
-                                if (!o.label) return false;
-                                var ol = o.label.toLowerCase();
-                                return sideLower.split(' ').some(function(w){ return w.length > 2 && ol.indexOf(w) !== -1; });
-                            });
-                        }
-                        if (match && match.pct != null) {
-                            preds[r.id] = String(match.pct);
-                            if (mktData.volumeDisplay) vols[r.id] = mktData.volumeDisplay;
-                        }
-                    });
-                } catch(e) { /* sync failed — skip preds for this sport */ }
-            } catch(e) { /* skip sport */ }
+                rawRows = parsed;
+                try { await fetchRealMarkets(s.key); } catch(e) {}
+                rawRows = savedRaw;
+                currentSport = savedSport;
+            } catch(e) {}
         }
+        _suppressRenderTable = false;
     }
 
     function toggleGame(gk) {
@@ -5794,6 +5742,7 @@
     }
 
     function renderTable() {
+        if (_suppressRenderTable) return;
         var unit = parseFloat(document.getElementById('unit-size').value) || 300;
         var q = document.getElementById('search').value.trim().toLowerCase();
         if (!rawRows.length) {
