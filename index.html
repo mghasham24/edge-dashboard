@@ -5022,13 +5022,13 @@
         if (!histTbody) return;
         if (!filtered.length) {
             var msg = portHistoryMore ? 'Still loading…' : (portFilterSport || portFilterMarket || portFilterResult ? 'No bets match the filters' : 'No settled bets on this date');
-            histTbody.innerHTML = '<tr><td colspan="7" style="color:var(--muted);padding:20px 12px">' + msg + '</td></tr>';
+            histTbody.innerHTML = '<tr><td colspan="8" style="color:var(--muted);padding:20px 12px">' + msg + '</td></tr>';
         } else {
             histTbody.innerHTML = filtered.map(function(p) { return histRowHtml(p); }).join('');
         }
         // Free users: show upgrade banner below history table
         if (!isPro()) {
-            histTbody.innerHTML += '<tr><td colspan="7" style="padding:12px;text-align:center;border-top:1px solid var(--border)">'
+            histTbody.innerHTML += '<tr><td colspan="8" style="padding:12px;text-align:center;border-top:1px solid var(--border)">'
                 + '<span style="color:var(--muted);font-size:12px">Showing last 7 days only. </span>'
                 + '<button onclick="showUpgradeModal(\'Upgrade to Pro to unlock your complete betting history.\')" style="background:none;border:none;color:var(--accent);font-size:12px;font-weight:600;cursor:pointer;padding:0;text-decoration:underline">Upgrade to Pro for full history →</button>'
                 + '</td></tr>';
@@ -5074,12 +5074,14 @@
         var details  = Array.isArray(p.details) ? p.details : [];
         var costDet  = details.find(function(d){ return d.label === 'Cost'; }) || {};
         var paidDet  = details.find(function(d){ return d.label === 'Paid'; }) || {};
-        var avgDet   = details.find(function(d){ return d.label === 'Avg';  }) || {};
-        var avgDisp  = avgDet.display  || '—';
+        var avgDet   = details.find(function(d){ return d.label === 'Avg' || d.label === 'Price' || d.label === 'Entry'; }) || {};
         var costDisp = costDet.display || '—';
         var paidDisp = paidDet.display || '—';
         var paidNum  = parseRaxDisplay(paidDet.display);
         var costNum  = parseRaxDisplay(costDet.display);
+        // Derive entry price: for wins cost/paid*100 gives the buy % (e.g. 200/276 = 72%)
+        // For losses we can't compute from paid=0, so fall back to API field or '—'
+        var avgDisp  = avgDet.display || (paidNum > 0 ? Math.round(costNum / paidNum * 100) + '%' : '—');
         var isWin      = paidDet.color === 'green' && paidNum > 0;
         var isLoss     = paidDet.display === '0' || (!isWin && paidDet.color === 'default');
         var profitNum  = paidNum - costNum;
