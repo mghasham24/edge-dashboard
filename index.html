@@ -2586,7 +2586,7 @@
                     <div style="margin-bottom:28px">
                         <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
                             <div>
-                                <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2)">Daily P&amp;L</div>
+                                <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2)">Monthly P&amp;L</div>
                                 <div id="port-cal-monthly-total" style="font-size:13px;font-weight:700;font-family:var(--mono);margin-top:2px"></div>
                             </div>
                             <div style="display:flex;align-items:center;gap:6px;margin-left:auto">
@@ -4608,7 +4608,18 @@
         // Default date filter to today, set input value
         portSelectedDate = localDateKey(new Date());
         var dateInput = document.getElementById('port-date-filter');
-        if (dateInput) dateInput.value = portSelectedDate;
+        if (dateInput) {
+            dateInput.value = portSelectedDate;
+            // Free users: lock date picker to last 7 days only
+            if (!isPro()) {
+                var minDate = localDateKey(new Date(Date.now() - 6 * 24 * 60 * 60 * 1000));
+                dateInput.min = minDate;
+                dateInput.max = portSelectedDate;
+            } else {
+                dateInput.min = '';
+                dateInput.max = '';
+            }
+        }
 
         updatePortProfit();
         updatePerfCards();
@@ -4695,6 +4706,10 @@
     }
 
     function togglePortAllTime() {
+        if (!isPro()) {
+            showUpgradeModal('Upgrade to Pro to view your complete all-time betting history.');
+            return;
+        }
         portShowAllTime = !portShowAllTime;
         var btn        = document.getElementById('port-alltime-btn');
         var datePicker = document.getElementById('port-date-filter');
@@ -4787,8 +4802,15 @@
         });
         var monthTotalEl = document.getElementById('port-cal-monthly-total');
         if (monthTotalEl) {
-            monthTotalEl.textContent = (monthTotal >= 0 ? '+' : '') + fmtRax(monthTotal) + ' rax';
-            monthTotalEl.style.color = monthTotal > 0 ? 'var(--green)' : monthTotal < 0 ? 'var(--red)' : 'var(--muted)';
+            var totalStr = (monthTotal >= 0 ? '+' : '') + fmtRax(monthTotal) + ' rax';
+            var totalColor = monthTotal > 0 ? 'var(--green)' : monthTotal < 0 ? 'var(--red)' : 'var(--muted)';
+            if (!isPro()) {
+                monthTotalEl.innerHTML = '<span style="filter:blur(6px);user-select:none;cursor:pointer" onclick="showUpgradeModal(\'Upgrade to Pro to see your monthly P&amp;L totals.\')">' + totalStr + '</span>';
+                monthTotalEl.style.color = totalColor;
+            } else {
+                monthTotalEl.textContent = totalStr;
+                monthTotalEl.style.color = totalColor;
+            }
         }
 
         var daysInMonth = new Date(portCalYear, portCalMonth + 1, 0).getDate();
