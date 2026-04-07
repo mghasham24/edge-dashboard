@@ -5464,12 +5464,14 @@
         var isCashout  = isWin && profitNum < 0;
         var resCls     = (isWin && !isCashout) ? 'port-win' : (isLoss || isCashout) ? 'port-loss' : '';
         var unitSize   = parseFloat(localStorage.getItem('raxedge_unit_size') || '300') || 300;
-        var profitStr  = '';
+        var profitRax  = '';
+        var profitUnit = '';
         if (isWin || isLoss) {
             var unitStr = (profitNum / unitSize);
-            profitStr = RAX_ICON + (profitNum >= 0 ? '+' : '') + fmtRax(profitNum) + ' (' + (unitStr >= 0 ? '+' : '') + unitStr.toFixed(2) + 'u)';
+            profitRax  = '<span style="font-size:11px;font-weight:600;white-space:nowrap">' + RAX_ICON + (profitNum >= 0 ? '+' : '') + fmtRax(profitNum) + '</span>';
+            profitUnit = '<span style="font-size:10px;color:var(--muted);font-family:var(--mono);display:block;white-space:nowrap">' + (unitStr >= 0 ? '+' : '') + unitStr.toFixed(2) + 'u</span>';
         }
-        var profit     = profitStr ? ' <span style="font-size:11px;font-weight:600">' + profitStr + '</span>' : '';
+        var profit     = profitRax ? ' ' + profitRax + profitUnit : '';
         var resLbl     = isCashout ? 'Cashout' : isWin ? 'Win' : isLoss ? 'Loss' : '—';
         var trCls      = isCashout ? 'port-card-loss' : isWin ? 'port-card-win' : isLoss ? 'port-card-loss' : '';
         var dateStr  = fmtPortDate(p.transactedAt);
@@ -5481,7 +5483,7 @@
             + '<td data-label="Avg" class="r" style="font-family:var(--mono);color:var(--muted)">' + escHtml(avgDisp) + '</td>'
             + '<td data-label="Cost" class="r" style="font-family:var(--mono);color:var(--muted)">' + escHtml(costDisp) + '</td>'
             + '<td data-label="Paid" class="r ' + ((isWin && !isCashout) ? 'port-win' : 'port-loss') + '" style="font-family:var(--mono)">' + escHtml(paidDisp) + '</td>'
-            + '<td data-label="Result" class="' + resCls + '" style="font-weight:700;font-size:12px">' + resLbl + profit + '</td>'
+            + '<td data-label="Result" class="' + resCls + '" style="font-weight:700;font-size:12px;white-space:normal">' + resLbl + profit + '</td>'
             + '</tr>';
     }
 
