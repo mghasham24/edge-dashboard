@@ -2960,7 +2960,7 @@
             var data;
             try { data = await res.json(); } catch(e) { data = {}; }
             if (!res.ok) {
-                showGateErr(data.error || 'Something went wrong');
+                showGateErr(data.error || ('Error ' + res.status + ' — please try again'));
             } else {
                 currentUser = data;
                 document.getElementById('gate').style.display = 'none';

@@ -12,7 +12,7 @@ export async function onRequestPost({ request, env }) {
     if (!email || !password) return err('Email and password required');
 
     const user = await env.DB.prepare(
-      'SELECT id, email, password_hash, plan, is_admin, banned, referral_code FROM users WHERE email=?'
+      'SELECT id, email, password_hash, plan, is_admin, banned FROM users WHERE email=?'
     ).bind(email).first();
 
     // Always verify to prevent timing attacks
@@ -34,11 +34,10 @@ export async function onRequestPost({ request, env }) {
     return ok({
       email: user.email,
       plan: user.plan,
-      is_admin: user.is_admin || 0,
-      referral_code: user.referral_code || ''
+      is_admin: user.is_admin || 0
     }, 200, cookie(token, exp));
   } catch(e) {
-    return err('Login failed: ' + e.message, 500);
+    return err('Login failed: ' + (e && e.message ? e.message : String(e)), 500);
   }
 }
 
