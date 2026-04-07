@@ -2597,6 +2597,7 @@
                                     <option value="profit-desc">Profit ↓</option>
                                     <option value="profit-asc">Profit ↑</option>
                                 </select>
+                                <button id="port-alltime-btn" onclick="togglePortAllTime()" class="port-tf-btn">All Time</button>
                                 <input type="date" id="port-date-filter" onchange="renderHistoryForDate(this.value)" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--mono);font-size:12px;padding:4px 8px;border-radius:5px;cursor:pointer">
                             </div>
                         </div>
@@ -2710,6 +2711,7 @@
     var portFilterMarket  = '';
     var portFilterResult  = '';
     var portSortBy        = 'chrono-desc';
+    var portShowAllTime   = false;
     var rfiOdds = {}; // game key -> {yesFair, noFair, yesAm, noAm}
     var rsGameIds = {}; // game string -> Real Sports numeric gameId
 
@@ -4505,6 +4507,16 @@
         renderHistoryForDate(portSelectedDate);
     }
 
+    function togglePortAllTime() {
+        portShowAllTime = !portShowAllTime;
+        var btn        = document.getElementById('port-alltime-btn');
+        var datePicker = document.getElementById('port-date-filter');
+        if (btn)        btn.classList.toggle('port-tf-active', portShowAllTime);
+        if (datePicker) datePicker.style.opacity = portShowAllTime ? '0.3' : '1';
+        if (datePicker) datePicker.style.pointerEvents = portShowAllTime ? 'none' : '';
+        renderHistoryForDate(portSelectedDate);
+    }
+
     function onPortSportChange() {
         var sportSel  = document.getElementById('port-filter-sport');
         var marketSel = document.getElementById('port-filter-market');
@@ -4753,7 +4765,8 @@
     function renderHistoryForDate(dateKey) {
         portSelectedDate = dateKey;
         var filtered = portHistoryAll.filter(function(p) {
-            if (!p.transactedAt || localDateKey(p.transactedAt) !== dateKey) return false;
+            if (!p.transactedAt) return false;
+            if (!portShowAllTime && localDateKey(p.transactedAt) !== dateKey) return false;
             if (portFilterSport  && getHistSport(p)  !== portFilterSport)  return false;
             if (portFilterMarket && getHistMarket(p) !== portFilterMarket) return false;
             if (portFilterResult && getHistResult(p) !== portFilterResult) return false;
