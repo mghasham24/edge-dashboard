@@ -2605,7 +2605,8 @@
                     <!-- ROI breakdown by market + sport -->
                     <!-- Open positions -->
                     <div style="margin-bottom:28px">
-                        <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:12px">Open Positions</div>
+                        <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:10px">Open Positions</div>
+                        <div id="port-open-stats" style="display:none;margin-bottom:14px"></div>
                         <div class="admin-table-wrap">
                             <table class="port-table">
                                 <thead>
@@ -2647,7 +2648,6 @@
                         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px">
                             <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2)">Settled History</div>
                             <span id="port-load-status" style="font-size:11px;color:var(--muted2)"></span>
-                            <input id="port-search" type="text" placeholder="Search matchup / side / market…" oninput="portSearchQuery=this.value.trim().toLowerCase();renderHistoryForDate()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--mono);font-size:12px;padding:5px 10px;border-radius:5px;outline:none;width:220px">
                             <div style="margin-left:auto;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
                                 <select id="port-filter-sport"  onchange="onPortSportChange()" class="port-filter-sel"><option value="">All Sports</option></select>
                                 <select id="port-filter-market" onchange="applyPortFilters()" class="port-filter-sel" style="display:none"><option value="">All Markets</option></select>
@@ -4748,19 +4748,27 @@
         if (openHead) openHead.innerHTML = '<th>Matchup</th><th>Sport</th><th>Market</th><th>Side</th><th class="r">Avg</th><th class="r">Now</th><th class="r">Cost</th><th class="r">Pays</th><th>Status</th>';
 
         var openTbody = document.getElementById('port-open-tbody');
+        var openStats = document.getElementById('port-open-stats');
         if (!isPro()) {
-            openTbody.innerHTML = '<tr><td colspan="9" style="padding:0"><div style="position:relative;min-height:110px;overflow:hidden;border-radius:6px">'
-                + '<div style="filter:blur(5px);pointer-events:none;user-select:none;padding:12px">'
-                + '<div style="height:13px;background:var(--bg3);border-radius:3px;margin-bottom:10px;width:75%"></div>'
-                + '<div style="height:13px;background:var(--bg3);border-radius:3px;margin-bottom:10px;width:55%"></div>'
-                + '<div style="height:13px;background:var(--bg3);border-radius:3px;width:65%"></div>'
-                + '</div>'
-                + '<div onclick="showUpgradeModal(\'Open Positions requires Pro. Upgrade to track your live positions and current market values.\')" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:rgba(10,10,12,.6);cursor:pointer">'
-                + '<span style="font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.1em;padding:4px 14px;border-radius:20px;background:var(--accent);color:#fff">PRO FEATURE</span>'
-                + '<span style="font-size:12px;color:var(--muted)">Upgrade to see open positions</span>'
-                + '</div>'
-                + '</div></td></tr>';
+            if (openStats) openStats.style.display = 'none';
+            // Replace table with a clean pro gate (no table rows — avoids mobile card layout issues)
+            var openWrap = openTbody.closest('.admin-table-wrap');
+            if (openWrap) {
+                openWrap.innerHTML = '<div onclick="showUpgradeModal(\'Open Positions requires Pro. Upgrade to track your live positions and current market values.\')" '
+                    + 'style="position:relative;border-radius:8px;overflow:hidden;cursor:pointer;min-height:100px">'
+                    + '<div style="filter:blur(4px);pointer-events:none;user-select:none;padding:14px 16px">'
+                    + '<div style="height:12px;background:var(--bg3);border-radius:3px;margin-bottom:10px;width:70%"></div>'
+                    + '<div style="height:12px;background:var(--bg3);border-radius:3px;margin-bottom:10px;width:50%"></div>'
+                    + '<div style="height:12px;background:var(--bg3);border-radius:3px;width:60%"></div>'
+                    + '</div>'
+                    + '<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:rgba(10,10,12,.55)">'
+                    + '<span style="font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.1em;padding:5px 16px;border-radius:20px;background:var(--accent);color:#fff">PRO FEATURE</span>'
+                    + '<span style="font-size:12px;color:var(--muted);text-align:center">Upgrade to see open positions</span>'
+                    + '</div>'
+                    + '</div>';
+            }
         } else if (!activePos.length) {
+            if (openStats) openStats.style.display = 'none';
             openTbody.innerHTML = '<tr><td colspan="9" style="color:var(--muted);padding:20px 12px">No open positions</td></tr>';
         } else {
             openTbody.innerHTML = activePos.map(function(p) {
@@ -4825,6 +4833,41 @@
                     + '<td data-label="Status" style="color:var(--muted);font-size:11px">' + escHtml(status) + '</td>'
                     + '</tr>';
             }).join('');
+
+            // Summary stats above open positions
+            if (openStats && activePos.length) {
+                var totalCost = 0, totalPays = 0;
+                activePos.forEach(function(p) {
+                    var det = Array.isArray(p.details) ? p.details : [];
+                    totalCost += parseRaxDisplay((det.find(function(d){ return d.label==='Cost'; }) || {}).display);
+                    totalPays += parseRaxDisplay((det.find(function(d){ return d.label==='Pays'; }) || {}).display);
+                });
+                var maxProfit = totalPays - totalCost;
+                var unitSize  = parseFloat(localStorage.getItem('raxedge_unit_size') || '300') || 300;
+                var unitsOut  = totalCost / unitSize;
+                var statStyle = 'flex:1;min-width:110px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:10px 14px';
+                openStats.style.display = 'flex';
+                openStats.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px';
+                openStats.innerHTML =
+                    '<div style="' + statStyle + '">'
+                    +   '<div style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:4px">Invested</div>'
+                    +   '<div style="font-family:var(--mono);font-size:15px;font-weight:700;color:var(--fg)">' + fmtRax(totalCost) + ' <span style="font-size:10px;color:var(--muted)">rax</span></div>'
+                    + '</div>'
+                    + '<div style="' + statStyle + '">'
+                    +   '<div style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:4px">Max Win</div>'
+                    +   '<div style="font-family:var(--mono);font-size:15px;font-weight:700;color:var(--green)">' + fmtRax(totalPays) + ' <span style="font-size:10px;color:var(--muted)">rax</span></div>'
+                    + '</div>'
+                    + '<div style="' + statStyle + '">'
+                    +   '<div style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:4px">Max Profit</div>'
+                    +   '<div style="font-family:var(--mono);font-size:15px;font-weight:700;color:' + (maxProfit >= 0 ? 'var(--green)' : 'var(--red)') + '">' + (maxProfit >= 0 ? '+' : '') + fmtRax(maxProfit) + ' <span style="font-size:10px;color:var(--muted)">rax</span></div>'
+                    + '</div>'
+                    + '<div style="' + statStyle + '">'
+                    +   '<div style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:4px">Units Out</div>'
+                    +   '<div style="font-family:var(--mono);font-size:15px;font-weight:700;color:var(--fg)">' + unitsOut.toFixed(2) + 'u <span style="font-size:10px;color:var(--muted)">@ $' + Math.round(unitSize) + '</span></div>'
+                    + '</div>';
+            } else if (openStats) {
+                openStats.style.display = 'none';
+            }
         }
 
         // Update history state — skip if we merged from cache (state already set)
