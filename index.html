@@ -5704,49 +5704,72 @@
     function fillPredsFromSync(rows, syncData) {
         if (!syncData || !syncData.markets) return;
         var markets = syncData.markets;
+        var marketKeys = Object.keys(markets);
+
+        // Build resolved map identical to fetchRealMarkets: full-name game key → original Real key
+        var resolvedMap = {};
+        marketKeys.forEach(function(k) {
+            if (k.endsWith('__lines') || k.endsWith('__gid')) return;
+            var parts = k.split(' @ ');
+            if (parts.length !== 2) return;
+            var resolvedKey = resolveTeamName(parts[0].trim()) + ' @ ' + resolveTeamName(parts[1].trim());
+            resolvedMap[resolvedKey] = k;
+            resolvedMap[k] = k;
+        });
+
         rows.forEach(function(r) {
-            if (preds[r.id]) return; // already set
+            if (preds[r.id]) return;
             var mktLabel = r.mkt === 'ML' ? 'Game Winner' : r.mkt === 'Spread' ? 'Spread' : r.mkt === 'Total' ? 'Total' : null;
             if (!mktLabel) return;
-            var teams = r.game.split(' @ ');
-            var fdAway = (teams[0] || '').toLowerCase();
-            var fdHome = (teams[1] || '').toLowerCase();
-            // Find matching game key in sync data
-            var gameKey = null;
-            var mkeys = Object.keys(markets).filter(function(k) { return !k.endsWith('__lines') && !k.endsWith('__gid'); });
-            for (var ki = 0; ki < mkeys.length; ki++) {
-                var k = mkeys[ki];
-                var parts = k.split(' @ ');
-                if (parts.length !== 2) continue;
-                var ra = resolveTeamName(parts[0].trim()).toLowerCase();
-                var rh = resolveTeamName(parts[1].trim()).toLowerCase();
-                var awayOk = ra.split(' ').some(function(w){ return w.length > 2 && fdAway.indexOf(w) !== -1; })
-                          || fdAway.split(' ').some(function(w){ return w.length > 2 && ra.indexOf(w) !== -1; });
-                var homeOk = rh.split(' ').some(function(w){ return w.length > 2 && fdHome.indexOf(w) !== -1; })
-                          || fdHome.split(' ').some(function(w){ return w.length > 2 && rh.indexOf(w) !== -1; });
-                if (awayOk && homeOk) { gameKey = k; break; }
+
+            // Try exact/resolved match first, then fuzzy fallback
+            var realKey = resolvedMap[r.game];
+            if (!realKey) {
+                var fdTeams = r.game.split(' @ ');
+                var fdAway = (fdTeams[0] || '').toLowerCase();
+                var fdHome = (fdTeams[1] || '').toLowerCase();
+                var found = marketKeys.find(function(k) {
+                    if (k.endsWith('__lines') || k.endsWith('__gid')) return false;
+                    var parts = k.split(' @ ');
+                    if (parts.length !== 2) return false;
+                    var ra = resolveTeamName(parts[0].trim()).toLowerCase();
+                    var rh = resolveTeamName(parts[1].trim()).toLowerCase();
+                    var awayOk = ra.split(' ').some(function(w){ return w.length > 2 && fdAway.indexOf(w) !== -1; })
+                              || fdAway.split(' ').some(function(w){ return w.length > 2 && ra.indexOf(w) !== -1; });
+                    var homeOk = rh.split(' ').some(function(w){ return w.length > 2 && fdHome.indexOf(w) !== -1; })
+                              || fdHome.split(' ').some(function(w){ return w.length > 2 && rh.indexOf(w) !== -1; });
+                    return awayOk && homeOk;
+                });
+                if (found) realKey = found;
             }
-            if (!gameKey) return;
-            var mktData = markets[gameKey];
-            if (!mktData) return;
-            var outcomes = mktData.outcomes || [];
-            if (!outcomes.length) return;
+            if (!realKey) return;
+
+            // markets[realKey] is the game object: { "Game Winner": {...}, "Spread": {...}, ... }
+            var gameMarkets = markets[realKey];
+            if (!gameMarkets) return;
+            var mktData = gameMarkets[mktLabel];
+            var outcomes = mktData ? (mktData.outcomes || mktData) : null;
+            if (!outcomes || !outcomes.length) return;
+
+            var sideLower = r.side.toLowerCase();
             var match = null;
             if (r.mkt === 'Total') {
-                var isOver = r.side.toLowerCase() === 'over';
-                match = outcomes.find(function(o) { var f = (o.label||'').trim()[0]; return isOver ? f==='O' : f==='U'; });
+                var isOver = sideLower === 'over';
+                match = outcomes.find(function(o) {
+                    if (!o.label) return false;
+                    return isOver ? o.label[0] === 'O' : o.label[0] === 'U';
+                });
                 if (!match) match = isOver ? outcomes[0] : outcomes[1];
             } else {
-                var sl = r.side.toLowerCase();
                 match = outcomes.find(function(o) {
                     if (!o.label) return false;
                     var ol = resolveTeamName(o.label).toLowerCase();
-                    return sl.split(' ').some(function(w){ return w.length > 2 && ol.indexOf(w) !== -1; });
+                    return sideLower.split(' ').some(function(w){ return w.length > 2 && ol.indexOf(w) !== -1; });
                 });
             }
             if (match && match.pct != null) {
                 preds[r.id] = String(match.pct);
-                if (mktData.volumeDisplay) vols[r.id] = mktData.volumeDisplay;
+                if (mktData && mktData.volumeDisplay) vols[r.id] = mktData.volumeDisplay;
             }
         });
     }
