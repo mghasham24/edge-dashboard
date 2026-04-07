@@ -4575,11 +4575,29 @@
             if (status) status.textContent = 'Loading ' + done + '/' + total + '…';
         }
         updateStatus();
+
+        // Re-fetch fresh odds for all sports in parallel — this evicts finished games from rawRowsBySport
+        var noSpread = ['mma_mixed_martial_arts', 'baseball_mlb', 'icehockey_nhl'];
+        await Promise.all(sportsToLoad.map(async function(s) {
+            try {
+                var mkts = noSpread.indexOf(s.key) !== -1 ? 'h2h' : 'h2h,spreads,totals';
+                var resp = await fetch('/api/odds?sport=' + s.key + '&markets=' + mkts + '&bookmakers=fanduel');
+                if (!resp.ok) return;
+                var d = await resp.json();
+                var games = Array.isArray(d) ? d : (d && Array.isArray(d.games) ? d.games : null);
+                if (!games) return;
+                var savedSport4 = currentSport;
+                currentSport = s.key;
+                var parsed = parseGames(games);
+                currentSport = savedSport4;
+                if (parsed.length > 0) rawRowsBySport[s.key] = parsed; // only overwrite if non-empty
+            } catch(e) {}
+        }));
+
         // Load each sport sequentially to avoid hammering the API
         for (var i = 0; i < sportsToLoad.length; i++) {
             var s = sportsToLoad[i];
             try {
-                // Use rows already loaded when user visited this sport tab (same IDs as preds)
                 var sportRows = rawRowsBySport[s.key] || [];
                 if (sportRows.length) {
                     var savedSport3 = currentSport;
