@@ -4423,7 +4423,7 @@
                 + '<td class="r" style="font-family:var(--mono);font-size:12px;color:var(--muted)">' + escHtml(amStr) + '</td>'
                 + '<td class="r" style="font-family:var(--mono);font-size:12px;color:var(--fg);font-weight:600">' + escHtml(afStr) + '</td>'
                 + '<td class="r"><input type="number" min="1" max="99" step="1" value="' + escHtml(Math.round(parseFloat(predPct) || 0) || '') + '" '
-                +   'oninput="evCardUpdate(' + JSON.stringify(r.id) + ',this)" placeholder="—" '
+                +   'data-ev-id="' + escHtml(r.id) + '" oninput="evCardUpdate(this.dataset.evId,this)" placeholder="—" '
                 +   'style="width:58px;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--mono);font-size:11px;font-weight:600;padding:3px 5px;border-radius:4px;text-align:right" /></td>'
                 + '<td class="r ev-units-td" style="font-family:var(--mono);font-size:11px;font-weight:700;color:' + uColor + '">' + escHtml(uStr) + '</td>'
                 + '<td class="r ev-bet-td" style="font-family:var(--mono);font-size:11px;font-weight:600;color:var(--muted)">' + escHtml(betAmt) + '</td>'
