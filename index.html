@@ -5762,7 +5762,9 @@
         var fetched = await Promise.all(sportsToLoad.map(async function(s) {
             if (rawRowsBySport[s.key] && rawRowsBySport[s.key].length) return { s: s, skip: true };
             try {
-                var mkts = s.key === 'mma_mixed_martial_arts' ? 'h2h' : 'h2h,spreads,totals';
+                // Match loadOdds market params so we hit the same D1 cache key
+                var noSpread = ['mma_mixed_martial_arts', 'baseball_mlb', 'icehockey_nhl'];
+                var mkts = noSpread.indexOf(s.key) !== -1 ? 'h2h' : 'h2h,spreads,totals';
                 var results = await Promise.all([
                     fetch('/api/odds?sport=' + s.key + '&markets=' + mkts + '&bookmakers=fanduel'),
                     fetch('/api/real/sync?sport=' + s.key, { credentials: 'same-origin' })
