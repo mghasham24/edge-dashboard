@@ -21,6 +21,7 @@
         --border: rgba(255, 255, 255, 0.07);
         --border2: rgba(255, 255, 255, 0.12);
         --text: #f0eff5;
+        --fg: #f0eff5;
         --muted: #7a7990;
         --muted2: #4a4960;
         --accent: #4f6ef7;
@@ -30,6 +31,22 @@
         --mono: 'IBM Plex Mono', monospace;
         --sans: 'Barlow', system-ui, sans-serif;
         --header-h: 60px;
+    }
+
+    html.light {
+        --bg: #f0f0f5;
+        --bg2: #ffffff;
+        --bg3: #e8e8f0;
+        --bg4: #dcdce8;
+        --border: rgba(0,0,0,0.08);
+        --border2: rgba(0,0,0,0.15);
+        --text: #1a1a2e;
+        --fg: #1a1a2e;
+        --muted: #60607a;
+        --muted2: #9898b0;
+        --green: #1aad66;
+        --red: #d43535;
+        --yellow: #c49000;
     }
 
     body {
@@ -2250,6 +2267,7 @@
                 <div class="api-remaining" id="api-remaining" style="display:none">-- requests left</div>
                 <button class="refresh-btn" id="collapse-btn" onclick="toggleAll()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted)" class="desktop-only">Collapse All</button>
                 <button class="refresh-btn" id="refresh-btn" onclick="loadOdds()">Refresh</button>
+                <button id="theme-btn" onclick="toggleTheme()" title="Toggle light/dark mode" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:14px;padding:6px 10px;border-radius:5px;cursor:pointer;line-height:1">🌙</button>
                 <button class="refresh-btn" onclick="logOut()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted)" title="Log out">⏻</button>
                 <button id="manage-sub-btn" onclick="openBillingPortal()" style="display:none;background:var(--bg3);border:1px solid rgba(79,110,247,.4);color:var(--accent);font-family:var(--sans);font-size:11px;font-weight:600;padding:6px 12px;border-radius:5px;cursor:pointer;text-transform:uppercase;letter-spacing:.05em">Pro ✦</button>
             </div>
@@ -2585,6 +2603,7 @@
                         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px">
                             <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2)">Settled History</div>
                             <span id="port-load-status" style="font-size:11px;color:var(--muted2)"></span>
+                            <input id="port-search" type="text" placeholder="Search matchup / side / market…" oninput="portSearchQuery=this.value.trim().toLowerCase();renderHistoryForDate()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--mono);font-size:12px;padding:5px 10px;border-radius:5px;outline:none;width:220px">
                             <div style="margin-left:auto;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
                                 <select id="port-filter-sport"  onchange="onPortSportChange()" class="port-filter-sel"><option value="">All Sports</option></select>
                                 <select id="port-filter-market" onchange="applyPortFilters()" class="port-filter-sel" style="display:none"><option value="">All Markets</option></select>
@@ -2630,6 +2649,27 @@
                         <pre id="port-debug-pre" style="background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:14px;font-size:11px;font-family:var(--mono);overflow-x:auto;white-space:pre-wrap;max-height:300px;overflow-y:auto"></pre>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <!-- Best EV panel (pro-only) -->
+        <div class="admin-panel" id="ev-panel">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;flex-wrap:wrap">
+                <div style="font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--fg)">⚡ Best EV — All Sports</div>
+                <div id="ev-load-status" style="font-size:11px;color:var(--muted2)"></div>
+                <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+                    <button onclick="loadAllEvSports()" id="ev-load-btn" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:11px;font-weight:700;padding:6px 14px;border-radius:5px;cursor:pointer;letter-spacing:.04em">Load All Sports</button>
+                    <button onclick="document.getElementById('ev-tab-btn').click()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:7px 14px;border-radius:5px;cursor:pointer;letter-spacing:.04em">&larr; Back</button>
+                </div>
+            </div>
+            <div class="admin-table-wrap">
+                <table class="port-table" id="ev-table">
+                    <thead><tr>
+                        <th>Sport</th><th>Game</th><th>Mkt</th><th>Side</th>
+                        <th class="r">FD Odds</th><th class="r">Edge</th><th class="r">EV Units</th>
+                    </tr></thead>
+                    <tbody id="ev-tbody"><tr><td colspan="7" style="color:var(--muted);padding:20px 12px">Click "Load All Sports" to fetch live odds for every sport.</td></tr></tbody>
+                </table>
             </div>
         </div>
 
@@ -2717,6 +2757,9 @@
     var portFilterResult  = '';
     var portSortBy        = 'chrono-desc';
     var portShowAllTime   = false;
+    var portSearchQuery   = '';
+    var evTabCache        = {};   // sport key -> array of positive-EV row objects
+    var evTabVisible      = false;
     var rfiOdds = {}; // game key -> {yesFair, noFair, yesAm, noAm}
     var rsGameIds = {}; // game string -> Real Sports numeric gameId
 
@@ -4212,6 +4255,156 @@
         document.getElementById('portfolio-panel').classList.remove('visible');
     }
 
+    function showEvTab() {
+        document.getElementById('sport-tabs').style.display = 'none';
+        document.querySelector('.controls').style.display = 'none';
+        document.querySelector('.status-bar').style.display = 'none';
+        document.querySelector('.table-wrap').style.display = 'none';
+        document.getElementById('mobile-cards').style.display = 'none';
+        document.getElementById('collapse-btn').style.display = 'none';
+        document.getElementById('refresh-btn').style.display = 'none';
+        document.getElementById('ev-panel').classList.add('visible');
+        evTabVisible = true;
+        renderEvTab();
+    }
+
+    function hideEvTab() {
+        document.getElementById('sport-tabs').style.display = '';
+        document.querySelector('.controls').style.display = '';
+        document.querySelector('.status-bar').style.display = '';
+        document.querySelector('.table-wrap').style.display = '';
+        document.getElementById('mobile-cards').style.display = '';
+        document.getElementById('collapse-btn').style.display = '';
+        document.getElementById('refresh-btn').style.display = '';
+        document.getElementById('ev-panel').classList.remove('visible');
+        evTabVisible = false;
+    }
+
+    function cacheEvRows(rows, sport) {
+        // Store only positive-EV rows for this sport
+        var positive = rows.filter(function(r) {
+            if (r.edge == null) return false;
+            // Compute EV (same formula as renderTable)
+            if (r.af == null || r.u == null) return false;
+            var pr = preds[r.id];
+            if (!pr || pr === '') return false;
+            var pred = parseFloat(pr) / 100;
+            if (pred <= 0 || pred >= 1) return false;
+            var volNum = 0;
+            if (vols[r.id]) { var vs = vols[r.id]; volNum = vs.endsWith('k') ? parseFloat(vs)*1000 : vs.endsWith('m') ? parseFloat(vs)*1000000 : parseFloat(vs); }
+            var rake = volNum > 100000 ? 0.034 : volNum > 10000 ? 0.032 : volNum > 1000 ? 0.035 : volNum > 0 ? 0.04 : 0.034;
+            var ev = (r.af * (1/pred) * (1-rake) - 1) * 100;
+            r._ev = ev;
+            return ev > 0;
+        });
+        // Attach sport label
+        var sportLabel = (SPORTS.find(function(s) { return s.key === sport; }) || {}).label || sport;
+        positive.forEach(function(r) { r._sport = sportLabel; });
+        evTabCache[sport] = positive;
+        if (evTabVisible) renderEvTab();
+    }
+
+    function renderEvTab() {
+        var tbody = document.getElementById('ev-tbody');
+        if (!tbody) return;
+        // Flatten all cached sports
+        var all = [];
+        Object.values(evTabCache).forEach(function(arr) { all = all.concat(arr); });
+        // Sort by EV descending
+        all.sort(function(a, b) { return (b._ev || 0) - (a._ev || 0); });
+        // Filter positives only
+        all = all.filter(function(r) { return r._ev > 0; });
+        if (!all.length) {
+            tbody.innerHTML = '<tr><td colspan="7" style="color:var(--muted);padding:20px 12px;text-align:center">Click "Load All Sports" to fetch odds across every sport, or navigate to a sport tab first.</td></tr>';
+            return;
+        }
+        var unit = parseFloat(document.getElementById('unit-size').value) || 300;
+        var html = '';
+        all.forEach(function(r) {
+            var evStr = r._ev != null ? (r._ev >= 0 ? '+' : '') + r._ev.toFixed(1) + '%' : '—';
+            var evCls = r._ev > 0 ? 'port-win' : 'port-loss';
+            var evUnits = r.u != null ? (r.u >= 0 ? '+' : '') + r.u.toFixed(2) + 'u' : '—';
+            var mktLabel = r.mkt + (r.pt != null ? ' ' + (r.pt >= 0 ? '+' : '') + r.pt : '');
+            html += '<tr>';
+            html += '<td>' + (r._sport || '') + '</td>';
+            html += '<td>' + (r.game || '') + '</td>';
+            html += '<td>' + mktLabel + '</td>';
+            html += '<td>' + (r.side || '') + '</td>';
+            html += '<td class="r">' + (r.am >= 0 ? '+' : '') + r.am + '</td>';
+            html += '<td class="r ' + evCls + '">' + evStr + '</td>';
+            html += '<td class="r">' + evUnits + '</td>';
+            html += '</tr>';
+        });
+        tbody.innerHTML = html;
+        var status = document.getElementById('ev-load-status');
+        if (status) status.textContent = all.length + ' positive EV bets across ' + Object.keys(evTabCache).length + ' sport' + (Object.keys(evTabCache).length !== 1 ? 's' : '');
+    }
+
+    async function loadAllEvSports() {
+        if (!isPro()) return;
+        var btn = document.getElementById('ev-load-btn');
+        var status = document.getElementById('ev-load-status');
+        if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
+        var sportsToLoad = SPORTS.filter(function(s) { return !s.noFetch; });
+        var total = sportsToLoad.length;
+        var done = 0;
+        function updateStatus() {
+            if (status) status.textContent = 'Loading ' + done + '/' + total + '…';
+        }
+        updateStatus();
+        // Load each sport sequentially to avoid hammering the API
+        for (var i = 0; i < sportsToLoad.length; i++) {
+            var s = sportsToLoad[i];
+            try {
+                var noSpread = ['mma_mixed_martial_arts', 'baseball_mlb', 'icehockey_nhl'];
+                var mkts = noSpread.indexOf(s.key) !== -1 ? 'h2h' : 'h2h,spreads,totals';
+                var resp = await fetch('/api/odds?sport=' + s.key + '&markets=' + mkts + '&bookmakers=fanduel');
+                if (resp.ok) {
+                    var d = await resp.json();
+                    var games = Array.isArray(d) ? d : (d && Array.isArray(d.games) ? d.games : null);
+                    if (games) {
+                        var savedSport = currentSport;
+                        currentSport = s.key;
+                        var parsedRows = parseGames(games);
+                        // Temporarily swap rawRows to compute
+                        var savedRaw = rawRows;
+                        rawRows = parsedRows;
+                        // Compute rows with edge/EV (inline mini-renderTable)
+                        var unit = parseFloat(document.getElementById('unit-size').value) || 300;
+                        var pairs = {};
+                        parsedRows.forEach(function(r) { if (!pairs[r.pid]) pairs[r.pid] = {}; pairs[r.pid][r.ps] = r; });
+                        var computed = parsedRows.map(function(r) {
+                            var p = pairs[r.pid] || {};
+                            var nv = novig(p.A ? imp(p.A.am) : null, p.B ? imp(p.B.am) : null);
+                            var yl = yourLines[r.id] != null ? yourLines[r.id] : null;
+                            var fair = r.ps === 'A' ? nv.fa : nv.fb;
+                            var af = adjFair(fair, r.pt, yl, r.mkt, r.ps);
+                            var pr = preds[r.id];
+                            var pred = (pr !== undefined && pr !== '') ? parseFloat(pr) / 100 : null;
+                            var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
+                            var evForUnits = null;
+                            if (af != null && pred != null && pred > 0 && pred < 1) {
+                                var volNum3 = 0;
+                                if (vols[r.id]) { var vs3 = vols[r.id]; volNum3 = vs3.endsWith('k') ? parseFloat(vs3)*1000 : vs3.endsWith('m') ? parseFloat(vs3)*1000000 : parseFloat(vs3); }
+                                var rake3 = volNum3 > 100000 ? 0.034 : volNum3 > 10000 ? 0.032 : volNum3 > 1000 ? 0.035 : volNum3 > 0 ? 0.04 : 0.034;
+                                evForUnits = (af * (1/pred) * (1-rake3) - 1) * 100;
+                            }
+                            var u = unitsEV(evForUnits, pred);
+                            return { id: r.id, game: r.game, cm: r.cm, mkt: r.mkt, side: r.side, am: r.am, pt: r.pt, ps: r.ps, pid: r.pid, fair: fair, af: af, yl: yl, edge: edge, u: u };
+                        });
+                        rawRows = savedRaw;
+                        currentSport = savedSport;
+                        cacheEvRows(computed, s.key);
+                    }
+                }
+            } catch(e) { /* skip sport on error */ }
+            done++;
+            updateStatus();
+        }
+        if (btn) { btn.disabled = false; btn.textContent = 'Reload All Sports'; }
+        renderEvTab();
+    }
+
     async function disconnectRealSports() {
         if (!confirm('Disconnect your Real Sports account from RaxEdge?')) return;
         try {
@@ -4782,6 +4975,10 @@
             if (portFilterSport  && getHistSport(p)  !== portFilterSport)  return false;
             if (portFilterMarket && getHistMarket(p) !== portFilterMarket) return false;
             if (portFilterResult && getHistResult(p) !== portFilterResult) return false;
+            if (portSearchQuery) {
+                var haystack = ((p.matchupLabel || p.homeTeam || '') + ' ' + (p.awayTeam || '') + ' ' + (p.selectionLabel || p.side || '') + ' ' + (p.headerLabel || p.marketLabel || '')).toLowerCase();
+                if (haystack.indexOf(portSearchQuery) === -1) return false;
+            }
             return true;
         });
         // Sort
@@ -5029,6 +5226,21 @@
         return currentUser && (currentUser.plan === 'pro' || currentUser.is_admin);
     }
 
+    function toggleTheme() {
+        var isLight = document.documentElement.classList.toggle('light');
+        localStorage.setItem('raxedge_theme', isLight ? 'light' : 'dark');
+        var btn = document.getElementById('theme-btn');
+        if (btn) btn.textContent = isLight ? '☀️' : '🌙';
+    }
+
+    function initTheme() {
+        var saved = localStorage.getItem('raxedge_theme');
+        var isLight = saved === 'light';
+        document.documentElement.classList.toggle('light', isLight);
+        var btn = document.getElementById('theme-btn');
+        if (btn) btn.textContent = isLight ? '☀️' : '🌙';
+    }
+
     async function startCheckout() {
         var btn = document.getElementById('upgrade-btn');
         btn.textContent = 'Redirecting...';
@@ -5157,6 +5369,33 @@
             nav.appendChild(portTabBtn);
         } else if (!isProduction) {
             nav.appendChild(document.getElementById('portfolio-tab-btn'));
+        }
+        // Best EV tab — pro users only
+        if (isPro()) {
+            if (!document.getElementById('ev-tab-btn')) {
+                var evTabBtn = document.createElement('button');
+                evTabBtn.className = 'sport-tab';
+                evTabBtn.textContent = '⚡ Best EV';
+                evTabBtn.id = 'ev-tab-btn';
+                evTabBtn.style.cssText = 'color:var(--yellow);font-weight:700';
+                evTabBtn.onclick = function() {
+                    var isActive = this.classList.contains('active');
+                    if (isActive) {
+                        this.classList.remove('active');
+                        this.textContent = '⚡ Best EV';
+                        hideEvTab();
+                        loadOdds();
+                    } else {
+                        document.querySelectorAll('.sport-tab').forEach(function(t) { t.classList.remove('active'); });
+                        this.classList.add('active');
+                        this.textContent = '<- Dashboard';
+                        showEvTab();
+                    }
+                };
+                nav.appendChild(evTabBtn);
+            } else {
+                nav.appendChild(document.getElementById('ev-tab-btn'));
+            }
         }
     }
 
@@ -5361,6 +5600,7 @@
             var u = isPro() ? unitsEV(evForUnits, pred) : units(edge);
             return { id: r.id, game: r.game, cm: r.cm, mkt: r.mkt, side: r.side, am: r.am, pt: r.pt, ps: r.ps, pid: r.pid, fair: fair, af: af, yl: yl, edge: edge, u: u, bet: u * unit };
         });
+        cacheEvRows(rows, currentSport);
         var now = new Date();
         var filtered = rows.filter(function(r) {
             // MLB: hide games that start tomorrow or later — only show today's games
@@ -6116,6 +6356,7 @@
     // Fetch FanDuel alternate lines for games where Real Sports line differs from main FD line
     // Only fires for specific games with mismatches — saves API credits
     handleCheckoutReturn();
+    initTheme();
     checkSession();
 
     // ── GROUP JOIN BANNER ──
