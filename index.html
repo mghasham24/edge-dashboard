@@ -5757,31 +5757,40 @@
         if (!isPro()) return;
         var sportsToLoad = SPORTS.filter(function(s) { return !s.noFetch && s.key !== currentSport; });
         var evBtn = document.getElementById('ev-tab-btn');
-        // Fetch all sports in parallel
-        await Promise.all(sportsToLoad.map(async function(s) {
-            if (rawRowsBySport[s.key] && rawRowsBySport[s.key].length) return;
+
+        // Fire all network requests in parallel
+        var fetched = await Promise.all(sportsToLoad.map(async function(s) {
+            if (rawRowsBySport[s.key] && rawRowsBySport[s.key].length) return { s: s, skip: true };
             try {
                 var mkts = s.key === 'mma_mixed_martial_arts' ? 'h2h' : 'h2h,spreads,totals';
-                var resp = await fetch('/api/odds?sport=' + s.key + '&markets=' + mkts + '&bookmakers=fanduel');
-                if (!resp.ok) return;
-                var d = await resp.json();
-                var games = Array.isArray(d) ? d : (d && Array.isArray(d.games) ? d.games : null);
-                if (!games || !games.length) return;
-                var savedSport = currentSport;
-                currentSport = s.key;
-                var parsed = parseGames(games);
-                currentSport = savedSport;
-                if (!parsed.length) return;
-                rawRowsBySport[s.key] = parsed;
-                try {
-                    var syncResp = await fetch('/api/real/sync?sport=' + s.key, { credentials: 'same-origin' });
-                    if (syncResp.ok) {
-                        var syncData = await syncResp.json();
-                        fillPredsFromSync(parsed, syncData);
-                    }
-                } catch(e) {}
-            } catch(e) {}
+                var results = await Promise.all([
+                    fetch('/api/odds?sport=' + s.key + '&markets=' + mkts + '&bookmakers=fanduel'),
+                    fetch('/api/real/sync?sport=' + s.key, { credentials: 'same-origin' })
+                ]);
+                var oddsResp = results[0], syncResp = results[1];
+                var games = null, syncData = null;
+                if (oddsResp.ok) {
+                    var d = await oddsResp.json();
+                    games = Array.isArray(d) ? d : (d && Array.isArray(d.games) ? d.games : null);
+                }
+                if (syncResp.ok) syncData = await syncResp.json();
+                return { s: s, games: games, syncData: syncData };
+            } catch(e) { return { s: s, games: null, syncData: null }; }
         }));
+
+        // Parse sequentially — parseGames uses currentSport global, can't run concurrently
+        for (var i = 0; i < fetched.length; i++) {
+            var f = fetched[i];
+            if (f.skip || !f.games || !f.games.length) continue;
+            var savedSport = currentSport;
+            currentSport = f.s.key;
+            var parsed = parseGames(f.games);
+            currentSport = savedSport;
+            if (!parsed.length) continue;
+            rawRowsBySport[f.s.key] = parsed;
+            if (f.syncData) fillPredsFromSync(parsed, f.syncData);
+        }
+
         // All sports loaded — enable Best EV button
         if (evBtn) {
             evBtn.disabled = false;
