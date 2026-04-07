@@ -5251,7 +5251,7 @@
                 var pnlColor = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--muted)';
                 var calUnit  = parseFloat(localStorage.getItem('raxedge_unit_size') || '300') || 300;
                 var calUnitStr = (pnl / calUnit);
-                var pnlAmtStr  = RAX_ICON + (pnl > 0 ? '+' : '') + fmtRax(pnl);
+                var pnlAmtStr  = (pnl > 0 ? '+' : '') + fmtRax(pnl);
                 var pnlUnitStr = (calUnitStr >= 0 ? '+' : '') + calUnitStr.toFixed(1) + 'u';
                 if (isBlurred) {
                     pnlHtml = '<span class="port-cal-pnl" style="filter:blur(5px);color:' + pnlColor + '">' + pnlAmtStr + '</span>'
