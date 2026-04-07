@@ -1598,16 +1598,16 @@
     @media (max-width: 768px) {
         .port-table { min-width: 0 }
         .port-table thead { display: none }
-        /* 2-column card grid */
-        .port-table tbody { display: grid; grid-template-columns: 1fr 1fr; gap: 8px }
+        /* 3-column compact card grid */
+        .port-table tbody { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px }
         .port-table tr {
             display: flex;
             flex-direction: column;
             background: var(--bg2);
             border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 9px 10px;
-            gap: 3px
+            border-radius: 7px;
+            padding: 8px 8px 6px;
+            gap: 2px
         }
         /* empty-state row spans full width */
         .port-table tr:has(td[colspan]) { grid-column: 1 / -1; align-items: center }
@@ -1625,57 +1625,49 @@
         }
         .port-table td::before { display: none }
         .port-table td[colspan] { white-space: normal; text-align: center; color: var(--muted); font-size: 12px; padding: 8px 0 }
-        /* Open positions: show Avg + Now inline with labels */
+
+        /* Win / loss card gradients */
+        .port-table tr.port-card-win  { background: linear-gradient(145deg, rgba(45,204,126,.18) 0%, var(--bg2) 100%); border-color: rgba(45,204,126,.3) }
+        .port-table tr.port-card-loss { background: linear-gradient(145deg, rgba(240,82,82,.18)  0%, var(--bg2) 100%); border-color: rgba(240,82,82,.3) }
+
+        /* ── Settled history ── */
+        #port-history-tbody td:nth-child(3) { display: none } /* hide Market */
+        #port-history-tbody td:nth-child(2) { font-weight: 700; font-size: 11px; color: var(--fg) }
+        #port-history-tbody td:nth-child(1) { font-size: 9px; color: var(--muted2) }
+        /* Cost + Paid inline with labels */
+        #port-history-tbody td:nth-child(5),
+        #port-history-tbody td:nth-child(6) { display: inline-block; width: auto; margin-right: 5px }
+        #port-history-tbody td:nth-child(5)::before,
+        #port-history-tbody td:nth-child(6)::before {
+            display: inline;
+            content: attr(data-label) ' ';
+            font-size: 9px; font-weight: 600; letter-spacing: .05em;
+            text-transform: uppercase; color: var(--muted2); margin-right: 2px
+        }
+
+        /* ── Open positions ── */
+        #port-open-tbody td:nth-child(1) { font-weight: 700; font-size: 11px; color: var(--fg) }
+        /* Avg + Now inline */
         #port-open-tbody td:nth-child(5),
-        #port-open-tbody td:nth-child(6) { display: inline-block; width: auto; margin-right: 6px }
+        #port-open-tbody td:nth-child(6) { display: inline-block; width: auto; margin-right: 5px }
         #port-open-tbody td:nth-child(5)::before,
         #port-open-tbody td:nth-child(6)::before {
             display: inline;
             content: attr(data-label) ' ';
-            font-size: 9px;
-            font-weight: 600;
-            letter-spacing: .05em;
-            text-transform: uppercase;
-            color: var(--muted2);
-            margin-right: 3px
+            font-size: 9px; font-weight: 600; letter-spacing: .05em;
+            text-transform: uppercase; color: var(--muted2); margin-right: 2px
         }
-        /* Settled history: hide Market column */
-        #port-history-tbody td:nth-child(3) { display: none }
-        /* Matchup as card title */
-        #port-open-tbody td:nth-child(1) { font-weight: 700; font-size: 12px; color: var(--fg) }
-        #port-history-tbody td:nth-child(2) { font-weight: 700; font-size: 12px; color: var(--fg) }
-        /* Date tiny */
-        #port-history-tbody td:nth-child(1) { font-size: 9px; color: var(--muted2) }
-        /* Show labels for Cost, Pays, Status in open positions */
+        /* Cost + Pays inline */
+        #port-open-tbody td:nth-child(7),
+        #port-open-tbody td:nth-child(8) { display: inline-block; width: auto; margin-right: 5px }
         #port-open-tbody td:nth-child(7)::before,
         #port-open-tbody td:nth-child(8)::before,
         #port-open-tbody td:nth-child(9)::before {
             display: inline;
             content: attr(data-label) ' ';
-            font-size: 9px;
-            font-weight: 600;
-            letter-spacing: .05em;
-            text-transform: uppercase;
-            color: var(--muted2);
-            margin-right: 3px
+            font-size: 9px; font-weight: 600; letter-spacing: .05em;
+            text-transform: uppercase; color: var(--muted2); margin-right: 2px
         }
-        /* Cost and Pays inline on one line */
-        #port-open-tbody td:nth-child(7),
-        #port-open-tbody td:nth-child(8) { display: inline-block; width: auto; margin-right: 6px }
-        /* Show labels for Cost, Paid in settled history */
-        #port-history-tbody td:nth-child(5)::before,
-        #port-history-tbody td:nth-child(6)::before {
-            display: inline;
-            content: attr(data-label) ' ';
-            font-size: 9px;
-            font-weight: 600;
-            letter-spacing: .05em;
-            text-transform: uppercase;
-            color: var(--muted2);
-            margin-right: 3px
-        }
-        #port-history-tbody td:nth-child(5),
-        #port-history-tbody td:nth-child(6) { display: inline-block; width: auto; margin-right: 6px }
     }
 
     @media (max-width: 768px) {
@@ -4368,7 +4360,20 @@
                     ? '<span class="port-match-badge">' + (matchedRow.edge > 0 ? '+' : '') + matchedRow.edge.toFixed(1) + '% edge</span>'
                     : '';
 
-                return '<tr>'
+                // Gradient based on Now% (cur is like "48¢" = 48%)
+                var nowPct = parseFloat(String(cur).replace(/[^0-9.]/g, ''));
+                var trStyle = '';
+                if (!isNaN(nowPct)) {
+                    if (nowPct > 50) {
+                        var g = ((nowPct - 50) / 50 * 0.22).toFixed(3);
+                        trStyle = 'background:linear-gradient(145deg,rgba(45,204,126,' + g + ') 0%,var(--bg2) 100%);border-color:rgba(45,204,126,' + Math.min(nowPct/100*0.5,0.4).toFixed(3) + ')';
+                    } else if (nowPct < 50) {
+                        var r = ((50 - nowPct) / 50 * 0.22).toFixed(3);
+                        trStyle = 'background:linear-gradient(145deg,rgba(240,82,82,' + r + ') 0%,var(--bg2) 100%);border-color:rgba(240,82,82,' + Math.min((50-nowPct)/100*0.5,0.4).toFixed(3) + ')';
+                    }
+                }
+
+                return '<tr' + (trStyle ? ' style="' + trStyle + '"' : '') + '>'
                     + '<td data-label="Matchup">' + escHtml(matchup) + '</td>'
                     + '<td data-label="Sport" style="font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--muted)">' + escHtml(sportLbl) + '</td>'
                     + '<td data-label="Market"><span class="mkt-badge">' + escHtml(market) + '</span></td>'
@@ -4603,7 +4608,7 @@
             histTbody.innerHTML = '<tr><td colspan="7" style="color:var(--muted);padding:20px 12px">' + msg + '</td></tr>';
         } else {
             histTbody.innerHTML = filtered.map(function(p) {
-                return '<tr>' + histRowHtml(p) + '</tr>';
+                return histRowHtml(p);
             }).join('');
         }
     }
@@ -4650,18 +4655,23 @@
         var costDisp = costDet.display || '—';
         var paidDisp = paidDet.display || '—';
         var paidNum  = parseRaxDisplay(paidDet.display);
+        var costNum  = parseRaxDisplay(costDet.display);
         var isWin    = paidDet.color === 'green' && paidNum > 0;
         var isLoss   = paidDet.display === '0' || (!isWin && paidDet.color === 'default');
         var resCls   = isWin ? 'port-win' : isLoss ? 'port-loss' : '';
+        var profit   = isWin ? ' <span style="font-size:11px;font-weight:600">+' + escHtml(fmtRax(paidNum - costNum)) + '</span>' : '';
         var resLbl   = isWin ? 'Win' : isLoss ? 'Loss' : '—';
+        var trCls    = isWin ? 'port-card-win' : isLoss ? 'port-card-loss' : '';
         var dateStr  = fmtPortDate(p.transactedAt);
-        return '<td data-label="Date" style="white-space:nowrap;font-size:11px;color:var(--muted);font-family:var(--mono)">' + escHtml(dateStr) + '</td>'
+        return '<tr class="' + trCls + '">'
+            + '<td data-label="Date" style="white-space:nowrap;font-size:11px;color:var(--muted);font-family:var(--mono)">' + escHtml(dateStr) + '</td>'
             + '<td data-label="Matchup">' + escHtml(matchup) + '</td>'
             + '<td data-label="Market"><span class="mkt-badge" style="font-size:10px">' + escHtml(market) + '</span></td>'
             + '<td data-label="Side">' + escHtml(side) + '</td>'
             + '<td data-label="Cost" class="r" style="font-family:var(--mono);color:var(--muted)">' + escHtml(costDisp) + '</td>'
             + '<td data-label="Paid" class="r ' + (isWin ? 'port-win' : 'port-loss') + '" style="font-family:var(--mono)">' + escHtml(paidDisp) + '</td>'
-            + '<td data-label="Result" class="' + resCls + '" style="font-weight:700;font-size:12px">' + resLbl + '</td>';
+            + '<td data-label="Result" class="' + resCls + '" style="font-weight:700;font-size:12px">' + resLbl + profit + '</td>'
+            + '</tr>';
     }
 
     function getField(obj, keys) {
