@@ -4420,13 +4420,31 @@
             activeGamesBySport[sk] = s;
         });
 
-        // Flatten cached sports, dropping games that have started or are stale
+        // Flatten cached sports, dropping finished games (live games are kept)
         var nowMs = Date.now();
+        var SPORT_DUR_MS = {
+            'baseball_mlb': 4 * 3600000,
+            'americanfootball_nfl': 4 * 3600000,
+            'basketball_nba': 3 * 3600000,
+            'basketball_ncaab': 3 * 3600000,
+            'icehockey_nhl': 3 * 3600000,
+            'soccer_epl': 2.5 * 3600000,
+            'soccer_uefa_champs_league': 2.5 * 3600000,
+        };
         var all = [];
         Object.values(evTabCache).forEach(function(arr) {
             arr.forEach(function(r) {
-                // Best EV is pre-game only — skip any game that has already started
-                if (r.cm && r.cm.getTime() < nowMs) return;
+                if (r.cm) {
+                    var cmMs = r.cm.getTime();
+                    var started = cmMs < nowMs;
+                    if (started) {
+                        // Past max game duration → definitely over
+                        var durMs = SPORT_DUR_MS[r._sport_key] || (3.5 * 3600000);
+                        if (cmMs + durMs < nowMs) return;
+                        // RS showing extreme confidence post-start → game settled
+                        if (r._pred && (r._pred > 0.90 || r._pred < 0.10)) return;
+                    }
+                }
                 // Sport data refreshed but game no longer in feed → finished
                 var active = activeGamesBySport[r._sport_key];
                 if (active && active.size > 0 && !active.has(r.game)) return;
