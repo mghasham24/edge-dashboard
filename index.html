@@ -1590,6 +1590,8 @@
         color: var(--muted2);
         line-height: 1
     }
+    .port-cal-day.has-data .port-cal-bets { color: rgba(255,255,255,0.55) }
+    .port-cal-day.has-data .port-cal-dn   { color: rgba(255,255,255,0.6) }
 
     @media (max-width: 768px) {
         .port-cal-day { min-height: 42px; padding: 4px 2px }
@@ -2598,8 +2600,10 @@
                                     <option value="profit-desc">Profit ↓</option>
                                     <option value="profit-asc">Profit ↑</option>
                                 </select>
-                                <button id="port-alltime-btn" onclick="togglePortAllTime()" class="port-tf-btn">All Time</button>
-                                <input type="date" id="port-date-filter" onchange="renderHistoryForDate(this.value)" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--mono);font-size:12px;padding:4px 8px;border-radius:5px;cursor:pointer">
+                                <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+                                    <button id="port-alltime-btn" onclick="togglePortAllTime()" class="port-tf-btn" style="width:100%">All Time</button>
+                                    <input type="date" id="port-date-filter" onchange="renderHistoryForDate(this.value)" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--mono);font-size:12px;padding:4px 8px;border-radius:5px;cursor:pointer">
+                                </div>
                             </div>
                         </div>
                         <div class="admin-table-wrap">
