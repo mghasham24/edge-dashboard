@@ -4795,16 +4795,21 @@
                     ? '<span class="port-match-badge">' + (matchedRow.edge > 0 ? '+' : '') + matchedRow.edge.toFixed(1) + '% edge</span>'
                     : '';
 
-                // Gradient based on Now% (cur is like "48¢" = 48%)
+                // Gradient based on Now% vs Avg% — green = price went up (winning), red = down
                 var nowPct = parseFloat(String(cur).replace(/[^0-9.]/g, ''));
+                var avgPct = parseFloat(String(avg).replace(/[^0-9.]/g, ''));
                 var trStyle = '';
-                if (!isNaN(nowPct)) {
-                    if (nowPct > 50) {
-                        var g = ((nowPct - 50) / 50 * 0.22).toFixed(3);
-                        trStyle = 'background:linear-gradient(145deg,rgba(45,204,126,' + g + ') 0%,var(--bg2) 100%);border-color:rgba(45,204,126,' + Math.min(nowPct/100*0.5,0.4).toFixed(3) + ')';
-                    } else if (nowPct < 50) {
-                        var r = ((50 - nowPct) / 50 * 0.22).toFixed(3);
-                        trStyle = 'background:linear-gradient(145deg,rgba(240,82,82,' + r + ') 0%,var(--bg2) 100%);border-color:rgba(240,82,82,' + Math.min((50-nowPct)/100*0.5,0.4).toFixed(3) + ')';
+                if (!isNaN(nowPct) && !isNaN(avgPct)) {
+                    var diff = nowPct - avgPct;
+                    var intensity = Math.min(Math.abs(diff) / 20, 1);
+                    if (diff > 0) {
+                        var ga = (intensity * 0.22).toFixed(3);
+                        var gb = (intensity * 0.4).toFixed(3);
+                        trStyle = 'background:linear-gradient(145deg,rgba(45,204,126,' + ga + ') 0%,var(--bg2) 100%);border-color:rgba(45,204,126,' + gb + ')';
+                    } else if (diff < 0) {
+                        var ra = (intensity * 0.22).toFixed(3);
+                        var rb = (intensity * 0.4).toFixed(3);
+                        trStyle = 'background:linear-gradient(145deg,rgba(240,82,82,' + ra + ') 0%,var(--bg2) 100%);border-color:rgba(240,82,82,' + rb + ')';
                     }
                 }
 
