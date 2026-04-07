@@ -4259,14 +4259,10 @@
     }
 
     function cacheEvRows(rows, sport) {
-        var positive = [];
+        // Include rows that have a prediction with positive EV, OR any row without a prediction (user can enter one)
+        var withEV = [], withoutEV = [];
         rows.forEach(function(r) {
             if (r.af == null) return;
-            var fdImp = imp(r.am);
-            if (fdImp == null || fdImp <= 0) return;
-            var noVigEdge = (r.af - fdImp) * 100;
-            if (noVigEdge <= 0) return;
-            // Compute EV if user has a prediction for this row
             r._pred = null; r._rake = 0.034; r._ev = null;
             var pr = preds[r.id];
             if (pr && pr !== '') {
@@ -4275,14 +4271,20 @@
                     var volNum = 0;
                     if (vols[r.id]) { var vs = vols[r.id]; volNum = vs.endsWith('k') ? parseFloat(vs)*1000 : vs.endsWith('m') ? parseFloat(vs)*1000000 : parseFloat(vs); }
                     var rake = volNum > 100000 ? 0.034 : volNum > 10000 ? 0.032 : volNum > 1000 ? 0.035 : volNum > 0 ? 0.04 : 0.034;
-                    r._pred = pred;
-                    r._rake = rake;
+                    r._pred = pred; r._rake = rake;
                     r._ev   = (r.af * (1/pred) * (1-rake) - 1) * 100;
+                    if (r._ev > 0) { r._sortVal = r._ev; withEV.push(r); }
                 }
+            } else {
+                // No prediction yet — include for display, sort by adj fair desc
+                r._sortVal = r.af;
+                withoutEV.push(r);
             }
-            r._sortVal = r._ev != null ? r._ev : noVigEdge;
-            positive.push(r);
         });
+        // Sort each group, take top 20 from withoutEV to avoid flooding the table
+        withEV.sort(function(a, b) { return b._sortVal - a._sortVal; });
+        withoutEV.sort(function(a, b) { return b._sortVal - a._sortVal; });
+        var positive = withEV.concat(withoutEV.slice(0, 20));
         var sportLabel = (SPORTS.find(function(s) { return s.key === sport; }) || {}).label || sport;
         positive.forEach(function(r) { r._sport = sportLabel; r._sport_key = sport; });
         evTabCache[sport] = positive;
@@ -4327,8 +4329,13 @@
         // Flatten all cached sports
         var all = [];
         Object.values(evTabCache).forEach(function(arr) { all = all.concat(arr); });
-        // Sort: EV rows first (desc), then edge-only rows (desc by edge)
-        all.sort(function(a, b) { return (b._sortVal || 0) - (a._sortVal || 0); });
+        // Sort: rows with positive EV first (desc), then no-prediction rows (by adj fair desc)
+        all.sort(function(a, b) {
+            var aHasEV = a._ev != null, bHasEV = b._ev != null;
+            if (aHasEV && !bHasEV) return -1;
+            if (!aHasEV && bHasEV) return 1;
+            return (b._sortVal || 0) - (a._sortVal || 0);
+        });
         if (!all.length) {
             container.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:40px 0">Click "Load All Sports" to fetch odds across every sport, or navigate to a sport tab first.</div>';
             return;
