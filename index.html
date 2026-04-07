@@ -5700,7 +5700,59 @@
         });
     }
 
+    // Fill preds from a Real Sports sync response for a set of rows — no global mutations
+    function fillPredsFromSync(rows, syncData) {
+        if (!syncData || !syncData.markets) return;
+        var markets = syncData.markets;
+        rows.forEach(function(r) {
+            if (preds[r.id]) return; // already set
+            var mktLabel = r.mkt === 'ML' ? 'Game Winner' : r.mkt === 'Spread' ? 'Spread' : r.mkt === 'Total' ? 'Total' : null;
+            if (!mktLabel) return;
+            var teams = r.game.split(' @ ');
+            var fdAway = (teams[0] || '').toLowerCase();
+            var fdHome = (teams[1] || '').toLowerCase();
+            // Find matching game key in sync data
+            var gameKey = null;
+            var mkeys = Object.keys(markets).filter(function(k) { return !k.endsWith('__lines') && !k.endsWith('__gid'); });
+            for (var ki = 0; ki < mkeys.length; ki++) {
+                var k = mkeys[ki];
+                var parts = k.split(' @ ');
+                if (parts.length !== 2) continue;
+                var ra = resolveTeamName(parts[0].trim()).toLowerCase();
+                var rh = resolveTeamName(parts[1].trim()).toLowerCase();
+                var awayOk = ra.split(' ').some(function(w){ return w.length > 2 && fdAway.indexOf(w) !== -1; })
+                          || fdAway.split(' ').some(function(w){ return w.length > 2 && ra.indexOf(w) !== -1; });
+                var homeOk = rh.split(' ').some(function(w){ return w.length > 2 && fdHome.indexOf(w) !== -1; })
+                          || fdHome.split(' ').some(function(w){ return w.length > 2 && rh.indexOf(w) !== -1; });
+                if (awayOk && homeOk) { gameKey = k; break; }
+            }
+            if (!gameKey) return;
+            var mktData = markets[gameKey];
+            if (!mktData) return;
+            var outcomes = mktData.outcomes || [];
+            if (!outcomes.length) return;
+            var match = null;
+            if (r.mkt === 'Total') {
+                var isOver = r.side.toLowerCase() === 'over';
+                match = outcomes.find(function(o) { var f = (o.label||'').trim()[0]; return isOver ? f==='O' : f==='U'; });
+                if (!match) match = isOver ? outcomes[0] : outcomes[1];
+            } else {
+                var sl = r.side.toLowerCase();
+                match = outcomes.find(function(o) {
+                    if (!o.label) return false;
+                    var ol = resolveTeamName(o.label).toLowerCase();
+                    return sl.split(' ').some(function(w){ return w.length > 2 && ol.indexOf(w) !== -1; });
+                });
+            }
+            if (match && match.pct != null) {
+                preds[r.id] = String(match.pct);
+                if (mktData.volumeDisplay) vols[r.id] = mktData.volumeDisplay;
+            }
+        });
+    }
+
     // Silently pre-fetch odds + Real Sports preds for all sports in the background after login
+    // Never touches rawRows, currentSport, or renderTable
     async function preloadAllSports() {
         if (!isPro()) return;
         var sportsToLoad = SPORTS.filter(function(s) { return !s.noFetch && s.key !== currentSport; });
@@ -5709,21 +5761,28 @@
             var s = sportsToLoad[i];
             if (rawRowsBySport[s.key] && rawRowsBySport[s.key].length) continue;
             try {
+                // Fetch FD odds
                 var mkts = s.key === 'mma_mixed_martial_arts' ? 'h2h' : 'h2h,spreads,totals';
                 var resp = await fetch('/api/odds?sport=' + s.key + '&markets=' + mkts + '&bookmakers=fanduel');
                 if (!resp.ok) continue;
                 var d = await resp.json();
                 var games = Array.isArray(d) ? d : (d && Array.isArray(d.games) ? d.games : null);
                 if (!games || !games.length) continue;
+                // Parse rows using a temp sport context — save/restore currentSport only for parseGames
                 var savedSport = currentSport;
-                var savedRaw = rawRows;
                 currentSport = s.key;
                 var parsed = parseGames(games);
-                rawRowsBySport[s.key] = parsed;
-                rawRows = parsed;
-                try { await fetchRealMarkets(s.key, true); } catch(e) {}
-                rawRows = savedRaw;
                 currentSport = savedSport;
+                if (!parsed.length) continue;
+                rawRowsBySport[s.key] = parsed;
+                // Fetch Real Sports preds and fill directly — no global rawRows mutation
+                try {
+                    var syncResp = await fetch('/api/real/sync?sport=' + s.key, { credentials: 'same-origin' });
+                    if (syncResp.ok) {
+                        var syncData = await syncResp.json();
+                        fillPredsFromSync(parsed, syncData);
+                    }
+                } catch(e) {}
             } catch(e) {}
         }
         // All sports loaded — enable Best EV button
@@ -6246,7 +6305,7 @@
 
             if (!skipRender) renderTable();
             // Trigger Real Sports auto-fill for new RFI rows
-            if (rawRows.length > 0) fetchRealMarkets(currentSport);
+            if (rawRows.length > 0) fetchRealMarkets(currentSport, skipRender);
         })
         .catch(function() {});
     }
