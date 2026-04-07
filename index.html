@@ -2026,9 +2026,11 @@
     /* Best EV mobile card grid */
     .ev-mobile-grid {
         display: none;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 6px;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 5px;
         padding: 0 8px 16px;
+        box-sizing: border-box;
+        width: 100%;
     }
     .ev-mobile-card {
         background: var(--bg2);
@@ -2039,6 +2041,8 @@
         flex-direction: column;
         gap: 3px;
         min-width: 0;
+        width: 100%;
+        box-sizing: border-box;
         position: relative;
         overflow: hidden;
     }
@@ -4833,7 +4837,30 @@
                     + '<td data-label="Pays" class="r" style="font-family:var(--mono);color:var(--green)">' + escHtml(pays) + '</td>'
                     + '<td data-label="Status" style="color:var(--muted);font-size:11px">' + escHtml(status) + '</td>'
                     + '</tr>';
-            }).join('');
+            });
+            var OPEN_PREVIEW = 3;
+            var showAllOpen  = false;
+            function renderOpenRows() {
+                var visible = showAllOpen ? rows : rows.slice(0, OPEN_PREVIEW);
+                openTbody.innerHTML = visible.join('');
+                var btnEl = document.getElementById('port-open-show-all-btn');
+                if (btnEl) {
+                    if (rows.length <= OPEN_PREVIEW) { btnEl.style.display = 'none'; return; }
+                    btnEl.style.display = '';
+                    btnEl.textContent = showAllOpen ? 'Show Less ▲' : 'Show All (' + rows.length + ') ▼';
+                }
+            }
+            renderOpenRows();
+            var showAllBtn = document.getElementById('port-open-show-all-btn');
+            if (!showAllBtn) {
+                showAllBtn = document.createElement('button');
+                showAllBtn.id = 'port-open-show-all-btn';
+                showAllBtn.style.cssText = 'display:none;margin-top:8px;background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:11px;font-weight:600;padding:5px 14px;border-radius:5px;cursor:pointer;width:100%';
+                var openTableWrap = openTbody.closest('.admin-table-wrap');
+                if (openTableWrap && openTableWrap.parentNode) openTableWrap.parentNode.insertBefore(showAllBtn, openTableWrap.nextSibling);
+            }
+            showAllBtn.onclick = function() { showAllOpen = !showAllOpen; renderOpenRows(); };
+            if (rows.length > OPEN_PREVIEW) { showAllBtn.style.display = ''; showAllBtn.textContent = 'Show All (' + rows.length + ') ▼'; }
 
             // Summary stats above open positions
             if (openStats && activePos.length) {
@@ -4852,15 +4879,15 @@
                 openStats.innerHTML =
                     '<div style="' + statStyle + '">'
                     +   '<div style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:4px">Invested</div>'
-                    +   '<div style="font-family:var(--mono);font-size:15px;font-weight:700;color:var(--fg)">' + fmtRax(totalCost) + ' <span style="font-size:10px;color:var(--muted)">rax</span></div>'
+                    +   '<div style="font-family:var(--mono);font-size:15px;font-weight:700;color:var(--fg)">' + RAX_ICON + fmtRax(totalCost) + '</div>'
                     + '</div>'
                     + '<div style="' + statStyle + '">'
                     +   '<div style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:4px">Max Win</div>'
-                    +   '<div style="font-family:var(--mono);font-size:15px;font-weight:700;color:var(--green)">' + fmtRax(totalPays) + ' <span style="font-size:10px;color:var(--muted)">rax</span></div>'
+                    +   '<div style="font-family:var(--mono);font-size:15px;font-weight:700;color:var(--green)">' + RAX_ICON + fmtRax(totalPays) + '</div>'
                     + '</div>'
                     + '<div style="' + statStyle + '">'
                     +   '<div style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:4px">Max Profit</div>'
-                    +   '<div style="font-family:var(--mono);font-size:15px;font-weight:700;color:' + (maxProfit >= 0 ? 'var(--green)' : 'var(--red)') + '">' + (maxProfit >= 0 ? '+' : '') + fmtRax(maxProfit) + ' <span style="font-size:10px;color:var(--muted)">rax</span></div>'
+                    +   '<div style="font-family:var(--mono);font-size:15px;font-weight:700;color:' + (maxProfit >= 0 ? 'var(--green)' : 'var(--red)') + '">' + RAX_ICON + (maxProfit >= 0 ? '+' : '') + fmtRax(maxProfit) + '</div>'
                     + '</div>'
                     + '<div style="' + statStyle + '">'
                     +   '<div style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:4px">Units Out</div>'
@@ -5081,7 +5108,7 @@
         if (monthTotalEl) {
             var mUnit    = parseFloat(localStorage.getItem('raxedge_unit_size') || '300') || 300;
             var mUnitStr = (monthTotal / mUnit);
-            var totalStr = (monthTotal >= 0 ? '+' : '') + fmtRax(monthTotal) + ' rax (' + (mUnitStr >= 0 ? '+' : '') + mUnitStr.toFixed(2) + 'u)';
+            var totalStr = RAX_ICON + (monthTotal >= 0 ? '+' : '') + fmtRax(monthTotal) + ' (' + (mUnitStr >= 0 ? '+' : '') + mUnitStr.toFixed(2) + 'u)';
             var totalColor = monthTotal > 0 ? 'var(--green)' : monthTotal < 0 ? 'var(--red)' : 'var(--muted)';
             if (!isPro()) {
                 monthTotalEl.innerHTML = '<span style="filter:blur(6px);user-select:none;cursor:pointer" onclick="showUpgradeModal(\'Upgrade to Pro to see your monthly P&amp;L totals.\')">' + totalStr + '</span>';
@@ -5128,7 +5155,7 @@
                 var pnlColor = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--muted)';
                 var calUnit  = parseFloat(localStorage.getItem('raxedge_unit_size') || '300') || 300;
                 var calUnitStr = (pnl / calUnit);
-                var pnlStr = (pnl > 0 ? '+' : '') + fmtRax(pnl) + ' (' + (calUnitStr >= 0 ? '+' : '') + calUnitStr.toFixed(2) + 'u)';
+                var pnlStr = RAX_ICON + (pnl > 0 ? '+' : '') + fmtRax(pnl) + ' (' + (calUnitStr >= 0 ? '+' : '') + calUnitStr.toFixed(2) + 'u)';
                 if (isBlurred) {
                     pnlHtml = '<span class="port-cal-pnl" style="filter:blur(5px);color:' + pnlColor + '">' + pnlStr + '</span>'
                             + '<span class="port-cal-bets" style="filter:blur(3px)">' + dayData.bets + ' bet' + (dayData.bets !== 1 ? 's' : '') + '</span>';
@@ -5190,7 +5217,7 @@
         var pnlEl = document.getElementById('port-pnl');
         var roiEl = document.getElementById('port-roi');
         var wrEl  = document.getElementById('port-winrate');
-        if (pnlEl) { pnlEl.textContent = (calc.pnl >= 0 ? '+' : '') + fmtRax(calc.pnl); pnlEl.style.color = calc.pnl >= 0 ? 'var(--green)' : 'var(--red)'; }
+        if (pnlEl) { pnlEl.innerHTML = RAX_ICON + (calc.pnl >= 0 ? '+' : '') + fmtRax(calc.pnl); pnlEl.style.color = calc.pnl >= 0 ? 'var(--green)' : 'var(--red)'; }
         if (!isPro()) {
             if (roiEl) { roiEl.innerHTML = '<span style="filter:blur(5px);user-select:none">' + (calc.roi >= 0 ? '+' : '') + calc.roi.toFixed(1) + '%</span>'; roiEl.style.color = calc.roi >= 0 ? 'var(--green)' : 'var(--red)'; roiEl.style.cursor = 'pointer'; roiEl.onclick = function(){ showUpgradeModal('ROI tracking requires Pro.'); }; }
             if (wrEl)  { wrEl.innerHTML  = '<span style="filter:blur(5px);user-select:none">' + winRate.toFixed(1) + '%</span>'; wrEl.style.color = winRate >= 50 ? 'var(--green)' : 'var(--red)'; wrEl.style.cursor = 'pointer'; wrEl.onclick = function(){ showUpgradeModal('Win Rate tracking requires Pro.'); }; }
@@ -5328,7 +5355,7 @@
         if (el) {
             var spUnit    = parseFloat(localStorage.getItem('raxedge_unit_size') || '300') || 300;
             var spUnitStr = (total / spUnit);
-            el.textContent = (total >= 0 ? '+' : '') + fmtRax(total) + ' rax (' + (spUnitStr >= 0 ? '+' : '') + spUnitStr.toFixed(2) + 'u)';
+            el.innerHTML = RAX_ICON + (total >= 0 ? '+' : '') + fmtRax(total) + ' (' + (spUnitStr >= 0 ? '+' : '') + spUnitStr.toFixed(2) + 'u)';
             el.style.color = total >= 0 ? 'var(--green)' : 'var(--red)';
         }
         // Update settled count
@@ -5372,9 +5399,9 @@
         var profitStr  = '';
         if (isWin || isLoss) {
             var unitStr = (profitNum / unitSize);
-            profitStr = (profitNum >= 0 ? '+' : '') + fmtRax(profitNum) + ' (' + (unitStr >= 0 ? '+' : '') + unitStr.toFixed(2) + 'u)';
+            profitStr = RAX_ICON + (profitNum >= 0 ? '+' : '') + fmtRax(profitNum) + ' (' + (unitStr >= 0 ? '+' : '') + unitStr.toFixed(2) + 'u)';
         }
-        var profit     = profitStr ? ' <span style="font-size:11px;font-weight:600">' + escHtml(profitStr) + '</span>' : '';
+        var profit     = profitStr ? ' <span style="font-size:11px;font-weight:600">' + profitStr + '</span>' : '';
         var resLbl     = isCashout ? 'Cashout' : isWin ? 'Win' : isLoss ? 'Loss' : '—';
         var trCls      = isCashout ? 'port-card-loss' : isWin ? 'port-card-win' : isLoss ? 'port-card-loss' : '';
         var dateStr  = fmtPortDate(p.transactedAt);
