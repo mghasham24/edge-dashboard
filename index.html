@@ -4414,12 +4414,24 @@
     function renderEvTab() {
         var container = document.getElementById('ev-cards');
         if (!container) return;
-        // Flatten all cached sports, filtering out games that started >4h ago (already finished)
-        var staleThreshold = Date.now() - 4 * 60 * 60 * 1000;
+        // Build set of active game strings per sport (from last-fetched odds data)
+        var activeGamesBySport = {};
+        Object.keys(rawRowsBySport).forEach(function(sk) {
+            var s = new Set();
+            (rawRowsBySport[sk] || []).forEach(function(r) { s.add(r.game); });
+            activeGamesBySport[sk] = s;
+        });
+
+        // Flatten cached sports, dropping games that are stale
+        var staleMs = Date.now() - 3 * 60 * 60 * 1000; // 3h ago: game definitely over
         var all = [];
         Object.values(evTabCache).forEach(function(arr) {
             arr.forEach(function(r) {
-                if (r.cm && new Date(r.cm).getTime() < staleThreshold) return;
+                // Commence_time too far in the past → finished
+                if (r.cm && new Date(r.cm).getTime() < staleMs) return;
+                // Sport data refreshed but game no longer in feed → finished
+                var active = activeGamesBySport[r._sport_key];
+                if (active && active.size > 0 && !active.has(r.game)) return;
                 all.push(r);
             });
         });
