@@ -1654,11 +1654,13 @@
         #port-history-tbody td:nth-child(3) { display: none } /* hide Market */
         #port-history-tbody td:nth-child(2) { font-weight: 700; font-size: 11px; color: var(--fg) }
         #port-history-tbody td:nth-child(1) { font-size: 9px; color: var(--muted2) }
-        /* Cost + Paid inline with labels */
+        /* Avg + Cost + Paid inline with labels */
         #port-history-tbody td:nth-child(5),
-        #port-history-tbody td:nth-child(6) { display: inline-block; width: auto; margin-right: 5px }
+        #port-history-tbody td:nth-child(6),
+        #port-history-tbody td:nth-child(7) { display: inline-block; width: auto; margin-right: 5px }
         #port-history-tbody td:nth-child(5)::before,
-        #port-history-tbody td:nth-child(6)::before {
+        #port-history-tbody td:nth-child(6)::before,
+        #port-history-tbody td:nth-child(7)::before {
             display: inline;
             content: attr(data-label) ' ';
             font-size: 9px; font-weight: 600; letter-spacing: .05em;
@@ -2633,6 +2635,7 @@
                                         <th>Matchup</th>
                                         <th>Market</th>
                                         <th>Side</th>
+                                        <th class="r" title="Price when bet was taken">Avg</th>
                                         <th class="r" title="Rax spent">Cost</th>
                                         <th class="r" title="Rax received">Paid</th>
                                         <th>Result</th>
@@ -5071,6 +5074,8 @@
         var details  = Array.isArray(p.details) ? p.details : [];
         var costDet  = details.find(function(d){ return d.label === 'Cost'; }) || {};
         var paidDet  = details.find(function(d){ return d.label === 'Paid'; }) || {};
+        var avgDet   = details.find(function(d){ return d.label === 'Avg';  }) || {};
+        var avgDisp  = avgDet.display  || '—';
         var costDisp = costDet.display || '—';
         var paidDisp = paidDet.display || '—';
         var paidNum  = parseRaxDisplay(paidDet.display);
@@ -5091,6 +5096,7 @@
             + '<td data-label="Matchup">' + escHtml(matchup) + '</td>'
             + '<td data-label="Market"><span class="mkt-badge" style="font-size:10px">' + escHtml(market) + '</span></td>'
             + '<td data-label="Side">' + escHtml(side) + '</td>'
+            + '<td data-label="Avg" class="r" style="font-family:var(--mono);color:var(--muted)">' + escHtml(avgDisp) + '</td>'
             + '<td data-label="Cost" class="r" style="font-family:var(--mono);color:var(--muted)">' + escHtml(costDisp) + '</td>'
             + '<td data-label="Paid" class="r ' + ((isWin && !isCashout) ? 'port-win' : 'port-loss') + '" style="font-family:var(--mono)">' + escHtml(paidDisp) + '</td>'
             + '<td data-label="Result" class="' + resCls + '" style="font-weight:700;font-size:12px">' + resLbl + profit + '</td>'
