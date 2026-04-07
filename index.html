@@ -5870,9 +5870,8 @@
                 ftBar.appendChild(document.getElementById('ev-tab-btn'));
             }
 
-            // Portfolio tab — non-production only (hidden on raxedge.com)
-            var isProduction = window.location.hostname === 'raxedge.com' || window.location.hostname === 'www.raxedge.com';
-            if (!isProduction && !document.getElementById('portfolio-tab-btn')) {
+            // Portfolio tab
+            if (!document.getElementById('portfolio-tab-btn')) {
                 var portTabBtn = document.createElement('button');
                 portTabBtn.className = 'feature-tab sport-tab';
                 portTabBtn.textContent = '📊 Portfolio';
@@ -5892,7 +5891,7 @@
                     }
                 };
                 ftBar.appendChild(portTabBtn);
-            } else if (!isProduction) {
+            } else {
                 ftBar.appendChild(document.getElementById('portfolio-tab-btn'));
             }
 
