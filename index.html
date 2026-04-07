@@ -1614,6 +1614,17 @@
         white-space: nowrap
     }
 
+    .port-cal-unit {
+        font-size: 9px;
+        font-family: var(--mono);
+        font-weight: 600;
+        line-height: 1;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap
+    }
+
     .port-cal-bets {
         font-size: 9px;
         color: var(--muted2);
@@ -5240,12 +5251,15 @@
                 var pnlColor = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--muted)';
                 var calUnit  = parseFloat(localStorage.getItem('raxedge_unit_size') || '300') || 300;
                 var calUnitStr = (pnl / calUnit);
-                var pnlStr = RAX_ICON + (pnl > 0 ? '+' : '') + fmtRax(pnl) + ' (' + (calUnitStr >= 0 ? '+' : '') + calUnitStr.toFixed(2) + 'u)';
+                var pnlAmtStr  = RAX_ICON + (pnl > 0 ? '+' : '') + fmtRax(pnl);
+                var pnlUnitStr = (calUnitStr >= 0 ? '+' : '') + calUnitStr.toFixed(1) + 'u';
                 if (isBlurred) {
-                    pnlHtml = '<span class="port-cal-pnl" style="filter:blur(5px);color:' + pnlColor + '">' + pnlStr + '</span>'
+                    pnlHtml = '<span class="port-cal-pnl" style="filter:blur(5px);color:' + pnlColor + '">' + pnlAmtStr + '</span>'
+                            + '<span class="port-cal-unit" style="filter:blur(3px)">' + pnlUnitStr + '</span>'
                             + '<span class="port-cal-bets" style="filter:blur(3px)">' + dayData.bets + ' bet' + (dayData.bets !== 1 ? 's' : '') + '</span>';
                 } else {
-                    pnlHtml = '<span class="port-cal-pnl" style="color:' + pnlColor + '">' + pnlStr + '</span>'
+                    pnlHtml = '<span class="port-cal-pnl" style="color:' + pnlColor + '">' + pnlAmtStr + '</span>'
+                            + '<span class="port-cal-unit" style="color:' + pnlColor + '">' + pnlUnitStr + '</span>'
                             + '<span class="port-cal-bets">' + dayData.bets + ' bet' + (dayData.bets !== 1 ? 's' : '') + '</span>';
                     // Gradient intensity: scale from 0.08 (small) → 0.45 (max)
                     if (maxAbsPnl > 0 && pnl !== 0) {
