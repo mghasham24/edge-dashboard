@@ -4420,13 +4420,13 @@
             activeGamesBySport[sk] = s;
         });
 
-        // Flatten cached sports, dropping games that are stale
-        var staleMs = Date.now() - 3 * 60 * 60 * 1000; // 3h ago: game definitely over
+        // Flatten cached sports, dropping games that have started or are stale
+        var nowMs = Date.now();
         var all = [];
         Object.values(evTabCache).forEach(function(arr) {
             arr.forEach(function(r) {
-                // Commence_time too far in the past → finished
-                if (r.cm && new Date(r.cm).getTime() < staleMs) return;
+                // Best EV is pre-game only — skip any game that has already started
+                if (r.cm && r.cm.getTime() < nowMs) return;
                 // Sport data refreshed but game no longer in feed → finished
                 var active = activeGamesBySport[r._sport_key];
                 if (active && active.size > 0 && !active.has(r.game)) return;
