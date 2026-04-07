@@ -5236,7 +5236,7 @@
             if (portFilterMarket && getHistMarket(p) !== portFilterMarket) return false;
             if (portFilterResult && getHistResult(p) !== portFilterResult) return false;
             if (portSearchQuery) {
-                var haystack = ((p.matchupLabel || p.homeTeam || '') + ' ' + (p.awayTeam || '') + ' ' + (p.selectionLabel || p.side || '') + ' ' + (p.headerLabel || p.marketLabel || '')).toLowerCase();
+                var haystack = (((p.marketDisplay && p.marketDisplay.display) || '') + ' ' + (p.outcomeLabel || '') + ' ' + (p.headerLabel || '')).toLowerCase();
                 if (haystack.indexOf(portSearchQuery) === -1) return false;
             }
             return true;
@@ -5826,6 +5826,15 @@
                     return Promise.reject('banned');
                 });
             }
+            if (!r.ok && r.status !== 200) {
+                return r.json().catch(function() { return { error: 'HTTP ' + r.status }; }).then(function(d) {
+                    rawRows = []; rsGameIds = {};
+                    dot.className = 'sdot error';
+                    stxt.textContent = (d && d.error ? d.error.slice(0, 80) : 'HTTP ' + r.status);
+                    btn.disabled = false;
+                    return Promise.reject('http' + r.status);
+                });
+            }
             return r.json();
         })
         .then(function(d) {
@@ -5846,7 +5855,7 @@
             } else {
                 rawRows = []; rsGameIds = {};
                 dot.className = 'sdot error';
-                stxt.textContent = 'API error';
+                stxt.textContent = d && d.error ? 'Error: ' + d.error.slice(0, 80) : 'API error';
             }
         })
         .catch(function(e) {
