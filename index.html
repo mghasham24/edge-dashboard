@@ -2855,6 +2855,10 @@
     }
 
     async function submitAuth() {
+        // Short delay so browser autofill (Safari/Chrome) commits values to the DOM
+        // before we read them — without this, .value can be empty on first autofill tap
+        await new Promise(function(r){ setTimeout(r, 80); });
+
         var email = document.getElementById('gate-email').value.trim();
         var pass = document.getElementById('gate-pass').value;
         var pass2 = document.getElementById('gate-pass2').value;
@@ -2901,13 +2905,12 @@
             }
             var res = await fetch(endpoint, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: { 'Content-Type': 'application/json' },
                 credentials: 'same-origin',
                 body: JSON.stringify(regBody)
             });
-            var data = await res.json();
+            var data;
+            try { data = await res.json(); } catch(e) { data = {}; }
             if (!res.ok) {
                 showGateErr(data.error || 'Something went wrong');
             } else {
