@@ -2976,6 +2976,7 @@
                     if (portBtn) { setTimeout(function(){ portBtn.click(); }, 100); }
                 } else {
                     setTimeout(loadOdds, 50);
+                    setTimeout(preloadAllSports, 3000); // background preload after current sport loads
                 }
             }
         } catch (e) {
@@ -3013,6 +3014,7 @@
                     if (portBtn2) { setTimeout(function(){ portBtn2.click(); }, 100); }
                 } else {
                     setTimeout(loadOdds, 50);
+                    setTimeout(preloadAllSports, 3000); // background preload after current sport loads
                 }
             } else {
                 document.getElementById('landing').classList.add('visible');
@@ -5694,6 +5696,36 @@
             if (rawRows.length > 0) fetchRealMarkets(currentSport);
             if (currentSport === 'baseball_mlb') fetchKalshiRFI();
         });
+    }
+
+    // Silently pre-fetch odds + Real Sports preds for all sports in the background after login
+    async function preloadAllSports() {
+        if (!isPro()) return; // only pro users have multi-sport access
+        var sportsToLoad = SPORTS.filter(function(s) { return !s.noFetch && s.key !== currentSport; });
+        for (var i = 0; i < sportsToLoad.length; i++) {
+            var s = sportsToLoad[i];
+            if (rawRowsBySport[s.key] && rawRowsBySport[s.key].length) continue; // already loaded
+            try {
+                var mkts = s.key === 'mma_mixed_martial_arts' ? 'h2h' : 'h2h,spreads,totals';
+                var resp = await fetch('/api/odds?sport=' + s.key + '&markets=' + mkts + '&bookmakers=fanduel');
+                if (!resp.ok) continue;
+                var d = await resp.json();
+                var games = Array.isArray(d) ? d : (d && Array.isArray(d.games) ? d.games : null);
+                if (!games) continue;
+                var savedSport = currentSport;
+                currentSport = s.key;
+                var parsed = parseGames(games);
+                currentSport = savedSport;
+                rawRowsBySport[s.key] = parsed;
+                // Now fetch Real Sports preds for this sport — swap rawRows so matching works
+                var savedRaw = rawRows;
+                rawRows = parsed;
+                currentSport = s.key;
+                try { await fetchRealMarkets(s.key); } catch(e) {}
+                rawRows = savedRaw;
+                currentSport = savedSport;
+            } catch(e) { /* skip sport on error */ }
+        }
     }
 
     function toggleGame(gk) {
