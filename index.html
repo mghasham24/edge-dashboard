@@ -4414,9 +4414,15 @@
     function renderEvTab() {
         var container = document.getElementById('ev-cards');
         if (!container) return;
-        // Flatten all cached sports
+        // Flatten all cached sports, filtering out games that started >4h ago (already finished)
+        var staleThreshold = Date.now() - 4 * 60 * 60 * 1000;
         var all = [];
-        Object.values(evTabCache).forEach(function(arr) { all = all.concat(arr); });
+        Object.values(evTabCache).forEach(function(arr) {
+            arr.forEach(function(r) {
+                if (r.cm && new Date(r.cm).getTime() < staleThreshold) return;
+                all.push(r);
+            });
+        });
         // All rows have positive EV — sort by EV descending
         all.sort(function(a, b) { return (b._ev || 0) - (a._ev || 0); });
         if (!all.length) {
@@ -5114,7 +5120,7 @@
                 monthTotalEl.innerHTML = '<span style="filter:blur(6px);user-select:none;cursor:pointer" onclick="showUpgradeModal(\'Upgrade to Pro to see your monthly P&amp;L totals.\')">' + totalStr + '</span>';
                 monthTotalEl.style.color = totalColor;
             } else {
-                monthTotalEl.textContent = totalStr;
+                monthTotalEl.innerHTML = totalStr;
                 monthTotalEl.style.color = totalColor;
             }
         }
