@@ -2711,7 +2711,6 @@
     var currentSport = 'basketball_nba';
     var rawRows = [];
     var rawRowsBySport = {}; // sport key -> parsed rows (same IDs as preds)
-    var _suppressRenderTable = false; // set true during background preload to prevent UI flicker
     var preds = {};
     var vols = {}; // volume display per row id
     var yourLines = {};
@@ -5703,7 +5702,6 @@
     async function preloadAllSports() {
         if (!isPro()) return;
         var sportsToLoad = SPORTS.filter(function(s) { return !s.noFetch && s.key !== currentSport; });
-        _suppressRenderTable = true;
         for (var i = 0; i < sportsToLoad.length; i++) {
             var s = sportsToLoad[i];
             if (rawRowsBySport[s.key] && rawRowsBySport[s.key].length) continue;
@@ -5720,12 +5718,11 @@
                 var parsed = parseGames(games);
                 rawRowsBySport[s.key] = parsed;
                 rawRows = parsed;
-                try { await fetchRealMarkets(s.key); } catch(e) {}
+                try { await fetchRealMarkets(s.key, true); } catch(e) {}
                 rawRows = savedRaw;
                 currentSport = savedSport;
             } catch(e) {}
         }
-        _suppressRenderTable = false;
     }
 
     function toggleGame(gk) {
@@ -5742,7 +5739,6 @@
     }
 
     function renderTable() {
-        if (_suppressRenderTable) return;
         var unit = parseFloat(document.getElementById('unit-size').value) || 300;
         var q = document.getElementById('search').value.trim().toLowerCase();
         if (!rawRows.length) {
@@ -6238,14 +6234,14 @@
                 rawRows.push({ id: pid + '-B', game: game, cm: existing.cm, mkt: 'RFI', side: 'No (NRFI)',  am: rfi.noAm,  pt: null, pid: pid, ps: 'B', gid: existing.gid, rfiFair: rfi.noFair });
             });
 
-            renderTable();
+            if (!skipRender) renderTable();
             // Trigger Real Sports auto-fill for new RFI rows
             if (rawRows.length > 0) fetchRealMarkets(currentSport);
         })
         .catch(function() {});
     }
 
-    function fetchRealMarkets(sport) {
+    function fetchRealMarkets(sport, skipRender) {
         return fetch('/api/real/sync?sport=' + sport, { credentials: 'same-origin' })
         .then(function(r) { return r.json(); })
         .then(function(d) {
@@ -6301,7 +6297,7 @@
                         return normalMatch || flippedMatch;
                     });
                 });
-                renderTable();
+                if (!skipRender) renderTable();
             }
 
             rawRows.forEach(function(r) {
@@ -6472,7 +6468,7 @@
                     }
                 }
             });
-            renderTable();
+            if (!skipRender) renderTable();
             // On mobile, fire input events on all auto-filled inputs to trigger edge display
             if (window.innerWidth <= 768) {
                 setTimeout(function() {
