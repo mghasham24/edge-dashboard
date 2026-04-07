@@ -5458,9 +5458,7 @@
                 evTabBtn.className = 'sport-tab';
                 evTabBtn.textContent = '⚡ Best EV';
                 evTabBtn.id = 'ev-tab-btn';
-                evTabBtn.style.cssText = 'color:var(--yellow);font-weight:700;opacity:0.45;cursor:not-allowed';
-                evTabBtn.disabled = true;
-                evTabBtn.title = 'Loading all sports…';
+                evTabBtn.style.cssText = 'color:var(--yellow);font-weight:700';
                 evTabBtn.onclick = function() {
                     var isActive = this.classList.contains('active');
                     if (isActive) {
@@ -5756,26 +5754,22 @@
     async function preloadAllSports() {
         if (!isPro()) return;
         var sportsToLoad = SPORTS.filter(function(s) { return !s.noFetch && s.key !== currentSport; });
-        var evBtn = document.getElementById('ev-tab-btn');
-        for (var i = 0; i < sportsToLoad.length; i++) {
-            var s = sportsToLoad[i];
-            if (rawRowsBySport[s.key] && rawRowsBySport[s.key].length) continue;
+        // Fetch all sports in parallel
+        await Promise.all(sportsToLoad.map(async function(s) {
+            if (rawRowsBySport[s.key] && rawRowsBySport[s.key].length) return;
             try {
-                // Fetch FD odds
                 var mkts = s.key === 'mma_mixed_martial_arts' ? 'h2h' : 'h2h,spreads,totals';
                 var resp = await fetch('/api/odds?sport=' + s.key + '&markets=' + mkts + '&bookmakers=fanduel');
-                if (!resp.ok) continue;
+                if (!resp.ok) return;
                 var d = await resp.json();
                 var games = Array.isArray(d) ? d : (d && Array.isArray(d.games) ? d.games : null);
-                if (!games || !games.length) continue;
-                // Parse rows using a temp sport context — save/restore currentSport only for parseGames
+                if (!games || !games.length) return;
                 var savedSport = currentSport;
                 currentSport = s.key;
                 var parsed = parseGames(games);
                 currentSport = savedSport;
-                if (!parsed.length) continue;
+                if (!parsed.length) return;
                 rawRowsBySport[s.key] = parsed;
-                // Fetch Real Sports preds and fill directly — no global rawRows mutation
                 try {
                     var syncResp = await fetch('/api/real/sync?sport=' + s.key, { credentials: 'same-origin' });
                     if (syncResp.ok) {
@@ -5784,14 +5778,7 @@
                     }
                 } catch(e) {}
             } catch(e) {}
-        }
-        // All sports loaded — enable Best EV button
-        if (evBtn) {
-            evBtn.disabled = false;
-            evBtn.style.opacity = '';
-            evBtn.style.cursor = '';
-            evBtn.title = '';
-        }
+        }));
     }
 
     function toggleGame(gk) {
