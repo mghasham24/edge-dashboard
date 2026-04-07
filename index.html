@@ -2657,22 +2657,18 @@
 
         <!-- Best EV panel (pro-only) -->
         <div class="admin-panel" id="ev-panel">
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;flex-wrap:wrap">
-                <div style="font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--fg)">⚡ Best EV — All Sports</div>
-                <div id="ev-load-status" style="font-size:11px;color:var(--muted2)"></div>
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:22px;flex-wrap:wrap">
+                <div>
+                    <div style="font-size:16px;font-weight:800;letter-spacing:.04em;color:var(--fg)">⚡ Best EV</div>
+                    <div id="ev-load-status" style="font-size:11px;color:var(--muted2);margin-top:2px">All Sports</div>
+                </div>
                 <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
-                    <button onclick="loadAllEvSports()" id="ev-load-btn" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:11px;font-weight:700;padding:6px 14px;border-radius:5px;cursor:pointer;letter-spacing:.04em">Load All Sports</button>
-                    <button onclick="document.getElementById('ev-tab-btn').click()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:7px 14px;border-radius:5px;cursor:pointer;letter-spacing:.04em">&larr; Back</button>
+                    <button onclick="loadAllEvSports()" id="ev-load-btn" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:11px;font-weight:700;padding:7px 16px;border-radius:6px;cursor:pointer;letter-spacing:.04em">Load All Sports</button>
+                    <button onclick="document.getElementById('ev-tab-btn').click()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:7px 14px;border-radius:6px;cursor:pointer;letter-spacing:.04em">&larr; Back</button>
                 </div>
             </div>
-            <div class="admin-table-wrap">
-                <table class="port-table" id="ev-table">
-                    <thead><tr>
-                        <th>Sport</th><th>Game</th><th>Mkt</th><th>Side</th>
-                        <th class="r">FD Odds</th><th class="r">Edge</th><th class="r">EV Units</th>
-                    </tr></thead>
-                    <tbody id="ev-tbody"><tr><td colspan="7" style="color:var(--muted);padding:20px 12px">Click "Load All Sports" to fetch live odds for every sport.</td></tr></tbody>
-                </table>
+            <div id="ev-cards" style="display:flex;flex-direction:column;gap:8px">
+                <div style="color:var(--muted);font-size:13px;text-align:center;padding:40px 0">Click "Load All Sports" to fetch live odds for every sport.</div>
             </div>
         </div>
 
@@ -4270,16 +4266,16 @@
             r._ev = ev;
             return ev > 0;
         });
-        // Attach sport label
+        // Attach sport label and key
         var sportLabel = (SPORTS.find(function(s) { return s.key === sport; }) || {}).label || sport;
-        positive.forEach(function(r) { r._sport = sportLabel; });
+        positive.forEach(function(r) { r._sport = sportLabel; r._sport_key = sport; });
         evTabCache[sport] = positive;
         if (evTabVisible) renderEvTab();
     }
 
     function renderEvTab() {
-        var tbody = document.getElementById('ev-tbody');
-        if (!tbody) return;
+        var container = document.getElementById('ev-cards');
+        if (!container) return;
         // Flatten all cached sports
         var all = [];
         Object.values(evTabCache).forEach(function(arr) { all = all.concat(arr); });
@@ -4288,27 +4284,62 @@
         // Filter positives only
         all = all.filter(function(r) { return r._ev > 0; });
         if (!all.length) {
-            tbody.innerHTML = '<tr><td colspan="7" style="color:var(--muted);padding:20px 12px;text-align:center">Click "Load All Sports" to fetch odds across every sport, or navigate to a sport tab first.</td></tr>';
+            container.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:40px 0">Click "Load All Sports" to fetch odds across every sport, or navigate to a sport tab first.</div>';
             return;
         }
-        var unit = parseFloat(document.getElementById('unit-size').value) || 300;
         var html = '';
-        all.forEach(function(r) {
-            var evStr = r._ev != null ? (r._ev >= 0 ? '+' : '') + r._ev.toFixed(1) + '%' : '—';
-            var evCls = r._ev > 0 ? 'port-win' : 'port-loss';
-            var evUnits = r.u != null ? (r.u >= 0 ? '+' : '') + r.u.toFixed(2) + 'u' : '—';
+        all.forEach(function(r, i) {
+            var ev = r._ev;
+            var evStr = (ev >= 0 ? '+' : '') + ev.toFixed(1) + '%';
+            var evColor = ev >= 10 ? 'var(--green)' : ev >= 5 ? '#7ddfab' : 'var(--yellow)';
+            var evBg    = ev >= 10 ? 'rgba(45,204,126,0.13)' : ev >= 5 ? 'rgba(45,204,126,0.07)' : 'rgba(255,210,77,0.07)';
+            var evUnits = r.u != null ? (r.u > 0 ? '+' : '') + r.u.toFixed(2) + 'u' : null;
             var mktLabel = r.mkt + (r.pt != null ? ' ' + (r.pt >= 0 ? '+' : '') + r.pt : '');
-            html += '<tr>';
-            html += '<td>' + (r._sport || '') + '</td>';
-            html += '<td>' + (r.game || '') + '</td>';
-            html += '<td>' + mktLabel + '</td>';
-            html += '<td>' + (r.side || '') + '</td>';
-            html += '<td class="r">' + (r.am >= 0 ? '+' : '') + r.am + '</td>';
-            html += '<td class="r ' + evCls + '">' + evStr + '</td>';
-            html += '<td class="r">' + evUnits + '</td>';
-            html += '</tr>';
+            var amStr   = (r.am >= 0 ? '+' : '') + r.am;
+            var teams   = (r.game || '').split(' @ ');
+            var away    = teams[0] || r.game || '';
+            var home    = teams[1] || '';
+            // Real Sports link
+            var rsLink  = '';
+            if (rsGameIds[r.game]) {
+                var rsUrl = getRealSportsUrl(rsGameIds[r.game], r._sport_key);
+                if (rsUrl) rsLink = '<a href="' + rsUrl + '" target="_blank" rel="noopener" onclick="event.stopPropagation()" '
+                    + 'style="display:inline-flex;align-items:center;gap:4px;color:var(--accent);font-size:11px;font-weight:600;text-decoration:none;'
+                    + 'background:rgba(79,110,247,0.12);padding:3px 8px;border-radius:4px;border:1px solid rgba(79,110,247,0.25);white-space:nowrap">'
+                    + '&#8599; Real Sports</a>';
+            }
+            html += '<div style="display:flex;align-items:center;gap:12px;padding:13px 16px;border-radius:9px;background:var(--bg2);border:1px solid var(--border);position:relative;overflow:hidden">'
+                // left accent bar colored by EV strength
+                + '<div style="position:absolute;left:0;top:0;bottom:0;width:3px;background:' + evColor + ';border-radius:9px 0 0 9px"></div>'
+                // rank badge
+                + '<div style="min-width:26px;text-align:center;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--muted2)">#' + (i+1) + '</div>'
+                // EV pill
+                + '<div style="min-width:62px;padding:5px 10px;border-radius:6px;background:' + evBg + ';border:1px solid ' + evColor + ';text-align:center">'
+                +   '<div style="font-family:var(--mono);font-size:15px;font-weight:800;color:' + evColor + ';line-height:1">' + evStr + '</div>'
+                +   '<div style="font-size:9px;font-weight:700;letter-spacing:.06em;color:var(--muted2);margin-top:2px;text-transform:uppercase">EV</div>'
+                + '</div>'
+                // game + market info
+                + '<div style="flex:1;min-width:0">'
+                +   '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
+                +     '<span style="font-size:9px;font-weight:800;letter-spacing:.08em;color:var(--muted2);text-transform:uppercase;background:var(--bg3);padding:2px 7px;border-radius:4px">' + escHtml(r._sport || '') + '</span>'
+                +     '<span style="font-size:13px;font-weight:700;color:var(--fg)">' + escHtml(away) + '</span>'
+                +     (home ? '<span style="font-size:11px;color:var(--muted2)">@</span><span style="font-size:13px;font-weight:700;color:var(--fg)">' + escHtml(home) + '</span>' : '')
+                +     rsLink
+                +   '</div>'
+                +   '<div style="display:flex;align-items:center;gap:8px;margin-top:5px;flex-wrap:wrap">'
+                +     '<span style="font-size:11px;color:var(--muted);background:var(--bg3);padding:2px 8px;border-radius:4px;border:1px solid var(--border)">' + escHtml(mktLabel) + '</span>'
+                +     '<span style="font-size:12px;font-weight:700;color:var(--fg)">' + escHtml(r.side || '') + '</span>'
+                +   '</div>'
+                + '</div>'
+                // right stats
+                + '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;min-width:70px">'
+                +   '<div style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--fg)">' + escHtml(amStr) + '</div>'
+                +   '<div style="font-size:10px;color:var(--muted2)">FD Odds</div>'
+                +   (evUnits ? '<div style="font-family:var(--mono);font-size:11px;font-weight:600;color:var(--muted);margin-top:2px">' + escHtml(evUnits) + '</div>' : '')
+                + '</div>'
+                + '</div>';
         });
-        tbody.innerHTML = html;
+        container.innerHTML = html;
         var status = document.getElementById('ev-load-status');
         if (status) status.textContent = all.length + ' positive EV bets across ' + Object.keys(evTabCache).length + ' sport' + (Object.keys(evTabCache).length !== 1 ? 's' : '');
     }
