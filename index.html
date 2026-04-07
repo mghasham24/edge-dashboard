@@ -5458,7 +5458,9 @@
                 evTabBtn.className = 'sport-tab';
                 evTabBtn.textContent = '⚡ Best EV';
                 evTabBtn.id = 'ev-tab-btn';
-                evTabBtn.style.cssText = 'color:var(--yellow);font-weight:700';
+                evTabBtn.style.cssText = 'color:var(--yellow);font-weight:700;opacity:0.45;cursor:not-allowed';
+                evTabBtn.disabled = true;
+                evTabBtn.title = 'Loading all sports…';
                 evTabBtn.onclick = function() {
                     var isActive = this.classList.contains('active');
                     if (isActive) {
@@ -5754,6 +5756,7 @@
     async function preloadAllSports() {
         if (!isPro()) return;
         var sportsToLoad = SPORTS.filter(function(s) { return !s.noFetch && s.key !== currentSport; });
+        var evBtn = document.getElementById('ev-tab-btn');
         // Fetch all sports in parallel
         await Promise.all(sportsToLoad.map(async function(s) {
             if (rawRowsBySport[s.key] && rawRowsBySport[s.key].length) return;
@@ -5779,6 +5782,13 @@
                 } catch(e) {}
             } catch(e) {}
         }));
+        // All sports loaded — enable Best EV button
+        if (evBtn) {
+            evBtn.disabled = false;
+            evBtn.style.opacity = '';
+            evBtn.style.cursor = '';
+            evBtn.title = '';
+        }
     }
 
     function toggleGame(gk) {
