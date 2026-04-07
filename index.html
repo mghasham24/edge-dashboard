@@ -2526,8 +2526,8 @@
                     <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
                         <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2)">Performance</div>
                         <div style="margin-left:auto;display:flex;gap:4px">
-                            <button onclick="setPortTimeframe('1w')" id="port-tf-1w" class="port-tf-btn">1W</button>
-                            <button onclick="setPortTimeframe('1m')" id="port-tf-1m" class="port-tf-btn port-tf-active">1M</button>
+                            <button onclick="setPortTimeframe('1w')" id="port-tf-1w" class="port-tf-btn port-tf-active">1W</button>
+                            <button onclick="setPortTimeframe('1m')" id="port-tf-1m" class="port-tf-btn">1M</button>
                             <button onclick="setPortTimeframe('3m')" id="port-tf-3m" class="port-tf-btn">3M</button>
                         </div>
                     </div>
@@ -2721,7 +2721,7 @@
     var portHistoryCursor = null; // last item id for next page
     var portHistoryMore   = false;
     var portSelectedDate  = localDateKey(new Date());
-    var portTimeframe     = '1m';
+    var portTimeframe     = '1w';
     var PORT_CACHE_KEY    = 'rax_port_history_v1';
 
     // Returns "YYYY-MM-DD" in LOCAL timezone (not UTC)
