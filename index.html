@@ -1598,40 +1598,52 @@
     @media (max-width: 768px) {
         .port-table { min-width: 0 }
         .port-table thead { display: none }
+        /* 2-column card grid */
+        .port-table tbody { display: grid; grid-template-columns: 1fr 1fr; gap: 8px }
         .port-table tr {
-            display: block;
+            display: flex;
+            flex-direction: column;
             background: var(--bg2);
             border: 1px solid var(--border);
             border-radius: 8px;
-            margin-bottom: 8px;
-            padding: 2px 0
+            padding: 9px 10px;
+            gap: 3px
         }
+        /* empty-state row spans full width */
+        .port-table tr:has(td[colspan]) { grid-column: 1 / -1; align-items: center }
         .port-table tr:hover td { background: transparent }
         .port-table td {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 7px 12px;
-            border-bottom: 1px solid var(--border);
-            text-align: right
-        }
-        .port-table td:last-child { border-bottom: none }
-        .port-table td::before {
-            content: attr(data-label);
-            font-size: 10px;
-            font-weight: 600;
-            letter-spacing: .07em;
-            text-transform: uppercase;
-            color: var(--muted2);
-            flex-shrink: 0;
-            margin-right: 12px;
-            text-align: left
-        }
-        .port-table td[colspan] {
             display: block;
-            text-align: center
+            padding: 0;
+            border-bottom: none;
+            text-align: left;
+            font-size: 11px;
+            line-height: 1.3;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap
         }
-        .port-table td[colspan]::before { display: none }
+        .port-table td::before { display: none }
+        .port-table td[colspan] { white-space: normal; text-align: center; color: var(--muted); font-size: 12px; padding: 8px 0 }
+        /* Open positions: hide Avg + Now to save space */
+        #port-open-tbody td:nth-child(5),
+        #port-open-tbody td:nth-child(6) { display: none }
+        /* Settled history: hide Market column */
+        #port-history-tbody td:nth-child(3) { display: none }
+        /* Matchup as card title */
+        #port-open-tbody td:nth-child(1) { font-weight: 700; font-size: 12px; color: var(--fg) }
+        #port-history-tbody td:nth-child(2) { font-weight: 700; font-size: 12px; color: var(--fg) }
+        /* Date tiny */
+        #port-history-tbody td:nth-child(1) { font-size: 9px; color: var(--muted2) }
+        /* Cost/Pays side by side using flex */
+        #port-open-tbody td:nth-child(7),
+        #port-open-tbody td:nth-child(8) { display: inline-block; width: auto; white-space: nowrap }
+        #port-open-tbody td:nth-child(7)::after { content: ' →'; color: var(--muted2); font-size: 9px }
+        #port-history-tbody td:nth-child(5)::after { content: ' →'; color: var(--muted2); font-size: 9px }
+        #port-open-tbody td:nth-child(7),
+        #port-history-tbody td:nth-child(5) { display: inline-block; width: auto }
+        #port-open-tbody td:nth-child(8),
+        #port-history-tbody td:nth-child(6) { display: inline-block; width: auto }
     }
 
     @media (max-width: 768px) {
