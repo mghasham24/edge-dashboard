@@ -2058,9 +2058,6 @@
     .ev-mobile-card .evm-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; }
     .ev-mobile-card .evm-cb { width: 15px; height: 15px; cursor: pointer; accent-color: var(--green); }
 
-    /* Loading bar for Best EV */
-    #ev-loading-bar-wrap { height: 3px; background: var(--bg3); border-radius: 2px; overflow: hidden; margin-top: 10px; margin-bottom: 6px; display: none; }
-    #ev-loading-bar { height: 100%; width: 0%; background: var(--accent); border-radius: 2px; transition: width .3s ease; }
 
     @media (max-width: 768px) {
         .ev-desktop-table { display: none !important; }
@@ -2320,6 +2317,7 @@
         </header>
 
         <nav class="sport-tabs" id="sport-tabs"></nav>
+        <div id="ev-loading-bar-wrap" style="display:none;height:3px;background:var(--bg3);overflow:hidden"><div id="ev-loading-bar" style="height:100%;width:0%;background:linear-gradient(90deg,var(--accent),#7ddfab);transition:width .4s ease"></div></div>
 
         <div class="controls">
             <div class="search-wrap">
@@ -2712,7 +2710,6 @@
                     <button onclick="document.getElementById('ev-tab-btn').click()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:7px 14px;border-radius:6px;cursor:pointer;letter-spacing:.04em">&larr; Back</button>
                 </div>
             </div>
-            <div id="ev-loading-bar-wrap"><div id="ev-loading-bar"></div></div>
             <div id="ev-cards" style="margin-top:16px">
                 <div style="color:var(--muted);font-size:13px;text-align:center;padding:40px 0">Loading best EV bets…</div>
             </div>
@@ -4396,7 +4393,15 @@
         var evTd = container.querySelector('.ev-val-td');
         var uTd  = container.querySelector('.ev-units-td');
         var btTd = container.querySelector('.ev-bet-td');
-        if (evTd) evTd.innerHTML = '<span style="font-family:var(--mono);font-size:12px;font-weight:800;color:' + evColor + '">' + escHtml(evStr) + '</span>';
+        if (evTd) {
+            var isMobileCard = container.classList.contains('ev-mobile-card');
+            if (isMobileCard) {
+                evTd.style.color = evColor;
+                evTd.textContent = 'EV% ' + evStr;
+            } else {
+                evTd.innerHTML = '<span style="font-family:var(--mono);font-size:12px;font-weight:800;color:' + evColor + '">' + escHtml(evStr) + '</span>';
+            }
+        }
         if (uTd)  { uTd.textContent = u > 0 ? '+' + u.toFixed(2) + 'u' : '—'; uTd.style.color = uColor; }
         if (btTd) btTd.textContent = betAmt;
     }
@@ -4442,7 +4447,8 @@
             var uColor  = u >= 2 ? 'var(--green)' : u >= 1 ? '#7ddfab' : u >= 0.5 ? 'var(--yellow)' : 'var(--muted)';
             var uStr    = (ev != null && u > 0) ? '+' + u.toFixed(2) + 'u' : '—';
             var betAmt  = (u > 0) ? '$' + Math.round(u * evUnit) : '—';
-            var mktLabel = r.mkt + (r.pt != null ? ' ' + (r.pt >= 0 ? '+' : '') + r.pt : '');
+            var displayPt = (yourLines[r.id] != null) ? yourLines[r.id] : r.pt;
+            var mktLabel = r.mkt + (displayPt != null ? ' ' + (displayPt >= 0 ? '+' : '') + displayPt : '');
             var amStr   = (r.am >= 0 ? '+' : '') + r.am;
             var afStr   = r.af != null ? (r.af * 100).toFixed(1) + '%' : '—';
             var predPct = r._pred != null ? (r._pred * 100).toFixed(1) : '';
@@ -4494,7 +4500,7 @@
                 // Top row: sport + EV%
                 + '<div style="display:flex;align-items:center;justify-content:space-between;gap:2px">'
                 +   '<span class="evm-sport">' + escHtml(r._sport || '') + '</span>'
-                +   '<span class="evm-ev" style="color:' + evColor + '">EV% ' + escHtml(evStr || '—') + '</span>'
+                +   '<span class="evm-ev ev-val-td" style="color:' + evColor + '">EV% ' + escHtml(evStr || '—') + '</span>'
                 + '</div>'
                 // Teams stacked
                 + '<div class="evm-team">' + escHtml(away) + '</div>'
@@ -5899,6 +5905,20 @@
             // Populate rsGameIds so Real Sports links work in Best EV
             var gid = markets[realKey + '__gid'];
             if (gid) rsGameIds[r.game] = gid;
+
+            // Populate yourLines from Real Sports line data (spread/total)
+            var gameLines = markets[realKey + '__lines'];
+            if (gameLines) {
+                if (r.mkt === 'Spread' && yourLines[r.id] == null) {
+                    var gParts = r.game.split(' @ ');
+                    var isHome = gParts[1] && r.side.toLowerCase().indexOf(gParts[1].split(' ').pop().toLowerCase()) !== -1;
+                    var spreadVal = isHome ? gameLines.homeSpread : gameLines.awaySpread;
+                    if (spreadVal != null) yourLines[r.id] = spreadVal;
+                }
+                if (r.mkt === 'Total' && yourLines[r.id] == null && gameLines.total != null) {
+                    yourLines[r.id] = gameLines.total;
+                }
+            }
 
             // markets[realKey] is the game object: { "Game Winner": {...}, "Spread": {...}, ... }
             var gameMarkets = markets[realKey];
