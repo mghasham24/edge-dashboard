@@ -4423,10 +4423,17 @@
                     }
                 }
                 if (parsedRows && parsedRows.length) {
-                    var pairs = {};
-                    parsedRows.forEach(function(r) { if (!pairs[r.pid]) pairs[r.pid] = {}; pairs[r.pid][r.ps] = r; });
+                    // Swap rawRows so fetchRealMarkets auto-fills preds for this sport's rows
+                    var savedRaw2 = rawRows;
+                    rawRows = parsedRows;
                     var savedSport2 = currentSport;
                     currentSport = s.key;
+                    try { await fetchRealMarkets(s.key); } catch(e) {}
+                    // fetchRealMarkets may have mutated rawRows (added RFI rows etc) — use updated version
+                    parsedRows = rawRows;
+                    rawRowsBySport[s.key] = parsedRows;
+                    var pairs = {};
+                    parsedRows.forEach(function(r) { if (!pairs[r.pid]) pairs[r.pid] = {}; pairs[r.pid][r.ps] = r; });
                     var computed = parsedRows.map(function(r) {
                         var p = pairs[r.pid] || {};
                         var nv = novig(p.A ? imp(p.A.am) : null, p.B ? imp(p.B.am) : null);
@@ -4447,6 +4454,7 @@
                         return { id: r.id, game: r.game, cm: r.cm, mkt: r.mkt, side: r.side, am: r.am, pt: r.pt, ps: r.ps, pid: r.pid, fair: fair, af: af, yl: yl, edge: edge, u: u };
                     });
                     currentSport = savedSport2;
+                    rawRows = savedRaw2;
                     cacheEvRows(computed, s.key);
                 }
             } catch(e) { /* skip sport on error */ }
@@ -6230,7 +6238,7 @@
     }
 
     function fetchRealMarkets(sport) {
-        fetch('/api/real/sync?sport=' + sport, { credentials: 'same-origin' })
+        return fetch('/api/real/sync?sport=' + sport, { credentials: 'same-origin' })
         .then(function(r) { return r.json(); })
         .then(function(d) {
             if (!d.ok || !d.markets) return;
