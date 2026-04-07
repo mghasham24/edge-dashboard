@@ -4839,7 +4839,8 @@
             var key = portCalYear + '-' + mm + '-' + dd;
             var dayData = dailyMap[key];
             var isToday = (portCalYear === today.getFullYear() && portCalMonth === today.getMonth() && d === today.getDate());
-            var isBlurred = !isPro() && !isToday;
+            var freeCutoff = localDateKey(new Date(Date.now() - 6 * 24 * 60 * 60 * 1000));
+            var isBlurred = !isPro() && key < freeCutoff;
             var cls = 'port-cal-day' + (isToday ? ' today' : '') + (dayData ? ' has-data' : '');
             var pnlHtml = '';
             var dayStyle = '';
