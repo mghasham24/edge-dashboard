@@ -4538,29 +4538,7 @@
         // ── Mobile card grid ───────────────────────────────────
         var mhtml = '<div class="ev-mobile-grid">';
 
-        var lastEvGame = null;
         all.forEach(function(r) {
-            // Game header — insert when game changes
-            if (r.game !== lastEvGame) {
-                lastEvGame = r.game;
-                var ti  = timeInfo(r.cm);
-                var teams = (r.game || '').split(' @ ');
-                var badgeHtml = ti.lbl ? '<span class="gh-badge ' + ti.cls + '" style="font-size:9px;padding:2px 6px;flex-shrink:0">' + escHtml(ti.lbl) + '</span>' : '';
-                // Desktop: spanning header row
-                html += '<tr style="background:var(--bg2)">'
-                    + '<td colspan="11" style="padding:6px 8px;border-bottom:1px solid var(--border)">'
-                    + '<div style="display:flex;align-items:center;gap:8px">'
-                    + '<span style="font-size:11px;font-weight:700;color:var(--fg)">' + escHtml(teams[0]) + '</span>'
-                    + '<span style="color:var(--muted2);font-size:10px">@</span>'
-                    + '<span style="font-size:11px;font-weight:700;color:var(--fg)">' + escHtml(teams[1] || '') + '</span>'
-                    + badgeHtml
-                    + '</div></td></tr>';
-                // Mobile: game label divider (full width, spans outside card grid)
-                mhtml += '<div class="ev-game-hdr" style="grid-column:1/-1;display:flex;align-items:center;gap:6px;padding:4px 2px;margin-top:6px">'
-                    + '<span style="font-size:11px;font-weight:700;color:var(--fg)">' + escHtml(teams[0]) + ' <span style="color:var(--muted2)">@</span> ' + escHtml(teams[1] || '') + '</span>'
-                    + badgeHtml
-                    + '</div>';
-            }
             var ev      = r._ev;
             var evStr   = ev != null ? (ev >= 0 ? '+' : '') + ev.toFixed(1) + '%' : null;
             var evColor = ev != null ? (ev >= 10 ? 'var(--green)' : ev >= 5 ? '#7ddfab' : ev > 0 ? 'var(--yellow)' : 'var(--red)') : '';
@@ -4584,6 +4562,8 @@
             }
 
             // Desktop table row
+            var ti = timeInfo(r.cm);
+            var timeBadge = ti.lbl ? '<span class="gh-badge ' + ti.cls + '" style="font-size:9px;padding:2px 5px;margin-left:5px;vertical-align:middle">' + escHtml(ti.lbl) + '</span>' : '';
             var rsLink = rsUrl
                 ? ' <a href="' + rsUrl + '" target="_blank" rel="noopener" onclick="event.stopPropagation()" '
                     + 'style="color:var(--accent);font-size:10px;text-decoration:none" title="View on Real Sports">&#8599;</a>'
@@ -4600,7 +4580,7 @@
                 + '<td>' + cbHtml + '</td>'
                 + '<td class="r ev-val-td">' + evCell + '</td>'
                 + '<td><span style="font-size:9px;font-weight:800;letter-spacing:.07em;color:var(--muted2);text-transform:uppercase;white-space:nowrap">' + escHtml(r._sport || '') + '</span></td>'
-                + '<td style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escHtml(gameStr) + rsLink + '</td>'
+                + '<td style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escHtml(gameStr) + timeBadge + rsLink + '</td>'
                 + '<td><span class="mkt-badge" style="font-size:10px">' + escHtml(mktLabel) + '</span></td>'
                 + '<td style="font-weight:700;font-size:12px">' + escHtml(r.side || '') + '</td>'
                 + '<td class="r" style="font-family:var(--mono);font-size:12px;color:var(--muted)">' + escHtml(amStr) + '</td>'
@@ -4626,6 +4606,7 @@
                 // Teams stacked
                 + '<div class="evm-team">' + escHtml(away) + '</div>'
                 + (home ? '<div class="evm-team evm-home">@ ' + escHtml(home) + '</div>' : '')
+                + (timeBadge ? '<div style="margin-top:2px">' + timeBadge + '</div>' : '')
                 // Market + Side + FD odds
                 + '<div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:1px">'
                 +   '<span class="evm-mkt">' + escHtml(mktLabel) + '</span>'
