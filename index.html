@@ -1148,6 +1148,34 @@
         margin-top: 4px
     }
 
+    .admin-stat[data-tip] { position: relative; cursor: default }
+    .admin-stat[data-tip]::after {
+        content: attr(data-tip);
+        position: absolute;
+        bottom: calc(100% + 8px);
+        left: 50%;
+        transform: translateX(-50%);
+        background: var(--bg3);
+        color: var(--fg);
+        font-size: 11px;
+        font-family: var(--sans);
+        font-weight: 400;
+        letter-spacing: 0;
+        text-transform: none;
+        padding: 7px 11px;
+        border-radius: 6px;
+        border: 1px solid var(--border2);
+        white-space: normal;
+        max-width: 200px;
+        text-align: center;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity .15s;
+        z-index: 200;
+        line-height: 1.4
+    }
+    .admin-stat[data-tip]:hover::after { opacity: 1 }
+
     .admin-search {
         background: var(--bg3);
         border: 1px solid var(--border2);
@@ -2408,23 +2436,23 @@
                         </div>
                     </div>
                     <div class="admin-stats" style="margin-bottom:28px">
-                        <div class="admin-stat">
+                        <div class="admin-stat" data-tip="Net profit or loss for the selected timeframe (1W / 1M / 3M).">
                             <div class="admin-stat-val" id="port-pnl" style="color:var(--green)">-</div>
                             <div class="admin-stat-lbl">Total P&amp;L</div>
                         </div>
-                        <div class="admin-stat">
+                        <div class="admin-stat" data-tip="Return on investment for the selected timeframe — net P&L divided by total amount risked.">
                             <div class="admin-stat-val" id="port-roi">-</div>
                             <div class="admin-stat-lbl">ROI</div>
                         </div>
-                        <div class="admin-stat">
+                        <div class="admin-stat" data-tip="Number of bets currently active and waiting to settle.">
                             <div class="admin-stat-val" id="port-open-count">-</div>
                             <div class="admin-stat-lbl">Open Positions</div>
                         </div>
-                        <div class="admin-stat">
+                        <div class="admin-stat" data-tip="Total number of bets that have settled across all time.">
                             <div class="admin-stat-val" id="port-settled-count">-</div>
                             <div class="admin-stat-lbl">Settled · All Time</div>
                         </div>
-                        <div class="admin-stat">
+                        <div class="admin-stat" data-tip="Total net profit or loss from all settled bets, all time. Paid out minus amount risked.">
                             <div class="admin-stat-val" id="port-settled-profit" style="font-size:18px">-</div>
                             <div class="admin-stat-lbl">Realised P&amp;L · All Time</div>
                         </div>
@@ -2438,13 +2466,15 @@
                             <table class="port-table">
                                 <thead>
                                     <tr>
-                                        <th>Game</th>
+                                        <th>Matchup</th>
+                                        <th>Sport</th>
                                         <th>Market</th>
                                         <th>Side</th>
-                                        <th class="r">Shares</th>
-                                        <th class="r">Entry</th>
-                                        <th class="r">Value</th>
-                                        <th class="r">Unrealized P&amp;L</th>
+                                        <th class="r">Avg</th>
+                                        <th class="r">Now</th>
+                                        <th class="r">Cost</th>
+                                        <th class="r">Pays</th>
+                                        <th>Status</th>
                                     </tr>
                                 </thead>
                                 <tbody id="port-open-tbody"></tbody>
@@ -2594,6 +2624,7 @@
 
     var _hashids = null;
     var REAL_SPORT_IDS = { nba:1, nfl:2, ncaam:3, mlb:4, epl:5, ucl:6, nhl:7, mls:8, fifa:9, ufc:10, ncaaf:11, wnba:12, soccer:14, golf:15 };
+    var REAL_SPORT_LABELS = { 1:'NBA', 2:'NFL', 3:'NCAAB', 4:'MLB', 5:'EPL', 6:'UCL', 7:'NHL', 8:'MLS', 9:'FIFA', 10:'UFC', 11:'NCAAF', 12:'WNBA', 14:'Soccer', 15:'Golf' };
     function getRealSportsUrl(gid, sport) {
         if (!gid || typeof Hashids === 'undefined') return null;
         if (!_hashids) _hashids = new Hashids('routing', 11);
@@ -4216,11 +4247,11 @@
 
         // --- Open positions ---
         var openHead = document.querySelector('#port-open-tbody').closest('table').querySelector('thead tr');
-        if (openHead) openHead.innerHTML = '<th>Matchup</th><th>Market</th><th>Side</th><th class="r">Avg</th><th class="r" title="Rax spent">Cost</th><th class="r" title="Rax if wins">Pays</th><th class="r">Now</th><th>Status</th>';
+        if (openHead) openHead.innerHTML = '<th>Matchup</th><th>Sport</th><th>Market</th><th>Side</th><th class="r">Avg</th><th class="r">Now</th><th class="r">Cost</th><th class="r">Pays</th><th>Status</th>';
 
         var openTbody = document.getElementById('port-open-tbody');
         if (!activePos.length) {
-            openTbody.innerHTML = '<tr><td colspan="8" style="color:var(--muted);padding:20px 12px">No open positions</td></tr>';
+            openTbody.innerHTML = '<tr><td colspan="9" style="color:var(--muted);padding:20px 12px">No open positions</td></tr>';
         } else {
             openTbody.innerHTML = activePos.map(function(p) {
                 var matchup  = (p.marketDisplay && p.marketDisplay.display) || '—';
@@ -4234,6 +4265,17 @@
                 var cur      = p.currentPriceDisplay || '—';
                 var status   = p.leftFooterText || '—';
 
+                // Sport label: try sportId numeric map, then sport string, then sportLabel
+                var sportLbl = '—';
+                if (p.sportId && REAL_SPORT_LABELS[p.sportId]) {
+                    sportLbl = REAL_SPORT_LABELS[p.sportId];
+                } else if (p.sport) {
+                    // may be a key like "nba" or a label like "NBA"
+                    sportLbl = REAL_SPORT_LABELS[REAL_SPORT_IDS[p.sport.toLowerCase()]] || p.sport.toUpperCase();
+                } else if (p.sportLabel) {
+                    sportLbl = p.sportLabel;
+                }
+
                 // Edge match: normalise marketType to our mkt labels
                 var mktNorm  = (mktMap[p.marketType] || '').toLowerCase();
                 var matchedRow = gid && gidToRows[gid] ? gidToRows[gid].find(function(r) {
@@ -4245,12 +4287,13 @@
 
                 return '<tr>'
                     + '<td>' + escHtml(matchup) + '</td>'
+                    + '<td style="font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--muted)">' + escHtml(sportLbl) + '</td>'
                     + '<td><span class="mkt-badge">' + escHtml(market) + '</span></td>'
                     + '<td>' + escHtml(side) + edgeBadge + '</td>'
                     + '<td class="r" style="font-family:var(--mono);color:var(--muted)">' + escHtml(avg) + '</td>'
+                    + '<td class="r" style="font-family:var(--mono);color:var(--muted)">' + escHtml(cur) + '</td>'
                     + '<td class="r" style="font-family:var(--mono)">' + escHtml(cost) + '</td>'
                     + '<td class="r" style="font-family:var(--mono);color:var(--green)">' + escHtml(pays) + '</td>'
-                    + '<td class="r" style="font-family:var(--mono);color:var(--muted)">' + escHtml(cur) + '</td>'
                     + '<td style="color:var(--muted);font-size:11px">' + escHtml(status) + '</td>'
                     + '</tr>';
             }).join('');
