@@ -4538,7 +4538,29 @@
         // ── Mobile card grid ───────────────────────────────────
         var mhtml = '<div class="ev-mobile-grid">';
 
+        var lastEvGame = null;
         all.forEach(function(r) {
+            // Game header — insert when game changes
+            if (r.game !== lastEvGame) {
+                lastEvGame = r.game;
+                var ti  = timeInfo(r.cm);
+                var teams = (r.game || '').split(' @ ');
+                var badgeHtml = ti.lbl ? '<span class="gh-badge ' + ti.cls + '" style="font-size:9px;padding:2px 6px;flex-shrink:0">' + escHtml(ti.lbl) + '</span>' : '';
+                // Desktop: spanning header row
+                html += '<tr style="background:var(--bg2)">'
+                    + '<td colspan="11" style="padding:6px 8px;border-bottom:1px solid var(--border)">'
+                    + '<div style="display:flex;align-items:center;gap:8px">'
+                    + '<span style="font-size:11px;font-weight:700;color:var(--fg)">' + escHtml(teams[0]) + '</span>'
+                    + '<span style="color:var(--muted2);font-size:10px">@</span>'
+                    + '<span style="font-size:11px;font-weight:700;color:var(--fg)">' + escHtml(teams[1] || '') + '</span>'
+                    + badgeHtml
+                    + '</div></td></tr>';
+                // Mobile: game label divider (full width, spans outside card grid)
+                mhtml += '<div class="ev-game-hdr" style="grid-column:1/-1;display:flex;align-items:center;gap:6px;padding:4px 2px;margin-top:6px">'
+                    + '<span style="font-size:11px;font-weight:700;color:var(--fg)">' + escHtml(teams[0]) + ' <span style="color:var(--muted2)">@</span> ' + escHtml(teams[1] || '') + '</span>'
+                    + badgeHtml
+                    + '</div>';
+            }
             var ev      = r._ev;
             var evStr   = ev != null ? (ev >= 0 ? '+' : '') + ev.toFixed(1) + '%' : null;
             var evColor = ev != null ? (ev >= 10 ? 'var(--green)' : ev >= 5 ? '#7ddfab' : ev > 0 ? 'var(--yellow)' : 'var(--red)') : '';
