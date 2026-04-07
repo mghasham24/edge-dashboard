@@ -4403,46 +4403,21 @@
         for (var i = 0; i < sportsToLoad.length; i++) {
             var s = sportsToLoad[i];
             try {
-                var parsedRows = null;
-                // Prefer cached rows (same IDs as preds) — only fetch fresh if not yet visited this session
-                if (rawRowsBySport[s.key] && rawRowsBySport[s.key].length) {
-                    parsedRows = rawRowsBySport[s.key];
-                } else {
-                    var mkts = s.key === 'mma_mixed_martial_arts' ? 'h2h' : 'h2h,spreads,totals';
-                    var resp = await fetch('/api/odds?sport=' + s.key + '&markets=' + mkts + '&bookmakers=fanduel');
-                    if (resp.ok) {
-                        var d = await resp.json();
-                        var games = Array.isArray(d) ? d : (d && Array.isArray(d.games) ? d.games : null);
-                        if (games) {
-                            var savedSport = currentSport;
-                            currentSport = s.key;
-                            parsedRows = parseGames(games);
-                            rawRowsBySport[s.key] = parsedRows;
-                            currentSport = savedSport;
-                        }
-                    }
-                }
-                if (parsedRows && parsedRows.length) {
-                    // Swap rawRows so fetchRealMarkets auto-fills preds for this sport's rows
-                    var savedRaw2 = rawRows;
-                    rawRows = parsedRows;
-                    var savedSport2 = currentSport;
+                // Use rows already loaded when user visited this sport tab (same IDs as preds)
+                var sportRows = rawRowsBySport[s.key] || [];
+                if (sportRows.length) {
+                    var savedSport3 = currentSport;
                     currentSport = s.key;
-                    try { await fetchRealMarkets(s.key); } catch(e) {}
-                    // fetchRealMarkets may have mutated rawRows (added RFI rows etc) — use updated version
-                    parsedRows = rawRows;
-                    rawRowsBySport[s.key] = parsedRows;
-                    var pairs = {};
-                    parsedRows.forEach(function(r) { if (!pairs[r.pid]) pairs[r.pid] = {}; pairs[r.pid][r.ps] = r; });
-                    var computed = parsedRows.map(function(r) {
-                        var p = pairs[r.pid] || {};
+                    var pairs3 = {};
+                    sportRows.forEach(function(r) { if (!pairs3[r.pid]) pairs3[r.pid] = {}; pairs3[r.pid][r.ps] = r; });
+                    var computed3 = sportRows.map(function(r) {
+                        var p = pairs3[r.pid] || {};
                         var nv = novig(p.A ? imp(p.A.am) : null, p.B ? imp(p.B.am) : null);
                         var yl = yourLines[r.id] != null ? yourLines[r.id] : null;
                         var fair = r.ps === 'A' ? nv.fa : nv.fb;
                         var af = adjFair(fair, r.pt, yl, r.mkt, r.ps);
                         var pr = preds[r.id];
                         var pred = (pr !== undefined && pr !== '') ? parseFloat(pr) / 100 : null;
-                        var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
                         var evForUnits = null;
                         if (af != null && pred != null && pred > 0 && pred < 1) {
                             var volNum3 = 0;
@@ -4451,17 +4426,17 @@
                             evForUnits = (af * (1/pred) * (1-rake3) - 1) * 100;
                         }
                         var u = unitsEV(evForUnits, pred);
+                        var edge = (af != null && pred != null) ? (af - pred) * 100 : null;
                         return { id: r.id, game: r.game, cm: r.cm, mkt: r.mkt, side: r.side, am: r.am, pt: r.pt, ps: r.ps, pid: r.pid, fair: fair, af: af, yl: yl, edge: edge, u: u };
                     });
-                    currentSport = savedSport2;
-                    rawRows = savedRaw2;
-                    cacheEvRows(computed, s.key);
+                    currentSport = savedSport3;
+                    cacheEvRows(computed3, s.key);
                 }
             } catch(e) { /* skip sport on error */ }
             done++;
             updateStatus();
         }
-        if (btn) { btn.disabled = false; btn.textContent = 'Reload All Sports'; }
+        if (btn) { btn.disabled = false; btn.textContent = '↺ Refresh'; }
         renderEvTab();
         // Start 60s countdown to next auto-refresh in status bar
         var _evCountdown = EV_REFRESH_MS / 1000;
