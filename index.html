@@ -1596,6 +1596,45 @@
     }
 
     @media (max-width: 768px) {
+        .port-table { min-width: 0 }
+        .port-table thead { display: none }
+        .port-table tr {
+            display: block;
+            background: var(--bg2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 8px;
+            padding: 2px 0
+        }
+        .port-table tr:hover td { background: transparent }
+        .port-table td {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 7px 12px;
+            border-bottom: 1px solid var(--border);
+            text-align: right
+        }
+        .port-table td:last-child { border-bottom: none }
+        .port-table td::before {
+            content: attr(data-label);
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: .07em;
+            text-transform: uppercase;
+            color: var(--muted2);
+            flex-shrink: 0;
+            margin-right: 12px;
+            text-align: left
+        }
+        .port-table td[colspan] {
+            display: block;
+            text-align: center
+        }
+        .port-table td[colspan]::before { display: none }
+    }
+
+    @media (max-width: 768px) {
         .admin-panel {
             padding:14px
         }
@@ -4286,15 +4325,15 @@
                     : '';
 
                 return '<tr>'
-                    + '<td>' + escHtml(matchup) + '</td>'
-                    + '<td style="font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--muted)">' + escHtml(sportLbl) + '</td>'
-                    + '<td><span class="mkt-badge">' + escHtml(market) + '</span></td>'
-                    + '<td>' + escHtml(side) + edgeBadge + '</td>'
-                    + '<td class="r" style="font-family:var(--mono);color:var(--muted)">' + escHtml(avg) + '</td>'
-                    + '<td class="r" style="font-family:var(--mono);color:var(--muted)">' + escHtml(cur) + '</td>'
-                    + '<td class="r" style="font-family:var(--mono)">' + escHtml(cost) + '</td>'
-                    + '<td class="r" style="font-family:var(--mono);color:var(--green)">' + escHtml(pays) + '</td>'
-                    + '<td style="color:var(--muted);font-size:11px">' + escHtml(status) + '</td>'
+                    + '<td data-label="Matchup">' + escHtml(matchup) + '</td>'
+                    + '<td data-label="Sport" style="font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--muted)">' + escHtml(sportLbl) + '</td>'
+                    + '<td data-label="Market"><span class="mkt-badge">' + escHtml(market) + '</span></td>'
+                    + '<td data-label="Side">' + escHtml(side) + edgeBadge + '</td>'
+                    + '<td data-label="Avg" class="r" style="font-family:var(--mono);color:var(--muted)">' + escHtml(avg) + '</td>'
+                    + '<td data-label="Now" class="r" style="font-family:var(--mono);color:var(--muted)">' + escHtml(cur) + '</td>'
+                    + '<td data-label="Cost" class="r" style="font-family:var(--mono)">' + escHtml(cost) + '</td>'
+                    + '<td data-label="Pays" class="r" style="font-family:var(--mono);color:var(--green)">' + escHtml(pays) + '</td>'
+                    + '<td data-label="Status" style="color:var(--muted);font-size:11px">' + escHtml(status) + '</td>'
                     + '</tr>';
             }).join('');
         }
@@ -4572,13 +4611,13 @@
         var resCls   = isWin ? 'port-win' : isLoss ? 'port-loss' : '';
         var resLbl   = isWin ? 'Win' : isLoss ? 'Loss' : '—';
         var dateStr  = fmtPortDate(p.transactedAt);
-        return '<td style="white-space:nowrap;font-size:11px;color:var(--muted);font-family:var(--mono)">' + escHtml(dateStr) + '</td>'
-            + '<td>' + escHtml(matchup) + '</td>'
-            + '<td><span class="mkt-badge" style="font-size:10px">' + escHtml(market) + '</span></td>'
-            + '<td>' + escHtml(side) + '</td>'
-            + '<td class="r" style="font-family:var(--mono);color:var(--muted)">' + escHtml(costDisp) + '</td>'
-            + '<td class="r ' + (isWin ? 'port-win' : 'port-loss') + '" style="font-family:var(--mono)">' + escHtml(paidDisp) + '</td>'
-            + '<td class="' + resCls + '" style="font-weight:700;font-size:12px">' + resLbl + '</td>';
+        return '<td data-label="Date" style="white-space:nowrap;font-size:11px;color:var(--muted);font-family:var(--mono)">' + escHtml(dateStr) + '</td>'
+            + '<td data-label="Matchup">' + escHtml(matchup) + '</td>'
+            + '<td data-label="Market"><span class="mkt-badge" style="font-size:10px">' + escHtml(market) + '</span></td>'
+            + '<td data-label="Side">' + escHtml(side) + '</td>'
+            + '<td data-label="Cost" class="r" style="font-family:var(--mono);color:var(--muted)">' + escHtml(costDisp) + '</td>'
+            + '<td data-label="Paid" class="r ' + (isWin ? 'port-win' : 'port-loss') + '" style="font-family:var(--mono)">' + escHtml(paidDisp) + '</td>'
+            + '<td data-label="Result" class="' + resCls + '" style="font-weight:700;font-size:12px">' + resLbl + '</td>';
     }
 
     function getField(obj, keys) {
