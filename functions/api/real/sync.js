@@ -334,7 +334,7 @@ export async function onRequestGet(context) {
               const totalLine = (totalMkt.outcomes[0].label || '').match(/(\d+\.?\d*)\s*$/);
               if (totalLine) lines.total = parseFloat(totalLine[1]);
             }
-            return { gameKey, markets, lines };
+            return { gameKey, markets, lines, gameId };
           }
           if (mRes.status === 429) {
             // Rate limited on this specific game — skip and rely on D1 merge cache
@@ -360,7 +360,7 @@ export async function onRequestGet(context) {
     const marketMap = {};
     const now = Math.floor(Date.now() / 1000);
     const cacheKey = 'real_sync_' + realSport;
-    const TTL = 300;
+    const TTL = 15;
 
     // Phase 1: Load cache
     try {
@@ -370,11 +370,12 @@ export async function onRequestGet(context) {
       if (cacheRow) {
         Object.assign(marketMap, JSON.parse(cacheRow.data));
         if ((now - cacheRow.fetched_at) < TTL) {
-          // Cache fresh — check for missing games
+          // Cache fresh — check for missing games or games missing __gid
           const missingGames = games.filter(g => {
             const awayKey = (g.awayTeam && g.awayTeam.name) || g.awayTeamKey;
             const homeKey = (g.homeTeam && g.homeTeam.name) || g.homeTeamKey;
-            return !marketMap[awayKey + ' @ ' + homeKey];
+            const gameKey = awayKey + ' @ ' + homeKey;
+            return !marketMap[gameKey] || !marketMap[gameKey + '__gid'];
           });
           if (missingGames.length === 0) {
             return new Response(JSON.stringify({ ok: true, markets: marketMap }), {
@@ -400,6 +401,7 @@ export async function onRequestGet(context) {
             if (result && !result._err) {
               bgMap[result.gameKey] = result.markets;
               if (result.lines && Object.keys(result.lines).length) bgMap[result.gameKey + '__lines'] = result.lines;
+              if (result.gameId) bgMap[result.gameKey + '__gid'] = result.gameId;
             }
           }
           // Write updated cache
@@ -453,6 +455,7 @@ export async function onRequestGet(context) {
         if (result.lines && Object.keys(result.lines).length) {
           marketMap[result.gameKey + '__lines'] = result.lines;
         }
+        if (result.gameId) marketMap[result.gameKey + '__gid'] = result.gameId;
       }
     }
 

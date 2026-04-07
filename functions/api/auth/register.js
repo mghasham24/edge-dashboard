@@ -1,19 +1,95 @@
 // functions/api/auth/register.js
 const SESSION_DAYS = 30;
-const REFERRALS_FOR_REWARD = 5;
-const REWARD_MONTHS = 3;
+const MAX_REGS_PER_HOUR = 3;
 
 export async function onRequestPost({ request, env }) {
+  // IP-based rate limiting — max 3 registrations per IP per hour
+  const ip = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || 'unknown';
+  const hourKey = 'reg_ip_' + ip + '_' + Math.floor(Date.now() / 3600000);
+  try {
+    const ipRow = await env.DB.prepare(
+      'SELECT data FROM odds_cache WHERE cache_key=?'
+    ).bind(hourKey).first();
+    const count = ipRow ? parseInt(ipRow.data) : 0;
+    if (count >= MAX_REGS_PER_HOUR) {
+      return err('Too many accounts created from this IP. Please try again later.', 429);
+    }
+    // Increment counter
+    await env.DB.prepare(
+      'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data'
+    ).bind(hourKey, String(count + 1), Math.floor(Date.now() / 1000)).run();
+  } catch(e) {}
+
   let body;
   try { body = await request.json(); } catch { return err('Invalid JSON'); }
 
-  const email   = (body.email    || '').trim().toLowerCase();
+  const email    = (body.email    || '').trim().toLowerCase();
   const password = (body.password || '').trim();
   const refCode  = (body.refCode  || '').trim().toUpperCase();
+  const rcToken  = (body.rcToken  || '').trim();
+
+  // reCAPTCHA v3 verification — fail open to avoid blocking real users
+  if (env.RECAPTCHA_SECRET && rcToken) {
+    try {
+      const rcRes = await fetch('https://www.google.com/recaptcha/api/siteverify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `secret=${env.RECAPTCHA_SECRET}&response=${rcToken}`
+      });
+      const rcData = await rcRes.json();
+      // Only hard block obvious bots (score 0.1 or below) — fail open for everything else
+      if (rcData.success && rcData.score <= 0.1) {
+        return err('Registration blocked. Please try again.', 403);
+      }
+    } catch(e) {}
+  }
 
   if (!email || !password) return err('Email and password required');
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return err('Invalid email address');
   if (password.length < 8) return err('Password must be at least 8 characters');
+
+  // Block disposable email domains
+  const BLOCKED_DOMAINS = new Set([
+    'mailinator.com','guerrillamail.com','tempmail.com','throwam.com','sharklasers.com',
+    'guerrillamailblock.com','grr.la','guerrillamail.info','guerrillamail.biz','guerrillamail.de',
+    'guerrillamail.net','guerrillamail.org','spam4.me','trashmail.com','trashmail.me',
+    'trashmail.net','dispostable.com','maildrop.cc','yopmail.com','yopmail.fr',
+    'cool.fr.nf','jetable.fr.nf','nospam.ze.tc','nomail.xl.cx','mega.zik.dj',
+    'speed.1s.fr','courriel.fr.nf','moncourrier.fr.nf','monemail.fr.nf','monmail.fr.nf',
+    'spamgourmet.com','spamgourmet.net','spamgourmet.org','spamgourmet.me',
+    'spamgourmet.net','jnxjn.com','tnef.com','10minutemail.com','10minutemail.net',
+    'fakeinbox.com','filzmail.com','gowiki.com','humaility.com','incognitomail.com',
+    'mail-temporaire.fr','mytrashmail.com','nobulk.com','nospamfor.us','nowmymail.com',
+    'objectmail.com','obobbo.com','proxymail.eu','rcpt.at','recursor.net','shiftmail.com',
+    'skeefmail.com','slopsbox.com','smellfear.com','snkmail.com','sofimail.com',
+    'sogetthis.com','spamevader.com','spamfree24.org','spamhole.com','spamify.com',
+    'spamoff.de','spamobox.com','spamthisplease.com','supergreatmail.com','suremail.info',
+    'tempemail.net','tempinbox.co.uk','tempinbox.com','thanksnospam.info','thisisnotmyrealemail.com',
+    'throwam.com','tradermail.info','trash-mail.at','trash-mail.com','trash-mail.de',
+    'trash-mail.io','trash-mail.me','trash-mail.net','trash2009.com','trashdevil.com',
+    'trashdevil.de','trashemail.de','trashimail.com','trashmail.at','travestimail.com',
+    'trbvm.com','turual.com','twinmail.de','tyldd.com','uggsrock.com','uroid.com',
+    'us.af','venompen.com','veryrealemail.com','vidchart.com','viditag.com','vipikings.com',
+    'vmani.com','vomoto.com','vpn.st','vsimcard.com','vubby.com','wasteland.rfc822.org',
+    'webemail.me','webm4il.info','weg-werf-email.de','wegwerf-emails.de','wegwerfadresse.de',
+    'wegwerfemail.com','wegwerfemail.de','wegwerfmail.de','wegwerfmail.info','wegwerfmail.net',
+    'wegwerfmail.org','wetrainbayarea.com','wetrainbayarea.org','whyspam.me','willhackforfood.biz',
+    'willselfdestruct.com','winemaven.info','wronghead.com','wuzup.net','wuzupmail.net',
+    'www.e4ward.com','www.mailinator.com','wwwnew.eu','x.ip6.li','xagloo.co','xagloo.com',
+    'xemaps.com','xents.com','xmaily.com','xoxy.net','xup.in','xww.ro','xy9ce.at',
+    'yapped.net','yep.it','yet.com','yomail.info','yopmail.pp.ua','yourdomain.com',
+    'ypmail.webarnak.fr.eu.org','yuurok.com','z1p.biz','za.com','zebins.com','zebins.eu',
+    'zehnminuten.de','zehnminutenmail.de','zetmail.com','zippymail.info','zoemail.net',
+    'zoemail.org','zomg.info','jsncos.com','1951addd11f8.com','4218cd4d6883.com',
+    'add746fba024.com','9d927fc60518.com','3f6bfd335f37.com','5cbb551b1faa.com'
+  ]);
+  const emailDomain = email.split('@')[1];
+  if (BLOCKED_DOMAINS.has(emailDomain)) return err('Please use a valid email address.');
+
+  // Block offensive email prefixes
+  const localPart = email.split('@')[0];
+  const BLOCKED_PREFIXES = ['fuckpalestine','fuckisrael','fuckjews','fuckarab','fuckmuslim','fuckchrist'];
+  if (BLOCKED_PREFIXES.some(p => localPart.includes(p))) return err('Invalid email address.');
 
   const existing = await env.DB.prepare('SELECT id FROM users WHERE email=?').bind(email).first();
   if (existing) return err('An account with that email already exists', 409);
@@ -28,7 +104,7 @@ export async function onRequestPost({ request, env }) {
   }
 
   // Generate referral code for new user
-  const newRefCode = generateCode(email);
+  const newRefCode = generateCode();
 
   const hash = await hashPassword(password);
   const { meta } = await env.DB.prepare(
@@ -37,32 +113,15 @@ export async function onRequestPost({ request, env }) {
 
   const newUserId = meta.last_row_id;
 
-  // Track referral and check for reward
+  // Track referral — reward is granted when referred user upgrades to Pro (via Stripe webhook)
   if (referrerId) {
     await env.DB.prepare(
       'INSERT OR IGNORE INTO referrals (referrer_id, referred_id) VALUES (?,?)'
     ).bind(referrerId, newUserId).run();
-
-    // Count referrer's total referrals
-    const countRow = await env.DB.prepare(
-      'SELECT COUNT(*) as c FROM referrals WHERE referrer_id=?'
-    ).bind(referrerId).first();
-    const total = countRow ? countRow.c : 0;
-
-    // Every 5 referrals = 3 months Pro
-    if (total % REFERRALS_FOR_REWARD === 0) {
-      const referrer = await env.DB.prepare(
-        'SELECT plan, pro_expires_at FROM users WHERE id=?'
-      ).bind(referrerId).first();
-      const now = Math.floor(Date.now() / 1000);
-      const base = (referrer && referrer.pro_expires_at && referrer.pro_expires_at > now)
-        ? referrer.pro_expires_at
-        : now;
-      const newExpiry = base + REWARD_MONTHS * 30 * 86400;
-      await env.DB.prepare(
-        'UPDATE users SET plan=\'pro\', pro_expires_at=? WHERE id=?'
-      ).bind(newExpiry, referrerId).run();
-    }
+    // Also store referred_by on the new user for webhook lookup
+    await env.DB.prepare(
+      'UPDATE users SET referred_by=? WHERE id=?'
+    ).bind(referrerId, newUserId).run();
   }
 
   const token = genToken();
@@ -98,10 +157,10 @@ export async function onRequestPost({ request, env }) {
   return ok({ email, plan: 'free' }, 201, cookie(token, exp));
 }
 
-function generateCode(email) {
-  const prefix = email.split('@')[0].replace(/[^a-zA-Z0-9]/g,'').toUpperCase().slice(0, 6);
-  const suffix = Math.floor(1000 + Math.random() * 9000);
-  return prefix + suffix;
+function generateCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return Array.from(crypto.getRandomValues(new Uint8Array(5)))
+    .map(b => chars[b % chars.length]).join('');
 }
 
 // ── Helpers ───────────────────────────────────────────

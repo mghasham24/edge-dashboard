@@ -6,6 +6,19 @@ export async function onRequestPost({ request, env }) {
 
   const origin = new URL(request.url).origin;
 
+  // Read optional referral code from request body
+  let referrerId = null;
+  try {
+    const body = await request.json().catch(() => ({}));
+    const code = (body.referral_code || '').trim().toUpperCase();
+    if (code) {
+      const referrer = await env.DB.prepare(
+        'SELECT id FROM users WHERE referral_code=? AND id!=?'
+      ).bind(code, session.id).first();
+      if (referrer) referrerId = referrer.id;
+    }
+  } catch {}
+
   // Create or retrieve Stripe customer
   let customerId = session.stripe_customer_id;
   if (!customerId) {
@@ -19,15 +32,18 @@ export async function onRequestPost({ request, env }) {
       .bind(customerId, session.id).run();
   }
 
-  // Create Checkout session
-  const checkout = await stripePost('checkout/sessions', {
+  // Create Checkout session — store referrer_id in metadata for webhook
+  const checkoutParams = {
     customer: customerId,
     mode: 'subscription',
     line_items: [{ price: env.STRIPE_PRICE_ID, quantity: 1 }],
     success_url: origin + '/?checkout=success',
     cancel_url:  origin + '/?checkout=cancel',
     allow_promotion_codes: true,
-  }, env.STRIPE_SECRET_KEY);
+  };
+  if (referrerId) checkoutParams.metadata = { referrer_id: String(referrerId) };
+
+  const checkout = await stripePost('checkout/sessions', checkoutParams, env.STRIPE_SECRET_KEY);
 
   if (checkout.error) return fail(500, 'Failed to create checkout session');
 

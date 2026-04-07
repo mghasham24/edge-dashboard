@@ -63,22 +63,61 @@ export async function onRequestPost({ request, env }) {
     case 'customer.subscription.updated': {
       const status = obj.status;
       const plan   = (status === 'active' || status === 'trialing') ? 'pro' : 'free';
+      // Store subscription period end as pro_expires_at for Stripe subscribers
+      const proExpiresAt = (plan === 'pro' && obj.current_period_end) ? obj.current_period_end : null;
       await env.DB.prepare(
-        'UPDATE users SET plan=?, stripe_sub_id=? WHERE stripe_customer_id=?'
-      ).bind(plan, obj.id, obj.customer).run();
+        'UPDATE users SET plan=?, stripe_sub_id=?, pro_expires_at=? WHERE stripe_customer_id=?'
+      ).bind(plan, obj.id, proExpiresAt, obj.customer).run();
       break;
     }
     case 'customer.subscription.deleted': {
       await env.DB.prepare(
-        'UPDATE users SET plan=\'free\', stripe_sub_id=NULL WHERE stripe_customer_id=?'
+        'UPDATE users SET plan=\'free\', stripe_sub_id=NULL, pro_expires_at=NULL WHERE stripe_customer_id=?'
       ).bind(obj.customer).run();
       break;
     }
     case 'checkout.session.completed': {
       if (obj.mode === 'subscription' && obj.payment_status === 'paid') {
+        // Fetch subscription to get current_period_end
+        let proExpiresAt = null;
+        try {
+          const subRes = await fetch('https://api.stripe.com/v1/subscriptions/' + obj.subscription, {
+            headers: { 'Authorization': 'Bearer ' + env.STRIPE_SECRET_KEY }
+          });
+          const subData = await subRes.json();
+          if (subData.current_period_end) proExpiresAt = subData.current_period_end;
+        } catch(e) {}
+
         await env.DB.prepare(
-          'UPDATE users SET plan=\'pro\', stripe_sub_id=? WHERE stripe_customer_id=?'
-        ).bind(obj.subscription, obj.customer).run();
+          'UPDATE users SET plan=\'pro\', stripe_sub_id=?, pro_expires_at=? WHERE stripe_customer_id=?'
+        ).bind(obj.subscription, proExpiresAt, obj.customer).run();
+
+        // Reward referrer with +1 month Pro.
+        // Two sources: referred_by (set at signup) OR metadata.referrer_id (entered at checkout).
+        // Prefer checkout metadata if present, fall back to referred_by.
+        const newPro = await env.DB.prepare(
+          'SELECT id, referred_by FROM users WHERE stripe_customer_id=?'
+        ).bind(obj.customer).first();
+
+        const referrerIdFromMeta = obj.metadata && obj.metadata.referrer_id
+          ? parseInt(obj.metadata.referrer_id, 10) : null;
+        const referrerId = referrerIdFromMeta || (newPro && newPro.referred_by) || null;
+
+        if (referrerId) {
+          const referrer = await env.DB.prepare(
+            'SELECT id, plan, pro_expires_at FROM users WHERE id=?'
+          ).bind(referrerId).first();
+          if (referrer) {
+            const now = Math.floor(Date.now() / 1000);
+            const base = (referrer.pro_expires_at && referrer.pro_expires_at > now)
+              ? referrer.pro_expires_at
+              : now;
+            const newExpiry = base + 2592000; // +30 days
+            await env.DB.prepare(
+              'UPDATE users SET plan=\'pro\', pro_expires_at=? WHERE id=?'
+            ).bind(newExpiry, referrer.id).run();
+          }
+        }
       }
       break;
     }
