@@ -4520,7 +4520,19 @@
         if (openHead) openHead.innerHTML = '<th>Matchup</th><th>Sport</th><th>Market</th><th>Side</th><th class="r">Avg</th><th class="r">Now</th><th class="r">Cost</th><th class="r">Pays</th><th>Status</th>';
 
         var openTbody = document.getElementById('port-open-tbody');
-        if (!activePos.length) {
+        if (!isPro()) {
+            openTbody.innerHTML = '<tr><td colspan="9" style="padding:0"><div style="position:relative;min-height:110px;overflow:hidden;border-radius:6px">'
+                + '<div style="filter:blur(5px);pointer-events:none;user-select:none;padding:12px">'
+                + '<div style="height:13px;background:var(--bg3);border-radius:3px;margin-bottom:10px;width:75%"></div>'
+                + '<div style="height:13px;background:var(--bg3);border-radius:3px;margin-bottom:10px;width:55%"></div>'
+                + '<div style="height:13px;background:var(--bg3);border-radius:3px;width:65%"></div>'
+                + '</div>'
+                + '<div onclick="showUpgradeModal(\'Open Positions requires Pro. Upgrade to track your live positions and current market values.\')" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:rgba(10,10,12,.6);cursor:pointer">'
+                + '<span style="font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.1em;padding:4px 14px;border-radius:20px;background:var(--accent);color:#fff">PRO FEATURE</span>'
+                + '<span style="font-size:12px;color:var(--muted)">Upgrade to see open positions</span>'
+                + '</div>'
+                + '</div></td></tr>';
+        } else if (!activePos.length) {
             openTbody.innerHTML = '<tr><td colspan="9" style="color:var(--muted);padding:20px 12px">No open positions</td></tr>';
         } else {
             openTbody.innerHTML = activePos.map(function(p) {
@@ -4805,6 +4817,7 @@
             var key = portCalYear + '-' + mm + '-' + dd;
             var dayData = dailyMap[key];
             var isToday = (portCalYear === today.getFullYear() && portCalMonth === today.getMonth() && d === today.getDate());
+            var isBlurred = !isPro() && !isToday;
             var cls = 'port-cal-day' + (isToday ? ' today' : '') + (dayData ? ' has-data' : '');
             var pnlHtml = '';
             var dayStyle = '';
@@ -4812,19 +4825,29 @@
                 var pnl = dayData.pnl;
                 var pnlColor = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--muted)';
                 var pnlStr = (pnl > 0 ? '+' : '') + fmtRax(pnl);
-                pnlHtml = '<span class="port-cal-pnl" style="color:' + pnlColor + '">' + pnlStr + '</span>'
-                        + '<span class="port-cal-bets">' + dayData.bets + ' bet' + (dayData.bets !== 1 ? 's' : '') + '</span>';
-                // Gradient intensity: scale from 0.08 (small) → 0.45 (max)
-                if (maxAbsPnl > 0 && pnl !== 0) {
-                    var intensity = Math.min(Math.abs(pnl) / maxAbsPnl, 1);
-                    var alpha = (0.08 + intensity * 0.37).toFixed(3);
-                    if (pnl > 0) dayStyle = 'background:rgba(45,204,126,' + alpha + ');border-color:rgba(45,204,126,' + (intensity*0.5).toFixed(3) + ')';
-                    else         dayStyle = 'background:rgba(240,82,82,' + alpha + ');border-color:rgba(240,82,82,' + (intensity*0.5).toFixed(3) + ')';
+                if (isBlurred) {
+                    pnlHtml = '<span class="port-cal-pnl" style="filter:blur(5px);color:' + pnlColor + '">' + pnlStr + '</span>'
+                            + '<span class="port-cal-bets" style="filter:blur(3px)">' + dayData.bets + ' bet' + (dayData.bets !== 1 ? 's' : '') + '</span>';
+                } else {
+                    pnlHtml = '<span class="port-cal-pnl" style="color:' + pnlColor + '">' + pnlStr + '</span>'
+                            + '<span class="port-cal-bets">' + dayData.bets + ' bet' + (dayData.bets !== 1 ? 's' : '') + '</span>';
+                    // Gradient intensity: scale from 0.08 (small) → 0.45 (max)
+                    if (maxAbsPnl > 0 && pnl !== 0) {
+                        var intensity = Math.min(Math.abs(pnl) / maxAbsPnl, 1);
+                        var alpha = (0.08 + intensity * 0.37).toFixed(3);
+                        if (pnl > 0) dayStyle = 'background:rgba(45,204,126,' + alpha + ');border-color:rgba(45,204,126,' + (intensity*0.5).toFixed(3) + ')';
+                        else         dayStyle = 'background:rgba(240,82,82,' + alpha + ');border-color:rgba(240,82,82,' + (intensity*0.5).toFixed(3) + ')';
+                    }
                 }
             }
-            var dayAttrs = (dayData ? ' onclick="selectCalDay(\'' + key + '\')"' : '');
-            if (dayStyle) dayAttrs += ' style="cursor:pointer;' + dayStyle + '"';
-            else if (dayData) dayAttrs += ' style="cursor:pointer"';
+            var dayAttrs;
+            if (isBlurred && dayData) {
+                dayAttrs = ' onclick="showUpgradeModal(\'Upgrade to Pro to unlock your full P&amp;L calendar.\')" style="cursor:pointer"';
+            } else {
+                dayAttrs = (dayData ? ' onclick="selectCalDay(\'' + key + '\')"' : '');
+                if (dayStyle) dayAttrs += ' style="cursor:pointer;' + dayStyle + '"';
+                else if (dayData) dayAttrs += ' style="cursor:pointer"';
+            }
             html += '<div class="' + cls + '" title="' + key + '"' + dayAttrs + '>'
                   + '<span class="port-cal-dn">' + d + '</span>'
                   + pnlHtml
@@ -4864,11 +4887,20 @@
         var roiEl = document.getElementById('port-roi');
         var wrEl  = document.getElementById('port-winrate');
         if (pnlEl) { pnlEl.textContent = (calc.pnl >= 0 ? '+' : '') + fmtRax(calc.pnl); pnlEl.style.color = calc.pnl >= 0 ? 'var(--green)' : 'var(--red)'; }
-        if (roiEl) { roiEl.textContent = (calc.roi >= 0 ? '+' : '') + calc.roi.toFixed(1) + '%'; roiEl.style.color = calc.roi >= 0 ? 'var(--green)' : 'var(--red)'; }
-        if (wrEl)  { wrEl.textContent = winRate.toFixed(1) + '%'; wrEl.style.color = winRate >= 50 ? 'var(--green)' : 'var(--red)'; }
+        if (!isPro()) {
+            if (roiEl) { roiEl.innerHTML = '<span style="filter:blur(5px);user-select:none">' + (calc.roi >= 0 ? '+' : '') + calc.roi.toFixed(1) + '%</span>'; roiEl.style.color = calc.roi >= 0 ? 'var(--green)' : 'var(--red)'; roiEl.style.cursor = 'pointer'; roiEl.onclick = function(){ showUpgradeModal('ROI tracking requires Pro.'); }; }
+            if (wrEl)  { wrEl.innerHTML  = '<span style="filter:blur(5px);user-select:none">' + winRate.toFixed(1) + '%</span>'; wrEl.style.color = winRate >= 50 ? 'var(--green)' : 'var(--red)'; wrEl.style.cursor = 'pointer'; wrEl.onclick = function(){ showUpgradeModal('Win Rate tracking requires Pro.'); }; }
+        } else {
+            if (roiEl) { roiEl.textContent = (calc.roi >= 0 ? '+' : '') + calc.roi.toFixed(1) + '%'; roiEl.style.color = calc.roi >= 0 ? 'var(--green)' : 'var(--red)'; roiEl.style.cursor = ''; roiEl.onclick = null; }
+            if (wrEl)  { wrEl.textContent = winRate.toFixed(1) + '%'; wrEl.style.color = winRate >= 50 ? 'var(--green)' : 'var(--red)'; wrEl.style.cursor = ''; wrEl.onclick = null; }
+        }
     }
 
     function setPortTimeframe(tf) {
+        if (!isPro() && tf !== '1w') {
+            showUpgradeModal('Upgrade to Pro to unlock 1-month and 3-month performance views.');
+            return;
+        }
         portTimeframe = tf;
         ['1w','1m','3m'].forEach(function(t) {
             var btn = document.getElementById('port-tf-' + t);
@@ -4939,8 +4971,10 @@
 
     function renderHistoryForDate(dateKey) {
         portSelectedDate = dateKey;
+        var FREE_HISTORY_CUTOFF = Date.now() - 7 * 24 * 60 * 60 * 1000;
         var filtered = portHistoryAll.filter(function(p) {
             if (!p.transactedAt) return false;
+            if (!isPro() && new Date(p.transactedAt).getTime() < FREE_HISTORY_CUTOFF) return false;
             if (!portShowAllTime && localDateKey(p.transactedAt) !== dateKey) return false;
             if (portFilterSport  && getHistSport(p)  !== portFilterSport)  return false;
             if (portFilterMarket && getHistMarket(p) !== portFilterMarket) return false;
@@ -4965,6 +4999,13 @@
             histTbody.innerHTML = '<tr><td colspan="7" style="color:var(--muted);padding:20px 12px">' + msg + '</td></tr>';
         } else {
             histTbody.innerHTML = filtered.map(function(p) { return histRowHtml(p); }).join('');
+        }
+        // Free users: show upgrade banner below history table
+        if (!isPro()) {
+            histTbody.innerHTML += '<tr><td colspan="7" style="padding:12px;text-align:center;border-top:1px solid var(--border)">'
+                + '<span style="color:var(--muted);font-size:12px">Showing last 7 days only. </span>'
+                + '<button onclick="showUpgradeModal(\'Upgrade to Pro to unlock your complete betting history.\')" style="background:none;border:none;color:var(--accent);font-size:12px;font-weight:600;cursor:pointer;padding:0;text-decoration:underline">Upgrade to Pro for full history →</button>'
+                + '</td></tr>';
         }
     }
 
