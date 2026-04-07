@@ -4448,64 +4448,33 @@
     }
 
     // ── History item helpers ──────────────────────────────────────────
-    var _histItemLogged = false;
-    var KNOWN_SPORTS_LIST = null; // lazy init after REAL_SPORT_LABELS is ready
-
+    // headerLabel format is "NBA Game Winner", "MLB Total", "NHL Spread", etc.
+    // Sport is always the first word.
+    var KNOWN_SPORTS_LIST = null;
     function getHistSport(p) {
         if (!KNOWN_SPORTS_LIST) KNOWN_SPORTS_LIST = Object.values(REAL_SPORT_LABELS);
-
-        // Log first item keys once to console for debugging
-        if (!_histItemLogged && p) {
-            _histItemLogged = true;
-            console.log('[RaxEdge] history item keys:', Object.keys(p));
-            console.log('[RaxEdge] history item sample:', JSON.stringify(p).slice(0, 600));
-        }
-
-        // 1. Direct numeric sportId
-        if (p.sportId && REAL_SPORT_LABELS[p.sportId]) return REAL_SPORT_LABELS[p.sportId];
-
-        // 2. String sport field — try mapping through REAL_SPORT_IDS then direct
-        if (p.sport) {
-            var sl = String(p.sport).toLowerCase();
-            var mapped = REAL_SPORT_LABELS[REAL_SPORT_IDS[sl]];
-            if (mapped) return mapped;
-            var up = p.sport.toUpperCase();
-            if (KNOWN_SPORTS_LIST.indexOf(up) !== -1) return up;
-        }
-
-        // 3. Various label/name fields
-        var candidates = [
-            p.sportLabel, p.sportName, p.sportType,
-            p.leagueLabel, p.leagueName, p.league,
-            p.category, p.categoryName,
-            p.predictionSport, p.gameSport,
-            p.marketDisplay && p.marketDisplay.subtitle,
-            p.marketDisplay && p.marketDisplay.league,
-            p.marketDisplay && p.marketDisplay.sport,
-            p.marketDisplay && p.marketDisplay.leagueName,
-            p.gameInfo && p.gameInfo.sport,
-            p.gameInfo && p.gameInfo.league,
-            p.predictionInfo && p.predictionInfo.sport
-        ];
-        for (var i = 0; i < candidates.length; i++) {
-            if (!candidates[i]) continue;
-            var val = String(candidates[i]).toUpperCase().trim();
-            for (var j = 0; j < KNOWN_SPORTS_LIST.length; j++) {
-                if (val === KNOWN_SPORTS_LIST[j].toUpperCase() || val.indexOf(KNOWN_SPORTS_LIST[j].toUpperCase()) !== -1) {
-                    return KNOWN_SPORTS_LIST[j];
-                }
-            }
-        }
-
-        // 4. Try extracting from headerLabel (e.g. "NBA - Game Winner")
         var header = String(p.headerLabel || p.marketLabel || '');
+        // First word of headerLabel is the sport (e.g. "NBA" from "NBA Game Winner")
+        var firstWord = header.split(' ')[0].toUpperCase();
+        if (firstWord && KNOWN_SPORTS_LIST.indexOf(firstWord) !== -1) return firstWord;
+        // Also scan full string in case format varies
         for (var j = 0; j < KNOWN_SPORTS_LIST.length; j++) {
             if (header.toUpperCase().indexOf(KNOWN_SPORTS_LIST[j].toUpperCase()) !== -1) return KNOWN_SPORTS_LIST[j];
         }
-
+        // Fallback: direct sport fields
+        if (p.sportId && REAL_SPORT_LABELS[p.sportId]) return REAL_SPORT_LABELS[p.sportId];
         return '';
     }
-    function getHistMarket(p) { return p.headerLabel || p.marketLabel || p.marketType || ''; }
+    function getHistMarket(p) {
+        var raw = p.headerLabel || p.marketLabel || p.marketType || '';
+        if (!KNOWN_SPORTS_LIST) KNOWN_SPORTS_LIST = Object.values(REAL_SPORT_LABELS);
+        // Strip leading sport prefix (e.g. "NBA Game Winner" → "Game Winner")
+        for (var j = 0; j < KNOWN_SPORTS_LIST.length; j++) {
+            var prefix = KNOWN_SPORTS_LIST[j] + ' ';
+            if (raw.toUpperCase().indexOf(prefix.toUpperCase()) === 0) return raw.slice(prefix.length).trim();
+        }
+        return raw;
+    }
     function getHistResult(p) {
         var details = Array.isArray(p.details) ? p.details : [];
         var paidDet = details.find(function(d){ return d.label === 'Paid'; }) || {};
@@ -4775,7 +4744,6 @@
         updatePortProfit();
         updatePerfCards();
         updatePortFilterOptions();
-        renderRoiBreakdown();
         renderCalendar();
         renderHistoryForDate(portSelectedDate);
         // Save everything to cache so next visit is instant
