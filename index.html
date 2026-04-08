@@ -4745,7 +4745,9 @@
             // Restore from cache immediately — content appears without waiting for API
             var cache = !forceRefresh ? loadHistoryCache() : null;
             if (cache && cache.items && cache.items.length) {
-                portHistoryAll    = cache.items;
+                // Deduplicate cached items (cache may have been saved with dupes)
+                var _cSeenIds = new Set();
+                portHistoryAll = cache.items.filter(function(p){ return _cSeenIds.has(p.id) ? false : (_cSeenIds.add(p.id), true); });
                 portHistoryCursor = cache.cursor;
                 portHistoryMore   = cache.hasMore;
                 portSelectedDate  = localDateKey(new Date());
@@ -4984,7 +4986,9 @@
 
         // Update history state — skip if we merged from cache (state already set)
         if (!data._historyMerged) {
-            portHistoryAll    = histItems.slice();
+            // Deduplicate by id in case RS API returns overlapping items
+            var _seenIds = new Set();
+            portHistoryAll = histItems.filter(function(p){ return _seenIds.has(p.id) ? false : (_seenIds.add(p.id), true); });
             portHistoryCursor = histItems.length
                 ? (histItems[histItems.length - 1].latestLedgerTimestamp || histItems[histItems.length - 1].transactedAt)
                 : null;
@@ -5351,7 +5355,9 @@
             var res = await fetch(fetchUrl, { credentials: 'same-origin' });
             var data = await res.json();
             var newItems = (data.history && data.history.items) || [];
-            portHistoryAll    = portHistoryAll.concat(newItems);
+            var existingIds = new Set(portHistoryAll.map(function(p){ return p.id; }));
+            var dedupedNew = newItems.filter(function(p){ return !existingIds.has(p.id); });
+            portHistoryAll    = portHistoryAll.concat(dedupedNew);
             portHistoryCursor = newItems.length
                 ? (newItems[newItems.length - 1].latestLedgerTimestamp || newItems[newItems.length - 1].transactedAt)
                 : null;
