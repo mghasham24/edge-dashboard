@@ -4051,7 +4051,7 @@
                     var otherId = r.ps === 'A' ? id.replace(/-A$/, '-B') : id.replace(/-B$/, '-A');
                     var other = (100 - v).toFixed(1);
                     preds[otherId] = other;
-                    var otherInp = document.querySelector('.mc-inp[data-id="' + otherId + '"]');
+                    var otherInp = document.querySelector('.mc-inp[data-id="' + otherId + '"][data-type="pred"]') || document.querySelector('.mc-inp[data-id="' + otherId + '"]');
                     if (otherInp && otherInp !== input) {
                         otherInp.value = other;
                         otherInp.classList.add('filled');
