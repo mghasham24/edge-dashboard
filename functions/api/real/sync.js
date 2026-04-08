@@ -331,8 +331,9 @@ export async function onRequestGet(context) {
             if (spreadMkt && spreadMkt.outcomes) {
               const awayO = spreadMkt.outcomes[0];
               const homeO = spreadMkt.outcomes[1];
-              const awayLine = awayO && (awayO.label || '').match(/([+-]?\d+\.?\d*)\s*$/);
-              const homeLine = homeO && (homeO.label || '').match(/([+-]?\d+\.?\d*)\s*$/);
+              // Only extract spread if label has letters (team name like "OKC -3.5") — bare numbers like "3" are live probabilities
+              const awayLine = awayO && /[a-zA-Z]/.test(awayO.label || '') && (awayO.label || '').match(/([+-]?\d+\.?\d*)\s*$/);
+              const homeLine = homeO && /[a-zA-Z]/.test(homeO.label || '') && (homeO.label || '').match(/([+-]?\d+\.?\d*)\s*$/);
               if (awayLine) lines.awaySpread = parseFloat(awayLine[1]);
               if (homeLine) lines.homeSpread = parseFloat(homeLine[1]);
             }
@@ -366,7 +367,7 @@ export async function onRequestGet(context) {
     // Two-phase fetch: return cached data immediately, fetch missing games in background
     const marketMap = {};
     const now = Math.floor(Date.now() / 1000);
-    const cacheKey = 'real_sync_' + realSport + '_v2'; // bump version to bust stale cache
+    const cacheKey = 'real_sync_' + realSport + '_v3'; // v3: only store spread lines with team name in label
     const TTL = 15;
 
     // Phase 1: Load cache
