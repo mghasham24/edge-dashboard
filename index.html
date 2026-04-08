@@ -6114,6 +6114,11 @@
                 });
             }
             if (match && match.pct != null) {
+                var pct = parseFloat(match.pct);
+                // If game has already started and RS probability is extreme (≤3% or ≥97%),
+                // it's a post-game settled value — don't auto-populate, user can enter manually
+                var gameStarted = r.cm && r.cm.getTime() < Date.now();
+                if (gameStarted && (pct <= 3 || pct >= 97)) return;
                 preds[r.id] = String(match.pct);
                 if (mktData && mktData.volumeDisplay) vols[r.id] = mktData.volumeDisplay;
             }
