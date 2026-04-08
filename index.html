@@ -6079,13 +6079,13 @@
             // Populate yourLines from Real Sports line data (spread/total)
             var gameLines = markets[realKey + '__lines'];
             if (gameLines) {
-                if (r.mkt === 'Spread' && yourLines[r.id] == null) {
+                if (r.mkt === 'Spread') {
                     var gParts = r.game.split(' @ ');
                     var isHome = gParts[1] && r.side.toLowerCase().indexOf(gParts[1].split(' ').pop().toLowerCase()) !== -1;
                     var spreadVal = isHome ? gameLines.homeSpread : gameLines.awaySpread;
                     if (spreadVal != null) yourLines[r.id] = spreadVal;
                 }
-                if (r.mkt === 'Total' && yourLines[r.id] == null && gameLines.total != null) {
+                if (r.mkt === 'Total' && gameLines.total != null) {
                     yourLines[r.id] = gameLines.total;
                 }
             }
