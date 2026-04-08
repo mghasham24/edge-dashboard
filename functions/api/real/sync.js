@@ -94,10 +94,17 @@ function extractGames(gamesData) {
   const seen = new Set();
   const all = [];
 
+  const cutoff = Date.now() - 5 * 60 * 60 * 1000; // drop games that started >5h ago
   function addGame(g) {
     if (!g) return;
     const id = g.id || g.gameId;
     if (!id || seen.has(id)) return;
+    // Filter out completed games — use commenceTime, startTime, or scheduledAt
+    const startMs = g.commenceTime || g.startTime || g.scheduledAt || g.gameTime || g.startDate;
+    if (startMs) {
+      const ms = typeof startMs === 'number' ? startMs : new Date(startMs).getTime();
+      if (ms < cutoff) return; // definitely over, skip
+    }
     seen.add(id);
     all.push(g);
   }
@@ -359,7 +366,7 @@ export async function onRequestGet(context) {
     // Two-phase fetch: return cached data immediately, fetch missing games in background
     const marketMap = {};
     const now = Math.floor(Date.now() / 1000);
-    const cacheKey = 'real_sync_' + realSport;
+    const cacheKey = 'real_sync_' + realSport + '_v2'; // bump version to bust stale cache
     const TTL = 15;
 
     // Phase 1: Load cache
