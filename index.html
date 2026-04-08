@@ -6042,7 +6042,6 @@
         });
 
         rows.forEach(function(r) {
-            if (preds[r.id]) return;
             var mktLabel = r.mkt === 'ML' ? 'Game Winner' : r.mkt === 'Spread' ? 'Spread' : r.mkt === 'Total' ? 'Total' : null;
             if (!mktLabel) return;
 
