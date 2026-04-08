@@ -6933,7 +6933,10 @@
                         var isValidLine = r.mkt === 'Spread'
                             ? (!isNaN(lineVal) && Math.abs(lineVal) < 30)
                             : (!isNaN(lineVal) && (lineVal % 1 === 0.5 || lineVal > 20) && lineVal <= 350);
-                        if (isValidLine) yourLines[r.id] = lineVal;
+                        // For spreads: require label contains letters (team name + spread like "OKC -3.5")
+                        // A bare number label like "3" or "47" is a live probability, not a spread line
+                        var labelHasTeamName = r.mkt !== 'Spread' || /[a-zA-Z]/.test(match.label);
+                        if (isValidLine && labelHasTeamName) yourLines[r.id] = lineVal;
                     }
                 }
             });
