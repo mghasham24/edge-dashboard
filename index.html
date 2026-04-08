@@ -2553,68 +2553,11 @@
                 <button onclick="disconnectRealSports()" id="port-disconnect-btn" style="background:var(--bg3);border:1px solid rgba(240,82,82,.3);color:var(--red);font-family:var(--sans);font-size:11px;font-weight:600;padding:7px 14px;border-radius:5px;cursor:pointer;letter-spacing:.04em;display:none">Disconnect</button>
             </div>
 
-            <!-- Not-connected view -->
+            <!-- Not-connected view — connection temporarily unavailable -->
             <div id="portfolio-connect-view">
                 <div class="port-connect-card">
-                    <h2>Connect Real Sports</h2>
-                    <p>Link your Real Sports account to automatically track your open positions, settled bets, P&amp;L, and ROI — all in one place.</p>
-
-                    <!-- Method tabs -->
-                    <div class="port-method-tabs">
-                        <button class="port-method-tab active" id="port-tab-mobile" onclick="switchConnectTab('mobile')">📱 Mobile</button>
-                        <button class="port-method-tab" id="port-tab-desktop" onclick="switchConnectTab('desktop')">🖥 Desktop</button>
-                    </div>
-
-                    <!-- Mobile panel -->
-                    <div id="port-panel-mobile">
-                        <a href="https://youtube.com/shorts/gJ-CtBGY33I?si=HGP6MUNpdXcvupv0" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:10px;background:rgba(255,0,0,.08);border:1px solid rgba(255,0,0,.2);border-radius:8px;padding:10px 14px;margin-bottom:16px;text-decoration:none;color:var(--fg)">
-                            <span style="font-size:22px;line-height:1">▶</span>
-                            <span>
-                                <div style="font-size:13px;font-weight:700">Watch: How to connect on Mobile</div>
-                                <div style="font-size:11px;color:var(--muted);margin-top:2px">YouTube Short · step-by-step walkthrough</div>
-                            </span>
-                        </a>
-
-                        <div style="font-size:13px;color:var(--muted);margin-bottom:18px;line-height:1.6">Safari blocks pasting scripts in the address bar, but <strong style="color:var(--fg)">saved bookmarklets still work</strong>. Follow these steps while logged in to realsports.io on Safari:</div>
-
-                        <ol class="port-steps" style="margin-bottom:18px">
-                            <li>Copy the script below — tap <strong>Copy Script</strong></li>
-                            <li>In Safari, tap the <strong>Share</strong> button <span style="font-size:15px">⎋</span> → <strong>Add Bookmark</strong> → name it <em>RaxEdge</em> → <strong>Save</strong></li>
-                            <li>Tap the <strong>Bookmarks</strong> icon <span style="font-size:15px">📖</span>, find <em>RaxEdge</em>, then tap <strong>Edit</strong></li>
-                            <li>Clear the URL field and <strong>paste</strong> the copied script, then tap <strong>Done</strong></li>
-                            <li>Navigate to <strong>realsports.io</strong>, open Bookmarks, and tap <strong>RaxEdge</strong> — it will redirect back here and connect automatically</li>
-                        </ol>
-
-                        <button id="port-copy-mobile-btn" onclick="copyMobileScript()" style="width:100%;background:var(--accent);color:#fff;border:none;font-family:var(--sans);font-size:13px;font-weight:700;padding:10px;border-radius:7px;cursor:pointer;margin-bottom:6px">Copy Script</button>
-                        <div style="font-size:11px;color:var(--muted2);text-align:center;margin-bottom:18px" id="port-mobile-script-preview">Loading...</div>
-
-                        <div style="border-top:1px solid var(--border);padding-top:14px;font-size:12px;color:var(--muted);line-height:1.5">
-                            <strong style="color:var(--fg)">Easier:</strong> Connect once from the <button onclick="switchConnectTab('desktop')" style="background:none;border:none;color:var(--accent);cursor:pointer;padding:0;font-size:inherit;font-weight:700;text-decoration:underline">Desktop tab</button> — your portfolio will load on this phone automatically after that.
-                        </div>
-                    </div>
-
-                    <!-- Desktop bookmarklet panel -->
-                    <div id="port-panel-desktop" style="display:none">
-                        <a href="https://youtu.be/MJGtmjRTmfc?si=62veS1VDRmbbnnVm" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:10px;background:rgba(255,0,0,.08);border:1px solid rgba(255,0,0,.2);border-radius:8px;padding:10px 14px;margin-bottom:16px;text-decoration:none;color:var(--fg)">
-                            <span style="font-size:22px;line-height:1">▶</span>
-                            <span>
-                                <div style="font-size:13px;font-weight:700">Watch: How to connect on Desktop</div>
-                                <div style="font-size:11px;color:var(--muted);margin-top:2px">YouTube · step-by-step walkthrough</div>
-                            </span>
-                        </a>
-
-                        <ol class="port-steps">
-                            <li>Log in to <strong>realsports.io</strong> in your browser</li>
-                            <li>Drag the button below to your bookmarks bar:<br>
-                                <span style="display:inline-block;margin-top:10px">
-                                    <a id="port-bookmarklet-link" class="port-bookmarklet" title="Drag me to your bookmarks bar">&#128279; RaxEdge Connect</a>
-                                </span>
-                            </li>
-                            <li>While on realsports.io, click the <strong>RaxEdge Connect</strong> bookmark — it will redirect you back here and connect automatically</li>
-                        </ol>
-                    </div>
-
-                    <div style="font-size:11px;color:var(--muted2);margin-top:20px">Your Real Sports token is stored securely and only used to fetch your own portfolio data.</div>
+                    <h2>Portfolio</h2>
+                    <p style="color:var(--muted)">New connections are temporarily unavailable while we work on an official integration. If you previously connected your account your portfolio will continue to load normally.</p>
                 </div>
             </div>
 
@@ -5894,6 +5837,7 @@
             } else {
                 ftBar.appendChild(document.getElementById('portfolio-tab-btn'));
             }
+
 
             // Referral tab — recreate since innerHTML wipe destroys it
             if (!document.getElementById('referral-tab-btn')) {
