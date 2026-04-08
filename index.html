@@ -6170,6 +6170,7 @@
                 if (syncResp.ok) {
                     var syncData = await syncResp.json();
                     fillPredsFromSync(parsed, syncData);
+                    if (s.key === currentSport) renderTable();
                 }
             } catch(e) {}
             done++;
