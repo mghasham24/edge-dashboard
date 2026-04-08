@@ -6029,7 +6029,6 @@
         if (!syncData || !syncData.markets) return;
         var markets = syncData.markets;
         var marketKeys = Object.keys(markets);
-        console.log('[RS sync] market keys:', marketKeys.filter(function(k){ return !k.endsWith('__lines') && !k.endsWith('__gid'); }));
 
         // Build resolved map identical to fetchRealMarkets: full-name game key → original Real key
         var resolvedMap = {};
