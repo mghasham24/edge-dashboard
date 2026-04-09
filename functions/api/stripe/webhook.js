@@ -50,25 +50,10 @@ export async function onRequestPost({ request, env }) {
       ).bind(plan, obj.id, proExpiresAt, obj.customer).run();
 
       if (status === 'trialing') {
-        // Mark trial used
+        // Mark trial used — fingerprint abuse check happens in checkout.session.completed
         await env.DB.prepare(
           'UPDATE users SET had_free_trial=1 WHERE stripe_customer_id=?'
         ).bind(obj.customer).run();
-
-        // Card fingerprint abuse check — cancel trial if card already used for a trial
-        const abused = await checkAndStoreFingerprint(obj, env);
-        if (abused) {
-          // Cancel subscription immediately, drop plan back to free
-          try {
-            await fetch('https://api.stripe.com/v1/subscriptions/' + obj.id, {
-              method: 'DELETE',
-              headers: { 'Authorization': 'Bearer ' + env.STRIPE_SECRET_KEY }
-            });
-          } catch(e) {}
-          await env.DB.prepare(
-            'UPDATE users SET plan=\'free\', stripe_sub_id=NULL, pro_expires_at=NULL WHERE stripe_customer_id=?'
-          ).bind(obj.customer).run();
-        }
       }
       break;
     }
@@ -97,23 +82,44 @@ export async function onRequestPost({ request, env }) {
     }
 
     case 'checkout.session.completed': {
-      // Only reward referrer on immediate payment (non-trial).
-      // Trial conversions are handled in customer.subscription.updated (trialing→active).
-      if (obj.mode === 'subscription' && obj.payment_status === 'paid') {
-        let proExpiresAt = null;
-        try {
-          const subRes = await fetch('https://api.stripe.com/v1/subscriptions/' + obj.subscription, {
-            headers: { 'Authorization': 'Bearer ' + env.STRIPE_SECRET_KEY }
-          });
-          const subData = await subRes.json();
-          if (subData.current_period_end) proExpiresAt = subData.current_period_end;
-        } catch(e) {}
+      if (obj.mode === 'subscription') {
+        const isTrial = obj.payment_status === 'no_payment_required';
+        const isPaid  = obj.payment_status === 'paid';
 
-        await env.DB.prepare(
-          'UPDATE users SET plan=\'pro\', stripe_sub_id=?, pro_expires_at=? WHERE stripe_customer_id=?'
-        ).bind(obj.subscription, proExpiresAt, obj.customer).run();
+        if (isTrial) {
+          // Trial checkout — check card fingerprint for abuse via setup_intent
+          const abused = await checkFingerprintFromSetupIntent(obj.setup_intent, obj.customer, env);
+          if (abused) {
+            // Cancel subscription and drop back to free
+            try {
+              await fetch('https://api.stripe.com/v1/subscriptions/' + obj.subscription, {
+                method: 'DELETE',
+                headers: { 'Authorization': 'Bearer ' + env.STRIPE_SECRET_KEY }
+              });
+            } catch(e) {}
+            await env.DB.prepare(
+              'UPDATE users SET plan=\'free\', stripe_sub_id=NULL, pro_expires_at=NULL, had_free_trial=0 WHERE stripe_customer_id=?'
+            ).bind(obj.customer).run();
+          }
+        }
 
-        await rewardReferrerForCustomer(obj.customer, obj.metadata, env.DB);
+        if (isPaid) {
+          // Immediate paid subscription — set pro and reward referrer
+          let proExpiresAt = null;
+          try {
+            const subRes = await fetch('https://api.stripe.com/v1/subscriptions/' + obj.subscription, {
+              headers: { 'Authorization': 'Bearer ' + env.STRIPE_SECRET_KEY }
+            });
+            const subData = await subRes.json();
+            if (subData.current_period_end) proExpiresAt = subData.current_period_end;
+          } catch(e) {}
+
+          await env.DB.prepare(
+            'UPDATE users SET plan=\'pro\', stripe_sub_id=?, pro_expires_at=? WHERE stripe_customer_id=?'
+          ).bind(obj.subscription, proExpiresAt, obj.customer).run();
+
+          await rewardReferrerForCustomer(obj.customer, obj.metadata, env.DB);
+        }
       }
       break;
     }
@@ -129,43 +135,34 @@ export async function onRequestPost({ request, env }) {
   return new Response('ok', { status: 200 });
 }
 
-// ── Card fingerprint abuse prevention ─────────────────
-// Returns true if this card fingerprint has already been used for a trial (abuse detected).
-// If not, stores the fingerprint so future attempts with the same card are blocked.
-async function checkAndStoreFingerprint(subscription, env) {
+// ── Card fingerprint abuse check via SetupIntent ──────
+// For trial checkouts, Stripe creates a SetupIntent to save the card.
+// We fetch it to get the payment method fingerprint.
+// Returns true if this card has already been used for a trial on a different account.
+async function checkFingerprintFromSetupIntent(setupIntentId, stripeCustomerId, env) {
   try {
-    // Get the payment method attached to this subscription
-    const pmId = subscription.default_payment_method
-      || subscription.pending_setup_intent
-      || null;
+    if (!setupIntentId) return false;
 
-    let fingerprint = null;
+    // Fetch setup intent to get payment method
+    const siRes = await fetch('https://api.stripe.com/v1/setup_intents/' + setupIntentId, {
+      headers: { 'Authorization': 'Bearer ' + env.STRIPE_SECRET_KEY }
+    });
+    const si = await siRes.json();
+    const pmId = si.payment_method;
+    if (!pmId) return false;
 
-    if (pmId && typeof pmId === 'string' && pmId.startsWith('pm_')) {
-      const pmRes = await fetch('https://api.stripe.com/v1/payment_methods/' + pmId, {
-        headers: { 'Authorization': 'Bearer ' + env.STRIPE_SECRET_KEY }
-      });
-      const pm = await pmRes.json();
-      fingerprint = pm.card && pm.card.fingerprint ? pm.card.fingerprint : null;
-    }
-
-    // Fallback: fetch customer's default payment method
-    if (!fingerprint) {
-      const custRes = await fetch(
-        'https://api.stripe.com/v1/customers/' + subscription.customer + '?expand[]=invoice_settings.default_payment_method',
-        { headers: { 'Authorization': 'Bearer ' + env.STRIPE_SECRET_KEY } }
-      );
-      const cust = await custRes.json();
-      const custPm = cust.invoice_settings && cust.invoice_settings.default_payment_method;
-      if (custPm && custPm.card) fingerprint = custPm.card.fingerprint || null;
-    }
-
-    if (!fingerprint) return false; // can't determine — allow through
+    // Fetch payment method to get card fingerprint
+    const pmRes = await fetch('https://api.stripe.com/v1/payment_methods/' + pmId, {
+      headers: { 'Authorization': 'Bearer ' + env.STRIPE_SECRET_KEY }
+    });
+    const pm = await pmRes.json();
+    const fingerprint = pm.card && pm.card.fingerprint ? pm.card.fingerprint : null;
+    if (!fingerprint) return false;
 
     // Look up user_id for this customer
     const user = await env.DB.prepare(
       'SELECT id FROM users WHERE stripe_customer_id=?'
-    ).bind(subscription.customer).first();
+    ).bind(stripeCustomerId).first();
     const userId = user ? user.id : 0;
 
     // Check if fingerprint already used for a trial by a different user
@@ -179,7 +176,7 @@ async function checkAndStoreFingerprint(subscription, env) {
     }
 
     if (!existing) {
-      // First time seeing this card — record it
+      // First time — store it
       await env.DB.prepare(
         'INSERT OR IGNORE INTO trial_fingerprints (fingerprint, user_id, created_at) VALUES (?,?,?)'
       ).bind(fingerprint, userId, Math.floor(Date.now() / 1000)).run();
