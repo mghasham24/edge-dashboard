@@ -98,15 +98,21 @@ export async function onRequestGet(context) {
         const runners = evData?.attachments?.runners || {};
 
         if (debug) {
-          // Return full attachment keys + top-level event page keys + all market types
+          const attachments = evData?.attachments || {};
           debugInfo[gameKey] = {
-            topLevelKeys: Object.keys(evData || {}),
-            attachmentKeys: Object.keys(evData?.attachments || {}),
-            eventKeys: Object.keys(evData?.attachments?.events || {}),
-            tabs: evData?.attachments?.eventTypes || evData?.tabs || evData?.eventType || null,
+            attachmentKeys: Object.keys(attachments),
             marketCount: Object.keys(markets).length,
             markets: Object.values(markets).map(function(mkt) {
               return { marketType: mkt.marketType, marketName: mkt.marketName };
+            }),
+            // Inspect competitions structure for nested market groups
+            competitionsSample: Object.values(attachments.competitions || {}).slice(0, 2).map(function(c) {
+              return { id: c.id, name: c.name, keys: Object.keys(c) };
+            }),
+            // Check marketGroups if it exists
+            marketGroupsKeys: Object.keys(attachments.marketGroups || {}),
+            marketGroupsSample: Object.values(attachments.marketGroups || {}).slice(0, 5).map(function(mg) {
+              return { name: mg.name || mg.marketGroupName, type: mg.type, keys: Object.keys(mg) };
             })
           };
         }
