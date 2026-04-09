@@ -135,29 +135,14 @@ export async function onRequestPost({ request, env }) {
   return new Response('ok', { status: 200 });
 }
 
-// ── Card fingerprint abuse check via SetupIntent ──────
-// For trial checkouts, Stripe creates a SetupIntent to save the card.
-// We fetch it to get the payment method fingerprint.
+// ── Card fingerprint abuse check ──────────────────────
+// Fetches the customer's saved card fingerprint from Stripe.
+// Tries multiple sources in order of reliability.
 // Returns true if this card has already been used for a trial on a different account.
 async function checkFingerprintFromSetupIntent(setupIntentId, stripeCustomerId, env) {
   try {
-    if (!setupIntentId) return false;
-
-    // Fetch setup intent to get payment method
-    const siRes = await fetch('https://api.stripe.com/v1/setup_intents/' + setupIntentId, {
-      headers: { 'Authorization': 'Bearer ' + env.STRIPE_SECRET_KEY }
-    });
-    const si = await siRes.json();
-    const pmId = si.payment_method;
-    if (!pmId) return false;
-
-    // Fetch payment method to get card fingerprint
-    const pmRes = await fetch('https://api.stripe.com/v1/payment_methods/' + pmId, {
-      headers: { 'Authorization': 'Bearer ' + env.STRIPE_SECRET_KEY }
-    });
-    const pm = await pmRes.json();
-    const fingerprint = pm.card && pm.card.fingerprint ? pm.card.fingerprint : null;
-    if (!fingerprint) return false;
+    const fingerprint = await getCardFingerprint(setupIntentId, stripeCustomerId, env.STRIPE_SECRET_KEY);
+    if (!fingerprint) return false; // can't determine — allow through
 
     // Look up user_id for this customer
     const user = await env.DB.prepare(
@@ -186,6 +171,40 @@ async function checkFingerprintFromSetupIntent(setupIntentId, stripeCustomerId, 
   } catch(e) {
     return false; // don't block on errors
   }
+}
+
+async function getCardFingerprint(setupIntentId, stripeCustomerId, secretKey) {
+  const authHeader = { 'Authorization': 'Bearer ' + secretKey };
+
+  // Source 1: customer's payment methods list (most reliable post-checkout)
+  try {
+    const pmListRes = await fetch(
+      'https://api.stripe.com/v1/customers/' + stripeCustomerId + '/payment_methods?type=card&limit=1',
+      { headers: authHeader }
+    );
+    const pmList = await pmListRes.json();
+    const pm = pmList.data && pmList.data[0];
+    if (pm && pm.card && pm.card.fingerprint) return pm.card.fingerprint;
+  } catch(e) {}
+
+  // Source 2: setup_intent → payment_method
+  if (setupIntentId) {
+    try {
+      const siRes = await fetch('https://api.stripe.com/v1/setup_intents/' + setupIntentId, {
+        headers: authHeader
+      });
+      const si = await siRes.json();
+      if (si.payment_method) {
+        const pmRes = await fetch('https://api.stripe.com/v1/payment_methods/' + si.payment_method, {
+          headers: authHeader
+        });
+        const pm = await pmRes.json();
+        if (pm.card && pm.card.fingerprint) return pm.card.fingerprint;
+      }
+    } catch(e) {}
+  }
+
+  return null;
 }
 
 // ── Reward referrer helper ────────────────────────────
