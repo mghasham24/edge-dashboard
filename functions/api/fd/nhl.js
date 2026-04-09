@@ -5,9 +5,19 @@
 // Step 3: Batch POST to getMarketPrices for real-time prices
 
 const FD_AK         = 'FhMFpcPWXMeyZxOx';
-// competitionId=42 is FD's NHL competition — filters out college hockey
-const FD_LIST_URL   = `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=COMPETITION&competitionId=42&_ak=${FD_AK}&timezone=America/New_York`;
-const FD_LIST_FALLBACK = `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=CUSTOM&customPageId=nhl&_ak=${FD_AK}&timezone=America/New_York`;
+const FD_LIST_URL   = `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=CUSTOM&customPageId=nhl&_ak=${FD_AK}&timezone=America/New_York`;
+
+// Known NHL team name fragments — used to filter out college hockey on the same page
+const NHL_TEAMS = new Set([
+  'Ducks','Coyotes','Bruins','Sabres','Flames','Hurricanes','Blackhawks','Avalanche',
+  'Blue Jackets','Stars','Red Wings','Oilers','Panthers','Kings','Wild','Canadiens',
+  'Predators','Devils','Islanders','Rangers','Senators','Flyers','Penguins','Sharks',
+  'Kraken','Blues','Lightning','Maple Leafs','Canucks','Golden Knights','Capitals',
+  'Jets','Utah Hockey Club'
+]);
+function isNHLTeam(name) {
+  return [...NHL_TEAMS].some(t => name.includes(t));
+}
 const FD_EVENT_URL  = (id) => `https://sbapi.nj.sportsbook.fanduel.com/api/event-page?_ak=${FD_AK}&eventId=${id}&tab=all&timezone=America/New_York`;
 const FD_PRICES_URL = 'https://smp.nj.sportsbook.fanduel.com/api/sports/fixedodds/readonly/v1/getMarketPrices?priceHistory=0';
 const ML_TYPE       = 'MONEY_LINE';
@@ -58,29 +68,20 @@ export async function onRequestGet(context) {
   };
 
   try {
-    const nowMs = Date.now();
-    let events = {};
-    for (const url of [FD_LIST_URL, FD_LIST_FALLBACK]) {
-      try {
-        const listRes = await fetch(url, { headers });
-        if (!listRes.ok) continue;
-        const listData = await listRes.json();
-        events = listData?.attachments?.events || {};
-        if (Object.keys(events).length > 0) break;
-      } catch(e) {}
-    }
+    const listRes = await fetch(FD_LIST_URL, { headers });
+    if (!listRes.ok) return fail(listRes.status, 'FD NHL list fetch failed');
+    const listData = await listRes.json();
 
-    // Filter to NHL-only: competitionId 42 or competitionName containing "NHL"
-    // (the fallback page may contain college hockey — exclude by competition)
+    const events = listData?.attachments?.events || {};
+    const nowMs = Date.now();
     const todayEvents = Object.values(events).filter(e => {
       if (!e.openDate) return false;
       const t = new Date(e.openDate).getTime();
       if (t < nowMs - 3 * 60 * 60 * 1000 || t > nowMs + 36 * 60 * 60 * 1000) return false;
-      // If competitionId is present, only allow NHL (42)
-      if (e.competitionId != null && e.competitionId !== 42) return false;
-      // If competitionName is present, exclude non-NHL competitions
-      if (e.competitionName && !e.competitionName.toLowerCase().includes('nhl')) return false;
-      return true;
+      // Filter out non-NHL hockey (college, etc.) by checking team names
+      const teams = parseEventName(e.name);
+      if (!teams) return false;
+      return isNHLTeam(teams.away) || isNHLTeam(teams.home);
     });
 
     if (!todayEvents.length) {
