@@ -2806,6 +2806,8 @@
     var nbaPoller = null;
     var mlbPoller = null;
     var nhlPoller = null;
+    var dkPoller  = null;
+    var dkAltOdds = {}; // gid -> { spreads: { Away: {line: price}, Home: {line: price} }, totals: { Over: {line: price}, Under: {line: price} } }
     var exclusiveBets = localStorage.getItem('raxedge_exclusive_bets') === '1';
     var betTaken = JSON.parse(localStorage.getItem('raxedge_bets_taken') || '{}');
     var portfolioConnected = false;
@@ -3333,25 +3335,29 @@
     function getAltFair(r, yl, pA, pB) {
         if (yl == null || yl === '' || r.mkt === 'ML') return null;
         if (!r.gid) return null;
-        var alt = altOdds[r.gid];
-        if (!alt) return null;
         var realLine = parseFloat(yl);
         if (!isFinite(realLine)) return null;
-        if (realLine === parseFloat(r.pt)) return null;
+        if (realLine === parseFloat(r.pt)) return null; // lines match — no alt needed
+
+        // Lines differ: use DK alternate lines as fair value reference
+        var dk = dkAltOdds[r.gid];
+        if (!dk) return null;
+
         var priceA, priceB;
         if (r.mkt === 'Total') {
-            var ov = alt.totals && alt.totals['Over'];
-            var un = alt.totals && alt.totals['Under'];
+            var ov = dk.totals && dk.totals['Over'];
+            var un = dk.totals && dk.totals['Under'];
             if (!ov || !un) return null;
             priceA = ov[realLine];
             priceB = un[realLine];
         } else if (r.mkt === 'Spread') {
-            if (!pA || !pB || !alt.spreads) return null;
+            if (!pA || !pB || !dk.spreads) return null;
             var ylA = yourLines[pA.id];
             var ylB = yourLines[pB.id];
             if (ylA == null || ylB == null) return null;
-            priceA = alt.spreads[pA.side] && alt.spreads[pA.side][parseFloat(ylA)];
-            priceB = alt.spreads[pB.side] && alt.spreads[pB.side][parseFloat(ylB)];
+            // pA.ps === 'A' = away team, pB.ps === 'B' = home team
+            priceA = dk.spreads['Away'] && dk.spreads['Away'][parseFloat(ylA)];
+            priceB = dk.spreads['Home'] && dk.spreads['Home'][parseFloat(ylB)];
         }
         if (priceA == null || priceB == null) return null;
         return novig(imp(priceA), imp(priceB));
@@ -6183,6 +6189,13 @@
                     if (currentSport !== 'basketball_nba') { clearInterval(nbaPoller); nbaPoller = null; return; }
                     fetchAltLinesForNBA();
                 }, 5000);
+                // Fetch DK alt lines once on load, then every 30s
+                fetchDKAltLines();
+                if (dkPoller) clearInterval(dkPoller);
+                dkPoller = setInterval(function() {
+                    if (currentSport !== 'basketball_nba') { clearInterval(dkPoller); dkPoller = null; return; }
+                    fetchDKAltLines();
+                }, 30000);
             });
             return;
         }
@@ -6191,6 +6204,8 @@
         if (nbaPoller) { clearInterval(nbaPoller); nbaPoller = null; }
         if (mlbPoller) { clearInterval(mlbPoller); mlbPoller = null; }
         if (nhlPoller) { clearInterval(nhlPoller); nhlPoller = null; }
+        if (dkPoller)  { clearInterval(dkPoller);  dkPoller  = null; }
+        dkAltOdds = {};
 
         // MLB: use FD native API for ML — no Odds API credits
         if (currentSport === 'baseball_mlb') {
@@ -7494,6 +7509,33 @@
             if (!data.ok || !data.games) return;
             nativeMlUpdate(rawRows, data.games);
             renderTable();
+        } catch(e) {}
+    }
+
+    async function fetchDKAltLines() {
+        if (currentSport !== 'basketball_nba') return;
+        try {
+            var res = await fetch('/api/dk/nbaalts', { credentials: 'same-origin' });
+            var data = await res.json();
+            if (!data.ok || !data.games) return;
+            rawRows.forEach(function(r) {
+                if (r.mkt !== 'Spread' && r.mkt !== 'Total') return;
+                if (!r.gid) return;
+                var game = data.games[r.game];
+                if (!game) {
+                    var fdTeams = r.game.split(' @ ');
+                    var fdAwayLast = (fdTeams[0] || '').trim().split(' ').pop().toLowerCase();
+                    var fdHomeLast = (fdTeams[1] || '').trim().split(' ').pop().toLowerCase();
+                    var matchedKey = Object.keys(data.games).find(function(k) {
+                        var kTeams = k.split(' @ ');
+                        var kAwayLast = (kTeams[0] || '').trim().split(' ').pop().toLowerCase();
+                        var kHomeLast = (kTeams[1] || '').trim().split(' ').pop().toLowerCase();
+                        return kAwayLast === fdAwayLast && kHomeLast === fdHomeLast;
+                    });
+                    if (matchedKey) game = data.games[matchedKey];
+                }
+                if (game) dkAltOdds[r.gid] = game;
+            });
         } catch(e) {}
     }
 
