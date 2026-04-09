@@ -1,4 +1,6 @@
 // functions/api/stripe/checkout.js
+const TRIAL_DAYS = 14;
+
 export async function onRequestPost({ request, env }) {
   const session = await getSession(request, env.DB);
   if (!session) return fail(401, 'Not authenticated');
@@ -32,7 +34,9 @@ export async function onRequestPost({ request, env }) {
       .bind(customerId, session.id).run();
   }
 
-  // Create Checkout session — store referrer_id in metadata for webhook
+  const trialEligible = !session.had_free_trial;
+
+  // Build Checkout session params
   const checkoutParams = {
     customer: customerId,
     mode: 'subscription',
@@ -41,13 +45,23 @@ export async function onRequestPost({ request, env }) {
     cancel_url:  origin + '/?checkout=cancel',
     allow_promotion_codes: true,
   };
-  if (referrerId) checkoutParams.metadata = { referrer_id: String(referrerId) };
+
+  if (trialEligible) {
+    // Free trial: 14-day trial, then monthly recurring
+    // Store referrer_id in subscription metadata so webhook can reward on trial→paid conversion
+    checkoutParams.subscription_data = {
+      trial_period_days: TRIAL_DAYS,
+      metadata: referrerId ? { referrer_id: String(referrerId) } : {}
+    };
+  } else {
+    // No trial — immediate payment, store referrer in checkout metadata for webhook
+    if (referrerId) checkoutParams.metadata = { referrer_id: String(referrerId) };
+  }
 
   const checkout = await stripePost('checkout/sessions', checkoutParams, env.STRIPE_SECRET_KEY);
-
   if (checkout.error) return fail(500, 'Failed to create checkout session');
 
-  return new Response(JSON.stringify({ ok: true, url: checkout.url }), {
+  return new Response(JSON.stringify({ ok: true, url: checkout.url, trial: trialEligible }), {
     headers: { 'Content-Type': 'application/json' }
   });
 }
@@ -94,7 +108,7 @@ async function getSession(request, db) {
   if (!m) return null;
   const now = Math.floor(Date.now() / 1000);
   return db.prepare(
-    'SELECT u.id, u.email, u.plan, u.stripe_customer_id FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires_at>?'
+    'SELECT u.id, u.email, u.plan, u.stripe_customer_id, u.had_free_trial FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires_at>?'
   ).bind(m[1], now).first();
 }
 

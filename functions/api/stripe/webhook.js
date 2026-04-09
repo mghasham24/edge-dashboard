@@ -59,24 +59,49 @@ export async function onRequestPost({ request, env }) {
   const obj = event.data.object;
 
   switch (event.type) {
-    case 'customer.subscription.created':
-    case 'customer.subscription.updated': {
+    case 'customer.subscription.created': {
       const status = obj.status;
       const plan   = (status === 'active' || status === 'trialing') ? 'pro' : 'free';
-      // Store subscription period end as pro_expires_at for Stripe subscribers
       const proExpiresAt = (plan === 'pro' && obj.current_period_end) ? obj.current_period_end : null;
       await env.DB.prepare(
         'UPDATE users SET plan=?, stripe_sub_id=?, pro_expires_at=? WHERE stripe_customer_id=?'
       ).bind(plan, obj.id, proExpiresAt, obj.customer).run();
+
+      // Mark had_free_trial when a trial subscription starts
+      if (status === 'trialing') {
+        await env.DB.prepare(
+          'UPDATE users SET had_free_trial=1 WHERE stripe_customer_id=?'
+        ).bind(obj.customer).run();
+      }
       break;
     }
+
+    case 'customer.subscription.updated': {
+      const status = obj.status;
+      const plan   = (status === 'active' || status === 'trialing') ? 'pro' : 'free';
+      const proExpiresAt = (plan === 'pro' && obj.current_period_end) ? obj.current_period_end : null;
+      await env.DB.prepare(
+        'UPDATE users SET plan=?, stripe_sub_id=?, pro_expires_at=? WHERE stripe_customer_id=?'
+      ).bind(plan, obj.id, proExpiresAt, obj.customer).run();
+
+      // Trial converted to paid — reward referrer now (not at trial start)
+      const prevAttrs = event.data.previous_attributes || {};
+      if (prevAttrs.status === 'trialing' && status === 'active') {
+        await rewardReferrerForCustomer(obj.customer, obj.metadata, env.DB);
+      }
+      break;
+    }
+
     case 'customer.subscription.deleted': {
       await env.DB.prepare(
         'UPDATE users SET plan=\'free\', stripe_sub_id=NULL, pro_expires_at=NULL WHERE stripe_customer_id=?'
       ).bind(obj.customer).run();
       break;
     }
+
     case 'checkout.session.completed': {
+      // Only reward referrer on immediate payment (non-trial).
+      // Trial conversions are handled in customer.subscription.updated (trialing→active).
       if (obj.mode === 'subscription' && obj.payment_status === 'paid') {
         // Fetch subscription to get current_period_end
         let proExpiresAt = null;
@@ -92,35 +117,12 @@ export async function onRequestPost({ request, env }) {
           'UPDATE users SET plan=\'pro\', stripe_sub_id=?, pro_expires_at=? WHERE stripe_customer_id=?'
         ).bind(obj.subscription, proExpiresAt, obj.customer).run();
 
-        // Reward referrer with +1 month Pro.
-        // Two sources: referred_by (set at signup) OR metadata.referrer_id (entered at checkout).
-        // Prefer checkout metadata if present, fall back to referred_by.
-        const newPro = await env.DB.prepare(
-          'SELECT id, referred_by FROM users WHERE stripe_customer_id=?'
-        ).bind(obj.customer).first();
-
-        const referrerIdFromMeta = obj.metadata && obj.metadata.referrer_id
-          ? parseInt(obj.metadata.referrer_id, 10) : null;
-        const referrerId = referrerIdFromMeta || (newPro && newPro.referred_by) || null;
-
-        if (referrerId) {
-          const referrer = await env.DB.prepare(
-            'SELECT id, plan, pro_expires_at FROM users WHERE id=?'
-          ).bind(referrerId).first();
-          if (referrer) {
-            const now = Math.floor(Date.now() / 1000);
-            const base = (referrer.pro_expires_at && referrer.pro_expires_at > now)
-              ? referrer.pro_expires_at
-              : now;
-            const newExpiry = base + 2592000; // +30 days
-            await env.DB.prepare(
-              'UPDATE users SET plan=\'pro\', pro_expires_at=? WHERE id=?'
-            ).bind(newExpiry, referrer.id).run();
-          }
-        }
+        // Reward referrer for immediate (non-trial) paid subscriptions only
+        await rewardReferrerForCustomer(obj.customer, obj.metadata, env.DB);
       }
       break;
     }
+
     case 'invoice.payment_failed': {
       await env.DB.prepare(
         'UPDATE users SET plan=\'free\' WHERE stripe_customer_id=?'
@@ -130,4 +132,35 @@ export async function onRequestPost({ request, env }) {
   }
 
   return new Response('ok', { status: 200 });
+}
+
+// ── Reward referrer helper ────────────────────────────
+// Looks up referrer_id from: metadata.referrer_id → user's referred_by
+// Adds +30 days Pro to the referrer.
+async function rewardReferrerForCustomer(stripeCustomerId, metadata, db) {
+  try {
+    const newPro = await db.prepare(
+      'SELECT id, referred_by FROM users WHERE stripe_customer_id=?'
+    ).bind(stripeCustomerId).first();
+    if (!newPro) return;
+
+    const referrerIdFromMeta = metadata && metadata.referrer_id
+      ? parseInt(metadata.referrer_id, 10) : null;
+    const referrerId = referrerIdFromMeta || newPro.referred_by || null;
+    if (!referrerId) return;
+
+    const referrer = await db.prepare(
+      'SELECT id, plan, pro_expires_at FROM users WHERE id=?'
+    ).bind(referrerId).first();
+    if (!referrer) return;
+
+    const now = Math.floor(Date.now() / 1000);
+    const base = (referrer.pro_expires_at && referrer.pro_expires_at > now)
+      ? referrer.pro_expires_at
+      : now;
+    const newExpiry = base + 2592000; // +30 days
+    await db.prepare(
+      'UPDATE users SET plan=\'pro\', pro_expires_at=? WHERE id=?'
+    ).bind(newExpiry, referrer.id).run();
+  } catch(e) {}
 }
