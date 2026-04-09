@@ -5,8 +5,10 @@
 // Step 3: Batch POST to getMarketPrices for real-time prices
 
 const FD_AK         = 'FhMFpcPWXMeyZxOx';
-// Try the game-lines page first (returns all MLB games); fall back to main MLB custom page
+// Primary: FD competition events endpoint (returns ALL MLB games, competition ID 91)
+// Fallback: content-managed pages (curated/featured games only)
 const FD_LIST_URLS  = [
+  `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=COMPETITION&competitionId=91&_ak=${FD_AK}&timezone=America/New_York`,
   `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=CUSTOM&customPageId=mlb-game-lines&_ak=${FD_AK}&timezone=America/New_York`,
   `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=CUSTOM&customPageId=mlb&_ak=${FD_AK}&timezone=America/New_York`
 ];
@@ -70,7 +72,6 @@ export async function onRequestGet(context) {
         const listData = await listRes.json();
         const evts = listData?.attachments?.events || {};
         Object.entries(evts).forEach(([id, e]) => { if (!allEvents[id]) allEvents[id] = e; });
-        if (Object.keys(evts).length > 0) break; // stop if first URL returned events
       } catch(e) {}
     }
     if (!Object.keys(allEvents).length) return fail(502, 'FD MLB list fetch failed');
