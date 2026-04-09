@@ -6139,7 +6139,7 @@
         .then(function() {
             btn.disabled = false;
             renderTable();
-            if (rawRows.length > 0) fetchRealMarkets(currentSport);
+            if (rawRows.length > 0) fetchRealMarkets(currentSport).then(function() { fetchAltLinesForNBA(); });
             if (currentSport === 'baseball_mlb') fetchKalshiRFI();
         });
     }
@@ -6380,8 +6380,8 @@
                 var isHockey = currentSport === 'icehockey_nhl';
                 var isNBA = currentSport === 'basketball_nba';
 
-                // NBA: hide spread/total once game has started
-                if (isNBA && r.cm && r.cm <= now) return false;
+                // NBA: hide spread/total once game has started ONLY if no alternate odds available
+                if (isNBA && r.cm && r.cm <= now && !altOdds[r.gid]) return false;
 
                 // All sports: hide spread if signs are opposite AND gap > 2 (sign flip = bad data)
                 if (r.mkt === 'Spread' && r.pt != null && yourLines[r.id] != null) {
@@ -6825,7 +6825,7 @@
 
             if (!skipRender) renderTable();
             // Trigger Real Sports auto-fill for new RFI rows
-            if (rawRows.length > 0) fetchRealMarkets(currentSport, skipRender);
+            if (rawRows.length > 0) fetchRealMarkets(currentSport, skipRender).then(function() { fetchAltLinesForNBA(); });
         })
         .catch(function() {});
     }
@@ -7124,8 +7124,45 @@
         .catch(function() {});
     }
 
-    // Fetch FanDuel alternate lines for games where Real Sports line differs from main FD line
-    // Only fires for specific games with mismatches — saves API credits
+    // Fetch FanDuel alternate lines for NBA games where Real Sports line differs from main FD line
+    // Uses the existing /api/odds_event endpoint (alternate_spreads + alternate_totals)
+    // Only fetches for games with mismatches — saves Odds API credits
+    // Results stored in altOdds[gid] and picked up by getAltFair / renderTable
+    async function fetchAltLinesForNBA() {
+        if (currentSport !== 'basketball_nba') return;
+
+        // Find unique gids for spread/total rows where RS line ≠ FD main line
+        var gidsToFetch = {};
+        rawRows.forEach(function(r) {
+            if (r.mkt !== 'Spread' && r.mkt !== 'Total') return;
+            if (!r.gid) return;
+            if (altOdds[r.gid]) return; // already fetched this session
+            var yl = yourLines[r.id];
+            if (yl == null) return;
+            if (parseFloat(yl) === parseFloat(r.pt)) return; // lines match — no need for alts
+            gidsToFetch[r.gid] = true;
+        });
+
+        var gids = Object.keys(gidsToFetch);
+        if (!gids.length) return;
+
+        // Fetch alternate lines for each mismatched game, one at a time to be gentle on credits
+        for (var i = 0; i < gids.length; i++) {
+            var gid = gids[i];
+            try {
+                var res = await fetch('/api/odds_event?sport=basketball_nba&eventId=' + encodeURIComponent(gid), {
+                    credentials: 'same-origin'
+                });
+                var data = await res.json();
+                if (data.ok && data.altOdds) {
+                    altOdds[gid] = data.altOdds;
+                }
+            } catch(e) {}
+        }
+
+        if (gids.length) renderTable();
+    }
+
     handleCheckoutReturn();
     initTheme();
     checkSession();
