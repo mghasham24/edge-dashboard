@@ -1,11 +1,11 @@
-// functions/api/fd/nba-alts.js
+// functions/api/fd/nbaalts.js
 // Fetches FanDuel live alternate spread + total lines for NBA games
 // directly from FanDuel's native API — same approach as fd/rfi.js
 
 const FD_AK       = 'FhMFpcPWXMeyZxOx';
 const FD_LIST_URL = `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=CUSTOM&customPageId=nba&_ak=${FD_AK}&timezone=America/New_York`;
-const FD_EVENT_URL = (id) => `https://sbapi.nj.sportsbook.fanduel.com/api/event-page?_ak=${FD_AK}&eventId=${id}&tab=all&timezone=America/New_York`;
-const CACHE_TTL = 30; // 30s — matches live odds cache
+const FD_EVENT_URL = (id, tab) => `https://sbapi.nj.sportsbook.fanduel.com/api/event-page?_ak=${FD_AK}&eventId=${id}${tab ? '&tab=' + tab : ''}&timezone=America/New_York`;
+const CACHE_TTL = 30;
 
 async function getSession(request, db) {
   const c = request.headers.get('Cookie') || '';
@@ -24,7 +24,6 @@ function fail(status, msg) {
 }
 
 function parseEventName(name) {
-  // "Boston Celtics @ Miami Heat" or "Boston Celtics @ Miami Heat (Period 2)"
   const m = name.match(/^(.+?)\s*(?:\([^)]*\))?\s*@\s*(.+?)\s*(?:\([^)]*\))?\s*$/);
   if (!m) return null;
   return { away: m[1].trim(), home: m[2].trim() };
@@ -34,14 +33,16 @@ export async function onRequestGet(context) {
   const { request, env } = context;
   const session = await getSession(request, env.DB);
   if (!session) return fail(401, 'Not authenticated');
-  const url = new URL(request.url);
-  const debug = url.searchParams.get('debug') === '1';
+  const urlObj = new URL(request.url);
+  const debug = urlObj.searchParams.get('debug') === '1';
+  // debug=tabs tries multiple tab values on the first game to find which has alt markets
+  const debugTabs = urlObj.searchParams.get('debug') === 'tabs';
 
   const now = Math.floor(Date.now() / 1000);
   const cacheKey = 'fd_nba_alts';
 
   // Try cache first (skip in debug mode)
-  if (!debug) {
+  if (!debug && !debugTabs) {
     try {
       const cached = await env.DB.prepare(
         'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
@@ -58,7 +59,6 @@ export async function onRequestGet(context) {
   };
 
   try {
-    // Step 1: Get today's NBA events from FanDuel
     const listRes = await fetch(FD_LIST_URL, { headers });
     if (!listRes.ok) return fail(listRes.status, 'FD NBA list fetch failed');
     const listData = await listRes.json();
@@ -68,16 +68,40 @@ export async function onRequestGet(context) {
     const todayEvents = Object.values(events).filter(e => {
       if (!e.openDate) return false;
       const t = new Date(e.openDate).getTime();
-      // Games within last 4 hours (live) or next 12 hours (upcoming today)
       return t >= nowMs - 4 * 60 * 60 * 1000 && t <= nowMs + 12 * 60 * 60 * 1000;
     });
 
     if (!todayEvents.length) {
-      const body = JSON.stringify({ ok: true, games: {} });
-      return new Response(body, { headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ ok: true, games: {} }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
 
-    // Step 2: Fetch each event page and extract alternate spread + total markets
+    // debug=tabs: try multiple tab values on first game and return market counts
+    if (debugTabs) {
+      const event = todayEvents[0];
+      const tabsToTry = [null, 'all', 'game', 'spreads', 'totals', 'alternates', 'alternate-lines', 'alt-lines', 'player-props', 'same-game-parlay', 'featured'];
+      const results = {};
+      for (const tab of tabsToTry) {
+        try {
+          const res = await fetch(FD_EVENT_URL(event.eventId, tab), { headers });
+          if (!res.ok) { results[tab || 'no-tab'] = { error: res.status }; continue; }
+          const data = await res.json();
+          const mkts = data?.attachments?.markets || {};
+          results[tab || 'no-tab'] = {
+            marketCount: Object.keys(mkts).length,
+            markets: Object.values(mkts).map(m => m.marketType + ' / ' + m.marketName)
+          };
+        } catch(e) {
+          results[tab || 'no-tab'] = { error: e.message };
+        }
+        await new Promise(r => setTimeout(r, 200));
+      }
+      return new Response(JSON.stringify({ ok: true, game: event.name, tabResults: results }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
     const gamesMap = {};
     const debugInfo = {};
 
@@ -90,7 +114,7 @@ export async function onRequestGet(context) {
       const altData = { spreads: {}, totals: {} };
 
       try {
-        const evRes = await fetch(FD_EVENT_URL(event.eventId), { headers });
+        const evRes = await fetch(FD_EVENT_URL(event.eventId, 'all'), { headers });
         if (!evRes.ok) continue;
         const evData = await evRes.json();
 
@@ -98,23 +122,9 @@ export async function onRequestGet(context) {
         const runners = evData?.attachments?.runners || {};
 
         if (debug) {
-          const attachments = evData?.attachments || {};
-          debugInfo[gameKey] = {
-            attachmentKeys: Object.keys(attachments),
-            marketCount: Object.keys(markets).length,
-            markets: Object.values(markets).map(function(mkt) {
-              return { marketType: mkt.marketType, marketName: mkt.marketName };
-            }),
-            // Inspect competitions structure for nested market groups
-            competitionsSample: Object.values(attachments.competitions || {}).slice(0, 2).map(function(c) {
-              return { id: c.id, name: c.name, keys: Object.keys(c) };
-            }),
-            // Check marketGroups if it exists
-            marketGroupsKeys: Object.keys(attachments.marketGroups || {}),
-            marketGroupsSample: Object.values(attachments.marketGroups || {}).slice(0, 5).map(function(mg) {
-              return { name: mg.name || mg.marketGroupName, type: mg.type, keys: Object.keys(mg) };
-            })
-          };
+          debugInfo[gameKey] = Object.values(markets).map(function(mkt) {
+            return { marketType: mkt.marketType, marketName: mkt.marketName };
+          });
         }
 
         Object.values(markets).forEach(function(mkt) {
@@ -130,7 +140,6 @@ export async function onRequestGet(context) {
           if (!isAltSpread && !isAltTotal) return;
 
           const mktRunners = (mkt.runners || []).map(function(rRef) {
-            // runners can be inline or referenced by ID
             return rRef.selectionId ? (runners[rRef.selectionId] || rRef) : rRef;
           });
 
@@ -142,13 +151,11 @@ export async function onRequestGet(context) {
             const handicap = runner.handicap;
 
             if (isAltSpread && handicap != null) {
-              // name is team name (e.g. "Phoenix Suns"), handicap is the point value
               if (!altData.spreads[name]) altData.spreads[name] = {};
               altData.spreads[name][handicap] = price;
             }
 
             if (isAltTotal && handicap != null) {
-              // name is "Over" or "Under"
               const side = name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
               if (side === 'Over' || side === 'Under') {
                 if (!altData.totals[side]) altData.totals[side] = {};
