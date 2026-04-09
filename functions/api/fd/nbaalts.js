@@ -97,6 +97,10 @@ export async function onRequestGet(context) {
       const targetMarkets = Object.entries(markets).filter(([, m]) => [SPREAD_TYPE, ML_TYPE, TOTAL_TYPE].includes(m.marketType));
       const targetIds = targetMarkets.map(([id]) => id);
 
+      // Show runner structure for first target market
+      const firstTargetRunners = targetMarkets.length ? (targetMarkets[0][1].runners || []).slice(0, 2) : [];
+      const attachRunnerSample = Object.entries(runners).slice(0, 3).map(([k, v]) => ({ key: k, name: v.runnerName }));
+
       let pricesStatus = null, pricesBody = null;
       if (targetIds.length) {
         const pr = await fetch(FD_PRICES_URL, {
@@ -113,6 +117,9 @@ export async function onRequestGet(context) {
         evStatus, marketCount: marketList.length,
         markets: marketList,
         targetIds,
+        firstTargetRunners,
+        attachRunnerSample,
+        attachRunnersCount: Object.keys(runners).length,
         pricesStatus, pricesBody
       }), { headers: { 'Content-Type': 'application/json' } });
     }
