@@ -2397,6 +2397,7 @@
                 <input class="ctrl-inp" id="unit-size" type="number" value="300" min="1" step="1" oninput="localStorage.setItem('raxedge_unit_size',this.value);renderTable()">
             </div>
             <button id="ev-only-btn" onclick="toggleEVOnly()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:.05em;padding:6px 14px;border-radius:5px;cursor:pointer;white-space:nowrap">+EV Only</button>
+            <button id="excl-bets-btn" onclick="toggleExclusiveBets()" title="When on, checking one side automatically unchecks the other side of the same market" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:.05em;padding:6px 14px;border-radius:5px;cursor:pointer;white-space:nowrap">1 Side</button>
             <div class="stats-pill">
                 <div class="stat-item">
                     <span class="stat-val" id="stat-lines">0</span>
@@ -2804,6 +2805,8 @@
     var altOdds = {}; // gameId -> { spreads: {teamName: {point: price}}, totals: {side: {point: price}} }
     var nbaPoller = null;
     var mlbPoller = null;
+    var nhlPoller = null;
+    var exclusiveBets = localStorage.getItem('raxedge_exclusive_bets') === '1';
     var betTaken = JSON.parse(localStorage.getItem('raxedge_bets_taken') || '{}');
     var portfolioConnected = false;
     var portHistoryAll    = [];   // accumulated all settled history items
@@ -2911,6 +2914,7 @@
         betTaken[id] = !betTaken[id];
         if (!betTaken[id]) delete betTaken[id];
         localStorage.setItem('raxedge_bets_taken', JSON.stringify(betTaken));
+        if (betTaken[id] && exclusiveBets) applyExclusiveBet(id);
         // Sync to server so state persists across devices
         fetch('/api/bets/taken', {
             method: 'POST',
@@ -2952,6 +2956,41 @@
             btn.style.borderColor = showEVOnly ? 'var(--green)' : 'var(--border2)';
         }
         renderTable();
+    }
+
+    function toggleExclusiveBets() {
+        exclusiveBets = !exclusiveBets;
+        localStorage.setItem('raxedge_exclusive_bets', exclusiveBets ? '1' : '0');
+        var btn = document.getElementById('excl-bets-btn');
+        if (btn) {
+            btn.style.background = exclusiveBets ? 'var(--accent)' : 'var(--bg3)';
+            btn.style.color = exclusiveBets ? '#fff' : 'var(--muted)';
+            btn.style.borderColor = exclusiveBets ? 'var(--accent)' : 'var(--border2)';
+        }
+    }
+
+    function applyExclusiveBet(id) {
+        // Find the opposite side row (same pid, opposite ps)
+        var row = rawRows.find(function(r) { return r.id === id; });
+        if (!row) return;
+        var opposite = rawRows.find(function(r) { return r.pid === row.pid && r.id !== id; });
+        if (!opposite) return;
+        // Uncheck the opposite
+        betTaken[opposite.id] = false;
+        delete betTaken[opposite.id];
+        localStorage.setItem('raxedge_bets_taken', JSON.stringify(betTaken));
+        fetch('/api/bets/taken', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: opposite.id, taken: false })
+        }).catch(function() {});
+        document.querySelectorAll('input[type="checkbox"][data-id="' + opposite.id + '"]').forEach(function(cb) { cb.checked = false; });
+        var tr = document.querySelector('tr[data-row-id="' + opposite.id + '"]');
+        if (tr) tr.style.opacity = '';
+        document.querySelectorAll('.mc-bet-check[data-id="' + opposite.id + '"]').forEach(function(el) {
+            var sideRow = el.closest('div[style*="display:flex"]');
+            if (sideRow) sideRow.style.opacity = '';
+        });
     }
     var mobileCollapsed = {};
 
@@ -6148,9 +6187,10 @@
             return;
         }
 
-        // Stop NBA/MLB pollers when switching sports
+        // Stop all native pollers when switching sports
         if (nbaPoller) { clearInterval(nbaPoller); nbaPoller = null; }
         if (mlbPoller) { clearInterval(mlbPoller); mlbPoller = null; }
+        if (nhlPoller) { clearInterval(nhlPoller); nhlPoller = null; }
 
         // MLB: use FD native API for ML — no Odds API credits
         if (currentSport === 'baseball_mlb') {
@@ -6212,6 +6252,72 @@
                     mlbPoller = setInterval(function() {
                         if (currentSport !== 'baseball_mlb') { clearInterval(mlbPoller); mlbPoller = null; return; }
                         fetchMLBNativeUpdate();
+                    }, 5000);
+                }
+            });
+            return;
+        }
+
+        // NHL: use FD native API for ML — no Odds API credits
+        if (currentSport === 'icehockey_nhl') {
+            altOdds = {};
+            fetch('/api/fd/nhl', { credentials: 'same-origin' })
+            .then(function(r) {
+                if (r.status === 401) {
+                    dot.className = 'sdot error';
+                    stxt.textContent = 'Session expired — please log in again.';
+                    btn.disabled = false;
+                    setTimeout(function() { location.reload(); }, 2000);
+                    return Promise.reject('unauth');
+                }
+                return r.json();
+            })
+            .then(function(data) {
+                if (!data.ok || !data.games) {
+                    rawRows = []; rsGameIds = {};
+                    dot.className = 'sdot error';
+                    stxt.textContent = 'No NHL games right now';
+                    return;
+                }
+                var rows = [];
+                Object.entries(data.games).forEach(function([gameKey, game]) {
+                    var away = game.away, home = game.home;
+                    var cm = game.cm ? new Date(game.cm) : null;
+                    var gid = String(game.id);
+                    var pid = gid + '-h2h';
+                    [[away, 'A'], [home, 'B']].forEach(function(pair) {
+                        var teamName = pair[0], ps = pair[1];
+                        var price = game.ml[teamName];
+                        if (price == null) return;
+                        rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'ML', side: teamName, am: price, pt: null, pid: pid, ps: ps, gid: gid });
+                    });
+                });
+                rawRows = rows;
+                rawRowsBySport[currentSport] = rawRows;
+                var nowStr = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+                if (rawRows.length) {
+                    dot.className = 'sdot live';
+                    stxt.textContent = 'Updated ' + nowStr + ' - ' + Object.keys(data.games).length + ' games - FanDuel';
+                } else {
+                    dot.className = 'sdot error';
+                    stxt.textContent = 'No NHL games right now';
+                }
+            })
+            .catch(function(e) {
+                if (e === 'unauth') return;
+                rawRows = []; rsGameIds = {};
+                dot.className = 'sdot error';
+                stxt.textContent = 'Error fetching NHL data';
+            })
+            .then(function() {
+                btn.disabled = false;
+                renderTable();
+                if (rawRows.length > 0) {
+                    fetchRealMarkets(currentSport);
+                    if (nhlPoller) clearInterval(nhlPoller);
+                    nhlPoller = setInterval(function() {
+                        if (currentSport !== 'icehockey_nhl') { clearInterval(nhlPoller); nhlPoller = null; return; }
+                        fetchNHLNativeUpdate();
                     }, 5000);
                 }
             });
@@ -7347,31 +7453,46 @@
         } catch(e) {}
     }
 
+    function nativeMlUpdate(rows, games) {
+        rows.forEach(function(r) {
+            if (r.mkt !== 'ML') return;
+            var game = games[r.game];
+            if (!game) {
+                var fdTeams = r.game.split(' @ ');
+                var fdAwayLast = (fdTeams[0] || '').trim().split(' ').pop().toLowerCase();
+                var fdHomeLast = (fdTeams[1] || '').trim().split(' ').pop().toLowerCase();
+                var matchedKey = Object.keys(games).find(function(k) {
+                    var kTeams = k.split(' @ ');
+                    var kAwayLast = (kTeams[0] || '').trim().split(' ').pop().toLowerCase();
+                    var kHomeLast = (kTeams[1] || '').trim().split(' ').pop().toLowerCase();
+                    return kAwayLast === fdAwayLast && kHomeLast === fdHomeLast;
+                });
+                if (matchedKey) game = games[matchedKey];
+            }
+            if (!game) return;
+            var price = game.ml && game.ml[r.side];
+            if (price != null) r.am = price;
+        });
+    }
+
     async function fetchMLBNativeUpdate() {
         if (currentSport !== 'baseball_mlb') return;
         try {
             var res = await fetch('/api/fd/mlb', { credentials: 'same-origin' });
             var data = await res.json();
             if (!data.ok || !data.games) return;
-            rawRows.forEach(function(r) {
-                if (r.mkt !== 'ML') return;
-                var game = data.games[r.game];
-                if (!game) {
-                    var fdTeams = r.game.split(' @ ');
-                    var fdAwayLast = (fdTeams[0] || '').trim().split(' ').pop().toLowerCase();
-                    var fdHomeLast = (fdTeams[1] || '').trim().split(' ').pop().toLowerCase();
-                    var matchedKey = Object.keys(data.games).find(function(k) {
-                        var kTeams = k.split(' @ ');
-                        var kAwayLast = (kTeams[0] || '').trim().split(' ').pop().toLowerCase();
-                        var kHomeLast = (kTeams[1] || '').trim().split(' ').pop().toLowerCase();
-                        return kAwayLast === fdAwayLast && kHomeLast === fdHomeLast;
-                    });
-                    if (matchedKey) game = data.games[matchedKey];
-                }
-                if (!game) return;
-                var price = game.ml && game.ml[r.side];
-                if (price != null) r.am = price;
-            });
+            nativeMlUpdate(rawRows, data.games);
+            renderTable();
+        } catch(e) {}
+    }
+
+    async function fetchNHLNativeUpdate() {
+        if (currentSport !== 'icehockey_nhl') return;
+        try {
+            var res = await fetch('/api/fd/nhl', { credentials: 'same-origin' });
+            var data = await res.json();
+            if (!data.ok || !data.games) return;
+            nativeMlUpdate(rawRows, data.games);
             renderTable();
         } catch(e) {}
     }
@@ -7379,6 +7500,15 @@
     handleCheckoutReturn();
     initTheme();
     checkSession();
+    // Restore exclusive bets button state
+    (function() {
+        var btn = document.getElementById('excl-bets-btn');
+        if (btn && exclusiveBets) {
+            btn.style.background = 'var(--accent)';
+            btn.style.color = '#fff';
+            btn.style.borderColor = 'var(--accent)';
+        }
+    })();
 
     // ── GROUP JOIN BANNER ──
     (function() {
