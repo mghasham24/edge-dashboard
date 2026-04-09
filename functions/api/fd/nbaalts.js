@@ -77,18 +77,31 @@ export async function onRequestGet(context) {
       });
     }
 
-    // debug=tabs: inspect layout structure to find alternate market IDs
+    // debug=tabs: inspect competitions + full event-page for alternate market IDs
     if (debugTabs) {
       const event = todayEvents[0];
       const res = await fetch(FD_EVENT_URL(event.eventId, 'all'), { headers });
       if (!res.ok) return fail(res.status, 'event-page failed');
       const data = await res.json();
-      const layout = data?.layout || {};
-      // Walk layout to find any references to market IDs / market groups
-      const layoutSample = JSON.stringify(layout).slice(0, 5000);
-      return new Response(JSON.stringify({ ok: true, game: event.name, layoutSample }), {
-        headers: { 'Content-Type': 'application/json' }
-      });
+      const attachments = data?.attachments || {};
+      // Dump the full competitions object and look for market ID lists
+      const compRaw = JSON.stringify(attachments.competitions || {});
+      // Also look for any key in attachments that might list all market IDs
+      const attachKeys = Object.keys(attachments);
+      // Look for any field in the full response that contains arrays of market IDs
+      const fullRaw = JSON.stringify(data);
+      // Search for patterns like "734." which are FD market IDs
+      const fdIdMatches = [...fullRaw.matchAll(/"(734\.\d+)"/g)].map(m => m[1]).slice(0, 20);
+      // Also look for linkedMarketIds in markets
+      const marketLinkedIds = Object.values(attachments.markets || {}).map(m => ({
+        type: m.marketType, name: m.marketName, id: m.marketId, linkedId: m.linkedMarketId
+      }));
+      return new Response(JSON.stringify({
+        ok: true, game: event.name, attachKeys,
+        fdIdMatches,
+        marketLinkedIds,
+        compSample: compRaw.slice(0, 3000)
+      }), { headers: { 'Content-Type': 'application/json' } });
     }
 
     const gamesMap = {};
