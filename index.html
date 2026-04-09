@@ -7130,17 +7130,20 @@
     // Results stored in altOdds[gid] and picked up by getAltFair / renderTable
     async function fetchAltLinesForNBA() {
         if (currentSport !== 'basketball_nba') return;
+        var now = new Date();
 
-        // Find unique gids for spread/total rows where RS line ≠ FD main line
+        // Find unique gids for spread/total rows where:
+        // - game is live (started) — always fetch alts so live rows aren't hidden, OR
+        // - RS line differs from FD main line — fetch alts to get correct odds at RS line
         var gidsToFetch = {};
         rawRows.forEach(function(r) {
             if (r.mkt !== 'Spread' && r.mkt !== 'Total') return;
             if (!r.gid) return;
             if (altOdds[r.gid]) return; // already fetched this session
+            var isLive = r.cm && r.cm <= now;
             var yl = yourLines[r.id];
-            if (yl == null) return;
-            if (parseFloat(yl) === parseFloat(r.pt)) return; // lines match — no need for alts
-            gidsToFetch[r.gid] = true;
+            var hasMismatch = yl != null && parseFloat(yl) !== parseFloat(r.pt);
+            if (isLive || hasMismatch) gidsToFetch[r.gid] = true;
         });
 
         var gids = Object.keys(gidsToFetch);
