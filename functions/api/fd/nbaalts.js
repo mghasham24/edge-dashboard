@@ -40,15 +40,17 @@ export async function onRequestGet(context) {
   const now = Math.floor(Date.now() / 1000);
   const cacheKey = 'fd_nba_alts';
 
-  // Try cache first
-  try {
-    const cached = await env.DB.prepare(
-      'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
-    ).bind(cacheKey).first();
-    if (cached && (now - cached.fetched_at) < CACHE_TTL) {
-      return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
-    }
-  } catch(e) {}
+  // Try cache first (skip in debug mode)
+  if (!debug) {
+    try {
+      const cached = await env.DB.prepare(
+        'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
+      ).bind(cacheKey).first();
+      if (cached && (now - cached.fetched_at) < CACHE_TTL) {
+        return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
+      }
+    } catch(e) {}
+  }
 
   const headers = {
     'Accept': 'application/json',
