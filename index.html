@@ -7133,7 +7133,7 @@
 
         // Single call to FD native API — returns all NBA games' alt lines at once
         try {
-            var res = await fetch('/api/fd/nba-alts', { credentials: 'same-origin' });
+            var res = await fetch('/api/fd/nbaalts', { credentials: 'same-origin' });
             var data = await res.json();
             if (!data.ok || !data.games) return;
 
