@@ -6672,8 +6672,8 @@
                 var today = now.toDateString();
                 if (gameDate !== today) return false;
             }
-            // MLB: hide all rows once game has been going for 3+ hours (game is over)
-            if (currentSport === 'baseball_mlb' && r.cm && (now - r.cm) > 3 * 60 * 60 * 1000) return false;
+            // MLB: hide all rows once game has been going for 5+ hours (game is over)
+            if (currentSport === 'baseball_mlb' && r.cm && (now - r.cm) > 5 * 60 * 60 * 1000) return false;
             // RFI: hide once game has started — market resolves in 1st inning
             if (r.mkt === 'RFI' && r.cm && r.cm <= now) return false;
             if (r.mkt === 'Spread' || r.mkt === 'Total') {
@@ -7140,7 +7140,8 @@
                             if (k.endsWith('__lines') || k.endsWith('__gid')) return false;
                             var p = k.split(' @ ');
                             if (p.length !== 2) return false;
-                            var ka = p[0].toLowerCase(), kh = p[1].toLowerCase();
+                            // Resolve Real Sports nicknames/abbreviations (e.g. "D-backs" → "Arizona Diamondbacks")
+                            var ka = resolveTeamName(p[0].trim()).toLowerCase(), kh = resolveTeamName(p[1].trim()).toLowerCase();
                             var awayOk = ka.split(' ').some(function(w) { return w.length > 2 && fdAway.indexOf(w) !== -1; })
                                       || fdAway.split(' ').some(function(w) { return w.length > 2 && ka.indexOf(w) !== -1; });
                             var homeOk = kh.split(' ').some(function(w) { return w.length > 2 && fdHome.indexOf(w) !== -1; })
