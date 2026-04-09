@@ -84,18 +84,36 @@ export async function onRequestGet(context) {
     }
 
     if (debug) {
-      // Return raw info without fetching event-pages
-      const pricesTestRes = await fetch(FD_PRICES_URL, {
-        method: 'POST',
-        headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ marketIds: [] })
-      });
+      // Test full flow on first game only
+      const testEvent = todayEvents[0];
+      const testTeams = parseEventName(testEvent.name);
+      const evRes = await fetch(FD_EVENT_URL(testEvent.eventId), { headers });
+      const evStatus = evRes.status;
+      const evData = evRes.ok ? await evRes.json() : null;
+      const markets = evData?.attachments?.markets || {};
+      const runners = evData?.attachments?.runners || {};
+
+      const marketList = Object.entries(markets).map(([id, m]) => ({ id, type: m.marketType, name: m.marketName }));
+      const targetMarkets = Object.entries(markets).filter(([, m]) => [SPREAD_TYPE, ML_TYPE, TOTAL_TYPE].includes(m.marketType));
+      const targetIds = targetMarkets.map(([id]) => id);
+
+      let pricesStatus = null, pricesBody = null;
+      if (targetIds.length) {
+        const pr = await fetch(FD_PRICES_URL, {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ marketIds: targetIds })
+        });
+        pricesStatus = pr.status;
+        pricesBody = pr.ok ? await pr.json() : await pr.text();
+      }
+
       return new Response(JSON.stringify({
-        ok: true,
-        debug: 'event list ok',
-        eventCount: todayEvents.length,
-        events: todayEvents.map(e => ({ id: e.eventId, name: e.name, openDate: e.openDate })),
-        pricesEndpointStatus: pricesTestRes.status
+        ok: true, debug: 'full flow test', game: testEvent.name,
+        evStatus, marketCount: marketList.length,
+        markets: marketList,
+        targetIds,
+        pricesStatus, pricesBody
       }), { headers: { 'Content-Type': 'application/json' } });
     }
 
