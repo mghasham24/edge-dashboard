@@ -77,27 +77,16 @@ export async function onRequestGet(context) {
       });
     }
 
-    // debug=tabs: try multiple tab values on first game and return market counts
+    // debug=tabs: inspect layout structure to find alternate market IDs
     if (debugTabs) {
       const event = todayEvents[0];
-      const tabsToTry = [null, 'all', 'game', 'spreads', 'totals', 'alternates', 'alternate-lines', 'alt-lines', 'player-props', 'same-game-parlay', 'featured'];
-      const results = {};
-      for (const tab of tabsToTry) {
-        try {
-          const res = await fetch(FD_EVENT_URL(event.eventId, tab), { headers });
-          if (!res.ok) { results[tab || 'no-tab'] = { error: res.status }; continue; }
-          const data = await res.json();
-          const mkts = data?.attachments?.markets || {};
-          results[tab || 'no-tab'] = {
-            marketCount: Object.keys(mkts).length,
-            markets: Object.values(mkts).map(m => m.marketType + ' / ' + m.marketName)
-          };
-        } catch(e) {
-          results[tab || 'no-tab'] = { error: e.message };
-        }
-        await new Promise(r => setTimeout(r, 200));
-      }
-      return new Response(JSON.stringify({ ok: true, game: event.name, tabResults: results }), {
+      const res = await fetch(FD_EVENT_URL(event.eventId, 'all'), { headers });
+      if (!res.ok) return fail(res.status, 'event-page failed');
+      const data = await res.json();
+      const layout = data?.layout || {};
+      // Walk layout to find any references to market IDs / market groups
+      const layoutSample = JSON.stringify(layout).slice(0, 5000);
+      return new Response(JSON.stringify({ ok: true, game: event.name, layoutSample }), {
         headers: { 'Content-Type': 'application/json' }
       });
     }
