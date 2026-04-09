@@ -7557,7 +7557,32 @@
             var res = await fetch('/api/fd/mlb', { credentials: 'same-origin' });
             var data = await res.json();
             if (!data.ok || !data.games) return;
-            nativeMlUpdate(rawRows, data.games);
+            // Check if any games in the API response are missing from rawRows
+            var existingGames = {};
+            rawRows.forEach(function(r) { existingGames[r.game] = true; });
+            var hasNewGames = Object.keys(data.games).some(function(g) { return !existingGames[g]; });
+            if (hasNewGames) {
+                // Rebuild rawRows from scratch to pick up new games, preserving RFI rows
+                var rfiRows = rawRows.filter(function(r) { return r.mkt === 'RFI'; });
+                var newRows = [];
+                Object.entries(data.games).forEach(function([gameKey, game]) {
+                    var away = game.away, home = game.home;
+                    var cm = game.cm ? new Date(game.cm) : null;
+                    var gid = String(game.id);
+                    var pid = gid + '-h2h';
+                    [[away, 'A'], [home, 'B']].forEach(function(pair) {
+                        var teamName = pair[0], ps = pair[1];
+                        var price = game.ml[teamName];
+                        if (price == null) return;
+                        newRows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'ML', side: teamName, am: price, pt: null, pid: pid, ps: ps, gid: gid });
+                    });
+                });
+                rawRows = newRows.concat(rfiRows);
+                rawRowsBySport[currentSport] = rawRows;
+                fetchRealMarkets(currentSport, true).then(function() { fetchKalshiRFI(); });
+            } else {
+                nativeMlUpdate(rawRows, data.games);
+            }
             renderTable();
         } catch(e) {}
     }
