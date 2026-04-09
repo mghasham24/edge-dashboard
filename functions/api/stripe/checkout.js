@@ -59,7 +59,7 @@ export async function onRequestPost({ request, env }) {
   }
 
   const checkout = await stripePost('checkout/sessions', checkoutParams, env.STRIPE_SECRET_KEY);
-  if (checkout.error) return fail(500, 'Failed to create checkout session');
+  if (checkout.error) return fail(500, 'Failed to create checkout session: ' + (checkout.error.message || JSON.stringify(checkout.error)));
 
   return new Response(JSON.stringify({ ok: true, url: checkout.url, trial: trialEligible }), {
     headers: { 'Content-Type': 'application/json' }
