@@ -4447,6 +4447,8 @@
         // Only show rows with a prediction AND positive EV
         var positive = [];
         rows.forEach(function(r) {
+            // RFI rows store fair in rfiFair — normalise to af
+            if (r.mkt === 'RFI' && r.rfiFair != null) r.af = r.rfiFair;
             if (r.af == null) return;
             r._pred = null; r._rake = 0.034; r._ev = null;
             var pr = preds[r.id];
