@@ -95,7 +95,7 @@ export async function onRequestGet(context) {
         const markets = evData?.attachments?.markets || {};
         const runners = evData?.attachments?.runners || {};
         const gameKey = teams.away + ' @ ' + teams.home;
-        const entry = { runnerNames: {} };
+        const entry = { eventId: event.eventId, openDate: event.openDate, away: teams.away, home: teams.home, runnerNames: {} };
 
         Object.entries(markets).forEach(function([marketId, mkt]) {
           const mktType = mkt.marketType || '';
@@ -156,7 +156,7 @@ export async function onRequestGet(context) {
       if (!mapping || mp.marketStatus !== 'OPEN') return;
       const { gameKey, type } = mapping;
       const entry = gameData[gameKey];
-      if (!gamesMap[gameKey]) gamesMap[gameKey] = { spreads: {}, totals: {}, ml: {} };
+      if (!gamesMap[gameKey]) gamesMap[gameKey] = { id: entry.eventId, away: entry.away, home: entry.home, cm: entry.openDate, spreads: {}, totals: {}, ml: {} };
       const game = gamesMap[gameKey];
 
       (mp.runnerDetails || []).forEach(function(rd) {
