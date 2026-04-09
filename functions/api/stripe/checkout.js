@@ -34,6 +34,24 @@ export async function onRequestPost({ request, env }) {
       .bind(customerId, session.id).run();
   }
 
+  // Block if customer already has an active or trialing subscription
+  if (customerId) {
+    const subList = await stripeGet(
+      'subscriptions?customer=' + customerId + '&status=active&limit=1',
+      env.STRIPE_SECRET_KEY
+    );
+    if (subList.data && subList.data.length > 0) {
+      return fail(400, 'Already has an active subscription');
+    }
+    const trialList = await stripeGet(
+      'subscriptions?customer=' + customerId + '&status=trialing&limit=1',
+      env.STRIPE_SECRET_KEY
+    );
+    if (trialList.data && trialList.data.length > 0) {
+      return fail(400, 'Already has an active trial');
+    }
+  }
+
   const trialEligible = !session.had_free_trial;
 
   // Build Checkout session params
@@ -66,7 +84,14 @@ export async function onRequestPost({ request, env }) {
   });
 }
 
-// ── Stripe API helper ─────────────────────────────────
+// ── Stripe API helpers ────────────────────────────────
+async function stripeGet(endpoint, secretKey) {
+  const res = await fetch('https://api.stripe.com/v1/' + endpoint, {
+    headers: { 'Authorization': 'Bearer ' + secretKey }
+  });
+  return res.json();
+}
+
 async function stripePost(endpoint, params, secretKey) {
   const body = Object.entries(flattenParams(params))
     .map(([k, v]) => encodeURIComponent(k) + '=' + encodeURIComponent(v))

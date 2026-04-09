@@ -1,11 +1,18 @@
 // functions/api/fd/nbaalts.js
-// Fetches FanDuel live alternate spread + total lines for NBA games
-// directly from FanDuel's native API — same approach as fd/rfi.js
+// Fetches FanDuel real-time NBA spread, ML, and total odds via FD's native API
+// Step 1: Get today's NBA event IDs from content-managed-page
+// Step 2: Fetch event-page per game to collect market IDs and runner name mappings
+// Step 3: Batch POST to getMarketPrices for real-time prices
 
-const FD_AK       = 'FhMFpcPWXMeyZxOx';
-const FD_LIST_URL = `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=CUSTOM&customPageId=nba&_ak=${FD_AK}&timezone=America/New_York`;
-const FD_EVENT_URL = (id, tab) => `https://sbapi.nj.sportsbook.fanduel.com/api/event-page?_ak=${FD_AK}&eventId=${id}${tab ? '&tab=' + tab : ''}&timezone=America/New_York`;
+const FD_AK        = 'FhMFpcPWXMeyZxOx';
+const FD_LIST_URL  = `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=CUSTOM&customPageId=nba&_ak=${FD_AK}&timezone=America/New_York`;
+const FD_EVENT_URL = (id) => `https://sbapi.nj.sportsbook.fanduel.com/api/event-page?_ak=${FD_AK}&eventId=${id}&tab=all&timezone=America/New_York`;
+const FD_PRICES_URL = 'https://smp.nj.sportsbook.fanduel.com/api/sports/fixedodds/readonly/v1/getMarketPrices?priceHistory=0';
 const CACHE_TTL = 30;
+
+const SPREAD_TYPE = 'MATCH_HANDICAP_(2-WAY)';
+const ML_TYPE     = 'MONEY_LINE';
+const TOTAL_TYPE  = 'TOTAL_POINTS_(OVER/UNDER)';
 
 async function getSession(request, db) {
   const c = request.headers.get('Cookie') || '';
@@ -33,25 +40,19 @@ export async function onRequestGet(context) {
   const { request, env } = context;
   const session = await getSession(request, env.DB);
   if (!session) return fail(401, 'Not authenticated');
-  const urlObj = new URL(request.url);
-  const debug = urlObj.searchParams.get('debug') === '1';
-  // debug=tabs tries multiple tab values on the first game to find which has alt markets
-  const debugTabs = urlObj.searchParams.get('debug') === 'tabs';
 
   const now = Math.floor(Date.now() / 1000);
   const cacheKey = 'fd_nba_alts';
 
-  // Try cache first (skip in debug mode)
-  if (!debug && !debugTabs) {
-    try {
-      const cached = await env.DB.prepare(
-        'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
-      ).bind(cacheKey).first();
-      if (cached && (now - cached.fetched_at) < CACHE_TTL) {
-        return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
-      }
-    } catch(e) {}
-  }
+  // Try cache first
+  try {
+    const cached = await env.DB.prepare(
+      'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
+    ).bind(cacheKey).first();
+    if (cached && (now - cached.fetched_at) < CACHE_TTL) {
+      return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
+    }
+  } catch(e) {}
 
   const headers = {
     'Accept': 'application/json',
@@ -59,6 +60,7 @@ export async function onRequestGet(context) {
   };
 
   try {
+    // Step 1: Get today's NBA events
     const listRes = await fetch(FD_LIST_URL, { headers });
     if (!listRes.ok) return fail(listRes.status, 'FD NBA list fetch failed');
     const listData = await listRes.json();
@@ -77,99 +79,107 @@ export async function onRequestGet(context) {
       });
     }
 
-    // debug=tabs: try api.sportsbook.fanduel.com event-page (different domain)
-    if (debugTabs) {
-      const event = todayEvents[0];
-      const altUrl = `https://api.sportsbook.fanduel.com/api/event-page?_ak=${FD_AK}&eventId=${event.eventId}&tab=all&timezone=America/New_York`;
-      const res = await fetch(altUrl, { headers });
-      if (!res.ok) return fail(res.status, 'alt event-page failed: ' + res.status);
-      const data = await res.json();
-      const markets = data?.attachments?.markets || {};
-      const marketList = Object.values(markets).map(m => ({
-        id: m.marketId, type: m.marketType, name: m.marketName
-      }));
-      const attachKeys = Object.keys(data?.attachments || {});
-      return new Response(JSON.stringify({
-        ok: true, game: event.name,
-        attachKeys,
-        marketCount: marketList.length,
-        markets: marketList
-      }), { headers: { 'Content-Type': 'application/json' } });
-    }
-
-    const gamesMap = {};
-    const debugInfo = {};
+    // Step 2: Fetch event-pages to collect market IDs and runner name mappings
+    const gameData = {}; // gameKey → { spreadId, mlId, totalId, runnerNames: {selId: name} }
 
     for (let i = 0; i < todayEvents.length; i++) {
       const event = todayEvents[i];
       const teams = parseEventName(event.name);
       if (!teams) continue;
 
-      const gameKey = teams.away + ' @ ' + teams.home;
-      const altData = { spreads: {}, totals: {} };
-
       try {
-        const evRes = await fetch(FD_EVENT_URL(event.eventId, 'all'), { headers });
+        const evRes = await fetch(FD_EVENT_URL(event.eventId), { headers });
         if (!evRes.ok) continue;
         const evData = await evRes.json();
 
         const markets = evData?.attachments?.markets || {};
         const runners = evData?.attachments?.runners || {};
+        const gameKey = teams.away + ' @ ' + teams.home;
+        const entry = { runnerNames: {} };
 
-        if (debug) {
-          debugInfo[gameKey] = Object.values(markets).map(function(mkt) {
-            return { marketType: mkt.marketType, marketName: mkt.marketName };
-          });
-        }
+        Object.entries(markets).forEach(function([marketId, mkt]) {
+          const mktType = mkt.marketType || '';
+          if (mktType === SPREAD_TYPE)      entry.spreadId = marketId;
+          else if (mktType === ML_TYPE)     entry.mlId     = marketId;
+          else if (mktType === TOTAL_TYPE)  entry.totalId  = marketId;
+          else return;
 
-        Object.values(markets).forEach(function(mkt) {
-          const mktName = (mkt.marketName || '').toLowerCase();
-          const mktType = (mkt.marketType || '').toLowerCase();
-          const isAltSpread = mktName.includes('alternate spread') || mktName.includes('alt spread')
-            || mktType.includes('alternate_handicap') || mktType.includes('alt_handicap')
-            || mktType.includes('alternatehandicap') || mktType.includes('alternative_handicap');
-          const isAltTotal  = mktName.includes('alternate total') || mktName.includes('alt total')
-            || mktType.includes('alternate_total') || mktType.includes('alt_total')
-            || mktType.includes('alternatetotal') || mktType.includes('alternative_total');
-
-          if (!isAltSpread && !isAltTotal) return;
-
-          const mktRunners = (mkt.runners || []).map(function(rRef) {
-            return rRef.selectionId ? (runners[rRef.selectionId] || rRef) : rRef;
-          });
-
-          mktRunners.forEach(function(runner) {
-            if (runner.runnerStatus !== 'ACTIVE') return;
-            const price = runner.winRunnerOdds?.americanDisplayOdds?.americanOddsInt;
-            if (price == null) return;
-            const name  = runner.runnerName || '';
-            const handicap = runner.handicap;
-
-            if (isAltSpread && handicap != null) {
-              if (!altData.spreads[name]) altData.spreads[name] = {};
-              altData.spreads[name][handicap] = price;
-            }
-
-            if (isAltTotal && handicap != null) {
-              const side = name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
-              if (side === 'Over' || side === 'Under') {
-                if (!altData.totals[side]) altData.totals[side] = {};
-                altData.totals[side][handicap] = price;
-              }
-            }
+          // Map selectionId → runnerName for price-to-name lookup later
+          (mkt.runners || []).forEach(function(ref) {
+            const sid = ref.selectionId;
+            if (sid == null) return;
+            const runner = runners[sid] || runners[String(sid)];
+            if (runner && runner.runnerName) entry.runnerNames[sid] = runner.runnerName;
           });
         });
+
+        if (entry.spreadId || entry.mlId || entry.totalId) {
+          gameData[gameKey] = entry;
+        }
       } catch(e) {}
 
-      gamesMap[gameKey] = altData;
       if (i < todayEvents.length - 1) await new Promise(r => setTimeout(r, 150));
     }
 
-    if (debug) {
-      return new Response(JSON.stringify({ ok: true, debug: debugInfo }), {
+    // Step 3: Batch all market IDs into one getMarketPrices request
+    const allMarketIds = [];
+    const marketToGame = {}; // marketId → { gameKey, type }
+
+    Object.entries(gameData).forEach(function([gameKey, entry]) {
+      if (entry.spreadId) { allMarketIds.push(entry.spreadId); marketToGame[entry.spreadId] = { gameKey, type: 'spread' }; }
+      if (entry.mlId)     { allMarketIds.push(entry.mlId);     marketToGame[entry.mlId]     = { gameKey, type: 'ml' }; }
+      if (entry.totalId)  { allMarketIds.push(entry.totalId);  marketToGame[entry.totalId]  = { gameKey, type: 'total' }; }
+    });
+
+    if (!allMarketIds.length) {
+      return new Response(JSON.stringify({ ok: true, games: {} }), {
         headers: { 'Content-Type': 'application/json' }
       });
     }
+
+    const pricesRes = await fetch(FD_PRICES_URL, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ marketIds: allMarketIds })
+    });
+
+    if (!pricesRes.ok) return fail(pricesRes.status, 'getMarketPrices failed');
+    const pricesRaw = await pricesRes.json();
+    const marketPricesList = Array.isArray(pricesRaw) ? pricesRaw : (pricesRaw.marketPrices || []);
+
+    // Step 4: Map prices back to games in altOdds-compatible format
+    // { spreads: { teamName: { handicap: price } }, totals: { Over: { line: price }, Under: { line: price } }, ml: { teamName: price } }
+    const gamesMap = {};
+
+    marketPricesList.forEach(function(mp) {
+      const mapping = marketToGame[mp.marketId];
+      if (!mapping || mp.marketStatus !== 'OPEN') return;
+      const { gameKey, type } = mapping;
+      const entry = gameData[gameKey];
+      if (!gamesMap[gameKey]) gamesMap[gameKey] = { spreads: {}, totals: {}, ml: {} };
+      const game = gamesMap[gameKey];
+
+      (mp.runnerDetails || []).forEach(function(rd) {
+        if (rd.runnerStatus !== 'ACTIVE') return;
+        const price = rd.winRunnerOdds?.americanDisplayOdds?.americanOddsInt;
+        if (price == null) return;
+        const name = entry.runnerNames[rd.selectionId] || entry.runnerNames[String(rd.selectionId)] || '';
+        const handicap = rd.handicap;
+
+        if (type === 'spread' && name && handicap != null) {
+          if (!game.spreads[name]) game.spreads[name] = {};
+          game.spreads[name][handicap] = price;
+        } else if (type === 'total' && name && handicap != null) {
+          const side = name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
+          if (side === 'Over' || side === 'Under') {
+            if (!game.totals[side]) game.totals[side] = {};
+            game.totals[side][handicap] = price;
+          }
+        } else if (type === 'ml' && name) {
+          game.ml[name] = price;
+        }
+      });
+    });
 
     const body = JSON.stringify({ ok: true, games: gamesMap });
     try {
