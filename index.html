@@ -6666,12 +6666,11 @@
         cacheEvRows(rows, currentSport);
         var now = new Date();
         var filtered = rows.filter(function(r) {
-            // MLB: show only games within a rolling window — started <5h ago or starting <10h from now
-            // (avoids timezone-based date mismatch for late games that cross UTC midnight)
+            // MLB: hide games started >5h ago (over) or starting >30h from now (not today or tonight)
             if (currentSport === 'baseball_mlb' && r.cm) {
                 var diff = r.cm - now;
-                if (diff > 10 * 60 * 60 * 1000) return false;  // starts more than 10h from now
                 if (diff < -5 * 60 * 60 * 1000) return false;   // started more than 5h ago
+                if (diff > 30 * 60 * 60 * 1000) return false;    // more than 30h away
             }
             // RFI: hide once game has started — market resolves in 1st inning
             if (r.mkt === 'RFI' && r.cm && r.cm <= now) return false;
