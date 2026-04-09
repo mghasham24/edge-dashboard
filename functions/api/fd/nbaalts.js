@@ -41,11 +41,14 @@ export async function onRequestGet(context) {
   const session = await getSession(request, env.DB);
   if (!session) return fail(401, 'Not authenticated');
 
+  const urlObj = new URL(request.url);
+  const debug = urlObj.searchParams.get('debug') === '1';
+
   const now = Math.floor(Date.now() / 1000);
   const cacheKey = 'fd_nba_alts';
 
-  // Try cache first
-  try {
+  // Try cache first (skip in debug)
+  if (!debug) try {
     const cached = await env.DB.prepare(
       'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
     ).bind(cacheKey).first();
@@ -70,13 +73,30 @@ export async function onRequestGet(context) {
     const todayEvents = Object.values(events).filter(e => {
       if (!e.openDate) return false;
       const t = new Date(e.openDate).getTime();
-      return t >= nowMs - 4 * 60 * 60 * 1000 && t <= nowMs + 12 * 60 * 60 * 1000;
+      return t >= nowMs - 4 * 60 * 60 * 1000 && t <= nowMs + 36 * 60 * 60 * 1000;
     });
 
     if (!todayEvents.length) {
+      if (debug) return new Response(JSON.stringify({ ok: true, debug: 'no events in window', eventCount: Object.keys(events).length, allDates: Object.values(events).slice(0,5).map(e => e.openDate) }), { headers: { 'Content-Type': 'application/json' } });
       return new Response(JSON.stringify({ ok: true, games: {} }), {
         headers: { 'Content-Type': 'application/json' }
       });
+    }
+
+    if (debug) {
+      // Return raw info without fetching event-pages
+      const pricesTestRes = await fetch(FD_PRICES_URL, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ marketIds: [] })
+      });
+      return new Response(JSON.stringify({
+        ok: true,
+        debug: 'event list ok',
+        eventCount: todayEvents.length,
+        events: todayEvents.map(e => ({ id: e.eventId, name: e.name, openDate: e.openDate })),
+        pricesEndpointStatus: pricesTestRes.status
+      }), { headers: { 'Content-Type': 'application/json' } });
     }
 
     // Step 2: Fetch event-pages to collect market IDs and runner name mappings
