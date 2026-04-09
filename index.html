@@ -2803,6 +2803,7 @@
     var yourLines = {};
     var altOdds = {}; // gameId -> { spreads: {teamName: {point: price}}, totals: {side: {point: price}} }
     var nbaPoller = null;
+    var mlbPoller = null;
     var betTaken = JSON.parse(localStorage.getItem('raxedge_bets_taken') || '{}');
     var portfolioConnected = false;
     var portHistoryAll    = [];   // accumulated all settled history items
@@ -6147,8 +6148,75 @@
             return;
         }
 
-        // Stop NBA poller when switching to another sport
+        // Stop NBA/MLB pollers when switching sports
         if (nbaPoller) { clearInterval(nbaPoller); nbaPoller = null; }
+        if (mlbPoller) { clearInterval(mlbPoller); mlbPoller = null; }
+
+        // MLB: use FD native API for ML — no Odds API credits
+        if (currentSport === 'baseball_mlb') {
+            altOdds = {};
+            fetch('/api/fd/mlb', { credentials: 'same-origin' })
+            .then(function(r) {
+                if (r.status === 401) {
+                    dot.className = 'sdot error';
+                    stxt.textContent = 'Session expired — please log in again.';
+                    btn.disabled = false;
+                    setTimeout(function() { location.reload(); }, 2000);
+                    return Promise.reject('unauth');
+                }
+                return r.json();
+            })
+            .then(function(data) {
+                if (!data.ok || !data.games) {
+                    rawRows = []; rsGameIds = {};
+                    dot.className = 'sdot error';
+                    stxt.textContent = 'No MLB games right now';
+                    return;
+                }
+                var rows = [];
+                Object.entries(data.games).forEach(function([gameKey, game]) {
+                    var away = game.away, home = game.home;
+                    var cm = game.cm ? new Date(game.cm) : null;
+                    var gid = String(game.id);
+                    var pid = gid + '-h2h';
+                    [[away, 'A'], [home, 'B']].forEach(function(pair) {
+                        var teamName = pair[0], ps = pair[1];
+                        var price = game.ml[teamName];
+                        if (price == null) return;
+                        rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'ML', side: teamName, am: price, pt: null, pid: pid, ps: ps, gid: gid });
+                    });
+                });
+                rawRows = rows;
+                rawRowsBySport[currentSport] = rawRows;
+                var nowStr = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+                if (rawRows.length) {
+                    dot.className = 'sdot live';
+                    stxt.textContent = 'Updated ' + nowStr + ' - ' + Object.keys(data.games).length + ' games - FanDuel';
+                } else {
+                    dot.className = 'sdot error';
+                    stxt.textContent = 'No MLB games right now';
+                }
+            })
+            .catch(function(e) {
+                if (e === 'unauth') return;
+                rawRows = []; rsGameIds = {};
+                dot.className = 'sdot error';
+                stxt.textContent = 'Error fetching MLB data';
+            })
+            .then(function() {
+                btn.disabled = false;
+                renderTable();
+                if (rawRows.length > 0) {
+                    fetchRealMarkets(currentSport).then(function() { fetchKalshiRFI(); });
+                    if (mlbPoller) clearInterval(mlbPoller);
+                    mlbPoller = setInterval(function() {
+                        if (currentSport !== 'baseball_mlb') { clearInterval(mlbPoller); mlbPoller = null; return; }
+                        fetchMLBNativeUpdate();
+                    }, 5000);
+                }
+            });
+            return;
+        }
 
         var sel = document.getElementById('mkt-filter').value;
         var noSpread = ['mma_mixed_martial_arts', 'baseball_mlb', 'icehockey_nhl'];
@@ -7275,6 +7343,35 @@
                 }
             });
 
+            renderTable();
+        } catch(e) {}
+    }
+
+    async function fetchMLBNativeUpdate() {
+        if (currentSport !== 'baseball_mlb') return;
+        try {
+            var res = await fetch('/api/fd/mlb', { credentials: 'same-origin' });
+            var data = await res.json();
+            if (!data.ok || !data.games) return;
+            rawRows.forEach(function(r) {
+                if (r.mkt !== 'ML') return;
+                var game = data.games[r.game];
+                if (!game) {
+                    var fdTeams = r.game.split(' @ ');
+                    var fdAwayLast = (fdTeams[0] || '').trim().split(' ').pop().toLowerCase();
+                    var fdHomeLast = (fdTeams[1] || '').trim().split(' ').pop().toLowerCase();
+                    var matchedKey = Object.keys(data.games).find(function(k) {
+                        var kTeams = k.split(' @ ');
+                        var kAwayLast = (kTeams[0] || '').trim().split(' ').pop().toLowerCase();
+                        var kHomeLast = (kTeams[1] || '').trim().split(' ').pop().toLowerCase();
+                        return kAwayLast === fdAwayLast && kHomeLast === fdHomeLast;
+                    });
+                    if (matchedKey) game = data.games[matchedKey];
+                }
+                if (!game) return;
+                var price = game.ml && game.ml[r.side];
+                if (price != null) r.am = price;
+            });
             renderTable();
         } catch(e) {}
     }
