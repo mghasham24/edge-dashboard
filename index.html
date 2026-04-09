@@ -4709,6 +4709,55 @@
         var noSpread = ['mma_mixed_martial_arts', 'baseball_mlb', 'icehockey_nhl'];
         await Promise.all(sportsToLoad.map(async function(s) {
             try {
+                if (s.key === 'baseball_mlb') {
+                    // MLB uses FD native — fetch ML + RFI in parallel
+                    var [mlbRes, rfiRes] = await Promise.all([
+                        fetch('/api/fd/mlb', { credentials: 'same-origin' }),
+                        fetch('/api/fd/rfi', { credentials: 'same-origin' })
+                    ]);
+                    var mlbData = mlbRes.ok ? await mlbRes.json() : null;
+                    var rfiData = rfiRes.ok ? await rfiRes.json() : null;
+                    if (!mlbData || !mlbData.ok || !mlbData.games) return;
+                    var rows = [];
+                    Object.entries(mlbData.games).forEach(function([gameKey, game]) {
+                        var away = game.away, home = game.home;
+                        var cm = game.cm ? new Date(game.cm) : null;
+                        var gid = String(game.id);
+                        var pid = gid + '-h2h';
+                        [[away, 'A'], [home, 'B']].forEach(function(pair) {
+                            var teamName = pair[0], ps = pair[1];
+                            var price = game.ml[teamName];
+                            if (price == null) return;
+                            rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'ML', side: teamName, am: price, pt: null, pid: pid, ps: ps, gid: gid });
+                        });
+                        // Add RFI rows if available
+                        if (rfiData && rfiData.ok && rfiData.rfi) {
+                            var rfi = rfiData.rfi[gameKey];
+                            if (!rfi) {
+                                // fuzzy match
+                                var fdTeams = gameKey.split(' @ ');
+                                var fdAway = (fdTeams[0] || '').toLowerCase();
+                                var fdHome = (fdTeams[1] || '').toLowerCase();
+                                var matchKey = Object.keys(rfiData.rfi).find(function(k) {
+                                    var p = k.split(' @ ');
+                                    if (p.length !== 2) return false;
+                                    var ka = p[0].toLowerCase(), kh = p[1].toLowerCase();
+                                    return ka.split(' ').some(function(w) { return w.length > 2 && fdAway.indexOf(w) !== -1; })
+                                        && kh.split(' ').some(function(w) { return w.length > 2 && fdHome.indexOf(w) !== -1; });
+                                });
+                                if (matchKey) rfi = rfiData.rfi[matchKey];
+                            }
+                            if (rfi) {
+                                var today = new Date(); var dateStr = today.getFullYear() + '' + (today.getMonth()+1) + '' + today.getDate();
+                                var rpid = 'rfi-' + gameKey.replace(/[^a-z0-9]/gi, '') + '-' + dateStr;
+                                rows.push({ id: rpid + '-A', game: gameKey, cm: cm, mkt: 'RFI', side: 'Yes (YRFI)', am: rfi.yesAm, pt: null, pid: rpid, ps: 'A', gid: gid, rfiFair: rfi.yesFair });
+                                rows.push({ id: rpid + '-B', game: gameKey, cm: cm, mkt: 'RFI', side: 'No (NRFI)',  am: rfi.noAm,  pt: null, pid: rpid, ps: 'B', gid: gid, rfiFair: rfi.noFair });
+                            }
+                        }
+                    });
+                    rawRowsBySport[s.key] = rows;
+                    return;
+                }
                 var mkts = noSpread.indexOf(s.key) !== -1 ? 'h2h' : 'h2h,spreads,totals';
                 var resp = await fetch('/api/odds?sport=' + s.key + '&markets=' + mkts + '&bookmakers=fanduel');
                 if (!resp.ok) return;
@@ -4737,8 +4786,8 @@
                         var p = pairs3[r.pid] || {};
                         var nv = novig(p.A ? imp(p.A.am) : null, p.B ? imp(p.B.am) : null);
                         var yl = yourLines[r.id] != null ? yourLines[r.id] : null;
-                        var fair = r.ps === 'A' ? nv.fa : nv.fb;
-                        var af = adjFair(fair, r.pt, yl, r.mkt, r.ps);
+                        var fair = (r.mkt === 'RFI' && r.rfiFair != null) ? r.rfiFair : (r.ps === 'A' ? nv.fa : nv.fb);
+                        var af = (r.mkt === 'RFI' && r.rfiFair != null) ? r.rfiFair : adjFair(fair, r.pt, yl, r.mkt, r.ps);
                         var pr = preds[r.id];
                         var pred = (pr !== undefined && pr !== '') ? parseFloat(pr) / 100 : null;
                         var evForUnits = null;
