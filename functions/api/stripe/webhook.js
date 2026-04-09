@@ -82,15 +82,25 @@ export async function onRequestPost({ request, env }) {
     }
 
     case 'checkout.session.completed': {
-      if (obj.mode === 'subscription') {
-        const isTrial = obj.payment_status === 'no_payment_required';
-        const isPaid  = obj.payment_status === 'paid';
+      if (obj.mode === 'subscription' && obj.subscription) {
+        // Fetch the subscription to determine if this is a trial or immediate payment
+        let subData = null;
+        try {
+          const subRes = await fetch('https://api.stripe.com/v1/subscriptions/' + obj.subscription, {
+            headers: { 'Authorization': 'Bearer ' + env.STRIPE_SECRET_KEY }
+          });
+          subData = await subRes.json();
+        } catch(e) {}
+
+        const subStatus = subData && subData.status;
+        const isTrial = subStatus === 'trialing';
+        const isPaid  = subStatus === 'active';
 
         if (isTrial) {
-          // Trial checkout — check card fingerprint for abuse via setup_intent
-          const abused = await checkFingerprintFromSetupIntent(obj.setup_intent, obj.customer, env);
+          // Get card fingerprint from subscription's default_payment_method
+          const pmId = subData.default_payment_method;
+          const abused = await checkFingerprintByPmId(pmId, obj.customer, env);
           if (abused) {
-            // Cancel subscription and drop back to free
             try {
               await fetch('https://api.stripe.com/v1/subscriptions/' + obj.subscription, {
                 method: 'DELETE',
@@ -105,19 +115,10 @@ export async function onRequestPost({ request, env }) {
 
         if (isPaid) {
           // Immediate paid subscription — set pro and reward referrer
-          let proExpiresAt = null;
-          try {
-            const subRes = await fetch('https://api.stripe.com/v1/subscriptions/' + obj.subscription, {
-              headers: { 'Authorization': 'Bearer ' + env.STRIPE_SECRET_KEY }
-            });
-            const subData = await subRes.json();
-            if (subData.current_period_end) proExpiresAt = subData.current_period_end;
-          } catch(e) {}
-
+          const proExpiresAt = subData && subData.current_period_end ? subData.current_period_end : null;
           await env.DB.prepare(
             'UPDATE users SET plan=\'pro\', stripe_sub_id=?, pro_expires_at=? WHERE stripe_customer_id=?'
           ).bind(obj.subscription, proExpiresAt, obj.customer).run();
-
           await rewardReferrerForCustomer(obj.customer, obj.metadata, env.DB);
         }
       }
@@ -136,32 +137,25 @@ export async function onRequestPost({ request, env }) {
 }
 
 // ── Card fingerprint abuse check ──────────────────────
-// Fetches the customer's saved card fingerprint from Stripe.
-// Tries multiple sources in order of reliability.
+// pmId: subscription's default_payment_method (set by Stripe after trial checkout)
 // Returns true if this card has already been used for a trial on a different account.
-async function checkFingerprintFromSetupIntent(setupIntentId, stripeCustomerId, env) {
+async function checkFingerprintByPmId(pmId, stripeCustomerId, env) {
   try {
-    const fingerprint = await getCardFingerprint(setupIntentId, stripeCustomerId, env.STRIPE_SECRET_KEY);
+    const fingerprint = await resolveFingerprint(pmId, stripeCustomerId, env.STRIPE_SECRET_KEY);
     if (!fingerprint) return false; // can't determine — allow through
 
-    // Look up user_id for this customer
     const user = await env.DB.prepare(
       'SELECT id FROM users WHERE stripe_customer_id=?'
     ).bind(stripeCustomerId).first();
     const userId = user ? user.id : 0;
 
-    // Check if fingerprint already used for a trial by a different user
     const existing = await env.DB.prepare(
       'SELECT user_id FROM trial_fingerprints WHERE fingerprint=?'
     ).bind(fingerprint).first();
 
-    if (existing && existing.user_id !== userId) {
-      // Same card, different account — abuse
-      return true;
-    }
+    if (existing && existing.user_id !== userId) return true; // abuse
 
     if (!existing) {
-      // First time — store it
       await env.DB.prepare(
         'INSERT OR IGNORE INTO trial_fingerprints (fingerprint, user_id, created_at) VALUES (?,?,?)'
       ).bind(fingerprint, userId, Math.floor(Date.now() / 1000)).run();
@@ -169,40 +163,32 @@ async function checkFingerprintFromSetupIntent(setupIntentId, stripeCustomerId, 
 
     return false;
   } catch(e) {
-    return false; // don't block on errors
+    return false;
   }
 }
 
-async function getCardFingerprint(setupIntentId, stripeCustomerId, secretKey) {
-  const authHeader = { 'Authorization': 'Bearer ' + secretKey };
+async function resolveFingerprint(pmId, stripeCustomerId, secretKey) {
+  const auth = { 'Authorization': 'Bearer ' + secretKey };
 
-  // Source 1: customer's payment methods list (most reliable post-checkout)
-  try {
-    const pmListRes = await fetch(
-      'https://api.stripe.com/v1/customers/' + stripeCustomerId + '/payment_methods?type=card&limit=1',
-      { headers: authHeader }
-    );
-    const pmList = await pmListRes.json();
-    const pm = pmList.data && pmList.data[0];
-    if (pm && pm.card && pm.card.fingerprint) return pm.card.fingerprint;
-  } catch(e) {}
-
-  // Source 2: setup_intent → payment_method
-  if (setupIntentId) {
+  // Source 1: direct payment method lookup (most reliable — subscription.default_payment_method)
+  if (pmId && typeof pmId === 'string') {
     try {
-      const siRes = await fetch('https://api.stripe.com/v1/setup_intents/' + setupIntentId, {
-        headers: authHeader
-      });
-      const si = await siRes.json();
-      if (si.payment_method) {
-        const pmRes = await fetch('https://api.stripe.com/v1/payment_methods/' + si.payment_method, {
-          headers: authHeader
-        });
-        const pm = await pmRes.json();
-        if (pm.card && pm.card.fingerprint) return pm.card.fingerprint;
-      }
+      const pmRes = await fetch('https://api.stripe.com/v1/payment_methods/' + pmId, { headers: auth });
+      const pm = await pmRes.json();
+      if (pm.card && pm.card.fingerprint) return pm.card.fingerprint;
     } catch(e) {}
   }
+
+  // Source 2: customer's payment methods list
+  try {
+    const listRes = await fetch(
+      'https://api.stripe.com/v1/customers/' + stripeCustomerId + '/payment_methods?type=card&limit=1',
+      { headers: auth }
+    );
+    const list = await listRes.json();
+    const pm = list.data && list.data[0];
+    if (pm && pm.card && pm.card.fingerprint) return pm.card.fingerprint;
+  } catch(e) {}
 
   return null;
 }
