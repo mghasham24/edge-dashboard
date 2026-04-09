@@ -2802,6 +2802,7 @@
     var vols = {}; // volume display per row id
     var yourLines = {};
     var altOdds = {}; // gameId -> { spreads: {teamName: {point: price}}, totals: {side: {point: price}} }
+    var nbaPoller = null;
     var betTaken = JSON.parse(localStorage.getItem('raxedge_bets_taken') || '{}');
     var portfolioConnected = false;
     var portHistoryAll    = [];   // accumulated all settled history items
@@ -6136,9 +6137,18 @@
                 btn.disabled = false;
                 renderTable();
                 if (rawRows.length > 0) fetchRealMarkets(currentSport);
+                // Start auto-poll to keep NBA odds live
+                if (nbaPoller) clearInterval(nbaPoller);
+                nbaPoller = setInterval(function() {
+                    if (currentSport !== 'basketball_nba') { clearInterval(nbaPoller); nbaPoller = null; return; }
+                    fetchAltLinesForNBA();
+                }, 5000);
             });
             return;
         }
+
+        // Stop NBA poller when switching to another sport
+        if (nbaPoller) { clearInterval(nbaPoller); nbaPoller = null; }
 
         var sel = document.getElementById('mkt-filter').value;
         var noSpread = ['mma_mixed_martial_arts', 'baseball_mlb', 'icehockey_nhl'];
