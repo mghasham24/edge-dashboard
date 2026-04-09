@@ -96,10 +96,17 @@ export async function onRequestGet(context) {
         const runners = evData?.attachments?.runners || {};
 
         if (debug) {
-          // Collect all unique marketType + marketName combos for inspection
-          debugInfo[gameKey] = Object.values(markets).map(function(mkt) {
-            return { marketType: mkt.marketType, marketName: mkt.marketName };
-          });
+          // Return full attachment keys + top-level event page keys + all market types
+          debugInfo[gameKey] = {
+            topLevelKeys: Object.keys(evData || {}),
+            attachmentKeys: Object.keys(evData?.attachments || {}),
+            eventKeys: Object.keys(evData?.attachments?.events || {}),
+            tabs: evData?.attachments?.eventTypes || evData?.tabs || evData?.eventType || null,
+            marketCount: Object.keys(markets).length,
+            markets: Object.values(markets).map(function(mkt) {
+              return { marketType: mkt.marketType, marketName: mkt.marketName };
+            })
+          };
         }
 
         Object.values(markets).forEach(function(mkt) {
