@@ -41,14 +41,11 @@ export async function onRequestGet(context) {
   const session = await getSession(request, env.DB);
   if (!session) return fail(401, 'Not authenticated');
 
-  const urlObj = new URL(request.url);
-  const debug = urlObj.searchParams.get('debug') === '1';
-
   const now = Math.floor(Date.now() / 1000);
   const cacheKey = 'fd_nba_alts';
 
-  // Try cache first (skip in debug)
-  if (!debug) try {
+  // Try cache first
+  try {
     const cached = await env.DB.prepare(
       'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
     ).bind(cacheKey).first();
@@ -77,51 +74,9 @@ export async function onRequestGet(context) {
     });
 
     if (!todayEvents.length) {
-      if (debug) return new Response(JSON.stringify({ ok: true, debug: 'no events in window', eventCount: Object.keys(events).length, allDates: Object.values(events).slice(0,5).map(e => e.openDate) }), { headers: { 'Content-Type': 'application/json' } });
       return new Response(JSON.stringify({ ok: true, games: {} }), {
         headers: { 'Content-Type': 'application/json' }
       });
-    }
-
-    if (debug) {
-      // Test full flow on first game only
-      const testEvent = todayEvents[0];
-      const testTeams = parseEventName(testEvent.name);
-      const evRes = await fetch(FD_EVENT_URL(testEvent.eventId), { headers });
-      const evStatus = evRes.status;
-      const evData = evRes.ok ? await evRes.json() : null;
-      const markets = evData?.attachments?.markets || {};
-      const runners = evData?.attachments?.runners || {};
-
-      const marketList = Object.entries(markets).map(([id, m]) => ({ id, type: m.marketType, name: m.marketName }));
-      const targetMarkets = Object.entries(markets).filter(([, m]) => [SPREAD_TYPE, ML_TYPE, TOTAL_TYPE].includes(m.marketType));
-      const targetIds = targetMarkets.map(([id]) => id);
-
-      // Show runner structure for first target market
-      const firstTargetRunners = targetMarkets.length ? (targetMarkets[0][1].runners || []).slice(0, 2) : [];
-      const attachRunnerSample = Object.entries(runners).slice(0, 3).map(([k, v]) => ({ key: k, name: v.runnerName }));
-
-      let pricesStatus = null, pricesBody = null;
-      if (targetIds.length) {
-        const pr = await fetch(FD_PRICES_URL, {
-          method: 'POST',
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ marketIds: targetIds })
-        });
-        pricesStatus = pr.status;
-        pricesBody = pr.ok ? await pr.json() : await pr.text();
-      }
-
-      return new Response(JSON.stringify({
-        ok: true, debug: 'full flow test', game: testEvent.name,
-        evStatus, marketCount: marketList.length,
-        markets: marketList,
-        targetIds,
-        firstTargetRunners,
-        attachRunnerSample,
-        attachRunnersCount: Object.keys(runners).length,
-        pricesStatus, pricesBody
-      }), { headers: { 'Content-Type': 'application/json' } });
     }
 
     // Step 2: Fetch event-pages to collect market IDs and runner name mappings
@@ -138,7 +93,6 @@ export async function onRequestGet(context) {
         const evData = await evRes.json();
 
         const markets = evData?.attachments?.markets || {};
-        const runners = evData?.attachments?.runners || {};
         const gameKey = teams.away + ' @ ' + teams.home;
         const entry = { eventId: event.eventId, openDate: event.openDate, away: teams.away, home: teams.home, runnerNames: {} };
 
@@ -149,12 +103,11 @@ export async function onRequestGet(context) {
           else if (mktType === TOTAL_TYPE)  entry.totalId  = marketId;
           else return;
 
-          // Map selectionId → runnerName for price-to-name lookup later
+          // Map selectionId → runnerName directly from embedded runner objects
           (mkt.runners || []).forEach(function(ref) {
-            const sid = ref.selectionId;
-            if (sid == null) return;
-            const runner = runners[sid] || runners[String(sid)];
-            if (runner && runner.runnerName) entry.runnerNames[sid] = runner.runnerName;
+            if (ref.selectionId != null && ref.runnerName) {
+              entry.runnerNames[ref.selectionId] = ref.runnerName;
+            }
           });
         });
 
