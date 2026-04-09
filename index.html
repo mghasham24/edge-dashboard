@@ -6666,12 +6666,8 @@
         cacheEvRows(rows, currentSport);
         var now = new Date();
         var filtered = rows.filter(function(r) {
-            // MLB: hide games started >5h ago (over) or starting >30h from now (not today or tonight)
-            if (currentSport === 'baseball_mlb' && r.cm) {
-                var diff = r.cm - now;
-                if (diff < -5 * 60 * 60 * 1000) return false;   // started more than 5h ago
-                if (diff > 30 * 60 * 60 * 1000) return false;    // more than 30h away
-            }
+            // MLB: backend already limits to -5h/+16h window; just hide games that have ended
+            if (currentSport === 'baseball_mlb' && r.cm && (now - r.cm) > 5 * 60 * 60 * 1000) return false;
             // RFI: hide once game has started — market resolves in 1st inning
             if (r.mkt === 'RFI' && r.cm && r.cm <= now) return false;
             if (r.mkt === 'Spread' || r.mkt === 'Total') {

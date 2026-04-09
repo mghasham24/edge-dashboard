@@ -94,7 +94,7 @@ export async function onRequestGet(context) {
     const todayEvents = Object.values(allEvents).filter(e => {
       if (!e.openDate) return false;
       const t = new Date(e.openDate).getTime();
-      return t >= nowMs - 5 * 60 * 60 * 1000 && t <= nowMs + 36 * 60 * 60 * 1000;
+      return t >= nowMs - 5 * 60 * 60 * 1000 && t <= nowMs + 16 * 60 * 60 * 1000;
     });
 
     if (!todayEvents.length) {
@@ -119,11 +119,7 @@ export async function onRequestGet(context) {
 
         const markets = evData?.attachments?.markets || {};
         const gameKey = teams.away + ' @ ' + teams.home;
-        // Prefer openDate from the event-page's event object (more accurate than the list page's openDate)
-        const evEvents = evData?.attachments?.events || {};
-        const evEvent = evEvents[event.eventId] || Object.values(evEvents)[0];
-        const startDate = (evEvent && evEvent.openDate) ? evEvent.openDate : event.openDate;
-        const entry = { eventId: event.eventId, openDate: startDate, away: teams.away, home: teams.home, runnerNames: {} };
+        const entry = { eventId: event.eventId, openDate: event.openDate, away: teams.away, home: teams.home, runnerNames: {} };
         const marketTypes = Object.values(markets).map(m => m.marketType);
 
         Object.entries(markets).forEach(function([marketId, mkt]) {
