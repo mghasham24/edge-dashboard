@@ -34,6 +34,8 @@ export async function onRequestGet(context) {
   const { request, env } = context;
   const session = await getSession(request, env.DB);
   if (!session) return fail(401, 'Not authenticated');
+  const url = new URL(request.url);
+  const debug = url.searchParams.get('debug') === '1';
 
   const now = Math.floor(Date.now() / 1000);
   const cacheKey = 'fd_nba_alts';
@@ -75,6 +77,7 @@ export async function onRequestGet(context) {
 
     // Step 2: Fetch each event page and extract alternate spread + total markets
     const gamesMap = {};
+    const debugInfo = {};
 
     for (let i = 0; i < todayEvents.length; i++) {
       const event = todayEvents[i];
@@ -92,11 +95,22 @@ export async function onRequestGet(context) {
         const markets = evData?.attachments?.markets || {};
         const runners = evData?.attachments?.runners || {};
 
+        if (debug) {
+          // Collect all unique marketType + marketName combos for inspection
+          debugInfo[gameKey] = Object.values(markets).map(function(mkt) {
+            return { marketType: mkt.marketType, marketName: mkt.marketName };
+          });
+        }
+
         Object.values(markets).forEach(function(mkt) {
           const mktName = (mkt.marketName || '').toLowerCase();
           const mktType = (mkt.marketType || '').toLowerCase();
-          const isAltSpread = mktName.includes('alternate spread') || mktType.includes('alternate_handicap') || mktType.includes('alt_handicap');
-          const isAltTotal  = mktName.includes('alternate total') || mktType.includes('alternate_total') || mktType.includes('alt_total');
+          const isAltSpread = mktName.includes('alternate spread') || mktName.includes('alt spread')
+            || mktType.includes('alternate_handicap') || mktType.includes('alt_handicap')
+            || mktType.includes('alternatehandicap') || mktType.includes('alternative_handicap');
+          const isAltTotal  = mktName.includes('alternate total') || mktName.includes('alt total')
+            || mktType.includes('alternate_total') || mktType.includes('alt_total')
+            || mktType.includes('alternatetotal') || mktType.includes('alternative_total');
 
           if (!isAltSpread && !isAltTotal) return;
 
@@ -132,6 +146,12 @@ export async function onRequestGet(context) {
 
       gamesMap[gameKey] = altData;
       if (i < todayEvents.length - 1) await new Promise(r => setTimeout(r, 150));
+    }
+
+    if (debug) {
+      return new Response(JSON.stringify({ ok: true, debug: debugInfo }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
 
     const body = JSON.stringify({ ok: true, games: gamesMap });
