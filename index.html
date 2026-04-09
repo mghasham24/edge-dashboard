@@ -2319,6 +2319,19 @@
         </div>
     </div>
 
+    <!-- Trial blocked modal -->
+    <div id="trial-blocked-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:8001;align-items:center;justify-content:center">
+        <div style="background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:36px;max-width:380px;width:90%;text-align:center">
+            <div style="font-size:28px;margin-bottom:12px">⚠️</div>
+            <div style="font-family:var(--mono);font-weight:600;font-size:15px;letter-spacing:.06em;margin-bottom:12px">Trial Not Available</div>
+            <div style="color:var(--muted);font-size:13px;line-height:1.6;margin-bottom:24px">This card has already been used for a free trial on another account. Each card is eligible for one trial only.<br><br>To get Pro access, please subscribe with a different payment method.</div>
+            <div style="display:flex;gap:10px;justify-content:center">
+                <button onclick="closeTrialBlockedModal()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:9px 20px;border-radius:6px;cursor:pointer;text-transform:uppercase">Dismiss</button>
+                <button onclick="closeTrialBlockedModal();showUpgradeModal('Subscribe to RaxEdge Pro for full access.')" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:12px;font-weight:600;padding:9px 20px;border-radius:6px;cursor:pointer;text-transform:uppercase">Subscribe →</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Upgrade modal -->
     <div id="upgrade-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:8000;align-items:center;justify-content:center">
         <div style="background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:36px;max-width:400px;width:90%;text-align:center">
@@ -5780,10 +5793,26 @@
         var params = new URLSearchParams(window.location.search);
         if (params.get('checkout') === 'success') {
             history.replaceState({}, '', '/');
-            checkSession();
+            // Wait briefly for webhook to process, then check plan
+            setTimeout(async function() {
+                await checkSession();
+                // If still on free after a checkout=success, the trial was blocked (duplicate card)
+                if (currentUser && currentUser.plan !== 'pro') {
+                    showTrialBlockedModal();
+                }
+            }, 2500);
         } else if (params.get('checkout') === 'cancel') {
             history.replaceState({}, '', '/');
         }
+    }
+
+    function showTrialBlockedModal() {
+        var modal = document.getElementById('trial-blocked-modal');
+        if (modal) modal.style.display = 'flex';
+    }
+    function closeTrialBlockedModal() {
+        var modal = document.getElementById('trial-blocked-modal');
+        if (modal) modal.style.display = 'none';
     }
 
     function showUpgradeModal(msg) {
