@@ -3332,6 +3332,21 @@
 
     // Look up FanDuel alternate odds at Real Sports line.
     // Returns {fa, fb} novig from real alternate prices, or null if not available.
+    function dkClosestPrice(lines, target) {
+        if (!lines) return null;
+        var exact = lines[target];
+        if (exact != null) return exact;
+        // Find nearest available line within 1 point
+        var keys = Object.keys(lines).map(Number);
+        if (!keys.length) return null;
+        var closest = null, bestDist = Infinity;
+        keys.forEach(function(k) {
+            var d = Math.abs(k - target);
+            if (d < bestDist && d <= 1) { bestDist = d; closest = k; }
+        });
+        return closest != null ? lines[closest] : null;
+    }
+
     function getAltFair(r, yl, pA, pB) {
         if (yl == null || yl === '' || r.mkt === 'ML') return null;
         if (!r.gid) return null;
@@ -3345,19 +3360,15 @@
 
         var priceA, priceB;
         if (r.mkt === 'Total') {
-            var ov = dk.totals && dk.totals['Over'];
-            var un = dk.totals && dk.totals['Under'];
-            if (!ov || !un) return null;
-            priceA = ov[realLine];
-            priceB = un[realLine];
+            priceA = dkClosestPrice(dk.totals && dk.totals['Over'],  realLine);
+            priceB = dkClosestPrice(dk.totals && dk.totals['Under'], realLine);
         } else if (r.mkt === 'Spread') {
             if (!pA || !pB || !dk.spreads) return null;
             var ylA = yourLines[pA.id];
             var ylB = yourLines[pB.id];
             if (ylA == null || ylB == null) return null;
-            // pA.ps === 'A' = away team, pB.ps === 'B' = home team
-            priceA = dk.spreads['Away'] && dk.spreads['Away'][parseFloat(ylA)];
-            priceB = dk.spreads['Home'] && dk.spreads['Home'][parseFloat(ylB)];
+            priceA = dkClosestPrice(dk.spreads['Away'], parseFloat(ylA));
+            priceB = dkClosestPrice(dk.spreads['Home'], parseFloat(ylB));
         }
         if (priceA == null || priceB == null) return null;
         return novig(imp(priceA), imp(priceB));
