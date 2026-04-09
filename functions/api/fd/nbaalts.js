@@ -8,7 +8,7 @@ const FD_AK        = 'FhMFpcPWXMeyZxOx';
 const FD_LIST_URL  = `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=CUSTOM&customPageId=nba&_ak=${FD_AK}&timezone=America/New_York`;
 const FD_EVENT_URL = (id) => `https://sbapi.nj.sportsbook.fanduel.com/api/event-page?_ak=${FD_AK}&eventId=${id}&tab=all&timezone=America/New_York`;
 const FD_PRICES_URL = 'https://smp.nj.sportsbook.fanduel.com/api/sports/fixedodds/readonly/v1/getMarketPrices?priceHistory=0';
-const CACHE_TTL = 30;
+const CACHE_TTL = 5;
 
 const SPREAD_TYPE = 'MATCH_HANDICAP_(2-WAY)';
 const ML_TYPE     = 'MONEY_LINE';
