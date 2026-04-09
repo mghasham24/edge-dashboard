@@ -7130,40 +7130,38 @@
     // Results stored in altOdds[gid] and picked up by getAltFair / renderTable
     async function fetchAltLinesForNBA() {
         if (currentSport !== 'basketball_nba') return;
-        var now = new Date();
 
-        // Find unique gids for spread/total rows where:
-        // - game is live (started) — always fetch alts so live rows aren't hidden, OR
-        // - RS line differs from FD main line — fetch alts to get correct odds at RS line
-        var gidsToFetch = {};
-        rawRows.forEach(function(r) {
-            if (r.mkt !== 'Spread' && r.mkt !== 'Total') return;
-            if (!r.gid) return;
-            if (altOdds[r.gid]) return; // already fetched this session
-            var isLive = r.cm && r.cm <= now;
-            var yl = yourLines[r.id];
-            var hasMismatch = yl != null && parseFloat(yl) !== parseFloat(r.pt);
-            if (isLive || hasMismatch) gidsToFetch[r.gid] = true;
-        });
+        // Single call to FD native API — returns all NBA games' alt lines at once
+        try {
+            var res = await fetch('/api/fd/nba-alts', { credentials: 'same-origin' });
+            var data = await res.json();
+            if (!data.ok || !data.games) return;
 
-        var gids = Object.keys(gidsToFetch);
-        if (!gids.length) return;
-
-        // Fetch alternate lines for each mismatched game, one at a time to be gentle on credits
-        for (var i = 0; i < gids.length; i++) {
-            var gid = gids[i];
-            try {
-                var res = await fetch('/api/odds_event?sport=basketball_nba&eventId=' + encodeURIComponent(gid), {
-                    credentials: 'same-origin'
-                });
-                var data = await res.json();
-                if (data.ok && data.altOdds) {
-                    altOdds[gid] = data.altOdds;
+            // Store alt lines in altOdds keyed by r.gid, matched via r.game name
+            // Also store by game name directly for getAltFair lookup
+            rawRows.forEach(function(r) {
+                if (r.mkt !== 'Spread' && r.mkt !== 'Total') return;
+                if (!r.gid) return;
+                // Try exact match first, then partial match
+                var alt = data.games[r.game];
+                if (!alt) {
+                    // Try matching by last team name word
+                    var fdTeams = r.game.split(' @ ');
+                    var fdAwayLast = (fdTeams[0] || '').trim().split(' ').pop().toLowerCase();
+                    var fdHomeLast = (fdTeams[1] || '').trim().split(' ').pop().toLowerCase();
+                    var matchedKey = Object.keys(data.games).find(function(k) {
+                        var kTeams = k.split(' @ ');
+                        var kAwayLast = (kTeams[0] || '').trim().split(' ').pop().toLowerCase();
+                        var kHomeLast = (kTeams[1] || '').trim().split(' ').pop().toLowerCase();
+                        return kAwayLast === fdAwayLast && kHomeLast === fdHomeLast;
+                    });
+                    if (matchedKey) alt = data.games[matchedKey];
                 }
-            } catch(e) {}
-        }
+                if (alt) altOdds[r.gid] = alt;
+            });
 
-        if (gids.length) renderTable();
+            renderTable();
+        } catch(e) {}
     }
 
     handleCheckoutReturn();
