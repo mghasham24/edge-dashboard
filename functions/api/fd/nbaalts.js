@@ -77,25 +77,23 @@ export async function onRequestGet(context) {
       });
     }
 
-    // debug=tabs: try all numeric tab IDs from FD layout to find alternate market tab
+    // debug=tabs: inspect attachments.events to find full market ID list
     if (debugTabs) {
       const event = todayEvents[0];
-      const tabIds = [26, 27, 29, 56, 58, 168, 169, 170, 171, 172, 182, 200, 202, 204, 260, 292, 302, 376];
-      const results = {};
-      for (const tabId of tabIds) {
-        try {
-          const res = await fetch(FD_EVENT_URL(event.eventId, tabId), { headers });
-          if (!res.ok) { results[tabId] = { error: res.status }; continue; }
-          const data = await res.json();
-          const mkts = data?.attachments?.markets || {};
-          const mktList = Object.values(mkts).map(m => m.marketType + ' / ' + m.marketName);
-          results[tabId] = { count: mktList.length, markets: mktList };
-        } catch(e) { results[tabId] = { error: e.message }; }
-        await new Promise(r => setTimeout(r, 150));
-      }
-      return new Response(JSON.stringify({ ok: true, game: event.name, results }), {
-        headers: { 'Content-Type': 'application/json' }
-      });
+      const res = await fetch(FD_EVENT_URL(event.eventId, 'all'), { headers });
+      if (!res.ok) return fail(res.status, 'event-page failed');
+      const data = await res.json();
+      const eventsObj = data?.attachments?.events || {};
+      // Dump the full first event object to see if it has all market IDs
+      const firstEvent = Object.values(eventsObj)[0] || {};
+      const firstEventKeys = Object.keys(firstEvent);
+      const firstEventSample = JSON.stringify(firstEvent).slice(0, 8000);
+      return new Response(JSON.stringify({
+        ok: true, game: event.name,
+        eventCount: Object.keys(eventsObj).length,
+        firstEventKeys,
+        firstEventSample
+      }), { headers: { 'Content-Type': 'application/json' } });
     }
 
     const gamesMap = {};
