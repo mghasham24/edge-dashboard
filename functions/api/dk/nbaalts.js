@@ -8,7 +8,7 @@ const DK_BASE    = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sport
 const DK_LEAGUE_ID = '42648'; // NBA
 const DK_ALT_SPREAD = '13202';
 const DK_ALT_TOTAL  = '13201';
-const CACHE_TTL = 30;
+const CACHE_TTL = 5;
 
 const DK_EVENTS_URL = `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${DK_LEAGUE_ID}&eventsQuery=%24filter%3DleagueId%20eq%20%27${DK_LEAGUE_ID}%27%20AND%20clientMetadata%2FSubcategories%2Fany%28s%3A%20s%2FId%20eq%20%274511%27%29&marketsQuery=%24filter%3DclientMetadata%2FsubCategoryId%20eq%20%274511%27%20AND%20tags%2Fall%28t%3A%20t%20ne%20%27SportcastBetBuilder%27%29&include=Events&entity=events`;
 

@@ -6206,7 +6206,7 @@
                 dkPoller = setInterval(function() {
                     if (currentSport !== 'basketball_nba') { clearInterval(dkPoller); dkPoller = null; return; }
                     fetchDKAltLines();
-                }, 30000);
+                }, 5000);
             });
             return;
         }
