@@ -77,22 +77,23 @@ export async function onRequestGet(context) {
       });
     }
 
-    // debug=tabs: inspect attachments.events to find full market ID list
+    // debug=tabs: try api.sportsbook.fanduel.com event-page (different domain)
     if (debugTabs) {
       const event = todayEvents[0];
-      const res = await fetch(FD_EVENT_URL(event.eventId, 'all'), { headers });
-      if (!res.ok) return fail(res.status, 'event-page failed');
+      const altUrl = `https://api.sportsbook.fanduel.com/api/event-page?_ak=${FD_AK}&eventId=${event.eventId}&tab=all&timezone=America/New_York`;
+      const res = await fetch(altUrl, { headers });
+      if (!res.ok) return fail(res.status, 'alt event-page failed: ' + res.status);
       const data = await res.json();
-      const eventsObj = data?.attachments?.events || {};
-      // Dump the full first event object to see if it has all market IDs
-      const firstEvent = Object.values(eventsObj)[0] || {};
-      const firstEventKeys = Object.keys(firstEvent);
-      const firstEventSample = JSON.stringify(firstEvent).slice(0, 8000);
+      const markets = data?.attachments?.markets || {};
+      const marketList = Object.values(markets).map(m => ({
+        id: m.marketId, type: m.marketType, name: m.marketName
+      }));
+      const attachKeys = Object.keys(data?.attachments || {});
       return new Response(JSON.stringify({
         ok: true, game: event.name,
-        eventCount: Object.keys(eventsObj).length,
-        firstEventKeys,
-        firstEventSample
+        attachKeys,
+        marketCount: marketList.length,
+        markets: marketList
       }), { headers: { 'Content-Type': 'application/json' } });
     }
 
