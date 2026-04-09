@@ -44,17 +44,22 @@ export async function onRequestGet(context) {
   const session = await getSession(request, env.DB);
   if (!session) return fail(401, 'Not authenticated');
 
+  const reqUrl = new URL(request.url);
+  const debugMode = reqUrl.searchParams.get('debug');
+
   const now = Math.floor(Date.now() / 1000);
   const cacheKey = 'fd_mlb';
 
-  try {
-    const cached = await env.DB.prepare(
-      'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
-    ).bind(cacheKey).first();
-    if (cached && (now - cached.fetched_at) < CACHE_TTL) {
-      return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
-    }
-  } catch(e) {}
+  if (!debugMode) {
+    try {
+      const cached = await env.DB.prepare(
+        'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
+      ).bind(cacheKey).first();
+      if (cached && (now - cached.fetched_at) < CACHE_TTL) {
+        return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
+      }
+    } catch(e) {}
+  }
 
   const headers = {
     'Accept': 'application/json',
@@ -62,18 +67,28 @@ export async function onRequestGet(context) {
   };
 
   try {
-    // Fetch event lists from both URLs and merge (dedup by eventId)
+    // Fetch event lists from all URLs and merge (dedup by eventId)
     const nowMs = Date.now();
     const allEvents = {};
+    const urlDebug = [];
     for (const url of FD_LIST_URLS) {
       try {
         const listRes = await fetch(url, { headers });
-        if (!listRes.ok) continue;
+        if (!listRes.ok) { urlDebug.push({ url, status: listRes.status, count: 0 }); continue; }
         const listData = await listRes.json();
         const evts = listData?.attachments?.events || {};
+        const before = Object.keys(allEvents).length;
         Object.entries(evts).forEach(([id, e]) => { if (!allEvents[id]) allEvents[id] = e; });
-      } catch(e) {}
+        urlDebug.push({ url, status: listRes.status, count: Object.keys(evts).length, added: Object.keys(allEvents).length - before });
+      } catch(e) { urlDebug.push({ url, err: e.message }); }
     }
+
+    if (debugMode === '1') {
+      const nowMs2 = Date.now();
+      const all = Object.values(allEvents).map(e => ({ name: e.name, openDate: e.openDate, msSinceOpen: nowMs2 - new Date(e.openDate).getTime() }));
+      return new Response(JSON.stringify({ urlDebug, total: all.length, events: all }), { headers: { 'Content-Type': 'application/json' } });
+    }
+
     if (!Object.keys(allEvents).length) return fail(502, 'FD MLB list fetch failed');
 
     const todayEvents = Object.values(allEvents).filter(e => {
