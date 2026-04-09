@@ -2808,6 +2808,7 @@
     var nhlPoller = null;
     var dkPoller  = null;
     var dkAltOdds = {}; // gid -> { spreads: { Away: {line: price}, Home: {line: price} }, totals: { Over: {line: price}, Under: {line: price} } }
+    var lastSyncData = {}; // sport -> last Real Sports sync response (d.markets object)
     var exclusiveBets = localStorage.getItem('raxedge_exclusive_bets') === '1';
     var betTaken = JSON.parse(localStorage.getItem('raxedge_bets_taken') || '{}');
     var portfolioConnected = false;
@@ -2972,24 +2973,25 @@
     }
 
     function applyExclusiveBet(id) {
-        // Find the opposite side row (same pid, opposite ps)
-        var row = rawRows.find(function(r) { return r.id === id; });
-        if (!row) return;
-        var opposite = rawRows.find(function(r) { return r.pid === row.pid && r.id !== id; });
-        if (!opposite) return;
+        // All row IDs end in -A or -B — the opposite is simply swapping that suffix
+        var oppositeId = id.endsWith('-A') ? id.slice(0, -2) + '-B'
+                       : id.endsWith('-B') ? id.slice(0, -2) + '-A'
+                       : null;
+        if (!oppositeId) return;
+        if (!betTaken[oppositeId]) return; // opposite not checked, nothing to do
         // Uncheck the opposite
-        betTaken[opposite.id] = false;
-        delete betTaken[opposite.id];
+        betTaken[oppositeId] = false;
+        delete betTaken[oppositeId];
         localStorage.setItem('raxedge_bets_taken', JSON.stringify(betTaken));
         fetch('/api/bets/taken', {
             method: 'POST', credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: opposite.id, taken: false })
+            body: JSON.stringify({ id: oppositeId, taken: false })
         }).catch(function() {});
-        document.querySelectorAll('input[type="checkbox"][data-id="' + opposite.id + '"]').forEach(function(cb) { cb.checked = false; });
-        var tr = document.querySelector('tr[data-row-id="' + opposite.id + '"]');
+        document.querySelectorAll('input[type="checkbox"][data-id="' + oppositeId + '"]').forEach(function(cb) { cb.checked = false; });
+        var tr = document.querySelector('tr[data-row-id="' + oppositeId + '"]');
         if (tr) tr.style.opacity = '';
-        document.querySelectorAll('.mc-bet-check[data-id="' + opposite.id + '"]').forEach(function(el) {
+        document.querySelectorAll('.mc-bet-check[data-id="' + oppositeId + '"]').forEach(function(el) {
             var sideRow = el.closest('div[style*="display:flex"]');
             if (sideRow) sideRow.style.opacity = '';
         });
@@ -7121,9 +7123,53 @@
                 rawRows.push({ id: pid + '-B', game: game, cm: existing.cm, mkt: 'RFI', side: 'No (NRFI)',  am: rfi.noAm,  pt: null, pid: pid, ps: 'B', gid: existing.gid, rfiFair: rfi.noFair });
             });
 
+            // Apply Real Sports preds to new RFI rows using already-fetched sync data
+            // (avoids a second network call that would hit a stale D1 cache)
+            var syncD = lastSyncData[currentSport];
+            if (syncD && syncD.markets) {
+                var mKeys = Object.keys(syncD.markets);
+                rawRows.forEach(function(r) {
+                    if (r.mkt !== 'RFI') return;
+                    // Find Real Sports game key matching this RFI row
+                    var realKey = syncD.markets[r.game] ? r.game : null;
+                    if (!realKey) {
+                        var fdTeams = r.game.split(' @ ');
+                        var fdAway = (fdTeams[0] || '').toLowerCase();
+                        var fdHome = (fdTeams[1] || '').toLowerCase();
+                        var found = mKeys.find(function(k) {
+                            if (k.endsWith('__lines') || k.endsWith('__gid')) return false;
+                            var p = k.split(' @ ');
+                            if (p.length !== 2) return false;
+                            var ka = p[0].toLowerCase(), kh = p[1].toLowerCase();
+                            var awayOk = ka.split(' ').some(function(w) { return w.length > 2 && fdAway.indexOf(w) !== -1; })
+                                      || fdAway.split(' ').some(function(w) { return w.length > 2 && ka.indexOf(w) !== -1; });
+                            var homeOk = kh.split(' ').some(function(w) { return w.length > 2 && fdHome.indexOf(w) !== -1; })
+                                      || fdHome.split(' ').some(function(w) { return w.length > 2 && kh.indexOf(w) !== -1; });
+                            return awayOk && homeOk;
+                        });
+                        if (found) realKey = found;
+                    }
+                    if (!realKey) return;
+                    var gameMkts = syncD.markets[realKey];
+                    if (!gameMkts) return;
+                    var mktData = gameMkts['Run in 1st inning?'];
+                    if (!mktData) return;
+                    var outcomes = mktData.outcomes || mktData;
+                    if (!outcomes || !outcomes.length) return;
+                    var isYes = r.ps === 'A';
+                    var match = outcomes.find(function(o) {
+                        if (!o.label) return false;
+                        return isYes ? o.label.toLowerCase() === 'yes' : o.label.toLowerCase() === 'no';
+                    });
+                    if (!match) match = isYes ? outcomes[1] : outcomes[0];
+                    if (match && match.pct != null) {
+                        preds[r.id] = String(match.pct);
+                        if (mktData.volumeDisplay) vols[r.id] = mktData.volumeDisplay;
+                    }
+                });
+            }
+
             if (!skipRender) renderTable();
-            // Trigger Real Sports auto-fill for new RFI rows
-            if (rawRows.length > 0) fetchRealMarkets(currentSport, skipRender).then(function() { fetchAltLinesForNBA(); });
         })
         .catch(function() {});
     }
@@ -7358,6 +7404,7 @@
                     }
                 }
             });
+            lastSyncData[sport] = d;
             if (!skipRender) renderTable();
             // On mobile, fire input events on all auto-filled inputs to trigger edge display
             if (window.innerWidth <= 768) {
