@@ -4,7 +4,11 @@
 // Step 2: Fetch each event-page to extract RFI market odds
 
 const FD_AK = 'FhMFpcPWXMeyZxOx';
-const FD_LIST_URL = `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=CUSTOM&customPageId=mlb&_ak=${FD_AK}&timezone=America/New_York`;
+// Try the game-lines page first (returns all MLB games); fall back to main MLB custom page
+const FD_LIST_URLS = [
+  `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=CUSTOM&customPageId=mlb-game-lines&_ak=${FD_AK}&timezone=America/New_York`,
+  `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=CUSTOM&customPageId=mlb&_ak=${FD_AK}&timezone=America/New_York`
+];
 const FD_EVENT_URL = (id) => `https://sbapi.nj.sportsbook.fanduel.com/api/event-page?_ak=${FD_AK}&eventId=${id}&tab=all&timezone=America/New_York`;
 const RFI_MARKET_TYPE = '***OVER/UNDER_0.5_RUNS_1ST_INNINGS';
 const CACHE_TTL = 30;
@@ -71,18 +75,24 @@ export async function onRequestGet(context) {
   };
 
   try {
-    // Step 1: Get today's event IDs
-    const listRes = await fetch(FD_LIST_URL, { headers });
-    if (!listRes.ok) return fail(listRes.status, 'FD list fetch failed');
-    const listData = await listRes.json();
-
-    const events = listData?.attachments?.events || {};
+    // Step 1: Get today's event IDs — try game-lines page first, fall back to main MLB page
     const nowMs = Date.now();
-    const todayEvents = Object.values(events).filter(e => {
+    const allEvents = {};
+    for (const url of FD_LIST_URLS) {
+      try {
+        const listRes = await fetch(url, { headers });
+        if (!listRes.ok) continue;
+        const listData = await listRes.json();
+        const evts = listData?.attachments?.events || {};
+        Object.entries(evts).forEach(([id, e]) => { if (!allEvents[id]) allEvents[id] = e; });
+        if (Object.keys(evts).length > 0) break; // stop if first URL returned events
+      } catch(e) {}
+    }
+
+    const todayEvents = Object.values(allEvents).filter(e => {
       if (!e.openDate) return false;
       const t = new Date(e.openDate).getTime();
-      // Include games starting within the next 36 hours
-      return t >= nowMs - 3 * 60 * 60 * 1000 && t <= nowMs + 36 * 60 * 60 * 1000;
+      return t >= nowMs - 5 * 60 * 60 * 1000 && t <= nowMs + 36 * 60 * 60 * 1000;
     });
 
     if (!todayEvents.length) {
