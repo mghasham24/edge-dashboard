@@ -105,20 +105,22 @@ export async function onRequestGet(context) {
 
     // Fetch event-pages to collect ML market IDs + runner names
     const gameData = {};
+    const eventPageDebug = [];
 
     for (let i = 0; i < todayEvents.length; i++) {
       const event = todayEvents[i];
       const teams = parseEventName(event.name);
-      if (!teams) continue;
+      if (!teams) { eventPageDebug.push({ name: event.name, err: 'parse failed' }); continue; }
 
       try {
         const evRes = await fetch(FD_EVENT_URL(event.eventId), { headers });
-        if (!evRes.ok) continue;
+        if (!evRes.ok) { eventPageDebug.push({ name: event.name, evStatus: evRes.status }); continue; }
         const evData = await evRes.json();
 
         const markets = evData?.attachments?.markets || {};
         const gameKey = teams.away + ' @ ' + teams.home;
         const entry = { eventId: event.eventId, openDate: event.openDate, away: teams.away, home: teams.home, runnerNames: {} };
+        const marketTypes = Object.values(markets).map(m => m.marketType);
 
         Object.entries(markets).forEach(function([marketId, mkt]) {
           if (mkt.marketType !== ML_TYPE) return;
@@ -130,10 +132,15 @@ export async function onRequestGet(context) {
           });
         });
 
+        eventPageDebug.push({ name: event.name, evStatus: evRes.status, marketCount: Object.keys(markets).length, marketTypes: marketTypes.slice(0, 6), mlId: entry.mlId || null });
         if (entry.mlId) gameData[gameKey] = entry;
-      } catch(e) {}
+      } catch(e) { eventPageDebug.push({ name: event.name, err: e.message }); }
 
       if (i < todayEvents.length - 1) await new Promise(r => setTimeout(r, 150));
+    }
+
+    if (debugMode === '2') {
+      return new Response(JSON.stringify({ todayCount: todayEvents.length, gameDataCount: Object.keys(gameData).length, eventPageDebug }), { headers: { 'Content-Type': 'application/json' } });
     }
 
     // Batch all ML market IDs into one getMarketPrices request
@@ -161,9 +168,11 @@ export async function onRequestGet(context) {
     const marketPricesList = await pricesRes.json();
 
     const gamesMap = {};
+    const pricesDebug = [];
 
     (Array.isArray(marketPricesList) ? marketPricesList : []).forEach(function(mp) {
       const gameKey = marketToGame[mp.marketId];
+      pricesDebug.push({ marketId: mp.marketId, gameKey: gameKey || '?', marketStatus: mp.marketStatus });
       if (!gameKey || mp.marketStatus !== 'OPEN') return;
       const entry = gameData[gameKey];
       if (!gamesMap[gameKey]) gamesMap[gameKey] = { id: entry.eventId, away: entry.away, home: entry.home, cm: entry.openDate, ml: {} };
@@ -176,6 +185,10 @@ export async function onRequestGet(context) {
         if (name) gamesMap[gameKey].ml[name] = price;
       });
     });
+
+    if (debugMode === '3') {
+      return new Response(JSON.stringify({ gamesMapCount: Object.keys(gamesMap).length, pricesDebug }), { headers: { 'Content-Type': 'application/json' } });
+    }
 
     const body = JSON.stringify({ ok: true, games: gamesMap });
     try {
