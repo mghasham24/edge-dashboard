@@ -6460,7 +6460,7 @@
         });
 
         rows.forEach(function(r) {
-            var mktLabel = r.mkt === 'ML' ? 'Game Winner' : r.mkt === 'Spread' ? 'Spread' : r.mkt === 'Total' ? 'Total' : null;
+            var mktLabel = r.mkt === 'ML' ? 'Game Winner' : r.mkt === 'Spread' ? 'Spread' : r.mkt === 'Total' ? 'Total' : r.mkt === 'RFI' ? 'Run in 1st inning?' : null;
             if (!mktLabel) return;
 
             // Try exact/resolved match first, then fuzzy fallback
