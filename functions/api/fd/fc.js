@@ -1,25 +1,33 @@
 // functions/api/fd/fc.js
 // Fetches FanDuel real-time soccer ML odds for top 6 European leagues
-// EPL (10932509), UCL (228), La Liga (117), Bundesliga (59), Serie A (81), Ligue 1 (55)
-// Step 1: Fetch all 6 competition event lists in parallel
-// Step 2: Fetch event-page per game to collect ML market ID + runner names
-// Step 3: Batch POST to getMarketPrices for real-time prices
+// Step 1: Single SPORT endpoint (eventTypeId=1) returns all soccer events with competition info
+// Step 2: Filter by competition name to EPL, UCL, La Liga, Bundesliga, Serie A, Ligue 1
+// Step 3: Fetch event-page per game to collect ML market ID + runner names
+// Step 4: Batch POST to getMarketPrices for real-time prices
 
 const FD_AK = 'FhMFpcPWXMeyZxOx';
-const FD_COMP_URL = (id) => `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=COMPETITION&competitionId=${id}&_ak=${FD_AK}&timezone=America/New_York`;
+const FD_SPORT_URL = `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=SPORT&eventTypeId=1&_ak=${FD_AK}&timezone=America/New_York`;
 const FD_EVENT_URL = (id) => `https://sbapi.nj.sportsbook.fanduel.com/api/event-page?_ak=${FD_AK}&eventId=${id}&tab=all&timezone=America/New_York`;
 const FD_PRICES_URL = 'https://smp.nj.sportsbook.fanduel.com/api/sports/fixedodds/readonly/v1/getMarketPrices?priceHistory=0';
 const ML_TYPE = 'MONEY_LINE';
-const CACHE_TTL = 30; // soccer odds update slowly
+const CACHE_TTL = 30;
 
-const COMPETITIONS = [
-  { id: '10932509', label: 'EPL' },
-  { id: '228',      label: 'UCL' },
-  { id: '117',      label: 'La Liga' },
-  { id: '59',       label: 'Bundesliga' },
-  { id: '81',       label: 'Serie A' },
-  { id: '55',       label: 'Ligue 1' },
+// Competition name fragments to match (case-insensitive) → league label
+const LEAGUE_FILTERS = [
+  { match: 'premier league',   label: 'EPL' },
+  { match: 'champions league', label: 'UCL' },
+  { match: 'la liga',          label: 'La Liga' },
+  { match: 'bundesliga',       label: 'Bundesliga' },
+  { match: 'serie a',          label: 'Serie A' },
+  { match: 'ligue 1',          label: 'Ligue 1' },
 ];
+
+function getLeagueLabel(competitionName) {
+  if (!competitionName) return null;
+  const lower = competitionName.toLowerCase();
+  const match = LEAGUE_FILTERS.find(f => lower.includes(f.match));
+  return match ? match.label : null;
+}
 
 async function getSession(request, db) {
   const c = request.headers.get('Cookie') || '';
@@ -71,49 +79,58 @@ export async function onRequestGet(context) {
   };
 
   try {
-    // Step 1: Fetch all competition event lists in parallel, dedup by eventId
+    // Step 1: Single SPORT fetch for all soccer events
+    const sportRes = await fetch(FD_SPORT_URL, { headers });
+    if (!sportRes.ok) return fail(sportRes.status, 'FD soccer sport fetch failed: ' + sportRes.status);
+    const sportData = await sportRes.json();
+
     const nowMs = Date.now();
-    const allEvents = {};
-    const compDebug = [];
+    const allEvents = sportData?.attachments?.events || {};
+    const competitions = sportData?.attachments?.competitions || {};
 
-    await Promise.all(COMPETITIONS.map(async (comp) => {
-      try {
-        const res = await fetch(FD_COMP_URL(comp.id), { headers });
-        const status = res.status;
-        if (!res.ok) { compDebug.push({ comp: comp.label, id: comp.id, status, err: 'not ok' }); return; }
-        const data = await res.json();
-        const evts = data?.attachments?.events || {};
-        const count = Object.keys(evts).length;
-        compDebug.push({ comp: comp.label, id: comp.id, status, eventCount: count });
-        Object.entries(evts).forEach(([id, e]) => {
-          if (!allEvents[id]) allEvents[id] = { ...e, _league: comp.label };
-        });
-      } catch(e) { compDebug.push({ comp: comp.label, id: comp.id, err: e.message }); }
-    }));
+    // debug=1: show raw competition names and event sample
+    if (debugMode === '1') {
+      const compNames = Object.values(competitions).map(c => ({ id: c.competitionId, name: c.name })).slice(0, 30);
+      const eventSample = Object.values(allEvents).slice(0, 10).map(e => ({
+        name: e.name,
+        openDate: e.openDate,
+        competitionId: e.competitionId,
+        compName: competitions[e.competitionId]?.name
+      }));
+      return new Response(JSON.stringify({
+        totalEvents: Object.keys(allEvents).length,
+        totalComps: Object.keys(competitions).length,
+        competitions: compNames,
+        eventSample
+      }), { headers: { 'Content-Type': 'application/json' } });
+    }
 
-    const nowMs2 = Date.now();
+    // Step 2: Filter to target leagues within time window
     const todayEvents = Object.values(allEvents).filter(e => {
       if (!e.openDate) return false;
       const t = new Date(e.openDate).getTime();
-      return t >= nowMs2 - 4 * 60 * 60 * 1000 && t <= nowMs2 + 36 * 60 * 60 * 1000;
+      if (t < nowMs - 4 * 60 * 60 * 1000 || t > nowMs + 36 * 60 * 60 * 1000) return false;
+      const compName = competitions[e.competitionId]?.name || '';
+      const league = getLeagueLabel(compName);
+      if (!league) return false;
+      e._league = league;
+      return true;
     });
 
-    if (debugMode === '1') {
+    if (debugMode === '2') {
       return new Response(JSON.stringify({
-        compDebug,
-        totalEvents: Object.keys(allEvents).length,
-        filteredEvents: todayEvents.length,
-        sample: Object.values(allEvents).slice(0, 5).map(e => ({ name: e.name, openDate: e.openDate, league: e._league }))
+        filteredCount: todayEvents.length,
+        events: todayEvents.map(e => ({ name: e.name, openDate: e.openDate, league: e._league }))
       }), { headers: { 'Content-Type': 'application/json' } });
     }
 
     if (!todayEvents.length) {
-      return new Response(JSON.stringify({ ok: true, games: {}, _debug: { compDebug, totalRaw: Object.keys(allEvents).length } }), {
+      return new Response(JSON.stringify({ ok: true, games: {} }), {
         headers: { 'Content-Type': 'application/json' }
       });
     }
 
-    // Step 2: Fetch event-pages to collect ML market ID + runner name mappings
+    // Step 3: Fetch event-pages to collect ML market ID + runner name mappings
     const gameData = {};
 
     for (let i = 0; i < todayEvents.length; i++) {
@@ -159,7 +176,7 @@ export async function onRequestGet(context) {
       });
     }
 
-    // Step 3: Batch all ML market IDs into one getMarketPrices request
+    // Step 4: Batch all ML market IDs into one getMarketPrices request
     const allMarketIds = [];
     const marketToGame = {};
 
