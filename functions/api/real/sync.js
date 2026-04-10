@@ -73,7 +73,8 @@ const SPORT_MAP = {
   'basketball_ncaab': 'cbb',
   'mma_mixed_martial_arts': 'ufc',
   'soccer_epl': 'epl',
-  'soccer_uefa_champs_league': 'ucl'
+  'soccer_uefa_champs_league': 'ucl',
+  'soccer_fc': 'soccer'
 };
 
 // Sports not supported by Real Sports API

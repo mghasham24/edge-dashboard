@@ -2165,7 +2165,7 @@
                 <div class="lp-step">
                     <div class="lp-step-num">01</div>
                     <div class="lp-step-title">Pull Live Odds</div>
-                    <div class="lp-step-desc">We fetch real-time FanDuel lines across NBA, NHL, MLB, NCAAB, UFC, EPL, and UCL — updated on demand.</div>
+                    <div class="lp-step-desc">We fetch real-time FanDuel lines across NBA, NHL, MLB, NCAAB, UFC, and top European soccer (EPL, UCL, La Liga, Bundesliga, Serie A, Ligue 1) — updated on demand.</div>
                 </div>
                 <div class="lp-step">
                     <div class="lp-step-num">02</div>
@@ -2240,7 +2240,7 @@
                         </li>
                         <li>
                             <span class="x">✗</span>
-                             NCAAB, UFC, EPL, UCL
+                             NCAAB, UFC, FC
                         </li>
                     </ul>
                     <button class="lp-plan-btn free-btn" onclick="openGate('signup')">Get Started Free</button>
@@ -2778,13 +2778,8 @@
         key: 'mma_mixed_martial_arts',
         label: 'UFC/MMA'
     }, {
-        key: 'soccer_epl',
-        label: 'EPL',
-        noFetch: true
-    }, {
-        key: 'soccer_uefa_champs_league',
-        label: 'UCL',
-        noFetch: true
+        key: 'soccer_fc',
+        label: 'FC'
     }, {
         key: 'basketball_ncaab',
         label: 'NCAAB'
@@ -2807,6 +2802,7 @@
     var mlbPoller = null;
     var nhlPoller = null;
     var dkPoller  = null;
+    var fcPoller  = null;
     var dkAltOdds = {}; // gid -> { spreads: { Away: {line: price}, Home: {line: price} }, totals: { Over: {line: price}, Under: {line: price} } }
     var dkPreGameStore = {}; // gid -> last known DK alt lines before/during game (persists when DK suspends in-game)
     var lastSyncData = {}; // sport -> last Real Sports sync response (d.markets object)
@@ -2868,7 +2864,7 @@
     }
 
     var _hashids = null;
-    var REAL_SPORT_IDS = { nba:1, nfl:2, ncaam:3, mlb:4, epl:5, ucl:6, nhl:7, mls:8, fifa:9, ufc:10, ncaaf:11, wnba:12, soccer:14, golf:15 };
+    var REAL_SPORT_IDS = { nba:1, nfl:2, ncaam:3, mlb:4, epl:5, ucl:6, nhl:7, mls:8, fifa:9, ufc:10, ncaaf:11, wnba:12, soccer:14, golf:15, fc:14 };
     var REAL_SPORT_LABELS = { 1:'NBA', 2:'NFL', 3:'NCAAB', 4:'MLB', 5:'EPL', 6:'UCL', 7:'NHL', 8:'MLS', 9:'FIFA', 10:'UFC', 11:'NCAAF', 12:'WNBA', 14:'Soccer', 15:'Golf' };
     function getRealSportsUrl(gid, sport) {
         if (!gid || typeof Hashids === 'undefined') return null;
@@ -3310,8 +3306,7 @@
         'baseball_mlb':              0.02,
         'basketball_nba':            0.005,
         'basketball_ncaab':          0.005,
-        'soccer_epl':                0.03,
-        'soccer_uefa_champs_league': 0.03,
+        'soccer_fc':                 0.03,
         'mma_mixed_martial_arts':    0.005
     };
 
@@ -3535,8 +3530,7 @@
             icehockey_nhl: 'NHL',
             baseball_mlb: 'MLB',
             mma_mixed_martial_arts: 'UFC',
-            soccer_epl: 'EPL',
-            soccer_uefa_champs_league: 'UCL'
+            soccer_fc: 'FC'
         };
         var leagueColorMap = {
             basketball_nba: '#4f6ef7',
@@ -3544,8 +3538,7 @@
             icehockey_nhl: '#38bdf8',
             baseball_mlb: '#2dcc7e',
             mma_mixed_martial_arts: '#f05252',
-            soccer_epl: '#a78bfa',
-            soccer_uefa_champs_league: '#fb923c'
+            soccer_fc: '#2dcc7e'
         };
         var leagueLbl = leagueBadgeMap[currentSport] || '';
         var leagueClr = leagueColorMap[currentSport] || 'var(--muted)';
@@ -3740,7 +3733,8 @@
                         grp.appendChild(inp);
                         inp.addEventListener('input', function() {
                             var v = parseFloat(this.value);
-                            if (!isNaN(v) && v >= 1 && v <= 99) {
+                            // Only auto-fill the opposite for 2-way markets (not 3-way soccer)
+                            if (!isNaN(v) && v >= 1 && v <= 99 && mlInputs.length === 2) {
                                 mlInputs.forEach(function(other) {
                                     if (other !== inp) {
                                         var otherVal = (100 - v).toFixed(1);
@@ -4538,8 +4532,7 @@
             'basketball_nba': 3 * 3600000,
             'basketball_ncaab': 3 * 3600000,
             'icehockey_nhl': 3 * 3600000,
-            'soccer_epl': 2.5 * 3600000,
-            'soccer_uefa_champs_league': 2.5 * 3600000,
+            'soccer_fc': 2.5 * 3600000,
         };
         var all = [];
         Object.values(evTabCache).forEach(function(arr) {
@@ -5998,7 +5991,7 @@
             b.setAttribute('data-key', s.key);
             b.onclick = function() {
                 if (locked) {
-                    showUpgradeModal(s.label + ' is available on the Pro plan. Upgrade to access all 7 sports including NCAAB, NHL, UFC, EPL, and UCL.');
+                    showUpgradeModal(s.label + ' is available on the Pro plan. Upgrade to access all 7 sports including NCAAB, NHL, UFC, and FC (EPL, UCL, La Liga, Bundesliga, Serie A, Ligue 1).');
                     return;
                 }
                 currentSport = s.key;
@@ -6158,16 +6151,6 @@
         var sp = SPORTS.find(function(s) { return s.key === currentSport; });
         var lbl = sp ? sp.label : currentSport;
 
-        // EPL/UCL — show placeholder, no fetch
-        if (sp && sp.noFetch) {
-            btn.disabled = false;
-            dot.className = 'sdot';
-            stxt.textContent = lbl + ' — coming soon';
-            rawRows = []; rsGameIds = {};
-            document.getElementById('tbody').innerHTML = '<tr class="state-row"><td colspan="13" style="text-align:center;color:var(--muted2);padding:40px">No ' + lbl + ' markets available right now.</td></tr>';
-            renderMobileCards([]);
-            return;
-        }
         btn.disabled = true;
         dot.className = 'sdot loading';
         stxt.textContent = 'Fetching ' + lbl + '...';
@@ -6277,7 +6260,74 @@
         if (mlbPoller) { clearInterval(mlbPoller); mlbPoller = null; }
         if (nhlPoller) { clearInterval(nhlPoller); nhlPoller = null; }
         if (dkPoller)  { clearInterval(dkPoller);  dkPoller  = null; }
+        if (fcPoller)  { clearInterval(fcPoller);  fcPoller  = null; }
         dkAltOdds = {};
+
+        // FC: use FD native API for soccer ML — no Odds API credits
+        if (currentSport === 'soccer_fc') {
+            altOdds = {};
+            fetch('/api/fd/fc', { credentials: 'same-origin' })
+            .then(function(r) {
+                if (r.status === 401) {
+                    dot.className = 'sdot error';
+                    stxt.textContent = 'Session expired — please log in again.';
+                    btn.disabled = false;
+                    setTimeout(function() { location.reload(); }, 2000);
+                    return Promise.reject('unauth');
+                }
+                return r.json();
+            })
+            .then(function(data) {
+                if (!data.ok || !data.games) {
+                    rawRows = []; rsGameIds = {};
+                    dot.className = 'sdot error';
+                    stxt.textContent = 'No FC games right now';
+                    return;
+                }
+                var rows = [];
+                Object.entries(data.games).forEach(function([gameKey, game]) {
+                    var away = game.away, home = game.home;
+                    var cm = game.cm ? new Date(game.cm) : null;
+                    var gid = String(game.id);
+                    var pid = gid + '-h2h';
+                    if (game.ml) {
+                        [[away, 'A'], [home, 'B']].forEach(function(pair) {
+                            var teamName = pair[0], ps = pair[1];
+                            var price = game.ml[teamName];
+                            if (price == null) return;
+                            rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'ML', side: teamName, am: price, pt: null, pid: pid, ps: ps, gid: gid });
+                        });
+                    }
+                });
+                rawRows = rows;
+                rawRowsBySport[currentSport] = rawRows;
+                var nowStr = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+                if (rawRows.length) {
+                    dot.className = 'sdot live';
+                    stxt.textContent = 'Updated ' + nowStr + ' - ' + Object.keys(data.games).length + ' games - FanDuel';
+                } else {
+                    dot.className = 'sdot error';
+                    stxt.textContent = 'No FC games right now';
+                }
+            })
+            .catch(function(e) {
+                if (e === 'unauth') return;
+                rawRows = []; rsGameIds = {};
+                dot.className = 'sdot error';
+                stxt.textContent = 'Error fetching FC data';
+            })
+            .then(function() {
+                btn.disabled = false;
+                renderTable();
+                if (rawRows.length > 0) fetchRealMarkets(currentSport);
+                if (fcPoller) clearInterval(fcPoller);
+                fcPoller = setInterval(function() {
+                    if (currentSport !== 'soccer_fc') { clearInterval(fcPoller); fcPoller = null; return; }
+                    fetchFCNativeUpdate();
+                }, 30000);
+            });
+            return;
+        }
 
         // MLB: use FD native API for ML — no Odds API credits
         if (currentSport === 'baseball_mlb') {
@@ -7689,6 +7739,42 @@
             var data = await res.json();
             if (!data.ok || !data.games) return;
             nativeMlUpdate(rawRows, data.games);
+            renderTable();
+        } catch(e) {}
+    }
+
+    async function fetchFCNativeUpdate() {
+        if (currentSport !== 'soccer_fc') return;
+        try {
+            var res = await fetch('/api/fd/fc', { credentials: 'same-origin' });
+            var data = await res.json();
+            if (!data.ok || !data.games) return;
+            // Check if any new games appeared (match started, new fixture added)
+            var existingGames = {};
+            rawRows.forEach(function(r) { existingGames[r.game] = true; });
+            var hasNewGames = Object.keys(data.games).some(function(g) { return !existingGames[g]; });
+            if (hasNewGames) {
+                var rows = [];
+                Object.entries(data.games).forEach(function([gameKey, game]) {
+                    var away = game.away, home = game.home;
+                    var cm = game.cm ? new Date(game.cm) : null;
+                    var gid = String(game.id);
+                    var pid = gid + '-h2h';
+                    if (game.ml) {
+                        [[away, 'A'], [home, 'B']].forEach(function(pair) {
+                            var teamName = pair[0], ps = pair[1];
+                            var price = game.ml[teamName];
+                            if (price == null) return;
+                            rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'ML', side: teamName, am: price, pt: null, pid: pid, ps: ps, gid: gid });
+                        });
+                    }
+                });
+                rawRows = rows;
+                rawRowsBySport[currentSport] = rawRows;
+                fetchRealMarkets(currentSport, true);
+            } else {
+                nativeMlUpdate(rawRows, data.games);
+            }
             renderTable();
         } catch(e) {}
     }
