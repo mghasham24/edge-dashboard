@@ -14,6 +14,11 @@ export async function onRequest(context) {
   const session = await getSession(request, env.DB);
   if (!session) return fail(401, 'Not authenticated');
 
+  // Strip spreads/totals for non-Pro users server-side — defeats client console bypass
+  const allowedMarkets = session.plan === 'pro'
+    ? markets
+    : markets.split(',').filter(m => m !== 'spreads' && m !== 'totals').join(',') || 'h2h';
+
   const now = Math.floor(Date.now() / 1000);
 
   // Dynamic TTL based on game state:
@@ -44,7 +49,7 @@ export async function onRequest(context) {
     try { return Array.isArray(JSON.parse(text)); } catch(e) { return false; }
   }
 
-  const cacheKey = 'odds_' + sport + '_' + markets;
+  const cacheKey = 'odds_' + sport + '_' + allowedMarkets;
 
   // Try cache first
   try {
@@ -64,7 +69,7 @@ export async function onRequest(context) {
 
   // Cache miss — fetch from Odds API, with DraftKings fallback if FanDuel is empty
   async function fetchOdds(bookmakerList) {
-    const apiUrl = `https://api.the-odds-api.com/v4/sports/${sport}/odds/?apiKey=${API_KEY}&regions=us&markets=${markets}&bookmakers=${bookmakerList}&oddsFormat=american`;
+    const apiUrl = `https://api.the-odds-api.com/v4/sports/${sport}/odds/?apiKey=${API_KEY}&regions=us&markets=${allowedMarkets}&bookmakers=${bookmakerList}&oddsFormat=american`;
     const res = await fetch(apiUrl);
     const text = await res.text();
     return { res, text };
