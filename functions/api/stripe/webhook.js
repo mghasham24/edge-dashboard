@@ -158,16 +158,27 @@ async function checkFingerprintByPmId(pmId, stripeCustomerId, env) {
     ).bind(fingerprint).first();
 
     if (existing) {
-      // If the stored entry has userId=0 (written before user was resolvable), heal it and allow.
-      if (existing.user_id === 0) {
-        await env.DB.prepare(
-          'UPDATE trial_fingerprints SET user_id=? WHERE fingerprint=?'
-        ).bind(userId, fingerprint).run();
-        return false;
+      if (existing.user_id === userId) return false; // same user retrying, allow
+
+      // Different user_id (or 0). Check if the stored user actually has an active trial.
+      // We only block if had_free_trial=1 on the OTHER account — meaning their trial
+      // is genuinely in use. If had_free_trial=0 (e.g. our bug previously cancelled their
+      // sub and reset the flag), treat it as available and reassign the entry.
+      const existingUser = existing.user_id > 0
+        ? await env.DB.prepare('SELECT had_free_trial FROM users WHERE id=?')
+            .bind(existing.user_id).first()
+        : null;
+
+      if (existingUser && existingUser.had_free_trial === 1) {
+        // Other account still holds an active trial on this card — genuine abuse.
+        return true;
       }
-      // Different real user — genuine abuse.
-      if (existing.user_id !== userId) return true;
-      return false; // same user retrying
+
+      // Previous entry is stale (cancelled trial, bug victim, or userId=0) — reassign and allow.
+      await env.DB.prepare(
+        'UPDATE trial_fingerprints SET user_id=? WHERE fingerprint=?'
+      ).bind(userId, fingerprint).run();
+      return false;
     }
 
     await env.DB.prepare(
