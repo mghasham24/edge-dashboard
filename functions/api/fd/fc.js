@@ -279,15 +279,36 @@ export async function onRequestGet(context) {
         };
       }
 
+      // Collect all 3 prices (home win, draw, away win)
+      const raw3 = {};
       (mp.runnerDetails || []).forEach(function(rd) {
         if (rd.runnerStatus !== 'ACTIVE') return;
         const price = rd.winRunnerOdds?.americanDisplayOdds?.americanOddsInt;
         if (price == null) return;
         const name = entry.runnerNames[rd.selectionId] || entry.runnerNames[String(rd.selectionId)] || '';
-        // Skip Draw runner
-        if (!name || name === DRAW_NAME || rd.selectionId === DRAW_ID) return;
-        gamesMap[gameKey].ml[name] = price;
+        if (!name) return;
+        raw3[name] = price;
       });
+
+      // Derive Away +0.5 from 3-way novig:
+      //   Home -0.5  = Home Win (exact same bet, use directly)
+      //   Away +0.5  = Draw OR Away Win = P(draw_novig) + P(away_novig)
+      const homePr = raw3[entry.home];
+      const awayPr = raw3[entry.away];
+      const drawPr = raw3[DRAW_NAME];
+      if (homePr != null && awayPr != null && drawPr != null) {
+        function toImpl(am) { return am < 0 ? (-am) / (-am + 100) : 100 / (am + 100); }
+        var pH = toImpl(homePr), pD = toImpl(drawPr), pA = toImpl(awayPr);
+        var tot = pH + pD + pA;
+        var pAwayPlus = (pD + pA) / tot; // novig P(away+0.5)
+        var awayPlus05Am = pAwayPlus >= 0.5
+          ? Math.round(-(pAwayPlus / (1 - pAwayPlus)) * 100)
+          : Math.round(((1 - pAwayPlus) / pAwayPlus) * 100);
+        gamesMap[gameKey].ml[entry.home] = homePr;
+        gamesMap[gameKey].ml[entry.away] = awayPlus05Am;
+      } else if (homePr != null) {
+        gamesMap[gameKey].ml[entry.home] = homePr;
+      }
     });
 
     const body = JSON.stringify({ ok: true, games: gamesMap });
