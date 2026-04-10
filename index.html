@@ -4498,7 +4498,7 @@
         var evColor = ev >= 10 ? 'var(--green)' : ev >= 5 ? '#7ddfab' : ev > 0 ? 'var(--yellow)' : 'var(--red)';
         var uColor  = u >= 2 ? 'var(--green)' : u >= 1 ? '#7ddfab' : u >= 0.5 ? 'var(--yellow)' : 'var(--muted)';
         var evUnit  = parseFloat(document.getElementById('ev-unit-size').value) || 300;
-        var betAmt  = (u > 0) ? '$' + Math.round(u * evUnit) : '—';
+        var betAmt  = (u > 0) ? RAX_ICON + Math.round(u * evUnit) : '—';
         var evTd = container.querySelector('.ev-val-td');
         var uTd  = container.querySelector('.ev-units-td');
         var btTd = container.querySelector('.ev-bet-td');
@@ -4512,7 +4512,7 @@
             }
         }
         if (uTd)  { uTd.textContent = u > 0 ? '+' + u.toFixed(2) + 'u' : '—'; uTd.style.color = uColor; }
-        if (btTd) btTd.textContent = betAmt;
+        if (btTd) btTd.innerHTML = betAmt;
     }
 
     function renderEvTab() {
@@ -4577,7 +4577,7 @@
             + '<th style="width:68px" class="r">Adj Fair</th>'
             + '<th style="width:80px" class="r">Real%</th>'
             + '<th style="width:58px" class="r">Units</th>'
-            + '<th style="width:68px" class="r">Bet $</th>'
+            + '<th style="width:68px" class="r">Bet</th>'
             + '</tr></thead><tbody>';
 
         // ── Mobile card grid ───────────────────────────────────
@@ -4590,7 +4590,7 @@
             var u       = r.u != null ? r.u : 0;
             var uColor  = u >= 2 ? 'var(--green)' : u >= 1 ? '#7ddfab' : u >= 0.5 ? 'var(--yellow)' : 'var(--muted)';
             var uStr    = (ev != null && u > 0) ? '+' + u.toFixed(2) + 'u' : '—';
-            var betAmt  = (u > 0) ? '$' + Math.round(u * evUnit) : '—';
+            var betAmt  = (u > 0) ? RAX_ICON + Math.round(u * evUnit) : '—';
             var displayPt = (yourLines[r.id] != null) ? yourLines[r.id] : r.pt;
             var mktLabel = r.mkt + (displayPt != null ? ' ' + (displayPt >= 0 ? '+' : '') + displayPt : '');
             var amStr   = (r.am >= 0 ? '+' : '') + r.am;
@@ -4634,7 +4634,7 @@
                 +   'data-ev-id="' + escHtml(r.id) + '" oninput="evCardUpdate(this.dataset.evId,this)" placeholder="—" '
                 +   'style="width:58px;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--mono);font-size:11px;font-weight:600;padding:3px 5px;border-radius:4px;text-align:right" /></td>'
                 + '<td class="r ev-units-td" style="font-family:var(--mono);font-size:11px;font-weight:700;color:' + uColor + '">' + escHtml(uStr) + '</td>'
-                + '<td class="r ev-bet-td" style="font-family:var(--mono);font-size:11px;font-weight:600;color:var(--muted)">' + escHtml(betAmt) + '</td>'
+                + '<td class="r ev-bet-td" style="font-family:var(--mono);font-size:11px;font-weight:600;color:var(--muted)">' + betAmt + '</td>'
                 + '</tr>';
 
             // Mobile card
@@ -4667,7 +4667,7 @@
                 // Units + Bet
                 + '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:2px">'
                 +   '<span class="evm-units ev-units-td" style="color:' + uColor + '">' + escHtml(uStr) + '</span>'
-                +   '<span class="evm-bet ev-bet-td">' + escHtml(betAmt) + '</span>'
+                +   '<span class="evm-bet ev-bet-td">' + betAmt + '</span>'
                 + '</div>'
                 // Redirect button (if available)
                 + redirectBtn
