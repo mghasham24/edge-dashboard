@@ -4688,6 +4688,11 @@
     }
 
     async function loadAllEvSports() {
+        // Re-verify plan from server — prevents console bypass (currentUser.plan = 'pro')
+        try {
+            var meRes = await fetch('/api/auth/me', { credentials: 'same-origin' });
+            if (meRes.ok) currentUser = await meRes.json();
+        } catch(e) {}
         if (!isPro()) return;
         var btn = document.getElementById('ev-load-btn');
         var status = document.getElementById('ev-load-status');
