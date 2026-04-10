@@ -7692,24 +7692,78 @@
             var res = await fetch('/api/dk/nbaalts', { credentials: 'same-origin' });
             var data = await res.json();
             if (!data.ok || !data.games) return;
+
+            // Helper: find DK game for a rawRow game key
+            function findDkGame(gameKey) {
+                if (data.games[gameKey]) return data.games[gameKey];
+                var fdTeams = gameKey.split(' @ ');
+                var fdAwayLast = (fdTeams[0] || '').trim().split(' ').pop().toLowerCase();
+                var fdHomeLast = (fdTeams[1] || '').trim().split(' ').pop().toLowerCase();
+                var matchedKey = Object.keys(data.games).find(function(k) {
+                    var kTeams = k.split(' @ ');
+                    var kAwayLast = (kTeams[0] || '').trim().split(' ').pop().toLowerCase();
+                    var kHomeLast = (kTeams[1] || '').trim().split(' ').pop().toLowerCase();
+                    return kAwayLast === fdAwayLast && kHomeLast === fdHomeLast;
+                });
+                return matchedKey ? data.games[matchedKey] : null;
+            }
+
+            // Populate dkAltOdds for existing spread/total rows
             rawRows.forEach(function(r) {
                 if (r.mkt !== 'Spread' && r.mkt !== 'Total') return;
                 if (!r.gid) return;
-                var game = data.games[r.game];
-                if (!game) {
-                    var fdTeams = r.game.split(' @ ');
-                    var fdAwayLast = (fdTeams[0] || '').trim().split(' ').pop().toLowerCase();
-                    var fdHomeLast = (fdTeams[1] || '').trim().split(' ').pop().toLowerCase();
-                    var matchedKey = Object.keys(data.games).find(function(k) {
-                        var kTeams = k.split(' @ ');
-                        var kAwayLast = (kTeams[0] || '').trim().split(' ').pop().toLowerCase();
-                        var kHomeLast = (kTeams[1] || '').trim().split(' ').pop().toLowerCase();
-                        return kAwayLast === fdAwayLast && kHomeLast === fdHomeLast;
-                    });
-                    if (matchedKey) game = data.games[matchedKey];
-                }
+                var game = findDkGame(r.game);
                 if (game) dkAltOdds[r.gid] = game;
             });
+
+            // Synthesize spread/total rows for live games that FD no longer offers them for
+            // (FD suspends MATCH_HANDICAP in-game; DK keeps alt lines available)
+            var existingPids = {};
+            rawRows.forEach(function(r) { existingPids[r.pid] = true; });
+            var newRows = [];
+            rawRows.forEach(function(r) {
+                if (r.mkt !== 'ML' || !r.gid || !r.cm) return;
+                if (r.cm > new Date()) return; // only for live games
+                var dk = findDkGame(r.game);
+                if (!dk) return;
+                dkAltOdds[r.gid] = dk;
+                var spreadPid = r.gid + '-spreads';
+                var totalPid  = r.gid + '-totals';
+                var gameParts = r.game.split(' @ ');
+                var away = gameParts[0] || '', home = gameParts[1] || '';
+
+                if (!existingPids[spreadPid] && dk.spreads) {
+                    var awayEntries = Object.entries(dk.spreads['Away'] || {});
+                    var homeEntries = Object.entries(dk.spreads['Home'] || {});
+                    if (awayEntries.length && homeEntries.length) {
+                        // pick line closest to 0 as the "main" displayed line
+                        var awayE = awayEntries.reduce(function(a, b) { return Math.abs(parseFloat(a[0])) <= Math.abs(parseFloat(b[0])) ? a : b; });
+                        var homeE = homeEntries.reduce(function(a, b) { return Math.abs(parseFloat(a[0])) <= Math.abs(parseFloat(b[0])) ? a : b; });
+                        newRows.push({ id: spreadPid + '-A', game: r.game, cm: r.cm, mkt: 'Spread', side: away, am: awayE[1], pt: parseFloat(awayE[0]), pid: spreadPid, ps: 'A', gid: r.gid });
+                        newRows.push({ id: spreadPid + '-B', game: r.game, cm: r.cm, mkt: 'Spread', side: home, am: homeE[1], pt: parseFloat(homeE[0]), pid: spreadPid, ps: 'B', gid: r.gid });
+                        existingPids[spreadPid] = true;
+                    }
+                }
+                if (!existingPids[totalPid] && dk.totals) {
+                    var overEntries  = Object.entries(dk.totals['Over']  || {});
+                    var underEntries = Object.entries(dk.totals['Under'] || {});
+                    if (overEntries.length && underEntries.length) {
+                        var overE  = overEntries.reduce(function(a, b)  { return Math.abs(parseFloat(a[0])) <= Math.abs(parseFloat(b[0])) ? a : b; });
+                        var underE = underEntries.reduce(function(a, b) { return Math.abs(parseFloat(a[0])) <= Math.abs(parseFloat(b[0])) ? a : b; });
+                        newRows.push({ id: totalPid + '-A', game: r.game, cm: r.cm, mkt: 'Total', side: 'Over',  am: overE[1],  pt: parseFloat(overE[0]),  pid: totalPid, ps: 'A', gid: r.gid });
+                        newRows.push({ id: totalPid + '-B', game: r.game, cm: r.cm, mkt: 'Total', side: 'Under', am: underE[1], pt: parseFloat(underE[0]), pid: totalPid, ps: 'B', gid: r.gid });
+                        existingPids[totalPid] = true;
+                    }
+                }
+            });
+            if (newRows.length) {
+                rawRows = rawRows.concat(newRows);
+                rawRowsBySport[currentSport] = rawRows;
+                // Populate Real% for new rows from cached sync data
+                var syncD = lastSyncData[currentSport];
+                if (syncD) fillPredsFromSync(newRows, syncD);
+            }
+
             renderTable();
         } catch(e) {}
     }
