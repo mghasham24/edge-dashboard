@@ -109,6 +109,53 @@ export async function onRequestGet(context) {
   try {
     const nowMs = Date.now();
 
+    // debug=7: fetch known soccer event detail to extract league ID, then list league events
+    if (debugMode === '7') {
+      const DK_BASE = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
+      const KNOWN_EVENT_ID = '33861209'; // soccer game seen in DevTools
+
+      // Step 1: get event detail to find league ID
+      const evRes = await fetch(`${DK_BASE}/pagedata/event/v1/events?eventIds=${KNOWN_EVENT_ID}`, { headers: dkHeaders });
+      const evData = evRes.ok ? await evRes.json() : null;
+      const evPreview = JSON.stringify(evData).slice(0, 3000);
+
+      // Extract league IDs from response
+      const leagueIds = new Set();
+      function walk(obj) {
+        if (!obj || typeof obj !== 'object') return;
+        if (Array.isArray(obj)) { obj.forEach(walk); return; }
+        for (const [k, v] of Object.entries(obj)) {
+          if ((k === 'leagueId' || k === 'league_id' || k === 'competitionId') && v) leagueIds.add(String(v));
+          walk(v);
+        }
+      }
+      walk(evData);
+
+      // Step 2: try to list events using any league IDs found
+      const leagueResults = [];
+      for (const lid of [...leagueIds].slice(0, 5)) {
+        const urls = [
+          `${DK_BASE}/pagedata/league/v1/events?leagueId=${lid}`,
+          `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${lid}&eventsQuery=${encodeURIComponent(`$filter=leagueId eq '${lid}'`)}&include=Events&entity=events`,
+        ];
+        for (const url of urls) {
+          try {
+            const r = await fetch(url, { headers: dkHeaders });
+            if (r.ok) {
+              const d = await r.json();
+              const evSample = (d.events || []).slice(0,3).map(e => ({ id: e.id, name: e.name, date: e.startEventDate }));
+              leagueResults.push({ leagueId: lid, url: url.split('?')[0].split('/').slice(-3).join('/'), status: 200, eventCount: (d.events||[]).length, evSample, preview: JSON.stringify(d).slice(0,500) });
+            } else {
+              leagueResults.push({ leagueId: lid, url: url.split('?')[0].split('/').slice(-3).join('/'), status: r.status });
+            }
+          } catch(e) { leagueResults.push({ leagueId: lid, error: e.message }); }
+          await new Promise(r => setTimeout(r, 80));
+        }
+      }
+
+      return new Response(JSON.stringify({ eventStatus: evRes.status, evPreview, leagueIdsFound: [...leagueIds], leagueResults }), { headers: { 'Content-Type': 'application/json' } });
+    }
+
     // debug=6: probe DK to discover soccer league IDs + Asian handicap subcategory IDs
     if (debugMode === '6') {
       const DK_BASE = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
