@@ -11,8 +11,11 @@ const FD_EVENT_URL = (id) => `https://sbapi.nj.sportsbook.fanduel.com/api/event-
 const FD_PRICES_URL = 'https://smp.nj.sportsbook.fanduel.com/api/sports/fixedodds/readonly/v1/getMarketPrices?priceHistory=0';
 const CACHE_TTL = 30;
 
-// Spread market types in priority order
-const SPREAD_TYPES = ['ASIAN_HANDICAP', 'HANDICAP', 'ASIAN_LINE'];
+// FD soccer only has WIN-DRAW-WIN (3-way ML) for individual games — no Asian handicap
+// Home win = Home -0.5 (same bet). Away win ≠ Away +0.5 (off by draw probability).
+const TARGET_MKT = 'WIN-DRAW-WIN';
+const DRAW_NAME = 'Draw';
+const DRAW_ID = 58805;
 
 // Exact competition names → league label
 const EXACT_COMP_NAMES = {
@@ -164,7 +167,7 @@ export async function onRequestGet(context) {
       const evMarkets = evData?.attachments?.markets || {};
       const mktTypes = [...new Set(Object.values(evMarkets).map(m => m.marketType))].sort();
       const spreadSample = Object.values(evMarkets)
-        .filter(m => SPREAD_TYPES.some(t => t === m.marketType))
+        .filter(m => m.marketType === TARGET_MKT)
         .map(m => ({ marketId: m.marketId, marketType: m.marketType, marketName: m.marketName, runners: (m.runners||[]).map(r => ({ name: r.runnerName, handicap: r.handicap, selectionId: r.selectionId })) }));
 
       return new Response(JSON.stringify({
@@ -219,23 +222,16 @@ export async function onRequestGet(context) {
           runnerNames: {}
         };
 
-        // Find spread market (prefer ASIAN_HANDICAP, fallback to HANDICAP)
-        let bestMkt = null;
-        for (const spreadType of SPREAD_TYPES) {
-          const found = Object.entries(markets).find(([, m]) => m.marketType === spreadType);
-          if (found) { bestMkt = found; break; }
-        }
-
-        if (bestMkt) {
-          entry.spreadId = bestMkt[0];
-          entry.spreadType = bestMkt[1].marketType;
-          (bestMkt[1].runners || []).forEach(function(r) {
+        // Find WIN-DRAW-WIN market (only individual game ML FD offers for soccer)
+        const wdwEntry = Object.entries(markets).find(([, m]) => m.marketType === TARGET_MKT);
+        if (wdwEntry) {
+          entry.mlId = wdwEntry[0];
+          (wdwEntry[1].runners || []).forEach(function(r) {
             if (r.selectionId != null && r.runnerName) {
               entry.runnerNames[r.selectionId] = r.runnerName;
               entry.runnerNames[String(r.selectionId)] = r.runnerName;
             }
           });
-          entry.runners = bestMkt[1].runners || [];
           gameData[gameKey] = entry;
         }
       } catch(e) {}
@@ -253,8 +249,8 @@ export async function onRequestGet(context) {
     const allMarketIds = [];
     const marketToGame = {};
     Object.entries(gameData).forEach(function([gameKey, entry]) {
-      allMarketIds.push(entry.spreadId);
-      marketToGame[entry.spreadId] = gameKey;
+      allMarketIds.push(entry.mlId);
+      marketToGame[entry.mlId] = gameKey;
     });
 
     const pricesRes = await fetch(FD_PRICES_URL, {
@@ -279,7 +275,7 @@ export async function onRequestGet(context) {
           home: entry.home,
           cm: entry.openDate,
           league: entry.league,
-          spread: {}
+          ml: {}
         };
       }
 
@@ -288,9 +284,9 @@ export async function onRequestGet(context) {
         const price = rd.winRunnerOdds?.americanDisplayOdds?.americanOddsInt;
         if (price == null) return;
         const name = entry.runnerNames[rd.selectionId] || entry.runnerNames[String(rd.selectionId)] || '';
-        if (!name) return;
-        const handicap = rd.handicap ?? entry.runners.find(r => r.selectionId == rd.selectionId)?.handicap;
-        gamesMap[gameKey].spread[name] = { pt: handicap, am: price };
+        // Skip Draw runner
+        if (!name || name === DRAW_NAME || rd.selectionId === DRAW_ID) return;
+        gamesMap[gameKey].ml[name] = price;
       });
     });
 
