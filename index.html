@@ -3278,7 +3278,7 @@
         if (ev == null || !isFinite(ev)) return 0;
         var maxU = (realPct != null && realPct < 0.075) ? 0.25
                  : (realPct != null && realPct < 0.15)  ? 0.5
-                 : (realPct != null && realPct < 0.25)  ? 1
+                 : (realPct != null && realPct < 0.25)  ? 0.5  // underdogs: cap at 0.5u
                  : 3;
         if (ev >= 35) return Math.min(3, maxU);
         if (ev >= 20) return Math.min(2, maxU);
