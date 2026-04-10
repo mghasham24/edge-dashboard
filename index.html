@@ -4776,6 +4776,13 @@
         for (var i = 0; i < sportsToLoad.length; i++) {
             var s = sportsToLoad[i];
             try {
+                // For MLB, run fetchRealMarkets now so preds for RFI rows are populated
+                if (s.key === 'baseball_mlb' && (rawRowsBySport[s.key] || []).length) {
+                    var savedSportEv = currentSport;
+                    currentSport = 'baseball_mlb';
+                    await fetchRealMarkets('baseball_mlb', true);
+                    currentSport = savedSportEv;
+                }
                 var sportRows = rawRowsBySport[s.key] || [];
                 if (sportRows.length) {
                     var savedSport3 = currentSport;
@@ -6326,7 +6333,45 @@
                 btn.disabled = false;
                 renderTable();
                 if (rawRows.length > 0) {
-                    fetchRealMarkets(currentSport).then(function() { fetchKalshiRFI(); });
+                    // Fetch Real Sports and RFI odds in parallel; apply Real% to RFI rows once both complete
+                    Promise.all([fetchRealMarkets(currentSport, true), fetchKalshiRFI(true)]).then(function() {
+                        // Now lastSyncData is populated — apply Real% to RFI rows
+                        var syncD = lastSyncData[currentSport];
+                        if (syncD && syncD.markets) {
+                            var mKeys = Object.keys(syncD.markets);
+                            rawRows.forEach(function(r) {
+                                if (r.mkt !== 'RFI') return;
+                                var realKey = syncD.markets[r.game] ? r.game : null;
+                                if (!realKey) {
+                                    var fdTeams = r.game.split(' @ ');
+                                    var fdAway = (fdTeams[0] || '').toLowerCase();
+                                    var fdHome = (fdTeams[1] || '').toLowerCase();
+                                    var found = mKeys.find(function(k) {
+                                        if (k.endsWith('__lines') || k.endsWith('__gid')) return false;
+                                        var p = k.split(' @ ');
+                                        if (p.length !== 2) return false;
+                                        var ka = resolveTeamName(p[0].trim()).toLowerCase(), kh = resolveTeamName(p[1].trim()).toLowerCase();
+                                        var awayOk = ka.split(' ').some(function(w) { return w.length > 2 && fdAway.indexOf(w) !== -1; }) || fdAway.split(' ').some(function(w) { return w.length > 2 && ka.indexOf(w) !== -1; });
+                                        var homeOk = kh.split(' ').some(function(w) { return w.length > 2 && fdHome.indexOf(w) !== -1; }) || fdHome.split(' ').some(function(w) { return w.length > 2 && kh.indexOf(w) !== -1; });
+                                        return awayOk && homeOk;
+                                    });
+                                    if (found) realKey = found;
+                                }
+                                if (!realKey) return;
+                                var gameMkts = syncD.markets[realKey];
+                                if (!gameMkts) return;
+                                var mktData = gameMkts['Run in 1st inning?'];
+                                if (!mktData) return;
+                                var outcomes = mktData.outcomes || mktData;
+                                if (!outcomes || !outcomes.length) return;
+                                var isYes = r.ps === 'A';
+                                var match = outcomes.find(function(o) { if (!o.label) return false; return isYes ? o.label.toLowerCase() === 'yes' : o.label.toLowerCase() === 'no'; });
+                                if (!match) match = isYes ? outcomes[1] : outcomes[0];
+                                if (match && match.pct != null) { preds[r.id] = String(match.pct); if (mktData.volumeDisplay) vols[r.id] = mktData.volumeDisplay; }
+                            });
+                        }
+                        renderTable();
+                    });
                     if (mlbPoller) clearInterval(mlbPoller);
                     mlbPoller = setInterval(function() {
                         if (currentSport !== 'baseball_mlb') { clearInterval(mlbPoller); mlbPoller = null; return; }
@@ -7117,8 +7162,8 @@
         'Athletics': 'Oakland'
     };
 
-    function fetchKalshiRFI() {
-        fetch('/api/fd/rfi', { credentials: 'same-origin' })
+    function fetchKalshiRFI(skipRender) {
+        return fetch('/api/fd/rfi', { credentials: 'same-origin' })
         .then(function(r) { return r.json(); })
         .then(function(d) {
             if (!d.ok || !d.rfi) return;
