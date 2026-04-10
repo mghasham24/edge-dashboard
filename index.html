@@ -4771,11 +4771,16 @@
         for (var i = 0; i < sportsToLoad.length; i++) {
             var s = sportsToLoad[i];
             try {
-                // For MLB, run fetchRealMarkets now so preds for RFI rows are populated
+                // For MLB, run fetchRealMarkets against MLB rows (not current rawRows)
+                // so preds are set for ML + RFI rows before cacheEvRows runs.
                 if (s.key === 'baseball_mlb' && (rawRowsBySport[s.key] || []).length) {
                     var savedSportEv = currentSport;
+                    var savedRawRowsEv = rawRows;
                     currentSport = 'baseball_mlb';
+                    rawRows = rawRowsBySport['baseball_mlb']; // point fetchRealMarkets at MLB rows
                     await fetchRealMarkets('baseball_mlb', true);
+                    rawRowsBySport['baseball_mlb'] = rawRows; // sync back (fetchRealMarkets may filter rows)
+                    rawRows = savedRawRowsEv;
                     currentSport = savedSportEv;
                 }
                 var sportRows = rawRowsBySport[s.key] || [];
