@@ -97,9 +97,8 @@ export async function onRequestPost({ request, env }) {
         const isPaid  = subStatus === 'active';
 
         if (isTrial) {
-          // Get card fingerprint from subscription's default_payment_method
           const pmId = subData.default_payment_method;
-          const abused = await checkFingerprintByPmId(pmId, obj.customer, env);
+          const abused = await checkFingerprintByPmId(pmId, obj.customer, env.DB, env.STRIPE_SECRET_KEY);
           if (abused) {
             try {
               await fetch('https://api.stripe.com/v1/subscriptions/' + obj.subscription, {
@@ -137,33 +136,51 @@ export async function onRequestPost({ request, env }) {
 }
 
 // ── Card fingerprint abuse check ──────────────────────
-// pmId: subscription's default_payment_method (set by Stripe after trial checkout)
-// Returns true if this card has already been used for a trial on a different account.
-async function checkFingerprintByPmId(pmId, stripeCustomerId, env) {
+// Returns true only if this card is actively held by a DIFFERENT user with had_free_trial=1.
+// userId is resolved from Stripe customer metadata (not D1) to avoid replication lag.
+async function checkFingerprintByPmId(pmId, stripeCustomerId, db, secretKey) {
   try {
-    const fingerprint = await resolveFingerprint(pmId, stripeCustomerId, env.STRIPE_SECRET_KEY);
-    if (!fingerprint) return false; // can't determine — allow through
+    const fingerprint = await resolveFingerprint(pmId, stripeCustomerId, secretKey);
+    if (!fingerprint) return false; // can't determine fingerprint — allow through
 
-    const user = await env.DB.prepare(
-      'SELECT id FROM users WHERE stripe_customer_id=?'
-    ).bind(stripeCustomerId).first();
-    const userId = user ? user.id : 0;
+    // Get userId from Stripe customer metadata — avoids D1 replication lag entirely.
+    const auth = { 'Authorization': 'Bearer ' + secretKey };
+    const custRes = await fetch('https://api.stripe.com/v1/customers/' + stripeCustomerId, { headers: auth });
+    const cust = await custRes.json();
+    const userId = cust.metadata && cust.metadata.user_id ? parseInt(cust.metadata.user_id, 10) : 0;
+    if (!userId) return false; // can't identify user — allow through
 
-    const existing = await env.DB.prepare(
+    const existing = await db.prepare(
       'SELECT user_id FROM trial_fingerprints WHERE fingerprint=?'
     ).bind(fingerprint).first();
 
-    if (existing && existing.user_id !== userId) return true; // abuse
+    if (existing) {
+      if (existing.user_id === userId) return false; // same user retrying
 
-    if (!existing) {
-      await env.DB.prepare(
-        'INSERT OR IGNORE INTO trial_fingerprints (fingerprint, user_id, created_at) VALUES (?,?,?)'
-      ).bind(fingerprint, userId, Math.floor(Date.now() / 1000)).run();
+      // Different user. Only block if the other account still has had_free_trial=1
+      // (their trial is genuinely active). If had_free_trial=0 the entry is stale
+      // (cancelled trial or bug victim) — reassign and allow.
+      const existingUser = existing.user_id > 0
+        ? await db.prepare('SELECT had_free_trial FROM users WHERE id=?')
+            .bind(existing.user_id).first()
+        : null;
+
+      if (existingUser && existingUser.had_free_trial === 1) return true; // genuine abuse
+
+      // Stale entry — take over and allow.
+      await db.prepare(
+        'UPDATE trial_fingerprints SET user_id=? WHERE fingerprint=?'
+      ).bind(userId, fingerprint).run();
+      return false;
     }
 
+    // First time this card is seen — record it.
+    await db.prepare(
+      'INSERT OR IGNORE INTO trial_fingerprints (fingerprint, user_id, created_at) VALUES (?,?,?)'
+    ).bind(fingerprint, userId, Math.floor(Date.now() / 1000)).run();
     return false;
   } catch(e) {
-    return false;
+    return false; // on any error, allow through
   }
 }
 

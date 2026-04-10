@@ -24,14 +24,46 @@ export async function onRequestPost({ request, env }) {
   // Create or retrieve Stripe customer
   let customerId = session.stripe_customer_id;
   if (!customerId) {
-    const customer = await stripePost('customers', {
-      email: session.email,
-      metadata: { user_id: String(session.id) }
-    }, env.STRIPE_SECRET_KEY);
-    if (customer.error) return fail(500, 'Failed to create customer');
-    customerId = customer.id;
+    // Before creating, search Stripe for an existing customer with this email
+    // to prevent duplicate customers on retry (e.g. if DB write failed last time).
+    const existingList = await stripeGet(
+      'customers?email=' + encodeURIComponent(session.email) + '&limit=1',
+      env.STRIPE_SECRET_KEY
+    );
+    if (existingList.data && existingList.data.length > 0) {
+      customerId = existingList.data[0].id;
+      // Ensure metadata has this user's id (may be missing on old customers)
+      await stripePost('customers/' + customerId, {
+        metadata: { user_id: String(session.id) }
+      }, env.STRIPE_SECRET_KEY);
+    } else {
+      const customer = await stripePost('customers', {
+        email: session.email,
+        metadata: { user_id: String(session.id) }
+      }, env.STRIPE_SECRET_KEY);
+      if (customer.error) return fail(500, 'Failed to create customer');
+      customerId = customer.id;
+    }
     await env.DB.prepare('UPDATE users SET stripe_customer_id=? WHERE id=?')
       .bind(customerId, session.id).run();
+  }
+
+  // Block if customer already has an active or trialing subscription
+  if (customerId) {
+    const subList = await stripeGet(
+      'subscriptions?customer=' + customerId + '&status=active&limit=1',
+      env.STRIPE_SECRET_KEY
+    );
+    if (subList.data && subList.data.length > 0) {
+      return fail(400, 'Already has an active subscription');
+    }
+    const trialList = await stripeGet(
+      'subscriptions?customer=' + customerId + '&status=trialing&limit=1',
+      env.STRIPE_SECRET_KEY
+    );
+    if (trialList.data && trialList.data.length > 0) {
+      return fail(400, 'Already has an active trial');
+    }
   }
 
   const trialEligible = !session.had_free_trial;
@@ -66,7 +98,14 @@ export async function onRequestPost({ request, env }) {
   });
 }
 
-// ── Stripe API helper ─────────────────────────────────
+// ── Stripe API helpers ────────────────────────────────
+async function stripeGet(endpoint, secretKey) {
+  const res = await fetch('https://api.stripe.com/v1/' + endpoint, {
+    headers: { 'Authorization': 'Bearer ' + secretKey }
+  });
+  return res.json();
+}
+
 async function stripePost(endpoint, params, secretKey) {
   const body = Object.entries(flattenParams(params))
     .map(([k, v]) => encodeURIComponent(k) + '=' + encodeURIComponent(v))

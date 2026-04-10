@@ -1,18 +1,27 @@
-// functions/api/fd/nbaalts.js
-// Fetches FanDuel real-time NBA spread, ML, and total odds via FD's native API
-// Step 1: Get today's NBA event IDs from content-managed-page
-// Step 2: Fetch event-page per game to collect market IDs and runner name mappings
+// functions/api/fd/nhl.js
+// Fetches FanDuel real-time NHL moneyline odds via FD's native API
+// Step 1: Get today's NHL event IDs from content-managed-page
+// Step 2: Fetch event-page per game to collect MONEY_LINE market IDs + runner names
 // Step 3: Batch POST to getMarketPrices for real-time prices
 
-const FD_AK        = 'FhMFpcPWXMeyZxOx';
-const FD_LIST_URL  = `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=CUSTOM&customPageId=nba&_ak=${FD_AK}&timezone=America/New_York`;
-const FD_EVENT_URL = (id) => `https://sbapi.nj.sportsbook.fanduel.com/api/event-page?_ak=${FD_AK}&eventId=${id}&tab=all&timezone=America/New_York`;
-const FD_PRICES_URL = 'https://smp.nj.sportsbook.fanduel.com/api/sports/fixedodds/readonly/v1/getMarketPrices?priceHistory=0';
-const CACHE_TTL = 5;
+const FD_AK         = 'FhMFpcPWXMeyZxOx';
+const FD_LIST_URL   = `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=CUSTOM&customPageId=nhl&_ak=${FD_AK}&timezone=America/New_York`;
 
-const SPREAD_TYPE = 'MATCH_HANDICAP_(2-WAY)';
-const ML_TYPE     = 'MONEY_LINE';
-const TOTAL_TYPE  = 'TOTAL_POINTS_(OVER/UNDER)';
+// Known NHL team name fragments — used to filter out college hockey on the same page
+const NHL_TEAMS = new Set([
+  'Ducks','Coyotes','Bruins','Sabres','Flames','Hurricanes','Blackhawks','Avalanche',
+  'Blue Jackets','Stars','Red Wings','Oilers','Panthers','Kings','Wild','Canadiens',
+  'Predators','Devils','Islanders','Rangers','Senators','Flyers','Penguins','Sharks',
+  'Kraken','Blues','Lightning','Maple Leafs','Canucks','Golden Knights','Capitals',
+  'Jets','Utah Hockey Club'
+]);
+function isNHLTeam(name) {
+  return [...NHL_TEAMS].some(t => name.includes(t));
+}
+const FD_EVENT_URL  = (id) => `https://sbapi.nj.sportsbook.fanduel.com/api/event-page?_ak=${FD_AK}&eventId=${id}&tab=all&timezone=America/New_York`;
+const FD_PRICES_URL = 'https://smp.nj.sportsbook.fanduel.com/api/sports/fixedodds/readonly/v1/getMarketPrices?priceHistory=0';
+const ML_TYPE       = 'MONEY_LINE';
+const CACHE_TTL     = 5;
 
 async function getSession(request, db) {
   const c = request.headers.get('Cookie') || '';
@@ -42,9 +51,8 @@ export async function onRequestGet(context) {
   if (!session) return fail(401, 'Not authenticated');
 
   const now = Math.floor(Date.now() / 1000);
-  const cacheKey = 'fd_nba_alts';
+  const cacheKey = 'fd_nhl';
 
-  // Try cache first
   try {
     const cached = await env.DB.prepare(
       'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
@@ -60,9 +68,8 @@ export async function onRequestGet(context) {
   };
 
   try {
-    // Step 1: Get today's NBA events
     const listRes = await fetch(FD_LIST_URL, { headers });
-    if (!listRes.ok) return fail(listRes.status, 'FD NBA list fetch failed');
+    if (!listRes.ok) return fail(listRes.status, 'FD NHL list fetch failed');
     const listData = await listRes.json();
 
     const events = listData?.attachments?.events || {};
@@ -70,7 +77,11 @@ export async function onRequestGet(context) {
     const todayEvents = Object.values(events).filter(e => {
       if (!e.openDate) return false;
       const t = new Date(e.openDate).getTime();
-      return t >= nowMs - 4 * 60 * 60 * 1000 && t <= nowMs + 36 * 60 * 60 * 1000;
+      if (t < nowMs - 3 * 60 * 60 * 1000 || t > nowMs + 36 * 60 * 60 * 1000) return false;
+      // Filter out non-NHL hockey (college, etc.) by checking team names
+      const teams = parseEventName(e.name);
+      if (!teams) return false;
+      return isNHLTeam(teams.away) || isNHLTeam(teams.home);
     });
 
     if (!todayEvents.length) {
@@ -79,8 +90,8 @@ export async function onRequestGet(context) {
       });
     }
 
-    // Step 2: Fetch event-pages to collect market IDs and runner name mappings
-    const gameData = {}; // gameKey → { spreadId, mlId, totalId, runnerNames: {selId: name} }
+    // Fetch event-pages to collect ML market IDs + runner names
+    const gameData = {};
 
     for (let i = 0; i < todayEvents.length; i++) {
       const event = todayEvents[i];
@@ -97,13 +108,8 @@ export async function onRequestGet(context) {
         const entry = { eventId: event.eventId, openDate: event.openDate, away: teams.away, home: teams.home, runnerNames: {} };
 
         Object.entries(markets).forEach(function([marketId, mkt]) {
-          const mktType = mkt.marketType || '';
-          if (mktType === SPREAD_TYPE)      entry.spreadId = marketId;
-          else if (mktType === ML_TYPE)     entry.mlId     = marketId;
-          else if (mktType === TOTAL_TYPE)  entry.totalId  = marketId;
-          else return;
-
-          // Map selectionId → runnerName directly from embedded runner objects
+          if (mkt.marketType !== ML_TYPE) return;
+          entry.mlId = marketId;
           (mkt.runners || []).forEach(function(ref) {
             if (ref.selectionId != null && ref.runnerName) {
               entry.runnerNames[ref.selectionId] = ref.runnerName;
@@ -111,22 +117,19 @@ export async function onRequestGet(context) {
           });
         });
 
-        if (entry.spreadId || entry.mlId || entry.totalId) {
-          gameData[gameKey] = entry;
-        }
+        if (entry.mlId) gameData[gameKey] = entry;
       } catch(e) {}
 
       if (i < todayEvents.length - 1) await new Promise(r => setTimeout(r, 150));
     }
 
-    // Step 3: Batch all market IDs into one getMarketPrices request
+    // Batch all ML market IDs into one getMarketPrices request
     const allMarketIds = [];
-    const marketToGame = {}; // marketId → { gameKey, type }
+    const marketToGame = {};
 
     Object.entries(gameData).forEach(function([gameKey, entry]) {
-      if (entry.spreadId) { allMarketIds.push(entry.spreadId); marketToGame[entry.spreadId] = { gameKey, type: 'spread' }; }
-      if (entry.mlId)     { allMarketIds.push(entry.mlId);     marketToGame[entry.mlId]     = { gameKey, type: 'ml' }; }
-      if (entry.totalId)  { allMarketIds.push(entry.totalId);  marketToGame[entry.totalId]  = { gameKey, type: 'total' }; }
+      allMarketIds.push(entry.mlId);
+      marketToGame[entry.mlId] = gameKey;
     });
 
     if (!allMarketIds.length) {
@@ -142,40 +145,22 @@ export async function onRequestGet(context) {
     });
 
     if (!pricesRes.ok) return fail(pricesRes.status, 'getMarketPrices failed');
-    const pricesRaw = await pricesRes.json();
-    const marketPricesList = Array.isArray(pricesRaw) ? pricesRaw : (pricesRaw.marketPrices || []);
+    const marketPricesList = await pricesRes.json();
 
-    // Step 4: Map prices back to games in altOdds-compatible format
-    // { spreads: { teamName: { handicap: price } }, totals: { Over: { line: price }, Under: { line: price } }, ml: { teamName: price } }
     const gamesMap = {};
 
-    marketPricesList.forEach(function(mp) {
-      const mapping = marketToGame[mp.marketId];
-      if (!mapping || mp.marketStatus !== 'OPEN') return;
-      const { gameKey, type } = mapping;
+    (Array.isArray(marketPricesList) ? marketPricesList : []).forEach(function(mp) {
+      const gameKey = marketToGame[mp.marketId];
+      if (!gameKey || mp.marketStatus !== 'OPEN') return;
       const entry = gameData[gameKey];
-      if (!gamesMap[gameKey]) gamesMap[gameKey] = { id: entry.eventId, away: entry.away, home: entry.home, cm: entry.openDate, spreads: {}, totals: {}, ml: {} };
-      const game = gamesMap[gameKey];
+      if (!gamesMap[gameKey]) gamesMap[gameKey] = { id: entry.eventId, away: entry.away, home: entry.home, cm: entry.openDate, ml: {} };
 
       (mp.runnerDetails || []).forEach(function(rd) {
         if (rd.runnerStatus !== 'ACTIVE') return;
         const price = rd.winRunnerOdds?.americanDisplayOdds?.americanOddsInt;
         if (price == null) return;
         const name = entry.runnerNames[rd.selectionId] || entry.runnerNames[String(rd.selectionId)] || '';
-        const handicap = rd.handicap;
-
-        if (type === 'spread' && name && handicap != null) {
-          if (!game.spreads[name]) game.spreads[name] = {};
-          game.spreads[name][handicap] = price;
-        } else if (type === 'total' && name && handicap != null) {
-          const side = name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
-          if (side === 'Over' || side === 'Under') {
-            if (!game.totals[side]) game.totals[side] = {};
-            game.totals[side][handicap] = price;
-          }
-        } else if (type === 'ml' && name) {
-          game.ml[name] = price;
-        }
+        if (name) gamesMap[gameKey].ml[name] = price;
       });
     });
 
