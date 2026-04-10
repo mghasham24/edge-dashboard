@@ -156,6 +156,43 @@ export async function onRequestGet(context) {
       return new Response(JSON.stringify({ eventStatus: evRes.status, evPreview, leagueIdsFound: [...leagueIds], leagueResults }), { headers: { 'Content-Type': 'application/json' } });
     }
 
+    // debug=10: find remaining soccer league IDs (La Liga, Serie A, Ligue 1, UCL)
+    if (debugMode === '10') {
+      const DK_BASE = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
+      const DK_SUBCAT = '4514';
+      const results = { found: [] };
+
+      // EPL=40253, Bundesliga=40481. Probe ranges between and around them + UCL guesses.
+      const ranges = [
+        // Around EPL
+        ...Array.from({length:30}, (_, i) => 40254 + i),
+        // Mid range
+        ...Array.from({length:20}, (_, i) => 40320 + i * 5),
+        // Around Bundesliga
+        ...Array.from({length:20}, (_, i) => 40455 + i),
+        // UCL/Champions League guesses
+        35977, 36000, 36001, 36050, 36100, 37000, 38000, 39000, 39500, 40000, 40100, 40200
+      ];
+
+      for (const lid of ranges) {
+        const eq = encodeURIComponent(`$filter=leagueId eq '${lid}' AND clientMetadata/Subcategories/any(s: s/Id eq '${DK_SUBCAT}')`);
+        const mq = encodeURIComponent(`$filter=clientMetadata/subCategoryId eq '${DK_SUBCAT}' AND tags/all(t: t ne 'SportcastBetBuilder')`);
+        const url = `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${lid}&eventsQuery=${eq}&marketsQuery=${mq}&include=Events&entity=events`;
+        const r = await fetch(url, { headers: dkHeaders });
+        if (r.ok) {
+          const d = await r.json();
+          const evs = d.events || [];
+          const lg = (d.leagues || [])[0];
+          if (evs.length > 0) {
+            results.found.push({ leagueId: lid, leagueName: lg && lg.name, eventCount: evs.length, sample: evs.slice(0,2).map(e => e.name) });
+          }
+        }
+        await new Promise(r => setTimeout(r, 50));
+      }
+
+      return new Response(JSON.stringify(results), { headers: { 'Content-Type': 'application/json' } });
+    }
+
     // debug=9: probe nearby subcats for actual ±0.5 AH + find EPL/La Liga league IDs
     if (debugMode === '9') {
       const DK_BASE = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
