@@ -88,6 +88,36 @@ export async function onRequestGet(context) {
   try {
     const nowMs = Date.now();
 
+    // debug=3: probe candidate custom page IDs to find working soccer pages
+    if (debugMode === '3') {
+      const candidates = [
+        'soccer','epl','premier-league','english-premier-league',
+        'bundesliga','german-bundesliga','serie-a','italian-serie-a',
+        'la-liga','spanish-la-liga','ligue-1','french-ligue-1',
+        'champions-league','ucl','uefa-champions-league',
+      ];
+      const results = [];
+      for (const pageId of candidates) {
+        const url = `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=CUSTOM&customPageId=${pageId}&_ak=${FD_AK}&timezone=America/New_York`;
+        try {
+          const r = await fetch(url, { headers });
+          if (r.ok) {
+            const d = await r.json();
+            const evCount = Object.keys(d?.attachments?.events || {}).length;
+            const mktCount = Object.keys(d?.attachments?.markets || {}).length;
+            const mktTypes = [...new Set(Object.values(d?.attachments?.markets || {}).map(m => m.marketType))].sort();
+            results.push({ pageId, status: 200, evCount, mktCount, mktTypes });
+          } else {
+            results.push({ pageId, status: r.status });
+          }
+        } catch(e) {
+          results.push({ pageId, error: e.message });
+        }
+        await new Promise(r => setTimeout(r, 80));
+      }
+      return new Response(JSON.stringify({ results }), { headers: { 'Content-Type': 'application/json' } });
+    }
+
     // debug=1: inspect one competition page structure
     if (debugMode === '1') {
       const compId = debugComp || TARGET_COMPS[0].id;
