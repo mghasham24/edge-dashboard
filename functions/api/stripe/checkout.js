@@ -32,6 +32,10 @@ export async function onRequestPost({ request, env }) {
     );
     if (existingList.data && existingList.data.length > 0) {
       customerId = existingList.data[0].id;
+      // Ensure metadata has this user's id (may be missing on old customers)
+      await stripePost('customers/' + customerId, {
+        metadata: { user_id: String(session.id) }
+      }, env.STRIPE_SECRET_KEY);
     } else {
       const customer = await stripePost('customers', {
         email: session.email,
