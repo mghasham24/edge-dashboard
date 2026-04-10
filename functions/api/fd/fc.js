@@ -1,46 +1,43 @@
 // functions/api/fd/fc.js
-// Fetches FanDuel real-time soccer spread (Asian handicap) odds for top 6 European leagues
-// Step 1: Single SPORT endpoint (eventTypeId=1) returns attachments.markets with all game markets
-// Step 2: Filter markets by spread type, today's games in ET, and target competition
+// Fetches FanDuel real-time soccer spread odds for top 6 European leagues
+// Step 1: Fetch COMPETITION page for each league — these return individual game events + markets
+// Step 2: Filter to today's games in ET, collect spread market IDs + runner names
 // Step 3: Batch POST to getMarketPrices for real-time prices
-// Note: No per-event-page fetches needed — runner names are embedded in attachments.markets
 
 const FD_AK = 'FhMFpcPWXMeyZxOx';
-const FD_SPORT_URL = `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=SPORT&eventTypeId=1&_ak=${FD_AK}&timezone=America/New_York`;
+const FD_COMP_URL = (compId) =>
+  `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=COMPETITION&competitionId=${compId}&_ak=${FD_AK}&timezone=America/New_York`;
 const FD_PRICES_URL = 'https://smp.nj.sportsbook.fanduel.com/api/sports/fixedodds/readonly/v1/getMarketPrices?priceHistory=0';
-const SPREAD_TYPE = 'ASIAN_HANDICAP';
 const CACHE_TTL = 30;
 
-// Exact competition names → league label (prevents substring false matches like Bundesliga 2, Brazilian Serie A, Slovenian Premier League)
-const EXACT_COMP_NAMES = {
-  'premier league':          'EPL',
-  'english premier league':  'EPL',
-  'la liga':                 'La Liga',
-  'spanish la liga':         'La Liga',
-  'bundesliga':              'Bundesliga',
-  'german bundesliga':       'Bundesliga',
-  'serie a':                 'Serie A',
-  'italian serie a':         'Serie A',
-  'ligue 1':                 'Ligue 1',
-  'french ligue 1':          'Ligue 1',
-};
+// Known FD competition IDs + league labels
+const TARGET_COMPS = [
+  { id: 10932509, label: 'EPL' },
+  { id: 228,      label: 'UCL' },
+  { id: 117,      label: 'La Liga' },
+  { id: 59,       label: 'Bundesliga' },
+  { id: 81,       label: 'Serie A' },
+  { id: 55,       label: 'Ligue 1' },
+];
 
-function getLeagueLabel(competitionName) {
-  if (!competitionName) return null;
-  const lower = competitionName.toLowerCase();
-  if (EXACT_COMP_NAMES[lower]) return EXACT_COMP_NAMES[lower];
-  // UCL substring match is safe — no other major competition shares this substring
-  if (lower.includes('champions league')) return 'UCL';
-  return null;
+// Soccer spread market types to look for (in priority order)
+const SPREAD_TYPES = ['ASIAN_HANDICAP', 'HANDICAP', 'ASIAN_LINE'];
+
+// Returns true if date matches today in ET
+function isToday_ET(dateStr) {
+  if (!dateStr) return false;
+  const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
+  return fmt.format(new Date(dateStr)) === fmt.format(new Date());
 }
 
-// Returns true if the market's game date matches today in ET (America/New_York)
-function isToday_ET(marketTime) {
-  if (!marketTime) return false;
-  const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
-  const gameDate = fmt.format(new Date(marketTime));
-  const todayDate = fmt.format(new Date());
-  return gameDate === todayDate;
+function parseEventName(name) {
+  // FD soccer: "Home v Away"
+  let m = name.match(/^(.+?)\s+v\s+(.+?)\s*$/i);
+  if (m) return { home: m[1].trim(), away: m[2].trim() };
+  // US format: "Away @ Home"
+  m = name.match(/^(.+?)\s*@\s*(.+?)\s*$/);
+  if (m) return { away: m[1].trim(), home: m[2].trim() };
+  return null;
 }
 
 async function getSession(request, db) {
@@ -66,6 +63,8 @@ export async function onRequestGet(context) {
 
   const reqUrl = new URL(request.url);
   const debugMode = reqUrl.searchParams.get('debug');
+  // debug=1 can target a specific comp: ?debug=1&comp=59
+  const debugComp = reqUrl.searchParams.get('comp');
 
   const now = Math.floor(Date.now() / 1000);
   const cacheKey = 'fd_fc';
@@ -87,130 +86,122 @@ export async function onRequestGet(context) {
   };
 
   try {
-    // Step 1: Single SPORT fetch for all soccer markets
-    const sportRes = await fetch(FD_SPORT_URL, { headers });
-    if (!sportRes.ok) return fail(sportRes.status, 'FD soccer sport fetch failed: ' + sportRes.status);
-    const sportData = await sportRes.json();
-
     const nowMs = Date.now();
-    const allMarkets = sportData?.attachments?.markets || {};
-    const competitions = sportData?.attachments?.competitions || {};
 
-    // Build competitionId → league label map for target leagues
-    const compLeagueMap = {};
-    Object.values(competitions).forEach(function(c) {
-      const label = getLeagueLabel(c.name);
-      if (label) compLeagueMap[c.competitionId] = label;
-    });
-
-    // debug=1: show all unique market types and target competitions
+    // debug=1: inspect one competition page structure
     if (debugMode === '1') {
-      const uniqueTypes = [...new Set(Object.values(allMarkets).map(m => m.marketType))].sort();
-      const targetComps = Object.entries(compLeagueMap).map(([id, label]) => ({
-        competitionId: id, label, name: competitions[id]?.name
-      }));
-      // Sample of SPREAD_TYPE markets
-      const spreadMarkets = Object.values(allMarkets)
-        .filter(m => m.marketType === SPREAD_TYPE)
+      const compId = debugComp || TARGET_COMPS[0].id;
+      const res = await fetch(FD_COMP_URL(compId), { headers });
+      const status = res.status;
+      if (!res.ok) {
+        return new Response(JSON.stringify({ compId, status, error: 'fetch failed' }), { headers: { 'Content-Type': 'application/json' } });
+      }
+      const data = await res.json();
+      const attachmentKeys = Object.keys(data?.attachments || {});
+      const events = data?.attachments?.events || {};
+      const markets = data?.attachments?.markets || {};
+      const eventSample = Object.values(events).slice(0, 5);
+      const uniqueMarketTypes = [...new Set(Object.values(markets).map(m => m.marketType))].sort();
+      const spreadSample = Object.values(markets)
+        .filter(m => SPREAD_TYPES.some(t => t === m.marketType))
         .slice(0, 5)
-        .map(m => ({
-          marketId: m.marketId,
-          competitionId: m.competitionId,
-          league: compLeagueMap[m.competitionId],
-          marketTime: m.marketTime,
-          marketStatus: m.marketStatus,
-          runners: (m.runners || []).map(r => ({ id: r.selectionId, name: r.runnerName, handicap: r.handicap }))
-        }));
-      // Sample of non-WDW, non-outright market types
-      const otherSample = Object.values(allMarkets)
-        .filter(m => m.marketType !== 'WIN-DRAW-WIN' && m.marketType !== 'OUTRIGHT_BETTING' && compLeagueMap[m.competitionId])
-        .slice(0, 5)
-        .map(m => ({ marketType: m.marketType, marketId: m.marketId, marketName: m.marketName, league: compLeagueMap[m.competitionId], runners: (m.runners || []).slice(0,2).map(r => ({ name: r.runnerName, handicap: r.handicap })) }));
+        .map(m => ({ marketId: m.marketId, marketType: m.marketType, eventId: m.eventId, marketName: m.marketName, runners: (m.runners || []).slice(0,3).map(r => ({ name: r.runnerName, handicap: r.handicap, selectionId: r.selectionId })) }));
       return new Response(JSON.stringify({
-        totalMarkets: Object.keys(allMarkets).length,
-        allMarketTypes: uniqueTypes,
-        targetCompetitions: targetComps,
-        spreadTypeSample: spreadMarkets,
-        otherLeagueMarketsSample: otherSample
+        compId, status,
+        attachmentKeys,
+        totalEvents: Object.keys(events).length,
+        totalMarkets: Object.keys(markets).length,
+        uniqueMarketTypes,
+        eventSample: eventSample.map(e => ({ eventId: e.eventId, name: e.name, openDate: e.openDate })),
+        spreadSample
       }), { headers: { 'Content-Type': 'application/json' } });
     }
 
-    // Step 2: Filter markets — target spread type, target league, today's games in ET
-    // For Asian handicap: runner order is [Home, Away] or flagged by handicap sign
-    const gameMarkets = {};
+    // Step 1: Fetch all competition pages sequentially, collect today's game data
+    const gameData = {}; // gameKey → { marketId, eventId, marketTime, away, home, league, runnerNames }
 
-    Object.values(allMarkets).forEach(function(mkt) {
-      if (mkt.marketType !== SPREAD_TYPE) return;
-      const league = compLeagueMap[mkt.competitionId];
-      if (!league) return;
-      if (mkt.marketStatus && mkt.marketStatus !== 'OPEN') return;
-      if (!mkt.marketTime) return;
-      // Today-only filter in ET timezone
-      if (!isToday_ET(mkt.marketTime)) return;
-      // Also skip games that started more than 4h ago
-      const t = new Date(mkt.marketTime).getTime();
-      if (t < nowMs - 4 * 60 * 60 * 1000) return;
+    for (const comp of TARGET_COMPS) {
+      try {
+        const res = await fetch(FD_COMP_URL(comp.id), { headers });
+        if (!res.ok) continue;
+        const data = await res.json();
 
-      const runners = mkt.runners || [];
-      if (runners.length < 2) return;
+        const events = data?.attachments?.events || {};
+        const markets = data?.attachments?.markets || {};
 
-      // For Asian handicap runners: identify home/away by handicap sign
-      // Home team runner typically has negative handicap (favorite) or positive (underdog)
-      // Runner order: [0]=Home, [1]=Away in FD soccer
-      const homeRunner = runners[0];
-      const awayRunner = runners[1];
-      if (!homeRunner || !awayRunner) return;
+        // Find today's events
+        const todayEventIds = new Set();
+        Object.values(events).forEach(function(e) {
+          if (!e.openDate) return;
+          if (!isToday_ET(e.openDate)) return;
+          const t = new Date(e.openDate).getTime();
+          if (t < nowMs - 4 * 60 * 60 * 1000) return; // skip if started 4h+ ago
+          todayEventIds.add(e.eventId);
+        });
 
-      const gameKey = awayRunner.runnerName + ' @ ' + homeRunner.runnerName;
+        if (!todayEventIds.size) continue;
 
-      // One market per game — prefer the -0.5/+0.5 line if multiple exist
-      const existingEntry = gameMarkets[gameKey];
-      const currentHandicap = Math.abs(parseFloat(homeRunner.handicap) || 0);
-      if (existingEntry) {
-        const existingHandicap = Math.abs(parseFloat(existingEntry.homeHandicap) || 0);
-        // Keep the -0.5/+0.5 line; if tie, keep first
-        if (Math.abs(currentHandicap - 0.5) > Math.abs(existingHandicap - 0.5)) return;
-      }
+        // For each today event, find spread market
+        Object.values(markets).forEach(function(mkt) {
+          if (!todayEventIds.has(mkt.eventId)) return;
+          if (!SPREAD_TYPES.includes(mkt.marketType)) return;
+          if (mkt.marketStatus && mkt.marketStatus !== 'OPEN') return;
 
-      const runnerNames = {};
-      runners.forEach(function(r) {
-        if (r.selectionId != null && r.runnerName) runnerNames[r.selectionId] = r.runnerName;
-      });
+          // Find the event to get game name + time
+          const event = events[mkt.eventId];
+          if (!event) return;
 
-      gameMarkets[gameKey] = {
-        marketId: mkt.marketId,
-        eventId: mkt.eventId,
-        marketTime: mkt.marketTime,
-        away: awayRunner.runnerName,
-        home: homeRunner.runnerName,
-        homeHandicap: homeRunner.handicap,
-        awayHandicap: awayRunner.handicap,
-        league,
-        runnerNames
-      };
-    });
+          const teams = parseEventName(event.name);
+          if (!teams) return;
+          const gameKey = teams.away + ' @ ' + teams.home;
+
+          if (gameData[gameKey]) return; // already have this game
+
+          const runnerNames = {};
+          (mkt.runners || []).forEach(function(r) {
+            if (r.selectionId != null && r.runnerName) runnerNames[r.selectionId] = r.runnerName;
+          });
+
+          gameData[gameKey] = {
+            marketId: mkt.marketId,
+            eventId: mkt.eventId,
+            marketTime: event.openDate,
+            marketType: mkt.marketType,
+            away: teams.away,
+            home: teams.home,
+            league: comp.label,
+            runnerNames,
+            runners: mkt.runners || []
+          };
+        });
+      } catch(e) {}
+
+      // Small delay between competition fetches
+      await new Promise(r => setTimeout(r, 100));
+    }
 
     if (debugMode === '2') {
       return new Response(JSON.stringify({
-        filteredCount: Object.keys(gameMarkets).length,
-        games: Object.entries(gameMarkets).map(([k, v]) => ({
+        filteredCount: Object.keys(gameData).length,
+        games: Object.entries(gameData).map(([k, v]) => ({
           gameKey: k, league: v.league, marketTime: v.marketTime,
-          homeHandicap: v.homeHandicap, awayHandicap: v.awayHandicap, marketId: v.marketId
+          marketType: v.marketType, marketId: v.marketId,
+          runners: v.runners.map(r => ({ name: r.runnerName, handicap: r.handicap }))
         }))
       }), { headers: { 'Content-Type': 'application/json' } });
     }
 
-    if (!Object.keys(gameMarkets).length) {
+    if (!Object.keys(gameData).length) {
       return new Response(JSON.stringify({ ok: true, games: {} }), {
         headers: { 'Content-Type': 'application/json' }
       });
     }
 
-    // Step 3: Batch all market IDs into one getMarketPrices request
+    // Step 2: Batch all market IDs into one getMarketPrices request
     const allMarketIds = [];
     const marketToGame = {};
 
-    Object.entries(gameMarkets).forEach(function([gameKey, entry]) {
+    Object.entries(gameData).forEach(function([gameKey, entry]) {
       allMarketIds.push(entry.marketId);
       marketToGame[entry.marketId] = gameKey;
     });
@@ -229,7 +220,7 @@ export async function onRequestGet(context) {
     (Array.isArray(marketPricesList) ? marketPricesList : []).forEach(function(mp) {
       const gameKey = marketToGame[mp.marketId];
       if (!gameKey || mp.marketStatus !== 'OPEN') return;
-      const entry = gameMarkets[gameKey];
+      const entry = gameData[gameKey];
       if (!gamesMap[gameKey]) {
         gamesMap[gameKey] = {
           id: entry.eventId,
@@ -247,8 +238,7 @@ export async function onRequestGet(context) {
         if (price == null) return;
         const name = entry.runnerNames[rd.selectionId] || entry.runnerNames[String(rd.selectionId)] || '';
         if (!name) return;
-        // handicap from the market entry
-        const handicap = rd.handicap ?? (name === entry.home ? entry.homeHandicap : entry.awayHandicap);
+        const handicap = rd.handicap ?? (entry.runners.find(r => r.selectionId == rd.selectionId)?.handicap);
         gamesMap[gameKey].spread[name] = { pt: handicap, am: price };
       });
     });
