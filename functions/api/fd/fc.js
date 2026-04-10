@@ -81,7 +81,7 @@ export async function onRequestGet(context) {
         'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
       ).bind(cacheKey).first();
       if (cached && (now - cached.fetched_at) < CACHE_TTL) {
-        return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
+        return new Response(cached.data, { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
       }
     } catch(e) {}
   }
@@ -220,7 +220,7 @@ export async function onRequestGet(context) {
       ).bind(cacheKey, body, now).run();
     } catch(e) {}
 
-    return new Response(body, { headers: { 'Content-Type': 'application/json' } });
+    return new Response(body, { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
 
   } catch(e) {
     return fail(500, e.message);
