@@ -2852,6 +2852,7 @@
     var portSearchQuery   = '';
     var evTabCache        = {};   // sport key -> array of positive-EV row objects
     var evTabVisible      = false;
+    var evLoadingInProgress = false; // true while loadAllEvSports Phase1/2 running — suppresses mid-load renders
     var evAutoRefreshTimer = null;
     var EV_REFRESH_MS = 60000; // refresh every 60 seconds
     var rfiOdds = {}; // game key -> {yesFair, noFair, yesAm, noAm}
@@ -4457,14 +4458,15 @@
             r._pred = pred; r._rake = rake;
             r._ev   = (r.af * (1/pred) * (1-rake) - 1) * 100;
             // >100% EV is a post-game artifact (RS knows result, FD market not yet settled)
-            if (r._ev > 0 && r._ev <= 100) { r._sortVal = r._ev; positive.push(r); }
+            // Exception: soccer_fc live ±0.5 lines can legitimately produce >100% EV
+            if (r._ev > 0 && (r._ev <= 100 || sport === 'soccer_fc')) { r._sortVal = r._ev; positive.push(r); }
         });
         positive.sort(function(a, b) { return b._sortVal - a._sortVal; });
         var sportLabel = (SPORTS.find(function(s) { return s.key === sport; }) || {}).label || sport;
         positive.forEach(function(r) { r._sport = sportLabel; r._sport_key = sport; });
         // Always overwrite — empty rows means no active games for this sport
         evTabCache[sport] = positive;
-        if (!skipRender && evTabVisible) renderEvTab();
+        if (!skipRender && evTabVisible && !evLoadingInProgress) renderEvTab();
     }
 
     // Called when user edits a Real% input on a Best EV row (desktop table or mobile card)
@@ -4699,6 +4701,7 @@
         updateStatus();
 
         // Re-fetch fresh odds for all sports in parallel — this evicts finished games from rawRowsBySport
+        evLoadingInProgress = true;
         var noSpread = ['mma_mixed_martial_arts', 'baseball_mlb', 'icehockey_nhl'];
         await Promise.all(sportsToLoad.map(async function(s) {
             try {
@@ -4816,6 +4819,13 @@
                     currentSport = savedSportEvFc;
                 }
                 var sportRows = rawRowsBySport[s.key] || [];
+                // For non-MLB/FC sports: re-apply cached RS sync data to new row IDs so preds are populated.
+                // Phase 1 may have fetched fresh odds (new row IDs), so preds from prior tab load may be stale.
+                // fillPredsFromSync matches by game/team name, not ID — safe to call with refreshed rows.
+                if (s.key !== 'baseball_mlb' && s.key !== 'soccer_fc' && sportRows.length) {
+                    var cachedSync = lastSyncData[s.key];
+                    if (cachedSync) fillPredsFromSync(sportRows, cachedSync);
+                }
                 if (sportRows.length) {
                     var savedSport3 = currentSport;
                     currentSport = s.key;
@@ -4848,6 +4858,7 @@
             updateStatus();
         }
         if (btn) { btn.disabled = false; btn.textContent = '↺ Refresh'; }
+        evLoadingInProgress = false;
         renderEvTab();
         // Start 60s countdown to next auto-refresh in status bar
         var _evCountdown = EV_REFRESH_MS / 1000;
@@ -6797,6 +6808,7 @@
                 if (syncResp.ok) {
                     var syncData = await syncResp.json();
                     fillPredsFromSync(parsed, syncData);
+                    lastSyncData[s.key] = syncData; // cache for Best EV Phase 2 pred lookup
                     if (s.key === currentSport) renderTable();
                 }
             } catch(e) {}
@@ -6996,6 +7008,27 @@
     }
 
     function buildRow(r, color, isC) {
+        // Free users: Spread and Total rows are locked — show blurred placeholder, click to upgrade
+        if (!isPro() && r.mkt !== 'ML' && r.mkt !== 'RFI') {
+            var gk = r.game.replace(/"/g, '&quot;');
+            var lockedLine = r.mkt === 'Total' ? (r.ps === 'A' ? 'O ???' : 'U ???') : (r.ps === 'A' ? '+?.5' : '-?.5');
+            return '<tr class="' + (isC ? 'collapsed-row' : '') + '" data-gk="' + gk + '" data-row-id="' + r.id + '" style="border-left:3px solid ' + color + ';cursor:pointer;' + edgeBg(null) + '" onclick="showUpgradeModal(\'Spread and Total markets are available on the Pro plan. Upgrade to unlock spread and total betting across all sports.\')">'
+            + '<td class="game-td" data-label="Game"><div style="font-weight:600;filter:blur(4px);user-select:none;pointer-events:none">' + r.side + '</div><div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px">' + r.game + '</div></td>'
+            + '<td data-label="Market"><span class="mkt-badge">' + r.mkt + '</span></td>'
+            + '<td data-label="Side" style="filter:blur(4px);user-select:none;pointer-events:none;color:var(--muted);font-size:12px">' + r.side + '</td>'
+            + '<td data-label="FD Line" style="filter:blur(4px);user-select:none;pointer-events:none;font-family:var(--mono);color:var(--muted);font-size:12px">' + lockedLine + '</td>'
+            + '<td class="r" data-label="Consensus" style="filter:blur(4px);user-select:none;pointer-events:none"><span class="odds-neg">-115</span></td>'
+            + '<td class="r" data-label="No-Vig %" style="filter:blur(4px);user-select:none;pointer-events:none;font-family:var(--mono);color:var(--muted2);font-size:11px;opacity:0.5">50.0%</td>'
+            + '<td class="c" data-label="Real Line"></td>'
+            + '<td class="r" data-label="Adj. Fair %" style="filter:blur(4px);user-select:none;pointer-events:none;font-family:var(--mono);color:var(--muted)">50.0%</td>'
+            + '<td class="c" data-label="Real %"></td>'
+            + '<td class="r" data-label="Edge" style="filter:blur(4px);user-select:none;pointer-events:none"><span class="e-weak">+2.5%</span></td>'
+            + '<td class="r" data-label="EV"><span style="filter:blur(4px);font-family:var(--mono);font-size:12px;font-weight:600;color:var(--green);user-select:none;pointer-events:none">+5.2%</span><span style="font-size:9px;font-weight:700;background:var(--accent);color:#fff;border-radius:3px;padding:1px 4px;margin-left:3px;vertical-align:middle">PRO</span></td>'
+            + '<td class="r" data-label="Units"><span class="u-pass">—</span></td>'
+            + '<td class="r" data-label="Bet"><span class="u-pass">—</span></td>'
+            + '<td class="c"></td>'
+            + '</tr>';
+        }
         var am = fmtAm(r.am);
         var aCls = Number(r.am) >= 0 ? 'odds-pos' : 'odds-neg';
         var lineStr = '-';
