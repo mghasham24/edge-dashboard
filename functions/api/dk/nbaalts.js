@@ -53,16 +53,22 @@ export async function onRequestGet(context) {
   const now = Math.floor(Date.now() / 1000);
   const cacheKey = 'dk_nba_alts';
 
-  if (!debugMode) {
-    try {
-      const cached = await env.DB.prepare(
-        'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
-      ).bind(cacheKey).first();
-      if (cached && (now - cached.fetched_at) < CACHE_TTL) {
+  // Read existing cache — use as fresh response if within TTL, keep as fallback for live-game alt line persistence
+  let oldGamesFallback = {};
+  try {
+    const cached = await env.DB.prepare(
+      'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
+    ).bind(cacheKey).first();
+    if (cached) {
+      if (!debugMode && (now - cached.fetched_at) < CACHE_TTL) {
         return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
       }
-    } catch(e) {}
-  }
+      try {
+        const old = JSON.parse(cached.data);
+        oldGamesFallback = old.games || {};
+      } catch(e) {}
+    }
+  } catch(e) {}
 
   const headers = {
     'Accept': '*/*',
@@ -149,6 +155,16 @@ export async function onRequestGet(context) {
 
       if (i < events.length - 1) await new Promise(r => setTimeout(r, 100));
     }
+
+    // Fallback: for live games that DK has removed from the events list (or suspended alt lines),
+    // restore the last known pre-game alt lines so spread/total rows remain meaningful
+    Object.entries(oldGamesFallback).forEach(([gameKey, oldGame]) => {
+      const hadData = Object.keys((oldGame.spreads && oldGame.spreads.Away) || {}).length > 0;
+      if (!hadData) return;
+      const curr = gamesMap[gameKey];
+      const hasCurrData = curr && Object.keys((curr.spreads && curr.spreads.Away) || {}).length > 0;
+      if (!hasCurrData) gamesMap[gameKey] = oldGame;
+    });
 
     if (debugMode === '2') {
       return new Response(JSON.stringify({ ok: true, games: gamesMap }), { headers: { 'Content-Type': 'application/json' } });
