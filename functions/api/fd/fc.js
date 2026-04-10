@@ -88,6 +88,39 @@ export async function onRequestGet(context) {
   try {
     const nowMs = Date.now();
 
+    // debug=5: try alternative page types and SMP endpoint for soccer game markets
+    if (debugMode === '5') {
+      const attempts = [
+        `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=INPLAY&_ak=${FD_AK}&timezone=America/New_York`,
+        `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=SPORT&eventTypeId=1&tab=matches&_ak=${FD_AK}&timezone=America/New_York`,
+        `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=SPORT&eventTypeId=1&tab=today&_ak=${FD_AK}&timezone=America/New_York`,
+        `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=SPORT&eventTypeId=1&maxMarketCount=5&_ak=${FD_AK}&timezone=America/New_York`,
+        `https://sbapi.pa.sportsbook.fanduel.com/api/content-managed-page?page=SPORT&eventTypeId=1&_ak=${FD_AK}&timezone=America/New_York`,
+        `https://smp.nj.sportsbook.fanduel.com/api/sports/fixedodds/readonly/v1/getEvents?sportId=1&_ak=${FD_AK}`,
+        `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=NEXT_RACES&eventTypeId=1&_ak=${FD_AK}&timezone=America/New_York`,
+      ];
+      const results = [];
+      for (const url of attempts) {
+        try {
+          const r = await fetch(url, { headers });
+          if (r.ok) {
+            const d = await r.json();
+            const topKeys = Object.keys(d || {});
+            const attKeys = Object.keys(d?.attachments || {});
+            const evCount = Object.keys(d?.attachments?.events || {}).length;
+            const mktCount = Object.keys(d?.attachments?.markets || {}).length;
+            const mktTypes = [...new Set(Object.values(d?.attachments?.markets || {}).map(m => m.marketType))].sort();
+            const evSample = Object.values(d?.attachments?.events || {}).slice(0,2).map(e => ({ id: e.eventId, name: e.name, date: e.openDate }));
+            results.push({ url: url.split('?')[1].slice(0,60), status: 200, topKeys, attKeys, evCount, mktCount, mktTypes, evSample });
+          } else {
+            results.push({ url: url.split('?')[1].slice(0,60), status: r.status });
+          }
+        } catch(e) { results.push({ url: url.split('?')[1].slice(0,60), error: e.message }); }
+        await new Promise(r => setTimeout(r, 100));
+      }
+      return new Response(JSON.stringify({ results }), { headers: { 'Content-Type': 'application/json' } });
+    }
+
     // debug=3: probe candidate custom page IDs to find working soccer pages
     if (debugMode === '3') {
       const candidates = [
