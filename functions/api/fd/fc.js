@@ -156,6 +156,70 @@ export async function onRequestGet(context) {
       return new Response(JSON.stringify({ eventStatus: evRes.status, evPreview, leagueIdsFound: [...leagueIds], leagueResults }), { headers: { 'Content-Type': 'application/json' } });
     }
 
+    // debug=9: probe nearby subcats for actual ±0.5 AH + find EPL/La Liga league IDs
+    if (debugMode === '9') {
+      const DK_BASE = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
+      const KNOWN_EVENT_ID = '33861209';
+      const results = {};
+
+      // Part 1: probe subcat IDs for the known event to find actual ±0.5 Asian handicap
+      // subcat 4514 = 3-way ML confirmed. Try nearby IDs for 2-way AH.
+      const subcatsToTry = [4508, 4509, 4510, 4511, 4512, 4513, 4515, 4516, 4517, 4518, 4519, 4520, 4522, 4524, 4526];
+      results.subcatProbe = [];
+      for (const sc of subcatsToTry) {
+        const mq = encodeURIComponent(
+          `$filter=eventId eq '${KNOWN_EVENT_ID}' AND clientMetadata/subCategoryId eq '${sc}' AND tags/all(t: t ne 'SportcastBetBuilder')`
+        );
+        const url = `${DK_BASE}/controldata/event/eventSubcategory/v1/markets?isBatchable=false&templateVars=${KNOWN_EVENT_ID}%2C${sc}&marketsQuery=${mq}&include=MarketSplits&entity=markets`;
+        const r = await fetch(url, { headers: dkHeaders });
+        if (r.ok) {
+          const d = await r.json();
+          const sels = d.selections || [];
+          const mktNames = [...new Set((d.markets||[]).map(m => m.name))];
+          results.subcatProbe.push({ subcat: sc, status: 200, selCount: sels.length, mktNames, sample: sels.slice(0,3).map(s => ({ label: s.label, outcomeType: s.outcomeType, points: s.points, odds: s.displayOdds && s.displayOdds.american })) });
+        } else {
+          results.subcatProbe.push({ subcat: sc, status: r.status });
+        }
+        await new Promise(r => setTimeout(r, 60));
+      }
+
+      // Part 2: try to find EPL/La Liga league IDs via event IDs near known Bundesliga ones
+      // Also try sport-level listing variants
+      const idsToProbe = [33861100, 33861150, 33861200, 33861220, 33861250, 33861300, 33861400, 33861500, 33861600, 33862000];
+      results.eventProbe = [];
+      for (const eid of idsToProbe) {
+        const r = await fetch(`${DK_BASE}/pagedata/event/v1/events?eventIds=${eid}`, { headers: dkHeaders });
+        if (r.ok) {
+          const d = await r.json();
+          const ev = (d.events || [])[0];
+          const lg = (d.leagues || [])[0];
+          if (ev && lg && lg.sportId === '1') { // soccer only
+            results.eventProbe.push({ eventId: eid, name: ev.name, league: lg.name, leagueId: lg.id, date: ev.startEventDate });
+          }
+        }
+        await new Promise(r => setTimeout(r, 60));
+      }
+
+      // Part 3: try league IDs near Bundesliga (40481) for other top soccer leagues
+      const leagueIdsToProbe = [40475, 40476, 40477, 40478, 40479, 40480, 40482, 40483, 40484, 40485, 40490, 40500, 40510, 40520, 35977];
+      results.leagueProbe = [];
+      for (const lid of leagueIdsToProbe) {
+        const eq = encodeURIComponent(`$filter=leagueId eq '${lid}' AND clientMetadata/Subcategories/any(s: s/Id eq '4514')`);
+        const mq = encodeURIComponent(`$filter=clientMetadata/subCategoryId eq '4514' AND tags/all(t: t ne 'SportcastBetBuilder')`);
+        const url = `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${lid}&eventsQuery=${eq}&marketsQuery=${mq}&include=Events&entity=events`;
+        const r = await fetch(url, { headers: dkHeaders });
+        if (r.ok) {
+          const d = await r.json();
+          const evs = d.events || [];
+          const lg = (d.leagues || [])[0];
+          if (evs.length > 0) results.leagueProbe.push({ leagueId: lid, leagueName: lg && lg.name, eventCount: evs.length, sample: evs.slice(0,2).map(e => ({ name: e.name, date: e.startEventDate })) });
+        }
+        await new Promise(r => setTimeout(r, 60));
+      }
+
+      return new Response(JSON.stringify(results), { headers: { 'Content-Type': 'application/json' } });
+    }
+
     // debug=8: verify subcat 4514 works for known event + exact NBA-style league listing + find other league IDs
     if (debugMode === '8') {
       const DK_BASE = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
