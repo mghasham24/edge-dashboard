@@ -5906,14 +5906,35 @@
         var params = new URLSearchParams(window.location.search);
         if (params.get('checkout') === 'success') {
             history.replaceState({}, '', '/');
-            // Wait briefly for webhook to process, then check plan
-            setTimeout(async function() {
-                await checkSession();
-                // If still on free after a checkout=success, the trial was blocked (duplicate card)
-                if (currentUser && currentUser.plan !== 'pro') {
-                    showTrialBlockedModal();
+            // sync-plan reads from Stripe directly (bypasses D1 replica lag),
+            // force-writes plan='pro' to D1 so subsequent /api/auth/me reads see it.
+            async function syncThenPoll() {
+                try {
+                    var syncRes = await fetch('/api/stripe/sync-plan', { credentials: 'same-origin' });
+                    var syncData = await syncRes.json();
+                    if (syncData.plan === 'pro') {
+                        await checkSession();
+                        return; // success — no modal
+                    }
+                } catch(e) {}
+
+                // sync-plan returned free — poll /api/auth/me for up to 12s
+                // (webhook may still be in flight)
+                var attempts = 0;
+                var maxAttempts = 8;
+                async function pollForPro() {
+                    await checkSession();
+                    if (currentUser && currentUser.plan === 'pro') return;
+                    attempts++;
+                    if (attempts < maxAttempts) {
+                        setTimeout(pollForPro, 1500);
+                    } else {
+                        if (currentUser && currentUser.plan !== 'pro') showTrialBlockedModal();
+                    }
                 }
-            }, 2500);
+                setTimeout(pollForPro, 1500);
+            }
+            setTimeout(syncThenPoll, 2000);
         } else if (params.get('checkout') === 'cancel') {
             history.replaceState({}, '', '/');
         }
