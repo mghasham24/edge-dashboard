@@ -6770,9 +6770,6 @@
                 var isHockey = currentSport === 'icehockey_nhl';
                 var isNBA = currentSport === 'basketball_nba';
 
-                // NBA: hide spread/total once game has started ONLY if no alternate odds available (FD or DK)
-                if (isNBA && r.cm && r.cm <= now && !altOdds[r.gid] && !dkAltOdds[r.gid]) return false;
-
                 // All sports: hide spread if signs are opposite AND gap > 2 (sign flip = bad data)
                 if (r.mkt === 'Spread' && r.pt != null && yourLines[r.id] != null) {
                     var fdPt = parseFloat(r.pt);
