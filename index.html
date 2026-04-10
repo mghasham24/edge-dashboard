@@ -4188,13 +4188,13 @@
         var af = adjFair(fair, r.pt, yl, r.mkt, r.ps);
         var pr = preds[id];
         var pred = (pr !== undefined && pr !== '') ? parseFloat(pr) / 100 : null;
-        var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
+        var edge = (af != null && pred != null && isFinite(pred)) ? (pred - af) * 100 : null;
         var evForU = null;
         if (af != null && pred != null && pred > 0 && pred < 1) {
             var volNumU = 0;
             if (vols[id]) { var vsU = vols[id]; volNumU = vsU.endsWith('k') ? parseFloat(vsU)*1000 : vsU.endsWith('m') ? parseFloat(vsU)*1000000 : parseFloat(vsU); }
             var rakeU = volNumU > 100000 ? 0.034 : volNumU > 10000 ? 0.032 : volNumU > 1000 ? 0.035 : volNumU > 0 ? 0.04 : 0.034;
-            evForU = (af * (1/pred) * (1-rakeU) - 1) * 100;
+            evForU = (pred * (1/af) * (1-rakeU) - 1) * 100;
         }
         var u = isPro() ? unitsEV(evForU, pred) : units(edge);
         var bet = u * unit;
@@ -4249,7 +4249,7 @@
         var af = adjFair(fair, r.pt, yl, r.mkt, r.ps);
         var pr = preds[id];
         var pred = (pr !== undefined && pr !== '') ? parseFloat(pr) / 100 : null;
-        var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
+        var edge = (af != null && pred != null && isFinite(pred)) ? (pred - af) * 100 : null;
         var u = units(edge);
         var bet = u * unit;
         if (edge != null) {
@@ -4277,7 +4277,7 @@
             var af = adjFair(fair, r.pt, yl, r.mkt, r.ps);
             var pr = preds[r.id];
             var pred = (pr !== undefined && pr !== '') ? parseFloat(pr) / 100 : null;
-            var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
+            var edge = (af != null && pred != null && isFinite(pred)) ? (pred - af) * 100 : null;
             var u = pred != null ? units(edge) : units(edge);
             return Object.assign({}, r, { fair: fair, af: af, yl: yl, edge: edge, u: u, bet: u * unit });
         });
@@ -4455,7 +4455,7 @@
             if (vols[r.id]) { var vs = vols[r.id]; volNum = vs.endsWith('k') ? parseFloat(vs)*1000 : vs.endsWith('m') ? parseFloat(vs)*1000000 : parseFloat(vs); }
             var rake = volNum > 100000 ? 0.034 : volNum > 10000 ? 0.032 : volNum > 1000 ? 0.035 : volNum > 0 ? 0.04 : 0.034;
             r._pred = pred; r._rake = rake;
-            r._ev   = (r.af * (1/pred) * (1-rake) - 1) * 100;
+            r._ev   = (pred * (1/r.af) * (1-rake) - 1) * 100;
             // >100% EV is a post-game artifact (RS knows result, FD market not yet settled)
             if (r._ev > 0 && r._ev <= 100) { r._sortVal = r._ev; positive.push(r); }
         });
@@ -4490,7 +4490,7 @@
         var rake = (r && r._rake != null) ? r._rake : 0.034;
         var af   = (r && r.af != null)   ? r.af    : null;
         if (!af) return;
-        var ev     = (af * (1/pred) * (1-rake) - 1) * 100;
+        var ev     = (pred * (1/af) * (1-rake) - 1) * 100;
         var u      = unitsEV(ev, pred);
         var evStr  = (ev >= 0 ? '+' : '') + ev.toFixed(1) + '%';
         var evColor = ev >= 10 ? 'var(--green)' : ev >= 5 ? '#7ddfab' : ev > 0 ? 'var(--yellow)' : 'var(--red)';
@@ -4795,10 +4795,10 @@
                             var volNum3 = 0;
                             if (vols[r.id]) { var vs3 = vols[r.id]; volNum3 = vs3.endsWith('k') ? parseFloat(vs3)*1000 : vs3.endsWith('m') ? parseFloat(vs3)*1000000 : parseFloat(vs3); }
                             var rake3 = volNum3 > 100000 ? 0.034 : volNum3 > 10000 ? 0.032 : volNum3 > 1000 ? 0.035 : volNum3 > 0 ? 0.04 : 0.034;
-                            evForUnits = (af * (1/pred) * (1-rake3) - 1) * 100;
+                            evForUnits = (pred * (1/af) * (1-rake3) - 1) * 100;
                         }
                         var u = unitsEV(evForUnits, pred);
-                        var edge = (af != null && pred != null) ? (af - pred) * 100 : null;
+                        var edge = (af != null && pred != null) ? (pred - af) * 100 : null;
                         return { id: r.id, game: r.game, cm: r.cm, mkt: r.mkt, side: r.side, am: r.am, pt: r.pt, ps: r.ps, pid: r.pid, fair: fair, af: af, yl: yl, edge: edge, u: u };
                     });
                     currentSport = savedSport3;
@@ -6795,13 +6795,13 @@
             }
             var pr = preds[r.id];
             var pred = (pr !== undefined && pr !== '') ? parseFloat(pr) / 100 : null;
-            var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
+            var edge = (af != null && pred != null && isFinite(pred)) ? (pred - af) * 100 : null;
             var evForUnits = null;
             if (af != null && pred != null && pred > 0 && pred < 1) {
                 var volNum3 = 0;
                 if (vols[r.id]) { var vs3 = vols[r.id]; volNum3 = vs3.endsWith('k') ? parseFloat(vs3)*1000 : vs3.endsWith('m') ? parseFloat(vs3)*1000000 : parseFloat(vs3); }
                 var rake3 = volNum3 > 100000 ? 0.034 : volNum3 > 10000 ? 0.032 : volNum3 > 1000 ? 0.035 : volNum3 > 0 ? 0.04 : 0.034;
-                evForUnits = (af * (1/pred) * (1-rake3) - 1) * 100;
+                evForUnits = (pred * (1/af) * (1-rake3) - 1) * 100;
                 // >100% EV is a post-game artifact — treat as no edge
                 if (evForUnits > 100) evForUnits = null;
             }
@@ -6859,7 +6859,7 @@
                 var volNum = 0;
                 if (vols[r.id]) { var vs = vols[r.id]; volNum = vs.endsWith('k') ? parseFloat(vs)*1000 : vs.endsWith('m') ? parseFloat(vs)*1000000 : parseFloat(vs); }
                 var rake = volNum > 100000 ? 0.034 : volNum > 10000 ? 0.032 : volNum > 1000 ? 0.035 : volNum > 0 ? 0.04 : 0.034;
-                var ev = (r.af * (1/pred) * (1-rake) - 1) * 100;
+                var ev = (pred * (1/r.af) * (1-rake) - 1) * 100;
                 return ev >= 5;
             });
         }
@@ -6943,7 +6943,7 @@
                 var volNumEV = 0;
                 if (vols[r.id]) { var vsEV = vols[r.id]; volNumEV = vsEV.endsWith('k') ? parseFloat(vsEV)*1000 : vsEV.endsWith('m') ? parseFloat(vsEV)*1000000 : parseFloat(vsEV); }
                 var rakeEV = volNumEV > 100000 ? 0.034 : volNumEV > 10000 ? 0.032 : volNumEV > 1000 ? 0.035 : volNumEV > 0 ? 0.04 : 0.034;
-                var ev = (r.af * (1/realPctEV) * (1-rakeEV) - 1) * 100;
+                var ev = (realPctEV * (1/r.af) * (1-rakeEV) - 1) * 100;
                 // >100% EV = post-game artifact (RS knows result, FD market still open)
                 if (ev > 100) { evH = '-'; } else {
                 var evColor = ev >= 5 ? 'var(--green)' : ev > 0 ? 'var(--yellow)' : 'var(--red)';
@@ -7035,14 +7035,14 @@
         var yl = yourLines[id] != null ? yourLines[id] : null;
         var af = adjFair(fair, r.pt, yl, r.mkt, r.ps);
         var pred = input.value !== '' ? parseFloat(input.value) / 100 : null;
-        var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
+        var edge = (af != null && pred != null && isFinite(pred)) ? (pred - af) * 100 : null;
         // EV calculation (volume-tiered rake) — mirrors buildRow logic
         var evForUnits = null, evH = '-';
         if (af != null && pred != null && pred > 0 && pred < 1) {
             var volNumP = 0;
             if (vols[id]) { var vsP = vols[id]; volNumP = vsP.endsWith('k') ? parseFloat(vsP)*1000 : vsP.endsWith('m') ? parseFloat(vsP)*1000000 : parseFloat(vsP); }
             var rakeP = volNumP > 100000 ? 0.034 : volNumP > 10000 ? 0.032 : volNumP > 1000 ? 0.035 : volNumP > 0 ? 0.04 : 0.034;
-            evForUnits = (af * (1/pred) * (1-rakeP) - 1) * 100;
+            evForUnits = (pred * (1/af) * (1-rakeP) - 1) * 100;
             if (isPro() || r.mkt === 'ML') {
                 var evColor = evForUnits >= 5 ? 'var(--green)' : evForUnits > 0 ? 'var(--yellow)' : 'var(--red)';
                 evH = '<span style="font-family:var(--mono);font-size:12px;font-weight:600;color:' + evColor + '">' + (evForUnits > 0 ? '+' : '') + evForUnits.toFixed(1) + '%</span>';
@@ -7598,7 +7598,7 @@
                         var yl = yourLines[r.id] != null ? yourLines[r.id] : null;
                         var af = adjFair(fair, r.pt, yl, r.mkt, r.ps);
                         var pred = parseFloat(preds[activeId]) / 100;
-                        var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
+                        var edge = (af != null && pred != null && isFinite(pred)) ? (pred - af) * 100 : null;
                         var u = units(edge);
                         var bet = u * unit;
                         if (edge != null) {
