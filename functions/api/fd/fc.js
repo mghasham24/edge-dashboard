@@ -93,13 +93,55 @@ export async function onRequestGet(context) {
     } catch(e) {}
   }
 
-  const headers = {
+  const fdHeaders = {
     'Accept': 'application/json',
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15'
   };
+  const dkHeaders = {
+    'Accept': '*/*',
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15',
+    'Origin': 'https://sportsbook.draftkings.com',
+    'Referer': 'https://sportsbook.draftkings.com/'
+  };
+  // alias for FD-only sections
+  const headers = fdHeaders;
 
   try {
     const nowMs = Date.now();
+
+    // debug=6: probe DK to discover soccer league IDs + Asian handicap subcategory IDs
+    if (debugMode === '6') {
+      const DK_BASE = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
+      const attempts = [
+        // Try DK featured/nav endpoints
+        `${DK_BASE}/controldata/featured/v1/page?pageType=SPORT&sportNavId=4`,      // Soccer sport nav ID 4?
+        `${DK_BASE}/controldata/featured/v1/page?pageType=SPORT&sportNavId=soccer`,
+        `${DK_BASE}/controldata/sport/v1/navigation`,
+        `${DK_BASE}/controldata/sport/v1/featuredLeagues`,
+        // Try known-pattern league IDs for soccer (typical DK range for soccer)
+        `${DK_BASE}/controldata/league/v1/leagues/10301`,   // EPL guess
+        `${DK_BASE}/controldata/league/v1/leagues/10303`,   // La Liga guess
+        `${DK_BASE}/controldata/league/v1/leagues/51847`,
+        `${DK_BASE}/controldata/league/v1/leagues/51827`,
+        // DK odds API
+        `https://sportsbook.draftkings.com/api/odds/v1/leagues/soccer`,
+        `https://sportsbook.draftkings.com/api/odds/v2/sports/soccer`,
+      ];
+      const results = [];
+      for (const url of attempts) {
+        try {
+          const r = await fetch(url, { headers: dkHeaders });
+          if (r.ok) {
+            const d = await r.json();
+            results.push({ url: url.replace('https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent','DK').replace('https://sportsbook.draftkings.com','DK'), status: 200, keys: Object.keys(d||{}), preview: JSON.stringify(d).slice(0,400) });
+          } else {
+            results.push({ url: url.split('/').slice(-2).join('/'), status: r.status });
+          }
+        } catch(e) { results.push({ url: url.split('/').slice(-2).join('/'), error: e.message }); }
+        await new Promise(r => setTimeout(r, 80));
+      }
+      return new Response(JSON.stringify({ results }), { headers: { 'Content-Type': 'application/json' } });
+    }
 
     const sportRes = await fetch(FD_SPORT_URL, { headers });
     if (!sportRes.ok) return fail(sportRes.status, 'FD soccer sport fetch failed');
