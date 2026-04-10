@@ -46,9 +46,13 @@ function fail(status, msg) {
 }
 
 function parseEventName(name) {
-  const m = name.match(/^(.+?)\s*(?:\([^)]*\))?\s*@\s*(.+?)\s*(?:\([^)]*\))?\s*$/);
-  if (!m) return null;
-  return { away: m[1].trim(), home: m[2].trim() };
+  // Try FD US format: "Away @ Home"
+  let m = name.match(/^(.+?)\s*(?:\([^)]*\))?\s*@\s*(.+?)\s*(?:\([^)]*\))?\s*$/);
+  if (m) return { away: m[1].trim(), home: m[2].trim() };
+  // Try FD soccer format: "Home v Away" (home team first in soccer)
+  m = name.match(/^(.+?)\s+v\s+(.+?)\s*$/);
+  if (m) return { away: m[2].trim(), home: m[1].trim() };
+  return null;
 }
 
 export async function onRequestGet(context) {
@@ -120,7 +124,12 @@ export async function onRequestGet(context) {
     if (debugMode === '2') {
       return new Response(JSON.stringify({
         filteredCount: todayEvents.length,
-        events: todayEvents.map(e => ({ name: e.name, openDate: e.openDate, league: e._league }))
+        events: todayEvents.map(e => ({
+          name: e.name,
+          openDate: e.openDate,
+          league: e._league,
+          parsed: parseEventName(e.name)
+        }))
       }), { headers: { 'Content-Type': 'application/json' } });
     }
 
