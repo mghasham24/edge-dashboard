@@ -118,6 +118,51 @@ export async function onRequestGet(context) {
       return new Response(JSON.stringify({ results }), { headers: { 'Content-Type': 'application/json' } });
     }
 
+    // debug=4: test event-page for competition containers + COMPETITION page variations
+    if (debugMode === '4') {
+      // Known competition container event IDs from SPORT page
+      const containerEventIds = [78601, 241361, 259241, 268416, 605621];
+      const results = [];
+
+      // Test event-page for each container
+      for (const eid of containerEventIds.slice(0, 3)) {
+        const url = `https://sbapi.nj.sportsbook.fanduel.com/api/event-page?_ak=${FD_AK}&eventId=${eid}&tab=all&timezone=America/New_York`;
+        try {
+          const r = await fetch(url, { headers });
+          if (r.ok) {
+            const d = await r.json();
+            const evCount = Object.keys(d?.attachments?.events || {}).length;
+            const mktCount = Object.keys(d?.attachments?.markets || {}).length;
+            const mktTypes = [...new Set(Object.values(d?.attachments?.markets || {}).map(m => m.marketType))].sort();
+            const evSample = Object.values(d?.attachments?.events || {}).slice(0,3).map(e => ({ eventId: e.eventId, name: e.name, openDate: e.openDate }));
+            results.push({ type: 'event-page', eventId: eid, status: 200, evCount, mktCount, mktTypes, evSample });
+          } else {
+            results.push({ type: 'event-page', eventId: eid, status: r.status });
+          }
+        } catch(e) { results.push({ type: 'event-page', eventId: eid, error: e.message }); }
+        await new Promise(r => setTimeout(r, 100));
+      }
+
+      // Test COMPETITION page with extra params
+      const compVariants = [
+        `page=COMPETITION&competitionId=59&eventTypeId=1`,
+        `page=COMPETITION&competitionId=59&tab=MATCHES`,
+        `page=COMPETITION&competitionId=59&tab=matches`,
+        `page=COMPETITION&id=59`,
+        `page=LEAGUE&competitionId=59`,
+      ];
+      for (const params of compVariants) {
+        const url = `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?${params}&_ak=${FD_AK}&timezone=America/New_York`;
+        try {
+          const r = await fetch(url, { headers });
+          results.push({ type: 'comp-variant', params, status: r.status });
+        } catch(e) { results.push({ type: 'comp-variant', params, error: e.message }); }
+        await new Promise(r => setTimeout(r, 80));
+      }
+
+      return new Response(JSON.stringify({ results }), { headers: { 'Content-Type': 'application/json' } });
+    }
+
     // debug=1: inspect one competition page structure
     if (debugMode === '1') {
       const compId = debugComp || TARGET_COMPS[0].id;
