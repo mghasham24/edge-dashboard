@@ -164,10 +164,15 @@ export async function onRequestGet(context) {
           if (ot === 'Away' && Math.abs(pts - 0.5) < 0.01) awayPlus  = price; // Away +0.5 (wins or draws)
         }
 
-        // Pick the pair where the FAVORITE gets -0.5 (negative price = implied >50%)
-        // This matches RS's convention and makes the EV comparison valid.
+        // Pick the pair where the FAVORITE gets -0.5.
+        // Compare the actual -0.5 prices: whoever has the better (more negative / less positive)
+        // -0.5 price is more likely to win outright = the true favorite.
+        // This is robust to DK naming events "Away vs Home" for some leagues.
         let homePrice, awayPrice, homePt, awayPt;
-        if (awayMinus != null && awayMinus < 0 && (homeMinus == null || homeMinus >= 0)) {
+        const awayIsFav = (awayMinus != null && homeMinus != null)
+          ? awayMinus < homeMinus   // both present — pick the cheaper -0.5 line
+          : (awayMinus != null && awayMinus < 0); // fallback: check sign
+        if (awayIsFav) {
           // Away team is the favorite — use Away -0.5 / Home +0.5
           awayPrice = awayMinus; awayPt = -0.5;
           homePrice = homePlus;  homePt  = 0.5;
