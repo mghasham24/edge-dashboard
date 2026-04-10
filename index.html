@@ -2397,7 +2397,7 @@
                 <input class="ctrl-inp" id="unit-size" type="number" value="300" min="1" step="1" oninput="localStorage.setItem('raxedge_unit_size',this.value);renderTable()">
             </div>
             <button id="ev-only-btn" onclick="toggleEVOnly()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:.05em;padding:6px 14px;border-radius:5px;cursor:pointer;white-space:nowrap">+EV Only</button>
-            <button id="excl-bets-btn" onclick="toggleExclusiveBets()" title="When on, checking one side automatically unchecks the other side of the same market" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:.05em;padding:6px 14px;border-radius:5px;cursor:pointer;white-space:nowrap">1 Side</button>
+            <button id="excl-bets-btn" onclick="toggleExclusiveBets()" title="When on, checking one side automatically checks the other side too (marks the full game as positioned)" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:.05em;padding:6px 14px;border-radius:5px;cursor:pointer;white-space:nowrap">1 Side</button>
             <div class="stats-pill">
                 <div class="stat-item">
                     <span class="stat-val" id="stat-lines">0</span>
@@ -2979,22 +2979,21 @@
                        : id.endsWith('-B') ? id.slice(0, -2) + '-A'
                        : null;
         if (!oppositeId) return;
-        if (!betTaken[oppositeId]) return; // opposite not checked, nothing to do
-        // Uncheck the opposite
-        betTaken[oppositeId] = false;
-        delete betTaken[oppositeId];
+        if (betTaken[oppositeId]) return; // opposite already checked — nothing to do
+        // Auto-check the opposite side so the full game position is tracked
+        betTaken[oppositeId] = true;
         localStorage.setItem('raxedge_bets_taken', JSON.stringify(betTaken));
         fetch('/api/bets/taken', {
             method: 'POST', credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: oppositeId, taken: false })
+            body: JSON.stringify({ id: oppositeId, taken: true })
         }).catch(function() {});
-        document.querySelectorAll('input[type="checkbox"][data-id="' + oppositeId + '"]').forEach(function(cb) { cb.checked = false; });
+        document.querySelectorAll('input[type="checkbox"][data-id="' + oppositeId + '"]').forEach(function(cb) { cb.checked = true; });
         var tr = document.querySelector('tr[data-row-id="' + oppositeId + '"]');
-        if (tr) tr.style.opacity = '';
+        if (tr) tr.style.opacity = '0.4';
         document.querySelectorAll('.mc-bet-check[data-id="' + oppositeId + '"]').forEach(function(el) {
             var sideRow = el.closest('div[style*="display:flex"]');
-            if (sideRow) sideRow.style.opacity = '';
+            if (sideRow) sideRow.style.opacity = '0.4';
         });
     }
     var mobileCollapsed = {};
