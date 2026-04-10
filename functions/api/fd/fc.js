@@ -48,17 +48,22 @@ export async function onRequestGet(context) {
   const session = await getSession(request, env.DB);
   if (!session) return fail(401, 'Not authenticated');
 
+  const reqUrl = new URL(request.url);
+  const debugMode = reqUrl.searchParams.get('debug');
+
   const now = Math.floor(Date.now() / 1000);
   const cacheKey = 'fd_fc';
 
-  try {
-    const cached = await env.DB.prepare(
-      'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
-    ).bind(cacheKey).first();
-    if (cached && (now - cached.fetched_at) < CACHE_TTL) {
-      return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
-    }
-  } catch(e) {}
+  if (!debugMode) {
+    try {
+      const cached = await env.DB.prepare(
+        'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
+      ).bind(cacheKey).first();
+      if (cached && (now - cached.fetched_at) < CACHE_TTL) {
+        return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
+      }
+    } catch(e) {}
+  }
 
   const headers = {
     'Accept': 'application/json',
@@ -69,27 +74,41 @@ export async function onRequestGet(context) {
     // Step 1: Fetch all competition event lists in parallel, dedup by eventId
     const nowMs = Date.now();
     const allEvents = {};
+    const compDebug = [];
 
     await Promise.all(COMPETITIONS.map(async (comp) => {
       try {
         const res = await fetch(FD_COMP_URL(comp.id), { headers });
-        if (!res.ok) return;
+        const status = res.status;
+        if (!res.ok) { compDebug.push({ comp: comp.label, id: comp.id, status, err: 'not ok' }); return; }
         const data = await res.json();
         const evts = data?.attachments?.events || {};
+        const count = Object.keys(evts).length;
+        compDebug.push({ comp: comp.label, id: comp.id, status, eventCount: count });
         Object.entries(evts).forEach(([id, e]) => {
           if (!allEvents[id]) allEvents[id] = { ...e, _league: comp.label };
         });
-      } catch(e) {}
+      } catch(e) { compDebug.push({ comp: comp.label, id: comp.id, err: e.message }); }
     }));
 
+    const nowMs2 = Date.now();
     const todayEvents = Object.values(allEvents).filter(e => {
       if (!e.openDate) return false;
       const t = new Date(e.openDate).getTime();
-      return t >= nowMs - 4 * 60 * 60 * 1000 && t <= nowMs + 36 * 60 * 60 * 1000;
+      return t >= nowMs2 - 4 * 60 * 60 * 1000 && t <= nowMs2 + 36 * 60 * 60 * 1000;
     });
 
+    if (debugMode === '1') {
+      return new Response(JSON.stringify({
+        compDebug,
+        totalEvents: Object.keys(allEvents).length,
+        filteredEvents: todayEvents.length,
+        sample: Object.values(allEvents).slice(0, 5).map(e => ({ name: e.name, openDate: e.openDate, league: e._league }))
+      }), { headers: { 'Content-Type': 'application/json' } });
+    }
+
     if (!todayEvents.length) {
-      return new Response(JSON.stringify({ ok: true, games: {} }), {
+      return new Response(JSON.stringify({ ok: true, games: {}, _debug: { compDebug, totalRaw: Object.keys(allEvents).length } }), {
         headers: { 'Content-Type': 'application/json' }
       });
     }
