@@ -6,7 +6,7 @@
 
 const DK_BASE = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
 const DK_SUBCAT = '13170'; // Soccer Asian Handicap ±0.5 (2-way, no draw)
-const CACHE_TTL = 30;
+const CACHE_TTL = 5;
 
 // DK league IDs for target European soccer leagues (confirmed via API discovery)
 const DK_SOCCER_LEAGUES = {
@@ -166,15 +166,15 @@ export async function onRequestGet(context) {
 
         // Pick the pair where the FAVORITE gets -0.5 (negative price = implied >50%)
         // This matches RS's convention and makes the EV comparison valid.
-        let homePrice, awayPrice;
+        let homePrice, awayPrice, homePt, awayPt;
         if (awayMinus != null && awayMinus < 0 && (homeMinus == null || homeMinus >= 0)) {
           // Away team is the favorite — use Away -0.5 / Home +0.5
-          awayPrice = awayMinus;
-          homePrice = homePlus;
+          awayPrice = awayMinus; awayPt = -0.5;
+          homePrice = homePlus;  homePt  = 0.5;
         } else {
           // Home team is favorite (or near-even) — use Home -0.5 / Away +0.5
-          homePrice = homeMinus;
-          awayPrice = awayPlus;
+          homePrice = homeMinus; homePt  = -0.5;
+          awayPrice = awayPlus;  awayPt  = 0.5;
         }
 
         if (debugMode === '2') {
@@ -191,10 +191,11 @@ export async function onRequestGet(context) {
           home: ev.home,
           cm: ev.openDate,
           league: ev.league,
-          ml: {}
+          ml: {},
+          pt: {}
         };
-        if (homePrice != null) gamesMap[gameKey].ml[ev.home] = homePrice;
-        if (awayPrice != null) gamesMap[gameKey].ml[ev.away] = awayPrice;
+        if (homePrice != null) { gamesMap[gameKey].ml[ev.home] = homePrice; gamesMap[gameKey].pt[ev.home] = homePt; }
+        if (awayPrice != null) { gamesMap[gameKey].ml[ev.away] = awayPrice; gamesMap[gameKey].pt[ev.away] = awayPt; }
 
       } catch(e) {}
 

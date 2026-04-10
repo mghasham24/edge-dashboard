@@ -6295,7 +6295,8 @@
                             var teamName = pair[0], ps = pair[1];
                             var price = game.ml[teamName];
                             if (price == null) return;
-                            rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName, am: price, pt: null, pid: pid, ps: ps, gid: gid });
+                            var pt = game.pt ? game.pt[teamName] : null;
+                            rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName, am: price, pt: pt, pid: pid, ps: ps, gid: gid });
                         });
                     }
                 });
@@ -6324,7 +6325,7 @@
                 fcPoller = setInterval(function() {
                     if (currentSport !== 'soccer_fc') { clearInterval(fcPoller); fcPoller = null; return; }
                     fetchFCNativeUpdate();
-                }, 30000);
+                }, 5000);
             });
             return;
         }
@@ -7771,7 +7772,8 @@
                             var teamName = pair[0], ps = pair[1];
                             var price = game.ml[teamName];
                             if (price == null) return;
-                            rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName, am: price, pt: null, pid: pid, ps: ps, gid: gid });
+                            var pt = game.pt ? game.pt[teamName] : null;
+                            rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName, am: price, pt: pt, pid: pid, ps: ps, gid: gid });
                         });
                     }
                 });
