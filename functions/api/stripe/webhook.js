@@ -97,20 +97,14 @@ export async function onRequestPost({ request, env }) {
         const isPaid  = subStatus === 'active';
 
         if (isTrial) {
-          // Get card fingerprint from subscription's default_payment_method
-          const pmId = subData.default_payment_method;
-          const abused = await checkFingerprintByPmId(pmId, obj.customer, env);
-          if (abused) {
-            try {
-              await fetch('https://api.stripe.com/v1/subscriptions/' + obj.subscription, {
-                method: 'DELETE',
-                headers: { 'Authorization': 'Bearer ' + env.STRIPE_SECRET_KEY }
-              });
-            } catch(e) {}
-            await env.DB.prepare(
-              'UPDATE users SET plan=\'free\', stripe_sub_id=NULL, pro_expires_at=NULL, had_free_trial=0 WHERE stripe_customer_id=?'
-            ).bind(obj.customer).run();
-          }
+          // Fingerprint-based cancellation disabled — had_free_trial flag is the
+          // primary trial-abuse guard (one trial per account). Card fingerprinting
+          // caused too many false positives due to timing/replication issues.
+          // Still record the fingerprint for analysis but do not cancel.
+          try {
+            const pmId = subData.default_payment_method;
+            await checkFingerprintByPmId(pmId, obj.customer, env);
+          } catch(e) {}
         }
 
         if (isPaid) {
