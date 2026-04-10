@@ -92,20 +92,31 @@ export async function onRequestGet(context) {
     const allEvents = sportData?.attachments?.events || {};
     const competitions = sportData?.attachments?.competitions || {};
 
-    // debug=1: show raw competition names and event sample
+    // debug=1: show raw competition names and full event objects for first 5 events
     if (debugMode === '1') {
       const compNames = Object.values(competitions).map(c => ({ id: c.competitionId, name: c.name })).slice(0, 30);
-      const eventSample = Object.values(allEvents).slice(0, 10).map(e => ({
-        name: e.name,
-        openDate: e.openDate,
-        competitionId: e.competitionId,
-        compName: competitions[e.competitionId]?.name
-      }));
+      const rawEvents = Object.values(allEvents).slice(0, 5);
       return new Response(JSON.stringify({
         totalEvents: Object.keys(allEvents).length,
         totalComps: Object.keys(competitions).length,
         competitions: compNames,
-        eventSample
+        rawEventKeys: rawEvents.length > 0 ? Object.keys(rawEvents[0]) : [],
+        rawEvents: rawEvents
+      }), { headers: { 'Content-Type': 'application/json' } });
+    }
+
+    // debug=3: dump ALL top-level keys in the sport response to find where fixtures live
+    if (debugMode === '3') {
+      const topKeys = Object.keys(sportData);
+      const attachmentKeys = Object.keys(sportData?.attachments || {});
+      const moduleCount = (sportData?.modules || []).length;
+      const firstModule = sportData?.modules?.[0];
+      return new Response(JSON.stringify({
+        topKeys,
+        attachmentKeys,
+        moduleCount,
+        firstModuleKeys: firstModule ? Object.keys(firstModule) : [],
+        firstModule: JSON.stringify(firstModule || {}).slice(0, 3000)
       }), { headers: { 'Content-Type': 'application/json' } });
     }
 
