@@ -1,31 +1,46 @@
 // functions/api/fd/fc.js
-// Fetches FanDuel real-time soccer ML odds for top 6 European leagues
+// Fetches FanDuel real-time soccer spread (Asian handicap) odds for top 6 European leagues
 // Step 1: Single SPORT endpoint (eventTypeId=1) returns attachments.markets with all game markets
-// Step 2: Filter markets by WIN-DRAW-WIN type, time window, and target competition
+// Step 2: Filter markets by spread type, today's games in ET, and target competition
 // Step 3: Batch POST to getMarketPrices for real-time prices
 // Note: No per-event-page fetches needed — runner names are embedded in attachments.markets
 
 const FD_AK = 'FhMFpcPWXMeyZxOx';
 const FD_SPORT_URL = `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=SPORT&eventTypeId=1&_ak=${FD_AK}&timezone=America/New_York`;
 const FD_PRICES_URL = 'https://smp.nj.sportsbook.fanduel.com/api/sports/fixedodds/readonly/v1/getMarketPrices?priceHistory=0';
-const ML_TYPE = 'WIN-DRAW-WIN';
+const SPREAD_TYPE = 'ASIAN_HANDICAP';
 const CACHE_TTL = 30;
 
-// Competition name fragments to match (case-insensitive) → league label
-const LEAGUE_FILTERS = [
-  { match: 'premier league',   label: 'EPL' },
-  { match: 'champions league', label: 'UCL' },
-  { match: 'la liga',          label: 'La Liga' },
-  { match: 'bundesliga',       label: 'Bundesliga' },
-  { match: 'serie a',          label: 'Serie A' },
-  { match: 'ligue 1',          label: 'Ligue 1' },
-];
+// Exact competition names → league label (prevents substring false matches like Bundesliga 2, Brazilian Serie A, Slovenian Premier League)
+const EXACT_COMP_NAMES = {
+  'premier league':          'EPL',
+  'english premier league':  'EPL',
+  'la liga':                 'La Liga',
+  'spanish la liga':         'La Liga',
+  'bundesliga':              'Bundesliga',
+  'german bundesliga':       'Bundesliga',
+  'serie a':                 'Serie A',
+  'italian serie a':         'Serie A',
+  'ligue 1':                 'Ligue 1',
+  'french ligue 1':          'Ligue 1',
+};
 
 function getLeagueLabel(competitionName) {
   if (!competitionName) return null;
   const lower = competitionName.toLowerCase();
-  const match = LEAGUE_FILTERS.find(f => lower.includes(f.match));
-  return match ? match.label : null;
+  if (EXACT_COMP_NAMES[lower]) return EXACT_COMP_NAMES[lower];
+  // UCL substring match is safe — no other major competition shares this substring
+  if (lower.includes('champions league')) return 'UCL';
+  return null;
+}
+
+// Returns true if the market's game date matches today in ET (America/New_York)
+function isToday_ET(marketTime) {
+  if (!marketTime) return false;
+  const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
+  const gameDate = fmt.format(new Date(marketTime));
+  const todayDate = fmt.format(new Date());
+  return gameDate === todayDate;
 }
 
 async function getSession(request, db) {
@@ -72,7 +87,7 @@ export async function onRequestGet(context) {
   };
 
   try {
-    // Step 1: Single SPORT fetch for all soccer events
+    // Step 1: Single SPORT fetch for all soccer markets
     const sportRes = await fetch(FD_SPORT_URL, { headers });
     if (!sportRes.ok) return fail(sportRes.status, 'FD soccer sport fetch failed: ' + sportRes.status);
     const sportData = await sportRes.json();
@@ -88,57 +103,74 @@ export async function onRequestGet(context) {
       if (label) compLeagueMap[c.competitionId] = label;
     });
 
+    // debug=1: show all unique market types and target competitions
     if (debugMode === '1') {
-      // Show target competition matches and sample of WIN-DRAW-WIN markets
+      const uniqueTypes = [...new Set(Object.values(allMarkets).map(m => m.marketType))].sort();
       const targetComps = Object.entries(compLeagueMap).map(([id, label]) => ({
-        competitionId: id,
-        label,
-        name: competitions[id]?.name
+        competitionId: id, label, name: competitions[id]?.name
       }));
-      const wdwMarkets = Object.values(allMarkets).filter(m => m.marketType === ML_TYPE).slice(0, 10).map(m => ({
-        marketId: m.marketId,
-        competitionId: m.competitionId,
-        league: compLeagueMap[m.competitionId],
-        marketTime: m.marketTime,
-        marketStatus: m.marketStatus,
-        runners: (m.runners || []).map(r => ({ id: r.selectionId, name: r.runnerName }))
-      }));
+      // Sample of SPREAD_TYPE markets
+      const spreadMarkets = Object.values(allMarkets)
+        .filter(m => m.marketType === SPREAD_TYPE)
+        .slice(0, 5)
+        .map(m => ({
+          marketId: m.marketId,
+          competitionId: m.competitionId,
+          league: compLeagueMap[m.competitionId],
+          marketTime: m.marketTime,
+          marketStatus: m.marketStatus,
+          runners: (m.runners || []).map(r => ({ id: r.selectionId, name: r.runnerName, handicap: r.handicap }))
+        }));
+      // Sample of non-WDW, non-outright market types
+      const otherSample = Object.values(allMarkets)
+        .filter(m => m.marketType !== 'WIN-DRAW-WIN' && m.marketType !== 'OUTRIGHT_BETTING' && compLeagueMap[m.competitionId])
+        .slice(0, 5)
+        .map(m => ({ marketType: m.marketType, marketId: m.marketId, marketName: m.marketName, league: compLeagueMap[m.competitionId], runners: (m.runners || []).slice(0,2).map(r => ({ name: r.runnerName, handicap: r.handicap })) }));
       return new Response(JSON.stringify({
         totalMarkets: Object.keys(allMarkets).length,
+        allMarketTypes: uniqueTypes,
         targetCompetitions: targetComps,
-        wdwMarketSample: wdwMarkets
+        spreadTypeSample: spreadMarkets,
+        otherLeagueMarketsSample: otherSample
       }), { headers: { 'Content-Type': 'application/json' } });
     }
 
-    // Step 2: Filter markets — WIN-DRAW-WIN, target league, within time window
-    // Runner order: [0]=Home, [1]=Draw, [2]=Away
+    // Step 2: Filter markets — target spread type, target league, today's games in ET
+    // For Asian handicap: runner order is [Home, Away] or flagged by handicap sign
     const gameMarkets = {};
 
     Object.values(allMarkets).forEach(function(mkt) {
-      if (mkt.marketType !== ML_TYPE) return;
+      if (mkt.marketType !== SPREAD_TYPE) return;
       const league = compLeagueMap[mkt.competitionId];
       if (!league) return;
       if (mkt.marketStatus && mkt.marketStatus !== 'OPEN') return;
-
-      // Time window filter using marketTime
       if (!mkt.marketTime) return;
+      // Today-only filter in ET timezone
+      if (!isToday_ET(mkt.marketTime)) return;
+      // Also skip games that started more than 4h ago
       const t = new Date(mkt.marketTime).getTime();
-      if (t < nowMs - 4 * 60 * 60 * 1000 || t > nowMs + 36 * 60 * 60 * 1000) return;
+      if (t < nowMs - 4 * 60 * 60 * 1000) return;
 
       const runners = mkt.runners || [];
       if (runners.length < 2) return;
 
-      // Identify home, draw, away by runner order / Draw selectionId
-      const nonDraw = runners.filter(r => r.runnerName !== 'Draw' && r.selectionId !== 58805);
-      if (nonDraw.length < 2) return;
-      const home = runners[0].runnerName !== 'Draw' ? runners[0] : nonDraw[0];
-      const away = runners[runners.length - 1].runnerName !== 'Draw' ? runners[runners.length - 1] : nonDraw[nonDraw.length - 1];
-      if (!home || !away || home === away) return;
+      // For Asian handicap runners: identify home/away by handicap sign
+      // Home team runner typically has negative handicap (favorite) or positive (underdog)
+      // Runner order: [0]=Home, [1]=Away in FD soccer
+      const homeRunner = runners[0];
+      const awayRunner = runners[1];
+      if (!homeRunner || !awayRunner) return;
 
-      const gameKey = away.runnerName + ' @ ' + home.runnerName;
+      const gameKey = awayRunner.runnerName + ' @ ' + homeRunner.runnerName;
 
-      // One market per game (first WIN-DRAW-WIN wins)
-      if (gameMarkets[gameKey]) return;
+      // One market per game — prefer the -0.5/+0.5 line if multiple exist
+      const existingEntry = gameMarkets[gameKey];
+      const currentHandicap = Math.abs(parseFloat(homeRunner.handicap) || 0);
+      if (existingEntry) {
+        const existingHandicap = Math.abs(parseFloat(existingEntry.homeHandicap) || 0);
+        // Keep the -0.5/+0.5 line; if tie, keep first
+        if (Math.abs(currentHandicap - 0.5) > Math.abs(existingHandicap - 0.5)) return;
+      }
 
       const runnerNames = {};
       runners.forEach(function(r) {
@@ -149,8 +181,10 @@ export async function onRequestGet(context) {
         marketId: mkt.marketId,
         eventId: mkt.eventId,
         marketTime: mkt.marketTime,
-        away: away.runnerName,
-        home: home.runnerName,
+        away: awayRunner.runnerName,
+        home: homeRunner.runnerName,
+        homeHandicap: homeRunner.handicap,
+        awayHandicap: awayRunner.handicap,
         league,
         runnerNames
       };
@@ -160,10 +194,8 @@ export async function onRequestGet(context) {
       return new Response(JSON.stringify({
         filteredCount: Object.keys(gameMarkets).length,
         games: Object.entries(gameMarkets).map(([k, v]) => ({
-          gameKey: k,
-          league: v.league,
-          marketTime: v.marketTime,
-          marketId: v.marketId
+          gameKey: k, league: v.league, marketTime: v.marketTime,
+          homeHandicap: v.homeHandicap, awayHandicap: v.awayHandicap, marketId: v.marketId
         }))
       }), { headers: { 'Content-Type': 'application/json' } });
     }
@@ -205,7 +237,7 @@ export async function onRequestGet(context) {
           home: entry.home,
           cm: entry.marketTime,
           league: entry.league,
-          ml: {}
+          spread: {}
         };
       }
 
@@ -214,9 +246,10 @@ export async function onRequestGet(context) {
         const price = rd.winRunnerOdds?.americanDisplayOdds?.americanOddsInt;
         if (price == null) return;
         const name = entry.runnerNames[rd.selectionId] || entry.runnerNames[String(rd.selectionId)] || '';
-        // Skip Draw — we only show home/away ML
-        if (!name || name === 'Draw') return;
-        gamesMap[gameKey].ml[name] = price;
+        if (!name) return;
+        // handicap from the market entry
+        const handicap = rd.handicap ?? (name === entry.home ? entry.homeHandicap : entry.awayHandicap);
+        gamesMap[gameKey].spread[name] = { pt: handicap, am: price };
       });
     });
 
