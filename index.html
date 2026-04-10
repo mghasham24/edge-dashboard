@@ -6780,6 +6780,13 @@
                     if (fdPt !== 0 && rlPt !== 0 && Math.sign(fdPt) !== Math.sign(rlPt) && gap > 2) return false;
                 }
 
+                // Live NBA: hide spread/total if DK alt pt is too far from Real Sports line (DK ran out of range)
+                if (isLiveNBA && r.pt != null && yourLines[r.id] != null && (r.mkt === 'Spread' || r.mkt === 'Total')) {
+                    var dkGap = Math.abs(parseFloat(r.pt) - parseFloat(yourLines[r.id]));
+                    var maxGap = r.mkt === 'Total' ? 6 : 4;
+                    if (dkGap > maxGap) return false;
+                }
+
                 // NHL: hide spread/total if Real line differs from FD at all
                 if (isHockey && r.pt != null && yourLines[r.id] != null) {
                     var gap = Math.abs(parseFloat(yourLines[r.id]) - parseFloat(r.pt));
@@ -7596,13 +7603,15 @@
                 if (r.mkt === 'Spread' || r.mkt === 'Total') altOdds[r.gid] = game;
 
                 // Override displayed values with FD native real-time data
-                if (r.mkt === 'Spread') {
+                // For live games DK owns spread/total pts — skip FD overwrite to avoid flicker
+                var isLiveRow = r.cm && r.cm <= new Date();
+                if (r.mkt === 'Spread' && !isLiveRow) {
                     var sideData = game.spreads && game.spreads[r.side];
                     if (sideData) {
                         var entry = Object.entries(sideData)[0];
                         if (entry) { r.pt = parseFloat(entry[0]); r.am = entry[1]; }
                     }
-                } else if (r.mkt === 'Total') {
+                } else if (r.mkt === 'Total' && !isLiveRow) {
                     var sideData = game.totals && game.totals[r.side];
                     if (sideData) {
                         var entry = Object.entries(sideData)[0];
