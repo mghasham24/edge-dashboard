@@ -80,6 +80,9 @@ const SPORT_MAP = {
 // Sports not supported by Real Sports API
 const UNSUPPORTED_SPORTS = new Set([]);
 
+// Sports accessible to free-plan users (on their individual sport tabs)
+const FREE_PLAN_SPORTS = new Set(['basketball_nba', 'icehockey_nhl', 'baseball_mlb']);
+
 async function getSession(request, db) {
   const c = request.headers.get('Cookie') || '';
   const m = c.match(/(?:^|;\s*)session=([^;]+)/);
@@ -151,6 +154,11 @@ export async function onRequestGet(context) {
 
   const reqUrl = new URL(request.url);
   const fdKey = reqUrl.searchParams.get('sport');
+
+  // Pro gate: non-free-sport syncs require a Pro plan (server-authoritative — not bypassable client-side)
+  if (!FREE_PLAN_SPORTS.has(fdKey) && session.plan !== 'pro') {
+    return fail(403, 'Pro plan required');
+  }
   const realSport = SPORT_MAP[fdKey] || fdKey;
   const debugMode = reqUrl.searchParams.get('debug');
 
