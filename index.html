@@ -6295,7 +6295,7 @@
                             var teamName = pair[0], ps = pair[1];
                             var price = game.ml[teamName];
                             if (price == null) return;
-                            rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'ML', side: teamName, am: price, pt: null, pid: pid, ps: ps, gid: gid });
+                            rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName, am: price, pt: null, pid: pid, ps: ps, gid: gid });
                         });
                     }
                 });
@@ -7481,6 +7481,12 @@
                     }
                 }
 
+                // Pass 0d: Soccer FC spread — RS outcomes[0]=away, outcomes[1]=home
+                // RS labels use team abbreviations (e.g. "ASM -0.5") that don't word-match FD full names
+                if (!match && r.mkt === 'Spread' && sport === 'soccer_fc') {
+                    match = r.ps === 'A' ? outcomes[0] : outcomes[1];
+                }
+
                 // Pass 1: exact word match or full label phrase in FD side
                 if (!match) match = outcomes.find(function(o) {
                     if (!o.label) return false;
@@ -7765,7 +7771,7 @@
                             var teamName = pair[0], ps = pair[1];
                             var price = game.ml[teamName];
                             if (price == null) return;
-                            rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'ML', side: teamName, am: price, pt: null, pid: pid, ps: ps, gid: gid });
+                            rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName, am: price, pt: null, pid: pid, ps: ps, gid: gid });
                         });
                     }
                 });
