@@ -68,6 +68,7 @@ export async function onRequestGet(context) {
   const { request, env } = context;
   const session = await getSession(request, env.DB);
   if (!session) return fail(401, 'Not authenticated');
+  if (session.plan !== 'pro') return fail(403, 'Pro plan required');
 
   const reqUrl = new URL(request.url);
   const debugMode = reqUrl.searchParams.get('debug');
