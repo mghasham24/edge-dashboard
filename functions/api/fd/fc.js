@@ -120,6 +120,29 @@ export async function onRequestGet(context) {
       }), { headers: { 'Content-Type': 'application/json' } });
     }
 
+    // debug=4: inspect attachments.markets to find game-level fixture data
+    if (debugMode === '4') {
+      const markets = sportData?.attachments?.markets || {};
+      const marketEntries = Object.entries(markets);
+      const sample = marketEntries.slice(0, 10).map(([id, m]) => ({
+        marketId: id,
+        keys: Object.keys(m),
+        marketType: m.marketType,
+        eventId: m.eventId,
+        marketName: m.marketName || m.name,
+        inPlay: m.inPlay,
+        runners: (m.runners || []).slice(0, 3).map(r => ({ selectionId: r.selectionId, runnerName: r.runnerName }))
+      }));
+      // Also find any eventIds in markets that aren't in attachments.events
+      const knownEventIds = new Set(Object.keys(allEvents));
+      const unknownEventIds = [...new Set(marketEntries.map(([,m]) => String(m.eventId)).filter(Boolean))].filter(id => !knownEventIds.has(id));
+      return new Response(JSON.stringify({
+        totalMarkets: marketEntries.length,
+        unknownEventIds: unknownEventIds.slice(0, 20),
+        marketSample: sample
+      }), { headers: { 'Content-Type': 'application/json' } });
+    }
+
     // Step 2: Filter to target leagues within time window
     const todayEvents = Object.values(allEvents).filter(e => {
       if (!e.openDate) return false;
