@@ -47,17 +47,22 @@ export async function onRequestGet(context) {
   const session = await getSession(request, env.DB);
   if (!session) return fail(401, 'Not authenticated');
 
+  const reqUrl = new URL(request.url);
+  const debugMode = reqUrl.searchParams.get('debug');
+
   const now = Math.floor(Date.now() / 1000);
   const cacheKey = 'dk_nba_alts';
 
-  try {
-    const cached = await env.DB.prepare(
-      'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
-    ).bind(cacheKey).first();
-    if (cached && (now - cached.fetched_at) < CACHE_TTL) {
-      return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
-    }
-  } catch(e) {}
+  if (!debugMode) {
+    try {
+      const cached = await env.DB.prepare(
+        'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
+      ).bind(cacheKey).first();
+      if (cached && (now - cached.fetched_at) < CACHE_TTL) {
+        return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
+      }
+    } catch(e) {}
+  }
 
   const headers = {
     'Accept': '*/*',
@@ -73,11 +78,26 @@ export async function onRequestGet(context) {
     const evData = await evRes.json();
 
     const nowMs = Date.now();
-    const events = (evData.events || []).filter(e => {
+    const allEvents = (evData.events || []);
+    const events = allEvents.filter(e => {
       if (!e.startEventDate) return false;
       const t = new Date(e.startEventDate).getTime();
       return t >= nowMs - 4 * 60 * 60 * 1000 && t <= nowMs + 36 * 60 * 60 * 1000;
     });
+
+    if (debugMode === '1') {
+      return new Response(JSON.stringify({
+        totalEvents: allEvents.length,
+        filteredEvents: events.length,
+        events: events.map(e => ({
+          id: e.id,
+          name: e.name,
+          startEventDate: e.startEventDate,
+          msSinceStart: nowMs - new Date(e.startEventDate).getTime(),
+          status: e.eventStatus || e.status
+        }))
+      }), { headers: { 'Content-Type': 'application/json' } });
+    }
 
     if (!events.length) {
       return new Response(JSON.stringify({ ok: true, games: {} }), {
@@ -128,6 +148,10 @@ export async function onRequestGet(context) {
       } catch(e) {}
 
       if (i < events.length - 1) await new Promise(r => setTimeout(r, 100));
+    }
+
+    if (debugMode === '2') {
+      return new Response(JSON.stringify({ ok: true, games: gamesMap }), { headers: { 'Content-Type': 'application/json' } });
     }
 
     const body = JSON.stringify({ ok: true, games: gamesMap });

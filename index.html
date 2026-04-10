@@ -2808,6 +2808,7 @@
     var nhlPoller = null;
     var dkPoller  = null;
     var dkAltOdds = {}; // gid -> { spreads: { Away: {line: price}, Home: {line: price} }, totals: { Over: {line: price}, Under: {line: price} } }
+    var dkPreGameStore = {}; // gid -> last known DK alt lines before/during game (persists when DK suspends in-game)
     var lastSyncData = {}; // sport -> last Real Sports sync response (d.markets object)
     var exclusiveBets = localStorage.getItem('raxedge_exclusive_bets') === '1';
     var betTaken = JSON.parse(localStorage.getItem('raxedge_bets_taken') || '{}');
@@ -6176,6 +6177,7 @@
         // NBA: use FD native API directly — no Odds API credits
         if (currentSport === 'basketball_nba') {
             altOdds = {};
+            dkPreGameStore = {};
             fetch('/api/fd/nbaalts', { credentials: 'same-origin' })
             .then(function(r) {
                 if (r.status === 401) {
@@ -7693,7 +7695,7 @@
             var data = await res.json();
             if (!data.ok || !data.games) return;
 
-            // Helper: find DK game for a rawRow game key
+            // Helper: find DK game for a rawRow game key (exact then fuzzy last-word match)
             function findDkGame(gameKey) {
                 if (data.games[gameKey]) return data.games[gameKey];
                 var fdTeams = gameKey.split(' @ ');
@@ -7708,35 +7710,71 @@
                 return matchedKey ? data.games[matchedKey] : null;
             }
 
-            // Populate dkAltOdds for existing spread/total rows
+            var nowDate = new Date();
+
+            // First pass: populate dkAltOdds, cache pre-game data, update existing live rows
             rawRows.forEach(function(r) {
-                if (r.mkt !== 'Spread' && r.mkt !== 'Total') return;
                 if (!r.gid) return;
-                var game = findDkGame(r.game);
-                if (game) dkAltOdds[r.gid] = game;
+                if (r.mkt !== 'Spread' && r.mkt !== 'Total' && r.mkt !== 'ML') return;
+                var dk = findDkGame(r.game);
+                if (!dk) return;
+
+                dkAltOdds[r.gid] = dk;
+
+                // Cache whenever DK actually has alt line data (may be pre-game or live)
+                var hasSpread = Object.keys(dk.spreads['Away'] || {}).length > 0;
+                var hasTotal  = Object.keys(dk.totals['Over']  || {}).length > 0;
+                if (hasSpread || hasTotal) dkPreGameStore[r.gid] = dk;
+
+                // Update existing Spread/Total rows for live games with best DK alt odds
+                if ((r.mkt === 'Spread' || r.mkt === 'Total') && r.cm && r.cm <= nowDate) {
+                    var dkSrc = (hasSpread || hasTotal) ? dk : dkPreGameStore[r.gid];
+                    if (!dkSrc) return;
+                    if (r.mkt === 'Spread') {
+                        var sideKey = r.ps === 'A' ? 'Away' : 'Home';
+                        var entries = Object.entries(dkSrc.spreads[sideKey] || {});
+                        if (entries.length) {
+                            var yl = yourLines[r.id];
+                            var target = (yl != null) ? parseFloat(yl) : 0;
+                            var best = entries.reduce(function(a, b) { return Math.abs(parseFloat(a[0]) - target) <= Math.abs(parseFloat(b[0]) - target) ? a : b; });
+                            r.am = best[1]; r.pt = parseFloat(best[0]);
+                        }
+                    } else {
+                        var entries = Object.entries(dkSrc.totals[r.side] || {});
+                        if (entries.length) {
+                            var yl = yourLines[r.id];
+                            var target = (yl != null) ? parseFloat(yl) : 0;
+                            var best = entries.reduce(function(a, b) { return Math.abs(parseFloat(a[0]) - target) <= Math.abs(parseFloat(b[0]) - target) ? a : b; });
+                            r.am = best[1]; r.pt = parseFloat(best[0]);
+                        }
+                    }
+                }
             });
 
-            // Synthesize spread/total rows for live games that FD no longer offers them for
-            // (FD suspends MATCH_HANDICAP in-game; DK keeps alt lines available)
+            // Second pass: synthesize spread/total rows for live games where FD has suspended them
             var existingPids = {};
             rawRows.forEach(function(r) { existingPids[r.pid] = true; });
             var newRows = [];
             rawRows.forEach(function(r) {
                 if (r.mkt !== 'ML' || !r.gid || !r.cm) return;
-                if (r.cm > new Date()) return; // only for live games
+                if (r.cm > nowDate) return; // only live games
                 var dk = findDkGame(r.game);
-                if (!dk) return;
-                dkAltOdds[r.gid] = dk;
+                if (dk) dkAltOdds[r.gid] = dk;
+
+                // Use current DK data if available, otherwise fall back to cached pre-game data
+                var hasCurrentData = dk && Object.keys(dk.spreads['Away'] || {}).length > 0;
+                var dkSrc = hasCurrentData ? dk : dkPreGameStore[r.gid];
+                if (!dkSrc) return;
+
                 var spreadPid = r.gid + '-spreads';
                 var totalPid  = r.gid + '-totals';
                 var gameParts = r.game.split(' @ ');
                 var away = gameParts[0] || '', home = gameParts[1] || '';
 
-                if (!existingPids[spreadPid] && dk.spreads) {
-                    var awayEntries = Object.entries(dk.spreads['Away'] || {});
-                    var homeEntries = Object.entries(dk.spreads['Home'] || {});
+                if (!existingPids[spreadPid]) {
+                    var awayEntries = Object.entries(dkSrc.spreads['Away'] || {});
+                    var homeEntries = Object.entries(dkSrc.spreads['Home'] || {});
                     if (awayEntries.length && homeEntries.length) {
-                        // pick line closest to 0 as the "main" displayed line
                         var awayE = awayEntries.reduce(function(a, b) { return Math.abs(parseFloat(a[0])) <= Math.abs(parseFloat(b[0])) ? a : b; });
                         var homeE = homeEntries.reduce(function(a, b) { return Math.abs(parseFloat(a[0])) <= Math.abs(parseFloat(b[0])) ? a : b; });
                         newRows.push({ id: spreadPid + '-A', game: r.game, cm: r.cm, mkt: 'Spread', side: away, am: awayE[1], pt: parseFloat(awayE[0]), pid: spreadPid, ps: 'A', gid: r.gid });
@@ -7744,11 +7782,11 @@
                         existingPids[spreadPid] = true;
                     }
                 }
-                if (!existingPids[totalPid] && dk.totals) {
-                    var overEntries  = Object.entries(dk.totals['Over']  || {});
-                    var underEntries = Object.entries(dk.totals['Under'] || {});
+                if (!existingPids[totalPid]) {
+                    var overEntries  = Object.entries(dkSrc.totals['Over']  || {});
+                    var underEntries = Object.entries(dkSrc.totals['Under'] || {});
                     if (overEntries.length && underEntries.length) {
-                        var overE  = overEntries.reduce(function(a, b)  { return Math.abs(parseFloat(a[0])) <= Math.abs(parseFloat(b[0])) ? a : b; });
+                        var overE  = overEntries.reduce(function(a, b) { return Math.abs(parseFloat(a[0])) <= Math.abs(parseFloat(b[0])) ? a : b; });
                         var underE = underEntries.reduce(function(a, b) { return Math.abs(parseFloat(a[0])) <= Math.abs(parseFloat(b[0])) ? a : b; });
                         newRows.push({ id: totalPid + '-A', game: r.game, cm: r.cm, mkt: 'Total', side: 'Over',  am: overE[1],  pt: parseFloat(overE[0]),  pid: totalPid, ps: 'A', gid: r.gid });
                         newRows.push({ id: totalPid + '-B', game: r.game, cm: r.cm, mkt: 'Total', side: 'Under', am: underE[1], pt: parseFloat(underE[0]), pid: totalPid, ps: 'B', gid: r.gid });
@@ -7756,10 +7794,10 @@
                     }
                 }
             });
+
             if (newRows.length) {
                 rawRows = rawRows.concat(newRows);
                 rawRowsBySport[currentSport] = rawRows;
-                // Populate Real% for new rows from cached sync data
                 var syncD = lastSyncData[currentSport];
                 if (syncD) fillPredsFromSync(newRows, syncD);
             }
