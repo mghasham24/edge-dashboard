@@ -147,10 +147,10 @@ export async function onRequestGet(context) {
         if (!r.ok) continue;
         const d = await r.json();
 
-        // Extract ±0.5 selections:
-        //   Home outcomeType with points = -0.5 → Home -0.5 price
-        //   Away outcomeType with points =  0.5 → Away +0.5 price
-        let homePrice = null, awayPrice = null;
+        // DK subcat 13170 always puts Home at -0.5 and Away at +0.5 by default,
+        // but RS assigns -0.5 to the FAVORITE regardless of home/away.
+        // Extract all four ±0.5 prices and pick the pair matching RS convention.
+        let homeMinus = null, homePlus = null, awayMinus = null, awayPlus = null;
 
         for (const sel of d.selections || []) {
           const pts = sel.points;
@@ -158,8 +158,23 @@ export async function onRequestGet(context) {
           const price = parseAmerican(sel.displayOdds && sel.displayOdds.american);
           if (price == null || pts == null) continue;
 
-          if (ot === 'Home' && Math.abs(pts + 0.5) < 0.01) homePrice = price;
-          if (ot === 'Away' && Math.abs(pts - 0.5) < 0.01) awayPrice = price;
+          if (ot === 'Home' && Math.abs(pts + 0.5) < 0.01) homeMinus = price; // Home -0.5 (must win)
+          if (ot === 'Home' && Math.abs(pts - 0.5) < 0.01) homePlus  = price; // Home +0.5 (wins or draws)
+          if (ot === 'Away' && Math.abs(pts + 0.5) < 0.01) awayMinus = price; // Away -0.5 (must win)
+          if (ot === 'Away' && Math.abs(pts - 0.5) < 0.01) awayPlus  = price; // Away +0.5 (wins or draws)
+        }
+
+        // Pick the pair where the FAVORITE gets -0.5 (negative price = implied >50%)
+        // This matches RS's convention and makes the EV comparison valid.
+        let homePrice, awayPrice;
+        if (awayMinus != null && awayMinus < 0 && (homeMinus == null || homeMinus >= 0)) {
+          // Away team is the favorite — use Away -0.5 / Home +0.5
+          awayPrice = awayMinus;
+          homePrice = homePlus;
+        } else {
+          // Home team is favorite (or near-even) — use Home -0.5 / Away +0.5
+          homePrice = homeMinus;
+          awayPrice = awayPlus;
         }
 
         if (debugMode === '2') {
