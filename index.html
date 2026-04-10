@@ -7844,7 +7844,17 @@
                 rawRowsBySport[currentSport] = rawRows;
                 fetchRealMarkets(currentSport, true);
             } else {
-                nativeMlUpdate(rawRows, data.games);
+                // FC rows use mkt='Spread' — nativeMlUpdate skips them. Update in-place.
+                rawRows.forEach(function(r) {
+                    if (r.mkt !== 'Spread') return;
+                    var game = data.games[r.game];
+                    if (!game) return;
+                    var price = game.ml && game.ml[r.side];
+                    var pt = game.pt && game.pt[r.side];
+                    if (price != null) r.am = price;
+                    if (pt != null) r.pt = pt;
+                });
+                rawRowsBySport[currentSport] = rawRows;
             }
             renderTable();
         } catch(e) {}
