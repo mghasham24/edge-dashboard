@@ -6780,13 +6780,6 @@
                     if (fdPt !== 0 && rlPt !== 0 && Math.sign(fdPt) !== Math.sign(rlPt) && gap > 2) return false;
                 }
 
-                // Live NBA: hide spread/total if DK alt pt is too far from Real Sports line (DK ran out of range)
-                if (isLiveNBA && r.pt != null && yourLines[r.id] != null && (r.mkt === 'Spread' || r.mkt === 'Total')) {
-                    var dkGap = Math.abs(parseFloat(r.pt) - parseFloat(yourLines[r.id]));
-                    var maxGap = r.mkt === 'Total' ? 6 : 4;
-                    if (dkGap > maxGap) return false;
-                }
-
                 // NHL: hide spread/total if Real line differs from FD at all
                 if (isHockey && r.pt != null && yourLines[r.id] != null) {
                     var gap = Math.abs(parseFloat(yourLines[r.id]) - parseFloat(r.pt));
