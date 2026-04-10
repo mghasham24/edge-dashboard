@@ -156,6 +156,68 @@ export async function onRequestGet(context) {
       return new Response(JSON.stringify({ eventStatus: evRes.status, evPreview, leagueIdsFound: [...leagueIds], leagueResults }), { headers: { 'Content-Type': 'application/json' } });
     }
 
+    // debug=8: verify subcat 4514 works for known event + exact NBA-style league listing + find other league IDs
+    if (debugMode === '8') {
+      const DK_BASE = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
+      const DK_SUBCAT = '4514';
+      const BUNDESLIGA_ID = '40481';
+      const KNOWN_EVENT_ID = '33861209';
+      const results = {};
+
+      // Test 1: Asian handicap subcat for known event
+      const subcatMq = encodeURIComponent(
+        `$filter=eventId eq '${KNOWN_EVENT_ID}' AND clientMetadata/subCategoryId eq '${DK_SUBCAT}' AND tags/all(t: t ne 'SportcastBetBuilder')`
+      );
+      const subcatUrl = `${DK_BASE}/controldata/event/eventSubcategory/v1/markets?isBatchable=false&templateVars=${KNOWN_EVENT_ID}%2C${DK_SUBCAT}&marketsQuery=${subcatMq}&include=MarketSplits&entity=markets`;
+      const subcatRes = await fetch(subcatUrl, { headers: dkHeaders });
+      results.subcatTest = { status: subcatRes.status };
+      if (subcatRes.ok) {
+        const d = await subcatRes.json();
+        results.subcatTest.preview = JSON.stringify(d).slice(0, 1500);
+        results.subcatTest.selectionCount = (d.selections || []).length;
+        results.subcatTest.sampleSelections = (d.selections || []).slice(0, 4).map(s => ({
+          outcomeType: s.outcomeType, points: s.points, odds: s.displayOdds && s.displayOdds.american
+        }));
+      }
+      await new Promise(r => setTimeout(r, 100));
+
+      // Test 2: League-level event listing — exact NBA URL pattern with soccer league+subcat
+      const eq = encodeURIComponent(`$filter=leagueId eq '${BUNDESLIGA_ID}' AND clientMetadata/Subcategories/any(s: s/Id eq '${DK_SUBCAT}')`);
+      const mq = encodeURIComponent(`$filter=clientMetadata/subCategoryId eq '${DK_SUBCAT}' AND tags/all(t: t ne 'SportcastBetBuilder')`);
+      const leagueUrl = `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${BUNDESLIGA_ID}&eventsQuery=${eq}&marketsQuery=${mq}&include=Events&entity=events`;
+      const leagueRes = await fetch(leagueUrl, { headers: dkHeaders });
+      results.leagueTest = { status: leagueRes.status };
+      if (leagueRes.ok) {
+        const d = await leagueRes.json();
+        results.leagueTest.eventCount = (d.events || []).length;
+        results.leagueTest.events = (d.events || []).slice(0, 5).map(e => ({ id: e.id, name: e.name, date: e.startEventDate, leagueId: e.leagueId }));
+      }
+      await new Promise(r => setTimeout(r, 100));
+
+      // Test 3: Probe sport-level endpoints to find all soccer leagues
+      const sportUrls = [
+        `${DK_BASE}/pagedata/sport/v1/leagues?sportId=1`,
+        `${DK_BASE}/controldata/sport/v1/leagues?sportId=1`,
+        `${DK_BASE}/pagedata/league/v1/leagues?sportId=1`,
+        `${DK_BASE}/controldata/featured/v1/page?pageType=SPORT&sportNavId=1`,
+        `${DK_BASE}/pagedata/featured/v1/page?pageType=SPORT&sportNavId=1`,
+      ];
+      results.sportLeagueAttempts = [];
+      for (const url of sportUrls) {
+        await new Promise(r => setTimeout(r, 80));
+        const r = await fetch(url, { headers: dkHeaders });
+        const label = url.split('/').slice(-4).join('/').split('?')[0];
+        if (r.ok) {
+          const d = await r.json();
+          results.sportLeagueAttempts.push({ url: label, status: 200, preview: JSON.stringify(d).slice(0, 600) });
+        } else {
+          results.sportLeagueAttempts.push({ url: label, status: r.status });
+        }
+      }
+
+      return new Response(JSON.stringify(results), { headers: { 'Content-Type': 'application/json' } });
+    }
+
     // debug=6: probe DK to discover soccer league IDs + Asian handicap subcategory IDs
     if (debugMode === '6') {
       const DK_BASE = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
