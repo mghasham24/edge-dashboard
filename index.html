@@ -6771,7 +6771,9 @@
                 var isNBA = currentSport === 'basketball_nba';
 
                 // All sports: hide spread if signs are opposite AND gap > 2 (sign flip = bad data)
-                if (r.mkt === 'Spread' && r.pt != null && yourLines[r.id] != null) {
+                // Skip for live NBA — DK alt lines can legitimately cross 0 (e.g., big favourite becomes underdog)
+                var isLiveNBA = isNBA && r.cm && r.cm <= now;
+                if (r.mkt === 'Spread' && r.pt != null && yourLines[r.id] != null && !isLiveNBA) {
                     var fdPt = parseFloat(r.pt);
                     var rlPt = parseFloat(yourLines[r.id]);
                     var gap = Math.abs(rlPt - fdPt);
@@ -7797,6 +7799,29 @@
                 rawRowsBySport[currentSport] = rawRows;
                 var syncD = lastSyncData[currentSport];
                 if (syncD) fillPredsFromSync(newRows, syncD);
+                // Re-pick DK alt line closest to Real Sports line now that yourLines is populated
+                newRows.forEach(function(nr) {
+                    if (yourLines[nr.id] == null) return;
+                    var dk = findDkGame(nr.game);
+                    var hasCurrentDk = dk && Object.keys((dk.spreads && dk.spreads['Away']) || {}).length > 0;
+                    var dkSrc = hasCurrentDk ? dk : dkPreGameStore[nr.gid];
+                    if (!dkSrc) return;
+                    var yl = parseFloat(yourLines[nr.id]);
+                    if (nr.mkt === 'Spread') {
+                        var sideKey = nr.ps === 'A' ? 'Away' : 'Home';
+                        var entries = Object.entries(dkSrc.spreads[sideKey] || {});
+                        if (entries.length) {
+                            var best = entries.reduce(function(a, b) { return Math.abs(parseFloat(a[0]) - yl) <= Math.abs(parseFloat(b[0]) - yl) ? a : b; });
+                            nr.am = best[1]; nr.pt = parseFloat(best[0]);
+                        }
+                    } else if (nr.mkt === 'Total') {
+                        var entries = Object.entries(dkSrc.totals[nr.side] || {});
+                        if (entries.length) {
+                            var best = entries.reduce(function(a, b) { return Math.abs(parseFloat(a[0]) - yl) <= Math.abs(parseFloat(b[0]) - yl) ? a : b; });
+                            nr.am = best[1]; nr.pt = parseFloat(best[0]);
+                        }
+                    }
+                });
             }
 
             renderTable();
