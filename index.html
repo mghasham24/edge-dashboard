@@ -4439,7 +4439,7 @@
         if (evAutoRefreshTimer) { clearInterval(evAutoRefreshTimer); evAutoRefreshTimer = null; }
     }
 
-    function cacheEvRows(rows, sport) {
+    function cacheEvRows(rows, sport, skipRender) {
         // Only show rows with a prediction AND positive EV
         var positive = [];
         rows.forEach(function(r) {
@@ -4464,7 +4464,7 @@
         positive.forEach(function(r) { r._sport = sportLabel; r._sport_key = sport; });
         // Always overwrite — empty rows means no active games for this sport
         evTabCache[sport] = positive;
-        if (evTabVisible) renderEvTab();
+        if (!skipRender && evTabVisible) renderEvTab();
     }
 
     // Called when user edits a Real% input on a Best EV row (desktop table or mobile card)
@@ -4807,7 +4807,7 @@
                         return { id: r.id, game: r.game, cm: r.cm, mkt: r.mkt, side: r.side, am: r.am, pt: r.pt, ps: r.ps, pid: r.pid, fair: fair, af: af, yl: yl, edge: edge, u: u };
                     });
                     currentSport = savedSport3;
-                    cacheEvRows(computed3, s.key);
+                    cacheEvRows(computed3, s.key, true);
                 }
             } catch(e) { /* skip sport on error */ }
             done++;
