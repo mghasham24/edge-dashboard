@@ -1,15 +1,14 @@
 // functions/api/fd/fc.js
 // Fetches FanDuel real-time soccer ML odds for top 6 European leagues
-// Step 1: Single SPORT endpoint (eventTypeId=1) returns all soccer events with competition info
-// Step 2: Filter by competition name to EPL, UCL, La Liga, Bundesliga, Serie A, Ligue 1
-// Step 3: Fetch event-page per game to collect ML market ID + runner names
-// Step 4: Batch POST to getMarketPrices for real-time prices
+// Step 1: Single SPORT endpoint (eventTypeId=1) returns attachments.markets with all game markets
+// Step 2: Filter markets by WIN-DRAW-WIN type, time window, and target competition
+// Step 3: Batch POST to getMarketPrices for real-time prices
+// Note: No per-event-page fetches needed — runner names are embedded in attachments.markets
 
 const FD_AK = 'FhMFpcPWXMeyZxOx';
 const FD_SPORT_URL = `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=SPORT&eventTypeId=1&_ak=${FD_AK}&timezone=America/New_York`;
-const FD_EVENT_URL = (id) => `https://sbapi.nj.sportsbook.fanduel.com/api/event-page?_ak=${FD_AK}&eventId=${id}&tab=all&timezone=America/New_York`;
 const FD_PRICES_URL = 'https://smp.nj.sportsbook.fanduel.com/api/sports/fixedodds/readonly/v1/getMarketPrices?priceHistory=0';
-const ML_TYPE = 'MONEY_LINE';
+const ML_TYPE = 'WIN-DRAW-WIN';
 const CACHE_TTL = 30;
 
 // Competition name fragments to match (case-insensitive) → league label
@@ -43,16 +42,6 @@ function fail(status, msg) {
   return new Response(JSON.stringify({ error: msg }), {
     status, headers: { 'Content-Type': 'application/json' }
   });
-}
-
-function parseEventName(name) {
-  // Try FD US format: "Away @ Home"
-  let m = name.match(/^(.+?)\s*(?:\([^)]*\))?\s*@\s*(.+?)\s*(?:\([^)]*\))?\s*$/);
-  if (m) return { away: m[1].trim(), home: m[2].trim() };
-  // Try FD soccer format: "Home v Away" (home team first in soccer)
-  m = name.match(/^(.+?)\s+v\s+(.+?)\s*$/);
-  if (m) return { away: m[2].trim(), home: m[1].trim() };
-  return null;
 }
 
 export async function onRequestGet(context) {
@@ -89,143 +78,109 @@ export async function onRequestGet(context) {
     const sportData = await sportRes.json();
 
     const nowMs = Date.now();
-    const allEvents = sportData?.attachments?.events || {};
+    const allMarkets = sportData?.attachments?.markets || {};
     const competitions = sportData?.attachments?.competitions || {};
 
-    // debug=1: show raw competition names and full event objects for first 5 events
+    // Build competitionId → league label map for target leagues
+    const compLeagueMap = {};
+    Object.values(competitions).forEach(function(c) {
+      const label = getLeagueLabel(c.name);
+      if (label) compLeagueMap[c.competitionId] = label;
+    });
+
     if (debugMode === '1') {
-      const compNames = Object.values(competitions).map(c => ({ id: c.competitionId, name: c.name })).slice(0, 30);
-      const rawEvents = Object.values(allEvents).slice(0, 5);
-      return new Response(JSON.stringify({
-        totalEvents: Object.keys(allEvents).length,
-        totalComps: Object.keys(competitions).length,
-        competitions: compNames,
-        rawEventKeys: rawEvents.length > 0 ? Object.keys(rawEvents[0]) : [],
-        rawEvents: rawEvents
-      }), { headers: { 'Content-Type': 'application/json' } });
-    }
-
-    // debug=3: dump ALL top-level keys in the sport response to find where fixtures live
-    if (debugMode === '3') {
-      const topKeys = Object.keys(sportData);
-      const attachmentKeys = Object.keys(sportData?.attachments || {});
-      const moduleCount = (sportData?.modules || []).length;
-      const firstModule = sportData?.modules?.[0];
-      return new Response(JSON.stringify({
-        topKeys,
-        attachmentKeys,
-        moduleCount,
-        firstModuleKeys: firstModule ? Object.keys(firstModule) : [],
-        firstModule: JSON.stringify(firstModule || {}).slice(0, 3000)
-      }), { headers: { 'Content-Type': 'application/json' } });
-    }
-
-    // debug=4: inspect attachments.markets to find game-level fixture data
-    if (debugMode === '4') {
-      const markets = sportData?.attachments?.markets || {};
-      const marketEntries = Object.entries(markets);
-      const sample = marketEntries.slice(0, 10).map(([id, m]) => ({
-        marketId: id,
-        keys: Object.keys(m),
-        marketType: m.marketType,
-        eventId: m.eventId,
-        marketName: m.marketName || m.name,
-        inPlay: m.inPlay,
-        runners: (m.runners || []).slice(0, 3).map(r => ({ selectionId: r.selectionId, runnerName: r.runnerName }))
+      // Show target competition matches and sample of WIN-DRAW-WIN markets
+      const targetComps = Object.entries(compLeagueMap).map(([id, label]) => ({
+        competitionId: id,
+        label,
+        name: competitions[id]?.name
       }));
-      // Also find any eventIds in markets that aren't in attachments.events
-      const knownEventIds = new Set(Object.keys(allEvents));
-      const unknownEventIds = [...new Set(marketEntries.map(([,m]) => String(m.eventId)).filter(Boolean))].filter(id => !knownEventIds.has(id));
+      const wdwMarkets = Object.values(allMarkets).filter(m => m.marketType === ML_TYPE).slice(0, 10).map(m => ({
+        marketId: m.marketId,
+        competitionId: m.competitionId,
+        league: compLeagueMap[m.competitionId],
+        marketTime: m.marketTime,
+        marketStatus: m.marketStatus,
+        runners: (m.runners || []).map(r => ({ id: r.selectionId, name: r.runnerName }))
+      }));
       return new Response(JSON.stringify({
-        totalMarkets: marketEntries.length,
-        unknownEventIds: unknownEventIds.slice(0, 20),
-        marketSample: sample
+        totalMarkets: Object.keys(allMarkets).length,
+        targetCompetitions: targetComps,
+        wdwMarketSample: wdwMarkets
       }), { headers: { 'Content-Type': 'application/json' } });
     }
 
-    // Step 2: Filter to target leagues within time window
-    const todayEvents = Object.values(allEvents).filter(e => {
-      if (!e.openDate) return false;
-      const t = new Date(e.openDate).getTime();
-      if (t < nowMs - 4 * 60 * 60 * 1000 || t > nowMs + 36 * 60 * 60 * 1000) return false;
-      const compName = competitions[e.competitionId]?.name || '';
-      const league = getLeagueLabel(compName);
-      if (!league) return false;
-      e._league = league;
-      return true;
+    // Step 2: Filter markets — WIN-DRAW-WIN, target league, within time window
+    // Runner order: [0]=Home, [1]=Draw, [2]=Away
+    const gameMarkets = {};
+
+    Object.values(allMarkets).forEach(function(mkt) {
+      if (mkt.marketType !== ML_TYPE) return;
+      const league = compLeagueMap[mkt.competitionId];
+      if (!league) return;
+      if (mkt.marketStatus && mkt.marketStatus !== 'OPEN') return;
+
+      // Time window filter using marketTime
+      if (!mkt.marketTime) return;
+      const t = new Date(mkt.marketTime).getTime();
+      if (t < nowMs - 4 * 60 * 60 * 1000 || t > nowMs + 36 * 60 * 60 * 1000) return;
+
+      const runners = mkt.runners || [];
+      if (runners.length < 2) return;
+
+      // Identify home, draw, away by runner order / Draw selectionId
+      const nonDraw = runners.filter(r => r.runnerName !== 'Draw' && r.selectionId !== 58805);
+      if (nonDraw.length < 2) return;
+      const home = runners[0].runnerName !== 'Draw' ? runners[0] : nonDraw[0];
+      const away = runners[runners.length - 1].runnerName !== 'Draw' ? runners[runners.length - 1] : nonDraw[nonDraw.length - 1];
+      if (!home || !away || home === away) return;
+
+      const gameKey = away.runnerName + ' @ ' + home.runnerName;
+
+      // One market per game (first WIN-DRAW-WIN wins)
+      if (gameMarkets[gameKey]) return;
+
+      const runnerNames = {};
+      runners.forEach(function(r) {
+        if (r.selectionId != null && r.runnerName) runnerNames[r.selectionId] = r.runnerName;
+      });
+
+      gameMarkets[gameKey] = {
+        marketId: mkt.marketId,
+        eventId: mkt.eventId,
+        marketTime: mkt.marketTime,
+        away: away.runnerName,
+        home: home.runnerName,
+        league,
+        runnerNames
+      };
     });
 
     if (debugMode === '2') {
       return new Response(JSON.stringify({
-        filteredCount: todayEvents.length,
-        events: todayEvents.map(e => ({
-          name: e.name,
-          openDate: e.openDate,
-          league: e._league,
-          parsed: parseEventName(e.name)
+        filteredCount: Object.keys(gameMarkets).length,
+        games: Object.entries(gameMarkets).map(([k, v]) => ({
+          gameKey: k,
+          league: v.league,
+          marketTime: v.marketTime,
+          marketId: v.marketId
         }))
       }), { headers: { 'Content-Type': 'application/json' } });
     }
 
-    if (!todayEvents.length) {
+    if (!Object.keys(gameMarkets).length) {
       return new Response(JSON.stringify({ ok: true, games: {} }), {
         headers: { 'Content-Type': 'application/json' }
       });
     }
 
-    // Step 3: Fetch event-pages to collect ML market ID + runner name mappings
-    const gameData = {};
-
-    for (let i = 0; i < todayEvents.length; i++) {
-      const event = todayEvents[i];
-      const teams = parseEventName(event.name);
-      if (!teams) continue;
-
-      try {
-        const evRes = await fetch(FD_EVENT_URL(event.eventId), { headers });
-        if (!evRes.ok) continue;
-        const evData = await evRes.json();
-
-        const markets = evData?.attachments?.markets || {};
-        const gameKey = teams.away + ' @ ' + teams.home;
-        const entry = {
-          eventId: event.eventId,
-          openDate: event.openDate,
-          away: teams.away,
-          home: teams.home,
-          league: event._league,
-          runnerNames: {}
-        };
-
-        Object.entries(markets).forEach(function([marketId, mkt]) {
-          if (mkt.marketType !== ML_TYPE) return;
-          entry.mlId = marketId;
-          (mkt.runners || []).forEach(function(ref) {
-            if (ref.selectionId != null && ref.runnerName) {
-              entry.runnerNames[ref.selectionId] = ref.runnerName;
-            }
-          });
-        });
-
-        if (entry.mlId) gameData[gameKey] = entry;
-      } catch(e) {}
-
-      if (i < todayEvents.length - 1) await new Promise(r => setTimeout(r, 120));
-    }
-
-    if (!Object.keys(gameData).length) {
-      return new Response(JSON.stringify({ ok: true, games: {} }), {
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-
-    // Step 4: Batch all ML market IDs into one getMarketPrices request
+    // Step 3: Batch all market IDs into one getMarketPrices request
     const allMarketIds = [];
     const marketToGame = {};
 
-    Object.entries(gameData).forEach(function([gameKey, entry]) {
-      allMarketIds.push(entry.mlId);
-      marketToGame[entry.mlId] = gameKey;
+    Object.entries(gameMarkets).forEach(function([gameKey, entry]) {
+      allMarketIds.push(entry.marketId);
+      marketToGame[entry.marketId] = gameKey;
     });
 
     const pricesRes = await fetch(FD_PRICES_URL, {
@@ -242,13 +197,13 @@ export async function onRequestGet(context) {
     (Array.isArray(marketPricesList) ? marketPricesList : []).forEach(function(mp) {
       const gameKey = marketToGame[mp.marketId];
       if (!gameKey || mp.marketStatus !== 'OPEN') return;
-      const entry = gameData[gameKey];
+      const entry = gameMarkets[gameKey];
       if (!gamesMap[gameKey]) {
         gamesMap[gameKey] = {
           id: entry.eventId,
           away: entry.away,
           home: entry.home,
-          cm: entry.openDate,
+          cm: entry.marketTime,
           league: entry.league,
           ml: {}
         };
@@ -259,7 +214,9 @@ export async function onRequestGet(context) {
         const price = rd.winRunnerOdds?.americanDisplayOdds?.americanOddsInt;
         if (price == null) return;
         const name = entry.runnerNames[rd.selectionId] || entry.runnerNames[String(rd.selectionId)] || '';
-        if (name) gamesMap[gameKey].ml[name] = price;
+        // Skip Draw — we only show home/away ML
+        if (!name || name === 'Draw') return;
+        gamesMap[gameKey].ml[name] = price;
       });
     });
 
