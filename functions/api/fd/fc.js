@@ -156,6 +156,68 @@ export async function onRequestGet(context) {
       return new Response(JSON.stringify({ eventStatus: evRes.status, evPreview, leagueIdsFound: [...leagueIds], leagueResults }), { headers: { 'Content-Type': 'application/json' } });
     }
 
+    // debug=11: probe high-range subcats (NBA alt=13202) + prepacks to find soccer AH subcat
+    if (debugMode === '11') {
+      const DK_BASE = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
+      const KNOWN_EVENT_ID = '33861209';
+      const results = { found: [], prepacks: null };
+
+      // Step 1: prepacks endpoint — may list all available subcategories for this event
+      try {
+        const ppRes = await fetch(`${DK_BASE}/prepacks/event/v1/contentcards/all/events/${KNOWN_EVENT_ID}`, { headers: dkHeaders });
+        if (ppRes.ok) {
+          const d = await ppRes.json();
+          results.prepacks = { status: 200, preview: JSON.stringify(d).slice(0, 3000) };
+          // Walk for subcategoryId references
+          const subcatIds = new Set();
+          function walkPP(obj) {
+            if (!obj || typeof obj !== 'object') return;
+            if (Array.isArray(obj)) { obj.forEach(walkPP); return; }
+            for (const [k,v] of Object.entries(obj)) {
+              if ((k === 'subcategoryId' || k === 'subCategoryId' || k === 'subcatId') && v) subcatIds.add(String(v));
+              walkPP(v);
+            }
+          }
+          walkPP(d);
+          results.prepacks.subcatIdsFound = [...subcatIds];
+        } else {
+          results.prepacks = { status: ppRes.status };
+        }
+      } catch(e) { results.prepacks = { error: e.message }; }
+
+      await new Promise(r => setTimeout(r, 100));
+
+      // Step 2: probe subcat IDs in ranges where DK stores alt/specialty markets
+      // NBA alt spread=13202, alt total=13201. Soccer AH might be 13100s or 13000s or 8000s.
+      const subcatsToTry = [
+        // Around NBA alt range
+        13100, 13110, 13120, 13130, 13140, 13150, 13160, 13170, 13180, 13190,
+        13200, 13201, 13202, 13203, 13204, 13205, 13210, 13220, 13230, 13240,
+        // Soccer-specific guesses
+        8000, 8010, 8020, 8030, 8040, 8050,
+        5000, 5010, 5020, 5030
+      ];
+
+      for (const sc of subcatsToTry) {
+        const mq = encodeURIComponent(
+          `$filter=eventId eq '${KNOWN_EVENT_ID}' AND clientMetadata/subCategoryId eq '${sc}' AND tags/all(t: t ne 'SportcastBetBuilder')`
+        );
+        const url = `${DK_BASE}/controldata/event/eventSubcategory/v1/markets?isBatchable=false&templateVars=${KNOWN_EVENT_ID}%2C${sc}&marketsQuery=${mq}&include=MarketSplits&entity=markets`;
+        const r = await fetch(url, { headers: dkHeaders });
+        if (r.ok) {
+          const d = await r.json();
+          const sels = d.selections || [];
+          if (sels.length > 0) {
+            const mktNames = [...new Set((d.markets||[]).map(m => m.name))];
+            results.found.push({ subcat: sc, selCount: sels.length, mktNames, sample: sels.slice(0,3).map(s => ({ label: s.label, outcomeType: s.outcomeType, points: s.points, odds: s.displayOdds && s.displayOdds.american })) });
+          }
+        }
+        await new Promise(r => setTimeout(r, 60));
+      }
+
+      return new Response(JSON.stringify(results), { headers: { 'Content-Type': 'application/json' } });
+    }
+
     // debug=10: find remaining soccer league IDs (La Liga, Serie A, Ligue 1, UCL)
     if (debugMode === '10') {
       const DK_BASE = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
