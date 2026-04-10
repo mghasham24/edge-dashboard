@@ -24,12 +24,22 @@ export async function onRequestPost({ request, env }) {
   // Create or retrieve Stripe customer
   let customerId = session.stripe_customer_id;
   if (!customerId) {
-    const customer = await stripePost('customers', {
-      email: session.email,
-      metadata: { user_id: String(session.id) }
-    }, env.STRIPE_SECRET_KEY);
-    if (customer.error) return fail(500, 'Failed to create customer');
-    customerId = customer.id;
+    // Before creating, search Stripe for an existing customer with this email
+    // to prevent duplicate customers on retry (e.g. if DB write failed last time).
+    const existingList = await stripeGet(
+      'customers?email=' + encodeURIComponent(session.email) + '&limit=1',
+      env.STRIPE_SECRET_KEY
+    );
+    if (existingList.data && existingList.data.length > 0) {
+      customerId = existingList.data[0].id;
+    } else {
+      const customer = await stripePost('customers', {
+        email: session.email,
+        metadata: { user_id: String(session.id) }
+      }, env.STRIPE_SECRET_KEY);
+      if (customer.error) return fail(500, 'Failed to create customer');
+      customerId = customer.id;
+    }
     await env.DB.prepare('UPDATE users SET stripe_customer_id=? WHERE id=?')
       .bind(customerId, session.id).run();
   }

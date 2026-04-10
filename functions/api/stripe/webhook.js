@@ -149,17 +149,30 @@ async function checkFingerprintByPmId(pmId, stripeCustomerId, env) {
     ).bind(stripeCustomerId).first();
     const userId = user ? user.id : 0;
 
+    // If we can't resolve the user yet (DB replication lag or stripe_customer_id not saved),
+    // don't store a fingerprint with userId=0 — that would cause a false abuse flag on retry.
+    if (!userId) return false;
+
     const existing = await env.DB.prepare(
       'SELECT user_id FROM trial_fingerprints WHERE fingerprint=?'
     ).bind(fingerprint).first();
 
-    if (existing && existing.user_id !== userId) return true; // abuse
-
-    if (!existing) {
-      await env.DB.prepare(
-        'INSERT OR IGNORE INTO trial_fingerprints (fingerprint, user_id, created_at) VALUES (?,?,?)'
-      ).bind(fingerprint, userId, Math.floor(Date.now() / 1000)).run();
+    if (existing) {
+      // If the stored entry has userId=0 (written before user was resolvable), heal it and allow.
+      if (existing.user_id === 0) {
+        await env.DB.prepare(
+          'UPDATE trial_fingerprints SET user_id=? WHERE fingerprint=?'
+        ).bind(userId, fingerprint).run();
+        return false;
+      }
+      // Different real user — genuine abuse.
+      if (existing.user_id !== userId) return true;
+      return false; // same user retrying
     }
+
+    await env.DB.prepare(
+      'INSERT OR IGNORE INTO trial_fingerprints (fingerprint, user_id, created_at) VALUES (?,?,?)'
+    ).bind(fingerprint, userId, Math.floor(Date.now() / 1000)).run();
 
     return false;
   } catch(e) {
