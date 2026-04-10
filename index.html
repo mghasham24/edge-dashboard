@@ -6780,6 +6780,11 @@
                     if (fdPt !== 0 && rlPt !== 0 && Math.sign(fdPt) !== Math.sign(rlPt) && gap > 2) return false;
                 }
 
+                // Live NBA: hide spread/total unless DK has the exact Real Sports line
+                if (isLiveNBA && (r.mkt === 'Spread' || r.mkt === 'Total') && r.pt != null && yourLines[r.id] != null) {
+                    if (Math.abs(parseFloat(r.pt) - parseFloat(yourLines[r.id])) > 0.001) return false;
+                }
+
                 // NHL: hide spread/total if Real line differs from FD at all
                 if (isHockey && r.pt != null && yourLines[r.id] != null) {
                     var gap = Math.abs(parseFloat(yourLines[r.id]) - parseFloat(r.pt));
@@ -7736,17 +7741,37 @@
                         var entries = Object.entries(dkSrc.spreads[sideKey] || {});
                         if (entries.length) {
                             var yl = yourLines[r.id];
-                            var target = (yl != null) ? parseFloat(yl) : 0;
-                            var best = entries.reduce(function(a, b) { return Math.abs(parseFloat(a[0]) - target) <= Math.abs(parseFloat(b[0]) - target) ? a : b; });
-                            r.am = best[1]; r.pt = parseFloat(best[0]);
+                            if (yl == null) {
+                                // Real Sports line not set yet — pick closest to 0 temporarily
+                                var best = entries.reduce(function(a, b) { return Math.abs(parseFloat(a[0])) <= Math.abs(parseFloat(b[0])) ? a : b; });
+                                r.am = best[1]; r.pt = parseFloat(best[0]);
+                            } else {
+                                var ylPt = parseFloat(yl);
+                                if (Math.abs(parseFloat(r.pt) - ylPt) <= 0.001) {
+                                    // FD line already equals Real Sports line — update DK price for that point if available
+                                    var exact = entries.find(function(e) { return Math.abs(parseFloat(e[0]) - ylPt) <= 0.001; });
+                                    if (exact) r.am = exact[1];
+                                } else {
+                                    // FD line differs — use exact DK match at Real Sports line
+                                    var exact = entries.find(function(e) { return Math.abs(parseFloat(e[0]) - ylPt) <= 0.001; });
+                                    if (exact) { r.am = exact[1]; r.pt = ylPt; }
+                                    // No exact match: leave r.pt as is — renderTable will hide the row
+                                }
+                            }
                         }
                     } else {
                         var entries = Object.entries(dkSrc.totals[r.side] || {});
                         if (entries.length) {
                             var yl = yourLines[r.id];
-                            var target = (yl != null) ? parseFloat(yl) : 0;
-                            var best = entries.reduce(function(a, b) { return Math.abs(parseFloat(a[0]) - target) <= Math.abs(parseFloat(b[0]) - target) ? a : b; });
-                            r.am = best[1]; r.pt = parseFloat(best[0]);
+                            if (yl == null) {
+                                var best = entries.reduce(function(a, b) { return Math.abs(parseFloat(a[0])) <= Math.abs(parseFloat(b[0])) ? a : b; });
+                                r.am = best[1]; r.pt = parseFloat(best[0]);
+                            } else {
+                                var ylPt = parseFloat(yl);
+                                var exact = entries.find(function(e) { return Math.abs(parseFloat(e[0]) - ylPt) <= 0.001; });
+                                if (exact) { r.am = exact[1]; r.pt = ylPt; }
+                                // No exact match: leave r.pt as is — renderTable will hide the row
+                            }
                         }
                     }
                 }
@@ -7812,16 +7837,13 @@
                     if (nr.mkt === 'Spread') {
                         var sideKey = nr.ps === 'A' ? 'Away' : 'Home';
                         var entries = Object.entries(dkSrc.spreads[sideKey] || {});
-                        if (entries.length) {
-                            var best = entries.reduce(function(a, b) { return Math.abs(parseFloat(a[0]) - yl) <= Math.abs(parseFloat(b[0]) - yl) ? a : b; });
-                            nr.am = best[1]; nr.pt = parseFloat(best[0]);
-                        }
+                        var exact = entries.find(function(e) { return Math.abs(parseFloat(e[0]) - yl) <= 0.001; });
+                        if (exact) { nr.am = exact[1]; nr.pt = yl; }
+                        // No exact match: nr.pt stays at initial value — renderTable will hide the row
                     } else if (nr.mkt === 'Total') {
                         var entries = Object.entries(dkSrc.totals[nr.side] || {});
-                        if (entries.length) {
-                            var best = entries.reduce(function(a, b) { return Math.abs(parseFloat(a[0]) - yl) <= Math.abs(parseFloat(b[0]) - yl) ? a : b; });
-                            nr.am = best[1]; nr.pt = parseFloat(best[0]);
-                        }
+                        var exact = entries.find(function(e) { return Math.abs(parseFloat(e[0]) - yl) <= 0.001; });
+                        if (exact) { nr.am = exact[1]; nr.pt = yl; }
                     }
                 });
             }
