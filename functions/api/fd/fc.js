@@ -1,31 +1,40 @@
 // functions/api/fd/fc.js
-// Fetches DraftKings real-time soccer spread (Asian handicap ±0.5) odds for top 6 European leagues
-// Step 1: Fetch DK league events for each target competition
-// Step 2: Filter to today's games in ET
-// Step 3: Fetch spread markets per game
-// debug=1: discover DK soccer category/league structure
+// Fetches FanDuel real-time soccer spread odds for top 6 European leagues
+// Step 1: SPORT page → attachments.events has both competition containers AND individual game events
+//         Filter events by openDate (today ET) + target league competition ID
+// Step 2: Fetch event-page per game event → get Asian handicap market ID + runner names
+// Step 3: Batch POST getMarketPrices
 
-const DK_BASE = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
+const FD_AK = 'FhMFpcPWXMeyZxOx';
+const FD_SPORT_URL = `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=SPORT&eventTypeId=1&_ak=${FD_AK}&timezone=America/New_York`;
+const FD_EVENT_URL = (id) => `https://sbapi.nj.sportsbook.fanduel.com/api/event-page?_ak=${FD_AK}&eventId=${id}&tab=all&timezone=America/New_York`;
+const FD_PRICES_URL = 'https://smp.nj.sportsbook.fanduel.com/api/sports/fixedodds/readonly/v1/getMarketPrices?priceHistory=0';
 const CACHE_TTL = 30;
 
-// DK league IDs for soccer — populated via debug=1 discovery
-// Format: { id: DK_LEAGUE_ID, label: display_label }
-// Placeholders until confirmed via debug
-const TARGET_LEAGUES = [
-  { id: '3',    label: 'EPL' },       // English Premier League — needs confirmation
-  { id: '7',    label: 'UCL' },       // UEFA Champions League — needs confirmation
-  { id: '11',   label: 'La Liga' },   // Spanish La Liga — needs confirmation
-  { id: '13',   label: 'Bundesliga' },// German Bundesliga — needs confirmation
-  { id: '14',   label: 'Serie A' },   // Italian Serie A — needs confirmation
-  { id: '15',   label: 'Ligue 1' },   // French Ligue 1 — needs confirmation
-];
+// Spread market types in priority order
+const SPREAD_TYPES = ['ASIAN_HANDICAP', 'HANDICAP', 'ASIAN_LINE'];
 
-const DK_HEADERS = {
-  'Accept': '*/*',
-  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15',
-  'Origin': 'https://sportsbook.draftkings.com',
-  'Referer': 'https://sportsbook.draftkings.com/'
+// Exact competition names → league label
+const EXACT_COMP_NAMES = {
+  'premier league':          'EPL',
+  'english premier league':  'EPL',
+  'la liga':                 'La Liga',
+  'spanish la liga':         'La Liga',
+  'bundesliga':              'Bundesliga',
+  'german bundesliga':       'Bundesliga',
+  'serie a':                 'Serie A',
+  'italian serie a':         'Serie A',
+  'ligue 1':                 'Ligue 1',
+  'french ligue 1':          'Ligue 1',
 };
+
+function getLeagueLabel(competitionName) {
+  if (!competitionName) return null;
+  const lower = competitionName.toLowerCase();
+  if (EXACT_COMP_NAMES[lower]) return EXACT_COMP_NAMES[lower];
+  if (lower.includes('champions league')) return 'UCL';
+  return null;
+}
 
 function isToday_ET(dateStr) {
   if (!dateStr) return false;
@@ -33,11 +42,14 @@ function isToday_ET(dateStr) {
   return fmt.format(new Date(dateStr)) === fmt.format(new Date());
 }
 
-function parseAmerican(str) {
-  if (!str) return null;
-  const s = String(str).replace(/\u2212/g, '-').replace(/[^0-9+\-]/g, '');
-  const n = parseInt(s, 10);
-  return isFinite(n) ? n : null;
+function parseEventName(name) {
+  // FD soccer: "Home v Away"
+  let m = name.match(/^(.+?)\s+v\s+(.+?)\s*$/i);
+  if (m) return { home: m[1].trim(), away: m[2].trim() };
+  // US format: "Away @ Home"
+  m = name.match(/^(.+?)\s*@\s*(.+?)\s*$/);
+  if (m) return { away: m[1].trim(), home: m[2].trim() };
+  return null;
 }
 
 async function getSession(request, db) {
@@ -78,58 +90,218 @@ export async function onRequestGet(context) {
     } catch(e) {}
   }
 
+  const headers = {
+    'Accept': 'application/json',
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15'
+  };
+
   try {
     const nowMs = Date.now();
 
-    // debug=1: discover DK soccer league structure
-    // Fetches DK's sport/category listing to find correct league IDs for soccer competitions
+    const sportRes = await fetch(FD_SPORT_URL, { headers });
+    if (!sportRes.ok) return fail(sportRes.status, 'FD soccer sport fetch failed');
+    const sportData = await sportRes.json();
+
+    const allEvents = sportData?.attachments?.events || {};
+    const competitions = sportData?.attachments?.competitions || {};
+
+    // Build competitionId → league label
+    const compLeagueMap = {};
+    Object.values(competitions).forEach(function(c) {
+      const label = getLeagueLabel(c.name);
+      if (label) compLeagueMap[c.competitionId] = label;
+    });
+
+    // debug=1: show ALL today's individual game events (not competition containers)
+    // Game events have names like "Team A v Team B", containers have league names
     if (debugMode === '1') {
-      const results = [];
+      const todayGameEvents = Object.values(allEvents).filter(e => {
+        if (!e.openDate) return false;
+        const league = compLeagueMap[e.competitionId];
+        if (!league) return false;
+        if (!isToday_ET(e.openDate)) return false;
+        const t = new Date(e.openDate).getTime();
+        if (t < nowMs - 4 * 60 * 60 * 1000) return false;
+        const teams = parseEventName(e.name);
+        return !!teams; // only events with parseable team matchup names
+      });
 
-      // Try DK sport categories listing
-      const catUrls = [
-        `${DK_BASE}/controldata/sport/v1/categories`,
-        `${DK_BASE}/v1/featured`,
-        `${DK_BASE}/controldata/sport/v1/leagues`,
-        `${DK_BASE}/controldata/sport/v1/sports`,
-      ];
-      for (const url of catUrls) {
-        try {
-          const r = await fetch(url, { headers: DK_HEADERS });
-          if (r.ok) {
-            const d = await r.json();
-            results.push({ url, status: 200, keys: Object.keys(d || {}), preview: JSON.stringify(d).slice(0, 500) });
-          } else {
-            results.push({ url, status: r.status });
-          }
-        } catch(e) { results.push({ url, error: e.message }); }
-        await new Promise(r => setTimeout(r, 80));
-      }
+      const allLeagueEvents = Object.values(allEvents).filter(e => compLeagueMap[e.competitionId]);
 
-      // Also try fetching each placeholder league ID to see what comes back
-      for (const league of TARGET_LEAGUES) {
-        const evQuery = encodeURIComponent(`$filter=leagueId eq '${league.id}'`);
-        const url = `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${league.id}&eventsQuery=${evQuery}&include=Events&entity=events`;
-        try {
-          const r = await fetch(url, { headers: DK_HEADERS });
-          if (r.ok) {
-            const d = await r.json();
-            const evSample = (d.events || []).slice(0, 3).map(e => ({ id: e.id, name: e.name, date: e.startEventDate, status: e.status }));
-            results.push({ type: 'league-probe', id: league.id, label: league.label, status: 200, eventCount: (d.events || []).length, evSample });
-          } else {
-            results.push({ type: 'league-probe', id: league.id, label: league.label, status: r.status });
-          }
-        } catch(e) { results.push({ type: 'league-probe', id: league.id, label: league.label, error: e.message }); }
-        await new Promise(r => setTimeout(r, 100));
-      }
-
-      return new Response(JSON.stringify({ results }), { headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({
+        totalEvents: Object.keys(allEvents).length,
+        targetLeagueEventsTotal: allLeagueEvents.length,
+        todayGameEventsFound: todayGameEvents.length,
+        todayEvents: todayGameEvents.map(e => ({
+          eventId: e.eventId,
+          name: e.name,
+          openDate: e.openDate,
+          competitionId: e.competitionId,
+          league: compLeagueMap[e.competitionId],
+          parsed: parseEventName(e.name)
+        })),
+        // Sample of all events in target leagues (to see the range)
+        allLeagueSample: allLeagueEvents.slice(0, 10).map(e => ({ eventId: e.eventId, name: e.name, openDate: e.openDate, league: compLeagueMap[e.competitionId] }))
+      }), { headers: { 'Content-Type': 'application/json' } });
     }
 
-    // Main flow — placeholder until league IDs confirmed
-    return new Response(JSON.stringify({ ok: true, games: {}, note: 'League IDs pending confirmation via debug=1' }), {
-      headers: { 'Content-Type': 'application/json' }
+    // debug=2: fetch event-page for one today game event and show all market types
+    if (debugMode === '2') {
+      const todayGameEvents = Object.values(allEvents).filter(e => {
+        if (!e.openDate || !compLeagueMap[e.competitionId] || !isToday_ET(e.openDate)) return false;
+        const t = new Date(e.openDate).getTime();
+        if (t < nowMs - 4 * 60 * 60 * 1000) return false;
+        return !!parseEventName(e.name);
+      });
+
+      if (!todayGameEvents.length) {
+        return new Response(JSON.stringify({ error: 'No today game events found' }), { headers: { 'Content-Type': 'application/json' } });
+      }
+
+      const testEvent = todayGameEvents[0];
+      const evRes = await fetch(FD_EVENT_URL(testEvent.eventId), { headers });
+      const evData = evRes.ok ? await evRes.json() : null;
+      const evMarkets = evData?.attachments?.markets || {};
+      const mktTypes = [...new Set(Object.values(evMarkets).map(m => m.marketType))].sort();
+      const spreadSample = Object.values(evMarkets)
+        .filter(m => SPREAD_TYPES.some(t => t === m.marketType))
+        .map(m => ({ marketId: m.marketId, marketType: m.marketType, marketName: m.marketName, runners: (m.runners||[]).map(r => ({ name: r.runnerName, handicap: r.handicap, selectionId: r.selectionId })) }));
+
+      return new Response(JSON.stringify({
+        testEventId: testEvent.eventId,
+        testEventName: testEvent.name,
+        league: compLeagueMap[testEvent.competitionId],
+        evPageStatus: evRes.status,
+        totalMarketsInEventPage: Object.keys(evMarkets).length,
+        allMarketTypes: mktTypes,
+        spreadMarkets: spreadSample,
+        // Also show all market types with sample runner names
+        allMarketsSample: Object.values(evMarkets).slice(0, 8).map(m => ({ marketType: m.marketType, marketName: m.marketName, runners: (m.runners||[]).slice(0,2).map(r => ({ name: r.runnerName, handicap: r.handicap })) }))
+      }), { headers: { 'Content-Type': 'application/json' } });
+    }
+
+    // Step 1: Find today's individual game events in target leagues
+    const todayGameEvents = Object.values(allEvents).filter(function(e) {
+      if (!e.openDate || !compLeagueMap[e.competitionId]) return false;
+      if (!isToday_ET(e.openDate)) return false;
+      const t = new Date(e.openDate).getTime();
+      if (t < nowMs - 4 * 60 * 60 * 1000) return false;
+      return !!parseEventName(e.name);
     });
+
+    if (!todayGameEvents.length) {
+      return new Response(JSON.stringify({ ok: true, games: {} }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Step 2: Fetch event-pages to find spread markets
+    const gameData = {};
+
+    for (let i = 0; i < todayGameEvents.length; i++) {
+      const event = todayGameEvents[i];
+      const teams = parseEventName(event.name);
+      if (!teams) continue;
+
+      try {
+        const evRes = await fetch(FD_EVENT_URL(event.eventId), { headers });
+        if (!evRes.ok) continue;
+        const evData = await evRes.json();
+        const markets = evData?.attachments?.markets || {};
+
+        const gameKey = teams.away + ' @ ' + teams.home;
+        const entry = {
+          eventId: event.eventId,
+          openDate: event.openDate,
+          away: teams.away,
+          home: teams.home,
+          league: compLeagueMap[event.competitionId],
+          runnerNames: {}
+        };
+
+        // Find spread market (prefer ASIAN_HANDICAP, fallback to HANDICAP)
+        let bestMkt = null;
+        for (const spreadType of SPREAD_TYPES) {
+          const found = Object.entries(markets).find(([, m]) => m.marketType === spreadType);
+          if (found) { bestMkt = found; break; }
+        }
+
+        if (bestMkt) {
+          entry.spreadId = bestMkt[0];
+          entry.spreadType = bestMkt[1].marketType;
+          (bestMkt[1].runners || []).forEach(function(r) {
+            if (r.selectionId != null && r.runnerName) {
+              entry.runnerNames[r.selectionId] = r.runnerName;
+              entry.runnerNames[String(r.selectionId)] = r.runnerName;
+            }
+          });
+          entry.runners = bestMkt[1].runners || [];
+          gameData[gameKey] = entry;
+        }
+      } catch(e) {}
+
+      if (i < todayGameEvents.length - 1) await new Promise(r => setTimeout(r, 120));
+    }
+
+    if (!Object.keys(gameData).length) {
+      return new Response(JSON.stringify({ ok: true, games: {} }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Step 3: Batch getMarketPrices
+    const allMarketIds = [];
+    const marketToGame = {};
+    Object.entries(gameData).forEach(function([gameKey, entry]) {
+      allMarketIds.push(entry.spreadId);
+      marketToGame[entry.spreadId] = gameKey;
+    });
+
+    const pricesRes = await fetch(FD_PRICES_URL, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ marketIds: allMarketIds })
+    });
+
+    if (!pricesRes.ok) return fail(pricesRes.status, 'getMarketPrices failed');
+    const marketPricesList = await pricesRes.json();
+
+    const gamesMap = {};
+
+    (Array.isArray(marketPricesList) ? marketPricesList : []).forEach(function(mp) {
+      const gameKey = marketToGame[mp.marketId];
+      if (!gameKey || mp.marketStatus !== 'OPEN') return;
+      const entry = gameData[gameKey];
+      if (!gamesMap[gameKey]) {
+        gamesMap[gameKey] = {
+          id: entry.eventId,
+          away: entry.away,
+          home: entry.home,
+          cm: entry.openDate,
+          league: entry.league,
+          spread: {}
+        };
+      }
+
+      (mp.runnerDetails || []).forEach(function(rd) {
+        if (rd.runnerStatus !== 'ACTIVE') return;
+        const price = rd.winRunnerOdds?.americanDisplayOdds?.americanOddsInt;
+        if (price == null) return;
+        const name = entry.runnerNames[rd.selectionId] || entry.runnerNames[String(rd.selectionId)] || '';
+        if (!name) return;
+        const handicap = rd.handicap ?? entry.runners.find(r => r.selectionId == rd.selectionId)?.handicap;
+        gamesMap[gameKey].spread[name] = { pt: handicap, am: price };
+      });
+    });
+
+    const body = JSON.stringify({ ok: true, games: gamesMap });
+    try {
+      await env.DB.prepare(
+        'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at'
+      ).bind(cacheKey, body, now).run();
+    } catch(e) {}
+
+    return new Response(body, { headers: { 'Content-Type': 'application/json' } });
 
   } catch(e) {
     return fail(500, e.message);
