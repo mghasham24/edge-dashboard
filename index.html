@@ -4702,6 +4702,30 @@
         var noSpread = ['mma_mixed_martial_arts', 'baseball_mlb', 'icehockey_nhl'];
         await Promise.all(sportsToLoad.map(async function(s) {
             try {
+                if (s.key === 'soccer_fc') {
+                    // FC uses FD native DK AH endpoint — not Odds API
+                    var fcRes = await fetch('/api/fd/fc', { credentials: 'same-origin' });
+                    var fcData = fcRes.ok ? await fcRes.json() : null;
+                    if (!fcData || !fcData.ok || !fcData.games) return;
+                    var rows = [];
+                    Object.entries(fcData.games).forEach(function([gameKey, game]) {
+                        var away = game.away, home = game.home;
+                        var cm = game.cm ? new Date(game.cm) : null;
+                        var gid = String(game.id);
+                        var pid = gid + '-h2h';
+                        if (game.ml) {
+                            [[away, 'A'], [home, 'B']].forEach(function(pair) {
+                                var teamName = pair[0], ps = pair[1];
+                                var price = game.ml[teamName];
+                                if (price == null) return;
+                                var pt = game.pt ? game.pt[teamName] : null;
+                                rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName, am: price, pt: pt, pid: pid, ps: ps, gid: gid });
+                            });
+                        }
+                    });
+                    rawRowsBySport[s.key] = rows;
+                    return;
+                }
                 if (s.key === 'baseball_mlb') {
                     // MLB uses FD native — fetch ML + RFI in parallel
                     var [mlbRes, rfiRes] = await Promise.all([
@@ -4769,8 +4793,8 @@
         for (var i = 0; i < sportsToLoad.length; i++) {
             var s = sportsToLoad[i];
             try {
-                // For MLB, run fetchRealMarkets against MLB rows (not current rawRows)
-                // so preds are set for ML + RFI rows before cacheEvRows runs.
+                // For MLB and FC, run fetchRealMarkets against their rows (not current rawRows)
+                // so preds are populated before cacheEvRows runs.
                 if (s.key === 'baseball_mlb' && (rawRowsBySport[s.key] || []).length) {
                     var savedSportEv = currentSport;
                     var savedRawRowsEv = rawRows;
@@ -4780,6 +4804,16 @@
                     rawRowsBySport['baseball_mlb'] = rawRows; // sync back (fetchRealMarkets may filter rows)
                     rawRows = savedRawRowsEv;
                     currentSport = savedSportEv;
+                }
+                if (s.key === 'soccer_fc' && (rawRowsBySport[s.key] || []).length) {
+                    var savedSportEvFc = currentSport;
+                    var savedRawRowsEvFc = rawRows;
+                    currentSport = 'soccer_fc';
+                    rawRows = rawRowsBySport['soccer_fc'];
+                    await fetchRealMarkets('soccer_fc', true);
+                    rawRowsBySport['soccer_fc'] = rawRows;
+                    rawRows = savedRawRowsEvFc;
+                    currentSport = savedSportEvFc;
                 }
                 var sportRows = rawRowsBySport[s.key] || [];
                 if (sportRows.length) {
