@@ -4188,13 +4188,14 @@
         var af = adjFair(fair, r.pt, yl, r.mkt, r.ps);
         var pr = preds[id];
         var pred = (pr !== undefined && pr !== '') ? parseFloat(pr) / 100 : null;
-        var edge = (af != null && pred != null && isFinite(pred)) ? (pred - af) * 100 : null;
+        var _isSFC = currentSport === 'soccer_fc';
+        var edge = (af != null && pred != null && isFinite(pred)) ? (_isSFC ? (af - pred) : (pred - af)) * 100 : null;
         var evForU = null;
         if (af != null && pred != null && pred > 0 && pred < 1) {
             var volNumU = 0;
             if (vols[id]) { var vsU = vols[id]; volNumU = vsU.endsWith('k') ? parseFloat(vsU)*1000 : vsU.endsWith('m') ? parseFloat(vsU)*1000000 : parseFloat(vsU); }
             var rakeU = volNumU > 100000 ? 0.034 : volNumU > 10000 ? 0.032 : volNumU > 1000 ? 0.035 : volNumU > 0 ? 0.04 : 0.034;
-            evForU = (pred * (1/af) * (1-rakeU) - 1) * 100;
+            evForU = _isSFC ? (af * (1/pred) * (1-rakeU) - 1) * 100 : (pred * (1/af) * (1-rakeU) - 1) * 100;
         }
         var u = isPro() ? unitsEV(evForU, pred) : units(edge);
         var bet = u * unit;
@@ -4277,7 +4278,8 @@
             var af = adjFair(fair, r.pt, yl, r.mkt, r.ps);
             var pr = preds[r.id];
             var pred = (pr !== undefined && pr !== '') ? parseFloat(pr) / 100 : null;
-            var edge = (af != null && pred != null && isFinite(pred)) ? (pred - af) * 100 : null;
+            var _sfcM = currentSport === 'soccer_fc';
+            var edge = (af != null && pred != null && isFinite(pred)) ? (_sfcM ? (af - pred) : (pred - af)) * 100 : null;
             var u = pred != null ? units(edge) : units(edge);
             return Object.assign({}, r, { fair: fair, af: af, yl: yl, edge: edge, u: u, bet: u * unit });
         });
@@ -7047,14 +7049,15 @@
         var yl = yourLines[id] != null ? yourLines[id] : null;
         var af = adjFair(fair, r.pt, yl, r.mkt, r.ps);
         var pred = input.value !== '' ? parseFloat(input.value) / 100 : null;
-        var edge = (af != null && pred != null && isFinite(pred)) ? (pred - af) * 100 : null;
+        var _isSFC2 = currentSport === 'soccer_fc';
+        var edge = (af != null && pred != null && isFinite(pred)) ? (_isSFC2 ? (af - pred) : (pred - af)) * 100 : null;
         // EV calculation (volume-tiered rake) — mirrors buildRow logic
         var evForUnits = null, evH = '-';
         if (af != null && pred != null && pred > 0 && pred < 1) {
             var volNumP = 0;
             if (vols[id]) { var vsP = vols[id]; volNumP = vsP.endsWith('k') ? parseFloat(vsP)*1000 : vsP.endsWith('m') ? parseFloat(vsP)*1000000 : parseFloat(vsP); }
             var rakeP = volNumP > 100000 ? 0.034 : volNumP > 10000 ? 0.032 : volNumP > 1000 ? 0.035 : volNumP > 0 ? 0.04 : 0.034;
-            evForUnits = (pred * (1/af) * (1-rakeP) - 1) * 100;
+            evForUnits = _isSFC2 ? (af * (1/pred) * (1-rakeP) - 1) * 100 : (pred * (1/af) * (1-rakeP) - 1) * 100;
             if (isPro() || r.mkt === 'ML') {
                 var evColor = evForUnits >= 5 ? 'var(--green)' : evForUnits > 0 ? 'var(--yellow)' : 'var(--red)';
                 evH = '<span style="font-family:var(--mono);font-size:12px;font-weight:600;color:' + evColor + '">' + (evForUnits > 0 ? '+' : '') + evForUnits.toFixed(1) + '%</span>';
@@ -7610,7 +7613,7 @@
                         var yl = yourLines[r.id] != null ? yourLines[r.id] : null;
                         var af = adjFair(fair, r.pt, yl, r.mkt, r.ps);
                         var pred = parseFloat(preds[activeId]) / 100;
-                        var edge = (af != null && pred != null && isFinite(pred)) ? (pred - af) * 100 : null;
+                        var edge = (af != null && pred != null && isFinite(pred)) ? (currentSport === 'soccer_fc' ? (af - pred) : (pred - af)) * 100 : null;
                         var u = units(edge);
                         var bet = u * unit;
                         if (edge != null) {
