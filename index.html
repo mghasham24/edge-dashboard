@@ -7009,7 +7009,7 @@
                     if (dkAltPrice != null) { dispAm = dkAltPrice; dispPt = parseFloat(yl); }
                 }
             }
-            return { id: r.id, game: r.game, cm: r.cm, mkt: r.mkt, side: r.side, am: dispAm, pt: dispPt, ps: r.ps, pid: r.pid, gid: r.gid, fair: fair, af: af, yl: yl, edge: edge, u: u, bet: u * unit };
+            return { id: r.id, game: r.game, cm: r.cm, mkt: r.mkt, side: r.side, am: dispAm, pt: dispPt, ps: r.ps, pid: r.pid, gid: r.gid, league: r.league, fair: fair, af: af, yl: yl, edge: edge, u: u, bet: u * unit };
         });
         cacheEvRows(rows, currentSport);
         var now = new Date();
