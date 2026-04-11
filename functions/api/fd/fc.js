@@ -90,37 +90,44 @@ export async function onRequestGet(context) {
 
   if (debugMode === 'mls') {
     const h = { 'Accept': '*/*', 'User-Agent': 'Mozilla/5.0', 'Origin': 'https://sportsbook.draftkings.com', 'Referer': 'https://sportsbook.draftkings.com/' };
-    const mq = encodeURIComponent(`$filter=clientMetadata/subCategoryId eq '4511' AND tags/all(t: t ne 'SportcastBetBuilder')`);
-    const results = [];
+    const MLS_SUBCAT = '4514'; // confirmed from DevTools: MLS spread subcat
 
-    // Probe templateVars 1-15 in sport/sportSubcategory to find which returns soccer (sportId=1) markets
-    const probes = await Promise.all(
-      Array.from({ length: 15 }, (_, i) => i + 1).map(async ctx => {
-        try {
-          const url = `${DK_BASE}/controldata/sport/sportSubcategory/v1/markets?isBatchable=false&templateVars=${ctx}%2C4511&marketsQuery=${mq}&include=Events&entity=events`;
-          const r = await fetch(url, { headers: h });
-          const d = r.ok ? await r.json() : null;
-          const markets = (d && d.markets) || [];
-          const sportIds  = [...new Set(markets.map(m => m.sportId))];
-          const leagueIds = [...new Set(markets.map(m => m.leagueId))];
-          return { ctx, status: r.status, marketCount: markets.length, sportIds, leagueIds: leagueIds.slice(0, 10) };
-        } catch(e) { return { ctx, error: e.message }; }
-      })
-    );
-    results.push({ test: 'templateVarsProbe1-15', probes });
-
-    // Also try sport/sportSubcategory with eventsQuery filtering sportId=1
+    // Step 1: Fetch a known MLS event (33952871) with subcat 4514 to get leagueId + selection structure
+    const mq1 = encodeURIComponent(`$filter=eventId eq '33952871' AND clientMetadata/subCategoryId eq '${MLS_SUBCAT}' AND tags/all(t: t ne 'SportcastBetBuilder')`);
+    const eventUrl = `${DK_BASE}/controldata/event/eventSubcategory/v1/markets?isBatchable=false&templateVars=33952871%2C${MLS_SUBCAT}&marketsQuery=${mq1}&include=MarketSplits&entity=markets`;
+    let eventData = null;
+    let mlsLeagueId = null;
     try {
-      const eq = encodeURIComponent(`$filter=sportId eq '1'`);
-      const url = `${DK_BASE}/controldata/sport/sportSubcategory/v1/markets?isBatchable=false&templateVars=1%2C4511&eventsQuery=${eq}&marketsQuery=${mq}&include=Events&entity=events`;
-      const r = await fetch(url, { headers: h });
+      const r = await fetch(eventUrl, { headers: h });
       const d = r.ok ? await r.json() : null;
-      const markets = (d && d.markets) || [];
-      const leagueIds = [...new Set(markets.map(m => `${m.sportId}:${m.leagueId}`))];
-      results.push({ test: 'eventsQuerySportId1', status: r.status, marketCount: markets.length, leagueIds });
-    } catch(e) { results.push({ test: 'eventsQuerySportId1', error: e.message }); }
+      eventData = { status: r.status, keys: d ? Object.keys(d) : null };
+      // Extract leagueId from events or markets
+      const evs = (d && d.events) || [];
+      const mks = (d && d.markets) || [];
+      const sels = (d && d.selections) || [];
+      if (evs[0]) mlsLeagueId = evs[0].leagueId;
+      if (!mlsLeagueId && mks[0]) mlsLeagueId = mks[0].leagueId;
+      eventData.leagueId = mlsLeagueId;
+      eventData.eventSample = evs[0] || null;
+      eventData.marketSample = mks[0] || null;
+      eventData.selectionSamples = sels.slice(0, 6).map(s => ({ label: s.label, outcomeType: s.outcomeType, points: s.points, odds: s.displayOdds && s.displayOdds.american }));
+    } catch(e) { eventData = { error: e.message }; }
 
-    return new Response(JSON.stringify(results), { headers: { 'Content-Type': 'application/json' } });
+    // Step 2: If we got a leagueId, try the league endpoint with subcat 4514 to get all MLS events
+    let leagueData = null;
+    if (mlsLeagueId) {
+      try {
+        const eq = encodeURIComponent(`$filter=leagueId eq '${mlsLeagueId}'`);
+        const mq2 = encodeURIComponent(`$filter=clientMetadata/subCategoryId eq '${MLS_SUBCAT}' AND tags/all(t: t ne 'SportcastBetBuilder')`);
+        const url = `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${mlsLeagueId}&eventsQuery=${eq}&marketsQuery=${mq2}&include=Events&entity=events`;
+        const r = await fetch(url, { headers: h });
+        const d = r.ok ? await r.json() : null;
+        const evs = (d && d.events) || [];
+        leagueData = { leagueId: mlsLeagueId, status: r.status, eventCount: evs.length, events: evs.slice(0, 5).map(e => ({ id: e.id, name: e.name, date: e.startEventDate })) };
+      } catch(e) { leagueData = { error: e.message }; }
+    }
+
+    return new Response(JSON.stringify({ eventData, leagueData }), { headers: { 'Content-Type': 'application/json' } });
   }
 
   const headers = {
