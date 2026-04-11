@@ -282,8 +282,12 @@ export async function onRequestGet(context) {
     // Fetch market data with retry logic — sequential to avoid rate limiting
     async function fetchGameMarkets(game, tokenOffset) {
       const gameId = game.id || game.gameId;
-      const awayKey = (game.awayTeam && game.awayTeam.name) || game.awayTeamKey || game.awayTeam?.key;
-      const homeKey = (game.homeTeam && game.homeTeam.name) || game.homeTeamKey || game.homeTeam?.key;
+      // Handle fighters array (UFC/MMA) vs awayTeam/homeTeam (team sports)
+      const fighters = game.fighters || game.athletes || game.players;
+      const awayKey = (game.awayTeam && game.awayTeam.name) || game.awayTeamKey || game.awayTeam?.key
+                   || (fighters && fighters[0] && (fighters[0].name || fighters[0].displayName));
+      const homeKey = (game.homeTeam && game.homeTeam.name) || game.homeTeamKey || game.homeTeam?.key
+                   || (fighters && fighters[1] && (fighters[1].name || fighters[1].displayName));
       if (!gameId || !awayKey || !homeKey) return { _err: 'no keys', gameId };
       const headers = buildHeaders(env);
       if (tokenOffset) headers['real-request-token'] = hashidsEncode(Date.now() + (tokenOffset || 0));
@@ -314,6 +318,11 @@ export async function onRequestGet(context) {
             const keyToName = {};
             if (game.awayTeam) keyToName[game.awayTeam.key] = game.awayTeam.name;
             if (game.homeTeam) keyToName[game.homeTeam.key] = game.homeTeam.name;
+            // UFC/MMA: map fighter keys to full names for outcome label resolution
+            if (fighters) fighters.forEach(f => {
+                if (f.key && f.name) keyToName[f.key] = f.name;
+                if (f.key && f.displayName) keyToName[f.key] = f.displayName;
+            });
             const markets = {};
             for (const mk of (mData.markets || [])) {
               // Parse volumeDisplay e.g. "213.7k" -> 213700, "1.9k" -> 1900
@@ -376,7 +385,7 @@ export async function onRequestGet(context) {
     // Two-phase fetch: return cached data immediately, fetch missing games in background
     const marketMap = {};
     const now = Math.floor(Date.now() / 1000);
-    const cacheKey = 'real_sync_' + realSport + '_v3'; // v3: only store spread lines with team name in label
+    const cacheKey = 'real_sync_' + realSport + '_v4'; // v4: fighter array support for UFC
     const TTL = 15;
 
     // Phase 1: Load cache

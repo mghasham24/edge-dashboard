@@ -6824,6 +6824,12 @@
             var gameMarkets = markets[realKey];
             if (!gameMarkets) return;
             var mktData = gameMarkets[mktLabel];
+            // MMA: RS may use a different label for fight winner market
+            if (!mktData && (r._sport_key === 'mma_mixed_martial_arts' || currentSport === 'mma_mixed_martial_arts') && r.mkt === 'ML') {
+                mktData = gameMarkets['Fight Outcome'] || gameMarkets['Fight Winner']
+                       || gameMarkets['Match Winner'] || gameMarkets['Winner']
+                       || Object.values(gameMarkets)[0];
+            }
             var outcomes = mktData ? (mktData.outcomes || mktData) : null;
             if (!outcomes || !outcomes.length) return;
 
@@ -7624,7 +7630,9 @@
             });
 
             // For MMA, filter rawRows to only UFC fights (those that exist in Real Sports)
-            if (sport === 'mma_mixed_martial_arts') {
+            // Only filter if RS actually returned fights — if marketKeys is empty, RS has no data for this card
+            // and we still want to show FD odds (even without RS preds).
+            if (sport === 'mma_mixed_martial_arts' && marketKeys.length > 0) {
                 rawRows = rawRows.filter(function(r) {
                     if (resolvedMap[r.game]) return true;
                     var fdTeams = r.game.split(' @ ');
@@ -7633,6 +7641,7 @@
                     var fdAwayLast = fdAway.split(' ').pop();
                     var fdHomeLast = fdHome.split(' ').pop();
                     return marketKeys.some(function(k) {
+                        if (k.endsWith('__lines') || k.endsWith('__gid')) return false;
                         var realTeams = k.split(' @ ');
                         if (realTeams.length !== 2) return false;
                         var rAway = realTeams[0].trim().toLowerCase();
@@ -7725,6 +7734,12 @@
                              : null;
                 if (!mktLabel) return;
                 var mktData = gameMarkets[mktLabel];
+                // MMA: RS may use different label than "Game Winner" for fight winner market
+                if (!mktData && sport === 'mma_mixed_martial_arts' && r.mkt === 'ML') {
+                    mktData = gameMarkets['Fight Outcome'] || gameMarkets['Fight Winner']
+                           || gameMarkets['Match Winner'] || gameMarkets['Winner']
+                           || Object.values(gameMarkets)[0]; // last resort: first available market
+                }
                 var outcomes = mktData ? (mktData.outcomes || mktData) : null;
                 if (!outcomes || !outcomes.length) return;
 
