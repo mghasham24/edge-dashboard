@@ -90,9 +90,9 @@ export async function onRequestGet(context) {
 
   if (debugMode === 'mls') {
     const h = { 'Accept': '*/*', 'User-Agent': 'Mozilla/5.0', 'Origin': 'https://sportsbook.draftkings.com', 'Referer': 'https://sportsbook.draftkings.com/' };
-    const BATCH = 25;
+    const BATCH = 30;
 
-    async function probeLeagueSubcat(id, subcat) {
+    async function probeId(id, subcat) {
       try {
         const eq = encodeURIComponent(`$filter=leagueId eq '${id}'`);
         const mq = encodeURIComponent(`$filter=clientMetadata/subCategoryId eq '${subcat}' AND tags/all(t: t ne 'SportcastBetBuilder')`);
@@ -101,30 +101,26 @@ export async function onRequestGet(context) {
         if (!r.ok) return null;
         const d = await r.json();
         const evs = (d && d.events) || [];
-        return evs.length > 0 ? { id, subcat, total: evs.length, names: evs.slice(0, 3).map(e => e.name) } : null;
+        return evs.length > 0 ? { id, total: evs.length, names: evs.slice(0, 3).map(e => e.name) } : null;
       } catch(e) { return null; }
     }
 
-    // Part A: dense step-5 sweep 40000–43000 with subcat 4511 to find the real MLS league ID
-    const denseIds = [];
-    for (let i = 38000; i <= 43000; i += 5) denseIds.push(String(i));
-    const denseHits = [];
-    for (let i = 0; i < denseIds.length; i += BATCH) {
-      const r = await Promise.all(denseIds.slice(i, i + BATCH).map(id => probeLeagueSubcat(id, '4511')));
-      denseHits.push(...r.filter(Boolean));
+    // Sweep wide ranges we haven't tried yet, using subcat 4511
+    const candidates = [];
+    for (let i = 100;   i < 5000;   i += 50)   candidates.push(String(i));  // low range
+    for (let i = 5000;  i < 38000;  i += 200)  candidates.push(String(i));  // mid-low range
+    for (let i = 43000; i < 80000;  i += 200)  candidates.push(String(i));  // mid-high range
+    for (let i = 80000; i < 90000;  i += 100)  candidates.push(String(i));  // 88808xxx DK slug range
+    // Specific DK URL slug candidates for MLS and nearby leagues
+    for (const id of ['88808476','88808477','88808478','88808479','88808480','88808481','88808482','88808483','88808484','88808485']) candidates.push(id);
+
+    const hits = [];
+    for (let i = 0; i < candidates.length; i += BATCH) {
+      const r = await Promise.all(candidates.slice(i, i + BATCH).map(id => probeId(id, '4511')));
+      hits.push(...r.filter(Boolean));
     }
 
-    // Part B: probe 40237 with broad subcat range to see what markets it actually has
-    const subcats = [];
-    for (let i = 1; i <= 100; i++) subcats.push(String(i));
-    for (let i = 4000; i <= 4600; i += 2) subcats.push(String(i));
-    const subcatHits = [];
-    for (let i = 0; i < subcats.length; i += BATCH) {
-      const r = await Promise.all(subcats.slice(i, i + BATCH).map(sc => probeLeagueSubcat('40237', sc)));
-      subcatHits.push(...r.filter(Boolean));
-    }
-
-    return new Response(JSON.stringify({ denseHits, subcatHits }), { headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ probed: candidates.length, hits }), { headers: { 'Content-Type': 'application/json' } });
   }
 
   const headers = {
