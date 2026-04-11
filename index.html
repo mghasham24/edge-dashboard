@@ -2900,11 +2900,18 @@
     var _hashids = null;
     var REAL_SPORT_IDS = { nba:1, nfl:2, ncaam:3, mlb:4, epl:5, ucl:6, nhl:7, mls:8, fifa:9, ufc:10, ncaaf:11, wnba:12, soccer:14, golf:15, fc:14 };
     var REAL_SPORT_LABELS = { 1:'NBA', 2:'NFL', 3:'NCAAB', 4:'MLB', 5:'EPL', 6:'UCL', 7:'NHL', 8:'MLS', 9:'FIFA', 10:'UFC', 11:'NCAAF', 12:'WNBA', 14:'Soccer', 15:'Golf' };
-    function getRealSportsUrl(gid, sport) {
+    var FC_LEAGUE_SPORT_ID = { 'EPL': 5, 'UCL': 6, 'MLS': 8, 'La Liga': 14, 'Serie A': 14, 'Bundesliga': 14, 'Ligue 1': 14 };
+
+    function getRealSportsUrl(gid, sport, league) {
         if (!gid || typeof Hashids === 'undefined') return null;
         if (!_hashids) _hashids = new Hashids('routing', 11);
-        var sportKey = sport === 'mma_mixed_martial_arts' ? 'ufc' : (sport || '').split('_').pop();
-        var sportId = REAL_SPORT_IDS[sportKey] || 0;
+        var sportId;
+        if (sport === 'soccer_fc' && league) {
+            sportId = FC_LEAGUE_SPORT_ID[league] || 14;
+        } else {
+            var sportKey = sport === 'mma_mixed_martial_arts' ? 'ufc' : (sport || '').split('_').pop();
+            sportId = REAL_SPORT_IDS[sportKey] || 0;
+        }
         var hash = _hashids.encode([4, sportId, 0, gid]);
         return 'https://www.realapp.com/' + hash;
     }
@@ -3627,7 +3634,7 @@
             title.className = 'gc-title';
             title.innerHTML = (teams[0] || '') + '<span style="color:var(--muted2);font-weight:400;margin:0 5px">@</span>' + (teams[1] || '');
             hdr.appendChild(title);
-            var rsUrl = getRealSportsUrl(rsGameIds[game], currentSport);
+            var rsUrl = getRealSportsUrl(rsGameIds[game], currentSport, gameRows[0] && gameRows[0].league);
             if (rsUrl) {
                 var rsLink = document.createElement('a');
                 rsLink.href = rsUrl;
@@ -4651,7 +4658,7 @@
             var taken   = !!betTaken[r.id];
             var rsUrl   = '';
             if (rsGameIds[r.game]) {
-                rsUrl = getRealSportsUrl(rsGameIds[r.game], r._sport_key) || '';
+                rsUrl = getRealSportsUrl(rsGameIds[r.game], r._sport_key, r.league) || '';
             }
 
             // Desktop table row
@@ -7141,7 +7148,7 @@
                 + '<div class="gh-stripe" style="background:' + color + '"></div>'
                 + '<span>' + teams[0] + '</span><span style="color:var(--muted2)">@</span><span>' + (teams[1] || '') + '</span>'
                 + (ti.lbl ? '<span class="gh-badge ' + ti.cls + '">' + ti.lbl + '</span>' : '')
-                + (rsGameIds[r.game] ? (function(){ var u = getRealSportsUrl(rsGameIds[r.game], currentSport); return u ? '<a href="' + u + '" target="_blank" onclick="event.stopPropagation();event.preventDefault();window.open(this.href,\'_blank\');return false;" style="margin-left:6px;color:var(--accent);font-size:11px;text-decoration:none;opacity:0.9;flex-shrink:0" title="View on Real Sports">&#8599;</a>' : ''; })() : '')
+                + (rsGameIds[r.game] ? (function(){ var u = getRealSportsUrl(rsGameIds[r.game], currentSport, r.league); return u ? '<a href="' + u + '" target="_blank" onclick="event.stopPropagation();event.preventDefault();window.open(this.href,\'_blank\');return false;" style="margin-left:6px;color:var(--accent);font-size:11px;text-decoration:none;opacity:0.9;flex-shrink:0" title="View on Real Sports">&#8599;</a>' : ''; })() : '')
                 + '<span class="gh-score-badge gh-badge" data-game="' + r.game.replace(/"/g, '&quot;') + '" data-cm="' + (r.cm ? r.cm.getTime() : '') + '" style="display:none"></span>'
                 + '<span class="live-score-badge gh-badge" style="display:none"></span>'
                 + '<span class="gh-arrow' + (isC ? '' : ' up') + '" data-gk="' + r.game.replace(/"/g, '&quot;') + '">&#9660;</span>'
