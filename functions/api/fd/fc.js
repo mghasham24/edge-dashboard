@@ -179,37 +179,15 @@ export async function onRequestGet(context) {
           if (ot === 'Away' && Math.abs(pts - 0.5) < 0.01) awayPlus  = price; // Away +0.5 (wins or draws)
         }
 
-        // Pick the pair where the FAVORITE gets -0.5.
-        // Rule: if DK only exposes one team's -0.5 price, that team IS the designated -0.5 side.
-        // If both are present, lower American odds = higher implied probability = bigger favorite.
-        let homePrice, awayPrice, homePt, awayPt;
-        let awayIsFav;
-        if (awayMinus != null && homeMinus == null) {
-          awayIsFav = true;  // DK natural pair: Away -0.5 / Home +0.5
-        } else if (homeMinus != null && awayMinus == null) {
-          awayIsFav = false; // DK natural pair: Home -0.5 / Away +0.5
-        } else if (awayMinus != null && homeMinus != null) {
-          awayIsFav = awayMinus < homeMinus; // lower value = higher implied prob
-        } else {
-          awayIsFav = false; // no -0.5 prices at all — null-check below will skip
-        }
-        if (awayIsFav) {
-          // Away team is the favorite — use Away -0.5 / Home +0.5
-          awayPrice = awayMinus; awayPt = -0.5;
-          homePrice = homePlus;  homePt  = 0.5;
-        } else {
-          // Home team is favorite (or near-even) — use Home -0.5 / Away +0.5
-          homePrice = homeMinus; homePt  = -0.5;
-          awayPrice = awayPlus;  awayPt  = 0.5;
-        }
-
+        // Return all 4 prices — the frontend will pick the correct one after RS tells us
+        // which team is at -0.5 and which is at +0.5 for each game.
         if (debugMode === '2') {
           const allSels = (d.selections || []).map(s => ({ label: s.label, outcomeType: s.outcomeType, points: s.points, odds: s.displayOdds && s.displayOdds.american }));
-          gamesMap[gameKey] = { home: ev.home, away: ev.away, homePrice, awayPrice, allSels };
+          gamesMap[gameKey] = { home: ev.home, away: ev.away, hm: homeMinus, hp: homePlus, awm: awayMinus, awp: awayPlus, allSels };
           continue;
         }
 
-        if (homePrice == null && awayPrice == null) continue;
+        if (homeMinus == null && homePlus == null && awayMinus == null && awayPlus == null) continue;
 
         gamesMap[gameKey] = {
           id: parseInt(ev.eventId),
@@ -217,11 +195,11 @@ export async function onRequestGet(context) {
           home: ev.home,
           cm: ev.openDate,
           league: ev.league,
-          ml: {},
-          pt: {}
+          hm: homeMinus,  // home -0.5 price
+          hp: homePlus,   // home +0.5 price
+          awm: awayMinus, // away -0.5 price
+          awp: awayPlus   // away +0.5 price
         };
-        if (homePrice != null) { gamesMap[gameKey].ml[ev.home] = homePrice; gamesMap[gameKey].pt[ev.home] = homePt; }
-        if (awayPrice != null) { gamesMap[gameKey].ml[ev.away] = awayPrice; gamesMap[gameKey].pt[ev.away] = awayPt; }
 
       } catch(e) {}
 

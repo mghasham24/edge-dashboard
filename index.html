@@ -6435,15 +6435,22 @@
                     var cm = game.cm ? new Date(game.cm) : null;
                     var gid = String(game.id);
                     var pid = gid + '-h2h';
-                    if (game.ml) {
-                        [[away, 'A'], [home, 'B']].forEach(function(pair) {
-                            var teamName = pair[0], ps = pair[1];
-                            var price = game.ml[teamName];
-                            if (price == null) return;
-                            var pt = game.pt ? game.pt[teamName] : null;
-                            rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName, am: price, pt: pt, pid: pid, ps: ps, gid: gid, league: game.league || '' });
-                        });
-                    }
+                    // Store all 4 DK prices; RS fetch will override am/pt with the correct line.
+                    [[away, 'A'], [home, 'B']].forEach(function(pair) {
+                        var teamName = pair[0], ps = pair[1];
+                        var initAm, initPt;
+                        if (ps === 'A') {
+                            if (game.awm != null) { initAm = game.awm; initPt = -0.5; }
+                            else if (game.awp != null) { initAm = game.awp; initPt = 0.5; }
+                        } else {
+                            if (game.hm != null) { initAm = game.hm; initPt = -0.5; }
+                            else if (game.hp != null) { initAm = game.hp; initPt = 0.5; }
+                        }
+                        if (initAm == null) return;
+                        rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName,
+                            am: initAm, pt: initPt, pid: pid, ps: ps, gid: gid, league: game.league || '',
+                            _dkHm: game.hm, _dkHp: game.hp, _dkAwm: game.awm, _dkAwp: game.awp });
+                    });
                 });
                 rawRows = rows;
                 rawRowsBySport[currentSport] = rawRows;
@@ -7688,7 +7695,16 @@
                         var gameParts = r.game.split(' @ ');
                         var isHome = gameParts[1] && r.side.toLowerCase().indexOf(gameParts[1].split(' ').pop().toLowerCase()) !== -1;
                         var spreadVal = isHome ? gameLines.homeSpread : gameLines.awaySpread;
-                        if (spreadVal != null) yourLines[r.id] = spreadVal;
+                        if (spreadVal != null) {
+                            yourLines[r.id] = spreadVal;
+                            // FC: use the RS line to select the correct DK price
+                            if (sport === 'soccer_fc' && r._dkHm !== undefined) {
+                                var dk = isHome
+                                    ? (spreadVal < 0 ? r._dkHm : r._dkHp)
+                                    : (spreadVal < 0 ? r._dkAwm : r._dkAwp);
+                                if (dk != null) { r.am = dk; r.pt = spreadVal; }
+                            }
+                        }
                     }
                     if (r.mkt === 'Total' && yourLines[r.id] == null && gameLines.total != null) {
                         yourLines[r.id] = gameLines.total;
@@ -8042,29 +8058,41 @@
                     var cm = game.cm ? new Date(game.cm) : null;
                     var gid = String(game.id);
                     var pid = gid + '-h2h';
-                    if (game.ml) {
-                        [[away, 'A'], [home, 'B']].forEach(function(pair) {
-                            var teamName = pair[0], ps = pair[1];
-                            var price = game.ml[teamName];
-                            if (price == null) return;
-                            var pt = game.pt ? game.pt[teamName] : null;
-                            rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName, am: price, pt: pt, pid: pid, ps: ps, gid: gid, league: game.league || '' });
-                        });
-                    }
+                    [[away, 'A'], [home, 'B']].forEach(function(pair) {
+                        var teamName = pair[0], ps = pair[1];
+                        var initAm, initPt;
+                        if (ps === 'A') {
+                            if (game.awm != null) { initAm = game.awm; initPt = -0.5; }
+                            else if (game.awp != null) { initAm = game.awp; initPt = 0.5; }
+                        } else {
+                            if (game.hm != null) { initAm = game.hm; initPt = -0.5; }
+                            else if (game.hp != null) { initAm = game.hp; initPt = 0.5; }
+                        }
+                        if (initAm == null) return;
+                        rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName,
+                            am: initAm, pt: initPt, pid: pid, ps: ps, gid: gid, league: game.league || '',
+                            _dkHm: game.hm, _dkHp: game.hp, _dkAwm: game.awm, _dkAwp: game.awp });
+                    });
                 });
                 rawRows = rows;
                 rawRowsBySport[currentSport] = rawRows;
                 fetchRealMarkets(currentSport, true);
             } else {
-                // FC rows use mkt='Spread' — nativeMlUpdate skips them. Update in-place.
+                // FC: update stored DK prices and re-apply the RS line
                 rawRows.forEach(function(r) {
                     if (r.mkt !== 'Spread') return;
                     var game = data.games[r.game];
                     if (!game) return;
-                    var price = game.ml && game.ml[r.side];
-                    var pt = game.pt && game.pt[r.side];
-                    if (price != null) r.am = price;
-                    if (pt != null) r.pt = pt;
+                    r._dkHm = game.hm; r._dkHp = game.hp;
+                    r._dkAwm = game.awm; r._dkAwp = game.awp;
+                    // Re-apply RS line to pick the correct updated DK price
+                    var yl = yourLines[r.id];
+                    if (yl != null) {
+                        var dk = (r.ps === 'B')
+                            ? (yl < 0 ? r._dkHm : r._dkHp)
+                            : (yl < 0 ? r._dkAwm : r._dkAwp);
+                        if (dk != null) { r.am = dk; r.pt = yl; }
+                    }
                     if (game.league) r.league = game.league;
                 });
                 rawRowsBySport[currentSport] = rawRows;
