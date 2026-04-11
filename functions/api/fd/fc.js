@@ -90,37 +90,42 @@ export async function onRequestGet(context) {
 
   if (debugMode === 'mls') {
     const h = { 'Accept': '*/*', 'User-Agent': 'Mozilla/5.0', 'Origin': 'https://sportsbook.draftkings.com', 'Referer': 'https://sportsbook.draftkings.com/' };
-    const BATCH = 30;
 
-    async function probeId(id, subcat) {
+    // Strategy 1: Fetch the DK MLS sportsbook page — SPAs embed initial state with leagueIds
+    const pageAttempts = [];
+    const pageUrls = [
+      'https://sportsbook.draftkings.com/leagues/soccer/88808480-major-league-soccer',
+      'https://sportsbook.draftkings.com/leagues/soccer/major-league-soccer',
+    ];
+    for (const pageUrl of pageUrls) {
       try {
-        const eq = encodeURIComponent(`$filter=leagueId eq '${id}'`);
-        const mq = encodeURIComponent(`$filter=clientMetadata/subCategoryId eq '${subcat}' AND tags/all(t: t ne 'SportcastBetBuilder')`);
-        const url = `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${id}&eventsQuery=${eq}&marketsQuery=${mq}&include=Events&entity=events`;
+        const pr = await fetch(pageUrl, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'text/html' } });
+        const html = pr.ok ? await pr.text() : '';
+        // Extract leagueId values from embedded JSON/JS
+        const leagueIds = [...new Set((html.match(/"leagueId"\s*:\s*"?(\d+)"?/g) || []).map(m => m.replace(/[^0-9]/g, '')))];
+        const templateVars = [...new Set((html.match(/templateVars[=:]["']?([0-9%,]+)/g) || []).map(m => m.replace(/templateVars[=:]["']?/, '')))];
+        pageAttempts.push({ url: pageUrl, status: pr.status, leagueIds: leagueIds.slice(0, 20), templateVars: templateVars.slice(0, 10), htmlSnippet: html.slice(0, 500) });
+      } catch(e) { pageAttempts.push({ url: pageUrl, error: e.message }); }
+    }
+
+    // Strategy 2: Try different DK Nash base paths (US-DraftKings vs US-SB)
+    const altBases = [
+      'https://sportsbook-nash.draftkings.com/sites/US-DraftKings/api/sportscontent',
+      'https://sportsbook-nash.draftkings.com/sites/US-NJ/api/sportscontent',
+    ];
+    const altResults = [];
+    for (const base of altBases) {
+      try {
+        const eq = encodeURIComponent(`$filter=leagueId eq '40237'`);
+        const mq = encodeURIComponent(`$filter=clientMetadata/subCategoryId eq '4511' AND tags/all(t: t ne 'SportcastBetBuilder')`);
+        const url = `${base}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=40237&eventsQuery=${eq}&marketsQuery=${mq}&include=Events&entity=events`;
         const r = await fetch(url, { headers: h });
-        if (!r.ok) return null;
-        const d = await r.json();
-        const evs = (d && d.events) || [];
-        return evs.length > 0 ? { id, total: evs.length, names: evs.slice(0, 3).map(e => e.name) } : null;
-      } catch(e) { return null; }
+        const d = r.ok ? await r.json() : null;
+        altResults.push({ base, status: r.status, events: (d && d.events && d.events.length) || 0 });
+      } catch(e) { altResults.push({ base, error: e.message }); }
     }
 
-    // Sweep wide ranges we haven't tried yet, using subcat 4511
-    const candidates = [];
-    for (let i = 100;   i < 5000;   i += 50)   candidates.push(String(i));  // low range
-    for (let i = 5000;  i < 38000;  i += 200)  candidates.push(String(i));  // mid-low range
-    for (let i = 43000; i < 80000;  i += 200)  candidates.push(String(i));  // mid-high range
-    for (let i = 80000; i < 90000;  i += 100)  candidates.push(String(i));  // 88808xxx DK slug range
-    // Specific DK URL slug candidates for MLS and nearby leagues
-    for (const id of ['88808476','88808477','88808478','88808479','88808480','88808481','88808482','88808483','88808484','88808485']) candidates.push(id);
-
-    const hits = [];
-    for (let i = 0; i < candidates.length; i += BATCH) {
-      const r = await Promise.all(candidates.slice(i, i + BATCH).map(id => probeId(id, '4511')));
-      hits.push(...r.filter(Boolean));
-    }
-
-    return new Response(JSON.stringify({ probed: candidates.length, hits }), { headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ pageAttempts, altResults }), { headers: { 'Content-Type': 'application/json' } });
   }
 
   const headers = {
