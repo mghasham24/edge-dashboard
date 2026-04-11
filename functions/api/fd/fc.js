@@ -91,42 +91,41 @@ export async function onRequestGet(context) {
   if (debugMode === 'mls') {
     const h = { 'Accept': '*/*', 'User-Agent': 'Mozilla/5.0', 'Origin': 'https://sportsbook.draftkings.com', 'Referer': 'https://sportsbook.draftkings.com/' };
     const results = {};
-    const nowMs2 = Date.now();
+    const mq = encodeURIComponent(`$filter=clientMetadata/subCategoryId eq '4511' AND tags/all(t: t ne 'SportcastBetBuilder')`);
 
-    // Try Nash scores/live endpoints — these list events without needing a market subcat.
-    // If any return soccer events, we can extract MLS event IDs and leagueIds directly.
-    const endpoints = [
-      `${DK_BASE}/scores/v1/scores?sportId=1`,
-      `${DK_BASE}/scores/v2/scores?sportId=1`,
-      `${DK_BASE}/scores/v1/scores?leagueId=40237`,
-      `${DK_BASE}/controldata/v1/events?sportId=1`,
-      `${DK_BASE}/controldata/v1/live?sportId=1`,
-      `${DK_BASE}/controldata/league/v1/events?leagueId=40237`,
-      `${DK_BASE}/controldata/event/v1/events?leagueId=40237`,
-    ];
-    const endpointResults = [];
-    for (const url of endpoints) {
-      try {
-        const r = await fetch(url, { headers: h });
-        const body = r.ok ? await r.text() : null;
-        endpointResults.push({ url: url.replace(DK_BASE, ''), status: r.status, sample: body ? body.slice(0, 300) : null });
-      } catch(e) { endpointResults.push({ url: url.replace(DK_BASE, ''), error: e.message }); }
-    }
-    results.endpointProbe = endpointResults;
-
-    // Also try: EPL events subcat response — inspect the raw market/selection structure
-    // to see if there's a leagueId or cross-league data that reveals MLS structure
+    // Inspect the leagues[] array from the EPL response — may contain all soccer league metadata
     try {
       const eq = encodeURIComponent(`$filter=leagueId eq '40253'`);
-      const mq = encodeURIComponent(`$filter=clientMetadata/subCategoryId eq '4511' AND tags/all(t: t ne 'SportcastBetBuilder')`);
       const url = `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=40253&eventsQuery=${eq}&marketsQuery=${mq}&include=Events&entity=events`;
       const r = await fetch(url, { headers: h });
       const d = r.ok ? await r.json() : null;
-      // Return the top-level keys to understand response structure
-      results.eplResponseKeys = d ? Object.keys(d) : null;
-      // Return first market object to see its structure
-      results.eplFirstMarket = d && d.markets && d.markets[0] ? d.markets[0] : null;
-    } catch(e) { results.eplResponseKeys = { error: e.message }; }
+      results.eplLeagues = d && d.leagues ? d.leagues : null;
+      results.eplSports  = d && d.sports  ? d.sports  : null;
+    } catch(e) { results.eplLeagues = { error: e.message }; }
+
+    // Try entity=leagues — might return all leagues in the system
+    const entityVariants = ['leagues', 'sports', 'markets', 'selections'];
+    const entityResults = [];
+    for (const entity of entityVariants) {
+      try {
+        const eq = encodeURIComponent(`$filter=leagueId eq '40253'`);
+        const url = `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=40253&eventsQuery=${eq}&marketsQuery=${mq}&include=${entity.charAt(0).toUpperCase()+entity.slice(1)}&entity=${entity}`;
+        const r = await fetch(url, { headers: h });
+        const d = r.ok ? await r.json() : null;
+        const arr = d && d[entity];
+        entityResults.push({ entity, status: r.status, count: Array.isArray(arr) ? arr.length : null, sample: arr && arr[0] ? arr[0] : null });
+      } catch(e) { entityResults.push({ entity, error: e.message }); }
+    }
+    results.entityVariants = entityResults;
+
+    // Try subscriptionPartials key — EPL response had this, might contain cross-league refs
+    try {
+      const eq = encodeURIComponent(`$filter=leagueId eq '40253'`);
+      const url = `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=40253&eventsQuery=${eq}&marketsQuery=${mq}&include=Events&entity=events`;
+      const r = await fetch(url, { headers: h });
+      const d = r.ok ? await r.json() : null;
+      results.subscriptionPartials = d && d.subscriptionPartials ? d.subscriptionPartials.slice(0, 5) : null;
+    } catch(e) { results.subscriptionPartials = { error: e.message }; }
 
     return new Response(JSON.stringify(results), { headers: { 'Content-Type': 'application/json' } });
   }
