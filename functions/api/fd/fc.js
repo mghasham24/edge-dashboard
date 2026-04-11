@@ -90,44 +90,48 @@ export async function onRequestGet(context) {
 
   if (debugMode === 'mls') {
     const h = { 'Accept': '*/*', 'User-Agent': 'Mozilla/5.0', 'Origin': 'https://sportsbook.draftkings.com', 'Referer': 'https://sportsbook.draftkings.com/' };
-    const MLS_SUBCAT = '4514'; // confirmed from DevTools: MLS spread subcat
+    // MLS league ID confirmed as 89345, subcat 4514 = Match Lines (moneyline).
+    // Need to find the spread subcat — fetch ALL markets for event 33952871 to see every market type.
+    // Also probe MLS league 89345 with nearby subcats to find the spread-specific one.
 
-    // Step 1: Fetch a known MLS event (33952871) with subcat 4514 to get leagueId + selection structure
-    const mq1 = encodeURIComponent(`$filter=eventId eq '33952871' AND clientMetadata/subCategoryId eq '${MLS_SUBCAT}' AND tags/all(t: t ne 'SportcastBetBuilder')`);
-    const eventUrl = `${DK_BASE}/controldata/event/eventSubcategory/v1/markets?isBatchable=false&templateVars=33952871%2C${MLS_SUBCAT}&marketsQuery=${mq1}&include=MarketSplits&entity=markets`;
-    let eventData = null;
-    let mlsLeagueId = null;
+    // Part A: full market+selection dump for event 33952871 with subcat 4514 (no truncation)
+    let fullEventDump = null;
     try {
-      const r = await fetch(eventUrl, { headers: h });
+      const mq = encodeURIComponent(`$filter=eventId eq '33952871' AND clientMetadata/subCategoryId eq '4514' AND tags/all(t: t ne 'SportcastBetBuilder')`);
+      const url = `${DK_BASE}/controldata/event/eventSubcategory/v1/markets?isBatchable=false&templateVars=33952871%2C4514&marketsQuery=${mq}&include=MarketSplits&entity=markets`;
+      const r = await fetch(url, { headers: h });
       const d = r.ok ? await r.json() : null;
-      eventData = { status: r.status, keys: d ? Object.keys(d) : null };
-      // Extract leagueId from events or markets
-      const evs = (d && d.events) || [];
-      const mks = (d && d.markets) || [];
+      const markets = (d && d.markets) || [];
       const sels = (d && d.selections) || [];
-      if (evs[0]) mlsLeagueId = evs[0].leagueId;
-      if (!mlsLeagueId && mks[0]) mlsLeagueId = mks[0].leagueId;
-      eventData.leagueId = mlsLeagueId;
-      eventData.eventSample = evs[0] || null;
-      eventData.marketSample = mks[0] || null;
-      eventData.selectionSamples = sels.slice(0, 6).map(s => ({ label: s.label, outcomeType: s.outcomeType, points: s.points, odds: s.displayOdds && s.displayOdds.american }));
-    } catch(e) { eventData = { error: e.message }; }
+      fullEventDump = {
+        status: r.status,
+        markets: markets.map(m => ({ id: m.id, name: m.name, betOfferTypeId: m.marketType && m.marketType.betOfferTypeId })),
+        selections: sels.map(s => ({ label: s.label, outcomeType: s.outcomeType, points: s.points, odds: s.displayOdds && s.displayOdds.american, marketId: s.marketId }))
+      };
+    } catch(e) { fullEventDump = { error: e.message }; }
 
-    // Step 2: If we got a leagueId, try the league endpoint with subcat 4514 to get all MLS events
-    let leagueData = null;
-    if (mlsLeagueId) {
-      try {
-        const eq = encodeURIComponent(`$filter=leagueId eq '${mlsLeagueId}'`);
-        const mq2 = encodeURIComponent(`$filter=clientMetadata/subCategoryId eq '${MLS_SUBCAT}' AND tags/all(t: t ne 'SportcastBetBuilder')`);
-        const url = `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${mlsLeagueId}&eventsQuery=${eq}&marketsQuery=${mq2}&include=Events&entity=events`;
-        const r = await fetch(url, { headers: h });
-        const d = r.ok ? await r.json() : null;
-        const evs = (d && d.events) || [];
-        leagueData = { leagueId: mlsLeagueId, status: r.status, eventCount: evs.length, events: evs.slice(0, 5).map(e => ({ id: e.id, name: e.name, date: e.startEventDate })) };
-      } catch(e) { leagueData = { error: e.message }; }
+    // Part B: probe MLS league (89345) with subcats 4514-4540 to find spread-specific subcat
+    const spreadHits = [];
+    const BATCH = 25;
+    const subcats = [];
+    for (let i = 4514; i <= 4550; i++) subcats.push(String(i));
+    for (let i = 0; i < subcats.length; i += BATCH) {
+      const r = await Promise.all(subcats.slice(i, i + BATCH).map(async sc => {
+        try {
+          const eq = encodeURIComponent(`$filter=leagueId eq '89345'`);
+          const mq = encodeURIComponent(`$filter=clientMetadata/subCategoryId eq '${sc}' AND tags/all(t: t ne 'SportcastBetBuilder')`);
+          const url = `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=89345&eventsQuery=${eq}&marketsQuery=${mq}&include=Events&entity=events`;
+          const r2 = await fetch(url, { headers: h });
+          if (!r2.ok) return null;
+          const d = await r2.json();
+          const evs = (d && d.events) || [];
+          return evs.length > 0 ? { sc, eventCount: evs.length, names: evs.slice(0, 2).map(e => e.name) } : null;
+        } catch(e) { return null; }
+      }));
+      spreadHits.push(...r.filter(Boolean));
     }
 
-    return new Response(JSON.stringify({ eventData, leagueData }), { headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ fullEventDump, spreadHits }), { headers: { 'Content-Type': 'application/json' } });
   }
 
   const headers = {
