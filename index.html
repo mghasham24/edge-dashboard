@@ -3350,11 +3350,15 @@
         if (!r.gid) return null;
         var realLine = parseFloat(yl);
         if (!isFinite(realLine)) return null;
-        if (realLine === parseFloat(r.pt)) return null; // lines match — no alt needed
 
-        // Lines differ: use DK alternate lines as fair value reference
+        // Always check DK alt data when available — even when RS line = FD line.
+        // DK is the sharper book; using FD when they diverge creates false positive EV.
         var dk = dkAltOdds[r.gid];
-        if (!dk) return null;
+        if (!dk) {
+            // No DK alt data — skip when lines match (no adjustment needed)
+            if (realLine === parseFloat(r.pt)) return null;
+            return null; // can't compute without DK
+        }
 
         var priceA, priceB;
         if (r.mkt === 'Total') {
