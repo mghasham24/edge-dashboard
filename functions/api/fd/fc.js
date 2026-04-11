@@ -90,32 +90,34 @@ export async function onRequestGet(context) {
 
   if (debugMode === 'mls') {
     const h = { 'Accept': '*/*', 'User-Agent': 'Mozilla/5.0', 'Origin': 'https://sportsbook.draftkings.com', 'Referer': 'https://sportsbook.draftkings.com/' };
-    const nowMs2 = Date.now();
-    const results = [];
 
-    // Use sportId=1 (soccer) to fetch ALL soccer events across every league in one call.
-    // Try both subcats so we catch whichever MLS uses.
-    for (const subcat of ['4511', '13170']) {
-      try {
-        const eq = encodeURIComponent(`$filter=sportId eq '1'`);
-        const mq = encodeURIComponent(`$filter=clientMetadata/subCategoryId eq '${subcat}' AND tags/all(t: t ne 'SportcastBetBuilder')`);
-        const url = `${DK_BASE}/controldata/sport/sportSubcategory/v1/markets?isBatchable=false&templateVars=1%2C${subcat}&eventsQuery=${eq}&marketsQuery=${mq}&include=Events&entity=events`;
-        const r = await fetch(url, { headers: h });
-        const d = r.ok ? await r.json() : null;
-        const evs = (d && d.events) || [];
-        // Group events by leagueId
-        const leagues = {};
-        for (const ev of evs) {
-          const lid = ev.leagueId || 'unknown';
-          if (!leagues[lid]) leagues[lid] = { count: 0, names: [], masterLeagueId: ev.metadata && ev.metadata.masterLeagueId };
-          leagues[lid].count++;
-          if (leagues[lid].names.length < 2) leagues[lid].names.push(ev.name);
-        }
-        results.push({ subcat, status: r.status, totalEvents: evs.length, leagues });
-      } catch(e) { results.push({ subcat, error: e.message }); }
+    // Wide parallel sweep — fire 25 at a time to find MLS leagueId fast
+    const candidates = [];
+    for (let i = 40000; i <= 44000; i += 10) candidates.push(String(i));
+    for (let i = 44000; i <= 60000; i += 100) candidates.push(String(i));
+
+    const hits = [];
+    const BATCH = 25;
+    const mq = encodeURIComponent(`$filter=clientMetadata/subCategoryId eq '4511' AND tags/all(t: t ne 'SportcastBetBuilder')`);
+
+    for (let i = 0; i < candidates.length; i += BATCH) {
+      const batch = candidates.slice(i, i + BATCH);
+      const results = await Promise.all(batch.map(async id => {
+        try {
+          const eq = encodeURIComponent(`$filter=leagueId eq '${id}'`);
+          const url = `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${id}&eventsQuery=${eq}&marketsQuery=${mq}&include=Events&entity=events`;
+          const r = await fetch(url, { headers: h });
+          if (!r.ok) return null;
+          const d = await r.json();
+          const evs = (d && d.events) || [];
+          if (evs.length > 0) return { id, total: evs.length, names: evs.slice(0, 3).map(e => e.name) };
+          return null;
+        } catch(e) { return null; }
+      }));
+      hits.push(...results.filter(Boolean));
     }
 
-    return new Response(JSON.stringify(results), { headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ probed: candidates.length, hits }), { headers: { 'Content-Type': 'application/json' } });
   }
 
   const headers = {
