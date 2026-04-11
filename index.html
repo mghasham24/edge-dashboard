@@ -8069,6 +8069,12 @@
                 });
                 rawRowsBySport[currentSport] = rawRows;
             }
+            // Update status bar timestamp so users can see odds are live
+            var nowStr = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+            var stxtEl = document.getElementById('status-txt');
+            var dotEl = document.getElementById('sdot');
+            if (stxtEl) stxtEl.textContent = 'Updated ' + nowStr + ' - ' + Object.keys(data.games).length + ' games - DraftKings';
+            if (dotEl) dotEl.className = 'sdot live';
             renderTable();
         } catch(e) {}
     }
