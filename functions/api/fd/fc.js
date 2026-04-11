@@ -90,36 +90,32 @@ export async function onRequestGet(context) {
 
   if (debugMode === 'mls') {
     const h = { 'Accept': '*/*', 'User-Agent': 'Mozilla/5.0', 'Origin': 'https://sportsbook.draftkings.com', 'Referer': 'https://sportsbook.draftkings.com/' };
+    const nowMs2 = Date.now();
+    const results = [];
 
-    // Part 1: Get a raw EPL event object to see all available fields (sportId, categoryId, etc.)
-    let eplEvent = null;
-    try {
-      const eq = encodeURIComponent(`$filter=leagueId eq '40253'`);
-      const mq = encodeURIComponent(`$filter=clientMetadata/subCategoryId eq '4511' AND tags/all(t: t ne 'SportcastBetBuilder')`);
-      const url = `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=40253&eventsQuery=${eq}&marketsQuery=${mq}&include=Events&entity=events`;
-      const r = await fetch(url, { headers: h });
-      const d = r.ok ? await r.json() : null;
-      eplEvent = d && d.events && d.events[0] ? d.events[0] : d; // full object for inspection
-    } catch(e) { eplEvent = { error: e.message }; }
-
-    // Part 2: Try several DK sport-list API paths that might enumerate all leagues
-    const sportApis = [];
-    const paths = [
-      'controldata/v1/sports',
-      'data/sports/v1/sports',
-      'controldata/sport/v1/sports',
-      'navigation/v2/sports',
-      'controldata/category/v1/categories',
-    ];
-    for (const path of paths) {
+    // Use sportId=1 (soccer) to fetch ALL soccer events across every league in one call.
+    // Try both subcats so we catch whichever MLS uses.
+    for (const subcat of ['4511', '13170']) {
       try {
-        const r = await fetch(`${DK_BASE}/${path}`, { headers: h });
-        const body = r.ok ? await r.text() : null;
-        sportApis.push({ path, status: r.status, sample: body ? body.slice(0, 500) : null });
-      } catch(e) { sportApis.push({ path, error: e.message }); }
+        const eq = encodeURIComponent(`$filter=sportId eq '1'`);
+        const mq = encodeURIComponent(`$filter=clientMetadata/subCategoryId eq '${subcat}' AND tags/all(t: t ne 'SportcastBetBuilder')`);
+        const url = `${DK_BASE}/controldata/sport/sportSubcategory/v1/markets?isBatchable=false&templateVars=1%2C${subcat}&eventsQuery=${eq}&marketsQuery=${mq}&include=Events&entity=events`;
+        const r = await fetch(url, { headers: h });
+        const d = r.ok ? await r.json() : null;
+        const evs = (d && d.events) || [];
+        // Group events by leagueId
+        const leagues = {};
+        for (const ev of evs) {
+          const lid = ev.leagueId || 'unknown';
+          if (!leagues[lid]) leagues[lid] = { count: 0, names: [], masterLeagueId: ev.metadata && ev.metadata.masterLeagueId };
+          leagues[lid].count++;
+          if (leagues[lid].names.length < 2) leagues[lid].names.push(ev.name);
+        }
+        results.push({ subcat, status: r.status, totalEvents: evs.length, leagues });
+      } catch(e) { results.push({ subcat, error: e.message }); }
     }
 
-    return new Response(JSON.stringify({ eplEvent, sportApis }), { headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify(results), { headers: { 'Content-Type': 'application/json' } });
   }
 
   const headers = {
