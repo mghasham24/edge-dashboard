@@ -4742,7 +4742,7 @@
                                 var price = game.ml[teamName];
                                 if (price == null) return;
                                 var pt = game.pt ? game.pt[teamName] : null;
-                                rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName, am: price, pt: pt, pid: pid, ps: ps, gid: gid });
+                                rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName, am: price, pt: pt, pid: pid, ps: ps, gid: gid, league: game.league || '' });
                             });
                         }
                     });
@@ -7977,7 +7977,7 @@
                             var price = game.ml[teamName];
                             if (price == null) return;
                             var pt = game.pt ? game.pt[teamName] : null;
-                            rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName, am: price, pt: pt, pid: pid, ps: ps, gid: gid });
+                            rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName, am: price, pt: pt, pid: pid, ps: ps, gid: gid, league: game.league || '' });
                         });
                     }
                 });
@@ -7994,6 +7994,7 @@
                     var pt = game.pt && game.pt[r.side];
                     if (price != null) r.am = price;
                     if (pt != null) r.pt = pt;
+                    if (game.league) r.league = game.league;
                 });
                 rawRowsBySport[currentSport] = rawRows;
             }
