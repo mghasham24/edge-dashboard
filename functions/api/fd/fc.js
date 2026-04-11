@@ -90,42 +90,39 @@ export async function onRequestGet(context) {
 
   if (debugMode === 'mls') {
     const h = { 'Accept': '*/*', 'User-Agent': 'Mozilla/5.0', 'Origin': 'https://sportsbook.draftkings.com', 'Referer': 'https://sportsbook.draftkings.com/' };
-    const results = {};
+    const results = [];
     const mq = encodeURIComponent(`$filter=clientMetadata/subCategoryId eq '4511' AND tags/all(t: t ne 'SportcastBetBuilder')`);
 
-    // Inspect the leagues[] array from the EPL response — may contain all soccer league metadata
-    try {
-      const eq = encodeURIComponent(`$filter=leagueId eq '40253'`);
-      const url = `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=40253&eventsQuery=${eq}&marketsQuery=${mq}&include=Events&entity=events`;
-      const r = await fetch(url, { headers: h });
-      const d = r.ok ? await r.json() : null;
-      results.eplLeagues = d && d.leagues ? d.leagues : null;
-      results.eplSports  = d && d.sports  ? d.sports  : null;
-    } catch(e) { results.eplLeagues = { error: e.message }; }
+    // Try every plausible Nash league-list endpoint using sportId=1
+    const leagueListUrls = [
+      `${DK_BASE}/controldata/v1/leagues?sportId=1`,
+      `${DK_BASE}/controldata/league/v1/leagues?sportId=1`,
+      `${DK_BASE}/controldata/sport/v1/leagues?sportId=1`,
+      `${DK_BASE}/controldata/sport/v1/leagues/1`,
+      `${DK_BASE}/controldata/league/v1/markets?sportId=1&include=Leagues&entity=leagues`,
+      // Sport as templateVars with entity=leagues (different from league as templateVars)
+      `${DK_BASE}/controldata/sport/sportSubcategory/v1/markets?isBatchable=false&templateVars=1%2C4511&marketsQuery=${mq}&include=Leagues&entity=leagues`,
+      `${DK_BASE}/controldata/sport/sportSubcategory/v1/markets?isBatchable=false&templateVars=1%2C4511&marketsQuery=${mq}&include=Events&entity=events`,
+      // Try leagueSubcategory with templateVars=1 (sport ID instead of league ID)
+      `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=1&marketsQuery=${mq}&include=Leagues&entity=leagues`,
+      `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=1&marketsQuery=${mq}&include=Events&entity=events`,
+    ];
 
-    // Try entity=leagues — might return all leagues in the system
-    const entityVariants = ['leagues', 'sports', 'markets', 'selections'];
-    const entityResults = [];
-    for (const entity of entityVariants) {
+    for (const url of leagueListUrls) {
       try {
-        const eq = encodeURIComponent(`$filter=leagueId eq '40253'`);
-        const url = `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=40253&eventsQuery=${eq}&marketsQuery=${mq}&include=${entity.charAt(0).toUpperCase()+entity.slice(1)}&entity=${entity}`;
         const r = await fetch(url, { headers: h });
-        const d = r.ok ? await r.json() : null;
-        const arr = d && d[entity];
-        entityResults.push({ entity, status: r.status, count: Array.isArray(arr) ? arr.length : null, sample: arr && arr[0] ? arr[0] : null });
-      } catch(e) { entityResults.push({ entity, error: e.message }); }
+        const body = r.ok ? await r.text() : null;
+        const d = body ? (() => { try { return JSON.parse(body); } catch(e) { return null; } })() : null;
+        const leagues = d && d.leagues;
+        results.push({
+          url: url.replace(DK_BASE, ''),
+          status: r.status,
+          leagueCount: Array.isArray(leagues) ? leagues.length : null,
+          leagueSample: Array.isArray(leagues) ? leagues.slice(0, 5).map(l => ({ id: l.id, name: l.name })) : null,
+          rawSample: body ? body.slice(0, 200) : null
+        });
+      } catch(e) { results.push({ url: url.replace(DK_BASE, ''), error: e.message }); }
     }
-    results.entityVariants = entityResults;
-
-    // Try subscriptionPartials key — EPL response had this, might contain cross-league refs
-    try {
-      const eq = encodeURIComponent(`$filter=leagueId eq '40253'`);
-      const url = `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=40253&eventsQuery=${eq}&marketsQuery=${mq}&include=Events&entity=events`;
-      const r = await fetch(url, { headers: h });
-      const d = r.ok ? await r.json() : null;
-      results.subscriptionPartials = d && d.subscriptionPartials ? d.subscriptionPartials.slice(0, 5) : null;
-    } catch(e) { results.subscriptionPartials = { error: e.message }; }
 
     return new Response(JSON.stringify(results), { headers: { 'Content-Type': 'application/json' } });
   }
