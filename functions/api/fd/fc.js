@@ -89,20 +89,25 @@ export async function onRequestGet(context) {
   }
 
   if (debugMode === 'mls') {
-    // Probe candidate MLS league IDs against the same events endpoint
+    // Probe candidate MLS league IDs without subcat filter to find which has today's events
     const h = { 'Accept': '*/*', 'User-Agent': 'Mozilla/5.0', 'Origin': 'https://sportsbook.draftkings.com', 'Referer': 'https://sportsbook.draftkings.com/' };
-    const candidates = ['40098', '40237', '40152', '40200', '40201', '40175', '42655', '40099'];
+    const candidates = ['40098', '40237', '40152', '40200', '40201', '40175', '42655', '40099', '40250', '40251', '40260', '40261'];
     const results = [];
+    const nowMs2 = Date.now();
     for (const id of candidates) {
       try {
         const eq = encodeURIComponent(`$filter=leagueId eq '${id}'`);
-        const mq = encodeURIComponent(`$filter=clientMetadata/subCategoryId eq '${DK_SUBCAT}' AND tags/all(t: t ne 'SportcastBetBuilder')`);
+        const mq = encodeURIComponent(`$filter=clientMetadata/subCategoryId eq '4511' AND tags/all(t: t ne 'SportcastBetBuilder')`);
         const url = `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${id}&eventsQuery=${eq}&marketsQuery=${mq}&include=Events&entity=events`;
         const r = await fetch(url, { headers: h });
         const d = r.ok ? await r.json() : null;
-        const events = d && d.events ? d.events.length : 0;
-        const names = d && d.events ? d.events.slice(0,3).map(e => e.name) : [];
-        results.push({ id, status: r.status, events, names });
+        const allEvs = (d && d.events) || [];
+        const todayEvs = allEvs.filter(e => {
+          if (!e.startEventDate) return false;
+          const t = new Date(e.startEventDate).getTime();
+          return t >= nowMs2 - 6*3600000 && t <= nowMs2 + 36*3600000;
+        });
+        results.push({ id, status: r.status, total: allEvs.length, today: todayEvs.length, names: todayEvs.slice(0,3).map(e => e.name) });
       } catch(e) { results.push({ id, error: e.message }); }
     }
     return new Response(JSON.stringify(results), { headers: { 'Content-Type': 'application/json' } });
