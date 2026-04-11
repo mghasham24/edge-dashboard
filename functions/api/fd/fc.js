@@ -109,7 +109,7 @@ export async function onRequestGet(context) {
         for (const ev of d.events || []) {
           if (!isToday_ET(ev.startEventDate)) continue;
           const t = new Date(ev.startEventDate).getTime();
-          if (t < nowMs - 2 * 60 * 60 * 1000) continue; // skip games started >2h ago
+          if (t < nowMs - 4 * 60 * 60 * 1000) continue; // skip games started >4h ago (covers 90min + stoppage + halftime)
 
           // DK soccer event name format: "Home vs Away"
           const parts = (ev.name || '').split(' vs ');
