@@ -90,49 +90,36 @@ export async function onRequestGet(context) {
 
   if (debugMode === 'mls') {
     const h = { 'Accept': '*/*', 'User-Agent': 'Mozilla/5.0', 'Origin': 'https://sportsbook.draftkings.com', 'Referer': 'https://sportsbook.draftkings.com/' };
-    const nowMs2 = Date.now();
 
-    // Strategy 1: DK navigation API — lists all sports/leagues directly
+    // Part 1: Get a raw EPL event object to see all available fields (sportId, categoryId, etc.)
+    let eplEvent = null;
     try {
-      const navUrl = `${DK_BASE}/navigation/v1/sports`;
-      const nr = await fetch(navUrl, { headers: h });
-      if (nr.ok) {
-        const nd = await nr.json();
-        return new Response(JSON.stringify({ strategy: 'navigation', status: nr.status, data: nd }), { headers: { 'Content-Type': 'application/json' } });
-      }
-    } catch(e) {}
+      const eq = encodeURIComponent(`$filter=leagueId eq '40253'`);
+      const mq = encodeURIComponent(`$filter=clientMetadata/subCategoryId eq '4511' AND tags/all(t: t ne 'SportcastBetBuilder')`);
+      const url = `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=40253&eventsQuery=${eq}&marketsQuery=${mq}&include=Events&entity=events`;
+      const r = await fetch(url, { headers: h });
+      const d = r.ok ? await r.json() : null;
+      eplEvent = d && d.events && d.events[0] ? d.events[0] : d; // full object for inspection
+    } catch(e) { eplEvent = { error: e.message }; }
 
-    // Strategy 2: EPL control + MLS candidates, two subcats + subcatless probe
-    const toTest = [
-      { id: '40253', label: 'EPL', subcat: '13170' },  // known working
-      { id: '40253', label: 'EPL', subcat: '4511' },   // control: does 4511 return events?
-      ...['40098','40237','40152','40200','40201','40175','42655','40099',
-          '40250','40251','40260','40261','40310','40320','40330','40340',
-          '40350','40360','40370','40380','40400','40450','40500','41000',
-          '41100','41200','41500','42000','42100','42500'].map(id => ({ id, label: 'cand', subcat: '4511' }))
+    // Part 2: Try several DK sport-list API paths that might enumerate all leagues
+    const sportApis = [];
+    const paths = [
+      'controldata/v1/sports',
+      'data/sports/v1/sports',
+      'controldata/sport/v1/sports',
+      'navigation/v2/sports',
+      'controldata/category/v1/categories',
     ];
-
-    const results = [];
-    for (const { id, label, subcat } of toTest) {
+    for (const path of paths) {
       try {
-        const eq = encodeURIComponent(`$filter=leagueId eq '${id}'`);
-        const mq = encodeURIComponent(`$filter=clientMetadata/subCategoryId eq '${subcat}' AND tags/all(t: t ne 'SportcastBetBuilder')`);
-        const url = `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${id}&eventsQuery=${eq}&marketsQuery=${mq}&include=Events&entity=events`;
-        const r = await fetch(url, { headers: h });
-        const d = r.ok ? await r.json() : null;
-        const allEvs = (d && d.events) || [];
-        const todayEvs = allEvs.filter(e => {
-          if (!e.startEventDate) return false;
-          const t = new Date(e.startEventDate).getTime();
-          return t >= nowMs2 - 6*3600000 && t <= nowMs2 + 36*3600000;
-        });
-        if (todayEvs.length > 0 || (label === 'EPL')) {
-          results.push({ id, label, subcat, status: r.status, total: allEvs.length, today: todayEvs.length, names: todayEvs.slice(0,3).map(e => e.name) });
-        }
-      } catch(e) { results.push({ id, label, subcat, error: e.message }); }
-      await new Promise(r => setTimeout(r, 50));
+        const r = await fetch(`${DK_BASE}/${path}`, { headers: h });
+        const body = r.ok ? await r.text() : null;
+        sportApis.push({ path, status: r.status, sample: body ? body.slice(0, 500) : null });
+      } catch(e) { sportApis.push({ path, error: e.message }); }
     }
-    return new Response(JSON.stringify({ strategy: 'probe', results }), { headers: { 'Content-Type': 'application/json' } });
+
+    return new Response(JSON.stringify({ eplEvent, sportApis }), { headers: { 'Content-Type': 'application/json' } });
   }
 
   const headers = {
