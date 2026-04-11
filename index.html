@@ -6713,13 +6713,7 @@
         });
 
         rows.forEach(function(r) {
-            // FC rows use mkt='Spread' (DK AH ±0.5) but RS soccer labels this market 'Game Winner'
-            var isFcSpread = r.mkt === 'Spread' && (r._sport_key === 'soccer_fc' || currentSport === 'soccer_fc');
-            var mktLabel = r.mkt === 'ML' ? 'Game Winner'
-                : isFcSpread ? 'Game Winner'
-                : r.mkt === 'Spread' ? 'Spread'
-                : r.mkt === 'Total' ? 'Total'
-                : r.mkt === 'RFI' ? 'Run in 1st inning?' : null;
+            var mktLabel = r.mkt === 'ML' ? 'Game Winner' : r.mkt === 'Spread' ? 'Spread' : r.mkt === 'Total' ? 'Total' : r.mkt === 'RFI' ? 'Run in 1st inning?' : null;
             if (!mktLabel) return;
 
             // Try exact/resolved match first, then fuzzy fallback
