@@ -90,48 +90,35 @@ export async function onRequestGet(context) {
 
   if (debugMode === 'mls') {
     const h = { 'Accept': '*/*', 'User-Agent': 'Mozilla/5.0', 'Origin': 'https://sportsbook.draftkings.com', 'Referer': 'https://sportsbook.draftkings.com/' };
-    // MLS league ID confirmed as 89345, subcat 4514 = Match Lines (moneyline).
-    // Need to find the spread subcat — fetch ALL markets for event 33952871 to see every market type.
-    // Also probe MLS league 89345 with nearby subcats to find the spread-specific one.
+    // MLS leagueId=89345 confirmed. Subcat 4514=Moneyline (3-way). Need to find spread (±0.5) subcat.
+    // Probe at EVENT level (33941113 = Toronto FC vs FC Cincinnati) across subcats 4501-4545.
+    // Only return subcats that have selections with points=±0.5.
 
-    // Part A: full market+selection dump for event 33952871 with subcat 4514 (no truncation)
-    let fullEventDump = null;
-    try {
-      const mq = encodeURIComponent(`$filter=eventId eq '33952871' AND clientMetadata/subCategoryId eq '4514' AND tags/all(t: t ne 'SportcastBetBuilder')`);
-      const url = `${DK_BASE}/controldata/event/eventSubcategory/v1/markets?isBatchable=false&templateVars=33952871%2C4514&marketsQuery=${mq}&include=MarketSplits&entity=markets`;
-      const r = await fetch(url, { headers: h });
-      const d = r.ok ? await r.json() : null;
-      const markets = (d && d.markets) || [];
-      const sels = (d && d.selections) || [];
-      fullEventDump = {
-        status: r.status,
-        markets: markets.map(m => ({ id: m.id, name: m.name, betOfferTypeId: m.marketType && m.marketType.betOfferTypeId })),
-        selections: sels.map(s => ({ label: s.label, outcomeType: s.outcomeType, points: s.points, odds: s.displayOdds && s.displayOdds.american, marketId: s.marketId }))
-      };
-    } catch(e) { fullEventDump = { error: e.message }; }
+    const MLS_EVENT = '33941113'; // Toronto FC vs FC Cincinnati — the event shown in screenshot
+    const hits = [];
+    const subcats = Array.from({ length: 45 }, (_, i) => String(4501 + i));
 
-    // Part B: probe MLS league (89345) with subcats 4514-4540 to find spread-specific subcat
-    const spreadHits = [];
-    const BATCH = 25;
-    const subcats = [];
-    for (let i = 4514; i <= 4550; i++) subcats.push(String(i));
-    for (let i = 0; i < subcats.length; i += BATCH) {
-      const r = await Promise.all(subcats.slice(i, i + BATCH).map(async sc => {
-        try {
-          const eq = encodeURIComponent(`$filter=leagueId eq '89345'`);
-          const mq = encodeURIComponent(`$filter=clientMetadata/subCategoryId eq '${sc}' AND tags/all(t: t ne 'SportcastBetBuilder')`);
-          const url = `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=89345&eventsQuery=${eq}&marketsQuery=${mq}&include=Events&entity=events`;
-          const r2 = await fetch(url, { headers: h });
-          if (!r2.ok) return null;
-          const d = await r2.json();
-          const evs = (d && d.events) || [];
-          return evs.length > 0 ? { sc, eventCount: evs.length, names: evs.slice(0, 2).map(e => e.name) } : null;
-        } catch(e) { return null; }
-      }));
-      spreadHits.push(...r.filter(Boolean));
-    }
+    const results = await Promise.all(subcats.map(async sc => {
+      try {
+        const mq = encodeURIComponent(`$filter=eventId eq '${MLS_EVENT}' AND clientMetadata/subCategoryId eq '${sc}' AND tags/all(t: t ne 'SportcastBetBuilder')`);
+        const url = `${DK_BASE}/controldata/event/eventSubcategory/v1/markets?isBatchable=false&templateVars=${MLS_EVENT}%2C${sc}&marketsQuery=${mq}&include=MarketSplits&entity=markets`;
+        const r = await fetch(url, { headers: h });
+        const d = r.ok ? await r.json() : null;
+        const mks  = (d && d.markets)    || [];
+        const sels = (d && d.selections) || [];
+        if (!mks.length) return null;
+        const spreadSels = sels.filter(s => s.points != null && (Math.abs(s.points + 0.5) < 0.01 || Math.abs(s.points - 0.5) < 0.01));
+        return {
+          sc,
+          markets: mks.map(m => ({ name: m.name, betOfferTypeId: m.marketType && m.marketType.betOfferTypeId })),
+          selCount: sels.length,
+          spreadSels: spreadSels.map(s => ({ label: s.label, outcomeType: s.outcomeType, points: s.points, odds: s.displayOdds && s.displayOdds.american })),
+          allSels: sels.map(s => ({ label: s.label, outcomeType: s.outcomeType, points: s.points, odds: s.displayOdds && s.displayOdds.american }))
+        };
+      } catch(e) { return null; }
+    }));
 
-    return new Response(JSON.stringify({ fullEventDump, spreadHits }), { headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify(results.filter(Boolean)), { headers: { 'Content-Type': 'application/json' } });
   }
 
   const headers = {
