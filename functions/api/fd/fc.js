@@ -19,10 +19,13 @@ const DK_SOCCER_LEAGUES = {
 };
 
 function dkLeagueEventsUrl(leagueId) {
-  // eventsQuery filters by leagueId only (no subcat filter) so DK doesn't drop live events
-  // when AH markets are temporarily suspended. Step 2 handles whether AH odds exist.
+  // eventsQuery: no subcat filter so live events aren't dropped when AH is suspended
+  // marketsQuery: still references subcat so the endpoint has required context
   const eq = encodeURIComponent(`$filter=leagueId eq '${leagueId}'`);
-  return `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${leagueId}&eventsQuery=${eq}&include=Events&entity=events`;
+  const mq = encodeURIComponent(
+    `$filter=clientMetadata/subCategoryId eq '${DK_SUBCAT}' AND tags/all(t: t ne 'SportcastBetBuilder')`
+  );
+  return `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${leagueId}&eventsQuery=${eq}&marketsQuery=${mq}&include=Events&entity=events`;
 }
 
 function dkEventSubcatUrl(eventId) {
