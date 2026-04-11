@@ -4459,7 +4459,18 @@
             r._ev   = (r.af * (1/pred) * (1-rake) - 1) * 100;
             // >100% EV is a post-game artifact (RS knows result, FD market not yet settled)
             // Exception: soccer_fc live ±0.5 lines can legitimately produce >100% EV
-            if (r._ev > 0 && (r._ev <= 100 || sport === 'soccer_fc')) { r._sortVal = r._ev; positive.push(r); }
+            if (r._ev > 0 && (r._ev <= 100 || sport === 'soccer_fc')) {
+                // NBA: skip spread/total rows where DK has alt data but not the RS line
+                if (sport === 'basketball_nba' && r.gid && r.yl != null && (r.mkt === 'Spread' || r.mkt === 'Total')) {
+                    var dkGame3 = dkAltOdds[r.gid];
+                    if (dkGame3) {
+                        var sk3 = r.ps === 'A' ? (r.mkt === 'Spread' ? 'Away' : 'Over') : (r.mkt === 'Spread' ? 'Home' : 'Under');
+                        var dl3 = r.mkt === 'Spread' ? (dkGame3.spreads && dkGame3.spreads[sk3]) : (dkGame3.totals && dkGame3.totals[sk3]);
+                        if (dl3 && Object.keys(dl3).length > 0 && dkClosestPrice(dl3, parseFloat(r.yl)) == null) return;
+                    }
+                }
+                r._sortVal = r._ev; positive.push(r);
+            }
         });
         positive.sort(function(a, b) { return b._sortVal - a._sortVal; });
         var sportLabel = (SPORTS.find(function(s) { return s.key === sport; }) || {}).label || sport;
@@ -4840,8 +4851,9 @@
                         var p = pairs3[r.pid] || {};
                         var nv = novig(p.A ? imp(p.A.am) : null, p.B ? imp(p.B.am) : null);
                         var yl = yourLines[r.id] != null ? yourLines[r.id] : null;
-                        var fair = (r.mkt === 'RFI' && r.rfiFair != null) ? r.rfiFair : (r.ps === 'A' ? nv.fa : nv.fb);
-                        var af = (r.mkt === 'RFI' && r.rfiFair != null) ? r.rfiFair : adjFair(fair, r.pt, yl, r.mkt, r.ps);
+                        var altNV3 = getAltFair(r, yl, p.A, p.B);
+                        var fair = (r.mkt === 'RFI' && r.rfiFair != null) ? r.rfiFair : (altNV3 ? (r.ps === 'A' ? altNV3.fa : altNV3.fb) : (r.ps === 'A' ? nv.fa : nv.fb));
+                        var af = (r.mkt === 'RFI' && r.rfiFair != null) ? r.rfiFair : (altNV3 ? fair : adjFair(fair, r.pt, yl, r.mkt, r.ps));
                         var pr = preds[r.id];
                         var pred = (pr !== undefined && pr !== '') ? parseFloat(pr) / 100 : null;
                         var evForUnits = null;
@@ -4853,7 +4865,19 @@
                         }
                         var u = unitsEV(evForUnits, pred);
                         var edge = (af != null && pred != null) ? (af - pred) * 100 : null;
-                        return { id: r.id, game: r.game, cm: r.cm, mkt: r.mkt, side: r.side, am: r.am, pt: r.pt, ps: r.ps, pid: r.pid, fair: fair, af: af, yl: yl, edge: edge, u: u };
+                        return { id: r.id, game: r.game, cm: r.cm, mkt: r.mkt, side: r.side, am: r.am, pt: r.pt, ps: r.ps, pid: r.pid, gid: r.gid, fair: fair, af: af, yl: yl, edge: edge, u: u };
+                    }).filter(function(r) {
+                        // NBA: hide spread/total when DK has alt data for the game but not the RS line
+                        if (s.key === 'basketball_nba' && r.gid && r.yl != null && (r.mkt === 'Spread' || r.mkt === 'Total')) {
+                            var dkGame = dkAltOdds[r.gid];
+                            if (dkGame) {
+                                var dkSideKey = r.ps === 'A' ? (r.mkt === 'Spread' ? 'Away' : 'Over') : (r.mkt === 'Spread' ? 'Home' : 'Under');
+                                var dkLines = r.mkt === 'Spread' ? (dkGame.spreads && dkGame.spreads[dkSideKey]) : (dkGame.totals && dkGame.totals[dkSideKey]);
+                                var dkHasData = dkLines && Object.keys(dkLines).length > 0;
+                                if (dkHasData && dkClosestPrice(dkLines, parseFloat(r.yl)) == null) return false;
+                            }
+                        }
+                        return true;
                     });
                     currentSport = savedSport3;
                     cacheEvRows(computed3, s.key, true);
