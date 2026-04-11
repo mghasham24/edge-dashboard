@@ -6932,6 +6932,18 @@
                     if (Math.abs(parseFloat(r.pt) - parseFloat(yourLines[r.id])) > 0.001) return false;
                 }
 
+                // NBA (live or pregame): hide if DK has alt data for this game but can't find the RS line
+                // Row reappears automatically once DK adds the line to their alt spreads/totals
+                if (isNBA && r.gid && yourLines[r.id] != null) {
+                    var dkGame = dkAltOdds[r.gid];
+                    if (dkGame) {
+                        var dkSideKey = r.ps === 'A' ? (r.mkt === 'Spread' ? 'Away' : 'Over') : (r.mkt === 'Spread' ? 'Home' : 'Under');
+                        var dkLines = r.mkt === 'Spread' ? (dkGame.spreads && dkGame.spreads[dkSideKey]) : (dkGame.totals && dkGame.totals[dkSideKey]);
+                        var dkHasData = dkLines && Object.keys(dkLines).length > 0;
+                        if (dkHasData && dkClosestPrice(dkLines, parseFloat(yourLines[r.id])) == null) return false;
+                    }
+                }
+
                 // NHL: hide spread/total if Real line differs from FD at all
                 if (isHockey && r.pt != null && yourLines[r.id] != null) {
                     var gap = Math.abs(parseFloat(yourLines[r.id]) - parseFloat(r.pt));
