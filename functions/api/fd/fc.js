@@ -89,15 +89,34 @@ export async function onRequestGet(context) {
   }
 
   if (debugMode === 'mls') {
-    // Probe candidate MLS league IDs without subcat filter to find which has today's events
     const h = { 'Accept': '*/*', 'User-Agent': 'Mozilla/5.0', 'Origin': 'https://sportsbook.draftkings.com', 'Referer': 'https://sportsbook.draftkings.com/' };
-    const candidates = ['40098', '40237', '40152', '40200', '40201', '40175', '42655', '40099', '40250', '40251', '40260', '40261'];
-    const results = [];
     const nowMs2 = Date.now();
-    for (const id of candidates) {
+
+    // Strategy 1: DK navigation API — lists all sports/leagues directly
+    try {
+      const navUrl = `${DK_BASE}/navigation/v1/sports`;
+      const nr = await fetch(navUrl, { headers: h });
+      if (nr.ok) {
+        const nd = await nr.json();
+        return new Response(JSON.stringify({ strategy: 'navigation', status: nr.status, data: nd }), { headers: { 'Content-Type': 'application/json' } });
+      }
+    } catch(e) {}
+
+    // Strategy 2: EPL control + MLS candidates, two subcats + subcatless probe
+    const toTest = [
+      { id: '40253', label: 'EPL', subcat: '13170' },  // known working
+      { id: '40253', label: 'EPL', subcat: '4511' },   // control: does 4511 return events?
+      ...['40098','40237','40152','40200','40201','40175','42655','40099',
+          '40250','40251','40260','40261','40310','40320','40330','40340',
+          '40350','40360','40370','40380','40400','40450','40500','41000',
+          '41100','41200','41500','42000','42100','42500'].map(id => ({ id, label: 'cand', subcat: '4511' }))
+    ];
+
+    const results = [];
+    for (const { id, label, subcat } of toTest) {
       try {
         const eq = encodeURIComponent(`$filter=leagueId eq '${id}'`);
-        const mq = encodeURIComponent(`$filter=clientMetadata/subCategoryId eq '4511' AND tags/all(t: t ne 'SportcastBetBuilder')`);
+        const mq = encodeURIComponent(`$filter=clientMetadata/subCategoryId eq '${subcat}' AND tags/all(t: t ne 'SportcastBetBuilder')`);
         const url = `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${id}&eventsQuery=${eq}&marketsQuery=${mq}&include=Events&entity=events`;
         const r = await fetch(url, { headers: h });
         const d = r.ok ? await r.json() : null;
@@ -107,10 +126,13 @@ export async function onRequestGet(context) {
           const t = new Date(e.startEventDate).getTime();
           return t >= nowMs2 - 6*3600000 && t <= nowMs2 + 36*3600000;
         });
-        results.push({ id, status: r.status, total: allEvs.length, today: todayEvs.length, names: todayEvs.slice(0,3).map(e => e.name) });
-      } catch(e) { results.push({ id, error: e.message }); }
+        if (todayEvs.length > 0 || (label === 'EPL')) {
+          results.push({ id, label, subcat, status: r.status, total: allEvs.length, today: todayEvs.length, names: todayEvs.slice(0,3).map(e => e.name) });
+        }
+      } catch(e) { results.push({ id, label, subcat, error: e.message }); }
+      await new Promise(r => setTimeout(r, 50));
     }
-    return new Response(JSON.stringify(results), { headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ strategy: 'probe', results }), { headers: { 'Content-Type': 'application/json' } });
   }
 
   const headers = {
