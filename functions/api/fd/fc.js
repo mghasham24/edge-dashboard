@@ -90,41 +90,41 @@ export async function onRequestGet(context) {
 
   if (debugMode === 'mls') {
     const h = { 'Accept': '*/*', 'User-Agent': 'Mozilla/5.0', 'Origin': 'https://sportsbook.draftkings.com', 'Referer': 'https://sportsbook.draftkings.com/' };
-    const results = [];
     const mq = encodeURIComponent(`$filter=clientMetadata/subCategoryId eq '4511' AND tags/all(t: t ne 'SportcastBetBuilder')`);
 
-    // Try every plausible Nash league-list endpoint using sportId=1
-    const leagueListUrls = [
-      `${DK_BASE}/controldata/v1/leagues?sportId=1`,
-      `${DK_BASE}/controldata/league/v1/leagues?sportId=1`,
-      `${DK_BASE}/controldata/sport/v1/leagues?sportId=1`,
-      `${DK_BASE}/controldata/sport/v1/leagues/1`,
-      `${DK_BASE}/controldata/league/v1/markets?sportId=1&include=Leagues&entity=leagues`,
-      // Sport as templateVars with entity=leagues (different from league as templateVars)
-      `${DK_BASE}/controldata/sport/sportSubcategory/v1/markets?isBatchable=false&templateVars=1%2C4511&marketsQuery=${mq}&include=Leagues&entity=leagues`,
-      `${DK_BASE}/controldata/sport/sportSubcategory/v1/markets?isBatchable=false&templateVars=1%2C4511&marketsQuery=${mq}&include=Events&entity=events`,
-      // Try leagueSubcategory with templateVars=1 (sport ID instead of league ID)
-      `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=1&marketsQuery=${mq}&include=Leagues&entity=leagues`,
-      `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=1&marketsQuery=${mq}&include=Events&entity=events`,
-    ];
+    // sport/sportSubcategory with templateVars=1%2C4511 returns 200.
+    // Fetch full response and extract all unique leagueIds+sportIds from markets[].
+    const url = `${DK_BASE}/controldata/sport/sportSubcategory/v1/markets?isBatchable=false&templateVars=1%2C4511&marketsQuery=${mq}&include=Events&entity=events`;
+    try {
+      const r = await fetch(url, { headers: h });
+      const d = r.ok ? await r.json() : null;
+      const markets = (d && d.markets) || [];
+      const events  = (d && d.events)  || [];
+      const leagues = (d && d.leagues) || [];
 
-    for (const url of leagueListUrls) {
-      try {
-        const r = await fetch(url, { headers: h });
-        const body = r.ok ? await r.text() : null;
-        const d = body ? (() => { try { return JSON.parse(body); } catch(e) { return null; } })() : null;
-        const leagues = d && d.leagues;
-        results.push({
-          url: url.replace(DK_BASE, ''),
-          status: r.status,
-          leagueCount: Array.isArray(leagues) ? leagues.length : null,
-          leagueSample: Array.isArray(leagues) ? leagues.slice(0, 5).map(l => ({ id: l.id, name: l.name })) : null,
-          rawSample: body ? body.slice(0, 200) : null
-        });
-      } catch(e) { results.push({ url: url.replace(DK_BASE, ''), error: e.message }); }
+      // Build per-league summary from markets
+      const byLeague = {};
+      for (const m of markets) {
+        const key = `${m.sportId}:${m.leagueId}`;
+        if (!byLeague[key]) byLeague[key] = { sportId: m.sportId, leagueId: m.leagueId, marketCount: 0, eventIds: new Set() };
+        byLeague[key].marketCount++;
+        if (m.eventId) byLeague[key].eventIds.add(m.eventId);
+      }
+      // Serialize Sets
+      const leagueSummary = Object.values(byLeague).map(l => ({
+        ...l, eventCount: l.eventIds.size, eventIds: [...l.eventIds].slice(0, 3)
+      }));
+
+      return new Response(JSON.stringify({
+        status: r.status,
+        marketTotal: markets.length,
+        eventTotal: events.length,
+        leaguesInResponse: leagues,
+        leagueSummary,
+      }), { headers: { 'Content-Type': 'application/json' } });
+    } catch(e) {
+      return new Response(JSON.stringify({ error: e.message }), { headers: { 'Content-Type': 'application/json' } });
     }
-
-    return new Response(JSON.stringify(results), { headers: { 'Content-Type': 'application/json' } });
   }
 
   const headers = {
