@@ -193,6 +193,37 @@
         color: var(--muted2)
     }
 
+    #fc-league-nav {
+        display: none;
+        background: var(--bg);
+        border-bottom: 1px solid var(--border);
+        padding: 0 24px;
+        overflow-x: auto;
+        flex-shrink: 0
+    }
+
+    .fc-league-tab {
+        font-family: var(--sans);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+        color: var(--muted);
+        padding: 9px 14px;
+        cursor: pointer;
+        border: none;
+        border-bottom: 2px solid transparent;
+        background: none;
+        white-space: nowrap
+    }
+
+    .fc-league-tab:hover { color: var(--text) }
+
+    .fc-league-tab.active {
+        color: var(--accent);
+        border-bottom-color: var(--accent)
+    }
+
     .controls {
         padding: 16px 24px;
         display: flex;
@@ -2376,6 +2407,7 @@
         <div id="feature-tabs" style="display:flex;gap:6px;padding:6px 12px 0;border-bottom:1px solid var(--border)"></div>
 
         <nav class="sport-tabs" id="sport-tabs"></nav>
+        <div id="fc-league-nav" style="display:flex"></div>
         <div id="ev-loading-bar-wrap" style="display:none;height:3px;background:var(--bg3);overflow:hidden"><div id="ev-loading-bar" style="height:100%;width:0%;background:linear-gradient(90deg,var(--accent),#7ddfab);transition:width .4s ease"></div></div>
 
         <div class="controls">
@@ -2792,6 +2824,7 @@
     };
     var COLORS = ['#4f6ef7', '#2dcc7e', '#f5c842', '#f05252', '#a78bfa', '#38bdf8', '#fb923c', '#e879f9', '#34d399', '#f87171', '#60a5fa', '#fbbf24', '#a3e635', '#c084fc', '#fb7185', '#22d3ee'];
     var currentSport = 'basketball_nba';
+    var currentFcLeague = 'ALL';
     var rawRows = [];
     var rawRowsBySport = {}; // sport key -> parsed rows (same IDs as preds)
     var preds = {};
@@ -6103,6 +6136,13 @@
                 document.querySelectorAll('.sport-tab,.feature-tab').forEach(function(x) {
                     x.classList.toggle('active', x.getAttribute('data-key') === s.key);
                 });
+                if (s.key === 'soccer_fc') {
+                    currentFcLeague = 'ALL';
+                    buildFcLeagueNav();
+                    document.getElementById('fc-league-nav').style.display = 'flex';
+                } else {
+                    document.getElementById('fc-league-nav').style.display = 'none';
+                }
                 loadOdds();
             };
             nav.appendChild(b);
@@ -6888,6 +6928,27 @@
         });
     }
 
+    var FC_LEAGUES = ['ALL', 'EPL', 'La Liga', 'Serie A', 'Bundesliga', 'Ligue 1', 'MLS'];
+
+    function buildFcLeagueNav() {
+        var nav = document.getElementById('fc-league-nav');
+        if (!nav) return;
+        nav.innerHTML = '';
+        FC_LEAGUES.forEach(function(league) {
+            var btn = document.createElement('button');
+            btn.className = 'fc-league-tab' + (league === currentFcLeague ? ' active' : '');
+            btn.textContent = league;
+            btn.onclick = function() {
+                currentFcLeague = league;
+                nav.querySelectorAll('.fc-league-tab').forEach(function(b) {
+                    b.classList.toggle('active', b.textContent === league);
+                });
+                renderTable();
+            };
+            nav.appendChild(btn);
+        });
+    }
+
     function renderTable() {
         var unit = parseFloat(document.getElementById('unit-size').value) || 300;
         var q = document.getElementById('search').value.trim().toLowerCase();
@@ -7017,6 +7078,10 @@
                 return ev >= 5;
             });
         }
+        // FC league sub-nav filter
+        if (currentSport === 'soccer_fc' && currentFcLeague !== 'ALL') {
+            filtered = filtered.filter(function(r) { return r.league === currentFcLeague; });
+        }
         var mO = { ML: 0, Spread: 1, Total: 2, RFI: 3 };
         var FC_LEAGUE_ORDER = { 'EPL': 0, 'La Liga': 1, 'Serie A': 2, 'Bundesliga': 3, 'Ligue 1': 4, 'MLS': 5 };
         filtered.sort(function(a, b) {
@@ -7052,8 +7117,8 @@
         filtered.forEach(function(r) {
             var color = gColor[r.game];
             var isC = !!collapsed[r.game];
-            // FC: insert league sub-header when league changes
-            if (currentSport === 'soccer_fc' && r.league && r.league !== lastLeague) {
+            // FC: insert league sub-header when league changes (only in ALL view)
+            if (currentSport === 'soccer_fc' && currentFcLeague === 'ALL' && r.league && r.league !== lastLeague) {
                 lastLeague = r.league;
                 html += '<tr style="background:var(--bg2);border-bottom:1px solid var(--border2)">'
                 + '<td colspan="13" style="padding:6px 12px;font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--accent)">'
