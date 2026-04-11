@@ -19,13 +19,11 @@ const DK_SOCCER_LEAGUES = {
 };
 
 function dkLeagueEventsUrl(leagueId) {
-  const eq = encodeURIComponent(
-    `$filter=leagueId eq '${leagueId}' AND clientMetadata/Subcategories/any(s: s/Id eq '${DK_SUBCAT}')`
-  );
-  const mq = encodeURIComponent(
-    `$filter=clientMetadata/subCategoryId eq '${DK_SUBCAT}' AND tags/all(t: t ne 'SportcastBetBuilder')`
-  );
-  return `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${leagueId}&eventsQuery=${eq}&marketsQuery=${mq}&include=Events&entity=events`;
+  // No subcat filter on eventsQuery — DK suspends AH markets during live games which would
+  // cause them to drop from the events list entirely. Fetch all league events and let
+  // Step 2 (per-event subcat fetch) determine if AH odds are available.
+  const eq = encodeURIComponent(`$filter=leagueId eq '${leagueId}'`);
+  return `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${leagueId}&eventsQuery=${eq}&include=Events&entity=events`;
 }
 
 function dkEventSubcatUrl(eventId) {
@@ -111,11 +109,19 @@ export async function onRequestGet(context) {
           const t = new Date(ev.startEventDate).getTime();
           if (t < nowMs - 4 * 60 * 60 * 1000) continue; // skip games started >4h ago (covers 90min + stoppage + halftime)
 
-          // DK soccer event name format: "Home vs Away"
-          const parts = (ev.name || '').split(' vs ');
-          if (parts.length !== 2) continue;
-          const home = parts[0].trim();
-          const away = parts[1].trim();
+          // Resolve home/away from participants array (most reliable)
+          let home, away;
+          const parts_arr = ev.participants || [];
+          const homeP = parts_arr.find(p => p.venueRole === 'Home');
+          const awayP = parts_arr.find(p => p.venueRole === 'Away');
+          if (homeP && awayP) {
+            home = homeP.name; away = awayP.name;
+          } else {
+            // Fallback: DK soccer event name format: "Home vs Away"
+            const parts = (ev.name || '').split(' vs ');
+            if (parts.length !== 2) continue;
+            home = parts[0].trim(); away = parts[1].trim();
+          }
 
           todayEvents.push({ eventId: ev.id, home, away, league: leagueLabel, openDate: ev.startEventDate });
         }
