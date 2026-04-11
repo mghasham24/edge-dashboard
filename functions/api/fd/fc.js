@@ -19,9 +19,10 @@ const DK_SOCCER_LEAGUES = {
 };
 
 function dkLeagueEventsUrl(leagueId) {
-  // Use the plain league events endpoint (no subcat filter) so DK doesn't drop events
-  // when AH markets are suspended during live games.
-  return `${DK_BASE}/controldata/league/v1/events?isBatchable=false&templateVars=${leagueId}&entity=events`;
+  // eventsQuery filters by leagueId only (no subcat filter) so DK doesn't drop live events
+  // when AH markets are temporarily suspended. Step 2 handles whether AH odds exist.
+  const eq = encodeURIComponent(`$filter=leagueId eq '${leagueId}'`);
+  return `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${leagueId}&eventsQuery=${eq}&include=Events&entity=events`;
 }
 
 function dkEventSubcatUrl(eventId) {
