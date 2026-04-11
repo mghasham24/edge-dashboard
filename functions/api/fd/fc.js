@@ -50,7 +50,7 @@ async function getSession(request, db) {
   if (!m) return null;
   const now = Math.floor(Date.now() / 1000);
   return db.prepare(
-    'SELECT u.id as user_id, u.plan FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires_at>?'
+    'SELECT u.id as user_id, u.plan, u.is_admin FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires_at>?'
   ).bind(m[1], now).first();
 }
 
@@ -64,7 +64,7 @@ export async function onRequestGet(context) {
   const { request, env } = context;
   const session = await getSession(request, env.DB);
   if (!session) return fail(401, 'Not authenticated');
-  if (session.plan !== 'pro') return fail(403, 'Pro plan required');
+  if (session.plan !== 'pro' && !session.is_admin) return fail(403, 'Pro plan required');
 
   const reqUrl = new URL(request.url);
   const debugMode = reqUrl.searchParams.get('debug');
