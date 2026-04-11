@@ -88,6 +88,16 @@ export async function onRequestGet(context) {
     } catch(e) {}
   }
 
+  if (debugMode === 'leagues') {
+    // Probe DK soccer sport catalog to find all league IDs (soccer sportId=2)
+    const r = await fetch('https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent/controldata/sport/v1/leagues?isBatchable=false&templateVars=2&entity=leagues', {
+      headers: { 'Accept': '*/*', 'Origin': 'https://sportsbook.draftkings.com', 'Referer': 'https://sportsbook.draftkings.com/' }
+    });
+    const d = await r.json();
+    const leagues = (d.leagues || []).map(l => ({ id: l.id, name: l.name }));
+    return new Response(JSON.stringify({ status: r.status, leagues }), { headers: { 'Content-Type': 'application/json' } });
+  }
+
   const headers = {
     'Accept': '*/*',
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15',
