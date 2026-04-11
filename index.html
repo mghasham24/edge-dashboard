@@ -6401,7 +6401,7 @@
                             var price = game.ml[teamName];
                             if (price == null) return;
                             var pt = game.pt ? game.pt[teamName] : null;
-                            rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName, am: price, pt: pt, pid: pid, ps: ps, gid: gid });
+                            rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName, am: price, pt: pt, pid: pid, ps: ps, gid: gid, league: game.league || '' });
                         });
                     }
                 });
@@ -7042,10 +7042,17 @@
             var row = filtered.find(function(r) { return r.game === g; });
             gCm[g] = row ? row.cm : null;
         });
-        var html = '', lastG = null;
+        var html = '', lastG = null, lastLeague = null;
         filtered.forEach(function(r) {
             var color = gColor[r.game];
             var isC = !!collapsed[r.game];
+            // FC: insert league sub-header when league changes
+            if (currentSport === 'soccer_fc' && r.league && r.league !== lastLeague) {
+                lastLeague = r.league;
+                html += '<tr style="background:var(--bg2);border-bottom:1px solid var(--border2)">'
+                + '<td colspan="13" style="padding:6px 12px;font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--accent)">'
+                + escHtml(r.league) + '</td></tr>';
+            }
             if (r.game !== lastG) {
                 lastG = r.game;
                 var ti = timeInfo(gCm[r.game]);
