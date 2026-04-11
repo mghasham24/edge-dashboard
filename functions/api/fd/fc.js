@@ -15,7 +15,7 @@ const DK_SOCCER_LEAGUES = {
   '40030': 'Serie A',
   '40032': 'Ligue 1',
   '40481': 'Bundesliga',
-  '40152': 'MLS',
+  '40237': 'MLS',
   // UCL: TBD — UCL plays Tues/Wed; add leagueId when found
 };
 
