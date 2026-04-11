@@ -7018,7 +7018,13 @@
             });
         }
         var mO = { ML: 0, Spread: 1, Total: 2, RFI: 3 };
+        var FC_LEAGUE_ORDER = { 'EPL': 0, 'La Liga': 1, 'Serie A': 2, 'Bundesliga': 3, 'Ligue 1': 4, 'MLS': 5 };
         filtered.sort(function(a, b) {
+            if (currentSport === 'soccer_fc' && a.league !== b.league) {
+                var oa = FC_LEAGUE_ORDER[a.league] !== undefined ? FC_LEAGUE_ORDER[a.league] : 99;
+                var ob = FC_LEAGUE_ORDER[b.league] !== undefined ? FC_LEAGUE_ORDER[b.league] : 99;
+                if (oa !== ob) return oa - ob;
+            }
             var ta = a.cm ? a.cm.getTime() : 9e12, tb = b.cm ? b.cm.getTime() : 9e12;
             if (ta !== tb) return ta - tb;
             if (a.game !== b.game) return a.game < b.game ? -1 : 1;
