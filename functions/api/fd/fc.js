@@ -90,42 +90,47 @@ export async function onRequestGet(context) {
 
   if (debugMode === 'mls') {
     const h = { 'Accept': '*/*', 'User-Agent': 'Mozilla/5.0', 'Origin': 'https://sportsbook.draftkings.com', 'Referer': 'https://sportsbook.draftkings.com/' };
+    const BATCH = 20;
+    const results = {};
 
-    // Strategy 1: Fetch the DK MLS sportsbook page — SPAs embed initial state with leagueIds
-    const pageAttempts = [];
-    const pageUrls = [
-      'https://sportsbook.draftkings.com/leagues/soccer/88808480-major-league-soccer',
-      'https://sportsbook.draftkings.com/leagues/soccer/major-league-soccer',
-    ];
-    for (const pageUrl of pageUrls) {
+    // Strategy 1: DK sportsbook v5 eventgroups API (different from Nash, uses slug IDs)
+    const egIds = ['88808480', '88808479', '88808478', '88808477', '88808476', '88808481', '88808482', '88808483', '88808484', '88808485', '88808486', '88808487'];
+    const egResults = [];
+    for (const id of egIds) {
       try {
-        const pr = await fetch(pageUrl, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'text/html' } });
-        const html = pr.ok ? await pr.text() : '';
-        // Extract leagueId values from embedded JSON/JS
-        const leagueIds = [...new Set((html.match(/"leagueId"\s*:\s*"?(\d+)"?/g) || []).map(m => m.replace(/[^0-9]/g, '')))];
-        const templateVars = [...new Set((html.match(/templateVars[=:]["']?([0-9%,]+)/g) || []).map(m => m.replace(/templateVars[=:]["']?/, '')))];
-        pageAttempts.push({ url: pageUrl, status: pr.status, leagueIds: leagueIds.slice(0, 20), templateVars: templateVars.slice(0, 10), htmlSnippet: html.slice(0, 500) });
-      } catch(e) { pageAttempts.push({ url: pageUrl, error: e.message }); }
-    }
-
-    // Strategy 2: Try different DK Nash base paths (US-DraftKings vs US-SB)
-    const altBases = [
-      'https://sportsbook-nash.draftkings.com/sites/US-DraftKings/api/sportscontent',
-      'https://sportsbook-nash.draftkings.com/sites/US-NJ/api/sportscontent',
-    ];
-    const altResults = [];
-    for (const base of altBases) {
-      try {
-        const eq = encodeURIComponent(`$filter=leagueId eq '40237'`);
-        const mq = encodeURIComponent(`$filter=clientMetadata/subCategoryId eq '4511' AND tags/all(t: t ne 'SportcastBetBuilder')`);
-        const url = `${base}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=40237&eventsQuery=${eq}&marketsQuery=${mq}&include=Events&entity=events`;
+        const url = `https://sportsbook.draftkings.com/api/v5/eventgroups/${id}?includeEventGroupLeaf=true&format=json`;
         const r = await fetch(url, { headers: h });
         const d = r.ok ? await r.json() : null;
-        altResults.push({ base, status: r.status, events: (d && d.events && d.events.length) || 0 });
-      } catch(e) { altResults.push({ base, error: e.message }); }
+        const eg = d && d.eventGroup;
+        if (eg) egResults.push({ id, name: eg.name, leagueId: eg.leagueId, events: eg.events && eg.events.length });
+        else egResults.push({ id, status: r.status, sample: d ? JSON.stringify(d).slice(0, 100) : null });
+      } catch(e) { egResults.push({ id, error: e.message }); }
     }
+    results.v5EventGroups = egResults;
 
-    return new Response(JSON.stringify({ pageAttempts, altResults }), { headers: { 'Content-Type': 'application/json' } });
+    // Strategy 2: Nash category/categorySubcategory endpoint with IDs 1-60
+    const catIds = Array.from({ length: 60 }, (_, i) => String(i + 1));
+    const catHits = [];
+    const mq = encodeURIComponent(`$filter=clientMetadata/subCategoryId eq '4511' AND tags/all(t: t ne 'SportcastBetBuilder')`);
+    for (let i = 0; i < catIds.length; i += BATCH) {
+      const batch = catIds.slice(i, i + BATCH);
+      const batchRes = await Promise.all(batch.map(async cid => {
+        try {
+          const eq = encodeURIComponent(`$filter=categoryId eq '${cid}'`);
+          const url = `${DK_BASE}/controldata/category/categorySubcategory/v1/markets?isBatchable=false&templateVars=${cid}&eventsQuery=${eq}&marketsQuery=${mq}&include=Events&entity=events`;
+          const r = await fetch(url, { headers: h });
+          if (!r.ok) return null;
+          const d = await r.json();
+          const evs = (d && d.events) || [];
+          if (evs.length > 0) return { cid, total: evs.length, names: evs.slice(0, 2).map(e => e.name) };
+          return null;
+        } catch(e) { return null; }
+      }));
+      catHits.push(...batchRes.filter(Boolean));
+    }
+    results.categoryEndpoint = catHits;
+
+    return new Response(JSON.stringify(results), { headers: { 'Content-Type': 'application/json' } });
   }
 
   const headers = {
