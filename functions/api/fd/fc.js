@@ -105,19 +105,19 @@ export async function onRequestGet(context) {
       } catch(e) { return null; }
     }
 
-    // Part A: dense step-1 sweep 40220–40260 with subcat 4511 (catches nearby MLS ID variants)
+    // Part A: dense step-5 sweep 40000–43000 with subcat 4511 to find the real MLS league ID
     const denseIds = [];
-    for (let i = 40220; i <= 40260; i++) denseIds.push(String(i));
+    for (let i = 38000; i <= 43000; i += 5) denseIds.push(String(i));
     const denseHits = [];
     for (let i = 0; i < denseIds.length; i += BATCH) {
       const r = await Promise.all(denseIds.slice(i, i + BATCH).map(id => probeLeagueSubcat(id, '4511')));
       denseHits.push(...r.filter(Boolean));
     }
 
-    // Part B: probe MLS (40237) with many subcats to find what markets actually exist
+    // Part B: probe 40237 with broad subcat range to see what markets it actually has
     const subcats = [];
-    for (let i = 4500; i <= 4530; i++) subcats.push(String(i));
-    for (let i = 13150; i <= 13200; i++) subcats.push(String(i));
+    for (let i = 1; i <= 100; i++) subcats.push(String(i));
+    for (let i = 4000; i <= 4600; i += 2) subcats.push(String(i));
     const subcatHits = [];
     for (let i = 0; i < subcats.length; i += BATCH) {
       const r = await Promise.all(subcats.slice(i, i + BATCH).map(sc => probeLeagueSubcat('40237', sc)));
