@@ -19,11 +19,9 @@ const DK_SOCCER_LEAGUES = {
 };
 
 function dkLeagueEventsUrl(leagueId) {
-  // No subcat filter on eventsQuery — DK suspends AH markets during live games which would
-  // cause them to drop from the events list entirely. Fetch all league events and let
-  // Step 2 (per-event subcat fetch) determine if AH odds are available.
-  const eq = encodeURIComponent(`$filter=leagueId eq '${leagueId}'`);
-  return `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${leagueId}&eventsQuery=${eq}&include=Events&entity=events`;
+  // Use the plain league events endpoint (no subcat filter) so DK doesn't drop events
+  // when AH markets are suspended during live games.
+  return `${DK_BASE}/controldata/league/v1/events?isBatchable=false&templateVars=${leagueId}&entity=events`;
 }
 
 function dkEventSubcatUrl(eventId) {
@@ -101,8 +99,12 @@ export async function onRequestGet(context) {
     for (const [leagueId, leagueLabel] of Object.entries(DK_SOCCER_LEAGUES)) {
       try {
         const r = await fetch(dkLeagueEventsUrl(leagueId), { headers });
-        if (!r.ok) continue;
+        if (!r.ok) {
+          if (debugMode === '1') todayEvents.push({ _error: `league ${leagueId} status ${r.status}` });
+          continue;
+        }
         const d = await r.json();
+        if (debugMode === '1' && !d.events) todayEvents.push({ _warn: `league ${leagueId} no events key`, keys: Object.keys(d) });
 
         for (const ev of d.events || []) {
           if (!isToday_ET(ev.startEventDate)) continue;
