@@ -180,13 +180,19 @@ export async function onRequestGet(context) {
         }
 
         // Pick the pair where the FAVORITE gets -0.5.
-        // Compare the actual -0.5 prices: whoever has the better (more negative / less positive)
-        // -0.5 price is more likely to win outright = the true favorite.
-        // This is robust to DK naming events "Away vs Home" for some leagues.
+        // Rule: if DK only exposes one team's -0.5 price, that team IS the designated -0.5 side.
+        // If both are present, lower American odds = higher implied probability = bigger favorite.
         let homePrice, awayPrice, homePt, awayPt;
-        const awayIsFav = (awayMinus != null && homeMinus != null)
-          ? awayMinus < homeMinus   // both present — pick the cheaper -0.5 line
-          : (awayMinus != null && awayMinus < 0); // fallback: check sign
+        let awayIsFav;
+        if (awayMinus != null && homeMinus == null) {
+          awayIsFav = true;  // DK natural pair: Away -0.5 / Home +0.5
+        } else if (homeMinus != null && awayMinus == null) {
+          awayIsFav = false; // DK natural pair: Home -0.5 / Away +0.5
+        } else if (awayMinus != null && homeMinus != null) {
+          awayIsFav = awayMinus < homeMinus; // lower value = higher implied prob
+        } else {
+          awayIsFav = false; // no -0.5 prices at all — null-check below will skip
+        }
         if (awayIsFav) {
           // Away team is the favorite — use Away -0.5 / Home +0.5
           awayPrice = awayMinus; awayPt = -0.5;
