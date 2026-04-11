@@ -90,51 +90,43 @@ export async function onRequestGet(context) {
 
   if (debugMode === 'mls') {
     const h = { 'Accept': '*/*', 'User-Agent': 'Mozilla/5.0', 'Origin': 'https://sportsbook.draftkings.com', 'Referer': 'https://sportsbook.draftkings.com/' };
-    const BATCH = 25;
-    const mq4511 = encodeURIComponent(`$filter=clientMetadata/subCategoryId eq '4511' AND tags/all(t: t ne 'SportcastBetBuilder')`);
     const results = {};
+    const nowMs2 = Date.now();
 
-    // Test 1: Use EPL templateVars (40253) but filter eventsQuery by sportId=1 (all soccer).
-    // If leagueSubcategory cross-league expansion works, we'd see MLS events in the response.
-    try {
-      const eq = encodeURIComponent(`$filter=sportId eq '1'`);
-      const url = `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=40253&eventsQuery=${eq}&marketsQuery=${mq4511}&include=Events&entity=events`;
-      const r = await fetch(url, { headers: h });
-      const d = r.ok ? await r.json() : null;
-      const evs = (d && d.events) || [];
-      const byLeague = {};
-      for (const ev of evs) { const k = ev.leagueId || '?'; byLeague[k] = (byLeague[k] || 0) + 1; }
-      results.sportIdViaEPL = { status: r.status, total: evs.length, byLeague };
-    } catch(e) { results.sportIdViaEPL = { error: e.message }; }
-
-    // Test 2: MLS (40237) with NO marketsQuery — see if endpoint returns events without subcat filter
-    try {
-      const eq = encodeURIComponent(`$filter=leagueId eq '40237'`);
-      const url = `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=40237&eventsQuery=${eq}&include=Events&entity=events`;
-      const r = await fetch(url, { headers: h });
-      const d = r.ok ? await r.json() : null;
-      results.mlsNoMQ = { status: r.status, events: (d && d.events && d.events.length) || 0, keys: d ? Object.keys(d) : [] };
-    } catch(e) { results.mlsNoMQ = { error: e.message }; }
-
-    // Test 3: Step-10 sweep 43000–50000 (finer than our earlier step-200 pass)
-    const sweepIds = [];
-    for (let i = 43000; i <= 50000; i += 10) sweepIds.push(String(i));
-    const sweepHits = [];
-    for (let i = 0; i < sweepIds.length; i += BATCH) {
-      const r = await Promise.all(sweepIds.slice(i, i + BATCH).map(async id => {
-        try {
-          const eq = encodeURIComponent(`$filter=leagueId eq '${id}'`);
-          const url = `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${id}&eventsQuery=${eq}&marketsQuery=${mq4511}&include=Events&entity=events`;
-          const r2 = await fetch(url, { headers: h });
-          if (!r2.ok) return null;
-          const d = await r2.json();
-          const evs = (d && d.events) || [];
-          return evs.length > 0 ? { id, total: evs.length, names: evs.slice(0, 2).map(e => e.name) } : null;
-        } catch(e) { return null; }
-      }));
-      sweepHits.push(...r.filter(Boolean));
+    // Try Nash scores/live endpoints — these list events without needing a market subcat.
+    // If any return soccer events, we can extract MLS event IDs and leagueIds directly.
+    const endpoints = [
+      `${DK_BASE}/scores/v1/scores?sportId=1`,
+      `${DK_BASE}/scores/v2/scores?sportId=1`,
+      `${DK_BASE}/scores/v1/scores?leagueId=40237`,
+      `${DK_BASE}/controldata/v1/events?sportId=1`,
+      `${DK_BASE}/controldata/v1/live?sportId=1`,
+      `${DK_BASE}/controldata/league/v1/events?leagueId=40237`,
+      `${DK_BASE}/controldata/event/v1/events?leagueId=40237`,
+    ];
+    const endpointResults = [];
+    for (const url of endpoints) {
+      try {
+        const r = await fetch(url, { headers: h });
+        const body = r.ok ? await r.text() : null;
+        endpointResults.push({ url: url.replace(DK_BASE, ''), status: r.status, sample: body ? body.slice(0, 300) : null });
+      } catch(e) { endpointResults.push({ url: url.replace(DK_BASE, ''), error: e.message }); }
     }
-    results.sweep43k50kStep10 = sweepHits;
+    results.endpointProbe = endpointResults;
+
+    // Also try: EPL events subcat response — inspect the raw market/selection structure
+    // to see if there's a leagueId or cross-league data that reveals MLS structure
+    try {
+      const eq = encodeURIComponent(`$filter=leagueId eq '40253'`);
+      const mq = encodeURIComponent(`$filter=clientMetadata/subCategoryId eq '4511' AND tags/all(t: t ne 'SportcastBetBuilder')`);
+      const url = `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=40253&eventsQuery=${eq}&marketsQuery=${mq}&include=Events&entity=events`;
+      const r = await fetch(url, { headers: h });
+      const d = r.ok ? await r.json() : null;
+      // Return the top-level keys to understand response structure
+      results.eplResponseKeys = d ? Object.keys(d) : null;
+      // Return first market object to see its structure
+      results.eplFirstMarket = d && d.markets && d.markets[0] ? d.markets[0] : null;
+    } catch(e) { results.eplResponseKeys = { error: e.message }; }
 
     return new Response(JSON.stringify(results), { headers: { 'Content-Type': 'application/json' } });
   }
