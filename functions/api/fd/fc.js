@@ -90,34 +90,41 @@ export async function onRequestGet(context) {
 
   if (debugMode === 'mls') {
     const h = { 'Accept': '*/*', 'User-Agent': 'Mozilla/5.0', 'Origin': 'https://sportsbook.draftkings.com', 'Referer': 'https://sportsbook.draftkings.com/' };
-
-    // Wide parallel sweep — fire 25 at a time to find MLS leagueId fast
-    const candidates = [];
-    for (let i = 40000; i <= 44000; i += 10) candidates.push(String(i));
-    for (let i = 44000; i <= 60000; i += 100) candidates.push(String(i));
-
-    const hits = [];
     const BATCH = 25;
-    const mq = encodeURIComponent(`$filter=clientMetadata/subCategoryId eq '4511' AND tags/all(t: t ne 'SportcastBetBuilder')`);
 
-    for (let i = 0; i < candidates.length; i += BATCH) {
-      const batch = candidates.slice(i, i + BATCH);
-      const results = await Promise.all(batch.map(async id => {
-        try {
-          const eq = encodeURIComponent(`$filter=leagueId eq '${id}'`);
-          const url = `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${id}&eventsQuery=${eq}&marketsQuery=${mq}&include=Events&entity=events`;
-          const r = await fetch(url, { headers: h });
-          if (!r.ok) return null;
-          const d = await r.json();
-          const evs = (d && d.events) || [];
-          if (evs.length > 0) return { id, total: evs.length, names: evs.slice(0, 3).map(e => e.name) };
-          return null;
-        } catch(e) { return null; }
-      }));
-      hits.push(...results.filter(Boolean));
+    async function probeLeagueSubcat(id, subcat) {
+      try {
+        const eq = encodeURIComponent(`$filter=leagueId eq '${id}'`);
+        const mq = encodeURIComponent(`$filter=clientMetadata/subCategoryId eq '${subcat}' AND tags/all(t: t ne 'SportcastBetBuilder')`);
+        const url = `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${id}&eventsQuery=${eq}&marketsQuery=${mq}&include=Events&entity=events`;
+        const r = await fetch(url, { headers: h });
+        if (!r.ok) return null;
+        const d = await r.json();
+        const evs = (d && d.events) || [];
+        return evs.length > 0 ? { id, subcat, total: evs.length, names: evs.slice(0, 3).map(e => e.name) } : null;
+      } catch(e) { return null; }
     }
 
-    return new Response(JSON.stringify({ probed: candidates.length, hits }), { headers: { 'Content-Type': 'application/json' } });
+    // Part A: dense step-1 sweep 40220–40260 with subcat 4511 (catches nearby MLS ID variants)
+    const denseIds = [];
+    for (let i = 40220; i <= 40260; i++) denseIds.push(String(i));
+    const denseHits = [];
+    for (let i = 0; i < denseIds.length; i += BATCH) {
+      const r = await Promise.all(denseIds.slice(i, i + BATCH).map(id => probeLeagueSubcat(id, '4511')));
+      denseHits.push(...r.filter(Boolean));
+    }
+
+    // Part B: probe MLS (40237) with many subcats to find what markets actually exist
+    const subcats = [];
+    for (let i = 4500; i <= 4530; i++) subcats.push(String(i));
+    for (let i = 13150; i <= 13200; i++) subcats.push(String(i));
+    const subcatHits = [];
+    for (let i = 0; i < subcats.length; i += BATCH) {
+      const r = await Promise.all(subcats.slice(i, i + BATCH).map(sc => probeLeagueSubcat('40237', sc)));
+      subcatHits.push(...r.filter(Boolean));
+    }
+
+    return new Response(JSON.stringify({ denseHits, subcatHits }), { headers: { 'Content-Type': 'application/json' } });
   }
 
   const headers = {
