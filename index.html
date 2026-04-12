@@ -6449,17 +6449,20 @@
                     var cm = game.cm ? new Date(game.cm) : null;
                     var gid = String(game.id);
                     var pid = gid + '-h2h';
-                    // Store all 4 DK prices; RS fetch will override am/pt with the correct line.
+                    // Determine correct ±0.5 pairing using DK prices.
+                    // Lower American odds for the -0.5 line = more likely to win = DK's -0.5 team.
+                    // This ensures the initial display is always a proper -0.5/+0.5 pair, not -0.5/-0.5.
+                    var awayGetsMinus;
+                    if (game.awm != null && game.hm != null) {
+                        awayGetsMinus = game.awm <= game.hm;
+                    } else if (game.awm != null) { awayGetsMinus = true; }
+                    else { awayGetsMinus = false; }
                     [[away, 'A'], [home, 'B']].forEach(function(pair) {
                         var teamName = pair[0], ps = pair[1];
-                        var initAm, initPt;
-                        if (ps === 'A') {
-                            if (game.awm != null) { initAm = game.awm; initPt = -0.5; }
-                            else if (game.awp != null) { initAm = game.awp; initPt = 0.5; }
-                        } else {
-                            if (game.hm != null) { initAm = game.hm; initPt = -0.5; }
-                            else if (game.hp != null) { initAm = game.hp; initPt = 0.5; }
-                        }
+                        var isAway = ps === 'A';
+                        var isMinus = isAway ? awayGetsMinus : !awayGetsMinus;
+                        var initAm = isMinus ? (isAway ? game.awm : game.hm) : (isAway ? game.awp : game.hp);
+                        var initPt = isMinus ? -0.5 : 0.5;
                         if (initAm == null) return;
                         rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName,
                             am: initAm, pt: initPt, pid: pid, ps: ps, gid: gid, league: game.league || '',
@@ -8153,16 +8156,19 @@
                     var cm = game.cm ? new Date(game.cm) : null;
                     var gid = String(game.id);
                     var pid = gid + '-h2h';
+                    // Determine correct ±0.5 pairing using DK prices.
+                    // Lower American odds for the -0.5 line = more likely to win = DK's -0.5 team.
+                    var awayGetsMinus;
+                    if (game.awm != null && game.hm != null) {
+                        awayGetsMinus = game.awm <= game.hm;
+                    } else if (game.awm != null) { awayGetsMinus = true; }
+                    else { awayGetsMinus = false; }
                     [[away, 'A'], [home, 'B']].forEach(function(pair) {
                         var teamName = pair[0], ps = pair[1];
-                        var initAm, initPt;
-                        if (ps === 'A') {
-                            if (game.awm != null) { initAm = game.awm; initPt = -0.5; }
-                            else if (game.awp != null) { initAm = game.awp; initPt = 0.5; }
-                        } else {
-                            if (game.hm != null) { initAm = game.hm; initPt = -0.5; }
-                            else if (game.hp != null) { initAm = game.hp; initPt = 0.5; }
-                        }
+                        var isAway = ps === 'A';
+                        var isMinus = isAway ? awayGetsMinus : !awayGetsMinus;
+                        var initAm = isMinus ? (isAway ? game.awm : game.hm) : (isAway ? game.awp : game.hp);
+                        var initPt = isMinus ? -0.5 : 0.5;
                         if (initAm == null) return;
                         rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName,
                             am: initAm, pt: initPt, pid: pid, ps: ps, gid: gid, league: game.league || '',
