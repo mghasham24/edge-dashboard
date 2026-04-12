@@ -6873,7 +6873,14 @@
                 // it's a post-game settled value — don't auto-populate, user can enter manually
                 var gameStarted = r.cm && r.cm.getTime() < Date.now();
                 if (gameStarted && (pct <= 3 || pct >= 97)) return;
-                preds[r.id] = String(match.pct);
+                // FC: normalize pct to match the line we actually assigned this row
+                if (r.mkt === 'Spread' && (r._sport_key === 'soccer_fc' || currentSport === 'soccer_fc') && r.pt != null) {
+                    var rsLabelIsMinus2 = match.label && match.label.indexOf('-0.5') !== -1;
+                    var fcMinusPct2 = rsLabelIsMinus2 ? pct : (100 - pct);
+                    preds[r.id] = String((r.pt < 0 ? fcMinusPct2 : 100 - fcMinusPct2).toFixed(1));
+                } else {
+                    preds[r.id] = String(match.pct);
+                }
                 if (mktData && mktData.volumeDisplay) vols[r.id] = mktData.volumeDisplay;
             }
         });
@@ -7855,17 +7862,32 @@
                         vols[pairedId] = mktData.volumeDisplay;
                     }
                     // FC: use RS win probability to assign the correct DK ±0.5 price.
-                    // RS may show a different spread (e.g. "MAI +5") — never trust RS spread labels for FC.
-                    // Team with pct > 50 is the favorite → must win outright → gets -0.5.
+                    // RS may label outcomes as "AVL -0.5" or "NFO +0.5" — use the label's sign to know
+                    // which side of the market the matched pct refers to, then pick the correct DK price.
+                    // If we assign the team to the OPPOSITE side from what RS labelled, use complement pct.
                     if (sport === 'soccer_fc' && r.mkt === 'Spread' && r._dkHm !== undefined) {
+                        var fcPctRaw = parseFloat(match.pct);
+                        // Detect which side RS outcome represents from label ("-0.5" = must win, "+0.5" = wins or draws)
+                        var rsLabelIsMinus = match.label && match.label.indexOf('-0.5') !== -1;
+                        // pct of covering -0.5 (winning outright) — normalize so fcMinusPct = P(team wins outright)
+                        var fcMinusPct = rsLabelIsMinus ? fcPctRaw : (100 - fcPctRaw);
+                        // Favorite = more likely to win outright (fcMinusPct > 50 means favorite even with -0.5 line)
+                        // But in practice for soccer the favorite often has fcMinusPct < 50 (draws are common).
+                        // Key insight: the team that DK assigns -0.5 to is whoever has the LOWER -0.5 American odds.
+                        // We already computed that in the initial DK price selection.
+                        // Use RS pct to determine the correct DK side: if fcMinusPct > 50, team wins outright more often → gets DK -0.5 price
                         var fcIsHome = r.ps === 'B';
-                        var fcIsFav = parseFloat(match.pct) > 50;
+                        var fcIsFav = fcMinusPct > 50;
                         var fcDk = fcIsHome
                             ? (fcIsFav ? r._dkHm : r._dkHp)
                             : (fcIsFav ? r._dkAwm : r._dkAwp);
                         var fcPt = fcIsFav ? -0.5 : 0.5;
                         if (fcDk != null) { r.am = fcDk; r.pt = fcPt; }
                         yourLines[r.id] = fcPt;
+                        // Fix stored pct: we need P(team covers the line we assigned them)
+                        // If team got -0.5: pct = P(wins outright) = fcMinusPct
+                        // If team got +0.5: pct = P(wins or draws) = 100 - fcMinusPct
+                        preds[r.id] = String((fcPt < 0 ? fcMinusPct : 100 - fcMinusPct).toFixed(1));
                     }
                 }
                 // Auto-fill Real Line from Real Sports outcome label (e.g. "ATL +6.5" -> 6.5)
