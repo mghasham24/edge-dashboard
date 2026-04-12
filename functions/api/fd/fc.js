@@ -6,7 +6,7 @@
 
 const DK_BASE = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
 const DK_SUBCAT = '13170'; // Soccer Asian Handicap ±0.5 (2-way, no draw)
-const CACHE_TTL = 5;
+const CACHE_TTL = 4; // 4s ensures the 5s frontend poller always gets a fresh DK fetch
 
 // DK league IDs for target European soccer leagues (confirmed via API discovery)
 const DK_SOCCER_LEAGUES = {
