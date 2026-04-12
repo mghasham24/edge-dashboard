@@ -6442,6 +6442,7 @@
         // FC: use FD native API for soccer ML — no Odds API credits
         if (currentSport === 'soccer_fc') {
             altOdds = {};
+            rawRows = []; // clear before async fetch — prevents in-flight pollers/RS sync from flashing stale data
             fetch('/api/fd/fc?fresh=1', { credentials: 'same-origin' }) // ?fresh=1: bypass server cache so initial load always gets live DK prices
             .then(function(r) {
                 if (r.status === 401) {
@@ -8207,6 +8208,7 @@
         if (sport !== 'soccer_fc') return;
         try {
             var res = await fetch('/api/fd/fc', { credentials: 'same-origin' });
+            if (!fcPoller) return; // loadOdds() cleared the poller while we were fetching — bail out to avoid stale flash
             var data = await res.json();
             if (!data.ok || !data.games) return;
             // Check if any new games appeared (match started, new fixture added)
