@@ -6850,16 +6850,29 @@
                 });
                 if (!match) match = isOver ? outcomes[0] : outcomes[1];
             } else if (r.mkt === 'Spread' && (r._sport_key === 'soccer_fc' || currentSport === 'soccer_fc')) {
-                // FC: RS outcome labels are abbreviations (e.g. "EVE -0.5") — strip line and match by team word
-                var gameParts3 = r.game.split(' @ ');
-                var targetTeam3 = (r.ps === 'A' ? gameParts3[0] : gameParts3[1] || '').toLowerCase();
-                var targetWords3 = targetTeam3.split(' ').filter(function(w) { return w.length > 2; });
-                match = outcomes.find(function(o) {
-                    if (!o.label) return false;
-                    var ol = (o.label || '').toLowerCase().replace(/[+-]?\d+\.?\d*\s*$/, '').trim();
-                    return targetWords3.some(function(w) { return ol.indexOf(w) !== -1 || w.indexOf(ol) !== -1; });
-                });
-                if (!match) match = r.ps === 'A' ? outcomes[0] : outcomes[1];
+                // FC: find -0.5 and +0.5 outcomes, match this team against both by name
+                var fcMinusO2 = outcomes.find(function(o) { return o.label && o.label.indexOf('-0.5') !== -1; });
+                var fcPlusO2  = outcomes.find(function(o) { return o.label && o.label.indexOf('+0.5') !== -1; });
+                if (fcMinusO2 || fcPlusO2) {
+                    var fcTw2 = r.side.toLowerCase().split(' ').filter(function(w) { return w.length > 2; });
+                    function fcLbl2(o) {
+                        if (!o || !o.label) return false;
+                        var lbl = o.label.toLowerCase().replace(/[+-]?\d+\.?\d*\s*$/, '').trim();
+                        return fcTw2.some(function(w) { return lbl.indexOf(w) !== -1 || w.indexOf(lbl) !== -1; });
+                    }
+                    if (fcLbl2(fcMinusO2)) {
+                        match = fcMinusO2;
+                    } else if (fcLbl2(fcPlusO2)) {
+                        match = fcPlusO2;
+                    } else if (fcMinusO2 && fcPlusO2) {
+                        var hFav2 = r._dkHm != null && r._dkAwm != null ? r._dkHm <= r._dkAwm : r._dkHm != null;
+                        match = (r.ps === 'B' === hFav2) ? fcMinusO2 : fcPlusO2;
+                    } else {
+                        match = fcMinusO2 || fcPlusO2;
+                    }
+                } else {
+                    match = r.ps === 'A' ? outcomes[0] : outcomes[1];
+                }
             } else {
                 match = outcomes.find(function(o) {
                     if (!o.label) return false;
@@ -7803,24 +7816,38 @@
                     }
                 }
 
-                // Pass 0d: Soccer FC spread — RS outcome labels are team abbreviations (e.g. "EVE -0.5", "BRE +0.5")
-                // Try to match by checking if any side word appears in the resolved outcome label,
-                // then fall back to position (ps A=away=outcomes[0], B=home=outcomes[1]).
+                // Pass 0d: Soccer FC spread — find -0.5 and +0.5 outcomes by label, then match this
+                // team's name against both to determine which side RS assigned to this team.
+                // This avoids positional fallback errors when RS returns outcomes in home-first order.
                 if (!match && r.mkt === 'Spread' && sport === 'soccer_fc') {
-                    var gameParts2 = r.game.split(' @ ');
-                    var awayTeam = (gameParts2[0] || '').toLowerCase();
-                    var homeTeam = (gameParts2[1] || '').toLowerCase();
-                    var isAway = r.ps === 'A';
-                    var targetTeam = isAway ? awayTeam : homeTeam;
-                    var targetWords = targetTeam.split(' ').filter(function(w) { return w.length > 2; });
-                    // Try to find which outcome matches this side by label (abbreviation or partial name)
-                    match = outcomes.find(function(o) {
-                        if (!o.label) return false;
-                        var ol = (o.label || '').toLowerCase().replace(/[+-]?\d+\.?\d*\s*$/, '').trim();
-                        return targetWords.some(function(w) { return ol.indexOf(w) !== -1 || w.indexOf(ol) !== -1; });
-                    });
-                    // Fallback: positional (Away=A=outcomes[0], Home=B=outcomes[1])
-                    if (!match) match = isAway ? outcomes[0] : outcomes[1];
+                    var fcMinusO = outcomes.find(function(o) { return o.label && o.label.indexOf('-0.5') !== -1; });
+                    var fcPlusO  = outcomes.find(function(o) { return o.label && o.label.indexOf('+0.5') !== -1; });
+                    if (fcMinusO || fcPlusO) {
+                        var fcTeamLow = r.side.toLowerCase();
+                        var fcTeamWords = fcTeamLow.split(' ').filter(function(w) { return w.length > 2; });
+                        function fcLabelMatch(o) {
+                            if (!o || !o.label) return false;
+                            var lbl = o.label.toLowerCase().replace(/[+-]?\d+\.?\d*\s*$/, '').trim();
+                            return fcTeamWords.some(function(w) { return lbl.indexOf(w) !== -1 || w.indexOf(lbl) !== -1; });
+                        }
+                        if (fcLabelMatch(fcMinusO)) {
+                            match = fcMinusO;
+                        } else if (fcLabelMatch(fcPlusO)) {
+                            match = fcPlusO;
+                        } else if (fcMinusO && fcPlusO) {
+                            // Name matching failed — use DK favorite as tiebreaker:
+                            // the team with the lower (more negative) DK -0.5 price is the assigned -0.5 side
+                            var homeFavored = r._dkHm != null && r._dkAwm != null
+                                ? r._dkHm <= r._dkAwm : r._dkHm != null;
+                            var fcIsHomeRow = r.ps === 'B';
+                            match = (fcIsHomeRow === homeFavored) ? fcMinusO : fcPlusO;
+                        } else {
+                            match = fcMinusO || fcPlusO;
+                        }
+                    } else {
+                        // No ±0.5 labels — positional fallback
+                        match = r.ps === 'A' ? outcomes[0] : outcomes[1];
+                    }
                 }
 
                 // Pass 1: exact word match or full label phrase in FD side
