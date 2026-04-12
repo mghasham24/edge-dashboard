@@ -2890,6 +2890,7 @@
     var EV_REFRESH_MS = 60000; // refresh every 60 seconds
     var rfiOdds = {}; // game key -> {yesFair, noFair, yesAm, noAm}
     var rsGameIds = {}; // game string -> Real Sports numeric gameId
+    var rsGameSports = {}; // game string -> RS sport key (e.g. 'mls', 'epl') for URL generation
 
     function edgeBg(edge) {
         if (edge == null || edge <= 0) return '';
@@ -2901,12 +2902,18 @@
     var REAL_SPORT_IDS = { nba:1, nfl:2, ncaam:3, mlb:4, epl:5, ucl:6, nhl:7, mls:8, fifa:9, ufc:10, ncaaf:11, wnba:12, soccer:14, golf:15, fc:14 };
     var REAL_SPORT_LABELS = { 1:'NBA', 2:'NFL', 3:'NCAAB', 4:'MLB', 5:'EPL', 6:'UCL', 7:'NHL', 8:'MLS', 9:'FIFA', 10:'UFC', 11:'NCAAF', 12:'WNBA', 14:'Soccer', 15:'Golf' };
     var FC_LEAGUE_SPORT_ID = { 'EPL': 5, 'UCL': 6, 'MLS': 8, 'La Liga': 14, 'Serie A': 14, 'Bundesliga': 14, 'Ligue 1': 14 };
+    // RS sport key → sport ID for URL hash encoding
+    var RS_SPORT_KEY_ID = { 'epl': 5, 'ucl': 6, 'mls': 8, 'nba': 1, 'nfl': 2, 'mlb': 4, 'nhl': 7, 'ufc': 10, 'soccer': 14, 'cbb': 3 };
 
-    function getRealSportsUrl(gid, sport, league) {
+    function getRealSportsUrl(gid, sport, league, game) {
         if (!gid || typeof Hashids === 'undefined') return null;
         if (!_hashids) _hashids = new Hashids('routing', 11);
         var sportId;
-        if (sport === 'soccer_fc' && league) {
+        // Use stored RS sport key if available (most accurate)
+        var storedRsSport = game && rsGameSports[game];
+        if (storedRsSport && RS_SPORT_KEY_ID[storedRsSport] != null) {
+            sportId = RS_SPORT_KEY_ID[storedRsSport];
+        } else if (sport === 'soccer_fc' && league) {
             sportId = FC_LEAGUE_SPORT_ID[league] || 14;
         } else {
             var sportKey = sport === 'mma_mixed_martial_arts' ? 'ufc' : (sport || '').split('_').pop();
@@ -3634,7 +3641,7 @@
             title.className = 'gc-title';
             title.innerHTML = (teams[0] || '') + '<span style="color:var(--muted2);font-weight:400;margin:0 5px">@</span>' + (teams[1] || '');
             hdr.appendChild(title);
-            var rsUrl = getRealSportsUrl(rsGameIds[game], currentSport, gameRows[0] && gameRows[0].league);
+            var rsUrl = getRealSportsUrl(rsGameIds[game], currentSport, gameRows[0] && gameRows[0].league, game);
             if (rsUrl) {
                 var rsLink = document.createElement('a');
                 rsLink.href = rsUrl;
@@ -4658,7 +4665,7 @@
             var taken   = !!betTaken[r.id];
             var rsUrl   = '';
             if (rsGameIds[r.game]) {
-                rsUrl = getRealSportsUrl(rsGameIds[r.game], r._sport_key, r.league) || '';
+                rsUrl = getRealSportsUrl(rsGameIds[r.game], r._sport_key, r.league, r.game) || '';
             }
 
             // Desktop table row
@@ -4909,7 +4916,7 @@
                         }
                         var u = unitsEV(evForUnits, pred);
                         var edge = (af != null && pred != null) ? (af - pred) * 100 : null;
-                        return { id: r.id, game: r.game, cm: r.cm, mkt: r.mkt, side: r.side, am: r.am, pt: r.pt, ps: r.ps, pid: r.pid, gid: r.gid, fair: fair, af: af, yl: yl, edge: edge, u: u };
+                        return { id: r.id, game: r.game, cm: r.cm, mkt: r.mkt, side: r.side, am: r.am, pt: r.pt, ps: r.ps, pid: r.pid, gid: r.gid, league: r.league, fair: fair, af: af, yl: yl, edge: edge, u: u };
                     }).filter(function(r) {
                         // NBA: hide spread/total when DK has alt data for the game but not the RS line
                         if (s.key === 'basketball_nba' && r.gid && r.yl != null && (r.mkt === 'Spread' || r.mkt === 'Total')) {
@@ -7154,7 +7161,7 @@
                 + '<div class="gh-stripe" style="background:' + color + '"></div>'
                 + '<span>' + teams[0] + '</span><span style="color:var(--muted2)">@</span><span>' + (teams[1] || '') + '</span>'
                 + (ti.lbl ? '<span class="gh-badge ' + ti.cls + '">' + ti.lbl + '</span>' : '')
-                + (rsGameIds[r.game] ? (function(){ var u = getRealSportsUrl(rsGameIds[r.game], currentSport, r.league); return u ? '<a href="' + u + '" target="_blank" onclick="event.stopPropagation();event.preventDefault();window.open(this.href,\'_blank\');return false;" style="margin-left:6px;color:var(--accent);font-size:11px;text-decoration:none;opacity:0.9;flex-shrink:0" title="View on Real Sports">&#8599;</a>' : ''; })() : '')
+                + (rsGameIds[r.game] ? (function(){ var u = getRealSportsUrl(rsGameIds[r.game], currentSport, r.league, r.game); return u ? '<a href="' + u + '" target="_blank" onclick="event.stopPropagation();event.preventDefault();window.open(this.href,\'_blank\');return false;" style="margin-left:6px;color:var(--accent);font-size:11px;text-decoration:none;opacity:0.9;flex-shrink:0" title="View on Real Sports">&#8599;</a>' : ''; })() : '')
                 + '<span class="gh-score-badge gh-badge" data-game="' + r.game.replace(/"/g, '&quot;') + '" data-cm="' + (r.cm ? r.cm.getTime() : '') + '" style="display:none"></span>'
                 + '<span class="live-score-badge gh-badge" style="display:none"></span>'
                 + '<span class="gh-arrow' + (isC ? '' : ' up') + '" data-gk="' + r.game.replace(/"/g, '&quot;') + '">&#9660;</span>'
@@ -7700,12 +7707,16 @@
                 if (!realKey) return;
                 var gameGid = d.markets[realKey + '__gid'];
                 if (gameGid) rsGameIds[r.game] = gameGid;
+                // Store RS-level sport key so getRealSportsUrl picks the right sport ID for deep links
+                var gameRsSport = d.markets[realKey + '__sport'];
+                if (gameRsSport) rsGameSports[r.game] = gameRsSport;
                 var gameMarkets = d.markets[realKey];
                 if (!gameMarkets) return;
 
                 // Auto-fill Real Line from game-level pointSpread/overUnder
+                // FC: skip RS spread line — RS may show a different handicap (not ±0.5); use pct instead (below)
                 var gameLines = d.markets[realKey + '__lines'];
-                if (gameLines) {
+                if (gameLines && sport !== 'soccer_fc') {
                     if (r.mkt === 'Spread' && yourLines[r.id] == null) {
                         // Determine if this row is home or away side
                         var gameParts = r.game.split(' @ ');
@@ -7713,13 +7724,6 @@
                         var spreadVal = isHome ? gameLines.homeSpread : gameLines.awaySpread;
                         if (spreadVal != null) {
                             yourLines[r.id] = spreadVal;
-                            // FC: use the RS line to select the correct DK price
-                            if (sport === 'soccer_fc' && r._dkHm !== undefined) {
-                                var dk = isHome
-                                    ? (spreadVal < 0 ? r._dkHm : r._dkHp)
-                                    : (spreadVal < 0 ? r._dkAwm : r._dkAwp);
-                                if (dk != null) { r.am = dk; r.pt = spreadVal; }
-                            }
                         }
                     }
                     if (r.mkt === 'Total' && yourLines[r.id] == null && gameLines.total != null) {
@@ -7850,9 +7854,23 @@
                         var pairedId = r.id.endsWith('-A') ? r.id.slice(0, -2) + '-B' : r.id.slice(0, -2) + '-A';
                         vols[pairedId] = mktData.volumeDisplay;
                     }
+                    // FC: use RS win probability to assign the correct DK ±0.5 price.
+                    // RS may show a different spread (e.g. "MAI +5") — never trust RS spread labels for FC.
+                    // Team with pct > 50 is the favorite → must win outright → gets -0.5.
+                    if (sport === 'soccer_fc' && r.mkt === 'Spread' && r._dkHm !== undefined) {
+                        var fcIsHome = r.ps === 'B';
+                        var fcIsFav = parseFloat(match.pct) > 50;
+                        var fcDk = fcIsHome
+                            ? (fcIsFav ? r._dkHm : r._dkHp)
+                            : (fcIsFav ? r._dkAwm : r._dkAwp);
+                        var fcPt = fcIsFav ? -0.5 : 0.5;
+                        if (fcDk != null) { r.am = fcDk; r.pt = fcPt; }
+                        yourLines[r.id] = fcPt;
+                    }
                 }
                 // Auto-fill Real Line from Real Sports outcome label (e.g. "ATL +6.5" -> 6.5)
-                if (match && match.label && (r.mkt === 'Spread' || r.mkt === 'Total')) {
+                // FC: skip — RS spread label reflects a different market, not ±0.5 AH
+                if (sport !== 'soccer_fc' && match && match.label && (r.mkt === 'Spread' || r.mkt === 'Total')) {
                     var lineMatch = match.label.match(/([+-]?\d+\.?\d*)\s*$/);
                     if (lineMatch) {
                         var lineVal = parseFloat(lineMatch[1]);

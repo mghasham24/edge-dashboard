@@ -360,7 +360,9 @@ export async function onRequestGet(context) {
               const totalLine = (totalMkt.outcomes[0].label || '').match(/(\d+\.?\d*)\s*$/);
               if (totalLine) lines.total = parseFloat(totalLine[1]);
             }
-            return { gameKey, markets, lines, gameId };
+            // Store the RS league/sport for URL generation (MLS vs EPL vs generic soccer)
+            const rsSport = game.sport || (game.league && game.league.sport) || (game.league && game.league.key) || null;
+            return { gameKey, markets, lines, gameId, rsSport };
           }
           if (mRes.status === 429) {
             // Rate limited on this specific game — skip and rely on D1 merge cache
@@ -385,7 +387,7 @@ export async function onRequestGet(context) {
     // Two-phase fetch: return cached data immediately, fetch missing games in background
     const marketMap = {};
     const now = Math.floor(Date.now() / 1000);
-    const cacheKey = 'real_sync_' + realSport + '_v4'; // v4: fighter array support for UFC
+    const cacheKey = 'real_sync_' + realSport + '_v5'; // v5: store __sport for accurate link routing
     const TTL = 15;
 
     // Phase 1: Load cache
@@ -428,6 +430,7 @@ export async function onRequestGet(context) {
               bgMap[result.gameKey] = result.markets;
               if (result.lines && Object.keys(result.lines).length) bgMap[result.gameKey + '__lines'] = result.lines;
               if (result.gameId) bgMap[result.gameKey + '__gid'] = result.gameId;
+              if (result.rsSport) bgMap[result.gameKey + '__sport'] = result.rsSport;
             }
           }
           // Write updated cache
@@ -482,6 +485,7 @@ export async function onRequestGet(context) {
           marketMap[result.gameKey + '__lines'] = result.lines;
         }
         if (result.gameId) marketMap[result.gameKey + '__gid'] = result.gameId;
+        if (result.rsSport) marketMap[result.gameKey + '__sport'] = result.rsSport;
       }
     }
 
