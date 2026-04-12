@@ -4463,12 +4463,21 @@
         document.getElementById('collapse-btn').style.display = 'none';
         document.getElementById('refresh-btn').style.display = 'none';
         document.getElementById('ev-panel').classList.add('visible');
+        // Stop all native sport pollers — they share the rawRows/currentSport globals
+        // and would race with loadAllEvSports' sequential phase, causing cross-sport
+        // contamination in evTabCache (e.g. FC rows written under 'baseball_mlb' key).
+        // loadAllEvSports uses its own 15s refresh timer to keep EV data fresh.
+        if (nbaPoller) { clearInterval(nbaPoller); nbaPoller = null; }
+        if (mlbPoller) { clearInterval(mlbPoller); mlbPoller = null; }
+        if (nhlPoller) { clearInterval(nhlPoller); nhlPoller = null; }
+        if (dkPoller)  { clearInterval(dkPoller);  dkPoller  = null; }
+        if (fcPoller)  { clearInterval(fcPoller);  fcPoller  = null; }
         evTabVisible = true;
         // Sync unit size from main dashboard
         var mainUnit = document.getElementById('unit-size');
         var evUnit = document.getElementById('ev-unit-size');
         if (mainUnit && evUnit) evUnit.value = mainUnit.value;
-        // Auto-load on open, then refresh every 60s
+        // Auto-load on open, then refresh every 15s
         loadAllEvSports();
         if (!evAutoRefreshTimer) {
             evAutoRefreshTimer = setInterval(function() {

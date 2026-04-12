@@ -59,9 +59,15 @@ export async function onRequest(context) {
     if (cached && isValidGamesArray(cached.data)) {
       const ttl = getTTL(cached.data);
       if ((now - cached.fetched_at) < ttl) {
+        // Return last-known requests-remaining so the admin UI never shows '--'
+        let apiRemaining = '';
+        try {
+          const meta = await env.DB.prepare('SELECT data FROM odds_cache WHERE cache_key=?').bind('odds_api_remaining').first();
+          if (meta) apiRemaining = meta.data;
+        } catch(e) {}
         return new Response(cached.data, {
           status: 200,
-          headers: { 'Content-Type': 'application/json' }
+          headers: { 'Content-Type': 'application/json', 'x-requests-remaining': apiRemaining }
         });
       }
     }
@@ -99,16 +105,23 @@ export async function onRequest(context) {
 
     // Only cache valid game arrays — never cache error objects
     if (isValidGamesArray(text)) {
+      const remaining = res.headers.get('x-requests-remaining') || '';
       try {
         await env.DB.prepare(
           'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at'
         ).bind(cacheKey, text, now).run();
+        // Persist the requests-remaining count so cached responses can return it too
+        if (remaining) {
+          await env.DB.prepare(
+            'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at'
+          ).bind('odds_api_remaining', remaining, now).run();
+        }
       } catch(e) {}
       return new Response(text, {
         status: 200,
         headers: {
           'Content-Type': 'application/json',
-          'x-requests-remaining': res.headers.get('x-requests-remaining') || ''
+          'x-requests-remaining': remaining
         }
       });
     }
