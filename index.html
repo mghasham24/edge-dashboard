@@ -6871,9 +6871,10 @@
                 });
                 if (!match) match = isOver ? outcomes[0] : outcomes[1];
             } else if (r.mkt === 'Spread' && (r._sport_key === 'soccer_fc' || currentSport === 'soccer_fc')) {
-                // FC: find -0.5 and +0.5 outcomes, match this team against both by name
-                var fcMinusO2 = outcomes.find(function(o) { return o.label && o.label.indexOf('-0.5') !== -1; });
-                var fcPlusO2  = outcomes.find(function(o) { return o.label && o.label.indexOf('+0.5') !== -1; });
+                // FC: find -0.5 and +0.5 outcomes — also check o.line since RS team-key substitution
+                // can strip the ±0.5 suffix from the label, but line is extracted from the raw label.
+                var fcMinusO2 = outcomes.find(function(o) { return o.line === -0.5 || (o.label && o.label.indexOf('-0.5') !== -1); });
+                var fcPlusO2  = outcomes.find(function(o) { return o.line === 0.5  || (o.label && o.label.indexOf('+0.5') !== -1); });
                 if (fcMinusO2 || fcPlusO2) {
                     var fcTw2 = r.side.toLowerCase().split(' ').filter(function(w) { return w.length > 2; });
                     function fcLbl2(o) {
@@ -6909,8 +6910,8 @@
                 if (gameStarted && (pct <= 3 || pct >= 97)) return;
                 // FC: use RS label sign to assign the correct DK price and store aligned pct
                 if (r.mkt === 'Spread' && (r._sport_key === 'soccer_fc' || currentSport === 'soccer_fc') && r._dkHm !== undefined) {
-                    var rsHasMinus2 = match.label && match.label.indexOf('-0.5') !== -1;
-                    var rsHasPlus2  = match.label && match.label.indexOf('+0.5') !== -1;
+                    var rsHasMinus2 = (match.line === -0.5) || (match.label && match.label.indexOf('-0.5') !== -1);
+                    var rsHasPlus2  = (match.line === 0.5)  || (match.label && match.label.indexOf('+0.5') !== -1);
                     var fcIsHome2   = r.ps === 'B';
                     if (rsHasMinus2 || rsHasPlus2) {
                         var fcDk3 = fcIsHome2
@@ -7886,8 +7887,10 @@
                 // team's name against both to determine which side RS assigned to this team.
                 // This avoids positional fallback errors when RS returns outcomes in home-first order.
                 if (!match && r.mkt === 'Spread' && sport === 'soccer_fc') {
-                    var fcMinusO = outcomes.find(function(o) { return o.label && o.label.indexOf('-0.5') !== -1; });
-                    var fcPlusO  = outcomes.find(function(o) { return o.label && o.label.indexOf('+0.5') !== -1; });
+                    // Also check o.line — RS outcome label is sometimes stripped of ±0.5 by team-key substitution,
+                    // but the line field is extracted from the raw label before substitution and preserves it.
+                    var fcMinusO = outcomes.find(function(o) { return o.line === -0.5 || (o.label && o.label.indexOf('-0.5') !== -1); });
+                    var fcPlusO  = outcomes.find(function(o) { return o.line === 0.5  || (o.label && o.label.indexOf('+0.5') !== -1); });
                     if (fcMinusO || fcPlusO) {
                         var fcTeamLow = r.side.toLowerCase();
                         var fcTeamWords = fcTeamLow.split(' ').filter(function(w) { return w.length > 2; });
@@ -7969,8 +7972,8 @@
                     // RS labels each side as "TEAM -0.5" or "TEAM +0.5" — trust that sign exactly.
                     // Never compute complements: 100 - pct gives the OPPONENT's probability, not this team's.
                     if (sport === 'soccer_fc' && r.mkt === 'Spread' && r._dkHm !== undefined) {
-                        var rsHasMinus = match.label && match.label.indexOf('-0.5') !== -1;
-                        var rsHasPlus  = match.label && match.label.indexOf('+0.5') !== -1;
+                        var rsHasMinus = (match.line === -0.5) || (match.label && match.label.indexOf('-0.5') !== -1);
+                        var rsHasPlus  = (match.line === 0.5)  || (match.label && match.label.indexOf('+0.5') !== -1);
                         var fcIsHome   = r.ps === 'B';
                         if (rsHasMinus || rsHasPlus) {
                             // RS label tells us exactly which side — pick the matching DK price
