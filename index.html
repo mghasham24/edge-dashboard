@@ -2887,7 +2887,7 @@
     var evTabVisible      = false;
     var evLoadingInProgress = false; // true while loadAllEvSports Phase1/2 running — suppresses mid-load renders
     var evAutoRefreshTimer = null;
-    var EV_REFRESH_MS = 60000; // refresh every 60 seconds
+    var EV_REFRESH_MS = 15000; // refresh every 15 seconds (server caches absorb repeated hits)
     var rfiOdds = {}; // game key -> {yesFair, noFair, yesAm, noAm}
     var rsGameIds = {}; // game string -> Real Sports numeric gameId
     var rsGameSports = {}; // game string -> RS sport key (e.g. 'mls', 'epl') for URL generation
@@ -8141,7 +8141,8 @@
     }
 
     async function fetchMLBNativeUpdate() {
-        if (currentSport !== 'baseball_mlb') return;
+        var sport = currentSport; // capture before any await — prevents race with loadAllEvSports
+        if (sport !== 'baseball_mlb') return;
         try {
             var res = await fetch('/api/fd/mlb', { credentials: 'same-origin' });
             var data = await res.json();
@@ -8167,8 +8168,8 @@
                     });
                 });
                 rawRows = newRows.concat(rfiRows);
-                rawRowsBySport[currentSport] = rawRows;
-                fetchRealMarkets(currentSport, true).then(function() { fetchKalshiRFI(); });
+                rawRowsBySport[sport] = rawRows;
+                fetchRealMarkets(sport, true).then(function() { fetchKalshiRFI(); });
             } else {
                 nativeMlUpdate(rawRows, data.games);
             }
@@ -8188,7 +8189,8 @@
     }
 
     async function fetchFCNativeUpdate() {
-        if (currentSport !== 'soccer_fc') return;
+        var sport = currentSport; // capture before any await — prevents race with loadAllEvSports
+        if (sport !== 'soccer_fc') return;
         try {
             var res = await fetch('/api/fd/fc', { credentials: 'same-origin' });
             var data = await res.json();
@@ -8220,12 +8222,12 @@
                         if (initAm == null) return;
                         rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName,
                             am: initAm, pt: initPt, pid: pid, ps: ps, gid: gid, league: game.league || '',
-                            _dkHm: game.hm, _dkHp: game.hp, _dkAwm: game.awm, _dkAwp: game.awp });
+                            _sport_key: 'soccer_fc', _dkHm: game.hm, _dkHp: game.hp, _dkAwm: game.awm, _dkAwp: game.awp });
                     });
                 });
                 rawRows = rows;
-                rawRowsBySport[currentSport] = rawRows;
-                fetchRealMarkets(currentSport, true);
+                rawRowsBySport[sport] = rawRows;
+                fetchRealMarkets(sport, true);
             } else {
                 // FC: update stored DK prices and re-apply the RS line
                 rawRows.forEach(function(r) {
@@ -8244,7 +8246,7 @@
                     }
                     if (game.league) r.league = game.league;
                 });
-                rawRowsBySport[currentSport] = rawRows;
+                rawRowsBySport[sport] = rawRows;
             }
             // Update status bar timestamp so users can see odds are live
             var nowStr = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
