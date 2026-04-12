@@ -73,11 +73,12 @@ export async function onRequestGet(context) {
 
   const reqUrl = new URL(request.url);
   const debugMode = reqUrl.searchParams.get('debug');
+  const freshMode = reqUrl.searchParams.get('fresh'); // ?fresh=1 skips cache read (used on initial tab load)
 
   const now = Math.floor(Date.now() / 1000);
   const cacheKey = 'fd_fc';
 
-  if (!debugMode) {
+  if (!debugMode && !freshMode) {
     try {
       const cached = await env.DB.prepare(
         'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
