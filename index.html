@@ -4862,6 +4862,8 @@
                 }
                 var mkts = noSpread.indexOf(s.key) !== -1 ? 'h2h' : 'h2h,spreads,totals';
                 var resp = await fetch('/api/odds?sport=' + s.key + '&markets=' + mkts + '&bookmakers=fanduel');
+                var _remEv = resp.headers.get('x-requests-remaining');
+                if (_remEv) { var _remEvEl = document.getElementById('api-remaining'); if (_remEvEl) _remEvEl.textContent = _remEv + ' requests left'; }
                 if (!resp.ok) return;
                 var d = await resp.json();
                 var games = Array.isArray(d) ? d : (d && Array.isArray(d.games) ? d.games : null);
@@ -6999,6 +7001,9 @@
                     fetch('/api/real/sync?sport=' + s.key, { credentials: 'same-origin' })
                 ]);
                 var oddsResp = pair[0], syncResp = pair[1];
+                // Update admin Odds API remaining display whenever we get a count back
+                var _rem = oddsResp.headers.get('x-requests-remaining');
+                if (_rem) { var _remEl = document.getElementById('api-remaining'); if (_remEl) _remEl.textContent = _rem + ' requests left'; }
                 if (!oddsResp.ok) { done++; setBar(Math.round(done / total * 100)); return; }
                 var d = await oddsResp.json();
                 var games = Array.isArray(d) ? d : (d && Array.isArray(d.games) ? d.games : null);
