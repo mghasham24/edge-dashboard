@@ -2135,6 +2135,10 @@
     </style>
     <script src="https://www.google.com/recaptcha/api.js?render=6Let4qMsAAAAAFhvh6wy6Ai_Ruzq2j4MIlMhqRnl"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/hashids/2.3.0/hashids.min.js"></script>
+    <script>
+    !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+" (stub)"},o="init push capture register register_once register_for_session unregister unregister_for_session getFeatureFlag getFeatureFlagPayload isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey identify alias setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset get_distinct_id getGroups get_session_id get_session_replay_url alias createPersonProfile opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing clear_opt_in_out_capturing debug".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+    posthog.init('phc_uxgHqULdsUrd4qncS2sh4rCsZUNFpBguV7awNWWgfWgh', { api_host: 'https://us.i.posthog.com', person_profiles: 'identified_only' });
+    </script>
 </head>
 <body>
 
@@ -2962,6 +2966,7 @@
         betTaken[id] = !betTaken[id];
         if (!betTaken[id]) delete betTaken[id];
         localStorage.setItem('raxedge_bets_taken', JSON.stringify(betTaken));
+        posthog.capture(betTaken[id] ? 'bet_checked' : 'bet_unchecked', { sport: currentSport });
         if (betTaken[id] && exclusiveBets) applyExclusiveBet(id);
         // Sync to server so state persists across devices
         fetch('/api/bets/taken', {
@@ -3166,6 +3171,8 @@
                 showGateErr(data.error || ('Error ' + res.status + ' — please try again'));
             } else {
                 currentUser = data;
+                posthog.identify(String(data.id || data.user_id || ''), { plan: data.plan, is_admin: !!data.is_admin });
+                posthog.capture('login', { method: 'password', plan: data.plan });
                 document.getElementById('gate').style.display = 'none';
                 document.getElementById('landing').classList.remove('visible');
                 document.getElementById('dashboard').style.display = 'block';
@@ -3204,6 +3211,8 @@
             if (res.ok) {
                 var data = await res.json();
                 currentUser = data;
+                posthog.identify(String(data.id || data.user_id || ''), { plan: data.plan, is_admin: !!data.is_admin });
+                posthog.capture('session_restored', { plan: data.plan });
                 document.getElementById('gate').style.display = 'none';
                 document.getElementById('landing').classList.remove('visible');
                 document.getElementById('dashboard').style.display = 'block';
@@ -4472,6 +4481,7 @@
         if (nhlPoller) { clearInterval(nhlPoller); nhlPoller = null; }
         if (dkPoller)  { clearInterval(dkPoller);  dkPoller  = null; }
         if (fcPoller)  { clearInterval(fcPoller);  fcPoller  = null; }
+        posthog.capture('best_ev_opened');
         evTabVisible = true;
         // Sync unit size from main dashboard
         var mainUnit = document.getElementById('unit-size');
@@ -6016,6 +6026,7 @@
     async function startCheckout() {
         var btn = document.getElementById('upgrade-btn');
         var trialEligible = currentUser && !currentUser.had_free_trial;
+        posthog.capture('checkout_started', { trial_eligible: !!trialEligible });
         var defaultLabel  = trialEligible ? 'Start 14-Day Free Trial →' : 'Upgrade to Pro →';
         btn.textContent = 'Redirecting...';
         btn.disabled = true;
@@ -6043,6 +6054,7 @@
     }
 
     async function openBillingPortal() {
+        posthog.capture('billing_portal_opened');
         var res = await fetch('/api/stripe/portal', { method: 'POST', credentials: 'same-origin' });
         var data = await res.json();
         if (data.url) window.location.href = data.url;
@@ -6096,6 +6108,7 @@
     }
 
     function showUpgradeModal(msg) {
+        posthog.capture('upgrade_modal_shown', { trigger: msg, sport: currentSport });
         document.getElementById('upgrade-msg').textContent = msg;
         document.getElementById('upgrade-modal').style.display = 'flex';
         var btn = document.getElementById('upgrade-btn');
@@ -6164,6 +6177,7 @@
                     return;
                 }
                 currentSport = s.key;
+                posthog.capture('sport_tab_opened', { sport: s.key, label: s.label });
                 document.querySelectorAll('.sport-tab,.feature-tab').forEach(function(x) {
                     x.classList.toggle('active', x.getAttribute('data-key') === s.key);
                 });
