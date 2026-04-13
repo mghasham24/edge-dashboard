@@ -29,9 +29,10 @@ function dkLeagueEventsUrl(leagueId) {
   return `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${leagueId}&eventsQuery=${eq}&marketsQuery=${mq}&include=Events&entity=events`;
 }
 
-function dkEventSubcatUrl(eventId) {
+function dkEventAllSpreadsUrl(eventId) {
+  // No subCategoryId filter — fetch ALL Asian Handicap lines so frontend can match RS's actual line
   const mq = encodeURIComponent(
-    `$filter=eventId eq '${eventId}' AND clientMetadata/subCategoryId eq '${DK_SUBCAT}' AND tags/all(t: t ne 'SportcastBetBuilder')`
+    `$filter=eventId eq '${eventId}' AND tags/all(t: t ne 'SportcastBetBuilder')`
   );
   return `${DK_BASE}/controldata/event/eventSubcategory/v1/markets?isBatchable=false&templateVars=${eventId}%2C${DK_SUBCAT}&marketsQuery=${mq}&include=MarketSplits&entity=markets`;
 }
@@ -151,7 +152,7 @@ export async function onRequestGet(context) {
       });
     }
 
-    // Step 2: For each event, fetch subcat 13170 to get actual ±0.5 AH prices
+    // Step 2: For each event, fetch ALL AH spread lines so frontend can match RS's actual line
     const gamesMap = {};
 
     for (let i = 0; i < todayEvents.length; i++) {
@@ -159,36 +160,35 @@ export async function onRequestGet(context) {
       const gameKey = ev.away + ' @ ' + ev.home;
 
       try {
-        const r = await fetch(dkEventSubcatUrl(ev.eventId), { headers });
+        const r = await fetch(dkEventAllSpreadsUrl(ev.eventId), { headers });
         if (!r.ok) continue;
         const d = await r.json();
 
-        // DK subcat 13170 always puts Home at -0.5 and Away at +0.5 by default,
-        // but RS assigns -0.5 to the FAVORITE regardless of home/away.
-        // Extract all four ±0.5 prices and pick the pair matching RS convention.
-        let homeMinus = null, homePlus = null, awayMinus = null, awayPlus = null;
-
+        // Build spreads map: { Home: { '-0.5': price, '-1.5': price, ... }, Away: { '0.5': price, '1.5': price, ... } }
+        // Keyed by String(pts) so frontend can look up any RS line directly.
+        const spreads = { Home: {}, Away: {} };
         for (const sel of d.selections || []) {
           const pts = sel.points;
           const ot = sel.outcomeType;
           const price = parseAmerican(sel.displayOdds && sel.displayOdds.american);
           if (price == null || pts == null) continue;
-
-          if (ot === 'Home' && Math.abs(pts + 0.5) < 0.01) homeMinus = price; // Home -0.5 (must win)
-          if (ot === 'Home' && Math.abs(pts - 0.5) < 0.01) homePlus  = price; // Home +0.5 (wins or draws)
-          if (ot === 'Away' && Math.abs(pts + 0.5) < 0.01) awayMinus = price; // Away -0.5 (must win)
-          if (ot === 'Away' && Math.abs(pts - 0.5) < 0.01) awayPlus  = price; // Away +0.5 (wins or draws)
+          if (ot !== 'Home' && ot !== 'Away') continue;
+          spreads[ot][String(pts)] = price;
         }
 
-        // Return all 4 prices — the frontend will pick the correct one after RS tells us
-        // which team is at -0.5 and which is at +0.5 for each game.
+        // ±0.5 shorthand for initial display (before RS tells us the actual line)
+        const homeMinus = spreads.Home['-0.5'] || null;
+        const homePlus  = spreads.Home['0.5']  || null;
+        const awayMinus = spreads.Away['-0.5'] || null;
+        const awayPlus  = spreads.Away['0.5']  || null;
+
         if (debugMode === '2') {
           const allSels = (d.selections || []).map(s => ({ label: s.label, outcomeType: s.outcomeType, points: s.points, odds: s.displayOdds && s.displayOdds.american }));
-          gamesMap[gameKey] = { home: ev.home, away: ev.away, hm: homeMinus, hp: homePlus, awm: awayMinus, awp: awayPlus, allSels };
+          gamesMap[gameKey] = { home: ev.home, away: ev.away, hm: homeMinus, hp: homePlus, awm: awayMinus, awp: awayPlus, spreads, allSels };
           continue;
         }
 
-        if (homeMinus == null && homePlus == null && awayMinus == null && awayPlus == null) continue;
+        if (!Object.keys(spreads.Home).length && !Object.keys(spreads.Away).length) continue;
 
         gamesMap[gameKey] = {
           id: parseInt(ev.eventId),
@@ -196,10 +196,11 @@ export async function onRequestGet(context) {
           home: ev.home,
           cm: ev.openDate,
           league: ev.league,
-          hm: homeMinus,  // home -0.5 price
-          hp: homePlus,   // home +0.5 price
-          awm: awayMinus, // away -0.5 price
-          awp: awayPlus   // away +0.5 price
+          hm: homeMinus,  // home -0.5 (for initial display before RS sync)
+          hp: homePlus,
+          awm: awayMinus,
+          awp: awayPlus,
+          spreads          // full map — frontend picks the line RS actually uses
         };
 
       } catch(e) {}

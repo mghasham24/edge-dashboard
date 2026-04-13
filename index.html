@@ -4815,7 +4815,7 @@
                             if (initAm == null) return;
                             rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName,
                                 am: initAm, pt: initPt, pid: pid, ps: ps, gid: gid, league: game.league || '',
-                                _sport_key: 'soccer_fc', _dkHm: game.hm, _dkHp: game.hp, _dkAwm: game.awm, _dkAwp: game.awp });
+                                _sport_key: 'soccer_fc', _dkSpreads: game.spreads || { Home: {}, Away: {} } });
                         });
                     });
                     rawRowsBySport[s.key] = rows;
@@ -6498,7 +6498,7 @@
                         if (initAm == null) return;
                         rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName,
                             am: initAm, pt: initPt, pid: pid, ps: ps, gid: gid, league: game.league || '',
-                            _dkHm: game.hm, _dkHp: game.hp, _dkAwm: game.awm, _dkAwp: game.awp });
+                            _dkSpreads: game.spreads || { Home: {}, Away: {} } });
                     });
                 });
                 rawRows = rows;
@@ -6901,7 +6901,9 @@
                     } else if (fcLbl2(fcPlusO2)) {
                         match = fcPlusO2;
                     } else if (fcMinusO2 && fcPlusO2) {
-                        var hFav2 = r._dkHm != null && r._dkAwm != null ? r._dkHm <= r._dkAwm : r._dkHm != null;
+                        var _hm2 = r._dkSpreads && r._dkSpreads.Home && r._dkSpreads.Home['-0.5'];
+                        var _am2 = r._dkSpreads && r._dkSpreads.Away && r._dkSpreads.Away['-0.5'];
+                        var hFav2 = _hm2 != null && _am2 != null ? _hm2 <= _am2 : _hm2 != null;
                         match = (r.ps === 'B' === hFav2) ? fcMinusO2 : fcPlusO2;
                     } else {
                         match = fcMinusO2 || fcPlusO2;
@@ -6923,21 +6925,14 @@
                 var gameStarted = r.cm && r.cm.getTime() < Date.now();
                 if (gameStarted && (pct <= 3 || pct >= 97)) return;
                 // FC: use RS label sign to assign the correct DK price and store aligned pct
-                if (r.mkt === 'Spread' && (r._sport_key === 'soccer_fc' || currentSport === 'soccer_fc') && r._dkHm !== undefined) {
-                    var rsHasMinus2 = (match.line === -0.5) || (match.label && match.label.indexOf('-0.5') !== -1);
-                    var rsHasPlus2  = (match.line === 0.5)  || (match.label && match.label.indexOf('+0.5') !== -1);
-                    var fcIsHome2   = r.ps === 'B';
-                    if (rsHasMinus2 || rsHasPlus2) {
-                        var fcDk3 = fcIsHome2
-                            ? (rsHasMinus2 ? r._dkHm : r._dkHp)
-                            : (rsHasMinus2 ? r._dkAwm : r._dkAwp);
-                        var fcPt3 = rsHasMinus2 ? -0.5 : 0.5;
-                        if (fcDk3 != null) { r.am = fcDk3; r.pt = fcPt3; }
-                        yourLines[r.id] = fcPt3;
-                        preds[r.id] = String(parseFloat(match.pct).toFixed(1));
-                    } else {
-                        preds[r.id] = String(match.pct);
-                    }
+                if (r.mkt === 'Spread' && (r._sport_key === 'soccer_fc' || currentSport === 'soccer_fc') && r._dkSpreads) {
+                    var fcOutType2 = r.ps === 'B' ? 'Home' : 'Away';
+                    var rsLine2 = match.line;
+                    var dkSpr2 = (r._dkSpreads && r._dkSpreads[fcOutType2]) || {};
+                    var dkPrice3 = rsLine2 != null ? dkSpr2[String(rsLine2)] : null;
+                    if (dkPrice3 != null) { r.am = dkPrice3; r.pt = rsLine2; }
+                    if (rsLine2 != null) yourLines[r.id] = rsLine2;
+                    preds[r.id] = String(parseFloat(match.pct).toFixed(1));
                 } else {
                     preds[r.id] = String(match.pct);
                 }
@@ -6996,7 +6991,7 @@
                                 if (initAm == null) return;
                                 fcRows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName,
                                     am: initAm, pt: initPt, pid: pid, ps: ps, gid: gid, league: game.league || '',
-                                    _sport_key: 'soccer_fc', _dkHm: game.hm, _dkHp: game.hp, _dkAwm: game.awm, _dkAwp: game.awp });
+                                    _sport_key: 'soccer_fc', _dkSpreads: game.spreads || { Home: {}, Away: {} } });
                             });
                         });
                         rawRowsBySport[s.key] = fcRows;
@@ -7920,8 +7915,9 @@
                         } else if (fcMinusO && fcPlusO) {
                             // Name matching failed — use DK favorite as tiebreaker:
                             // the team with the lower (more negative) DK -0.5 price is the assigned -0.5 side
-                            var homeFavored = r._dkHm != null && r._dkAwm != null
-                                ? r._dkHm <= r._dkAwm : r._dkHm != null;
+                            var _hm = r._dkSpreads && r._dkSpreads.Home && r._dkSpreads.Home['-0.5'];
+                            var _am = r._dkSpreads && r._dkSpreads.Away && r._dkSpreads.Away['-0.5'];
+                            var homeFavored = _hm != null && _am != null ? _hm <= _am : _hm != null;
                             var fcIsHomeRow = r.ps === 'B';
                             match = (fcIsHomeRow === homeFavored) ? fcMinusO : fcPlusO;
                         } else {
@@ -7985,29 +7981,21 @@
                     // FC: use RS outcome label to directly pick the correct DK ±0.5 price.
                     // RS labels each side as "TEAM -0.5" or "TEAM +0.5" — trust that sign exactly.
                     // Never compute complements: 100 - pct gives the OPPONENT's probability, not this team's.
-                    if (sport === 'soccer_fc' && r.mkt === 'Spread' && r._dkHm !== undefined) {
-                        var rsHasMinus = (match.line === -0.5) || (match.label && match.label.indexOf('-0.5') !== -1);
-                        var rsHasPlus  = (match.line === 0.5)  || (match.label && match.label.indexOf('+0.5') !== -1);
-                        var fcIsHome   = r.ps === 'B';
-                        if (rsHasMinus || rsHasPlus) {
-                            // RS label tells us exactly which side — pick the matching DK price
-                            var fcDk2 = fcIsHome
-                                ? (rsHasMinus ? r._dkHm : r._dkHp)
-                                : (rsHasMinus ? r._dkAwm : r._dkAwp);
-                            var fcPt2 = rsHasMinus ? -0.5 : 0.5;
-                            if (fcDk2 != null) { r.am = fcDk2; r.pt = fcPt2; }
-                            yourLines[r.id] = fcPt2;
-                            // pct already corresponds to the correct side (RS label matches assigned line)
-                            preds[r.id] = String(parseFloat(match.pct).toFixed(1));
-                        } else {
-                            // No clear ±0.5 label (live game or stripped) — keep existing DK assignment,
-                            // store pct as-is for the line currently on this row
-                            preds[r.id] = String(parseFloat(match.pct).toFixed(1));
-                        }
+                    if (sport === 'soccer_fc' && r.mkt === 'Spread' && r._dkSpreads) {
+                        // Use RS's actual line to look up the exact DK price at that line.
+                        // match.line is extracted from the raw RS label (e.g. "MAN UTD -1.5" → -1.5)
+                        // before any team-key substitution, so it's always correct.
+                        var fcOutType = r.ps === 'B' ? 'Home' : 'Away';
+                        var rsLine = match.line; // e.g. -1.5, -0.5, 0.5, 1.5
+                        var dkSpr = (r._dkSpreads && r._dkSpreads[fcOutType]) || {};
+                        var dkPrice2 = rsLine != null ? dkSpr[String(rsLine)] : null;
+                        if (dkPrice2 != null) { r.am = dkPrice2; r.pt = rsLine; }
+                        if (rsLine != null) yourLines[r.id] = rsLine;
+                        preds[r.id] = String(parseFloat(match.pct).toFixed(1));
                     }
                 }
                 // Auto-fill Real Line from Real Sports outcome label (e.g. "ATL +6.5" -> 6.5)
-                // FC: skip — RS spread label reflects a different market, not ±0.5 AH
+                // FC: skip — line is already applied above via _dkSpreads lookup
                 if (sport !== 'soccer_fc' && match && match.label && (r.mkt === 'Spread' || r.mkt === 'Total')) {
                     var lineMatch = match.label.match(/([+-]?\d+\.?\d*)\s*$/);
                     if (lineMatch) {
@@ -8267,14 +8255,12 @@
                     if (r.mkt !== 'Spread') return;
                     var game = data.games[r.game];
                     if (!game) return;
-                    r._dkHm = game.hm; r._dkHp = game.hp;
-                    r._dkAwm = game.awm; r._dkAwp = game.awp;
-                    // Re-apply RS line to pick the correct updated DK price
+                    r._dkSpreads = game.spreads || { Home: {}, Away: {} };
+                    // Re-apply current RS line to pick the updated DK price at that exact line
                     var yl = yourLines[r.id];
                     if (yl != null) {
-                        var dk = (r.ps === 'B')
-                            ? (yl < 0 ? r._dkHm : r._dkHp)
-                            : (yl < 0 ? r._dkAwm : r._dkAwp);
+                        var fcOutType4 = r.ps === 'B' ? 'Home' : 'Away';
+                        var dk = (r._dkSpreads[fcOutType4] || {})[String(yl)];
                         if (dk != null) { r.am = dk; r.pt = yl; }
                     }
                     if (game.league) r.league = game.league;
