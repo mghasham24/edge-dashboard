@@ -2966,7 +2966,7 @@
         betTaken[id] = !betTaken[id];
         if (!betTaken[id]) delete betTaken[id];
         localStorage.setItem('raxedge_bets_taken', JSON.stringify(betTaken));
-        posthog.capture(betTaken[id] ? 'bet_checked' : 'bet_unchecked', { sport: currentSport });
+        try { posthog.capture(betTaken[id] ? 'bet_checked' : 'bet_unchecked', { sport: currentSport }); } catch(e) {}
         if (betTaken[id] && exclusiveBets) applyExclusiveBet(id);
         // Sync to server so state persists across devices
         fetch('/api/bets/taken', {
@@ -3171,8 +3171,8 @@
                 showGateErr(data.error || ('Error ' + res.status + ' — please try again'));
             } else {
                 currentUser = data;
-                posthog.identify(data.email, { email: data.email, plan: data.plan, is_admin: !!data.is_admin });
-                posthog.capture('login', { method: 'password', plan: data.plan });
+                try { posthog.identify(data.email, { email: data.email, plan: data.plan, is_admin: !!data.is_admin }); } catch(e) {}
+                try { posthog.capture('login', { method: 'password', plan: data.plan }); } catch(e) {}
                 document.getElementById('gate').style.display = 'none';
                 document.getElementById('landing').classList.remove('visible');
                 document.getElementById('dashboard').style.display = 'block';
@@ -3211,8 +3211,8 @@
             if (res.ok) {
                 var data = await res.json();
                 currentUser = data;
-                posthog.identify(data.email, { email: data.email, plan: data.plan, is_admin: !!data.is_admin });
-                posthog.capture('session_restored', { plan: data.plan });
+                try { posthog.identify(data.email, { email: data.email, plan: data.plan, is_admin: !!data.is_admin }); } catch(e) {}
+                try { posthog.capture('session_restored', { plan: data.plan }); } catch(e) {}
                 document.getElementById('gate').style.display = 'none';
                 document.getElementById('landing').classList.remove('visible');
                 document.getElementById('dashboard').style.display = 'block';
@@ -4481,7 +4481,7 @@
         if (nhlPoller) { clearInterval(nhlPoller); nhlPoller = null; }
         if (dkPoller)  { clearInterval(dkPoller);  dkPoller  = null; }
         if (fcPoller)  { clearInterval(fcPoller);  fcPoller  = null; }
-        posthog.capture('best_ev_opened');
+        try { posthog.capture('best_ev_opened'); } catch(e) {}
         evTabVisible = true;
         // Sync unit size from main dashboard
         var mainUnit = document.getElementById('unit-size');
@@ -6026,7 +6026,7 @@
     async function startCheckout() {
         var btn = document.getElementById('upgrade-btn');
         var trialEligible = currentUser && !currentUser.had_free_trial;
-        posthog.capture('checkout_started', { trial_eligible: !!trialEligible });
+        try { posthog.capture('checkout_started', { trial_eligible: !!trialEligible }); } catch(e) {}
         var defaultLabel  = trialEligible ? 'Start 14-Day Free Trial →' : 'Upgrade to Pro →';
         btn.textContent = 'Redirecting...';
         btn.disabled = true;
@@ -6054,7 +6054,7 @@
     }
 
     async function openBillingPortal() {
-        posthog.capture('billing_portal_opened');
+        try { posthog.capture('billing_portal_opened'); } catch(e) {}
         var res = await fetch('/api/stripe/portal', { method: 'POST', credentials: 'same-origin' });
         var data = await res.json();
         if (data.url) window.location.href = data.url;
@@ -6108,7 +6108,7 @@
     }
 
     function showUpgradeModal(msg) {
-        posthog.capture('upgrade_modal_shown', { trigger: msg, sport: currentSport });
+        try { posthog.capture('upgrade_modal_shown', { trigger: msg, sport: currentSport }); } catch(e) {}
         document.getElementById('upgrade-msg').textContent = msg;
         document.getElementById('upgrade-modal').style.display = 'flex';
         var btn = document.getElementById('upgrade-btn');
@@ -6177,7 +6177,7 @@
                     return;
                 }
                 currentSport = s.key;
-                posthog.capture('sport_tab_opened', { sport: s.key, label: s.label });
+                try { posthog.capture('sport_tab_opened', { sport: s.key, label: s.label }); } catch(e) {}
                 document.querySelectorAll('.sport-tab,.feature-tab').forEach(function(x) {
                     x.classList.toggle('active', x.getAttribute('data-key') === s.key);
                 });
