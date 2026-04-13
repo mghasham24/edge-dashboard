@@ -2926,6 +2926,15 @@
         var hash = _hashids.encode([4, sportId, 0, gid]);
         return 'https://www.realapp.com/' + hash;
     }
+    // Build RS URL directly from portfolio item fields (gameId + sportId already numeric)
+    function getPortfolioGameUrl(p) {
+        if (!p || p.gameId == null) return null;
+        if (typeof Hashids === 'undefined') return null;
+        if (!_hashids) _hashids = new Hashids('routing', 11);
+        var sid = p.sportId || 0;
+        var hash = _hashids.encode([4, sid, 0, p.gameId]);
+        return hash ? 'https://www.realapp.com/' + hash : null;
+    }
     var RAX_ICON = '<svg viewBox="0 0 512 512" style="width:13px;height:13px;vertical-align:-2px;display:inline-block;margin-right:1px" aria-hidden="true"><g fill="currentColor"><path d="M128.1,141.1h356.8C442.8,57.4,356.1,0,256,0C192,0,133.5,23.5,88.6,62.3L128.1,141.1z"/><polygon points="355.3,193.2 154.2,193.2 254.7,394"/><path d="M413.6,193.2L253.9,512c0.7,0,1.4,0,2.1,0c141.4,0,256-114.6,256-256c0-21.7-2.7-42.7-7.8-62.8H413.6z"/><path d="M225.6,452.1L50.7,103C18.9,145.7,0,198.6,0,256c0,121.7,85,223.6,198.8,249.6L225.6,452.1z"/></g></svg> ';
 
     // Restore saved unit size and sync both inputs
@@ -5199,8 +5208,10 @@
                     }
                 }
 
+                var portGameUrl = getPortfolioGameUrl(p);
+                var portGameLink = portGameUrl ? ' <a href="' + portGameUrl + '" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--accent);font-size:11px;text-decoration:none;opacity:0.85" title="View on Real Sports">&#8599;</a>' : '';
                 return '<tr' + (trStyle ? ' style="' + trStyle + '"' : '') + '>'
-                    + '<td data-label="Matchup">' + escHtml(matchup) + '</td>'
+                    + '<td data-label="Matchup">' + escHtml(matchup) + portGameLink + '</td>'
                     + '<td data-label="Sport" style="font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--muted)">' + escHtml(sportLbl) + '</td>'
                     + '<td data-label="Market"><span class="mkt-badge">' + escHtml(market) + '</span></td>'
                     + '<td data-label="Side">' + escHtml(side) + edgeBadge + '</td>'
@@ -5833,9 +5844,11 @@
         var resLbl     = isCashout ? 'Cashout' : isWin ? 'Win' : isLoss ? 'Loss' : '—';
         var trCls      = isCashout ? 'port-card-loss' : isWin ? 'port-card-win' : isLoss ? 'port-card-loss' : '';
         var dateStr  = fmtPortDate(p.transactedAt);
+        var histGameUrl = getPortfolioGameUrl(p);
+        var histGameLink = histGameUrl ? ' <a href="' + histGameUrl + '" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--accent);font-size:11px;text-decoration:none;opacity:0.85" title="View on Real Sports">&#8599;</a>' : '';
         return '<tr class="' + trCls + '">'
             + '<td data-label="Date" style="white-space:nowrap;font-size:11px;color:var(--muted);font-family:var(--mono)">' + escHtml(dateStr) + '</td>'
-            + '<td data-label="Matchup">' + escHtml(matchup) + '</td>'
+            + '<td data-label="Matchup">' + escHtml(matchup) + histGameLink + '</td>'
             + '<td data-label="Market"><span class="mkt-badge" style="font-size:10px">' + escHtml(market) + '</span></td>'
             + '<td data-label="Side">' + escHtml(side) + '</td>'
             + '<td data-label="Avg" class="r" style="font-family:var(--mono);color:var(--muted)">' + escHtml(avgDisp) + '</td>'
