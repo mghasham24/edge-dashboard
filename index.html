@@ -2816,9 +2816,6 @@
     }, {
         key: 'soccer_fc',
         label: 'FC'
-    }, {
-        key: 'basketball_ncaab',
-        label: 'NCAAB'
     }];
     var FREE_SPORTS = ['basketball_nba', 'icehockey_nhl', 'baseball_mlb']; // free plan sports
     var MARKET_KEYS = {
@@ -4875,6 +4872,72 @@
                                 rows.push({ id: rpid + '-B', game: gameKey, cm: cm, mkt: 'RFI', side: 'No (NRFI)',  am: rfi.noAm,  pt: null, pid: rpid, ps: 'B', gid: gid, rfiFair: rfi.noFair });
                             }
                         }
+                    });
+                    rawRowsBySport[s.key] = rows;
+                    return;
+                }
+                if (s.key === 'basketball_nba') {
+                    // NBA uses FD native API — no Odds API credits
+                    var nbaRes = await fetch('/api/fd/nbaalts', { credentials: 'same-origin' });
+                    var nbaData = nbaRes.ok ? await nbaRes.json() : null;
+                    if (!nbaData || !nbaData.ok || !nbaData.games) return;
+                    var rows = [];
+                    Object.entries(nbaData.games).forEach(function([gameKey, game]) {
+                        var away = game.away, home = game.home;
+                        var cm = game.cm ? new Date(game.cm) : null;
+                        var gid = String(game.id);
+                        if (game.spreads) {
+                            var pid = gid + '-spreads';
+                            [[away, 'A'], [home, 'B']].forEach(function(pair) {
+                                var teamName = pair[0], ps = pair[1];
+                                var sideData = game.spreads[teamName];
+                                if (!sideData) return;
+                                var entry = Object.entries(sideData)[0];
+                                if (!entry) return;
+                                rows.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName, am: entry[1], pt: parseFloat(entry[0]), pid: pid, ps: ps, gid: gid, _sport_key: 'basketball_nba' });
+                            });
+                        }
+                        if (game.totals) {
+                            var pid = gid + '-totals';
+                            [['Over','A'],['Under','B']].forEach(function(pair) {
+                                var side = pair[0], ps = pair[1];
+                                var sideData = game.totals[side];
+                                if (!sideData) return;
+                                var entry = Object.entries(sideData)[0];
+                                if (!entry) return;
+                                rows.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'Total', side: side, am: entry[1], pt: parseFloat(entry[0]), pid: pid, ps: ps, gid: gid, _sport_key: 'basketball_nba' });
+                            });
+                        }
+                        if (game.ml) {
+                            var pid = gid + '-h2h';
+                            [[away,'A'],[home,'B']].forEach(function(pair) {
+                                var teamName = pair[0], ps = pair[1];
+                                var price = game.ml[teamName];
+                                if (price == null) return;
+                                rows.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'ML', side: teamName, am: price, pt: null, pid: pid, ps: ps, gid: gid, _sport_key: 'basketball_nba' });
+                            });
+                        }
+                    });
+                    rawRowsBySport[s.key] = rows;
+                    return;
+                }
+                if (s.key === 'icehockey_nhl') {
+                    // NHL uses FD native API — no Odds API credits
+                    var nhlRes = await fetch('/api/fd/nhl', { credentials: 'same-origin' });
+                    var nhlData = nhlRes.ok ? await nhlRes.json() : null;
+                    if (!nhlData || !nhlData.ok || !nhlData.games) return;
+                    var rows = [];
+                    Object.entries(nhlData.games).forEach(function([gameKey, game]) {
+                        var away = game.away, home = game.home;
+                        var cm = game.cm ? new Date(game.cm) : null;
+                        var gid = String(game.id);
+                        var pid = gid + '-h2h';
+                        [[away,'A'],[home,'B']].forEach(function(pair) {
+                            var teamName = pair[0], ps = pair[1];
+                            var price = game.ml[teamName];
+                            if (price == null) return;
+                            rows.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'ML', side: teamName, am: price, pt: null, pid: pid, ps: ps, gid: gid, _sport_key: 'icehockey_nhl' });
+                        });
                     });
                     rawRowsBySport[s.key] = rows;
                     return;
@@ -7014,6 +7077,142 @@
                             fillPredsFromSync(fcRows, fcSyncData);
                             lastSyncData[s.key] = fcSyncData;
                         }
+                    }
+                    done++;
+                    setBar(Math.round(done / total * 100));
+                    return;
+                }
+                // NBA: use FD native — no Odds API credits
+                if (s.key === 'basketball_nba') {
+                    var [nbaResP, nbaSyncResP] = await Promise.all([
+                        fetch('/api/fd/nbaalts', { credentials: 'same-origin' }),
+                        fetch('/api/real/sync?sport=basketball_nba', { credentials: 'same-origin' })
+                    ]);
+                    var nbaDataP = nbaResP.ok ? await nbaResP.json() : null;
+                    if (nbaDataP && nbaDataP.ok && nbaDataP.games) {
+                        var nbaRowsP = [];
+                        Object.entries(nbaDataP.games).forEach(function([gameKey, game]) {
+                            var away = game.away, home = game.home;
+                            var cm = game.cm ? new Date(game.cm) : null;
+                            var gid = String(game.id);
+                            if (game.spreads) {
+                                var pid = gid + '-spreads';
+                                [[away,'A'],[home,'B']].forEach(function(pair) {
+                                    var teamName = pair[0], ps = pair[1];
+                                    var sideData = game.spreads[teamName];
+                                    if (!sideData) return;
+                                    var entry = Object.entries(sideData)[0];
+                                    if (!entry) return;
+                                    nbaRowsP.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName, am: entry[1], pt: parseFloat(entry[0]), pid: pid, ps: ps, gid: gid, _sport_key: 'basketball_nba' });
+                                });
+                            }
+                            if (game.totals) {
+                                var pid = gid + '-totals';
+                                [['Over','A'],['Under','B']].forEach(function(pair) {
+                                    var side = pair[0], ps = pair[1];
+                                    var sideData = game.totals[side];
+                                    if (!sideData) return;
+                                    var entry = Object.entries(sideData)[0];
+                                    if (!entry) return;
+                                    nbaRowsP.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'Total', side: side, am: entry[1], pt: parseFloat(entry[0]), pid: pid, ps: ps, gid: gid, _sport_key: 'basketball_nba' });
+                                });
+                            }
+                            if (game.ml) {
+                                var pid = gid + '-h2h';
+                                [[away,'A'],[home,'B']].forEach(function(pair) {
+                                    var teamName = pair[0], ps = pair[1];
+                                    var price = game.ml[teamName];
+                                    if (price == null) return;
+                                    nbaRowsP.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'ML', side: teamName, am: price, pt: null, pid: pid, ps: ps, gid: gid, _sport_key: 'basketball_nba' });
+                                });
+                            }
+                        });
+                        rawRowsBySport[s.key] = nbaRowsP;
+                        if (nbaSyncResP.ok) {
+                            var nbaSyncDataP = await nbaSyncResP.json();
+                            fillPredsFromSync(nbaRowsP, nbaSyncDataP);
+                            lastSyncData[s.key] = nbaSyncDataP;
+                        }
+                    }
+                    done++;
+                    setBar(Math.round(done / total * 100));
+                    return;
+                }
+                // NHL: use FD native — no Odds API credits
+                if (s.key === 'icehockey_nhl') {
+                    var [nhlResP, nhlSyncResP] = await Promise.all([
+                        fetch('/api/fd/nhl', { credentials: 'same-origin' }),
+                        fetch('/api/real/sync?sport=icehockey_nhl', { credentials: 'same-origin' })
+                    ]);
+                    var nhlDataP = nhlResP.ok ? await nhlResP.json() : null;
+                    if (nhlDataP && nhlDataP.ok && nhlDataP.games) {
+                        var nhlRowsP = [];
+                        Object.entries(nhlDataP.games).forEach(function([gameKey, game]) {
+                            var away = game.away, home = game.home;
+                            var cm = game.cm ? new Date(game.cm) : null;
+                            var gid = String(game.id);
+                            var pid = gid + '-h2h';
+                            [[away,'A'],[home,'B']].forEach(function(pair) {
+                                var teamName = pair[0], ps = pair[1];
+                                var price = game.ml[teamName];
+                                if (price == null) return;
+                                nhlRowsP.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'ML', side: teamName, am: price, pt: null, pid: pid, ps: ps, gid: gid, _sport_key: 'icehockey_nhl' });
+                            });
+                        });
+                        rawRowsBySport[s.key] = nhlRowsP;
+                        if (nhlSyncResP.ok) {
+                            var nhlSyncDataP = await nhlSyncResP.json();
+                            fillPredsFromSync(nhlRowsP, nhlSyncDataP);
+                            lastSyncData[s.key] = nhlSyncDataP;
+                        }
+                    }
+                    done++;
+                    setBar(Math.round(done / total * 100));
+                    return;
+                }
+                // MLB: use FD native — no Odds API credits
+                if (s.key === 'baseball_mlb') {
+                    var [mlbResP, rfiResP] = await Promise.all([
+                        fetch('/api/fd/mlb', { credentials: 'same-origin' }),
+                        fetch('/api/fd/rfi', { credentials: 'same-origin' })
+                    ]);
+                    var mlbDataP = mlbResP.ok ? await mlbResP.json() : null;
+                    var rfiDataP = rfiResP.ok ? await rfiResP.json() : null;
+                    if (mlbDataP && mlbDataP.ok && mlbDataP.games) {
+                        var mlbRowsP = [];
+                        Object.entries(mlbDataP.games).forEach(function([gameKey, game]) {
+                            var away = game.away, home = game.home;
+                            var cm = game.cm ? new Date(game.cm) : null;
+                            var gid = String(game.id);
+                            var pid = gid + '-h2h';
+                            [[away,'A'],[home,'B']].forEach(function(pair) {
+                                var teamName = pair[0], ps = pair[1];
+                                var price = game.ml[teamName];
+                                if (price == null) return;
+                                mlbRowsP.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'ML', side: teamName, am: price, pt: null, pid: pid, ps: ps, gid: gid, _sport_key: 'baseball_mlb' });
+                            });
+                            if (rfiDataP && rfiDataP.ok && rfiDataP.rfi) {
+                                var rfi = rfiDataP.rfi[gameKey];
+                                if (!rfi) {
+                                    var fdT = gameKey.split(' @ ');
+                                    var fdA = (fdT[0]||'').toLowerCase(), fdH = (fdT[1]||'').toLowerCase();
+                                    var mk = Object.keys(rfiDataP.rfi).find(function(k) {
+                                        var p = k.split(' @ '); if (p.length !== 2) return false;
+                                        var ka = p[0].toLowerCase(), kh = p[1].toLowerCase();
+                                        return ka.split(' ').some(function(w){ return w.length>2&&fdA.indexOf(w)!==-1; })
+                                            && kh.split(' ').some(function(w){ return w.length>2&&fdH.indexOf(w)!==-1; });
+                                    });
+                                    if (mk) rfi = rfiDataP.rfi[mk];
+                                }
+                                if (rfi) {
+                                    var td = new Date(); var ds = td.getFullYear()+''+(td.getMonth()+1)+''+td.getDate();
+                                    var rp = 'rfi-'+gameKey.replace(/[^a-z0-9]/gi,'')+'-'+ds;
+                                    mlbRowsP.push({ id: rp+'-A', game: gameKey, cm: cm, mkt: 'RFI', side: 'Yes (YRFI)', am: rfi.yesAm, pt: null, pid: rp, ps: 'A', gid: gid, rfiFair: rfi.yesFair, _sport_key: 'baseball_mlb' });
+                                    mlbRowsP.push({ id: rp+'-B', game: gameKey, cm: cm, mkt: 'RFI', side: 'No (NRFI)',  am: rfi.noAm,  pt: null, pid: rp, ps: 'B', gid: gid, rfiFair: rfi.noFair,  _sport_key: 'baseball_mlb' });
+                                }
+                            }
+                        });
+                        rawRowsBySport[s.key] = mlbRowsP;
                     }
                     done++;
                     setBar(Math.round(done / total * 100));
