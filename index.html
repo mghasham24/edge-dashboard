@@ -3171,7 +3171,7 @@
                 showGateErr(data.error || ('Error ' + res.status + ' — please try again'));
             } else {
                 currentUser = data;
-                posthog.identify(String(data.id || data.user_id || ''), { plan: data.plan, is_admin: !!data.is_admin });
+                posthog.identify(String(data.id || data.user_id || ''), { email: data.email, plan: data.plan, is_admin: !!data.is_admin });
                 posthog.capture('login', { method: 'password', plan: data.plan });
                 document.getElementById('gate').style.display = 'none';
                 document.getElementById('landing').classList.remove('visible');
@@ -3211,7 +3211,7 @@
             if (res.ok) {
                 var data = await res.json();
                 currentUser = data;
-                posthog.identify(String(data.id || data.user_id || ''), { plan: data.plan, is_admin: !!data.is_admin });
+                posthog.identify(String(data.id || data.user_id || ''), { email: data.email, plan: data.plan, is_admin: !!data.is_admin });
                 posthog.capture('session_restored', { plan: data.plan });
                 document.getElementById('gate').style.display = 'none';
                 document.getElementById('landing').classList.remove('visible');
