@@ -29,10 +29,10 @@ function dkLeagueEventsUrl(leagueId) {
   return `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${leagueId}&eventsQuery=${eq}&marketsQuery=${mq}&include=Events&entity=events`;
 }
 
-function dkEventAllSpreadsUrl(eventId) {
-  // No subCategoryId filter — fetch ALL Asian Handicap lines so frontend can match RS's actual line
+function dkEventSubcatUrl(eventId) {
+  // Fetch subcat 13170 (Asian Handicap) — returns ALL AH lines for this event, not just ±0.5
   const mq = encodeURIComponent(
-    `$filter=eventId eq '${eventId}' AND tags/all(t: t ne 'SportcastBetBuilder')`
+    `$filter=eventId eq '${eventId}' AND clientMetadata/subCategoryId eq '${DK_SUBCAT}' AND tags/all(t: t ne 'SportcastBetBuilder')`
   );
   return `${DK_BASE}/controldata/event/eventSubcategory/v1/markets?isBatchable=false&templateVars=${eventId}%2C${DK_SUBCAT}&marketsQuery=${mq}&include=MarketSplits&entity=markets`;
 }
@@ -160,7 +160,7 @@ export async function onRequestGet(context) {
       const gameKey = ev.away + ' @ ' + ev.home;
 
       try {
-        const r = await fetch(dkEventAllSpreadsUrl(ev.eventId), { headers });
+        const r = await fetch(dkEventSubcatUrl(ev.eventId), { headers });
         if (!r.ok) continue;
         const d = await r.json();
 
