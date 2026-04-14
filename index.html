@@ -3184,11 +3184,11 @@
         var ln = 'display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
         if (city) {
             return '<span style="overflow:hidden;margin-left:2px;padding:2px 8px 2px 5px;' + grad + ';border-radius:3px">'
-                + '<span style="' + ln + ';font-size:8px;color:var(--muted2);font-weight:600;letter-spacing:.07em;text-transform:uppercase;line-height:1.3">' + city + '</span>'
-                + '<span style="' + ln + ';font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;line-height:1.2;color:var(--text)">' + nick + '</span>'
+                + '<span style="' + ln + ';font-size:9px;color:var(--muted2);font-weight:600;letter-spacing:.07em;text-transform:uppercase;line-height:1.3">' + city + '</span>'
+                + '<span style="' + ln + ';font-size:13px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;line-height:1.2;color:var(--text)">' + nick + '</span>'
                 + '</span>';
         }
-        return '<span style="overflow:hidden;margin-left:2px;padding:3px 8px 3px 5px;' + grad + ';border-radius:3px;text-overflow:ellipsis;white-space:nowrap;font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--text)">' + name + '</span>';
+        return '<span style="overflow:hidden;margin-left:2px;padding:3px 8px 3px 5px;' + grad + ';border-radius:3px;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--text)">' + name + '</span>';
     }
 
     function teamLogoHtml(name, size) {
@@ -3965,26 +3965,8 @@
 
             var title = document.createElement('span');
             title.className = 'gc-title';
-            title.innerHTML = '<div style="display:grid;grid-template-columns:auto minmax(0,1fr) auto auto minmax(0,1fr);align-items:center;gap:4px;flex:1;min-width:0">' + teamLogoHtml(teams[0], 20) + teamNameHtml(teams[0] || '') + '<span style="color:var(--muted2);font-weight:400;text-align:center;padding:0 2px">@</span>' + teamLogoHtml(teams[1], 20) + teamNameHtml(teams[1] || '') + '</div>';
+            title.innerHTML = '<div style="display:grid;grid-template-columns:auto minmax(0,1fr) auto auto minmax(0,1fr);align-items:center;gap:4px;flex:1;min-width:0">' + teamLogoHtml(teams[0], 22) + teamNameHtml(teams[0] || '') + '<span style="color:var(--muted2);font-weight:400;text-align:center;padding:0 2px">@</span>' + teamLogoHtml(teams[1], 22) + teamNameHtml(teams[1] || '') + '</div>';
             hdr.appendChild(title);
-            var rsUrl = getRealSportsUrl(rsGameIds[game], currentSport, gameRows[0] && gameRows[0].league, game);
-            if (rsUrl) {
-                var rsLink = document.createElement('a');
-                rsLink.href = rsUrl;
-                rsLink.target = '_blank';
-                rsLink.innerHTML = '&#8599;';
-                rsLink.title = 'View on Real Sports';
-                rsLink.style.cssText = 'color:var(--accent);font-size:12px;text-decoration:none;opacity:0.9;flex-shrink:0;margin-left:4px';
-                rsLink.addEventListener('click', function(e) { e.stopPropagation(); });
-                hdr.appendChild(rsLink);
-            }
-
-            if (ti.lbl) {
-                var timeBadge = document.createElement('span');
-                timeBadge.className = 'gc-time ' + ti.cls;
-                timeBadge.textContent = ti.lbl;
-                hdr.appendChild(timeBadge);
-            }
 
             var arrow = document.createElement('span');
             arrow.className = 'gc-arrow' + (isC ? '' : ' up');
@@ -3992,6 +3974,10 @@
             arrow.innerHTML = '&#9660;';
             hdr.appendChild(arrow);
             card.appendChild(hdr);
+
+            // Store rsUrl and ti for ML section footer
+            var _rsUrl = getRealSportsUrl(rsGameIds[game], currentSport, gameRows[0] && gameRows[0].league, game);
+            var _ti = ti;
 
             var body = document.createElement('div');
             body.className = 'game-card-body' + (isC ? ' collapsed' : '');
@@ -4461,7 +4447,30 @@
                 }
                 section.appendChild(inputRow);
 
-                // No shared bottom result row - edges shown inline per side
+                // ML section footer: time (bottom-left) + RS link (bottom-right)
+                if (mkt === 'ML') {
+                    var mlFooter = document.createElement('div');
+                    mlFooter.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-top:8px;padding-top:6px;border-top:1px solid var(--border)';
+                    if (_ti && _ti.lbl) {
+                        var ftTime = document.createElement('span');
+                        ftTime.className = 'gh-badge ' + (_ti.cls || '');
+                        ftTime.style.cssText = 'font-size:11px;font-family:var(--mono)';
+                        ftTime.textContent = _ti.lbl;
+                        mlFooter.appendChild(ftTime);
+                    } else {
+                        mlFooter.appendChild(document.createElement('span'));
+                    }
+                    if (_rsUrl) {
+                        var ftLink = document.createElement('a');
+                        ftLink.href = _rsUrl;
+                        ftLink.target = '_blank';
+                        ftLink.textContent = 'Link to Game ↗';
+                        ftLink.style.cssText = 'font-size:10px;font-weight:700;letter-spacing:.05em;color:var(--accent);text-decoration:none;padding:3px 8px;border:1px solid var(--accent);border-radius:4px;opacity:0.9';
+                        ftLink.addEventListener('click', function(e) { e.stopPropagation(); });
+                        mlFooter.appendChild(ftLink);
+                    }
+                    section.appendChild(mlFooter);
+                }
 
                 body.appendChild(section);
             });
