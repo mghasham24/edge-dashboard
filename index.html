@@ -3177,6 +3177,22 @@
         return 'hsla(' + teamColorHue(name) + ',65%,50%,' + (parseInt(hexOp, 16) / 255).toFixed(2) + ')';
     }
 
+    // Renders team name as stacked city/nickname with team-color gradient
+    function teamNameHtml(name) {
+        name = name || '';
+        var lastSpace = name.lastIndexOf(' ');
+        var city = lastSpace > 0 ? name.slice(0, lastSpace) : '';
+        var nick = lastSpace > 0 ? name.slice(lastSpace + 1) : name;
+        var grad = 'background:linear-gradient(90deg,' + teamColorAt(name, '30') + ',transparent)';
+        if (city) {
+            return '<span style="margin-left:5px;padding:2px 8px 2px 5px;' + grad + ';border-radius:3px;display:inline-flex;flex-direction:column;line-height:1.15;vertical-align:middle">'
+                + '<span style="font-size:8px;color:var(--muted2);font-weight:600;letter-spacing:.07em;text-transform:uppercase;white-space:nowrap">' + city + '</span>'
+                + '<span style="font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap">' + nick + '</span>'
+                + '</span>';
+        }
+        return '<span style="margin-left:5px;padding:3px 8px 3px 5px;' + grad + ';border-radius:3px;display:inline-flex;align-items:center;vertical-align:middle;white-space:nowrap;font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase">' + name + '</span>';
+    }
+
     function teamLogoHtml(name, size) {
         var url = name && TEAM_LOGO_URLS[name];
         var s = size || 18;
@@ -3907,7 +3923,7 @@
             if (!gameRows.length)
                 return;
             var _mgp = game.split(' @ ');
-            var _mht = (_mgp[_mgp.length - 1] || game).trim();
+            var _mht = (_mgp[0] || game).trim(); // away team drives card color
             var color = teamColor(_mht);
             var isC = !!mobileCollapsed[game];
             var ti = timeInfo(gameRows[0].cm);
@@ -3941,7 +3957,7 @@
 
             var title = document.createElement('span');
             title.className = 'gc-title';
-            title.innerHTML = teamLogoHtml(teams[0], 20) + '<span style="margin-left:5px;padding:2px 10px 2px 5px;background:linear-gradient(90deg,' + teamColorAt(teams[0] || '', '30') + ',transparent);border-radius:3px">' + (teams[0] || '') + '</span><span style="color:var(--muted2);font-weight:400;margin:0 8px">@</span>' + teamLogoHtml(teams[1], 20) + '<span style="margin-left:5px;padding:2px 10px 2px 5px;background:linear-gradient(90deg,' + teamColorAt(teams[1] || '', '30') + ',transparent);border-radius:3px">' + (teams[1] || '') + '</span>';
+            title.innerHTML = teamLogoHtml(teams[0], 20) + teamNameHtml(teams[0] || '') + '<span style="color:var(--muted2);font-weight:400;margin:0 8px">@</span>' + teamLogoHtml(teams[1], 20) + teamNameHtml(teams[1] || '');
             hdr.appendChild(title);
             var rsUrl = getRealSportsUrl(rsGameIds[game], currentSport, gameRows[0] && gameRows[0].league, game);
             if (rsUrl) {
@@ -7767,7 +7783,7 @@
                 html += '<tr class="ghrow" data-gk="' + r.game.replace(/"/g, '&quot;') + '" onclick="toggleGame(\'' + gk + '\')">'
                 + '<td colspan="13"><div class="gh-inner">'
                 + '<div class="gh-stripe" style="background:' + color + '"></div>'
-                + teamLogoHtml(teams[0], 20) + '<span style="margin-left:5px;padding:2px 10px 2px 5px;background:linear-gradient(90deg,' + teamColorAt(teams[0], '30') + ',transparent);border-radius:3px">' + teams[0] + '</span><span style="color:var(--muted2);margin:0 6px">@</span>' + teamLogoHtml(teams[1], 20) + '<span style="margin-left:5px;padding:2px 10px 2px 5px;background:linear-gradient(90deg,' + teamColorAt(teams[1] || '', '30') + ',transparent);border-radius:3px">' + (teams[1] || '') + '</span>'
+                + teamLogoHtml(teams[0], 20) + teamNameHtml(teams[0]) + '<span style="color:var(--muted2);margin:0 6px">@</span>' + teamLogoHtml(teams[1], 20) + teamNameHtml(teams[1] || '')
                 + (ti.lbl ? '<span class="gh-badge ' + ti.cls + '">' + ti.lbl + '</span>' : '')
                 + (rsGameIds[r.game] ? (function(){ var u = getRealSportsUrl(rsGameIds[r.game], currentSport, r.league, r.game); return u ? '<a href="' + u + '" target="_blank" onclick="event.stopPropagation();event.preventDefault();window.open(this.href,\'_blank\');return false;" style="margin-left:6px;color:var(--accent);font-size:11px;text-decoration:none;opacity:0.9;flex-shrink:0" title="View on Real Sports">&#8599;</a>' : ''; })() : '')
                 + '<span class="gh-score-badge gh-badge" data-game="' + r.game.replace(/"/g, '&quot;') + '" data-cm="' + (r.cm ? r.cm.getTime() : '') + '" style="display:none"></span>'
