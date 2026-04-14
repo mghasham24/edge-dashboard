@@ -103,37 +103,24 @@ export async function onRequestGet(context) {
   // debug=ucl — probe candidate DK league IDs to find UCL's leagueId
   // Runs without the today filter so tomorrow's UCL games show up now
   if (debugMode === 'ucl') {
-    const UCL_CANDIDATES = [
-      // Around Serie A (40030), La Liga (40031), Ligue 1 (40032)
-      '40025','40026','40027','40028','40029',
-      '40033','40034','40035','40036','40037','40038','40039','40040',
-      // Around EPL (40253)
-      '40250','40251','40254','40255','40256','40257','40258','40260',
-      // Around Bundesliga (40481)
-      '40482','40483','40484','40485','40486','40487','40490',
-      // Around MLS (89345)
-      '89340','89341','89342','89343','89344','89346','89347','89348','89350',
-      // Other likely ranges
-      '40100','40101','40102','40103','40104','40105',
-      '40200','40201','40202','40203','40204','40205',
-      '40300','40301','40302','40303','40304','40305',
-      '40400','40401','40402','40403','40404','40405',
-    ];
+    // Sequential probe — avoids Cloudflare's 50 subrequest parallel limit
+    // ?debug=ucl&start=40300 scans 40 IDs starting from `start`
+    const startId = parseInt(reqUrl.searchParams.get('start') || '40300', 10);
+    const BATCH = 40;
     const results = {};
-    await Promise.all(UCL_CANDIDATES.map(async (id) => {
+    for (let id = startId; id < startId + BATCH; id++) {
+      const sid = String(id);
       try {
-        const r = await fetch(dkLeagueEventsUrl(id), { headers });
-        if (!r.ok) { results[id] = { status: r.status }; return; }
+        const r = await fetch(dkLeagueEventsUrl(sid), { headers });
+        if (!r.ok) { results[sid] = { status: r.status }; continue; }
         const d = await r.json();
-        const evts = (d.events || []).map(ev => ({
-          name: ev.name,
-          date: ev.startEventDate,
-          id: ev.id,
-        }));
-        results[id] = { count: evts.length, events: evts };
-      } catch(e) { results[id] = { error: e.message }; }
-    }));
-    return new Response(JSON.stringify({ candidates: results }), {
+        const evts = (d.events || []).map(ev => ({ name: ev.name, date: ev.startEventDate, id: ev.id }));
+        if (evts.length) results[sid] = { count: evts.length, events: evts };
+        // else omit — only show hits
+      } catch(e) { results[sid] = { error: e.message }; break; }
+      await new Promise(r => setTimeout(r, 50));
+    }
+    return new Response(JSON.stringify({ scanned: `${startId}–${startId+BATCH-1}`, hits: results }), {
       headers: { 'Content-Type': 'application/json' }
     });
   }
