@@ -91,10 +91,13 @@ export async function onRequestGet(context) {
 
     if (!Object.keys(allEvents).length) return fail(502, 'FD MLB list fetch failed');
 
+    const etFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
+    const todayET = etFmt.format(new Date());
     const todayEvents = Object.values(allEvents).filter(e => {
       if (!e.openDate) return false;
       const t = new Date(e.openDate).getTime();
-      return t >= nowMs - 5 * 60 * 60 * 1000 && t <= nowMs + 16 * 60 * 60 * 1000;
+      if (t < nowMs - 5 * 60 * 60 * 1000) return false; // skip games started >5h ago
+      return etFmt.format(new Date(e.openDate)) === todayET;
     });
 
     if (!todayEvents.length) {

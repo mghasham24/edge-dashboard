@@ -74,10 +74,13 @@ export async function onRequestGet(context) {
 
     const events = listData?.attachments?.events || {};
     const nowMs = Date.now();
+    const etFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
+    const todayET = etFmt.format(new Date());
     const todayEvents = Object.values(events).filter(e => {
       if (!e.openDate) return false;
       const t = new Date(e.openDate).getTime();
-      if (t < nowMs - 3 * 60 * 60 * 1000 || t > nowMs + 36 * 60 * 60 * 1000) return false;
+      if (t < nowMs - 3 * 60 * 60 * 1000) return false; // skip games started >3h ago
+      if (etFmt.format(new Date(e.openDate)) !== todayET) return false;
       // Filter out non-NHL hockey (college, etc.) by checking team names
       const teams = parseEventName(e.name);
       if (!teams) return false;
