@@ -2909,6 +2909,170 @@
     // RS sport key → sport ID for URL hash encoding
     var RS_SPORT_KEY_ID = { 'epl': 5, 'ucl': 6, 'mls': 8, 'nba': 1, 'nfl': 2, 'mlb': 4, 'nhl': 7, 'ufc': 10, 'soccer': 14, 'cbb': 3 };
 
+    // ESPN CDN team logo URLs — keyed by DraftKings team name
+    var TEAM_LOGO_URLS = {
+        // NBA
+        'Atlanta Hawks':'https://a.espncdn.com/i/teamlogos/nba/500/atl.png',
+        'Boston Celtics':'https://a.espncdn.com/i/teamlogos/nba/500/bos.png',
+        'Brooklyn Nets':'https://a.espncdn.com/i/teamlogos/nba/500/bkn.png',
+        'Charlotte Hornets':'https://a.espncdn.com/i/teamlogos/nba/500/cha.png',
+        'Chicago Bulls':'https://a.espncdn.com/i/teamlogos/nba/500/chi.png',
+        'Cleveland Cavaliers':'https://a.espncdn.com/i/teamlogos/nba/500/cle.png',
+        'Dallas Mavericks':'https://a.espncdn.com/i/teamlogos/nba/500/dal.png',
+        'Denver Nuggets':'https://a.espncdn.com/i/teamlogos/nba/500/den.png',
+        'Detroit Pistons':'https://a.espncdn.com/i/teamlogos/nba/500/det.png',
+        'Golden State Warriors':'https://a.espncdn.com/i/teamlogos/nba/500/gs.png',
+        'Houston Rockets':'https://a.espncdn.com/i/teamlogos/nba/500/hou.png',
+        'Indiana Pacers':'https://a.espncdn.com/i/teamlogos/nba/500/ind.png',
+        'LA Clippers':'https://a.espncdn.com/i/teamlogos/nba/500/lac.png',
+        'Los Angeles Clippers':'https://a.espncdn.com/i/teamlogos/nba/500/lac.png',
+        'Los Angeles Lakers':'https://a.espncdn.com/i/teamlogos/nba/500/lal.png',
+        'LA Lakers':'https://a.espncdn.com/i/teamlogos/nba/500/lal.png',
+        'Memphis Grizzlies':'https://a.espncdn.com/i/teamlogos/nba/500/mem.png',
+        'Miami Heat':'https://a.espncdn.com/i/teamlogos/nba/500/mia.png',
+        'Milwaukee Bucks':'https://a.espncdn.com/i/teamlogos/nba/500/mil.png',
+        'Minnesota Timberwolves':'https://a.espncdn.com/i/teamlogos/nba/500/min.png',
+        'New Orleans Pelicans':'https://a.espncdn.com/i/teamlogos/nba/500/no.png',
+        'New York Knicks':'https://a.espncdn.com/i/teamlogos/nba/500/ny.png',
+        'Oklahoma City Thunder':'https://a.espncdn.com/i/teamlogos/nba/500/okc.png',
+        'Orlando Magic':'https://a.espncdn.com/i/teamlogos/nba/500/orl.png',
+        'Philadelphia 76ers':'https://a.espncdn.com/i/teamlogos/nba/500/phi.png',
+        'Phoenix Suns':'https://a.espncdn.com/i/teamlogos/nba/500/phx.png',
+        'Portland Trail Blazers':'https://a.espncdn.com/i/teamlogos/nba/500/por.png',
+        'Sacramento Kings':'https://a.espncdn.com/i/teamlogos/nba/500/sac.png',
+        'San Antonio Spurs':'https://a.espncdn.com/i/teamlogos/nba/500/sa.png',
+        'Toronto Raptors':'https://a.espncdn.com/i/teamlogos/nba/500/tor.png',
+        'Utah Jazz':'https://a.espncdn.com/i/teamlogos/nba/500/utah.png',
+        'Washington Wizards':'https://a.espncdn.com/i/teamlogos/nba/500/wsh.png',
+        // NHL (DK uses abbreviated city names e.g. "BOS Bruins")
+        'Anaheim Ducks':'https://a.espncdn.com/i/teamlogos/nhl/500/ana.png','ANA Ducks':'https://a.espncdn.com/i/teamlogos/nhl/500/ana.png',
+        'Boston Bruins':'https://a.espncdn.com/i/teamlogos/nhl/500/bos.png','BOS Bruins':'https://a.espncdn.com/i/teamlogos/nhl/500/bos.png',
+        'Buffalo Sabres':'https://a.espncdn.com/i/teamlogos/nhl/500/buf.png','BUF Sabres':'https://a.espncdn.com/i/teamlogos/nhl/500/buf.png',
+        'Calgary Flames':'https://a.espncdn.com/i/teamlogos/nhl/500/cgy.png','CGY Flames':'https://a.espncdn.com/i/teamlogos/nhl/500/cgy.png',
+        'Carolina Hurricanes':'https://a.espncdn.com/i/teamlogos/nhl/500/car.png','CAR Hurricanes':'https://a.espncdn.com/i/teamlogos/nhl/500/car.png',
+        'Chicago Blackhawks':'https://a.espncdn.com/i/teamlogos/nhl/500/chi.png','CHI Blackhawks':'https://a.espncdn.com/i/teamlogos/nhl/500/chi.png',
+        'Colorado Avalanche':'https://a.espncdn.com/i/teamlogos/nhl/500/col.png','COL Avalanche':'https://a.espncdn.com/i/teamlogos/nhl/500/col.png',
+        'Columbus Blue Jackets':'https://a.espncdn.com/i/teamlogos/nhl/500/cbj.png','CBJ Blue Jackets':'https://a.espncdn.com/i/teamlogos/nhl/500/cbj.png',
+        'Dallas Stars':'https://a.espncdn.com/i/teamlogos/nhl/500/dal.png','DAL Stars':'https://a.espncdn.com/i/teamlogos/nhl/500/dal.png',
+        'Detroit Red Wings':'https://a.espncdn.com/i/teamlogos/nhl/500/det.png','DET Red Wings':'https://a.espncdn.com/i/teamlogos/nhl/500/det.png',
+        'Edmonton Oilers':'https://a.espncdn.com/i/teamlogos/nhl/500/edm.png','EDM Oilers':'https://a.espncdn.com/i/teamlogos/nhl/500/edm.png',
+        'Florida Panthers':'https://a.espncdn.com/i/teamlogos/nhl/500/fla.png','FLA Panthers':'https://a.espncdn.com/i/teamlogos/nhl/500/fla.png',
+        'Los Angeles Kings':'https://a.espncdn.com/i/teamlogos/nhl/500/la.png','LA Kings':'https://a.espncdn.com/i/teamlogos/nhl/500/la.png',
+        'Minnesota Wild':'https://a.espncdn.com/i/teamlogos/nhl/500/min.png','MIN Wild':'https://a.espncdn.com/i/teamlogos/nhl/500/min.png',
+        'Montreal Canadiens':'https://a.espncdn.com/i/teamlogos/nhl/500/mtl.png','MTL Canadiens':'https://a.espncdn.com/i/teamlogos/nhl/500/mtl.png',
+        'Nashville Predators':'https://a.espncdn.com/i/teamlogos/nhl/500/nsh.png','NSH Predators':'https://a.espncdn.com/i/teamlogos/nhl/500/nsh.png',
+        'New Jersey Devils':'https://a.espncdn.com/i/teamlogos/nhl/500/nj.png','NJ Devils':'https://a.espncdn.com/i/teamlogos/nhl/500/nj.png',
+        'New York Islanders':'https://a.espncdn.com/i/teamlogos/nhl/500/nyi.png','NY Islanders':'https://a.espncdn.com/i/teamlogos/nhl/500/nyi.png',
+        'New York Rangers':'https://a.espncdn.com/i/teamlogos/nhl/500/nyr.png','NY Rangers':'https://a.espncdn.com/i/teamlogos/nhl/500/nyr.png',
+        'Ottawa Senators':'https://a.espncdn.com/i/teamlogos/nhl/500/ott.png','OTT Senators':'https://a.espncdn.com/i/teamlogos/nhl/500/ott.png',
+        'Philadelphia Flyers':'https://a.espncdn.com/i/teamlogos/nhl/500/phi.png','PHI Flyers':'https://a.espncdn.com/i/teamlogos/nhl/500/phi.png',
+        'Pittsburgh Penguins':'https://a.espncdn.com/i/teamlogos/nhl/500/pit.png','PIT Penguins':'https://a.espncdn.com/i/teamlogos/nhl/500/pit.png',
+        'San Jose Sharks':'https://a.espncdn.com/i/teamlogos/nhl/500/sj.png','SJ Sharks':'https://a.espncdn.com/i/teamlogos/nhl/500/sj.png',
+        'Seattle Kraken':'https://a.espncdn.com/i/teamlogos/nhl/500/sea.png','SEA Kraken':'https://a.espncdn.com/i/teamlogos/nhl/500/sea.png',
+        'St. Louis Blues':'https://a.espncdn.com/i/teamlogos/nhl/500/stl.png','STL Blues':'https://a.espncdn.com/i/teamlogos/nhl/500/stl.png',
+        'Tampa Bay Lightning':'https://a.espncdn.com/i/teamlogos/nhl/500/tb.png','TB Lightning':'https://a.espncdn.com/i/teamlogos/nhl/500/tb.png',
+        'Toronto Maple Leafs':'https://a.espncdn.com/i/teamlogos/nhl/500/tor.png','TOR Maple Leafs':'https://a.espncdn.com/i/teamlogos/nhl/500/tor.png',
+        'Utah Mammoth':'https://a.espncdn.com/i/teamlogos/nhl/500/utah.png','UTA Mammoth':'https://a.espncdn.com/i/teamlogos/nhl/500/utah.png',
+        'Vancouver Canucks':'https://a.espncdn.com/i/teamlogos/nhl/500/van.png','VAN Canucks':'https://a.espncdn.com/i/teamlogos/nhl/500/van.png',
+        'Vegas Golden Knights':'https://a.espncdn.com/i/teamlogos/nhl/500/vgk.png','VGK Golden Knights':'https://a.espncdn.com/i/teamlogos/nhl/500/vgk.png',
+        'Washington Capitals':'https://a.espncdn.com/i/teamlogos/nhl/500/wsh.png','WAS Capitals':'https://a.espncdn.com/i/teamlogos/nhl/500/wsh.png',
+        'Winnipeg Jets':'https://a.espncdn.com/i/teamlogos/nhl/500/wpg.png','WPG Jets':'https://a.espncdn.com/i/teamlogos/nhl/500/wpg.png',
+        // MLB
+        'Arizona Diamondbacks':'https://a.espncdn.com/i/teamlogos/mlb/500/ari.png',
+        'Atlanta Braves':'https://a.espncdn.com/i/teamlogos/mlb/500/atl.png',
+        'Baltimore Orioles':'https://a.espncdn.com/i/teamlogos/mlb/500/bal.png',
+        'Boston Red Sox':'https://a.espncdn.com/i/teamlogos/mlb/500/bos.png',
+        'Chicago Cubs':'https://a.espncdn.com/i/teamlogos/mlb/500/chc.png',
+        'Chicago White Sox':'https://a.espncdn.com/i/teamlogos/mlb/500/cws.png',
+        'Cincinnati Reds':'https://a.espncdn.com/i/teamlogos/mlb/500/cin.png',
+        'Cleveland Guardians':'https://a.espncdn.com/i/teamlogos/mlb/500/cle.png',
+        'Colorado Rockies':'https://a.espncdn.com/i/teamlogos/mlb/500/col.png',
+        'Detroit Tigers':'https://a.espncdn.com/i/teamlogos/mlb/500/det.png',
+        'Houston Astros':'https://a.espncdn.com/i/teamlogos/mlb/500/hou.png',
+        'Kansas City Royals':'https://a.espncdn.com/i/teamlogos/mlb/500/kc.png',
+        'Los Angeles Angels':'https://a.espncdn.com/i/teamlogos/mlb/500/laa.png',
+        'Los Angeles Dodgers':'https://a.espncdn.com/i/teamlogos/mlb/500/lad.png',
+        'Miami Marlins':'https://a.espncdn.com/i/teamlogos/mlb/500/mia.png',
+        'Milwaukee Brewers':'https://a.espncdn.com/i/teamlogos/mlb/500/mil.png',
+        'Minnesota Twins':'https://a.espncdn.com/i/teamlogos/mlb/500/min.png',
+        'New York Mets':'https://a.espncdn.com/i/teamlogos/mlb/500/nym.png',
+        'New York Yankees':'https://a.espncdn.com/i/teamlogos/mlb/500/nyy.png',
+        'Oakland Athletics':'https://a.espncdn.com/i/teamlogos/mlb/500/oak.png','Athletics':'https://a.espncdn.com/i/teamlogos/mlb/500/oak.png',
+        'Philadelphia Phillies':'https://a.espncdn.com/i/teamlogos/mlb/500/phi.png',
+        'Pittsburgh Pirates':'https://a.espncdn.com/i/teamlogos/mlb/500/pit.png',
+        'San Diego Padres':'https://a.espncdn.com/i/teamlogos/mlb/500/sd.png',
+        'San Francisco Giants':'https://a.espncdn.com/i/teamlogos/mlb/500/sf.png',
+        'Seattle Mariners':'https://a.espncdn.com/i/teamlogos/mlb/500/sea.png',
+        'St. Louis Cardinals':'https://a.espncdn.com/i/teamlogos/mlb/500/stl.png',
+        'Tampa Bay Rays':'https://a.espncdn.com/i/teamlogos/mlb/500/tb.png',
+        'Texas Rangers':'https://a.espncdn.com/i/teamlogos/mlb/500/tex.png',
+        'Toronto Blue Jays':'https://a.espncdn.com/i/teamlogos/mlb/500/tor.png',
+        'Washington Nationals':'https://a.espncdn.com/i/teamlogos/mlb/500/was.png',
+        // Soccer (ESPN numeric IDs)
+        'Arsenal':'https://a.espncdn.com/i/teamlogos/soccer/500/359.png',
+        'Chelsea':'https://a.espncdn.com/i/teamlogos/soccer/500/363.png',
+        'Liverpool':'https://a.espncdn.com/i/teamlogos/soccer/500/364.png',
+        'Manchester City':'https://a.espncdn.com/i/teamlogos/soccer/500/382.png','Man City':'https://a.espncdn.com/i/teamlogos/soccer/500/382.png',
+        'Manchester United':'https://a.espncdn.com/i/teamlogos/soccer/500/360.png','Man United':'https://a.espncdn.com/i/teamlogos/soccer/500/360.png','Man Utd':'https://a.espncdn.com/i/teamlogos/soccer/500/360.png',
+        'Tottenham':'https://a.espncdn.com/i/teamlogos/soccer/500/367.png','Tottenham Hotspur':'https://a.espncdn.com/i/teamlogos/soccer/500/367.png',
+        'Newcastle':'https://a.espncdn.com/i/teamlogos/soccer/500/361.png','Newcastle United':'https://a.espncdn.com/i/teamlogos/soccer/500/361.png',
+        'Aston Villa':'https://a.espncdn.com/i/teamlogos/soccer/500/1213.png',
+        'West Ham':'https://a.espncdn.com/i/teamlogos/soccer/500/371.png','West Ham United':'https://a.espncdn.com/i/teamlogos/soccer/500/371.png',
+        'Brighton':'https://a.espncdn.com/i/teamlogos/soccer/500/331.png',
+        'Fulham':'https://a.espncdn.com/i/teamlogos/soccer/500/370.png',
+        'Wolves':'https://a.espncdn.com/i/teamlogos/soccer/500/380.png','Wolverhampton':'https://a.espncdn.com/i/teamlogos/soccer/500/380.png',
+        'Everton':'https://a.espncdn.com/i/teamlogos/soccer/500/368.png',
+        'Crystal Palace':'https://a.espncdn.com/i/teamlogos/soccer/500/384.png',
+        'Bournemouth':'https://a.espncdn.com/i/teamlogos/soccer/500/349.png',
+        'Brentford':'https://a.espncdn.com/i/teamlogos/soccer/500/337.png',
+        'Nottm Forest':'https://a.espncdn.com/i/teamlogos/soccer/500/393.png','Nottingham Forest':'https://a.espncdn.com/i/teamlogos/soccer/500/393.png',
+        'Leicester':'https://a.espncdn.com/i/teamlogos/soccer/500/375.png','Leicester City':'https://a.espncdn.com/i/teamlogos/soccer/500/375.png',
+        'Barcelona':'https://a.espncdn.com/i/teamlogos/soccer/500/83.png',
+        'Real Madrid':'https://a.espncdn.com/i/teamlogos/soccer/500/86.png',
+        'Atletico Madrid':'https://a.espncdn.com/i/teamlogos/soccer/500/1068.png',
+        'Sevilla':'https://a.espncdn.com/i/teamlogos/soccer/500/558.png',
+        'Villarreal':'https://a.espncdn.com/i/teamlogos/soccer/500/102.png',
+        'Athletic Club':'https://a.espncdn.com/i/teamlogos/soccer/500/77.png','Athletic Bilbao':'https://a.espncdn.com/i/teamlogos/soccer/500/77.png',
+        'Real Sociedad':'https://a.espncdn.com/i/teamlogos/soccer/500/543.png',
+        'Celta Vigo':'https://a.espncdn.com/i/teamlogos/soccer/500/558.png',
+        'Juventus':'https://a.espncdn.com/i/teamlogos/soccer/500/111.png',
+        'Inter':'https://a.espncdn.com/i/teamlogos/soccer/500/110.png','Inter Milan':'https://a.espncdn.com/i/teamlogos/soccer/500/110.png',
+        'AC Milan':'https://a.espncdn.com/i/teamlogos/soccer/500/103.png','Milan':'https://a.espncdn.com/i/teamlogos/soccer/500/103.png',
+        'Roma':'https://a.espncdn.com/i/teamlogos/soccer/500/104.png','AS Roma':'https://a.espncdn.com/i/teamlogos/soccer/500/104.png',
+        'Napoli':'https://a.espncdn.com/i/teamlogos/soccer/500/113.png',
+        'Lazio':'https://a.espncdn.com/i/teamlogos/soccer/500/112.png',
+        'Fiorentina':'https://a.espncdn.com/i/teamlogos/soccer/500/107.png',
+        'Atalanta':'https://a.espncdn.com/i/teamlogos/soccer/500/106.png',
+        'Bayern Munich':'https://a.espncdn.com/i/teamlogos/soccer/500/132.png','FC Bayern Munich':'https://a.espncdn.com/i/teamlogos/soccer/500/132.png','Bayern':'https://a.espncdn.com/i/teamlogos/soccer/500/132.png',
+        'Borussia Dortmund':'https://a.espncdn.com/i/teamlogos/soccer/500/124.png','Dortmund':'https://a.espncdn.com/i/teamlogos/soccer/500/124.png','BVB Dortmund':'https://a.espncdn.com/i/teamlogos/soccer/500/124.png',
+        'Bayer Leverkusen':'https://a.espncdn.com/i/teamlogos/soccer/500/131.png','Leverkusen':'https://a.espncdn.com/i/teamlogos/soccer/500/131.png',
+        'Paris St-Germain':'https://a.espncdn.com/i/teamlogos/soccer/500/1.png','PSG':'https://a.espncdn.com/i/teamlogos/soccer/500/1.png','Paris Saint-Germain':'https://a.espncdn.com/i/teamlogos/soccer/500/1.png',
+        // UCL additional
+        'Real Oviedo':'https://a.espncdn.com/i/teamlogos/soccer/500/3767.png',
+        'Benfica':'https://a.espncdn.com/i/teamlogos/soccer/500/209.png',
+        'Porto':'https://a.espncdn.com/i/teamlogos/soccer/500/211.png',
+        'Celtic':'https://a.espncdn.com/i/teamlogos/soccer/500/249.png',
+        'Ajax':'https://a.espncdn.com/i/teamlogos/soccer/500/169.png',
+        'Club Brugge':'https://a.espncdn.com/i/teamlogos/soccer/500/245.png',
+        'PSV Eindhoven':'https://a.espncdn.com/i/teamlogos/soccer/500/285.png','PSV':'https://a.espncdn.com/i/teamlogos/soccer/500/285.png',
+    };
+
+    function teamLogoHtml(name, size) {
+        var url = name && TEAM_LOGO_URLS[name];
+        var s = size || 18;
+        // Consistent color from team name for letter fallback
+        var hash = 0;
+        for (var ci = 0; ci < (name||'').length; ci++) hash = (name.charCodeAt(ci) + ((hash << 5) - hash)) | 0;
+        var hue = Math.abs(hash) % 360;
+        var letter = (name || '?').charAt(0).toUpperCase();
+        var fb = 'display:inline-flex;align-items:center;justify-content:center;width:' + s + 'px;height:' + s + 'px;border-radius:50%;background:hsl(' + hue + ',55%,32%);font-size:' + Math.round(s * 0.52) + 'px;font-weight:700;color:#fff;font-family:var(--sans);flex-shrink:0;vertical-align:middle';
+        var im = 'width:' + s + 'px;height:' + s + 'px;border-radius:50%;object-fit:contain;background:#fff;flex-shrink:0;vertical-align:middle;padding:1px';
+        if (url) {
+            return '<img src="' + url + '" style="' + im + '" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'inline-flex\'" alt=""><span style="' + fb + ';display:none">' + letter + '</span>';
+        }
+        return '<span style="' + fb + '">' + letter + '</span>';
+    }
+
     function getRealSportsUrl(gid, sport, league, game) {
         if (!gid || typeof Hashids === 'undefined') return null;
         if (!_hashids) _hashids = new Hashids('routing', 11);
@@ -3657,7 +3821,7 @@
 
             var title = document.createElement('span');
             title.className = 'gc-title';
-            title.innerHTML = (teams[0] || '') + '<span style="color:var(--muted2);font-weight:400;margin:0 5px">@</span>' + (teams[1] || '');
+            title.innerHTML = teamLogoHtml(teams[0], 20) + '<span style="margin-left:5px">' + (teams[0] || '') + '</span><span style="color:var(--muted2);font-weight:400;margin:0 8px">@</span>' + teamLogoHtml(teams[1], 20) + '<span style="margin-left:5px">' + (teams[1] || '') + '</span>';
             hdr.appendChild(title);
             var rsUrl = getRealSportsUrl(rsGameIds[game], currentSport, gameRows[0] && gameRows[0].league, game);
             if (rsUrl) {
@@ -7481,7 +7645,7 @@
                 html += '<tr class="ghrow" data-gk="' + r.game.replace(/"/g, '&quot;') + '" onclick="toggleGame(\'' + gk + '\')">'
                 + '<td colspan="13"><div class="gh-inner">'
                 + '<div class="gh-stripe" style="background:' + color + '"></div>'
-                + '<span>' + teams[0] + '</span><span style="color:var(--muted2)">@</span><span>' + (teams[1] || '') + '</span>'
+                + teamLogoHtml(teams[0], 20) + '<span style="margin-left:5px">' + teams[0] + '</span><span style="color:var(--muted2);margin:0 6px">@</span>' + teamLogoHtml(teams[1], 20) + '<span style="margin-left:5px">' + (teams[1] || '') + '</span>'
                 + (ti.lbl ? '<span class="gh-badge ' + ti.cls + '">' + ti.lbl + '</span>' : '')
                 + (rsGameIds[r.game] ? (function(){ var u = getRealSportsUrl(rsGameIds[r.game], currentSport, r.league, r.game); return u ? '<a href="' + u + '" target="_blank" onclick="event.stopPropagation();event.preventDefault();window.open(this.href,\'_blank\');return false;" style="margin-left:6px;color:var(--accent);font-size:11px;text-decoration:none;opacity:0.9;flex-shrink:0" title="View on Real Sports">&#8599;</a>' : ''; })() : '')
                 + '<span class="gh-score-badge gh-badge" data-game="' + r.game.replace(/"/g, '&quot;') + '" data-cm="' + (r.cm ? r.cm.getTime() : '') + '" style="display:none"></span>'
@@ -7569,7 +7733,7 @@
         var evGated = isPro() || r.mkt === 'ML' || r.mkt === 'RFI';
         var gk = r.game.replace(/"/g, '&quot;');
         return '<tr class="' + (r.edge != null && r.edge > 0 ? 'has-edge' : '') + (isC ? ' collapsed-row' : '') + '" data-gk="' + gk + '" data-row-id="' + r.id + '" style="border-left:3px solid ' + color + ';' + edgeBg(r.edge) + (betTaken[r.id] ? 'opacity:0.4' : '') + '">'
-        + '<td class="game-td" data-label="Game"><div style="font-weight:600">' + r.side + '</div><div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px">' + r.game + '</div></td>'
+        + '<td class="game-td" data-label="Game"><div style="font-weight:600;display:flex;align-items:center;gap:5px">' + teamLogoHtml(r.side, 16) + '<span>' + r.side + '</span></div><div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px">' + r.game + '</div></td>'
         + '<td data-label="Market"><span class="mkt-badge">' + r.mkt + '</span></td>'
         + '<td data-label="Side" style="color:var(--muted);font-size:12px">' + r.side + '</td>'
         + fdLineCell
