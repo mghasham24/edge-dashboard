@@ -3205,6 +3205,29 @@
         return '<span style="' + fb + '">' + letter + '</span>';
     }
 
+    var _sportLogoMap = {
+        basketball_nba:        'https://a.espncdn.com/i/teamlogos/leagues/500/nba.png',
+        basketball_ncaab:      'https://a.espncdn.com/i/teamlogos/leagues/500/ncaa.png',
+        icehockey_nhl:         'https://a.espncdn.com/i/teamlogos/leagues/500/nhl.png',
+        baseball_mlb:          'https://a.espncdn.com/i/teamlogos/leagues/500/mlb.png',
+        mma_mixed_martial_arts:'https://a.espncdn.com/i/teamlogos/leagues/500/ufc.png'
+    };
+    var _fcLeagueLogoMap = {
+        'UCL':        'https://a.espncdn.com/i/leaguelogos/soccer/500/2.png',
+        'EPL':        'https://a.espncdn.com/i/leaguelogos/soccer/500/23.png',
+        'La Liga':    'https://a.espncdn.com/i/leaguelogos/soccer/500/15.png',
+        'Serie A':    'https://a.espncdn.com/i/leaguelogos/soccer/500/12.png',
+        'Bundesliga': 'https://a.espncdn.com/i/leaguelogos/soccer/500/10.png',
+        'Ligue 1':    'https://a.espncdn.com/i/leaguelogos/soccer/500/9.png',
+        'MLS':        'https://a.espncdn.com/i/leaguelogos/soccer/500/19.png'
+    };
+    function sportLogoHtml(sport, league, size) {
+        var s = size || 20;
+        var url = sport === 'soccer_fc' ? (_fcLeagueLogoMap[league] || _fcLeagueLogoMap['UCL']) : _sportLogoMap[sport];
+        if (!url) return '';
+        return '<img src="' + url + '" style="width:' + s + 'px;height:' + s + 'px;object-fit:contain;flex-shrink:0;vertical-align:middle" onerror="this.style.display=\'none\'">';
+    }
+
     function getRealSportsUrl(gid, sport, league, game) {
         if (!gid || typeof Hashids === 'undefined') return null;
         if (!_hashids) _hashids = new Hashids('routing', 11);
@@ -3935,18 +3958,10 @@
                 toggleMobileCard(this.dataset.game);
             });
 
-            var stripe = document.createElement('div');
-            stripe.className = 'gc-stripe';
-            stripe.style.background = color;
-            hdr.appendChild(stripe);
-
-            if (leagueLbl) {
-                var badge = document.createElement('span');
-                badge.className = 'gc-league';
-                badge.style.background = leagueClr;
-                badge.textContent = leagueLbl;
-                hdr.appendChild(badge);
-            }
+            var iconEl = document.createElement('span');
+            iconEl.style.cssText = 'flex-shrink:0;display:flex;align-items:center';
+            iconEl.innerHTML = sportLogoHtml(currentSport, gameRows[0] && gameRows[0].league, 20);
+            hdr.appendChild(iconEl);
 
             var title = document.createElement('span');
             title.className = 'gc-title';
@@ -7775,7 +7790,7 @@
                 var gk = r.game.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
                 html += '<tr class="ghrow" data-gk="' + r.game.replace(/"/g, '&quot;') + '" onclick="toggleGame(\'' + gk + '\')">'
                 + '<td colspan="13"><div class="gh-inner">'
-                + '<div class="gh-stripe" style="background:' + color + '"></div>'
+                + sportLogoHtml(currentSport, r.league, 20)
                 + '<div style="display:grid;grid-template-columns:auto minmax(0,1fr) auto auto minmax(0,1fr);align-items:center;gap:4px;flex:1;min-width:0">' + teamLogoHtml(teams[0], 20) + teamNameHtml(teams[0]) + '<span style="color:var(--muted2);text-align:center;padding:0 2px">@</span>' + teamLogoHtml(teams[1], 20) + teamNameHtml(teams[1] || '') + '</div>'
                 + (ti.lbl ? '<span class="gh-badge ' + ti.cls + '" style="flex-shrink:0;margin-left:6px">' + ti.lbl + '</span>' : '')
                 + (rsGameIds[r.game] ? (function(){ var u = getRealSportsUrl(rsGameIds[r.game], currentSport, r.league, r.game); return u ? '<a href="' + u + '" target="_blank" onclick="event.stopPropagation();event.preventDefault();window.open(this.href,\'_blank\');return false;" style="margin-left:6px;color:var(--accent);font-size:11px;text-decoration:none;opacity:0.9;flex-shrink:0" title="View on Real Sports">&#8599;</a>' : ''; })() : '')
@@ -7870,10 +7885,12 @@
         var _rawayT = (_rgp[0] || '').trim(), _rhomeT = (_rgp[1] || '').trim();
         var rowColor = r.mkt === 'Total'
             ? teamColor(r.ps === 'A' ? _rawayT : _rhomeT)
+            : r.mkt === 'RFI' ? 'transparent'
             : teamColor(r.side);
-        var rowGrad = r.mkt !== 'Total' ? teamColorAt(r.side, '2e') : '';
+        var rowGrad = (r.mkt !== 'Total' && r.mkt !== 'RFI') ? teamColorAt(r.side, '2e') : '';
+        var rfiColor = r.mkt === 'RFI' ? (r.ps === 'A' ? '#3ddc84' : '#ff5f5f') : '';
         return '<tr class="' + (r.edge != null && r.edge > 0 ? 'has-edge' : '') + (isC ? ' collapsed-row' : '') + '" data-gk="' + gk + '" data-row-id="' + r.id + '" style="border-left:3px solid ' + rowColor + ';' + edgeBg(r.edge) + (betTaken[r.id] ? 'opacity:0.4' : '') + '">'
-        + '<td class="game-td" data-label="Game"><div style="font-weight:600;display:flex;align-items:center;gap:5px">' + (r.mkt !== 'Total' ? teamLogoHtml(r.side, 16) : '') + '<span' + (rowGrad ? ' style="padding:1px 8px 1px 4px;background:linear-gradient(90deg,' + rowGrad + ',transparent);border-radius:3px"' : '') + '>' + r.side + '</span></div><div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px">' + r.game + '</div></td>'
+        + '<td class="game-td" data-label="Game"><div style="font-weight:600;display:flex;align-items:center;gap:5px">' + (r.mkt !== 'Total' && r.mkt !== 'RFI' ? teamLogoHtml(r.side, 16) : '') + '<span' + (rowGrad ? ' style="padding:1px 8px 1px 4px;background:linear-gradient(90deg,' + rowGrad + ',transparent);border-radius:3px"' : '') + (rfiColor ? ' style="color:' + rfiColor + '"' : '') + '>' + r.side + '</span></div><div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px">' + r.game + '</div></td>'
         + '<td data-label="Market"><span class="mkt-badge">' + r.mkt + '</span></td>'
         + '<td data-label="Side" style="color:var(--muted);font-size:12px">' + r.side + '</td>'
         + fdLineCell
