@@ -3057,10 +3057,124 @@
         'PSV Eindhoven':'https://a.espncdn.com/i/teamlogos/soccer/500/285.png','PSV':'https://a.espncdn.com/i/teamlogos/soccer/500/285.png',
     };
 
+    // Actual brand hex colors — keyed by DraftKings team name
+    var TEAM_COLORS = {
+        // NBA
+        'Atlanta Hawks':'#e03a3e','Boston Celtics':'#007a33','Brooklyn Nets':'#000000',
+        'Charlotte Hornets':'#00788c','Chicago Bulls':'#ce1141','Cleveland Cavaliers':'#860038',
+        'Dallas Mavericks':'#0053bc','Denver Nuggets':'#4fa8d5','Detroit Pistons':'#c8102e',
+        'Golden State Warriors':'#1d428a','Houston Rockets':'#ce1141','Indiana Pacers':'#fdbb30',
+        'LA Clippers':'#c8102e','Los Angeles Clippers':'#c8102e','Los Angeles Lakers':'#552583',
+        'Memphis Grizzlies':'#5d76a9','Miami Heat':'#98002e','Milwaukee Bucks':'#00471b',
+        'Minnesota Timberwolves':'#0c2340','New Orleans Pelicans':'#b4975a',
+        'New York Knicks':'#f58426','Oklahoma City Thunder':'#007ac1','Orlando Magic':'#0077c0',
+        'Philadelphia 76ers':'#006bb6','Phoenix Suns':'#e56020','Portland Trail Blazers':'#e03a3e',
+        'Sacramento Kings':'#5a2d81','San Antonio Spurs':'#8a8d8f','Toronto Raptors':'#ce1141',
+        'Utah Jazz':'#002b5c','Washington Wizards':'#002b5c',
+        // NHL
+        'Anaheim Ducks':'#f47a38','Arizona Coyotes':'#8c2633','Boston Bruins':'#fcb514',
+        'Buffalo Sabres':'#003087','Calgary Flames':'#c8102e','Carolina Hurricanes':'#cc0000',
+        'Chicago Blackhawks':'#cf0a2c','Colorado Avalanche':'#6f263d','Columbus Blue Jackets':'#002654',
+        'Dallas Stars':'#006847','Detroit Red Wings':'#ce1126','Edmonton Oilers':'#ff4c00',
+        'Florida Panthers':'#c8102e','Los Angeles Kings':'#111111','Minnesota Wild':'#154734',
+        'Montreal Canadiens':'#af1e2d','Nashville Predators':'#ffb81c','New Jersey Devils':'#ce1126',
+        'New York Islanders':'#00539b','New York Rangers':'#0038a8','Ottawa Senators':'#c52032',
+        'Philadelphia Flyers':'#f74902','Pittsburgh Penguins':'#fcb514','San Jose Sharks':'#006d75',
+        'Seattle Kraken':'#355464','St. Louis Blues':'#002f87','Tampa Bay Lightning':'#002868',
+        'Toronto Maple Leafs':'#00205b','Vancouver Canucks':'#00843d','Vegas Golden Knights':'#b4975a',
+        'Washington Capitals':'#041e42','Winnipeg Jets':'#041e42',
+        // MLB
+        'Arizona Diamondbacks':'#a71930','Atlanta Braves':'#ce1141','Baltimore Orioles':'#df4601',
+        'Boston Red Sox':'#bd3039','Chicago Cubs':'#0e3386','Chicago White Sox':'#27251f',
+        'Cincinnati Reds':'#c6011f','Cleveland Guardians':'#e31937','Colorado Rockies':'#33006f',
+        'Detroit Tigers':'#0c2340','Houston Astros':'#002d62','Kansas City Royals':'#004687',
+        'Los Angeles Angels':'#ba0021','Los Angeles Dodgers':'#005a9c','Miami Marlins':'#00a3e0',
+        'Milwaukee Brewers':'#ffc52f','Minnesota Twins':'#002b5c','New York Mets':'#002d72',
+        'New York Yankees':'#132448','Athletics':'#003831','Oakland Athletics':'#003831',
+        'Philadelphia Phillies':'#e81828','Pittsburgh Pirates':'#27251f','San Diego Padres':'#2f241d',
+        'San Francisco Giants':'#fd5a1e','Seattle Mariners':'#0c2c56','St. Louis Cardinals':'#c41e3a',
+        'Tampa Bay Rays':'#092c5c','Texas Rangers':'#003278','Toronto Blue Jays':'#134a8e',
+        'Washington Nationals':'#ab0003',
+        // EPL
+        'Arsenal':'#ef0107','Chelsea':'#034694','Liverpool':'#c8102e','Manchester City':'#6cabdd',
+        'Manchester United':'#da291c','Man City':'#6cabdd','Man United':'#da291c',
+        'Tottenham':'#132257','Tottenham Hotspur':'#132257',
+        'Newcastle':'#241f20','Newcastle United':'#241f20',
+        'Aston Villa':'#670e36','West Ham':'#7a263a','West Ham United':'#7a263a',
+        'Brighton':'#0057b8','Everton':'#003399','Leicester':'#003090','Leicester City':'#003090',
+        'Wolves':'#fdb913','Wolverhampton':'#fdb913',
+        'Crystal Palace':'#1b458f','Brentford':'#e30613','Nottm Forest':'#dd0000',
+        'Nottingham Forest':'#dd0000','Fulham':'#cc0000','Bournemouth':'#da291c',
+        'Ipswich':'#0044a9','Ipswich Town':'#0044a9','Southampton':'#d71920',
+        // La Liga
+        'Barcelona':'#a50044','Real Madrid':'#00529f','Atletico Madrid':'#c00b2c',
+        'Atlético Madrid':'#c00b2c','Athletic Club':'#ee2523','Athletic Bilbao':'#ee2523',
+        'Sevilla':'#d4021d','Valencia':'#ed1c24','Villarreal':'#ffcc00',
+        'Real Betis':'#00954c','Real Sociedad':'#0067b1','Osasuna':'#be0000',
+        'Celta Vigo':'#5cbfeb','Getafe':'#005998','Girona':'#9b1c31',
+        'Las Palmas':'#ffcb00','Leganes':'#003594','Leganés':'#003594',
+        'Mallorca':'#e0001b','Rayo Vallecano':'#cc0000','Valladolid':'#8c3c98',
+        'Espanyol':'#0057a8','Deportivo Alavés':'#005eb8','Alaves':'#005eb8',
+        // Serie A
+        'AC Milan':'#fb090b','Juventus':'#000000','Inter Milan':'#0068a8','Inter':'#0068a8',
+        'Napoli':'#0067b1','Roma':'#8e1f2f','Lazio':'#87d8f7','Atalanta':'#1c3e81',
+        'Fiorentina':'#6a1472','Torino':'#87200f','Bologna':'#ed0000',
+        'Empoli':'#0082ca','Hellas Verona':'#004b98','Cagliari':'#b00000','Genoa':'#d40032',
+        'Lecce':'#fac81e','Monza':'#ef3124','Parma':'#007bc2','Venezia':'#002856',
+        'Como':'#003399','Udinese':'#000000',
+        // Bundesliga
+        'Bayern Munich':'#dc052d','FC Bayern Munich':'#dc052d','Bayern':'#dc052d',
+        'Borussia Dortmund':'#fde100','Dortmund':'#fde100','BVB Dortmund':'#fde100',
+        'Bayer Leverkusen':'#e32221','Leverkusen':'#e32221',
+        'RB Leipzig':'#dd0741','Leipzig':'#dd0741',
+        'Union Berlin':'#e2261c','Freiburg':'#e30613','Hoffenheim':'#1961a5',
+        'Mainz':'#c3152a','Augsburg':'#bb1612','Wolfsburg':'#009843',
+        'Stuttgart':'#e32219','Frankfurt':'#e1000f','Eintracht Frankfurt':'#e1000f',
+        'Werder Bremen':'#1d9053','Heidenheim':'#d73b2d','Bochum':'#0558a1',
+        // Ligue 1
+        'Paris St-Germain':'#004170','PSG':'#004170','Paris Saint-Germain':'#004170',
+        'Marseille':'#009bc4','Olympique Marseille':'#009bc4',
+        'Lyon':'#1d2c6b','Olympique Lyon':'#1d2c6b',
+        'Monaco':'#d4021d','Lille':'#e12219','Rennes':'#8b0304',
+        'Nice':'#000000','Lens':'#e2b029','Strasbourg':'#2561ae',
+        'Montpellier':'#eb5c00','Brest':'#063a6a','Toulouse':'#501e82',
+        // UCL extras
+        'Porto':'#003da5','Ajax':'#d2122e','Benfica':'#c8102e',
+        'Sporting CP':'#00a650','PSV Eindhoven':'#e7241e','PSV':'#e7241e',
+        'Celtic':'#16a34a','Rangers':'#0044a9','Feyenoord':'#b4141c',
+        'Club Brugge':'#1a3667','Brugge':'#1a3667','Real Oviedo':'#003da5',
+        // MLS
+        'LA Galaxy':'#003087','LAFC':'#c39e6d','LA FC':'#c39e6d',
+        'Seattle Sounders':'#5d9732','Portland Timbers':'#004812',
+        'Atlanta United':'#80000a','New York City FC':'#6cace4','NYCFC':'#6cace4',
+        'New York Red Bulls':'#ed1e36','D.C. United':'#231f20','DC United':'#231f20',
+        'Philadelphia Union':'#004c97','Columbus Crew':'#ffd200','Chicago Fire':'#c00b1d',
+        'Toronto FC':'#b81137','CF Montreal':'#003da5','Nashville SC':'#ecbf2f',
+        'Orlando City':'#633492','FC Cincinnati':'#f05123','Inter Miami CF':'#f7b5cd',
+        'Colorado Rapids':'#960a2c','Real Salt Lake':'#b30838','Vancouver Whitecaps':'#00245d',
+        'Minnesota United':'#8b1c32','FC Dallas':'#e81f3e','Sporting KC':'#002b5c',
+        'Sporting Kansas City':'#002b5c','Houston Dynamo':'#f4911e',
+        'San Jose Earthquakes':'#003087','New England Revolution':'#ce0e2d',
+        'Charlotte FC':'#1a85c8','St. Louis City':'#d42929','Austin FC':'#00b140',
+    };
+
     function teamColorHue(name) {
         var hash = 0;
         for (var ci = 0; ci < (name||'').length; ci++) hash = (name.charCodeAt(ci) + ((hash << 5) - hash)) | 0;
         return Math.abs(hash) % 360;
+    }
+
+    // Returns brand color hex or fallback hsl
+    function teamColor(name) {
+        return TEAM_COLORS[name] || ('hsl(' + teamColorHue(name) + ',65%,50%)');
+    }
+
+    // Returns brand color at given hex opacity suffix (e.g. '33' = 20%, '66' = 40%)
+    // Works for both hex TEAM_COLORS and hsl fallback
+    function teamColorAt(name, hexOp) {
+        var c = TEAM_COLORS[name];
+        if (c && c[0] === '#') return c + hexOp;
+        return 'hsla(' + teamColorHue(name) + ',65%,50%,' + (parseInt(hexOp, 16) / 255).toFixed(2) + ')';
     }
 
     function teamLogoHtml(name, size) {
@@ -3794,21 +3908,20 @@
                 return;
             var _mgp = game.split(' @ ');
             var _mht = (_mgp[_mgp.length - 1] || game).trim();
-            var _mh = teamColorHue(_mht);
-            var color = 'hsl(' + _mh + ',65%,55%)';
+            var color = teamColor(_mht);
             var isC = !!mobileCollapsed[game];
             var ti = timeInfo(gameRows[0].cm);
             var teams = game.split(' @ ');
 
             var card = document.createElement('div');
             card.className = 'game-card';
-            card.style.borderTop = '2px solid hsla(' + _mh + ',65%,55%,0.4)';
+            card.style.borderTop = '2px solid ' + teamColorAt(_mht, '66');
 
             var hdr = document.createElement('div');
             hdr.className = 'game-card-header';
             hdr.dataset.game = game;
             hdr.style.borderLeft = '4px solid ' + color;
-            hdr.style.background = 'linear-gradient(90deg, hsla(' + _mh + ',65%,55%,0.13) 0%, var(--bg3) 60%)';
+            hdr.style.background = 'linear-gradient(90deg, ' + teamColorAt(_mht, '22') + ' 0%, var(--bg3) 60%)';
             hdr.addEventListener('click', function() {
                 toggleMobileCard(this.dataset.game);
             });
@@ -3828,7 +3941,7 @@
 
             var title = document.createElement('span');
             title.className = 'gc-title';
-            title.innerHTML = teamLogoHtml(teams[0], 20) + '<span style="margin-left:5px;padding:2px 10px 2px 5px;background:linear-gradient(90deg,hsla(' + teamColorHue(teams[0] || '') + ',60%,45%,0.2),transparent);border-radius:3px">' + (teams[0] || '') + '</span><span style="color:var(--muted2);font-weight:400;margin:0 8px">@</span>' + teamLogoHtml(teams[1], 20) + '<span style="margin-left:5px;padding:2px 10px 2px 5px;background:linear-gradient(90deg,hsla(' + teamColorHue(teams[1] || '') + ',60%,45%,0.2),transparent);border-radius:3px">' + (teams[1] || '') + '</span>';
+            title.innerHTML = teamLogoHtml(teams[0], 20) + '<span style="margin-left:5px;padding:2px 10px 2px 5px;background:linear-gradient(90deg,' + teamColorAt(teams[0] || '', '30') + ',transparent);border-radius:3px">' + (teams[0] || '') + '</span><span style="color:var(--muted2);font-weight:400;margin:0 8px">@</span>' + teamLogoHtml(teams[1], 20) + '<span style="margin-left:5px;padding:2px 10px 2px 5px;background:linear-gradient(90deg,' + teamColorAt(teams[1] || '', '30') + ',transparent);border-radius:3px">' + (teams[1] || '') + '</span>';
             hdr.appendChild(title);
             var rsUrl = getRealSportsUrl(rsGameIds[game], currentSport, gameRows[0] && gameRows[0].league, game);
             if (rsUrl) {
@@ -7627,13 +7740,11 @@
         filtered.forEach(function(r) {
             if (!gSeen[r.game]) { gSeen[r.game] = true; gOrder.push(r.game); }
         });
-        var gColor = {}, gHue = {}, gCm = {};
+        var gColor = {}, gCm = {};
         gOrder.forEach(function(g, i) {
             var _gp = g.split(' @ ');
             var _ht = (_gp[_gp.length - 1] || g).trim();
-            var _h = teamColorHue(_ht);
-            gHue[g] = _h;
-            gColor[g] = 'hsl(' + _h + ',65%,55%)';
+            gColor[g] = teamColor(_ht);
             var row = filtered.find(function(r) { return r.game === g; });
             gCm[g] = row ? row.cm : null;
         });
@@ -7656,7 +7767,7 @@
                 html += '<tr class="ghrow" data-gk="' + r.game.replace(/"/g, '&quot;') + '" onclick="toggleGame(\'' + gk + '\')">'
                 + '<td colspan="13"><div class="gh-inner">'
                 + '<div class="gh-stripe" style="background:' + color + '"></div>'
-                + teamLogoHtml(teams[0], 20) + '<span style="margin-left:5px;padding:2px 10px 2px 5px;background:linear-gradient(90deg,hsla(' + teamColorHue(teams[0]) + ',60%,45%,0.2),transparent);border-radius:3px">' + teams[0] + '</span><span style="color:var(--muted2);margin:0 6px">@</span>' + teamLogoHtml(teams[1], 20) + '<span style="margin-left:5px;padding:2px 10px 2px 5px;background:linear-gradient(90deg,hsla(' + teamColorHue(teams[1] || '') + ',60%,45%,0.2),transparent);border-radius:3px">' + (teams[1] || '') + '</span>'
+                + teamLogoHtml(teams[0], 20) + '<span style="margin-left:5px;padding:2px 10px 2px 5px;background:linear-gradient(90deg,' + teamColorAt(teams[0], '30') + ',transparent);border-radius:3px">' + teams[0] + '</span><span style="color:var(--muted2);margin:0 6px">@</span>' + teamLogoHtml(teams[1], 20) + '<span style="margin-left:5px;padding:2px 10px 2px 5px;background:linear-gradient(90deg,' + teamColorAt(teams[1] || '', '30') + ',transparent);border-radius:3px">' + (teams[1] || '') + '</span>'
                 + (ti.lbl ? '<span class="gh-badge ' + ti.cls + '">' + ti.lbl + '</span>' : '')
                 + (rsGameIds[r.game] ? (function(){ var u = getRealSportsUrl(rsGameIds[r.game], currentSport, r.league, r.game); return u ? '<a href="' + u + '" target="_blank" onclick="event.stopPropagation();event.preventDefault();window.open(this.href,\'_blank\');return false;" style="margin-left:6px;color:var(--accent);font-size:11px;text-decoration:none;opacity:0.9;flex-shrink:0" title="View on Real Sports">&#8599;</a>' : ''; })() : '')
                 + '<span class="gh-score-badge gh-badge" data-game="' + r.game.replace(/"/g, '&quot;') + '" data-cm="' + (r.cm ? r.cm.getTime() : '') + '" style="display:none"></span>'
@@ -7675,7 +7786,9 @@
         if (!isPro() && r.mkt !== 'ML' && r.mkt !== 'RFI') {
             var gk = r.game.replace(/"/g, '&quot;');
             var lockedLine = r.mkt === 'Total' ? (r.ps === 'A' ? 'O ???' : 'U ???') : (r.ps === 'A' ? '+?.5' : '-?.5');
-            return '<tr class="' + (isC ? 'collapsed-row' : '') + '" data-gk="' + gk + '" data-row-id="' + r.id + '" style="border-left:3px solid ' + color + ';cursor:pointer;' + edgeBg(null) + '" onclick="showUpgradeModal(\'Spread and Total markets are available on the Pro plan. Upgrade to unlock spread and total betting across all sports.\')">'
+            var _lgp = r.game.split(' @ ');
+            var _lrc = r.mkt === 'Total' ? teamColor(r.ps === 'A' ? (_lgp[0]||'').trim() : (_lgp[1]||'').trim()) : teamColor(r.side);
+            return '<tr class="' + (isC ? 'collapsed-row' : '') + '" data-gk="' + gk + '" data-row-id="' + r.id + '" style="border-left:3px solid ' + _lrc + ';cursor:pointer;' + edgeBg(null) + '" onclick="showUpgradeModal(\'Spread and Total markets are available on the Pro plan. Upgrade to unlock spread and total betting across all sports.\')">'
             + '<td class="game-td" data-label="Game"><div style="font-weight:600;filter:blur(4px);user-select:none;pointer-events:none">' + r.side + '</div><div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px">' + r.game + '</div></td>'
             + '<td data-label="Market"><span class="mkt-badge">' + r.mkt + '</span></td>'
             + '<td data-label="Side" style="filter:blur(4px);user-select:none;pointer-events:none;color:var(--muted);font-size:12px">' + r.side + '</td>'
@@ -7743,8 +7856,15 @@
             : '<td data-label="FD Line" style="font-family:var(--mono);color:var(--muted);font-size:12px">' + lineStr + '</td>';
         var evGated = isPro() || r.mkt === 'ML' || r.mkt === 'RFI';
         var gk = r.game.replace(/"/g, '&quot;');
-        return '<tr class="' + (r.edge != null && r.edge > 0 ? 'has-edge' : '') + (isC ? ' collapsed-row' : '') + '" data-gk="' + gk + '" data-row-id="' + r.id + '" style="border-left:3px solid ' + color + ';' + edgeBg(r.edge) + (betTaken[r.id] ? 'opacity:0.4' : '') + '">'
-        + '<td class="game-td" data-label="Game"><div style="font-weight:600;display:flex;align-items:center;gap:5px">' + (r.mkt !== 'Total' ? teamLogoHtml(r.side, 16) : '') + '<span' + (r.mkt !== 'Total' ? ' style="padding:1px 8px 1px 4px;background:linear-gradient(90deg,hsla(' + teamColorHue(r.side) + ',60%,45%,0.18),transparent);border-radius:3px"' : '') + '>' + r.side + '</span></div><div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px">' + r.game + '</div></td>'
+        // Per-row team color: Total rows map Over→away, Under→home; others use r.side directly
+        var _rgp = r.game.split(' @ ');
+        var _rawayT = (_rgp[0] || '').trim(), _rhomeT = (_rgp[1] || '').trim();
+        var rowColor = r.mkt === 'Total'
+            ? teamColor(r.ps === 'A' ? _rawayT : _rhomeT)
+            : teamColor(r.side);
+        var rowGrad = r.mkt !== 'Total' ? teamColorAt(r.side, '2e') : '';
+        return '<tr class="' + (r.edge != null && r.edge > 0 ? 'has-edge' : '') + (isC ? ' collapsed-row' : '') + '" data-gk="' + gk + '" data-row-id="' + r.id + '" style="border-left:3px solid ' + rowColor + ';' + edgeBg(r.edge) + (betTaken[r.id] ? 'opacity:0.4' : '') + '">'
+        + '<td class="game-td" data-label="Game"><div style="font-weight:600;display:flex;align-items:center;gap:5px">' + (r.mkt !== 'Total' ? teamLogoHtml(r.side, 16) : '') + '<span' + (rowGrad ? ' style="padding:1px 8px 1px 4px;background:linear-gradient(90deg,' + rowGrad + ',transparent);border-radius:3px"' : '') + '>' + r.side + '</span></div><div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px">' + r.game + '</div></td>'
         + '<td data-label="Market"><span class="mkt-badge">' + r.mkt + '</span></td>'
         + '<td data-label="Side" style="color:var(--muted);font-size:12px">' + r.side + '</td>'
         + fdLineCell
