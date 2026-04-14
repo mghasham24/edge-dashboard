@@ -100,6 +100,35 @@ export async function onRequestGet(context) {
 
   const nowMs = Date.now();
 
+  // debug=ucl — probe candidate DK league IDs to find UCL's leagueId
+  // Runs without the today filter so tomorrow's UCL games show up now
+  if (debugMode === 'ucl') {
+    const UCL_CANDIDATES = [
+      '40033','40034','40035','40036',
+      '9018','9019',
+      '40252','40480','40479',
+      '89346','89347',
+      '42133','42134',
+    ];
+    const results = {};
+    await Promise.all(UCL_CANDIDATES.map(async (id) => {
+      try {
+        const r = await fetch(dkLeagueEventsUrl(id), { headers });
+        if (!r.ok) { results[id] = { status: r.status }; return; }
+        const d = await r.json();
+        const evts = (d.events || []).map(ev => ({
+          name: ev.name,
+          date: ev.startEventDate,
+          id: ev.id,
+        }));
+        results[id] = { count: evts.length, events: evts };
+      } catch(e) { results[id] = { error: e.message }; }
+    }));
+    return new Response(JSON.stringify({ candidates: results }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
   try {
     // Step 1: Get today's events from each target league
     const todayEvents = [];
