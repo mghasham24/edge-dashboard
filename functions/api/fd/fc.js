@@ -16,7 +16,7 @@ const DK_SOCCER_LEAGUES = {
   '40032': 'Ligue 1',
   '40481': 'Bundesliga',
   '89345': 'MLS',
-  // UCL: TBD — UCL plays Tues/Wed; add leagueId when found
+  '40685': 'UCL',
 };
 
 function dkLeagueEventsUrl(leagueId) {
@@ -100,30 +100,7 @@ export async function onRequestGet(context) {
 
   const nowMs = Date.now();
 
-  // debug=ucl — probe candidate DK league IDs to find UCL's leagueId
-  // Runs without the today filter so tomorrow's UCL games show up now
-  if (debugMode === 'ucl') {
-    // Sequential probe — avoids Cloudflare's 50 subrequest parallel limit
-    // ?debug=ucl&start=40300 scans 40 IDs starting from `start`
-    const startId = parseInt(reqUrl.searchParams.get('start') || '40300', 10);
-    const BATCH = 40;
-    const results = {};
-    for (let id = startId; id < startId + BATCH; id++) {
-      const sid = String(id);
-      try {
-        const r = await fetch(dkLeagueEventsUrl(sid), { headers });
-        if (!r.ok) { results[sid] = { status: r.status }; continue; }
-        const d = await r.json();
-        const evts = (d.events || []).map(ev => ({ name: ev.name, date: ev.startEventDate, id: ev.id }));
-        if (evts.length) results[sid] = { count: evts.length, events: evts };
-        // else omit — only show hits
-      } catch(e) { results[sid] = { error: e.message }; break; }
-      await new Promise(r => setTimeout(r, 50));
-    }
-    return new Response(JSON.stringify({ scanned: `${startId}–${startId+BATCH-1}`, hits: results }), {
-      headers: { 'Content-Type': 'application/json' }
-    });
-  }
+
 
   try {
     // Step 1: Get today's events from each target league
