@@ -67,10 +67,13 @@ export async function onRequestGet(context) {
 
     const events = listData?.attachments?.events || {};
     const nowMs = Date.now();
+    const etFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
+    const todayET = etFmt.format(new Date());
     const todayEvents = Object.values(events).filter(e => {
       if (!e.openDate) return false;
       const t = new Date(e.openDate).getTime();
-      return t >= nowMs - 4 * 60 * 60 * 1000 && t <= nowMs + 36 * 60 * 60 * 1000;
+      if (t < nowMs - 4 * 60 * 60 * 1000) return false; // skip games started >4h ago
+      return etFmt.format(new Date(e.openDate)) === todayET;
     });
 
     if (!todayEvents.length) {
