@@ -3185,12 +3185,12 @@
         var nick = lastSpace > 0 ? name.slice(lastSpace + 1) : name;
         var grad = 'background:linear-gradient(90deg,' + teamColorAt(name, '30') + ',transparent)';
         if (city) {
-            return '<span style="margin-left:5px;padding:2px 8px 2px 5px;' + grad + ';border-radius:3px;display:inline-flex;flex-direction:column;line-height:1.15;vertical-align:middle">'
+            return '<span style="margin-left:5px;padding:2px 8px 2px 5px;' + grad + ';border-radius:3px;display:inline-flex;flex-direction:column;line-height:1.15;vertical-align:middle;flex-shrink:0">'
                 + '<span style="font-size:8px;color:var(--muted2);font-weight:600;letter-spacing:.07em;text-transform:uppercase;white-space:nowrap">' + city + '</span>'
                 + '<span style="font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap">' + nick + '</span>'
                 + '</span>';
         }
-        return '<span style="margin-left:5px;padding:3px 8px 3px 5px;' + grad + ';border-radius:3px;display:inline-flex;align-items:center;vertical-align:middle;white-space:nowrap;font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase">' + name + '</span>';
+        return '<span style="margin-left:5px;padding:3px 8px 3px 5px;' + grad + ';border-radius:3px;display:inline-flex;align-items:center;vertical-align:middle;white-space:nowrap;font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;flex-shrink:0">' + name + '</span>';
     }
 
     function teamLogoHtml(name, size) {
