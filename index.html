@@ -3765,20 +3765,13 @@
                 lbl: (Math.round(m / 6) / 10) + 'h',
                 cls: 'soon'
             };
-        var tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
         var tzShort = c.toLocaleTimeString('en-US', {
             timeZoneName: 'short',
             hour: 'numeric',
             minute: '2-digit'
         }).split(' ').pop();
         return {
-            lbl: c.toLocaleDateString('en-US', {
-                month: 'short',
-                day: 'numeric'
-            }) + ' ' + c.toLocaleTimeString('en-US', {
-                hour: 'numeric',
-                minute: '2-digit'
-            }) + ' ' + tzShort,
+            lbl: c.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) + ' ' + tzShort,
             cls: ''
         };
     }
@@ -7784,7 +7777,7 @@
                 + '<td colspan="13"><div class="gh-inner">'
                 + '<div class="gh-stripe" style="background:' + color + '"></div>'
                 + teamLogoHtml(teams[0], 20) + teamNameHtml(teams[0]) + '<span style="color:var(--muted2);margin:0 6px">@</span>' + teamLogoHtml(teams[1], 20) + teamNameHtml(teams[1] || '')
-                + (ti.lbl ? '<span class="gh-badge ' + ti.cls + '">' + ti.lbl + '</span>' : '')
+                + (ti.lbl ? '<span class="gh-badge ' + ti.cls + '" style="flex-shrink:0;margin-left:6px">' + ti.lbl + '</span>' : '')
                 + (rsGameIds[r.game] ? (function(){ var u = getRealSportsUrl(rsGameIds[r.game], currentSport, r.league, r.game); return u ? '<a href="' + u + '" target="_blank" onclick="event.stopPropagation();event.preventDefault();window.open(this.href,\'_blank\');return false;" style="margin-left:6px;color:var(--accent);font-size:11px;text-decoration:none;opacity:0.9;flex-shrink:0" title="View on Real Sports">&#8599;</a>' : ''; })() : '')
                 + '<span class="gh-score-badge gh-badge" data-game="' + r.game.replace(/"/g, '&quot;') + '" data-cm="' + (r.cm ? r.cm.getTime() : '') + '" style="display:none"></span>'
                 + '<span class="live-score-badge gh-badge" style="display:none"></span>'
