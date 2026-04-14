@@ -3046,7 +3046,7 @@
         'Bayern Munich':'https://a.espncdn.com/i/teamlogos/soccer/500/132.png','FC Bayern Munich':'https://a.espncdn.com/i/teamlogos/soccer/500/132.png','Bayern':'https://a.espncdn.com/i/teamlogos/soccer/500/132.png',
         'Borussia Dortmund':'https://a.espncdn.com/i/teamlogos/soccer/500/124.png','Dortmund':'https://a.espncdn.com/i/teamlogos/soccer/500/124.png','BVB Dortmund':'https://a.espncdn.com/i/teamlogos/soccer/500/124.png',
         'Bayer Leverkusen':'https://a.espncdn.com/i/teamlogos/soccer/500/131.png','Leverkusen':'https://a.espncdn.com/i/teamlogos/soccer/500/131.png',
-        'Paris St-Germain':'https://a.espncdn.com/i/teamlogos/soccer/500/1.png','PSG':'https://a.espncdn.com/i/teamlogos/soccer/500/1.png','Paris Saint-Germain':'https://a.espncdn.com/i/teamlogos/soccer/500/1.png',
+        'Paris St-Germain':'https://a.espncdn.com/i/teamlogos/soccer/500/160.png','PSG':'https://a.espncdn.com/i/teamlogos/soccer/500/160.png','Paris Saint-Germain':'https://a.espncdn.com/i/teamlogos/soccer/500/160.png',
         // UCL additional
         'Real Oviedo':'https://a.espncdn.com/i/teamlogos/soccer/500/3767.png',
         'Benfica':'https://a.espncdn.com/i/teamlogos/soccer/500/209.png',
@@ -3057,16 +3057,20 @@
         'PSV Eindhoven':'https://a.espncdn.com/i/teamlogos/soccer/500/285.png','PSV':'https://a.espncdn.com/i/teamlogos/soccer/500/285.png',
     };
 
+    function teamColorHue(name) {
+        var hash = 0;
+        for (var ci = 0; ci < (name||'').length; ci++) hash = (name.charCodeAt(ci) + ((hash << 5) - hash)) | 0;
+        return Math.abs(hash) % 360;
+    }
+
     function teamLogoHtml(name, size) {
         var url = name && TEAM_LOGO_URLS[name];
         var s = size || 18;
         // Consistent color from team name for letter fallback
-        var hash = 0;
-        for (var ci = 0; ci < (name||'').length; ci++) hash = (name.charCodeAt(ci) + ((hash << 5) - hash)) | 0;
-        var hue = Math.abs(hash) % 360;
+        var hue = teamColorHue(name);
         var letter = (name || '?').charAt(0).toUpperCase();
         var fb = 'display:inline-flex;align-items:center;justify-content:center;width:' + s + 'px;height:' + s + 'px;border-radius:50%;background:hsl(' + hue + ',55%,32%);font-size:' + Math.round(s * 0.52) + 'px;font-weight:700;color:#fff;font-family:var(--sans);flex-shrink:0;vertical-align:middle';
-        var im = 'width:' + s + 'px;height:' + s + 'px;border-radius:50%;object-fit:contain;background:#fff;flex-shrink:0;vertical-align:middle;padding:1px';
+        var im = 'width:' + s + 'px;height:' + s + 'px;border-radius:50%;object-fit:contain;background:transparent;flex-shrink:0;vertical-align:middle;padding:0';
         if (url) {
             return '<img src="' + url + '" style="' + im + '" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'inline-flex\'" alt=""><span style="' + fb + ';display:none">' + letter + '</span>';
         }
@@ -3788,20 +3792,23 @@
             });
             if (!gameRows.length)
                 return;
-            var color = COLORS[gi % COLORS.length];
+            var _mgp = game.split(' @ ');
+            var _mht = (_mgp[_mgp.length - 1] || game).trim();
+            var _mh = teamColorHue(_mht);
+            var color = 'hsl(' + _mh + ',65%,55%)';
             var isC = !!mobileCollapsed[game];
             var ti = timeInfo(gameRows[0].cm);
             var teams = game.split(' @ ');
 
             var card = document.createElement('div');
             card.className = 'game-card';
-            card.style.borderTop = '2px solid ' + color + '66';
+            card.style.borderTop = '2px solid hsla(' + _mh + ',65%,55%,0.4)';
 
             var hdr = document.createElement('div');
             hdr.className = 'game-card-header';
             hdr.dataset.game = game;
             hdr.style.borderLeft = '4px solid ' + color;
-            hdr.style.background = 'linear-gradient(90deg, ' + color + '22 0%, var(--bg3) 60%)';
+            hdr.style.background = 'linear-gradient(90deg, hsla(' + _mh + ',65%,55%,0.13) 0%, var(--bg3) 60%)';
             hdr.addEventListener('click', function() {
                 toggleMobileCard(this.dataset.game);
             });
@@ -3821,7 +3828,7 @@
 
             var title = document.createElement('span');
             title.className = 'gc-title';
-            title.innerHTML = teamLogoHtml(teams[0], 20) + '<span style="margin-left:5px">' + (teams[0] || '') + '</span><span style="color:var(--muted2);font-weight:400;margin:0 8px">@</span>' + teamLogoHtml(teams[1], 20) + '<span style="margin-left:5px">' + (teams[1] || '') + '</span>';
+            title.innerHTML = teamLogoHtml(teams[0], 20) + '<span style="margin-left:5px;padding:2px 10px 2px 5px;background:linear-gradient(90deg,hsla(' + teamColorHue(teams[0] || '') + ',60%,45%,0.2),transparent);border-radius:3px">' + (teams[0] || '') + '</span><span style="color:var(--muted2);font-weight:400;margin:0 8px">@</span>' + teamLogoHtml(teams[1], 20) + '<span style="margin-left:5px;padding:2px 10px 2px 5px;background:linear-gradient(90deg,hsla(' + teamColorHue(teams[1] || '') + ',60%,45%,0.2),transparent);border-radius:3px">' + (teams[1] || '') + '</span>';
             hdr.appendChild(title);
             var rsUrl = getRealSportsUrl(rsGameIds[game], currentSport, gameRows[0] && gameRows[0].league, game);
             if (rsUrl) {
@@ -7620,9 +7627,13 @@
         filtered.forEach(function(r) {
             if (!gSeen[r.game]) { gSeen[r.game] = true; gOrder.push(r.game); }
         });
-        var gColor = {}, gCm = {};
+        var gColor = {}, gHue = {}, gCm = {};
         gOrder.forEach(function(g, i) {
-            gColor[g] = COLORS[i % COLORS.length];
+            var _gp = g.split(' @ ');
+            var _ht = (_gp[_gp.length - 1] || g).trim();
+            var _h = teamColorHue(_ht);
+            gHue[g] = _h;
+            gColor[g] = 'hsl(' + _h + ',65%,55%)';
             var row = filtered.find(function(r) { return r.game === g; });
             gCm[g] = row ? row.cm : null;
         });
@@ -7645,7 +7656,7 @@
                 html += '<tr class="ghrow" data-gk="' + r.game.replace(/"/g, '&quot;') + '" onclick="toggleGame(\'' + gk + '\')">'
                 + '<td colspan="13"><div class="gh-inner">'
                 + '<div class="gh-stripe" style="background:' + color + '"></div>'
-                + teamLogoHtml(teams[0], 20) + '<span style="margin-left:5px">' + teams[0] + '</span><span style="color:var(--muted2);margin:0 6px">@</span>' + teamLogoHtml(teams[1], 20) + '<span style="margin-left:5px">' + (teams[1] || '') + '</span>'
+                + teamLogoHtml(teams[0], 20) + '<span style="margin-left:5px;padding:2px 10px 2px 5px;background:linear-gradient(90deg,hsla(' + teamColorHue(teams[0]) + ',60%,45%,0.2),transparent);border-radius:3px">' + teams[0] + '</span><span style="color:var(--muted2);margin:0 6px">@</span>' + teamLogoHtml(teams[1], 20) + '<span style="margin-left:5px;padding:2px 10px 2px 5px;background:linear-gradient(90deg,hsla(' + teamColorHue(teams[1] || '') + ',60%,45%,0.2),transparent);border-radius:3px">' + (teams[1] || '') + '</span>'
                 + (ti.lbl ? '<span class="gh-badge ' + ti.cls + '">' + ti.lbl + '</span>' : '')
                 + (rsGameIds[r.game] ? (function(){ var u = getRealSportsUrl(rsGameIds[r.game], currentSport, r.league, r.game); return u ? '<a href="' + u + '" target="_blank" onclick="event.stopPropagation();event.preventDefault();window.open(this.href,\'_blank\');return false;" style="margin-left:6px;color:var(--accent);font-size:11px;text-decoration:none;opacity:0.9;flex-shrink:0" title="View on Real Sports">&#8599;</a>' : ''; })() : '')
                 + '<span class="gh-score-badge gh-badge" data-game="' + r.game.replace(/"/g, '&quot;') + '" data-cm="' + (r.cm ? r.cm.getTime() : '') + '" style="display:none"></span>'
@@ -7733,7 +7744,7 @@
         var evGated = isPro() || r.mkt === 'ML' || r.mkt === 'RFI';
         var gk = r.game.replace(/"/g, '&quot;');
         return '<tr class="' + (r.edge != null && r.edge > 0 ? 'has-edge' : '') + (isC ? ' collapsed-row' : '') + '" data-gk="' + gk + '" data-row-id="' + r.id + '" style="border-left:3px solid ' + color + ';' + edgeBg(r.edge) + (betTaken[r.id] ? 'opacity:0.4' : '') + '">'
-        + '<td class="game-td" data-label="Game"><div style="font-weight:600;display:flex;align-items:center;gap:5px">' + teamLogoHtml(r.side, 16) + '<span>' + r.side + '</span></div><div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px">' + r.game + '</div></td>'
+        + '<td class="game-td" data-label="Game"><div style="font-weight:600;display:flex;align-items:center;gap:5px">' + (r.mkt !== 'Total' ? teamLogoHtml(r.side, 16) : '') + '<span' + (r.mkt !== 'Total' ? ' style="padding:1px 8px 1px 4px;background:linear-gradient(90deg,hsla(' + teamColorHue(r.side) + ',60%,45%,0.18),transparent);border-radius:3px"' : '') + '>' + r.side + '</span></div><div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px">' + r.game + '</div></td>'
         + '<td data-label="Market"><span class="mkt-badge">' + r.mkt + '</span></td>'
         + '<td data-label="Side" style="color:var(--muted);font-size:12px">' + r.side + '</td>'
         + fdLineCell
