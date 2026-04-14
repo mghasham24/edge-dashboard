@@ -2621,25 +2621,14 @@
             <div id="portfolio-data-view" style="display:none">
                 <div id="portfolio-loading" style="color:var(--muted);font-size:13px;padding:20px 0">Loading portfolio...</div>
                 <div id="portfolio-content" style="display:none">
-                    <!-- P&L Chart -->
-                    <div style="margin-bottom:20px">
-                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-                            <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2)">P&amp;L Chart</div>
-                            <div style="margin-left:auto;display:flex;gap:4px">
-                                <button onclick="setPortTimeframe('1w')" id="port-tf-1w" class="port-tf-btn port-tf-active">1W</button>
-                                <button onclick="setPortTimeframe('1m')" id="port-tf-1m" class="port-tf-btn">1M</button>
-                                <button onclick="setPortTimeframe('3m')" id="port-tf-3m" class="port-tf-btn">3M</button>
-                            </div>
-                        </div>
-                        <div id="port-chart-wrap" style="position:relative;background:var(--bg2);border:1px solid var(--border2);border-radius:10px;overflow:hidden;height:160px;cursor:grab;user-select:none">
-                            <canvas id="port-chart" style="width:100%;height:100%;display:block"></canvas>
-                            <div id="port-chart-tooltip" style="position:absolute;pointer-events:none;display:none;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:5px 10px;font-size:11px;font-family:var(--mono);white-space:nowrap;z-index:10"></div>
-                        </div>
-                    </div>
-
                     <!-- Stats row -->
                     <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
                         <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2)">Performance</div>
+                        <div style="margin-left:auto;display:flex;gap:4px">
+                            <button onclick="setPortTimeframe('1w')" id="port-tf-1w" class="port-tf-btn port-tf-active">1W</button>
+                            <button onclick="setPortTimeframe('1m')" id="port-tf-1m" class="port-tf-btn">1M</button>
+                            <button onclick="setPortTimeframe('3m')" id="port-tf-3m" class="port-tf-btn">3M</button>
+                        </div>
                     </div>
                     <div class="admin-stats" style="margin-bottom:28px">
                         <div class="admin-stat" data-tip="Net profit or loss for the selected timeframe (1W / 1M / 3M).">
@@ -5707,7 +5696,6 @@
 
         updatePortProfit();
         updatePerfCards();
-        renderPnlChart();
         updatePortFilterOptions();
         renderHistoryForDate(portSelectedDate);
 
@@ -6023,157 +6011,6 @@
             if (btn) btn.classList.toggle('port-tf-active', t === tf);
         });
         updatePerfCards();
-        renderPnlChart();
-    }
-
-    var _chartPanOffset = 0; // pixel pan offset (negative = scroll right into past)
-    var _chartDragging = false;
-    var _chartDragStartX = 0;
-    var _chartDragPanStart = 0;
-
-    function renderPnlChart() {
-        var canvas = document.getElementById('port-chart');
-        var wrap = document.getElementById('port-chart-wrap');
-        if (!canvas || !wrap) return;
-
-        var days = portTimeframe === '1w' ? 7 : portTimeframe === '3m' ? 90 : 30;
-
-        // Build sorted daily cumulative series for the period
-        var cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
-        var dailyMap = buildDailyMap(portHistoryAll);
-
-        // Generate all dates in period
-        var dates = [];
-        for (var i = days - 1; i >= 0; i--) {
-            var d = new Date(Date.now() - i * 86400000);
-            var dk = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-            dates.push(dk);
-        }
-
-        // Build cumulative P&L series
-        var cumulative = 0;
-        var points = dates.map(function(dk) {
-            var day = dailyMap[dk];
-            cumulative += day ? day.pnl : 0;
-            return { date: dk, cum: cumulative, daily: day ? day.pnl : 0 };
-        });
-
-        // Canvas sizing
-        var dpr = window.devicePixelRatio || 1;
-        var W = wrap.clientWidth;
-        var H = wrap.clientHeight;
-        canvas.width = W * dpr;
-        canvas.height = H * dpr;
-        canvas.style.width = W + 'px';
-        canvas.style.height = H + 'px';
-        var ctx = canvas.getContext('2d');
-        ctx.scale(dpr, dpr);
-
-        var padL = 10, padR = 10, padT = 14, padB = 28;
-        var chartW = W - padL - padR;
-        var chartH = H - padT - padB;
-
-        var n = points.length;
-        if (n < 2) {
-            ctx.fillStyle = 'var(--muted)';
-            ctx.font = '12px sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText('No data for this period', W/2, H/2);
-            return;
-        }
-
-        var vals = points.map(function(p){ return p.cum; });
-        var minV = Math.min(0, Math.min.apply(null, vals));
-        var maxV = Math.max(0, Math.max.apply(null, vals));
-        var range = maxV - minV || 1;
-
-        function xOf(i) { return padL + (i / (n - 1)) * chartW; }
-        function yOf(v) { return padT + chartH - ((v - minV) / range) * chartH; }
-        var zeroY = yOf(0);
-
-        // Clamp pan
-        _chartPanOffset = 0; // pan disabled — full range shown; can add later if needed
-
-        // Gradient fill
-        var isPos = points[n-1].cum >= 0;
-        var lineColor = isPos ? '#2dcc7e' : '#f05252';
-        var grad = ctx.createLinearGradient(0, padT, 0, padT + chartH);
-        grad.addColorStop(0, isPos ? 'rgba(45,204,126,0.25)' : 'rgba(240,82,82,0.25)');
-        grad.addColorStop(1, 'rgba(0,0,0,0)');
-
-        // Zero line
-        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(padL, zeroY);
-        ctx.lineTo(padL + chartW, zeroY);
-        ctx.stroke();
-
-        // Fill area
-        ctx.beginPath();
-        ctx.moveTo(xOf(0), zeroY);
-        for (var i = 0; i < n; i++) ctx.lineTo(xOf(i), yOf(points[i].cum));
-        ctx.lineTo(xOf(n-1), zeroY);
-        ctx.closePath();
-        ctx.fillStyle = grad;
-        ctx.fill();
-
-        // Line
-        ctx.beginPath();
-        ctx.moveTo(xOf(0), yOf(points[0].cum));
-        for (var i = 1; i < n; i++) ctx.lineTo(xOf(i), yOf(points[i].cum));
-        ctx.strokeStyle = lineColor;
-        ctx.lineWidth = 2;
-        ctx.lineJoin = 'round';
-        ctx.stroke();
-
-        // X-axis date labels — show ~5 evenly spaced
-        ctx.fillStyle = 'rgba(255,255,255,0.3)';
-        ctx.font = '9px var(--mono, monospace)';
-        ctx.textAlign = 'center';
-        var labelStep = Math.max(1, Math.floor(n / 5));
-        for (var i = 0; i < n; i += labelStep) {
-            var parts = points[i].date.split('-');
-            var lbl = (parseInt(parts[1])) + '/' + parseInt(parts[2]);
-            ctx.fillText(lbl, xOf(i), H - padB + 14);
-        }
-
-        // Tooltip on hover
-        if (!wrap._chartListenersAdded) {
-            wrap._chartListenersAdded = true;
-            var tooltip = document.getElementById('port-chart-tooltip');
-
-            function getPointAt(mx) {
-                var rect = canvas.getBoundingClientRect();
-                var relX = mx - rect.left - padL;
-                var idx = Math.round((relX / chartW) * (n - 1));
-                return Math.max(0, Math.min(n - 1, idx));
-            }
-
-            function showTip(mx, my) {
-                var tooltip = document.getElementById('port-chart-tooltip');
-                var pts = (function(){ var days2 = portTimeframe === '1w' ? 7 : portTimeframe === '3m' ? 90 : 30; var dm = buildDailyMap(portHistoryAll); var ds = []; for(var j=days2-1;j>=0;j--){var d=new Date(Date.now()-j*86400000);var dk=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');ds.push(dk);} var c=0; return ds.map(function(dk){var dy=dm[dk];c+=dy?dy.pnl:0;return{date:dk,cum:c,daily:dy?dy.pnl:0};}); })();
-                var rect = canvas.getBoundingClientRect();
-                var relX = mx - rect.left - padL;
-                var idx = Math.round((relX / chartW) * (pts.length - 1));
-                idx = Math.max(0, Math.min(pts.length - 1, idx));
-                var pt = pts[idx];
-                if (!pt) return;
-                var sign = pt.cum >= 0 ? '+' : '';
-                var dsign = pt.daily >= 0 ? '+' : '';
-                tooltip.innerHTML = '<span style="color:var(--muted2)">' + pt.date + '</span>  <span style="color:' + (pt.cum>=0?'#2dcc7e':'#f05252') + ';font-weight:700">' + sign + '$' + pt.cum.toFixed(2) + '</span>  <span style="color:var(--muted);font-size:10px">day ' + dsign + '$' + pt.daily.toFixed(2) + '</span>';
-                var tipW = 200;
-                var tipX = Math.min(mx - wrap.getBoundingClientRect().left, wrap.clientWidth - tipW - 8);
-                tooltip.style.left = Math.max(4, tipX) + 'px';
-                tooltip.style.top = '6px';
-                tooltip.style.display = 'block';
-            }
-
-            canvas.addEventListener('mousemove', function(e) { showTip(e.clientX, e.clientY); });
-            canvas.addEventListener('mouseleave', function() { var t = document.getElementById('port-chart-tooltip'); if(t) t.style.display='none'; });
-            canvas.addEventListener('touchmove', function(e) { if(e.touches[0]) showTip(e.touches[0].clientX, e.touches[0].clientY); }, { passive: true });
-            canvas.addEventListener('touchend', function() { var t = document.getElementById('port-chart-tooltip'); if(t) t.style.display='none'; });
-        }
     }
 
     function selectCalDay(dateKey) {
@@ -6231,7 +6068,6 @@
         if (cntEl) cntEl.textContent = portHistoryAll.length;
         updatePortProfit();
         updatePerfCards();
-        renderPnlChart();
         updatePortFilterOptions();
         renderCalendar();
         renderHistoryForDate(portSelectedDate);
