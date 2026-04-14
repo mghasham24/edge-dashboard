@@ -3901,17 +3901,30 @@
             mma_mixed_martial_arts: '#f05252',
             soccer_fc: '#2dcc7e'
         };
-        var sportIconMap = {
-            basketball_nba: '🏀',
-            basketball_ncaab: '🏀',
-            icehockey_nhl: '🏒',
-            baseball_mlb: '⚾',
-            mma_mixed_martial_arts: '🥊',
-            soccer_fc: '⚽'
+        var sportLogoMap = {
+            basketball_nba:        'https://a.espncdn.com/i/teamlogos/leagues/500/nba.png',
+            basketball_ncaab:      'https://a.espncdn.com/i/teamlogos/leagues/500/ncaa.png',
+            icehockey_nhl:         'https://a.espncdn.com/i/teamlogos/leagues/500/nhl.png',
+            baseball_mlb:          'https://a.espncdn.com/i/teamlogos/leagues/500/mlb.png',
+            mma_mixed_martial_arts:'https://a.espncdn.com/i/teamlogos/leagues/500/ufc.png'
         };
+        var fcLeagueLogoMap = {
+            'UCL':        'https://a.espncdn.com/i/leaguelogos/soccer/500/2.png',
+            'EPL':        'https://a.espncdn.com/i/leaguelogos/soccer/500/23.png',
+            'La Liga':    'https://a.espncdn.com/i/leaguelogos/soccer/500/15.png',
+            'Serie A':    'https://a.espncdn.com/i/leaguelogos/soccer/500/12.png',
+            'Bundesliga': 'https://a.espncdn.com/i/leaguelogos/soccer/500/10.png',
+            'Ligue 1':    'https://a.espncdn.com/i/leaguelogos/soccer/500/9.png',
+            'MLS':        'https://a.espncdn.com/i/leaguelogos/soccer/500/19.png'
+        };
+        function sportLogoHtml(sport, league, size) {
+            var s = size || 20;
+            var url = sport === 'soccer_fc' ? (fcLeagueLogoMap[league] || fcLeagueLogoMap['UCL']) : sportLogoMap[sport];
+            if (!url) return '';
+            return '<img src="' + url + '" style="width:' + s + 'px;height:' + s + 'px;object-fit:contain;flex-shrink:0;vertical-align:middle" onerror="this.style.display=\'none\'">';
+        }
         var leagueLbl = leagueBadgeMap[currentSport] || '';
         var leagueClr = leagueColorMap[currentSport] || 'var(--muted)';
-        var sportIcon = sportIconMap[currentSport] || '🏆';
 
         if (!gameOrder.length) {
             container.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">No odds loaded</div>';
@@ -3944,10 +3957,10 @@
                 toggleMobileCard(this.dataset.game);
             });
 
-            var iconSpan = document.createElement('span');
-            iconSpan.style.cssText = 'font-size:15px;flex-shrink:0;line-height:1';
-            iconSpan.textContent = sportIcon;
-            hdr.appendChild(iconSpan);
+            var iconEl = document.createElement('span');
+            iconEl.style.cssText = 'flex-shrink:0;display:flex;align-items:center';
+            iconEl.innerHTML = sportLogoHtml(currentSport, gameRows[0] && gameRows[0].league, 20);
+            hdr.appendChild(iconEl);
 
             var title = document.createElement('span');
             title.className = 'gc-title';
@@ -7776,7 +7789,7 @@
                 var gk = r.game.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
                 html += '<tr class="ghrow" data-gk="' + r.game.replace(/"/g, '&quot;') + '" onclick="toggleGame(\'' + gk + '\')">'
                 + '<td colspan="13"><div class="gh-inner">'
-                + '<span style="font-size:15px;flex-shrink:0;line-height:1">' + sportIcon + '</span>'
+                + sportLogoHtml(currentSport, r.league, 20)
                 + '<div style="display:grid;grid-template-columns:auto minmax(0,1fr) auto auto minmax(0,1fr);align-items:center;gap:4px;flex:1;min-width:0">' + teamLogoHtml(teams[0], 20) + teamNameHtml(teams[0]) + '<span style="color:var(--muted2);text-align:center;padding:0 2px">@</span>' + teamLogoHtml(teams[1], 20) + teamNameHtml(teams[1] || '') + '</div>'
                 + (ti.lbl ? '<span class="gh-badge ' + ti.cls + '" style="flex-shrink:0;margin-left:6px">' + ti.lbl + '</span>' : '')
                 + (rsGameIds[r.game] ? (function(){ var u = getRealSportsUrl(rsGameIds[r.game], currentSport, r.league, r.game); return u ? '<a href="' + u + '" target="_blank" onclick="event.stopPropagation();event.preventDefault();window.open(this.href,\'_blank\');return false;" style="margin-left:6px;color:var(--accent);font-size:11px;text-decoration:none;opacity:0.9;flex-shrink:0" title="View on Real Sports">&#8599;</a>' : ''; })() : '')
