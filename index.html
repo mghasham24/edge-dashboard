@@ -3770,10 +3770,17 @@
             hour: 'numeric',
             minute: '2-digit'
         }).split(' ').pop();
-        return {
-            lbl: c.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) + ' ' + tzShort,
-            cls: ''
-        };
+        var timeStr = c.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) + ' ' + tzShort;
+        var now2 = new Date();
+        var isToday = now2.toDateString() === c.toDateString();
+        if (isToday) {
+            return { lbl: timeStr, cls: '' };
+        }
+        var tom = new Date(now2); tom.setDate(tom.getDate() + 1);
+        var prefix = tom.toDateString() === c.toDateString()
+            ? 'Tomorrow'
+            : c.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        return { lbl: prefix + ' ' + timeStr, cls: '' };
     }
     function getFair(r) {
         var pairs = {};
