@@ -4008,6 +4008,31 @@
                     volTag.textContent = vols[firstRow.id] + ' vol';
                     lbl.appendChild(volTag);
                 }
+                // Time + RS link bar above ML label
+                if (mkt === 'ML' && (_ti && _ti.lbl || _rsUrl)) {
+                    var mlTopBar = document.createElement('div');
+                    mlTopBar.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--border)';
+                    if (_ti && _ti.lbl) {
+                        var tbTime = document.createElement('span');
+                        tbTime.className = 'gh-badge ' + (_ti.cls || '');
+                        tbTime.style.cssText = 'font-size:11px;font-family:var(--mono)';
+                        tbTime.textContent = _ti.lbl;
+                        mlTopBar.appendChild(tbTime);
+                    } else {
+                        mlTopBar.appendChild(document.createElement('span'));
+                    }
+                    if (_rsUrl) {
+                        var tbLink = document.createElement('a');
+                        tbLink.href = _rsUrl;
+                        tbLink.target = '_blank';
+                        tbLink.textContent = 'Link to Game ↗';
+                        tbLink.style.cssText = 'font-size:10px;font-weight:700;letter-spacing:.05em;color:var(--accent);text-decoration:none;padding:3px 8px;border:1px solid var(--accent);border-radius:4px;opacity:0.9';
+                        tbLink.addEventListener('click', function(e) { e.stopPropagation(); });
+                        mlTopBar.appendChild(tbLink);
+                    }
+                    section.appendChild(mlTopBar);
+                }
+
                 section.appendChild(lbl);
 
                 if (isLocked) {
@@ -4446,31 +4471,6 @@
                     });
                 }
                 section.appendChild(inputRow);
-
-                // ML section footer: time (bottom-left) + RS link (bottom-right)
-                if (mkt === 'ML') {
-                    var mlFooter = document.createElement('div');
-                    mlFooter.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-top:8px;padding-top:6px;border-top:1px solid var(--border)';
-                    if (_ti && _ti.lbl) {
-                        var ftTime = document.createElement('span');
-                        ftTime.className = 'gh-badge ' + (_ti.cls || '');
-                        ftTime.style.cssText = 'font-size:11px;font-family:var(--mono)';
-                        ftTime.textContent = _ti.lbl;
-                        mlFooter.appendChild(ftTime);
-                    } else {
-                        mlFooter.appendChild(document.createElement('span'));
-                    }
-                    if (_rsUrl) {
-                        var ftLink = document.createElement('a');
-                        ftLink.href = _rsUrl;
-                        ftLink.target = '_blank';
-                        ftLink.textContent = 'Link to Game ↗';
-                        ftLink.style.cssText = 'font-size:10px;font-weight:700;letter-spacing:.05em;color:var(--accent);text-decoration:none;padding:3px 8px;border:1px solid var(--accent);border-radius:4px;opacity:0.9';
-                        ftLink.addEventListener('click', function(e) { e.stopPropagation(); });
-                        mlFooter.appendChild(ftLink);
-                    }
-                    section.appendChild(mlFooter);
-                }
 
                 body.appendChild(section);
             });
