@@ -7429,7 +7429,7 @@
             filtered = filtered.filter(function(r) { return r.league === currentFcLeague; });
         }
         var mO = { ML: 0, Spread: 1, Total: 2, RFI: 3 };
-        var FC_LEAGUE_ORDER = { 'EPL': 0, 'La Liga': 1, 'Serie A': 2, 'Bundesliga': 3, 'Ligue 1': 4, 'MLS': 5 };
+        var FC_LEAGUE_ORDER = { 'UCL': 0, 'EPL': 1, 'La Liga': 2, 'Serie A': 3, 'Bundesliga': 4, 'Ligue 1': 5, 'MLS': 6 };
         filtered.sort(function(a, b) {
             if (currentSport === 'soccer_fc' && a.league !== b.league) {
                 var oa = FC_LEAGUE_ORDER[a.league] !== undefined ? FC_LEAGUE_ORDER[a.league] : 99;

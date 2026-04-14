@@ -176,9 +176,15 @@ export async function onRequestGet(context) {
   }
 
   try {
-    const gamesRes = await fetch(`https://web.realapp.com/home/${realSport}/next?cohort=0`, {
-      headers: buildHeaders(env)
-    });
+    // For soccer_fc, also fetch UCL in parallel — RS treats UCL as a separate sport
+    const fetchPromises = [
+      fetch(`https://web.realapp.com/home/${realSport}/next?cohort=0`, { headers: buildHeaders(env) })
+    ];
+    if (realSport === 'soccer') {
+      fetchPromises.push(fetch('https://web.realapp.com/home/ucl/next?cohort=0', { headers: buildHeaders(env) }));
+    }
+    const [gamesRes, uclRes] = await Promise.all(fetchPromises);
+
     const gamesStatus = gamesRes.status;
     const gamesText = await gamesRes.text();
 
@@ -194,6 +200,23 @@ export async function onRequestGet(context) {
 
     const gamesData = JSON.parse(gamesText);
     const games = extractGames(gamesData);
+
+    // Merge UCL games — tag with _rsSport so market URL uses 'ucl' not 'soccer'
+    if (uclRes && uclRes.ok) {
+      try {
+        const uclData = await uclRes.json();
+        const uclGames = extractGames(uclData);
+        const seenIds = new Set(games.map(g => g.id || g.gameId));
+        for (const g of uclGames) {
+          const id = g.id || g.gameId;
+          if (id && !seenIds.has(id)) {
+            g._rsSport = 'ucl';
+            games.push(g);
+            seenIds.add(id);
+          }
+        }
+      } catch(e) {}
+    }
 
     if (debugMode === '3') {
       return new Response(JSON.stringify({
@@ -292,7 +315,8 @@ export async function onRequestGet(context) {
       const headers = buildHeaders(env);
       if (tokenOffset) headers['real-request-token'] = hashidsEncode(Date.now() + (tokenOffset || 0));
 
-      const url = `https://web.realapp.com/predictions/game/${realSport}/${gameId}/markets`;
+      const gameSport = game._rsSport || realSport;
+      const url = `https://web.realapp.com/predictions/game/${gameSport}/${gameId}/markets`;
       let attempt = 0;
       let lastStatus = null;
       let lastErr = null;
