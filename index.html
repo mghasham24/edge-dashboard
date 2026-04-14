@@ -3205,6 +3205,29 @@
         return '<span style="' + fb + '">' + letter + '</span>';
     }
 
+    var _sportLogoMap = {
+        basketball_nba:        'https://a.espncdn.com/i/teamlogos/leagues/500/nba.png',
+        basketball_ncaab:      'https://a.espncdn.com/i/teamlogos/leagues/500/ncaa.png',
+        icehockey_nhl:         'https://a.espncdn.com/i/teamlogos/leagues/500/nhl.png',
+        baseball_mlb:          'https://a.espncdn.com/i/teamlogos/leagues/500/mlb.png',
+        mma_mixed_martial_arts:'https://a.espncdn.com/i/teamlogos/leagues/500/ufc.png'
+    };
+    var _fcLeagueLogoMap = {
+        'UCL':        'https://a.espncdn.com/i/leaguelogos/soccer/500/2.png',
+        'EPL':        'https://a.espncdn.com/i/leaguelogos/soccer/500/23.png',
+        'La Liga':    'https://a.espncdn.com/i/leaguelogos/soccer/500/15.png',
+        'Serie A':    'https://a.espncdn.com/i/leaguelogos/soccer/500/12.png',
+        'Bundesliga': 'https://a.espncdn.com/i/leaguelogos/soccer/500/10.png',
+        'Ligue 1':    'https://a.espncdn.com/i/leaguelogos/soccer/500/9.png',
+        'MLS':        'https://a.espncdn.com/i/leaguelogos/soccer/500/19.png'
+    };
+    function sportLogoHtml(sport, league, size) {
+        var s = size || 20;
+        var url = sport === 'soccer_fc' ? (_fcLeagueLogoMap[league] || _fcLeagueLogoMap['UCL']) : _sportLogoMap[sport];
+        if (!url) return '';
+        return '<img src="' + url + '" style="width:' + s + 'px;height:' + s + 'px;object-fit:contain;flex-shrink:0;vertical-align:middle" onerror="this.style.display=\'none\'">';
+    }
+
     function getRealSportsUrl(gid, sport, league, game) {
         if (!gid || typeof Hashids === 'undefined') return null;
         if (!_hashids) _hashids = new Hashids('routing', 11);
@@ -3901,28 +3924,6 @@
             mma_mixed_martial_arts: '#f05252',
             soccer_fc: '#2dcc7e'
         };
-        var sportLogoMap = {
-            basketball_nba:        'https://a.espncdn.com/i/teamlogos/leagues/500/nba.png',
-            basketball_ncaab:      'https://a.espncdn.com/i/teamlogos/leagues/500/ncaa.png',
-            icehockey_nhl:         'https://a.espncdn.com/i/teamlogos/leagues/500/nhl.png',
-            baseball_mlb:          'https://a.espncdn.com/i/teamlogos/leagues/500/mlb.png',
-            mma_mixed_martial_arts:'https://a.espncdn.com/i/teamlogos/leagues/500/ufc.png'
-        };
-        var fcLeagueLogoMap = {
-            'UCL':        'https://a.espncdn.com/i/leaguelogos/soccer/500/2.png',
-            'EPL':        'https://a.espncdn.com/i/leaguelogos/soccer/500/23.png',
-            'La Liga':    'https://a.espncdn.com/i/leaguelogos/soccer/500/15.png',
-            'Serie A':    'https://a.espncdn.com/i/leaguelogos/soccer/500/12.png',
-            'Bundesliga': 'https://a.espncdn.com/i/leaguelogos/soccer/500/10.png',
-            'Ligue 1':    'https://a.espncdn.com/i/leaguelogos/soccer/500/9.png',
-            'MLS':        'https://a.espncdn.com/i/leaguelogos/soccer/500/19.png'
-        };
-        function sportLogoHtml(sport, league, size) {
-            var s = size || 20;
-            var url = sport === 'soccer_fc' ? (fcLeagueLogoMap[league] || fcLeagueLogoMap['UCL']) : sportLogoMap[sport];
-            if (!url) return '';
-            return '<img src="' + url + '" style="width:' + s + 'px;height:' + s + 'px;object-fit:contain;flex-shrink:0;vertical-align:middle" onerror="this.style.display=\'none\'">';
-        }
         var leagueLbl = leagueBadgeMap[currentSport] || '';
         var leagueClr = leagueColorMap[currentSport] || 'var(--muted)';
 
