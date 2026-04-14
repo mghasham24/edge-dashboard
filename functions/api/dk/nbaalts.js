@@ -84,11 +84,14 @@ export async function onRequestGet(context) {
     const evData = await evRes.json();
 
     const nowMs = Date.now();
+    const etFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
+    const todayET = etFmt.format(new Date());
     const allEvents = (evData.events || []);
     const events = allEvents.filter(e => {
       if (!e.startEventDate) return false;
       const t = new Date(e.startEventDate).getTime();
-      return t >= nowMs - 4 * 60 * 60 * 1000 && t <= nowMs + 36 * 60 * 60 * 1000;
+      if (t < nowMs - 4 * 60 * 60 * 1000) return false;
+      return etFmt.format(new Date(e.startEventDate)) === todayET;
     });
 
     if (debugMode === '1') {
