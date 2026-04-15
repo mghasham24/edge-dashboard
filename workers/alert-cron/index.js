@@ -35,12 +35,22 @@ function noVigFair(amA, amB) {
   return { fa: iA / total, fb: iB / total };
 }
 
+// Volume-tiered rake — mirrors dashboard's rakeEV logic exactly
+function rakeFor(volume) {
+  if (volume > 100000) return 0.034;
+  if (volume > 10000)  return 0.032;
+  if (volume > 1000)   return 0.035;
+  if (volume > 0)      return 0.040;
+  return 0.034; // default when volume unknown
+}
+
 // EV% — FD no-vig is the "true" probability baseline; RS is the betting market.
-// Positive EV when RS crowd undervalues a side (rsImpliedProb < fdNoVigProb).
-// Formula: EV = (fdNoVigProb / rsImpliedProb - 1) * 100
-function calcEV(fdNoVigProb, rsImpliedProb) {
+// Rake-adjusted to match what users see on the dashboard.
+// Formula: EV = (fdNoVigProb / rsImpliedProb * (1 - rake) - 1) * 100
+function calcEV(fdNoVigProb, rsImpliedProb, volume) {
   if (!fdNoVigProb || !rsImpliedProb || rsImpliedProb <= 0) return null;
-  return (fdNoVigProb / rsImpliedProb - 1) * 100;
+  const rake = rakeFor(volume ?? 0);
+  return (fdNoVigProb / rsImpliedProb * (1 - rake) - 1) * 100;
 }
 
 // Unit sizing — mirrors the frontend unitsEV() function exactly
@@ -303,7 +313,9 @@ export default {
           const rsMktLabel = rsMktLabels.find(l => rsMarkets[l]);
           if (!rsMktLabel) continue;
 
-          const rsOutcomes = rsMarkets[rsMktLabel].outcomes || [];
+          const rsMkt     = rsMarkets[rsMktLabel];
+          const rsOutcomes = rsMkt.outcomes || [];
+          const rsVolume   = rsMkt.volume ?? 0;
           const fdOutcomes = fdMkt.outcomes || [];
           if (fdOutcomes.length < 2) continue;
 
@@ -326,9 +338,8 @@ export default {
             const fdNoVigProb = noVig ? (isFirstOutcome ? noVig.fa : noVig.fb) : null;
             if (!fdNoVigProb) continue; // need both sides for no-vig calc
 
-            // EV = (FD no-vig prob / RS implied prob) - 1
-            // Positive when RS crowd undervalues this side vs the sharp market
-            const ev = calcEV(fdNoVigProb, rsO.probability);
+            // Rake-adjusted EV — matches dashboard formula exactly
+            const ev = calcEV(fdNoVigProb, rsO.probability, rsVolume);
             if (ev == null || ev < globalMinEv) continue;
 
             const u = unitsEV(ev, fdNoVigProb);
@@ -396,6 +407,7 @@ export default {
             if (!rfiMkt) continue;
 
             const rsOutcomes = rfiMkt.outcomes || [];
+            const rsVolume   = rfiMkt.volume ?? 0;
             const rsYes = rsOutcomes.find(o => /yes/i.test(o.label));
             const rsNo  = rsOutcomes.find(o => /no/i.test(o.label));
 
@@ -411,7 +423,7 @@ export default {
             for (const { side, fdFair, fdOdds, rsO } of rfiSides) {
               if (!rsO || !rsO.probability) continue;
 
-              const ev = calcEV(fdFair, rsO.probability);
+              const ev = calcEV(fdFair, rsO.probability, rsVolume);
               if (ev == null || ev < globalMinEv) continue;
 
               const u = unitsEV(ev, fdFair);
