@@ -1,10 +1,17 @@
 // workers/alert-cron/index.js
 // Runs every 60 seconds via Cloudflare Cron Trigger.
 // For each pro user with Telegram verified:
-//   1. Fetch FD odds + RS fair probabilities from D1 cache (or live if stale)
-//   2. Calculate EV for each pre-game bet
+//   1. Load odds from native FD/DK caches (same source as the site)
+//   2. Calculate EV vs RS fair probabilities
 //   3. Alert if EV >= user threshold and bet not already sent
 //   4. Re-alert if EV jumped +4% since last message (new unit tier)
+//
+// Native cache sources (matches the site exactly):
+//   NBA → fd_nba_alts   (FD native, ML + spread + total)
+//   MLB → fd_mlb        (FD native, ML only)  + fd_rfi (RFI)
+//   NHL → fd_nhl        (FD native, ML only)
+//   FC  → fd_fc         (DK native, AH spread)
+//   NCAAB, UFC → Odds API (no native endpoint exists)
 
 import Hashids from 'hashids';
 
@@ -41,12 +48,11 @@ function rakeFor(volume) {
   if (volume > 10000)  return 0.032;
   if (volume > 1000)   return 0.035;
   if (volume > 0)      return 0.040;
-  return 0.034; // default when volume unknown
+  return 0.034;
 }
 
-// EV% — FD no-vig is the "true" probability baseline; RS is the betting market.
+// EV% — FD/DK no-vig is the "true" probability baseline; RS is the betting market.
 // Rake-adjusted to match what users see on the dashboard.
-// Formula: EV = (fdNoVigProb / rsImpliedProb * (1 - rake) - 1) * 100
 function calcEV(fdNoVigProb, rsImpliedProb, volume) {
   if (!fdNoVigProb || !rsImpliedProb || rsImpliedProb <= 0) return null;
   const rake = rakeFor(volume ?? 0);
@@ -69,28 +75,29 @@ function unitsEV(ev, realPct) {
 
 // ── Sport config ───────────────────────────────────────
 
-const SPORTS = [
-  { fdKey: 'basketball_nba',        rsKey: 'nba',    label: 'NBA'  },
-  { fdKey: 'icehockey_nhl',         rsKey: 'nhl',    label: 'NHL'  },
-  { fdKey: 'baseball_mlb',          rsKey: 'mlb',    label: 'MLB'  },
-  { fdKey: 'basketball_ncaab',      rsKey: 'cbb',    label: 'NCAAB'},
-  { fdKey: 'mma_mixed_martial_arts',rsKey: 'ufc',    label: 'UFC'  },
-  { fdKey: 'soccer_fc',             rsKey: 'soccer', label: 'FC'   },
+// Native sports: read from FD/DK D1 cache (same source as the site)
+const NATIVE_SPORTS = [
+  { fdKey: 'basketball_nba',        rsKey: 'nba',    label: 'NBA',   cacheKey: 'fd_nba_alts', type: 'nba'     },
+  { fdKey: 'baseball_mlb',          rsKey: 'mlb',    label: 'MLB',   cacheKey: 'fd_mlb',      type: 'ml_only' },
+  { fdKey: 'icehockey_nhl',         rsKey: 'nhl',    label: 'NHL',   cacheKey: 'fd_nhl',      type: 'ml_only' },
+  { fdKey: 'soccer_fc',             rsKey: 'soccer', label: 'FC',    cacheKey: 'fd_fc',       type: 'fc'      },
 ];
 
-// Market label mapping between FD API key and RS label
-// Each entry is an array of possible RS labels to try in order
-const FD_MKT_TO_RS = {
-  h2h:     ['Moneyline', 'Game Winner'],
-  spreads: ['Spread', 'Puck Line', 'Run Line'],
-  totals:  ['Total', 'Total Runs', 'Total Goals'],
-};
-const FD_MKT_TO_DISPLAY = { h2h: 'ML', spreads: 'Spread', totals: 'Total' };
+// Odds API sports: no native endpoint exists yet
+const ODDS_API_SPORTS = [
+  { fdKey: 'basketball_ncaab',       rsKey: 'cbb',    label: 'NCAAB' },
+  { fdKey: 'mma_mixed_martial_arts', rsKey: 'ufc',    label: 'UFC'   },
+];
 
-// ── Odds API fetch ─────────────────────────────────────
+const ALL_SPORTS = [...NATIVE_SPORTS, ...ODDS_API_SPORTS];
+
+// RS market labels by native sport type
+const RS_ML_LABELS = ['Moneyline', 'Game Winner', 'Fight Outcome', 'Fight Winner', 'Match Winner', 'Winner'];
+
+// ── Odds API fetch (NCAAB + UFC only) ─────────────────
 
 async function fetchFDOdds(sport, apiKey) {
-  const url = `https://api.the-odds-api.com/v4/sports/${sport}/odds/?apiKey=${apiKey}&regions=us&markets=h2h,spreads,totals&bookmakers=fanduel&oddsFormat=american`;
+  const url = `https://api.the-odds-api.com/v4/sports/${sport}/odds/?apiKey=${apiKey}&regions=us&markets=h2h&bookmakers=fanduel&oddsFormat=american`;
   const res = await fetch(url);
   if (!res.ok) return null;
   const games = await res.json();
@@ -98,11 +105,9 @@ async function fetchFDOdds(sport, apiKey) {
   return games;
 }
 
-// ── Real Sports RS data from D1 cache ─────────────────
+// ── RS cache ───────────────────────────────────────────
 
 function parseRSCache(cacheData) {
-  // cacheData is the marketMap stored by real/sync.js
-  // Structure: { "Away @ Home": { "Moneyline": { outcomes: [{label, probability}] }, ... }, "Away @ Home__gid": 123, ... }
   const games = {};
   const gameIds = {};
   const gameSports = {};
@@ -112,14 +117,28 @@ function parseRSCache(cacheData) {
     if (key.endsWith('__sport')) { gameSports[key.slice(0, -7)] = val; continue; }
     if (key.endsWith('__lines')) continue;
     if (val && typeof val === 'object' &&
-        (val['Moneyline'] || val['Game Winner'] || val['Spread'] || val['Total'] || val['Total Runs'] || val['Total Goals'] || val['Run in 1st inning?'])) {
+        (val['Moneyline'] || val['Game Winner'] || val['Spread'] || val['Total'] ||
+         val['Total Runs'] || val['Total Goals'] || val['Run in 1st inning?'] ||
+         val['Fight Outcome'] || val['Fight Winner'] || val['Match Winner'] || val['Winner'])) {
       games[key] = val;
     }
   }
   return { games, gameIds, gameSports };
 }
 
-// ── Game key normalization for matching ───────────────
+async function loadRSCache(rsKey, env, now, staleThreshold) {
+  try {
+    const cached = await env.DB.prepare(
+      'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
+    ).bind('real_sync_' + rsKey + '_v5').first();
+    if (cached && (now - cached.fetched_at) < staleThreshold) {
+      return parseRSCache(JSON.parse(cached.data));
+    }
+  } catch(e) {}
+  return { games: {}, gameIds: {}, gameSports: {} };
+}
+
+// ── Game key normalization ─────────────────────────────
 
 function normName(name) {
   return (name || '')
@@ -132,16 +151,11 @@ function normName(name) {
     .trim();
 }
 
-// Try to find a matching RS game key for a given FD game
 function findRSGameKey(fdAway, fdHome, rsGames) {
-  // Direct match first
   const directKey = fdAway + ' @ ' + fdHome;
   if (rsGames[directKey]) return directKey;
-
-  // Normalize and find closest match
   const nAway = normName(fdAway);
   const nHome = normName(fdHome);
-
   for (const rsKey of Object.keys(rsGames)) {
     const parts = rsKey.split(' @ ');
     if (parts.length !== 2) continue;
@@ -155,9 +169,29 @@ function findRSGameKey(fdAway, fdHome, rsGames) {
   return null;
 }
 
+// Find matching RS outcome by team/side name (normalized)
+function findRSOutcome(name, rsOutcomes) {
+  const nName = normName(name);
+  return rsOutcomes.find(o => {
+    const nRs = normName(o.label);
+    return nRs.includes(nName) || nName.includes(nRs);
+  });
+}
+
+// Float-key lookup with tolerance (handles JS object key stringification)
+function lookupByLine(dict, line) {
+  if (!dict) return null;
+  const str = String(line);
+  if (dict[str] != null) return dict[str];
+  // Try matching any key within 0.01 of the target (float precision safety)
+  for (const k of Object.keys(dict)) {
+    if (Math.abs(parseFloat(k) - line) < 0.01) return dict[k];
+  }
+  return null;
+}
+
 // ── Telegram send ──────────────────────────────────────
 
-// Returns the sent message_id (needed to edit the message later)
 async function sendTelegram(chatId, text, botToken, replyMarkup) {
   try {
     const body = { chat_id: chatId, text, parse_mode: 'HTML' };
@@ -173,17 +207,16 @@ async function sendTelegram(chatId, text, botToken, replyMarkup) {
 }
 
 function formatAlert(sport, game, market, side, ev, units, dollarAmt, pt, rsPct, adjFairPct, gameUrl) {
-  const evStr     = (ev >= 0 ? '+' : '') + ev.toFixed(1) + '% EV';
-  const unitStr   = units + 'u (' + dollarAmt + ' Rax)';
-  const ptStr     = pt != null ? ' ' + (pt > 0 ? '+' : '') + pt : '';
-  const lineStr   = market === 'ML' ? side : side + ptStr;
-  const rsPctStr  = rsPct != null ? rsPct.toFixed(1) + '% RS' : '';
-  const adjStr    = adjFairPct != null ? adjFairPct.toFixed(1) + '% Fair' : '';
-  const statsStr  = [rsPctStr, adjStr].filter(Boolean).join(' · ');
-  const teams     = game.split(' @ ');
+  const evStr    = (ev >= 0 ? '+' : '') + ev.toFixed(1) + '% EV';
+  const unitStr  = units + 'u (' + dollarAmt + ' Rax)';
+  const ptStr    = pt != null ? ' ' + (pt > 0 ? '+' : '') + pt : '';
+  const lineStr  = market === 'ML' || market === 'RFI' ? side : side + ptStr;
+  const rsPctStr = rsPct != null ? rsPct.toFixed(1) + '% RS' : '';
+  const adjStr   = adjFairPct != null ? adjFairPct.toFixed(1) + '% Fair' : '';
+  const statsStr = [rsPctStr, adjStr].filter(Boolean).join(' · ');
+  const teams    = game.split(' @ ');
   const shortGame = (teams[0] || game) + ' @ ' + (teams[1] || '');
-  const linkLine  = gameUrl ? `\n<a href="${gameUrl}">View on Real Sports ↗</a>` : '';
-
+  const linkLine = gameUrl ? `\n<a href="${gameUrl}">View on Real Sports ↗</a>` : '';
   return (
     `🔔 <b>RaxEdge Alert</b>\n\n` +
     `<b>${lineStr}</b> · ${market} · ${sport.label}\n` +
@@ -193,17 +226,266 @@ function formatAlert(sport, game, market, side, ev, units, dollarAmt, pt, rsPct,
   );
 }
 
+// ── Native cache processors ────────────────────────────
+
+// ML-only sports: MLB (fd_mlb) and NHL (fd_nhl)
+// Cache: { ok, games: { "Away @ Home": { id, away, home, cm, ml: { TeamName: price } } } }
+function processNativeML(sport, fdGames, rsGames, rsGameIds, rsGameSports, globalMinEv, allBets, now) {
+  for (const [gameKey, game] of Object.entries(fdGames)) {
+    const commenceTime = game.cm ? Math.floor(new Date(game.cm).getTime() / 1000) : 0;
+    if (commenceTime && commenceTime <= now) continue;
+
+    const rsKey = findRSGameKey(game.away, game.home, rsGames);
+    if (!rsKey) continue;
+
+    const rsMarkets = rsGames[rsKey];
+    const gameId    = rsGameIds[rsKey] || null;
+    const rsSport   = rsGameSports[rsKey] || sport.rsKey;
+    const gameUrl   = buildRSUrl(gameId, rsSport);
+
+    // Find RS ML market (Moneyline or Game Winner)
+    const rsMktLabel = RS_ML_LABELS.find(l => rsMarkets[l]);
+    if (!rsMktLabel) continue;
+
+    const rsMkt      = rsMarkets[rsMktLabel];
+    const rsOutcomes = rsMkt.outcomes || [];
+    const rsVolume   = rsMkt.volume ?? 0;
+
+    const mlPrices = game.ml || {};
+    const awayPrice = mlPrices[game.away];
+    const homePrice = mlPrices[game.home];
+    if (awayPrice == null || homePrice == null) continue;
+
+    const noVig = noVigFair(awayPrice, homePrice);
+    if (!noVig) continue;
+
+    const sides = [
+      { name: game.away, fdOdds: awayPrice, fdFair: noVig.fa },
+      { name: game.home, fdOdds: homePrice, fdFair: noVig.fb },
+    ];
+
+    for (const { name, fdOdds, fdFair } of sides) {
+      const rsO = findRSOutcome(name, rsOutcomes);
+      if (!rsO || !rsO.probability) continue;
+
+      const ev = calcEV(fdFair, rsO.probability, rsVolume);
+      if (ev == null || ev < globalMinEv) continue;
+
+      const u = unitsEV(ev, fdFair);
+      if (u <= 0) continue;
+
+      allBets.push({
+        sport, game: gameKey, market: 'ML', side: name,
+        ev: Math.round(ev * 10) / 10, units: u, fdOdds, pt: null,
+        rsPct: Math.round(rsO.probability * 1000) / 10,
+        adjFairPct: Math.round(fdFair * 1000) / 10,
+        gameUrl, commenceTime,
+        betKey: `${sport.fdKey}|${gameKey}|ML|${name}|`,
+      });
+    }
+  }
+}
+
+// NBA: fd_nba_alts — ML + spread + total
+// Cache: { ok, games: { "Away @ Home": {
+//   id, away, home, cm,
+//   ml: { TeamName: price },
+//   spreads: { TeamName: { handicap: price } },
+//   totals: { Over: { line: price }, Under: { line: price } }
+// } } }
+function processNativeNBA(sport, fdGames, rsGames, rsGameIds, rsGameSports, globalMinEv, allBets, now) {
+  for (const [gameKey, game] of Object.entries(fdGames)) {
+    const commenceTime = game.cm ? Math.floor(new Date(game.cm).getTime() / 1000) : 0;
+    if (commenceTime && commenceTime <= now) continue;
+
+    const rsKey = findRSGameKey(game.away, game.home, rsGames);
+    if (!rsKey) continue;
+
+    const rsMarkets = rsGames[rsKey];
+    const gameId    = rsGameIds[rsKey] || null;
+    const rsSport   = rsGameSports[rsKey] || sport.rsKey;
+    const gameUrl   = buildRSUrl(gameId, rsSport);
+
+    // ── ML ──
+    const rsMlLabel = RS_ML_LABELS.find(l => rsMarkets[l]);
+    if (rsMlLabel) {
+      const rsMkt      = rsMarkets[rsMlLabel];
+      const rsOutcomes = rsMkt.outcomes || [];
+      const rsVolume   = rsMkt.volume ?? 0;
+      const mlPrices   = game.ml || {};
+      const awayPrice  = mlPrices[game.away];
+      const homePrice  = mlPrices[game.home];
+      if (awayPrice != null && homePrice != null) {
+        const noVig = noVigFair(awayPrice, homePrice);
+        if (noVig) {
+          for (const { name, fdOdds, fdFair } of [
+            { name: game.away, fdOdds: awayPrice, fdFair: noVig.fa },
+            { name: game.home, fdOdds: homePrice, fdFair: noVig.fb },
+          ]) {
+            const rsO = findRSOutcome(name, rsOutcomes);
+            if (!rsO || !rsO.probability) continue;
+            const ev = calcEV(fdFair, rsO.probability, rsVolume);
+            if (ev == null || ev < globalMinEv) continue;
+            const u = unitsEV(ev, fdFair);
+            if (u <= 0) continue;
+            allBets.push({
+              sport, game: gameKey, market: 'ML', side: name,
+              ev: Math.round(ev * 10) / 10, units: u, fdOdds, pt: null,
+              rsPct: Math.round(rsO.probability * 1000) / 10,
+              adjFairPct: Math.round(fdFair * 1000) / 10,
+              gameUrl, commenceTime,
+              betKey: `${sport.fdKey}|${gameKey}|ML|${name}|`,
+            });
+          }
+        }
+      }
+    }
+
+    // ── Spread ──
+    const rsSpreadMkt = rsMarkets['Spread'];
+    if (rsSpreadMkt && game.spreads) {
+      const rsOutcomes = rsSpreadMkt.outcomes || [];
+      const rsVolume   = rsSpreadMkt.volume ?? 0;
+      for (const rsO of rsOutcomes) {
+        if (!rsO.probability || rsO.line == null) continue;
+        // Find which FD team name this RS outcome belongs to
+        const nRsLabel = normName(rsO.label);
+        const fdTeam = Object.keys(game.spreads).find(t => {
+          const nFd = normName(t);
+          return nFd.includes(nRsLabel) || nRsLabel.includes(nFd);
+        });
+        if (!fdTeam) continue;
+        const otherTeam = Object.keys(game.spreads).find(t => t !== fdTeam);
+        if (!otherTeam) continue;
+        const fdPrice      = lookupByLine(game.spreads[fdTeam], rsO.line);
+        const fdOtherPrice = lookupByLine(game.spreads[otherTeam], -rsO.line);
+        if (fdPrice == null || fdOtherPrice == null) continue;
+        const noVig = noVigFair(fdPrice, fdOtherPrice);
+        if (!noVig) continue;
+        const fdFair = noVig.fa;
+        const ev = calcEV(fdFair, rsO.probability, rsVolume);
+        if (ev == null || ev < globalMinEv) continue;
+        const u = unitsEV(ev, fdFair);
+        if (u <= 0) continue;
+        const pt = rsO.line;
+        allBets.push({
+          sport, game: gameKey, market: 'Spread', side: fdTeam,
+          ev: Math.round(ev * 10) / 10, units: u, fdOdds: fdPrice, pt,
+          rsPct: Math.round(rsO.probability * 1000) / 10,
+          adjFairPct: Math.round(fdFair * 1000) / 10,
+          gameUrl, commenceTime,
+          betKey: `${sport.fdKey}|${gameKey}|Spread|${fdTeam}|${pt ?? ''}`,
+        });
+      }
+    }
+
+    // ── Total ──
+    const rsTotalMkt = rsMarkets['Total'];
+    if (rsTotalMkt && game.totals) {
+      const rsOutcomes = rsTotalMkt.outcomes || [];
+      const rsVolume   = rsTotalMkt.volume ?? 0;
+      for (const rsO of rsOutcomes) {
+        if (!rsO.probability || rsO.line == null) continue;
+        const side      = /over/i.test(rsO.label) ? 'Over' : 'Under';
+        const otherSide = side === 'Over' ? 'Under' : 'Over';
+        const fdPrice      = lookupByLine(game.totals[side], rsO.line);
+        const fdOtherPrice = lookupByLine(game.totals[otherSide], rsO.line);
+        if (fdPrice == null || fdOtherPrice == null) continue;
+        const noVig = noVigFair(fdPrice, fdOtherPrice);
+        if (!noVig) continue;
+        const fdFair = noVig.fa;
+        const ev = calcEV(fdFair, rsO.probability, rsVolume);
+        if (ev == null || ev < globalMinEv) continue;
+        const u = unitsEV(ev, fdFair);
+        if (u <= 0) continue;
+        const pt = rsO.line;
+        allBets.push({
+          sport, game: gameKey, market: 'Total', side,
+          ev: Math.round(ev * 10) / 10, units: u, fdOdds: fdPrice, pt,
+          rsPct: Math.round(rsO.probability * 1000) / 10,
+          adjFairPct: Math.round(fdFair * 1000) / 10,
+          gameUrl, commenceTime,
+          betKey: `${sport.fdKey}|${gameKey}|Total|${side}|${pt ?? ''}`,
+        });
+      }
+    }
+  }
+}
+
+// FC: fd_fc — DK Asian Handicap spread
+// Cache: { ok, games: { "Away @ Home": {
+//   id, away, home, cm, league,
+//   spreads: { Home: { "-0.5": price, ... }, Away: { "0.5": price, ... } }
+// } } }
+function processNativeFC(sport, fdGames, rsGames, rsGameIds, rsGameSports, globalMinEv, allBets, now) {
+  for (const [gameKey, game] of Object.entries(fdGames)) {
+    const commenceTime = game.cm ? Math.floor(new Date(game.cm).getTime() / 1000) : 0;
+    if (commenceTime && commenceTime <= now) continue;
+
+    const rsKey = findRSGameKey(game.away, game.home, rsGames);
+    if (!rsKey) continue;
+
+    const rsMarkets = rsGames[rsKey];
+    const gameId    = rsGameIds[rsKey] || null;
+    const rsSport   = rsGameSports[rsKey] || sport.rsKey;
+    const gameUrl   = buildRSUrl(gameId, rsSport);
+
+    const rsSpreadMkt = rsMarkets['Spread'];
+    if (!rsSpreadMkt || !game.spreads) continue;
+
+    const rsOutcomes = rsSpreadMkt.outcomes || [];
+    const rsVolume   = rsSpreadMkt.volume ?? 0;
+
+    for (const rsO of rsOutcomes) {
+      if (!rsO.probability || rsO.line == null) continue;
+
+      // Determine if this outcome is Home or Away by team name match
+      const nRsLabel = normName(rsO.label);
+      const nHome    = normName(game.home);
+      const nAway    = normName(game.away);
+      let dkSide;
+      if (nHome.includes(nRsLabel) || nRsLabel.includes(nHome)) dkSide = 'Home';
+      else if (nAway.includes(nRsLabel) || nRsLabel.includes(nAway)) dkSide = 'Away';
+      else continue;
+
+      const otherSide    = dkSide === 'Home' ? 'Away' : 'Home';
+      const fdPrice      = lookupByLine(game.spreads[dkSide], rsO.line);
+      const fdOtherPrice = lookupByLine(game.spreads[otherSide], -rsO.line);
+      if (fdPrice == null || fdOtherPrice == null) continue;
+
+      const noVig = noVigFair(fdPrice, fdOtherPrice);
+      if (!noVig) continue;
+      const fdFair = noVig.fa;
+
+      const ev = calcEV(fdFair, rsO.probability, rsVolume);
+      if (ev == null || ev < globalMinEv) continue;
+      const u = unitsEV(ev, fdFair);
+      if (u <= 0) continue;
+
+      const sideName = dkSide === 'Home' ? game.home : game.away;
+      const pt = rsO.line;
+      allBets.push({
+        sport, game: gameKey, market: 'Spread', side: sideName,
+        ev: Math.round(ev * 10) / 10, units: u, fdOdds: fdPrice, pt,
+        rsPct: Math.round(rsO.probability * 1000) / 10,
+        adjFairPct: Math.round(fdFair * 1000) / 10,
+        gameUrl, commenceTime,
+        betKey: `${sport.fdKey}|${gameKey}|Spread|${sideName}|${pt ?? ''}`,
+      });
+    }
+  }
+}
+
 // ── Main scheduled handler ─────────────────────────────
 
 export default {
   async scheduled(event, env, ctx) {
     if (!env.TELEGRAM_BOT_TOKEN) return;
-    if (!env.ODDS_API_KEY) return;
 
     const now = Math.floor(Date.now() / 1000);
-    const FD_STALE_THRESHOLD = 5 * 60;   // 5 minutes — FD odds change fast
-    const RS_STALE_THRESHOLD = 30 * 60;  // 30 minutes — RS fair value changes slowly
-    const RE_ALERT_EV_JUMP = 4.0;
+    const FD_STALE_THRESHOLD = 5 * 60;   // 5 minutes
+    const RS_STALE_THRESHOLD = 30 * 60;  // 30 minutes
+    const RE_ALERT_EV_JUMP   = 4.0;
 
     // 1. Load all verified, enabled users
     const users = await env.DB.prepare(
@@ -215,164 +497,153 @@ export default {
 
     if (!users.results || !users.results.length) return;
 
-    // 2. Determine which sports are needed (union across all user prefs)
+    // 2. Determine which sports are needed
     const sportsNeeded = new Set();
     for (const user of users.results) {
       if (!user.sports || user.sports === 'ALL') {
-        SPORTS.forEach(s => sportsNeeded.add(s.fdKey));
+        ALL_SPORTS.forEach(s => sportsNeeded.add(s.fdKey));
       } else {
         user.sports.split(',').forEach(s => sportsNeeded.add(s.trim()));
       }
     }
 
-    // 3. For each needed sport, collect bets above the global minimum EV threshold
     const globalMinEv = Math.min(...users.results.map(u => u.min_ev || 5));
-
-    // allBets: array of { sport, sportLabel, game, market, side, ev, units, fdOdds, pt, commenceTime, betKey }
     const allBets = [];
 
-    for (const sport of SPORTS) {
+    // ── 3a. Native sports (FD/DK caches) ──────────────────
+
+    for (const sport of NATIVE_SPORTS) {
       if (!sportsNeeded.has(sport.fdKey)) continue;
 
-      // Load FD odds from D1 cache — try any key for this sport
+      // Load native FD/DK odds cache
       let fdGames = null;
       try {
         const cached = await env.DB.prepare(
-          `SELECT data, fetched_at FROM odds_cache WHERE cache_key LIKE ? ORDER BY fetched_at DESC LIMIT 1`
-        ).bind('odds_' + sport.fdKey + '_%').first();
-
-        if (cached && (now - cached.fetched_at) < FD_STALE_THRESHOLD) {
-          fdGames = JSON.parse(cached.data);
-        }
-      } catch(e) {}
-
-      // Cache stale or empty — fetch fresh from Odds API
-      if (!fdGames) {
-        fdGames = await fetchFDOdds(sport.fdKey, env.ODDS_API_KEY);
-        if (fdGames) {
-          try {
-            await env.DB.prepare(
-              `INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?)
-               ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at`
-            ).bind('odds_' + sport.fdKey + '_alerts', JSON.stringify(fdGames), now).run();
-          } catch(e) {}
-        }
-      }
-
-      if (!Array.isArray(fdGames) || !fdGames.length) continue;
-
-      // Load RS fair probabilities from D1 cache
-      let rsGames = {}, rsGameIds = {}, rsGameSports = {};
-      try {
-        const rsCached = await env.DB.prepare(
           'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
-        ).bind('real_sync_' + sport.rsKey + '_v5').first();
-
-        if (rsCached && (now - rsCached.fetched_at) < RS_STALE_THRESHOLD) {
-          const parsed = parseRSCache(JSON.parse(rsCached.data));
-          rsGames = parsed.games;
-          rsGameIds = parsed.gameIds;
-          rsGameSports = parsed.gameSports;
+        ).bind(sport.cacheKey).first();
+        if (cached && (now - cached.fetched_at) < FD_STALE_THRESHOLD) {
+          const parsed = JSON.parse(cached.data);
+          fdGames = parsed.games || null;
         }
       } catch(e) {}
 
-      // No RS data available for this sport — skip (can't calculate EV without fair value)
+      if (!fdGames || !Object.keys(fdGames).length) continue;
+
+      // Load RS data
+      const { games: rsGames, gameIds: rsGameIds, gameSports: rsGameSports } =
+        await loadRSCache(sport.rsKey, env, now, RS_STALE_THRESHOLD);
+
       if (!Object.keys(rsGames).length) continue;
 
-      // Process each FD game
-      for (const game of fdGames) {
-        const commenceTime = game.commence_time
-          ? Math.floor(new Date(game.commence_time).getTime() / 1000)
-          : 0;
+      if (sport.type === 'nba') {
+        processNativeNBA(sport, fdGames, rsGames, rsGameIds, rsGameSports, globalMinEv, allBets, now);
+      } else if (sport.type === 'ml_only') {
+        processNativeML(sport, fdGames, rsGames, rsGameIds, rsGameSports, globalMinEv, allBets, now);
+      } else if (sport.type === 'fc') {
+        processNativeFC(sport, fdGames, rsGames, rsGameIds, rsGameSports, globalMinEv, allBets, now);
+      }
+    }
 
-        // Pre-game only: skip if game has already started
-        if (commenceTime && commenceTime <= now) continue;
+    // ── 3b. Odds API sports (NCAAB + UFC) ─────────────────
 
-        const fdAway = game.away_team;
-        const fdHome = game.home_team;
-        if (!fdAway || !fdHome) continue;
+    if (env.ODDS_API_KEY) {
+      for (const sport of ODDS_API_SPORTS) {
+        if (!sportsNeeded.has(sport.fdKey)) continue;
 
-        const gameKey = fdAway + ' @ ' + fdHome;
-        const rsKey   = findRSGameKey(fdAway, fdHome, rsGames);
-        if (!rsKey) continue;
+        let fdGames = null;
+        try {
+          const cached = await env.DB.prepare(
+            `SELECT data, fetched_at FROM odds_cache WHERE cache_key LIKE ? ORDER BY fetched_at DESC LIMIT 1`
+          ).bind('odds_' + sport.fdKey + '_%').first();
+          if (cached && (now - cached.fetched_at) < FD_STALE_THRESHOLD) {
+            fdGames = JSON.parse(cached.data);
+          }
+        } catch(e) {}
 
-        const rsMarkets = rsGames[rsKey];
-        const gameId    = rsGameIds[rsKey] || null;
-        const rsSport   = rsGameSports[rsKey] || sport.rsKey;
-        const gameUrl   = buildRSUrl(gameId, rsSport);
+        if (!fdGames) {
+          fdGames = await fetchFDOdds(sport.fdKey, env.ODDS_API_KEY);
+          if (fdGames) {
+            try {
+              await env.DB.prepare(
+                `INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?)
+                 ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at`
+              ).bind('odds_' + sport.fdKey + '_alerts', JSON.stringify(fdGames), now).run();
+            } catch(e) {}
+          }
+        }
 
-        // Get FD bookmaker data — prefer FanDuel, fall back to DraftKings
-        const bms = game.bookmakers || [];
-        const fd = bms.find(b => b.key === 'fanduel') || bms.find(b => b.key === 'draftkings');
-        if (!fd) continue;
+        if (!Array.isArray(fdGames) || !fdGames.length) continue;
 
-        for (const fdMkt of (fd.markets || [])) {
-          const rsMktLabels = FD_MKT_TO_RS[fdMkt.key];
-          const displayMkt  = FD_MKT_TO_DISPLAY[fdMkt.key];
-          if (!rsMktLabels) continue;
-          // Try each possible RS label in order until one matches
-          const rsMktLabel = rsMktLabels.find(l => rsMarkets[l]);
+        const { games: rsGames, gameIds: rsGameIds, gameSports: rsGameSports } =
+          await loadRSCache(sport.rsKey, env, now, RS_STALE_THRESHOLD);
+
+        if (!Object.keys(rsGames).length) continue;
+
+        for (const game of fdGames) {
+          const commenceTime = game.commence_time
+            ? Math.floor(new Date(game.commence_time).getTime() / 1000)
+            : 0;
+          if (commenceTime && commenceTime <= now) continue;
+
+          const fdAway = game.away_team;
+          const fdHome = game.home_team;
+          if (!fdAway || !fdHome) continue;
+
+          const gameKey = fdAway + ' @ ' + fdHome;
+          const rsKey   = findRSGameKey(fdAway, fdHome, rsGames);
+          if (!rsKey) continue;
+
+          const rsMarkets = rsGames[rsKey];
+          const gameId    = rsGameIds[rsKey] || null;
+          const rsSport   = rsGameSports[rsKey] || sport.rsKey;
+          const gameUrl   = buildRSUrl(gameId, rsSport);
+
+          const bms = game.bookmakers || [];
+          const fd  = bms.find(b => b.key === 'fanduel') || bms.find(b => b.key === 'draftkings');
+          if (!fd) continue;
+
+          // ML only for Odds API sports
+          const h2hMkt = (fd.markets || []).find(m => m.key === 'h2h');
+          if (!h2hMkt) continue;
+
+          const rsMktLabel = RS_ML_LABELS.find(l => rsMarkets[l]);
           if (!rsMktLabel) continue;
 
-          const rsMkt     = rsMarkets[rsMktLabel];
+          const rsMkt      = rsMarkets[rsMktLabel];
           const rsOutcomes = rsMkt.outcomes || [];
           const rsVolume   = rsMkt.volume ?? 0;
-          const fdOutcomes = fdMkt.outcomes || [];
+          const fdOutcomes = h2hMkt.outcomes || [];
           if (fdOutcomes.length < 2) continue;
 
-          // Calculate no-vig fair probability from FD odds (for 2-way markets)
-          const noVig = fdOutcomes.length === 2
-            ? noVigFair(fdOutcomes[0].price, fdOutcomes[1].price)
-            : null;
+          const noVig = noVigFair(fdOutcomes[0].price, fdOutcomes[1].price);
+          if (!noVig) continue;
 
-          for (const fdO of fdOutcomes) {
-            // Find matching RS outcome by normalized label
-            const nFdName = normName(fdO.name);
-            const rsO = rsOutcomes.find(o => {
-              const nRsLabel = normName(o.label);
-              return nRsLabel.includes(nFdName) || nFdName.includes(nRsLabel);
-            });
+          for (let i = 0; i < fdOutcomes.length; i++) {
+            const fdO    = fdOutcomes[i];
+            const fdFair = i === 0 ? noVig.fa : noVig.fb;
+            const rsO    = findRSOutcome(fdO.name, rsOutcomes);
             if (!rsO || !rsO.probability) continue;
 
-            // FD no-vig probability for this side (our "true" probability baseline)
-            const isFirstOutcome = fdOutcomes[0].name === fdO.name;
-            const fdNoVigProb = noVig ? (isFirstOutcome ? noVig.fa : noVig.fb) : null;
-            if (!fdNoVigProb) continue; // need both sides for no-vig calc
-
-            // Rake-adjusted EV — matches dashboard formula exactly
-            const ev = calcEV(fdNoVigProb, rsO.probability, rsVolume);
+            const ev = calcEV(fdFair, rsO.probability, rsVolume);
             if (ev == null || ev < globalMinEv) continue;
-
-            const u = unitsEV(ev, fdNoVigProb);
+            const u = unitsEV(ev, fdFair);
             if (u <= 0) continue;
 
-            const adjFairPct = Math.round(fdNoVigProb * 1000) / 10; // already have it
-
-            const pt = fdO.point !== undefined ? fdO.point : null;
-            const betKey = `${sport.fdKey}|${gameKey}|${displayMkt}|${fdO.name}|${pt ?? ''}`;
-
             allBets.push({
-              sport,
-              game: gameKey,
-              market: displayMkt,
-              side: fdO.name,
-              ev: Math.round(ev * 10) / 10,
-              units: u,
-              fdOdds: fdO.price,
-              pt,
-              rsPct: Math.round(rsO.probability * 1000) / 10,   // e.g. 57.3
-              adjFairPct: adjFairPct != null ? Math.round(adjFairPct * 10) / 10 : null,
-              gameUrl,
-              commenceTime,
-              betKey
+              sport, game: gameKey, market: 'ML', side: fdO.name,
+              ev: Math.round(ev * 10) / 10, units: u, fdOdds: fdO.price, pt: null,
+              rsPct: Math.round(rsO.probability * 1000) / 10,
+              adjFairPct: Math.round(fdFair * 1000) / 10,
+              gameUrl, commenceTime,
+              betKey: `${sport.fdKey}|${gameKey}|ML|${fdO.name}|`,
             });
           }
         }
       }
     }
 
-    // ── MLB RFI alerts (YRFI / NRFI) ─────────────────────
-    // Uses FD native API cache (fd_rfi) + RS "Run in 1st inning?" probability
+    // ── 3c. MLB RFI (FD native, fd_rfi cache) ─────────────
+
     if (sportsNeeded.has('baseball_mlb')) {
       try {
         const rfiCached = await env.DB.prepare(
@@ -381,22 +652,10 @@ export default {
 
         if (rfiCached && (now - rfiCached.fetched_at) < FD_STALE_THRESHOLD) {
           const rfiMap = JSON.parse(rfiCached.data).rfi || {};
+          const { games: rsGamesRfi, gameIds: rsGameIdsRfi, gameSports: rsGameSportsRfi } =
+            await loadRSCache('mlb', env, now, RS_STALE_THRESHOLD);
 
-          // Load MLB RS cache (may already be warm from the SPORTS loop above)
-          let rsGamesRfi = {}, rsGameIdsRfi = {}, rsGameSportsRfi = {};
-          try {
-            const rsCached = await env.DB.prepare(
-              'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
-            ).bind('real_sync_mlb_v5').first();
-            if (rsCached && (now - rsCached.fetched_at) < RS_STALE_THRESHOLD) {
-              const parsed = parseRSCache(JSON.parse(rsCached.data));
-              rsGamesRfi      = parsed.games;
-              rsGameIdsRfi    = parsed.gameIds;
-              rsGameSportsRfi = parsed.gameSports;
-            }
-          } catch(e) {}
-
-          const mlbSport = SPORTS.find(s => s.fdKey === 'baseball_mlb');
+          const mlbSport = NATIVE_SPORTS.find(s => s.fdKey === 'baseball_mlb');
 
           for (const [rfiGameKey, rfi] of Object.entries(rfiMap)) {
             const parts = rfiGameKey.split(' @ ');
@@ -411,39 +670,26 @@ export default {
             const rsVolume   = rfiMkt.volume ?? 0;
             const rsYes = rsOutcomes.find(o => /yes/i.test(o.label));
             const rsNo  = rsOutcomes.find(o => /no/i.test(o.label));
-
             const gameId  = rsGameIdsRfi[rsKey] || null;
             const rsSport = rsGameSportsRfi[rsKey] || 'mlb';
             const gameUrl = buildRSUrl(gameId, rsSport);
 
-            const rfiSides = [
+            for (const { side, fdFair, fdOdds, rsO } of [
               { side: 'Yes (YRFI)', fdFair: rfi.yesFair, fdOdds: rfi.yesAm, rsO: rsYes },
               { side: 'No (NRFI)',  fdFair: rfi.noFair,  fdOdds: rfi.noAm,  rsO: rsNo  },
-            ];
-
-            for (const { side, fdFair, fdOdds, rsO } of rfiSides) {
+            ]) {
               if (!rsO || !rsO.probability) continue;
-
               const ev = calcEV(fdFair, rsO.probability, rsVolume);
               if (ev == null || ev < globalMinEv) continue;
-
               const u = unitsEV(ev, fdFair);
               if (u <= 0) continue;
-
               allBets.push({
-                sport:        mlbSport,
-                game:         rfiGameKey,
-                market:       'RFI',
-                side,
-                ev:           Math.round(ev * 10) / 10,
-                units:        u,
-                fdOdds,
-                pt:           null,
-                rsPct:        Math.round(rsO.probability * 1000) / 10,
-                adjFairPct:   Math.round(fdFair * 1000) / 10,
-                gameUrl,
-                commenceTime: 0, // FD native API only returns OPEN markets
-                betKey:       `baseball_mlb|${rfiGameKey}|RFI|${side}|`,
+                sport: mlbSport, game: rfiGameKey, market: 'RFI', side,
+                ev: Math.round(ev * 10) / 10, units: u, fdOdds, pt: null,
+                rsPct: Math.round(rsO.probability * 1000) / 10,
+                adjFairPct: Math.round(fdFair * 1000) / 10,
+                gameUrl, commenceTime: 0,
+                betKey: `baseball_mlb|${rfiGameKey}|RFI|${side}|`,
               });
             }
           }
@@ -453,7 +699,8 @@ export default {
 
     if (!allBets.length) return;
 
-    // 4. For each user, find their matching bets and send alerts
+    // ── 4. Per-user alerting ───────────────────────────────
+
     for (const user of users.results) {
       const userSports = (!user.sports || user.sports === 'ALL')
         ? null
@@ -467,7 +714,7 @@ export default {
         b.ev >= minEv && (!userSports || userSports.has(b.sport.fdKey))
       );
 
-      // Skip any game+market the user already marked as taken
+      // Skip game+market the user already marked as taken
       try {
         const takenRows = await env.DB.prepare(
           'SELECT DISTINCT game, market FROM alert_messages WHERE user_id=? AND taken=1'
@@ -478,7 +725,7 @@ export default {
         }
       } catch(e) {}
 
-      // 1 Side filter: per game+market, keep only the highest EV side
+      // 1 Side filter: keep only highest EV side per game+market
       if (oneSide) {
         const bestPerMarket = new Map();
         for (const b of userBets) {
@@ -492,7 +739,7 @@ export default {
 
       if (!userBets.length) continue;
 
-      // Batch-load existing alert log for this user
+      // Batch-load existing alert log
       const betKeys = userBets.map(b => b.betKey);
       const placeholders = betKeys.map(() => '?').join(',');
       let existingLog = {};
@@ -507,14 +754,11 @@ export default {
 
       for (const bet of userBets) {
         const lastEv = existingLog[bet.betKey];
-
-        // Skip if already sent — unless EV has jumped 4%+ since last alert
         if (lastEv !== undefined && bet.ev - lastEv < RE_ALERT_EV_JUMP) continue;
 
         const dollarAmt = Math.round(bet.units * unitSize);
-        const message = formatAlert(bet.sport, bet.game, bet.market, bet.side, bet.ev, bet.units, dollarAmt, bet.pt, bet.rsPct, bet.adjFairPct, bet.gameUrl);
+        const message   = formatAlert(bet.sport, bet.game, bet.market, bet.side, bet.ev, bet.units, dollarAmt, bet.pt, bet.rsPct, bet.adjFairPct, bet.gameUrl);
 
-        // Insert alert_messages row first to get its ID for the callback button
         let alertRowId = null;
         try {
           const ins = await env.DB.prepare(
@@ -525,21 +769,17 @@ export default {
         } catch(e) {}
 
         const replyMarkup = alertRowId ? {
-          inline_keyboard: [[
-            { text: '✅ Mark Bet Taken', callback_data: 't:' + alertRowId }
-          ]]
+          inline_keyboard: [[{ text: '✅ Mark Bet Taken', callback_data: 't:' + alertRowId }]]
         } : undefined;
 
         const msgId = await sendTelegram(user.telegram_chat_id, message, env.TELEGRAM_BOT_TOKEN, replyMarkup);
 
-        // Store telegram message_id so we can edit the button later
         if (msgId && alertRowId) {
           try {
             await env.DB.prepare('UPDATE alert_messages SET msg_id=? WHERE id=?').bind(msgId, alertRowId).run();
           } catch(e) {}
         }
 
-        // Update alert log
         try {
           await env.DB.prepare(
             `INSERT INTO alert_sent_log (user_id, bet_key, last_ev, sent_at) VALUES (?,?,?,?)
@@ -547,23 +787,20 @@ export default {
           ).bind(user.user_id, bet.betKey, bet.ev, now).run();
         } catch(e) {}
 
-        // Small delay between messages to avoid Telegram rate limits (30 msg/sec global limit)
         await new Promise(r => setTimeout(r, 50));
       }
     }
 
-    // 5. Cleanup: remove stale log entries (bets from > 36h ago — games are long over)
+    // ── 5. Cleanup ─────────────────────────────────────────
+
     try {
-      await env.DB.prepare(
-        'DELETE FROM alert_sent_log WHERE sent_at < ?'
-      ).bind(now - 36 * 3600).run();
+      await env.DB.prepare('DELETE FROM alert_sent_log WHERE sent_at < ?')
+        .bind(now - 36 * 3600).run();
     } catch(e) {}
 
-    // 6. Cleanup: remove expired verify tokens
     try {
-      await env.DB.prepare(
-        'DELETE FROM telegram_verify_tokens WHERE expires_at < ?'
-      ).bind(now).run();
+      await env.DB.prepare('DELETE FROM telegram_verify_tokens WHERE expires_at < ?')
+        .bind(now).run();
     } catch(e) {}
   }
 };
