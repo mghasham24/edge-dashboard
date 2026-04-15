@@ -102,7 +102,7 @@ function parseRSCache(cacheData) {
     if (key.endsWith('__sport')) { gameSports[key.slice(0, -7)] = val; continue; }
     if (key.endsWith('__lines')) continue;
     if (val && typeof val === 'object' &&
-        (val['Moneyline'] || val['Game Winner'] || val['Spread'] || val['Total'] || val['Total Runs'] || val['Total Goals'])) {
+        (val['Moneyline'] || val['Game Winner'] || val['Spread'] || val['Total'] || val['Total Runs'] || val['Total Goals'] || val['Run in 1st inning?'])) {
       games[key] = val;
     }
   }
@@ -357,6 +357,85 @@ export default {
           }
         }
       }
+    }
+
+    // ── MLB RFI alerts (YRFI / NRFI) ─────────────────────
+    // Uses FD native API cache (fd_rfi) + RS "Run in 1st inning?" probability
+    if (sportsNeeded.has('baseball_mlb')) {
+      try {
+        const rfiCached = await env.DB.prepare(
+          'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
+        ).bind('fd_rfi').first();
+
+        if (rfiCached && (now - rfiCached.fetched_at) < FD_STALE_THRESHOLD) {
+          const rfiMap = JSON.parse(rfiCached.data).rfi || {};
+
+          // Load MLB RS cache (may already be warm from the SPORTS loop above)
+          let rsGamesRfi = {}, rsGameIdsRfi = {}, rsGameSportsRfi = {};
+          try {
+            const rsCached = await env.DB.prepare(
+              'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
+            ).bind('real_sync_mlb_v5').first();
+            if (rsCached && (now - rsCached.fetched_at) < RS_STALE_THRESHOLD) {
+              const parsed = parseRSCache(JSON.parse(rsCached.data));
+              rsGamesRfi      = parsed.games;
+              rsGameIdsRfi    = parsed.gameIds;
+              rsGameSportsRfi = parsed.gameSports;
+            }
+          } catch(e) {}
+
+          const mlbSport = SPORTS.find(s => s.fdKey === 'baseball_mlb');
+
+          for (const [rfiGameKey, rfi] of Object.entries(rfiMap)) {
+            const parts = rfiGameKey.split(' @ ');
+            if (parts.length !== 2) continue;
+            const rsKey = findRSGameKey(parts[0], parts[1], rsGamesRfi);
+            if (!rsKey) continue;
+
+            const rfiMkt = rsGamesRfi[rsKey]?.['Run in 1st inning?'];
+            if (!rfiMkt) continue;
+
+            const rsOutcomes = rfiMkt.outcomes || [];
+            const rsYes = rsOutcomes.find(o => /yes/i.test(o.label));
+            const rsNo  = rsOutcomes.find(o => /no/i.test(o.label));
+
+            const gameId  = rsGameIdsRfi[rsKey] || null;
+            const rsSport = rsGameSportsRfi[rsKey] || 'mlb';
+            const gameUrl = buildRSUrl(gameId, rsSport);
+
+            const rfiSides = [
+              { side: 'Yes (YRFI)', fdFair: rfi.yesFair, fdOdds: rfi.yesAm, rsO: rsYes },
+              { side: 'No (NRFI)',  fdFair: rfi.noFair,  fdOdds: rfi.noAm,  rsO: rsNo  },
+            ];
+
+            for (const { side, fdFair, fdOdds, rsO } of rfiSides) {
+              if (!rsO || !rsO.probability) continue;
+
+              const ev = calcEV(fdFair, rsO.probability);
+              if (ev == null || ev < globalMinEv) continue;
+
+              const u = unitsEV(ev, fdFair);
+              if (u <= 0) continue;
+
+              allBets.push({
+                sport:        mlbSport,
+                game:         rfiGameKey,
+                market:       'RFI',
+                side,
+                ev:           Math.round(ev * 10) / 10,
+                units:        u,
+                fdOdds,
+                pt:           null,
+                rsPct:        Math.round(rsO.probability * 1000) / 10,
+                adjFairPct:   Math.round(fdFair * 1000) / 10,
+                gameUrl,
+                commenceTime: 0, // FD native API only returns OPEN markets
+                betKey:       `baseball_mlb|${rfiGameKey}|RFI|${side}|`,
+              });
+            }
+          }
+        }
+      } catch(e) {}
     }
 
     if (!allBets.length) return;
