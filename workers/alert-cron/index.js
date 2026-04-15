@@ -164,7 +164,7 @@ async function sendTelegram(chatId, text, botToken, replyMarkup) {
 
 function formatAlert(sport, game, market, side, ev, units, dollarAmt, pt, rsPct, adjFairPct, gameUrl) {
   const evStr     = (ev >= 0 ? '+' : '') + ev.toFixed(1) + '% EV';
-  const unitStr   = units + 'u (' + dollarAmt + ' 🪙)';
+  const unitStr   = units + 'u (' + dollarAmt + ' Rax)';
   const ptStr     = pt != null ? ' ' + (pt > 0 ? '+' : '') + pt : '';
   const lineStr   = market === 'ML' ? side : side + ptStr;
   const rsPctStr  = rsPct != null ? rsPct.toFixed(1) + '% RS' : '';
