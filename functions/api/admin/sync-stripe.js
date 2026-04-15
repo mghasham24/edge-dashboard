@@ -1,6 +1,7 @@
 // functions/api/admin/sync-stripe.js
-// One-time fix: sync all Stripe subscription statuses → D1
-// Fetches active, trialing, past_due, and cancelled subs and corrects plan in DB.
+// Syncs Stripe subscription statuses → D1.
+// Processes active/trialing FIRST (pro), tracks those customers,
+// then only processes canceled/past_due for customers with NO active sub.
 export async function onRequestPost({ request, env }) {
   const session = await getSession(request, env.DB);
   if (!session) return fail(401, 'Not authenticated');
@@ -10,17 +11,11 @@ export async function onRequestPost({ request, env }) {
   const auth = { 'Authorization': 'Bearer ' + env.STRIPE_SECRET_KEY };
   const report = { upgraded: [], downgraded: [], unchanged: [], errors: [] };
 
-  // Fetch all subs for these statuses and apply the right plan
-  const statusMap = {
-    active:   'pro',
-    trialing: 'pro',
-    past_due: 'free',
-    canceled: 'free',
-    unpaid:   'free',
-    paused:   'free'
-  };
+  // Customers already handled by an active/trialing sub — don't overwrite with a old canceled sub
+  const processedCustomers = new Set();
 
-  for (const [status, plan] of Object.entries(statusMap)) {
+  // ── Pass 1: active + trialing → pro ──────────────────
+  for (const status of ['active', 'trialing']) {
     let startingAfter = null;
     let hasMore = true;
 
@@ -30,39 +25,72 @@ export async function onRequestPost({ request, env }) {
 
       const res = await fetch('https://api.stripe.com/v1/subscriptions?' + params, { headers: auth });
       const data = await res.json();
-      if (!res.ok) { report.errors.push('Stripe list error (' + status + '): ' + (data.error?.message || 'unknown')); break; }
+      if (!res.ok) { report.errors.push('Stripe error (' + status + '): ' + (data.error?.message || 'unknown')); break; }
 
       for (const sub of (data.data || [])) {
         const customerId = sub.customer;
         if (!customerId) continue;
+        processedCustomers.add(customerId);
 
         try {
           const user = await env.DB.prepare(
             'SELECT id, plan, stripe_sub_id FROM users WHERE stripe_customer_id=?'
           ).bind(customerId).first();
-
           if (!user) continue;
 
-          const proExpiresAt = (plan === 'pro' && sub.current_period_end) ? sub.current_period_end : null;
+          const proExpiresAt = sub.current_period_end || null;
+          await env.DB.prepare(
+            'UPDATE users SET plan=\'pro\', stripe_sub_id=?, pro_expires_at=? WHERE id=?'
+          ).bind(sub.id, proExpiresAt, user.id).run();
 
-          if (user.plan !== plan) {
-            await env.DB.prepare(
-              'UPDATE users SET plan=?, stripe_sub_id=?, pro_expires_at=? WHERE id=?'
-            ).bind(plan, sub.id, proExpiresAt, user.id).run();
-
-            if (plan === 'pro') {
-              report.upgraded.push({ customerId, userId: user.id, from: user.plan, status });
-            } else {
-              report.downgraded.push({ customerId, userId: user.id, from: user.plan, status });
-            }
+          if (user.plan !== 'pro') {
+            report.upgraded.push({ customerId, userId: user.id, from: user.plan, status });
           } else {
-            // Plan matches — still update pro_expires_at in case it drifted
-            if (plan === 'pro') {
-              await env.DB.prepare(
-                'UPDATE users SET stripe_sub_id=?, pro_expires_at=? WHERE id=?'
-              ).bind(sub.id, proExpiresAt, user.id).run();
-            }
-            report.unchanged.push({ customerId, plan, status });
+            report.unchanged.push({ customerId, plan: 'pro', status });
+          }
+        } catch(e) {
+          report.errors.push(customerId + ': ' + e.message);
+        }
+      }
+
+      hasMore = data.has_more;
+      startingAfter = hasMore ? data.data[data.data.length - 1].id : null;
+    }
+  }
+
+  // ── Pass 2: canceled / past_due / unpaid → free (only if no active sub) ──
+  for (const status of ['canceled', 'past_due', 'unpaid', 'paused']) {
+    let startingAfter = null;
+    let hasMore = true;
+
+    while (hasMore) {
+      const params = new URLSearchParams({ limit: '100', status });
+      if (startingAfter) params.set('starting_after', startingAfter);
+
+      const res = await fetch('https://api.stripe.com/v1/subscriptions?' + params, { headers: auth });
+      const data = await res.json();
+      if (!res.ok) { report.errors.push('Stripe error (' + status + '): ' + (data.error?.message || 'unknown')); break; }
+
+      for (const sub of (data.data || [])) {
+        const customerId = sub.customer;
+        if (!customerId) continue;
+
+        // Skip — this customer has an active/trialing sub that already set them to pro
+        if (processedCustomers.has(customerId)) continue;
+
+        try {
+          const user = await env.DB.prepare(
+            'SELECT id, plan FROM users WHERE stripe_customer_id=?'
+          ).bind(customerId).first();
+          if (!user) continue;
+
+          if (user.plan === 'pro') {
+            await env.DB.prepare(
+              'UPDATE users SET plan=\'free\', pro_expires_at=NULL WHERE id=?'
+            ).bind(user.id).run();
+            report.downgraded.push({ customerId, userId: user.id, status });
+          } else {
+            report.unchanged.push({ customerId, plan: 'free', status });
           }
         } catch(e) {
           report.errors.push(customerId + ': ' + e.message);
