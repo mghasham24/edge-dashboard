@@ -2412,7 +2412,6 @@
                 <button class="refresh-btn" id="refresh-btn" onclick="loadOdds()">Refresh</button>
                 <button id="theme-btn" onclick="toggleTheme()" title="Toggle light/dark mode" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:14px;padding:6px 10px;border-radius:5px;cursor:pointer;line-height:1">🌙</button>
                 <button class="refresh-btn" onclick="logOut()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted)" title="Log out">⏻</button>
-                <button id="manage-sub-btn" onclick="openBillingPortal()" style="display:none;background:var(--bg3);border:1px solid rgba(79,110,247,.4);color:var(--accent);font-family:var(--sans);font-size:11px;font-weight:600;padding:6px 12px;border-radius:5px;cursor:pointer;text-transform:uppercase;letter-spacing:.05em">Pro ✦</button>
             </div>
         </header>
 
@@ -6537,11 +6536,6 @@
         nav.innerHTML = '';
         var pro = isPro();
 
-        // Pro badge (manage subscription button)
-        if (currentUser && currentUser.plan === 'pro' && !currentUser.is_admin) {
-            document.getElementById('manage-sub-btn').style.display = '';
-        }
-
         // Admin setup: show api-remaining and ensure admin tab button exists
         var adminBtn = null;
         if (currentUser && currentUser.is_admin) {
@@ -6691,6 +6685,23 @@
                 ftBar.appendChild(refTabBtn);
             } else {
                 ftBar.appendChild(document.getElementById('referral-tab-btn'));
+            }
+
+            // Pro ✦ button (manage subscription) — right of Refer, only for pro users
+            if (currentUser && currentUser.plan === 'pro' && !currentUser.is_admin) {
+                var existingProBtn = document.getElementById('manage-sub-btn');
+                if (!existingProBtn) {
+                    var proBtn = document.createElement('button');
+                    proBtn.id = 'manage-sub-btn';
+                    proBtn.className = 'sport-tab';
+                    proBtn.textContent = 'Pro ✦';
+                    proBtn.style.cssText = 'color:var(--accent);border-bottom-color:transparent;margin-left:auto';
+                    proBtn.onclick = openBillingPortal;
+                    ftBar.appendChild(proBtn);
+                } else {
+                    existingProBtn.style.marginLeft = 'auto';
+                    ftBar.appendChild(existingProBtn);
+                }
             }
         }
     }
