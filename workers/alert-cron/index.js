@@ -6,6 +6,18 @@
 //   3. Alert if EV >= user threshold and bet not already sent
 //   4. Re-alert if EV jumped +4% since last message (new unit tier)
 
+import Hashids from 'hashids';
+
+const _hashids = new Hashids('routing', 11);
+const RS_SPORT_KEY_ID = { nba:1, nfl:2, cbb:3, mlb:4, nhl:7, ufc:10, wnba:12, soccer:14 };
+
+function buildRSUrl(gid, rsSportKey) {
+  if (!gid) return null;
+  const sportId = RS_SPORT_KEY_ID[rsSportKey] ?? 0;
+  const hash = _hashids.encode([4, sportId, 0, gid]);
+  return 'https://www.realapp.com/' + hash;
+}
+
 // ── EV Calculation ────────────────────────────────────
 
 function imp(american) {
@@ -23,11 +35,12 @@ function noVigFair(amA, amB) {
   return { fa: iA / total, fb: iB / total };
 }
 
-// EV% given RS fair probability and FD American odds for same side
-function calcEV(rsFairProb, fdAmerican) {
-  if (!rsFairProb || !fdAmerican) return null;
-  const payout = fdAmerican > 0 ? fdAmerican / 100 : 100 / Math.abs(fdAmerican);
-  return (rsFairProb * (1 + payout) - 1) * 100;
+// EV% — FD no-vig is the "true" probability baseline; RS is the betting market.
+// Positive EV when RS crowd undervalues a side (rsImpliedProb < fdNoVigProb).
+// Formula: EV = (fdNoVigProb / rsImpliedProb - 1) * 100
+function calcEV(fdNoVigProb, rsImpliedProb) {
+  if (!fdNoVigProb || !rsImpliedProb || rsImpliedProb <= 0) return null;
+  return (fdNoVigProb / rsImpliedProb - 1) * 100;
 }
 
 // Unit sizing — mirrors the frontend unitsEV() function exactly
@@ -56,7 +69,12 @@ const SPORTS = [
 ];
 
 // Market label mapping between FD API key and RS label
-const FD_MKT_TO_RS = { h2h: 'Moneyline', spreads: 'Spread', totals: 'Total' };
+// Each entry is an array of possible RS labels to try in order
+const FD_MKT_TO_RS = {
+  h2h:     ['Moneyline', 'Game Winner'],
+  spreads: ['Spread', 'Puck Line', 'Run Line'],
+  totals:  ['Total', 'Total Runs', 'Total Goals'],
+};
 const FD_MKT_TO_DISPLAY = { h2h: 'ML', spreads: 'Spread', totals: 'Total' };
 
 // ── Odds API fetch ─────────────────────────────────────
@@ -76,14 +94,19 @@ function parseRSCache(cacheData) {
   // cacheData is the marketMap stored by real/sync.js
   // Structure: { "Away @ Home": { "Moneyline": { outcomes: [{label, probability}] }, ... }, "Away @ Home__gid": 123, ... }
   const games = {};
-  if (!cacheData || typeof cacheData !== 'object') return games;
+  const gameIds = {};
+  const gameSports = {};
+  if (!cacheData || typeof cacheData !== 'object') return { games, gameIds, gameSports };
   for (const [key, val] of Object.entries(cacheData)) {
-    if (key.endsWith('__gid') || key.endsWith('__lines') || key.endsWith('__sport')) continue;
-    if (val && typeof val === 'object' && (val['Moneyline'] || val['Spread'] || val['Total'])) {
+    if (key.endsWith('__gid'))   { gameIds[key.slice(0, -5)] = val; continue; }
+    if (key.endsWith('__sport')) { gameSports[key.slice(0, -7)] = val; continue; }
+    if (key.endsWith('__lines')) continue;
+    if (val && typeof val === 'object' &&
+        (val['Moneyline'] || val['Game Winner'] || val['Spread'] || val['Total'] || val['Total Runs'] || val['Total Goals'])) {
       games[key] = val;
     }
   }
-  return games;
+  return { games, gameIds, gameSports };
 }
 
 // ── Game key normalization for matching ───────────────
@@ -134,21 +157,24 @@ async function sendTelegram(chatId, text, botToken) {
   } catch(e) {}
 }
 
-function formatAlert(sport, game, market, side, ev, units, fdOdds, pt) {
-  const evStr    = (ev >= 0 ? '+' : '') + ev.toFixed(1) + '% EV';
-  const unitStr  = units + 'u';
-  const oddsStr  = fdOdds > 0 ? '+' + fdOdds : String(fdOdds);
-  const ptStr    = pt != null ? ' ' + (pt > 0 ? '+' : '') + pt : '';
-  const lineStr  = market === 'ML' ? side : side + ptStr;
-  const teams    = game.split(' @ ');
+function formatAlert(sport, game, market, side, ev, units, dollarAmt, pt, rsPct, adjFairPct, gameUrl) {
+  const evStr     = (ev >= 0 ? '+' : '') + ev.toFixed(1) + '% EV';
+  const unitStr   = units + 'u ($' + dollarAmt + ')';
+  const ptStr     = pt != null ? ' ' + (pt > 0 ? '+' : '') + pt : '';
+  const lineStr   = market === 'ML' ? side : side + ptStr;
+  const rsPctStr  = rsPct != null ? rsPct.toFixed(1) + '% RS' : '';
+  const adjStr    = adjFairPct != null ? adjFairPct.toFixed(1) + '% Fair' : '';
+  const statsStr  = [rsPctStr, adjStr].filter(Boolean).join(' · ');
+  const teams     = game.split(' @ ');
   const shortGame = (teams[0] || game) + ' @ ' + (teams[1] || '');
+  const linkLine  = gameUrl ? `\n<a href="${gameUrl}">View on Real Sports ↗</a>` : '';
 
   return (
     `🔔 <b>RaxEdge Alert</b>\n\n` +
     `<b>${lineStr}</b> · ${market} · ${sport.label}\n` +
     `${evStr} · ${unitStr}\n` +
-    `FanDuel ${oddsStr}\n\n` +
-    `<i>${shortGame}</i>`
+    (statsStr ? statsStr + '\n' : '') +
+    `\n<i>${shortGame}</i>${linkLine}`
   );
 }
 
@@ -160,15 +186,16 @@ export default {
     if (!env.ODDS_API_KEY) return;
 
     const now = Math.floor(Date.now() / 1000);
-    const STALE_THRESHOLD = 5 * 60; // 5 minutes
+    const FD_STALE_THRESHOLD = 5 * 60;   // 5 minutes — FD odds change fast
+    const RS_STALE_THRESHOLD = 30 * 60;  // 30 minutes — RS fair value changes slowly
     const RE_ALERT_EV_JUMP = 4.0;
 
     // 1. Load all verified, enabled users
     const users = await env.DB.prepare(
-      `SELECT ns.user_id, ns.telegram_chat_id, ns.min_ev, ns.sports
+      `SELECT ns.user_id, ns.telegram_chat_id, ns.min_ev, ns.sports, ns.one_side, ns.unit_size
        FROM notification_settings ns
        JOIN users u ON u.id = ns.user_id
-       WHERE ns.telegram_verified=1 AND ns.enabled=1 AND u.plan='pro'`
+       WHERE ns.telegram_verified=1 AND ns.enabled=1 AND (u.plan='pro' OR u.is_admin=1)`
     ).all();
 
     if (!users.results || !users.results.length) return;
@@ -199,7 +226,7 @@ export default {
           `SELECT data, fetched_at FROM odds_cache WHERE cache_key LIKE ? ORDER BY fetched_at DESC LIMIT 1`
         ).bind('odds_' + sport.fdKey + '_%').first();
 
-        if (cached && (now - cached.fetched_at) < STALE_THRESHOLD) {
+        if (cached && (now - cached.fetched_at) < FD_STALE_THRESHOLD) {
           fdGames = JSON.parse(cached.data);
         }
       } catch(e) {}
@@ -220,14 +247,17 @@ export default {
       if (!Array.isArray(fdGames) || !fdGames.length) continue;
 
       // Load RS fair probabilities from D1 cache
-      let rsGames = {};
+      let rsGames = {}, rsGameIds = {}, rsGameSports = {};
       try {
         const rsCached = await env.DB.prepare(
           'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
         ).bind('real_sync_' + sport.rsKey + '_v5').first();
 
-        if (rsCached && (now - rsCached.fetched_at) < STALE_THRESHOLD) {
-          rsGames = parseRSCache(JSON.parse(rsCached.data));
+        if (rsCached && (now - rsCached.fetched_at) < RS_STALE_THRESHOLD) {
+          const parsed = parseRSCache(JSON.parse(rsCached.data));
+          rsGames = parsed.games;
+          rsGameIds = parsed.gameIds;
+          rsGameSports = parsed.gameSports;
         }
       } catch(e) {}
 
@@ -252,19 +282,30 @@ export default {
         if (!rsKey) continue;
 
         const rsMarkets = rsGames[rsKey];
+        const gameId    = rsGameIds[rsKey] || null;
+        const rsSport   = rsGameSports[rsKey] || sport.rsKey;
+        const gameUrl   = buildRSUrl(gameId, rsSport);
 
         // Get FD bookmaker data
         const fd = (game.bookmakers || []).find(b => b.key === 'fanduel' || b.key === 'draftkings');
         if (!fd) continue;
 
         for (const fdMkt of (fd.markets || [])) {
-          const rsMktLabel = FD_MKT_TO_RS[fdMkt.key];
-          const displayMkt = FD_MKT_TO_DISPLAY[fdMkt.key];
-          if (!rsMktLabel || !rsMarkets[rsMktLabel]) continue;
+          const rsMktLabels = FD_MKT_TO_RS[fdMkt.key];
+          const displayMkt  = FD_MKT_TO_DISPLAY[fdMkt.key];
+          if (!rsMktLabels) continue;
+          // Try each possible RS label in order until one matches
+          const rsMktLabel = rsMktLabels.find(l => rsMarkets[l]);
+          if (!rsMktLabel) continue;
 
           const rsOutcomes = rsMarkets[rsMktLabel].outcomes || [];
           const fdOutcomes = fdMkt.outcomes || [];
           if (fdOutcomes.length < 2) continue;
+
+          // Calculate no-vig fair probability from FD odds (for 2-way markets)
+          const noVig = fdOutcomes.length === 2
+            ? noVigFair(fdOutcomes[0].price, fdOutcomes[1].price)
+            : null;
 
           for (const fdO of fdOutcomes) {
             // Find matching RS outcome by normalized label
@@ -275,11 +316,20 @@ export default {
             });
             if (!rsO || !rsO.probability) continue;
 
-            const ev = calcEV(rsO.probability, fdO.price);
+            // FD no-vig probability for this side (our "true" probability baseline)
+            const isFirstOutcome = fdOutcomes[0].name === fdO.name;
+            const fdNoVigProb = noVig ? (isFirstOutcome ? noVig.fa : noVig.fb) : null;
+            if (!fdNoVigProb) continue; // need both sides for no-vig calc
+
+            // EV = (FD no-vig prob / RS implied prob) - 1
+            // Positive when RS crowd undervalues this side vs the sharp market
+            const ev = calcEV(fdNoVigProb, rsO.probability);
             if (ev == null || ev < globalMinEv) continue;
 
-            const u  = unitsEV(ev, rsO.probability);
+            const u = unitsEV(ev, fdNoVigProb);
             if (u <= 0) continue;
+
+            const adjFairPct = Math.round(fdNoVigProb * 1000) / 10; // already have it
 
             const pt = fdO.point !== undefined ? fdO.point : null;
             const betKey = `${sport.fdKey}|${gameKey}|${displayMkt}|${fdO.name}|${pt ?? ''}`;
@@ -293,6 +343,9 @@ export default {
               units: u,
               fdOdds: fdO.price,
               pt,
+              rsPct: Math.round(rsO.probability * 1000) / 10,   // e.g. 57.3
+              adjFairPct: adjFairPct != null ? Math.round(adjFairPct * 10) / 10 : null,
+              gameUrl,
               commenceTime,
               betKey
             });
@@ -309,11 +362,25 @@ export default {
         ? null
         : new Set(user.sports.split(',').map(s => s.trim()));
 
-      const minEv = user.min_ev || 5;
+      const minEv    = user.min_ev || 5;
+      const oneSide  = user.one_side === 1;
+      const unitSize = user.unit_size || 100;
 
-      const userBets = allBets.filter(b =>
+      let userBets = allBets.filter(b =>
         b.ev >= minEv && (!userSports || userSports.has(b.sport.fdKey))
       );
+
+      // 1 Side filter: per game+market, keep only the highest EV side
+      if (oneSide) {
+        const bestPerMarket = new Map();
+        for (const b of userBets) {
+          const key = b.game + '|' + b.market;
+          if (!bestPerMarket.has(key) || b.ev > bestPerMarket.get(key).ev) {
+            bestPerMarket.set(key, b);
+          }
+        }
+        userBets = Array.from(bestPerMarket.values());
+      }
 
       if (!userBets.length) continue;
 
@@ -336,7 +403,8 @@ export default {
         // Skip if already sent — unless EV has jumped 4%+ since last alert
         if (lastEv !== undefined && bet.ev - lastEv < RE_ALERT_EV_JUMP) continue;
 
-        const message = formatAlert(bet.sport, bet.game, bet.market, bet.side, bet.ev, bet.units, bet.fdOdds, bet.pt);
+        const dollarAmt = Math.round(bet.units * unitSize);
+        const message = formatAlert(bet.sport, bet.game, bet.market, bet.side, bet.ev, bet.units, dollarAmt, bet.pt, bet.rsPct, bet.adjFairPct, bet.gameUrl);
         await sendTelegram(user.telegram_chat_id, message, env.TELEGRAM_BOT_TOKEN);
 
         // Update alert log

@@ -30,21 +30,25 @@ export async function onRequest({ request, env }) {
 
   if (request.method === 'GET') {
     const row = await env.DB.prepare(
-      'SELECT telegram_chat_id, telegram_verified, enabled, min_ev, sports FROM notification_settings WHERE user_id=?'
+      'SELECT telegram_chat_id, telegram_verified, enabled, min_ev, sports, one_side, unit_size FROM notification_settings WHERE user_id=?'
     ).bind(session.user_id).first();
 
     return new Response(JSON.stringify({
       ok: true,
       settings: row ? {
-        verified:  row.telegram_verified === 1,
-        enabled:   row.enabled === 1,
-        min_ev:    row.min_ev,
-        sports:    row.sports
+        verified:   row.telegram_verified === 1,
+        enabled:    row.enabled === 1,
+        min_ev:     row.min_ev,
+        sports:     row.sports,
+        one_side:   row.one_side === 1,
+        unit_size:  row.unit_size ?? 100
       } : {
-        verified: false,
-        enabled:  true,
-        min_ev:   5.0,
-        sports:   'ALL'
+        verified:  false,
+        enabled:   true,
+        min_ev:    5.0,
+        sports:    'ALL',
+        one_side:  false,
+        unit_size: 100
       }
     }), { headers: { 'Content-Type': 'application/json' } });
   }
@@ -54,7 +58,7 @@ export async function onRequest({ request, env }) {
     try { body = await request.json(); }
     catch { return fail(400, 'Invalid JSON'); }
 
-    const { min_ev, sports, enabled } = body;
+    const { min_ev, sports, enabled, one_side, unit_size } = body;
 
     // Validate min_ev
     if (min_ev !== undefined) {
@@ -70,22 +74,32 @@ export async function onRequest({ request, env }) {
       }
     }
 
+    // Validate unit_size
+    if (unit_size !== undefined) {
+      const u = parseFloat(unit_size);
+      if (!isFinite(u) || u < 1 || u > 100000) return fail(400, 'unit_size must be between 1 and 100000');
+    }
+
     const now = Math.floor(Date.now() / 1000);
 
     // Upsert — preserve telegram linkage, only update prefs
     await env.DB.prepare(`
-      INSERT INTO notification_settings (user_id, enabled, min_ev, sports, updated_at)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO notification_settings (user_id, enabled, min_ev, sports, one_side, unit_size, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(user_id) DO UPDATE SET
         enabled    = COALESCE(excluded.enabled,    enabled),
         min_ev     = COALESCE(excluded.min_ev,     min_ev),
         sports     = COALESCE(excluded.sports,     sports),
+        one_side   = COALESCE(excluded.one_side,   one_side),
+        unit_size  = COALESCE(excluded.unit_size,  unit_size),
         updated_at = excluded.updated_at
     `).bind(
       session.user_id,
-      enabled !== undefined ? (enabled ? 1 : 0) : null,
-      min_ev  !== undefined ? parseFloat(min_ev) : null,
-      sports  !== undefined ? String(sports)     : null,
+      enabled   !== undefined ? (enabled ? 1 : 0)    : null,
+      min_ev    !== undefined ? parseFloat(min_ev)    : null,
+      sports    !== undefined ? String(sports)        : null,
+      one_side  !== undefined ? (one_side ? 1 : 0)   : null,
+      unit_size !== undefined ? parseFloat(unit_size) : null,
       now
     ).run();
 

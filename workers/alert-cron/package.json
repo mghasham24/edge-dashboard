@@ -1,0 +1,7 @@
+{
+  "name": "raxedge-alert-cron",
+  "type": "module",
+  "dependencies": {
+    "hashids": "^2.3.0"
+  }
+}
