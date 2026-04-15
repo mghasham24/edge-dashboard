@@ -147,19 +147,24 @@ function findRSGameKey(fdAway, fdHome, rsGames) {
 
 // ── Telegram send ──────────────────────────────────────
 
-async function sendTelegram(chatId, text, botToken) {
+// Returns the sent message_id (needed to edit the message later)
+async function sendTelegram(chatId, text, botToken, replyMarkup) {
   try {
-    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+    const body = { chat_id: chatId, text, parse_mode: 'HTML' };
+    if (replyMarkup) body.reply_markup = replyMarkup;
+    const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' })
+      body: JSON.stringify(body)
     });
-  } catch(e) {}
+    const data = await res.json();
+    return data.ok ? data.result.message_id : null;
+  } catch(e) { return null; }
 }
 
 function formatAlert(sport, game, market, side, ev, units, dollarAmt, pt, rsPct, adjFairPct, gameUrl) {
   const evStr     = (ev >= 0 ? '+' : '') + ev.toFixed(1) + '% EV';
-  const unitStr   = units + 'u (' + dollarAmt + ' Rax)';
+  const unitStr   = units + 'u (' + dollarAmt + ' 🪙)';
   const ptStr     = pt != null ? ' ' + (pt > 0 ? '+' : '') + pt : '';
   const lineStr   = market === 'ML' ? side : side + ptStr;
   const rsPctStr  = rsPct != null ? rsPct.toFixed(1) + '% RS' : '';
@@ -405,7 +410,31 @@ export default {
 
         const dollarAmt = Math.round(bet.units * unitSize);
         const message = formatAlert(bet.sport, bet.game, bet.market, bet.side, bet.ev, bet.units, dollarAmt, bet.pt, bet.rsPct, bet.adjFairPct, bet.gameUrl);
-        await sendTelegram(user.telegram_chat_id, message, env.TELEGRAM_BOT_TOKEN);
+
+        // Insert alert_messages row first to get its ID for the callback button
+        let alertRowId = null;
+        try {
+          const ins = await env.DB.prepare(
+            `INSERT INTO alert_messages (user_id, chat_id, bet_key, sport, game, market, side, pt, ev, units, dollar_amt, sent_at)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
+          ).bind(user.user_id, user.telegram_chat_id, bet.betKey, bet.sport.label, bet.game, bet.market, bet.side, bet.pt ?? null, bet.ev, bet.units, dollarAmt, now).run();
+          alertRowId = ins.meta.last_row_id;
+        } catch(e) {}
+
+        const replyMarkup = alertRowId ? {
+          inline_keyboard: [[
+            { text: '✅ Mark Bet Taken', callback_data: 't:' + alertRowId }
+          ]]
+        } : undefined;
+
+        const msgId = await sendTelegram(user.telegram_chat_id, message, env.TELEGRAM_BOT_TOKEN, replyMarkup);
+
+        // Store telegram message_id so we can edit the button later
+        if (msgId && alertRowId) {
+          try {
+            await env.DB.prepare('UPDATE alert_messages SET msg_id=? WHERE id=?').bind(msgId, alertRowId).run();
+          } catch(e) {}
+        }
 
         // Update alert log
         try {

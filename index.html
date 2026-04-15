@@ -2706,6 +2706,15 @@
 
         </div>
 
+            <!-- Taken Bets -->
+            <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:10px;padding:20px">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+                    <div style="font-size:13px;font-weight:700;color:var(--fg)">Taken Bets</div>
+                    <button onclick="loadTakenBets()" style="background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;font-family:var(--sans)">↻ Refresh</button>
+                </div>
+                <div id="alerts-taken-list" style="font-size:12px;color:var(--muted)">Loading...</div>
+            </div>
+
         <!-- Portfolio Panel -->
         <div class="admin-panel" id="portfolio-panel">
             <div style="margin-bottom:20px;display:flex;align-items:center;gap:12px">
@@ -4930,7 +4939,41 @@
 
             // Unit size
             document.getElementById('alerts-unit-size').value = s.unit_size || 100;
+
+            loadTakenBets();
         } catch(e) {}
+    }
+
+    async function loadTakenBets() {
+        var el = document.getElementById('alerts-taken-list');
+        if (!el) return;
+        try {
+            var res = await fetch('/api/alerts/taken', { credentials: 'same-origin' });
+            var data = await res.json();
+            var bets = data.bets || [];
+            if (!bets.length) {
+                el.textContent = 'No bets marked yet. Tap ✅ on a Telegram alert to record a bet.';
+                return;
+            }
+            el.innerHTML = bets.map(function(b) {
+                var date = new Date(b.sent_at * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                var ptStr = b.pt != null ? ' ' + (b.pt > 0 ? '+' : '') + b.pt : '';
+                var lineStr = b.market === 'ML' ? b.side : b.side + ptStr;
+                var evStr = (b.ev >= 0 ? '+' : '') + b.ev.toFixed(1) + '%';
+                return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">' +
+                    '<div>' +
+                        '<div style="font-weight:600;color:var(--fg);font-size:12px">' + lineStr + ' · ' + b.market + ' · ' + b.sport + '</div>' +
+                        '<div style="color:var(--muted);font-size:11px;margin-top:2px">' + b.game + ' · ' + date + '</div>' +
+                    '</div>' +
+                    '<div style="text-align:right;flex-shrink:0;margin-left:12px">' +
+                        '<div style="font-weight:700;color:var(--green);font-family:var(--mono);font-size:12px">' + evStr + ' EV</div>' +
+                        '<div style="color:var(--muted);font-size:11px">' + b.units + 'u · ' + b.dollar_amt + ' 🪙</div>' +
+                    '</div>' +
+                '</div>';
+            }).join('');
+        } catch(e) {
+            el.textContent = 'Failed to load.';
+        }
     }
 
     function updateAlertConnectUI(verified) {
