@@ -1,0 +1,22 @@
+# workers/alert-cron/wrangler.toml
+# Deploy this worker separately from the Pages project:
+#   cd workers/alert-cron && npx wrangler deploy
+#
+# Required env vars (set in Cloudflare dashboard → Workers → alert-cron → Settings → Variables):
+#   TELEGRAM_BOT_TOKEN    — from @BotFather
+#   ODDS_API_KEY          — same key used by the Pages project
+#   REAL_AUTH_TOKEN       — same key used by the Pages project (for future RS direct fetch)
+
+name = "raxedge-alert-cron"
+main = "index.js"
+compatibility_date = "2024-09-23"
+
+# ── D1 binding — same database as the Pages project ───
+[[d1_databases]]
+binding = "DB"
+database_name = "edge-db"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+
+# ── Cron trigger: every 60 seconds ────────────────────
+[triggers]
+crons = ["* * * * *"]
