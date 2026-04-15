@@ -375,6 +375,17 @@ export default {
         b.ev >= minEv && (!userSports || userSports.has(b.sport.fdKey))
       );
 
+      // Skip any game+market the user already marked as taken
+      try {
+        const takenRows = await env.DB.prepare(
+          'SELECT DISTINCT game, market FROM alert_messages WHERE user_id=? AND taken=1'
+        ).bind(user.user_id).all();
+        const takenKeys = new Set((takenRows.results || []).map(r => r.game + '|' + r.market));
+        if (takenKeys.size) {
+          userBets = userBets.filter(b => !takenKeys.has(b.game + '|' + b.market));
+        }
+      } catch(e) {}
+
       // 1 Side filter: per game+market, keep only the highest EV side
       if (oneSide) {
         const bestPerMarket = new Map();

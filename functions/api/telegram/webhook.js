@@ -28,6 +28,57 @@ export async function onRequestPost({ request, env }) {
   try { update = await request.json(); }
   catch { return new Response('ok', { status: 200 }); }
 
+  // ── Handle inline button taps ──────────────────────────
+  if (update.callback_query) {
+    const cq     = update.callback_query;
+    const cqId   = cq.id;
+    const data   = cq.data || '';
+    const chatId = String(cq.message?.chat?.id);
+    const msgId  = cq.message?.message_id;
+
+    if (data.startsWith('t:')) {
+      const rowId = parseInt(data.slice(2));
+      let toastText = '✅ Bet recorded!';
+
+      try {
+        const row = await env.DB.prepare(
+          'SELECT id, user_id, chat_id, game, market, taken FROM alert_messages WHERE id=?'
+        ).bind(rowId).first();
+
+        if (row && String(row.chat_id) === chatId) {
+          if (row.taken) {
+            toastText = 'Already recorded';
+          } else {
+            // Mark ALL sides of this game+market as taken — suppresses both sides
+            await env.DB.prepare(
+              'UPDATE alert_messages SET taken=1 WHERE user_id=? AND game=? AND market=?'
+            ).bind(row.user_id, row.game, row.market).run();
+
+            // Edit the button to show it's been recorded
+            await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/editMessageReplyMarkup`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                chat_id: chatId,
+                message_id: msgId,
+                reply_markup: { inline_keyboard: [[{ text: '✅ Bet Recorded', callback_data: 'noop' }]] }
+              })
+            });
+          }
+        }
+      } catch(e) {}
+
+      // Must answer callback query within 10s
+      await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ callback_query_id: cqId, text: toastText, show_alert: false })
+      });
+    }
+
+    return new Response('ok', { status: 200 });
+  }
+
   const msg = update.message;
   if (!msg || !msg.text) return new Response('ok', { status: 200 });
 
