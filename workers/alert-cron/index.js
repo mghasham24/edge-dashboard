@@ -487,6 +487,9 @@ export default {
     const RS_STALE_THRESHOLD = 30 * 60;  // 30 minutes
     const RE_ALERT_EV_JUMP   = 4.0;
 
+    // Debug snapshot — written to D1 at end of each run for diagnostics
+    const dbg = { ts: now, sports: {}, allBets: 0, sampleBets: [], sentCount: 0 };
+
     // 1. Load all verified, enabled users
     const users = await env.DB.prepare(
       `SELECT ns.user_id, ns.telegram_chat_id, ns.min_ev, ns.sports, ns.one_side, ns.unit_size
@@ -495,7 +498,11 @@ export default {
        WHERE ns.telegram_verified=1 AND ns.enabled=1 AND (u.plan='pro' OR u.is_admin=1)`
     ).all();
 
-    if (!users.results || !users.results.length) return;
+    if (!users.results || !users.results.length) {
+      dbg.exit = 'no_users';
+      await writeDebug(env, dbg);
+      return;
+    }
 
     // 2. Determine which sports are needed
     const sportsNeeded = new Set();
@@ -508,6 +515,8 @@ export default {
     }
 
     const globalMinEv = Math.min(...users.results.map(u => u.min_ev || 5));
+    dbg.globalMinEv = globalMinEv;
+    dbg.users = users.results.length;
     const allBets = [];
 
     // ── 3a. Native sports (FD/DK caches) ──────────────────
@@ -517,24 +526,37 @@ export default {
 
       // Load native FD/DK odds cache
       let fdGames = null;
+      let fdAge = null;
       try {
         const cached = await env.DB.prepare(
           'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
         ).bind(sport.cacheKey).first();
-        if (cached && (now - cached.fetched_at) < FD_STALE_THRESHOLD) {
-          const parsed = JSON.parse(cached.data);
-          fdGames = parsed.games || null;
+        if (cached) {
+          fdAge = now - cached.fetched_at;
+          if (fdAge < FD_STALE_THRESHOLD) {
+            const parsed = JSON.parse(cached.data);
+            fdGames = parsed.games || null;
+          }
         }
       } catch(e) {}
 
-      if (!fdGames || !Object.keys(fdGames).length) continue;
+      const fdCount = fdGames ? Object.keys(fdGames).length : 0;
+      if (!fdGames || !fdCount) {
+        dbg.sports[sport.label] = { fdGames: 0, fdAge, rsGames: 0, reason: 'no_fd_cache' };
+        continue;
+      }
 
       // Load RS data
       const { games: rsGames, gameIds: rsGameIds, gameSports: rsGameSports } =
         await loadRSCache(sport.rsKey, env, now, RS_STALE_THRESHOLD);
 
-      if (!Object.keys(rsGames).length) continue;
+      const rsCount = Object.keys(rsGames).length;
+      if (!rsCount) {
+        dbg.sports[sport.label] = { fdGames: fdCount, fdAge, rsGames: 0, reason: 'no_rs_cache' };
+        continue;
+      }
 
+      const beforeCount = allBets.length;
       if (sport.type === 'nba') {
         processNativeNBA(sport, fdGames, rsGames, rsGameIds, rsGameSports, globalMinEv, allBets, now);
       } else if (sport.type === 'ml_only') {
@@ -542,6 +564,7 @@ export default {
       } else if (sport.type === 'fc') {
         processNativeFC(sport, fdGames, rsGames, rsGameIds, rsGameSports, globalMinEv, allBets, now);
       }
+      dbg.sports[sport.label] = { fdGames: fdCount, fdAge, rsGames: rsCount, betsAdded: allBets.length - beforeCount };
     }
 
     // ── 3b. Odds API sports (NCAAB + UFC) ─────────────────
@@ -697,7 +720,17 @@ export default {
       } catch(e) {}
     }
 
-    if (!allBets.length) return;
+    dbg.allBets = allBets.length;
+    dbg.sampleBets = allBets.slice(0, 8).map(b => ({
+      sport: b.sport.label, game: b.game, market: b.market, side: b.side, ev: b.ev,
+      rsPct: b.rsPct, adjFairPct: b.adjFairPct
+    }));
+
+    if (!allBets.length) {
+      dbg.exit = 'no_bets';
+      await writeDebug(env, dbg);
+      return;
+    }
 
     // ── 4. Per-user alerting ───────────────────────────────
 
@@ -773,6 +806,7 @@ export default {
         } : undefined;
 
         const msgId = await sendTelegram(user.telegram_chat_id, message, env.TELEGRAM_BOT_TOKEN, replyMarkup);
+        if (msgId) dbg.sentCount++;
 
         if (msgId && alertRowId) {
           try {
@@ -791,7 +825,9 @@ export default {
       }
     }
 
-    // ── 5. Cleanup ─────────────────────────────────────────
+    // ── 5. Cleanup + debug write ───────────────────────────
+
+    await writeDebug(env, dbg);
 
     try {
       await env.DB.prepare('DELETE FROM alert_sent_log WHERE sent_at < ?')
@@ -804,3 +840,11 @@ export default {
     } catch(e) {}
   }
 };
+
+async function writeDebug(env, dbg) {
+  try {
+    await env.DB.prepare(
+      'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at'
+    ).bind('cron_debug', JSON.stringify(dbg), dbg.ts).run();
+  } catch(e) {}
+}
