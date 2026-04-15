@@ -4794,6 +4794,34 @@
         document.getElementById('admin-panel').classList.remove('visible');
     }
 
+    function showAlertsTab() {
+        document.getElementById('sport-tabs').style.display = 'none';
+        document.querySelector('.controls').style.display = 'none';
+        document.querySelector('.status-bar').style.display = 'none';
+        document.querySelector('.table-wrap').style.display = 'none';
+        document.getElementById('mobile-cards').style.display = 'none';
+        document.getElementById('collapse-btn').style.display = 'none';
+        document.getElementById('refresh-btn').style.display = 'none';
+        document.getElementById('alerts-panel').classList.add('visible');
+        var btn = document.getElementById('alerts-tab-btn');
+        if (btn) { btn.classList.add('active'); btn.textContent = '<- Dashboard'; }
+        loadAlertsPanel();
+    }
+
+    function hideAlertsTab() {
+        document.getElementById('sport-tabs').style.display = '';
+        document.querySelector('.controls').style.display = '';
+        document.querySelector('.status-bar').style.display = '';
+        document.querySelector('.table-wrap').style.display = '';
+        document.getElementById('mobile-cards').style.display = '';
+        document.getElementById('collapse-btn').style.display = '';
+        document.getElementById('refresh-btn').style.display = '';
+        document.getElementById('alerts-panel').classList.remove('visible');
+        var btn = document.getElementById('alerts-tab-btn');
+        if (btn) { btn.classList.remove('active'); btn.textContent = '🔔 Alerts'; }
+        loadOdds();
+    }
+
     function showReferralTab() {
         document.getElementById('sport-tabs').style.display = 'none';
         document.getElementById('feature-tabs').style.display = 'none';
@@ -6931,16 +6959,10 @@
                     alertsTabBtn.onclick = function() {
                         var isActive = this.classList.contains('active');
                         if (isActive) {
-                            this.classList.remove('active');
-                            this.textContent = '🔔 Alerts';
-                            document.getElementById('alerts-panel').classList.remove('visible');
-                            loadOdds();
+                            hideAlertsTab();
                         } else {
                             document.querySelectorAll('.sport-tab,.feature-tab').forEach(function(t) { t.classList.remove('active'); });
-                            this.classList.add('active');
-                            this.textContent = '<- Dashboard';
-                            document.getElementById('alerts-panel').classList.add('visible');
-                            loadAlertsPanel();
+                            showAlertsTab();
                         }
                     };
                     ftBar.appendChild(alertsTabBtn);
