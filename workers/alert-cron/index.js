@@ -301,8 +301,9 @@ export default {
         const rsSport   = rsGameSports[rsKey] || sport.rsKey;
         const gameUrl   = buildRSUrl(gameId, rsSport);
 
-        // Get FD bookmaker data
-        const fd = (game.bookmakers || []).find(b => b.key === 'fanduel' || b.key === 'draftkings');
+        // Get FD bookmaker data — prefer FanDuel, fall back to DraftKings
+        const bms = game.bookmakers || [];
+        const fd = bms.find(b => b.key === 'fanduel') || bms.find(b => b.key === 'draftkings');
         if (!fd) continue;
 
         for (const fdMkt of (fd.markets || [])) {
