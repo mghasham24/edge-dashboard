@@ -483,7 +483,7 @@ export default {
     if (!env.TELEGRAM_BOT_TOKEN) return;
 
     const now = Math.floor(Date.now() / 1000);
-    const FD_STALE_THRESHOLD = 5 * 60;   // 5 minutes
+    const FD_STALE_THRESHOLD = 30 * 60;  // 30 minutes — native caches only refresh when users visit the site
     const RS_STALE_THRESHOLD = 30 * 60;  // 30 minutes
     const RE_ALERT_EV_JUMP   = 4.0;
 
