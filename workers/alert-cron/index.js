@@ -778,16 +778,21 @@ export default {
       let existingLog = {};
       try {
         const logRows = await env.DB.prepare(
-          `SELECT bet_key, last_ev FROM alert_sent_log WHERE user_id=? AND bet_key IN (${placeholders})`
+          `SELECT bet_key, last_ev, sent_at FROM alert_sent_log WHERE user_id=? AND bet_key IN (${placeholders})`
         ).bind(user.user_id, ...betKeys).all();
         for (const row of (logRows.results || [])) {
-          existingLog[row.bet_key] = row.last_ev;
+          existingLog[row.bet_key] = { ev: row.last_ev, sentAt: row.sent_at };
         }
       } catch(e) {}
 
       for (const bet of userBets) {
-        const lastEv = existingLog[bet.betKey];
-        if (lastEv !== undefined && bet.ev - lastEv < RE_ALERT_EV_JUMP) continue;
+        const entry = existingLog[bet.betKey];
+        if (entry) {
+          const hoursSince = (now - entry.sentAt) / 3600;
+          // Suppress re-alert only if: EV hasn't jumped 4%+ AND last alert was within 2 hours
+          // The 2h escape hatch prevents algorithm-change EV mismatches from silencing alerts forever
+          if (bet.ev - entry.ev < RE_ALERT_EV_JUMP && hoursSince < 2) continue;
+        }
 
         const dollarAmt = Math.round(bet.units * unitSize);
         const message   = formatAlert(bet.sport, bet.game, bet.market, bet.side, bet.ev, bet.units, dollarAmt, bet.pt, bet.rsPct, bet.adjFairPct, bet.gameUrl);
