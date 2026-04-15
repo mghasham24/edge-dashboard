@@ -3195,6 +3195,7 @@
 
     function teamLogoHtml(name, size) {
         var url = name && TEAM_LOGO_URLS[name];
+        if (!url && name) console.log('[teamLogo] no logo for:', JSON.stringify(name));
         var s = size || 18;
         // Consistent color from team name for letter fallback
         var hue = teamColorHue(name);
