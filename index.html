@@ -3053,7 +3053,7 @@
         'Ajax':'https://a.espncdn.com/i/teamlogos/soccer/500/169.png',
         'Club Brugge':'https://a.espncdn.com/i/teamlogos/soccer/500/245.png',
         'PSV Eindhoven':'https://a.espncdn.com/i/teamlogos/soccer/500/285.png','PSV':'https://a.espncdn.com/i/teamlogos/soccer/500/285.png',
-        'FC Bayern':'https://a.espncdn.com/i/teamlogos/soccer/500/132.png','Bayern München':'https://a.espncdn.com/i/teamlogos/soccer/500/132.png','FC Bayern München':'https://a.espncdn.com/i/teamlogos/soccer/500/132.png',
+        'FC Bayern':'https://a.espncdn.com/i/teamlogos/soccer/500/132.png','Bayern München':'https://a.espncdn.com/i/teamlogos/soccer/500/132.png','FC Bayern München':'https://a.espncdn.com/i/teamlogos/soccer/500/132.png','Bayern Munchen':'https://a.espncdn.com/i/teamlogos/soccer/500/132.png','FC Bayern Munchen':'https://a.espncdn.com/i/teamlogos/soccer/500/132.png',
     };
 
     // Actual brand hex colors — keyed by DraftKings team name
@@ -3194,8 +3194,8 @@
     }
 
     function teamLogoHtml(name, size) {
-        var url = name && TEAM_LOGO_URLS[name];
-        if (!url && name) console.log('[teamLogo] no logo for:', JSON.stringify(name));
+        var cleanName = name ? name.replace(/^[\u2191\u2193\u2192\u2190\u2B06\u2B07\u27A1\u2B05\s]+/, '').trim() : name;
+        var url = cleanName && TEAM_LOGO_URLS[cleanName];
         var s = size || 18;
         // Consistent color from team name for letter fallback
         var hue = teamColorHue(name);
