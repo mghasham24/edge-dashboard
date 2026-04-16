@@ -7051,7 +7051,17 @@
                                 var isYes = r.ps === 'A';
                                 var match = outcomes.find(function(o) { if (!o.label) return false; return isYes ? o.label.toLowerCase() === 'yes' : o.label.toLowerCase() === 'no'; });
                                 if (!match) match = isYes ? outcomes[1] : outcomes[0];
-                                if (match && match.pct != null) { preds[r.id] = String(match.pct); if (mktData.volumeDisplay) vols[r.id] = mktData.volumeDisplay; }
+                                if (match && match.pct != null) {
+                                    var rsStartMs7 = syncD.markets[realKey + '__startMs'];
+                                    if (rsStartMs7 && r.cm) {
+                                        var _etFmt7 = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
+                                        if (_etFmt7.format(new Date(rsStartMs7)) !== _etFmt7.format(r.cm)) return;
+                                    } else if (!rsStartMs7) {
+                                        var pct7 = parseFloat(match.pct);
+                                        if (!isNaN(pct7) && (pct7 <= 3 || pct7 >= 97)) return;
+                                    }
+                                    preds[r.id] = String(match.pct); if (mktData.volumeDisplay) vols[r.id] = mktData.volumeDisplay;
+                                }
                             });
                         }
                         renderTable();
@@ -8284,6 +8294,14 @@
                     });
                     if (!match) match = isYes ? outcomes[1] : outcomes[0];
                     if (match && match.pct != null) {
+                        var rsStartMs8 = syncD.markets[realKey + '__startMs'];
+                        if (rsStartMs8 && r.cm) {
+                            var _etFmt8 = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
+                            if (_etFmt8.format(new Date(rsStartMs8)) !== _etFmt8.format(r.cm)) return;
+                        } else if (!rsStartMs8) {
+                            var pct8 = parseFloat(match.pct);
+                            if (!isNaN(pct8) && (pct8 <= 3 || pct8 >= 97)) return;
+                        }
                         preds[r.id] = String(match.pct);
                         if (mktData.volumeDisplay) vols[r.id] = mktData.volumeDisplay;
                     }
@@ -8560,6 +8578,15 @@
                     });
                 }
                 if (match && match.pct != null) {
+                    // Date guard: skip RS preds from a different ET day (series rematch / RFI carryover)
+                    var rsStartMsG = d.markets[realKey + '__startMs'];
+                    if (rsStartMsG && r.cm) {
+                        var _etFmtG = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
+                        if (_etFmtG.format(new Date(rsStartMsG)) !== _etFmtG.format(r.cm)) return;
+                    } else if (!rsStartMsG) {
+                        var pctG = parseFloat(match.pct);
+                        if (!isNaN(pctG) && (pctG <= 3 || pctG >= 97)) return;
+                    }
                     preds[r.id] = String(match.pct);
                     if (mktData && mktData.volumeDisplay) {
                         vols[r.id] = mktData.volumeDisplay;
