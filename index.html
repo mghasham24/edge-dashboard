@@ -7052,6 +7052,8 @@
                                 var match = outcomes.find(function(o) { if (!o.label) return false; return isYes ? o.label.toLowerCase() === 'yes' : o.label.toLowerCase() === 'no'; });
                                 if (!match) match = isYes ? outcomes[1] : outcomes[0];
                                 if (match && match.pct != null) {
+                                    // Time guard: first inning is typically over ~45min after game start
+                                    if (r.cm && Date.now() > r.cm.getTime() + 45 * 60 * 1000) return;
                                     var rsStartMs7 = syncD.markets[realKey + '__startMs'];
                                     if (rsStartMs7 && r.cm) {
                                         var _etFmt7 = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
@@ -7369,6 +7371,8 @@
                 });
             }
             if (match && match.pct != null) {
+                // RFI time guard: first inning is typically over ~45min after game start
+                if (r.mkt === 'RFI' && r.cm && Date.now() > r.cm.getTime() + 45 * 60 * 1000) return;
                 var pct = parseFloat(match.pct);
                 // Skip extreme RS probabilities (≤3% or ≥97%) — these are post-game settled values.
                 // Applies to both live and upcoming games: a series rematch tomorrow will
@@ -8294,6 +8298,8 @@
                     });
                     if (!match) match = isYes ? outcomes[1] : outcomes[0];
                     if (match && match.pct != null) {
+                        // Time guard: first inning is typically over ~45min after game start
+                        if (r.cm && Date.now() > r.cm.getTime() + 45 * 60 * 1000) return;
                         var rsStartMs8 = syncD.markets[realKey + '__startMs'];
                         if (rsStartMs8 && r.cm) {
                             var _etFmt8 = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
@@ -8578,6 +8584,8 @@
                     });
                 }
                 if (match && match.pct != null) {
+                    // RFI time guard: first inning is typically over ~45min after game start
+                    if (r.mkt === 'RFI' && r.cm && Date.now() > r.cm.getTime() + 45 * 60 * 1000) return;
                     // Date guard: skip RS preds from a different ET day (series rematch / RFI carryover)
                     var rsStartMsG = d.markets[realKey + '__startMs'];
                     if (rsStartMsG && r.cm) {
