@@ -103,10 +103,13 @@ function extractGames(gamesData) {
     if (!g) return;
     const id = g.id || g.gameId;
     if (!id || seen.has(id)) return;
-    // Filter out completed games — use commenceTime, startTime, or scheduledAt
-    const startMs = g.commenceTime || g.startTime || g.scheduledAt || g.gameTime || g.startDate;
-    if (startMs) {
-      const ms = typeof startMs === 'number' ? startMs : new Date(startMs).getTime();
+    // Drop settled/closed games — RS sets isClosed=true and status='final' when resolved
+    if (g.isClosed === true) return;
+    if (g.status === 'final' || g.status === 'closed' || g.status === 'completed') return;
+    // Filter out games that started >5h ago — RS field is 'dateTime' (primary) with fallbacks
+    const startRaw = g.dateTime || g.commenceTime || g.startTime || g.scheduledAt || g.gameTime || g.startDate;
+    if (startRaw) {
+      const ms = typeof startRaw === 'number' ? startRaw : new Date(startRaw).getTime();
       if (ms < cutoff) return; // definitely over, skip
     }
     seen.add(id);
@@ -407,14 +410,11 @@ export async function onRequestGet(context) {
             }
             // Store the RS league/sport for URL generation (MLS vs EPL vs generic soccer)
             const rsSport = game.sport || (game.league && game.league.sport) || (game.league && game.league.key) || null;
-            // Store game start time so client can skip preds when RS data is for a different game.
-            // RS API field names vary — check game object, nested game.game, and mData root.
-            const rawStart = game.commenceTime || game.startTime || game.scheduledAt || game.gameTime
-                          || game.startDate || game.startAt || game.startsAt || game.kickoffTime
-                          || game.eventDate || game.gameDate || game.scheduledStartTime || game.eventTime
-                          || (game.game && (game.game.startTime || game.game.gameDate || game.game.startDate || game.game.commenceTime))
-                          || mData.startTime || mData.gameTime || mData.gameDate || mData.startDate
-                          || (mData.game && (mData.game.startTime || mData.game.gameDate || mData.game.startDate));
+            // Store game start time so client can skip preds when RS data is for a different day.
+            // RS primary field is 'dateTime'; fall back to other common field names.
+            const rawStart = game.dateTime || game.commenceTime || game.startTime || game.scheduledAt
+                          || game.gameTime || game.startDate || game.startAt || game.startsAt
+                          || game.kickoffTime || game.eventDate || game.gameDate;
             const startMs = rawStart ? (typeof rawStart === 'number' ? rawStart : new Date(rawStart).getTime()) : null;
             return { gameKey, markets, lines, gameId, rsSport, startMs };
           }
@@ -441,7 +441,7 @@ export async function onRequestGet(context) {
     // Two-phase fetch: return cached data immediately, fetch missing games in background
     const marketMap = {};
     const now = Math.floor(Date.now() / 1000);
-    const cacheKey = 'real_sync_' + realSport + '_v7'; // v7: expanded __startMs field search + mData fields
+    const cacheKey = 'real_sync_' + realSport + '_v8'; // v8: filter isClosed/final games; dateTime as primary start field
     const TTL = 15;
 
     // Phase 1: Load cache
