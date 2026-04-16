@@ -103,10 +103,13 @@ function extractGames(gamesData) {
     if (!g) return;
     const id = g.id || g.gameId;
     if (!id || seen.has(id)) return;
-    // Filter out completed games — use commenceTime, startTime, or scheduledAt
-    const startMs = g.commenceTime || g.startTime || g.scheduledAt || g.gameTime || g.startDate;
-    if (startMs) {
-      const ms = typeof startMs === 'number' ? startMs : new Date(startMs).getTime();
+    // Drop settled/closed games — RS sets isClosed=true and status='final' when resolved
+    if (g.isClosed === true) return;
+    if (g.status === 'final' || g.status === 'closed' || g.status === 'completed') return;
+    // Filter out games that started >5h ago — RS field is 'dateTime' (primary) with fallbacks
+    const startRaw = g.dateTime || g.commenceTime || g.startTime || g.scheduledAt || g.gameTime || g.startDate;
+    if (startRaw) {
+      const ms = typeof startRaw === 'number' ? startRaw : new Date(startRaw).getTime();
       if (ms < cutoff) return; // definitely over, skip
     }
     seen.add(id);
@@ -283,12 +286,33 @@ export async function onRequestGet(context) {
     }
 
     if (debugMode === '8') {
-      // Dump raw game objects to inspect structure
+      // Dump raw game objects to inspect structure (including all top-level keys for start-time discovery)
       const targetId = parseInt(reqUrl.searchParams.get('id') || '0');
       const game = targetId ? games.find(g => (g.id || g.gameId) === targetId) : games[0];
-      return new Response(JSON.stringify({ game: game ? JSON.parse(JSON.stringify(game)) : null, allIds: games.map(g => g.id || g.gameId) }), {
+      const gameObj = game ? JSON.parse(JSON.stringify(game)) : null;
+      const topKeys = gameObj ? Object.keys(gameObj) : [];
+      return new Response(JSON.stringify({ game: gameObj, topKeys, allIds: games.map(g => g.id || g.gameId) }), {
         headers: { 'Content-Type': 'application/json' }
       });
+    }
+
+    if (debugMode === '10') {
+      // Fetch first game + its markets, dump both raw objects to find start time field names
+      const game = games[0];
+      if (!game) return new Response(JSON.stringify({ error: 'no games' }), { headers: { 'Content-Type': 'application/json' } });
+      const gameId = game.id || game.gameId;
+      const gameSport = game._rsSport || realSport;
+      const mUrl = `https://web.realapp.com/predictions/game/${gameSport}/${gameId}/markets`;
+      const mRes = await fetch(mUrl, { headers: buildHeaders(env) });
+      let mData = null;
+      try { mData = await mRes.json(); } catch(e) {}
+      const gameObj = JSON.parse(JSON.stringify(game));
+      return new Response(JSON.stringify({
+        gameTopKeys: Object.keys(gameObj),
+        gameObj,
+        marketsTopKeys: mData ? Object.keys(mData) : [],
+        marketsObj: mData ? JSON.parse(JSON.stringify(mData)).game || null : null
+      }), { headers: { 'Content-Type': 'application/json' } });
     }
 
     if (debugMode === '9') {
@@ -386,7 +410,13 @@ export async function onRequestGet(context) {
             }
             // Store the RS league/sport for URL generation (MLS vs EPL vs generic soccer)
             const rsSport = game.sport || (game.league && game.league.sport) || (game.league && game.league.key) || null;
-            return { gameKey, markets, lines, gameId, rsSport };
+            // Store game start time so client can skip preds when RS data is for a different day.
+            // RS primary field is 'dateTime'; fall back to other common field names.
+            const rawStart = game.dateTime || game.commenceTime || game.startTime || game.scheduledAt
+                          || game.gameTime || game.startDate || game.startAt || game.startsAt
+                          || game.kickoffTime || game.eventDate || game.gameDate;
+            const startMs = rawStart ? (typeof rawStart === 'number' ? rawStart : new Date(rawStart).getTime()) : null;
+            return { gameKey, markets, lines, gameId, rsSport, startMs };
           }
           if (mRes.status === 429) {
             // Rate limited on this specific game — skip and rely on D1 merge cache
@@ -411,7 +441,7 @@ export async function onRequestGet(context) {
     // Two-phase fetch: return cached data immediately, fetch missing games in background
     const marketMap = {};
     const now = Math.floor(Date.now() / 1000);
-    const cacheKey = 'real_sync_' + realSport + '_v5'; // v5: store __sport for accurate link routing
+    const cacheKey = 'real_sync_' + realSport + '_v8'; // v8: filter isClosed/final games; dateTime as primary start field
     const TTL = 15;
 
     // Phase 1: Load cache
@@ -455,6 +485,7 @@ export async function onRequestGet(context) {
               if (result.lines && Object.keys(result.lines).length) bgMap[result.gameKey + '__lines'] = result.lines;
               if (result.gameId) bgMap[result.gameKey + '__gid'] = result.gameId;
               if (result.rsSport) bgMap[result.gameKey + '__sport'] = result.rsSport;
+              if (result.startMs) bgMap[result.gameKey + '__startMs'] = result.startMs;
             }
           }
           // Write updated cache
@@ -510,6 +541,7 @@ export async function onRequestGet(context) {
         }
         if (result.gameId) marketMap[result.gameKey + '__gid'] = result.gameId;
         if (result.rsSport) marketMap[result.gameKey + '__sport'] = result.rsSport;
+        if (result.startMs) marketMap[result.gameKey + '__startMs'] = result.startMs;
       }
     }
 

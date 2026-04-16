@@ -130,7 +130,7 @@ async function loadRSCache(rsKey, env, now, staleThreshold) {
   try {
     const cached = await env.DB.prepare(
       'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
-    ).bind('real_sync_' + rsKey + '_v5').first();
+    ).bind('real_sync_' + rsKey + '_v8').first();
     if (cached && (now - cached.fetched_at) < staleThreshold) {
       return parseRSCache(JSON.parse(cached.data));
     }
