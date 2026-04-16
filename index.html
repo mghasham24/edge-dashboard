@@ -7279,6 +7279,15 @@
             var gid = markets[realKey + '__gid'];
             if (gid) rsGameIds[r.game] = gid;
 
+            // Skip if RS market is for a different calendar day (ET) than the FD game.
+            // This prevents settled series-game odds carrying over to tomorrow's rematch,
+            // and RFI markets closed mid-inning from leaking into the next day's game.
+            var rsStartMs = markets[realKey + '__startMs'];
+            if (rsStartMs && r.cm) {
+                var _etFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
+                if (_etFmt.format(new Date(rsStartMs)) !== _etFmt.format(r.cm)) return;
+            }
+
             // Populate yourLines from Real Sports line data (spread/total)
             var gameLines = markets[realKey + '__lines'];
             if (gameLines) {

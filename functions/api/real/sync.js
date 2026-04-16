@@ -386,7 +386,10 @@ export async function onRequestGet(context) {
             }
             // Store the RS league/sport for URL generation (MLS vs EPL vs generic soccer)
             const rsSport = game.sport || (game.league && game.league.sport) || (game.league && game.league.key) || null;
-            return { gameKey, markets, lines, gameId, rsSport };
+            // Store game start time so client can skip preds when RS data is for a different game
+            const rawStart = game.commenceTime || game.startTime || game.scheduledAt || game.gameTime || game.startDate;
+            const startMs = rawStart ? (typeof rawStart === 'number' ? rawStart : new Date(rawStart).getTime()) : null;
+            return { gameKey, markets, lines, gameId, rsSport, startMs };
           }
           if (mRes.status === 429) {
             // Rate limited on this specific game — skip and rely on D1 merge cache
@@ -411,7 +414,7 @@ export async function onRequestGet(context) {
     // Two-phase fetch: return cached data immediately, fetch missing games in background
     const marketMap = {};
     const now = Math.floor(Date.now() / 1000);
-    const cacheKey = 'real_sync_' + realSport + '_v5'; // v5: store __sport for accurate link routing
+    const cacheKey = 'real_sync_' + realSport + '_v6'; // v6: store __startMs for cross-day series game detection
     const TTL = 15;
 
     // Phase 1: Load cache
@@ -455,6 +458,7 @@ export async function onRequestGet(context) {
               if (result.lines && Object.keys(result.lines).length) bgMap[result.gameKey + '__lines'] = result.lines;
               if (result.gameId) bgMap[result.gameKey + '__gid'] = result.gameId;
               if (result.rsSport) bgMap[result.gameKey + '__sport'] = result.rsSport;
+              if (result.startMs) bgMap[result.gameKey + '__startMs'] = result.startMs;
             }
           }
           // Write updated cache
@@ -510,6 +514,7 @@ export async function onRequestGet(context) {
         }
         if (result.gameId) marketMap[result.gameKey + '__gid'] = result.gameId;
         if (result.rsSport) marketMap[result.gameKey + '__sport'] = result.rsSport;
+        if (result.startMs) marketMap[result.gameKey + '__startMs'] = result.startMs;
       }
     }
 
