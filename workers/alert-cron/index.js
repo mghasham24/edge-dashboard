@@ -131,11 +131,13 @@ async function loadRSCache(rsKey, env, now, staleThreshold) {
     const cached = await env.DB.prepare(
       'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
     ).bind('real_sync_' + rsKey + '_v8').first();
-    if (cached && (now - cached.fetched_at) < staleThreshold) {
-      return parseRSCache(JSON.parse(cached.data));
+    const age = cached ? now - cached.fetched_at : null;
+    if (cached && age < staleThreshold) {
+      return { ...parseRSCache(JSON.parse(cached.data)), rsAge: age };
     }
+    if (cached) return { games: {}, gameIds: {}, gameSports: {}, rsAge: age, reason: 'rs_stale' };
   } catch(e) {}
-  return { games: {}, gameIds: {}, gameSports: {} };
+  return { games: {}, gameIds: {}, gameSports: {}, rsAge: null, reason: 'rs_missing' };
 }
 
 // ── Game key normalization ─────────────────────────────
@@ -484,7 +486,7 @@ export default {
 
     const now = Math.floor(Date.now() / 1000);
     const FD_STALE_THRESHOLD = 30 * 60;  // 30 minutes — native caches only refresh when users visit the site
-    const RS_STALE_THRESHOLD = 30 * 60;  // 30 minutes
+    const RS_STALE_THRESHOLD = 4 * 60 * 60;  // 4 hours — pre-game RS odds valid for hours
     const RE_ALERT_EV_JUMP   = 4.0;
 
     // Debug snapshot — written to D1 at end of each run for diagnostics
@@ -547,12 +549,12 @@ export default {
       }
 
       // Load RS data
-      const { games: rsGames, gameIds: rsGameIds, gameSports: rsGameSports } =
+      const { games: rsGames, gameIds: rsGameIds, gameSports: rsGameSports, rsAge, reason: rsReason } =
         await loadRSCache(sport.rsKey, env, now, RS_STALE_THRESHOLD);
 
       const rsCount = Object.keys(rsGames).length;
       if (!rsCount) {
-        dbg.sports[sport.label] = { fdGames: fdCount, fdAge, rsGames: 0, reason: 'no_rs_cache' };
+        dbg.sports[sport.label] = { fdGames: fdCount, fdAge, rsGames: 0, rsAge, reason: rsReason || 'no_rs_cache' };
         continue;
       }
 
