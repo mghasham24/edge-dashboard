@@ -7058,9 +7058,6 @@
                                     if (rsStartMs7 && r.cm) {
                                         var _etFmt7 = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
                                         if (_etFmt7.format(new Date(rsStartMs7)) !== _etFmt7.format(r.cm)) return;
-                                    } else if (!rsStartMs7) {
-                                        var pct7 = parseFloat(match.pct);
-                                        if (!isNaN(pct7) && (pct7 <= 3 || pct7 >= 97)) return;
                                     }
                                     preds[r.id] = String(match.pct); if (mktData.volumeDisplay) vols[r.id] = mktData.volumeDisplay;
                                 }
@@ -7373,11 +7370,6 @@
             if (match && match.pct != null) {
                 // RFI time guard: first inning is typically over ~45min after game start
                 if (r.mkt === 'RFI' && r.cm && Date.now() > r.cm.getTime() + 45 * 60 * 1000) return;
-                var pct = parseFloat(match.pct);
-                // Skip extreme RS probabilities (≤3% or ≥97%) — these are post-game settled values.
-                // Applies to both live and upcoming games: a series rematch tomorrow will
-                // otherwise inherit yesterday's settled odds (e.g. 1%/99%) via the same team-name match.
-                if (pct <= 3 || pct >= 97) return;
                 // FC: use RS label sign to assign the correct DK price and store aligned pct
                 if (r.mkt === 'Spread' && (r._sport_key === 'soccer_fc' || currentSport === 'soccer_fc') && r._dkSpreads) {
                     var fcOutType2 = r.ps === 'B' ? 'Home' : 'Away';
@@ -8304,9 +8296,6 @@
                         if (rsStartMs8 && r.cm) {
                             var _etFmt8 = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
                             if (_etFmt8.format(new Date(rsStartMs8)) !== _etFmt8.format(r.cm)) return;
-                        } else if (!rsStartMs8) {
-                            var pct8 = parseFloat(match.pct);
-                            if (!isNaN(pct8) && (pct8 <= 3 || pct8 >= 97)) return;
                         }
                         preds[r.id] = String(match.pct);
                         if (mktData.volumeDisplay) vols[r.id] = mktData.volumeDisplay;
@@ -8591,9 +8580,6 @@
                     if (rsStartMsG && r.cm) {
                         var _etFmtG = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
                         if (_etFmtG.format(new Date(rsStartMsG)) !== _etFmtG.format(r.cm)) return;
-                    } else if (!rsStartMsG) {
-                        var pctG = parseFloat(match.pct);
-                        if (!isNaN(pctG) && (pctG <= 3 || pctG >= 97)) return;
                     }
                     preds[r.id] = String(match.pct);
                     if (mktData && mktData.volumeDisplay) {
