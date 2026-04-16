@@ -7351,10 +7351,10 @@
             }
             if (match && match.pct != null) {
                 var pct = parseFloat(match.pct);
-                // If game has already started and RS probability is extreme (≤3% or ≥97%),
-                // it's a post-game settled value — don't auto-populate, user can enter manually
-                var gameStarted = r.cm && r.cm.getTime() < Date.now();
-                if (gameStarted && (pct <= 3 || pct >= 97)) return;
+                // Skip extreme RS probabilities (≤3% or ≥97%) — these are post-game settled values.
+                // Applies to both live and upcoming games: a series rematch tomorrow will
+                // otherwise inherit yesterday's settled odds (e.g. 1%/99%) via the same team-name match.
+                if (pct <= 3 || pct >= 97) return;
                 // FC: use RS label sign to assign the correct DK price and store aligned pct
                 if (r.mkt === 'Spread' && (r._sport_key === 'soccer_fc' || currentSport === 'soccer_fc') && r._dkSpreads) {
                     var fcOutType2 = r.ps === 'B' ? 'Home' : 'Away';
