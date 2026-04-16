@@ -4090,9 +4090,22 @@
                     side.textContent = r.side;
                     row.appendChild(side);
 
+                    // For NBA spread/total, use DK alt price when available (matches desktop rendering)
+                    var dispAmMc = r.am;
+                    if (currentSport === 'basketball_nba' && r.gid && dkAltOdds[r.gid] && (r.mkt === 'Spread' || r.mkt === 'Total')) {
+                        var dkMc = dkAltOdds[r.gid];
+                        var dkMcSideKey = r.mkt === 'Spread' ? (r.ps === 'A' ? 'Away' : 'Home') : (r.ps === 'A' ? 'Over' : 'Under');
+                        var ylMc = yourLines[r.id] != null ? yourLines[r.id] : r.pt;
+                        if (ylMc != null) {
+                            var dkMcLines = r.mkt === 'Spread' ? (dkMc.spreads && dkMc.spreads[dkMcSideKey]) : (dkMc.totals && dkMc.totals[dkMcSideKey]);
+                            var dkMcPrice = dkClosestPrice(dkMcLines, parseFloat(ylMc));
+                            if (dkMcPrice != null) dispAmMc = dkMcPrice;
+                        }
+                    }
+
                     var odds = document.createElement('span');
-                    odds.className = 'mc-odds ' + (Number(r.am) >= 0 ? 'odds-pos' : 'odds-neg');
-                    odds.textContent = fmtAm(r.am);
+                    odds.className = 'mc-odds ' + (Number(dispAmMc) >= 0 ? 'odds-pos' : 'odds-neg');
+                    odds.textContent = fmtAm(dispAmMc);
                     row.appendChild(odds);
 
                     var fair = document.createElement('span');
