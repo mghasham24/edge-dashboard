@@ -283,12 +283,33 @@ export async function onRequestGet(context) {
     }
 
     if (debugMode === '8') {
-      // Dump raw game objects to inspect structure
+      // Dump raw game objects to inspect structure (including all top-level keys for start-time discovery)
       const targetId = parseInt(reqUrl.searchParams.get('id') || '0');
       const game = targetId ? games.find(g => (g.id || g.gameId) === targetId) : games[0];
-      return new Response(JSON.stringify({ game: game ? JSON.parse(JSON.stringify(game)) : null, allIds: games.map(g => g.id || g.gameId) }), {
+      const gameObj = game ? JSON.parse(JSON.stringify(game)) : null;
+      const topKeys = gameObj ? Object.keys(gameObj) : [];
+      return new Response(JSON.stringify({ game: gameObj, topKeys, allIds: games.map(g => g.id || g.gameId) }), {
         headers: { 'Content-Type': 'application/json' }
       });
+    }
+
+    if (debugMode === '10') {
+      // Fetch first game + its markets, dump both raw objects to find start time field names
+      const game = games[0];
+      if (!game) return new Response(JSON.stringify({ error: 'no games' }), { headers: { 'Content-Type': 'application/json' } });
+      const gameId = game.id || game.gameId;
+      const gameSport = game._rsSport || realSport;
+      const mUrl = `https://web.realapp.com/predictions/game/${gameSport}/${gameId}/markets`;
+      const mRes = await fetch(mUrl, { headers: buildHeaders(env) });
+      let mData = null;
+      try { mData = await mRes.json(); } catch(e) {}
+      const gameObj = JSON.parse(JSON.stringify(game));
+      return new Response(JSON.stringify({
+        gameTopKeys: Object.keys(gameObj),
+        gameObj,
+        marketsTopKeys: mData ? Object.keys(mData) : [],
+        marketsObj: mData ? JSON.parse(JSON.stringify(mData)).game || null : null
+      }), { headers: { 'Content-Type': 'application/json' } });
     }
 
     if (debugMode === '9') {
@@ -386,8 +407,14 @@ export async function onRequestGet(context) {
             }
             // Store the RS league/sport for URL generation (MLS vs EPL vs generic soccer)
             const rsSport = game.sport || (game.league && game.league.sport) || (game.league && game.league.key) || null;
-            // Store game start time so client can skip preds when RS data is for a different game
-            const rawStart = game.commenceTime || game.startTime || game.scheduledAt || game.gameTime || game.startDate;
+            // Store game start time so client can skip preds when RS data is for a different game.
+            // RS API field names vary — check game object, nested game.game, and mData root.
+            const rawStart = game.commenceTime || game.startTime || game.scheduledAt || game.gameTime
+                          || game.startDate || game.startAt || game.startsAt || game.kickoffTime
+                          || game.eventDate || game.gameDate || game.scheduledStartTime || game.eventTime
+                          || (game.game && (game.game.startTime || game.game.gameDate || game.game.startDate || game.game.commenceTime))
+                          || mData.startTime || mData.gameTime || mData.gameDate || mData.startDate
+                          || (mData.game && (mData.game.startTime || mData.game.gameDate || mData.game.startDate));
             const startMs = rawStart ? (typeof rawStart === 'number' ? rawStart : new Date(rawStart).getTime()) : null;
             return { gameKey, markets, lines, gameId, rsSport, startMs };
           }
@@ -414,7 +441,7 @@ export async function onRequestGet(context) {
     // Two-phase fetch: return cached data immediately, fetch missing games in background
     const marketMap = {};
     const now = Math.floor(Date.now() / 1000);
-    const cacheKey = 'real_sync_' + realSport + '_v6'; // v6: store __startMs for cross-day series game detection
+    const cacheKey = 'real_sync_' + realSport + '_v7'; // v7: expanded __startMs field search + mData fields
     const TTL = 15;
 
     // Phase 1: Load cache
