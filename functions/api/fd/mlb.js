@@ -92,12 +92,15 @@ export async function onRequestGet(context) {
     if (!Object.keys(allEvents).length) return fail(502, 'FD MLB list fetch failed');
 
     const etFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
-    const todayET = etFmt.format(new Date());
+    const todayET     = etFmt.format(new Date());
+    const yesterdayET = etFmt.format(new Date(nowMs - 24 * 60 * 60 * 1000));
     const todayEvents = Object.values(allEvents).filter(e => {
       if (!e.openDate) return false;
       const t = new Date(e.openDate).getTime();
       if (t < nowMs - 5 * 60 * 60 * 1000) return false; // skip games started >5h ago
-      return etFmt.format(new Date(e.openDate)) === todayET;
+      // Include yesterday's ET games — late west-coast games cross the midnight ET boundary
+      const openDateET = etFmt.format(new Date(e.openDate));
+      return openDateET === todayET || openDateET === yesterdayET;
     });
 
     if (!todayEvents.length) {
