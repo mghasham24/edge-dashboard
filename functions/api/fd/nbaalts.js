@@ -68,12 +68,15 @@ export async function onRequestGet(context) {
     const events = listData?.attachments?.events || {};
     const nowMs = Date.now();
     const etFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
-    const todayET = etFmt.format(new Date());
+    const todayET     = etFmt.format(new Date());
+    const yesterdayET = etFmt.format(new Date(nowMs - 24 * 60 * 60 * 1000));
     const todayEvents = Object.values(events).filter(e => {
       if (!e.openDate) return false;
       const t = new Date(e.openDate).getTime();
       if (t < nowMs - 4 * 60 * 60 * 1000) return false; // skip games started >4h ago
-      return etFmt.format(new Date(e.openDate)) === todayET;
+      // Include yesterday's ET games — late west-coast NBA games cross the midnight ET boundary
+      const openDateET = etFmt.format(new Date(e.openDate));
+      return openDateET === todayET || openDateET === yesterdayET;
     });
 
     if (!todayEvents.length) {
