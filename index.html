@@ -7052,8 +7052,8 @@
                                 var match = outcomes.find(function(o) { if (!o.label) return false; return isYes ? o.label.toLowerCase() === 'yes' : o.label.toLowerCase() === 'no'; });
                                 if (!match) match = isYes ? outcomes[1] : outcomes[0];
                                 if (match && match.pct != null) {
-                                    // Time guard: first inning is typically over ~45min after game start
-                                    if (r.cm && Date.now() > r.cm.getTime() + 45 * 60 * 1000) return;
+                                    // Time guard: clear RS preds 4h after game start
+                                    if (r.cm && Date.now() > r.cm.getTime() + 4 * 60 * 60 * 1000) return;
                                     var rsStartMs7 = syncD.markets[realKey + '__startMs'];
                                     if (rsStartMs7 && r.cm) {
                                         var _etFmt7 = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
@@ -7368,8 +7368,8 @@
                 });
             }
             if (match && match.pct != null) {
-                // RFI time guard: first inning is typically over ~45min after game start
-                if (r.mkt === 'RFI' && r.cm && Date.now() > r.cm.getTime() + 45 * 60 * 1000) return;
+                // Time guard: clear RS preds 4h after game start
+                if (r.cm && Date.now() > r.cm.getTime() + 4 * 60 * 60 * 1000) return;
                 // FC: use RS label sign to assign the correct DK price and store aligned pct
                 if (r.mkt === 'Spread' && (r._sport_key === 'soccer_fc' || currentSport === 'soccer_fc') && r._dkSpreads) {
                     var fcOutType2 = r.ps === 'B' ? 'Home' : 'Away';
@@ -8290,8 +8290,8 @@
                     });
                     if (!match) match = isYes ? outcomes[1] : outcomes[0];
                     if (match && match.pct != null) {
-                        // Time guard: first inning is typically over ~45min after game start
-                        if (r.cm && Date.now() > r.cm.getTime() + 45 * 60 * 1000) return;
+                        // Time guard: clear RS preds 4h after game start
+                        if (r.cm && Date.now() > r.cm.getTime() + 4 * 60 * 60 * 1000) return;
                         var rsStartMs8 = syncD.markets[realKey + '__startMs'];
                         if (rsStartMs8 && r.cm) {
                             var _etFmt8 = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
@@ -8573,8 +8573,8 @@
                     });
                 }
                 if (match && match.pct != null) {
-                    // RFI time guard: first inning is typically over ~45min after game start
-                    if (r.mkt === 'RFI' && r.cm && Date.now() > r.cm.getTime() + 45 * 60 * 1000) return;
+                    // Time guard: clear RS preds 4h after game start (game likely over; evening games refresh)
+                    if (r.cm && Date.now() > r.cm.getTime() + 4 * 60 * 60 * 1000) return;
                     // Date guard: skip RS preds from a different ET day (series rematch / RFI carryover)
                     var rsStartMsG = d.markets[realKey + '__startMs'];
                     if (rsStartMsG && r.cm) {
