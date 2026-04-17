@@ -691,6 +691,16 @@ export default {
 
     if (sportsNeeded.has('baseball_mlb')) {
       try {
+        // Warm fd_rfi cache if stale
+        if (env.SITE_URL && env.CRON_SECRET) {
+          const rfiCheck = await env.DB.prepare(
+            'SELECT fetched_at FROM odds_cache WHERE cache_key=?'
+          ).bind('fd_rfi').first();
+          if (!rfiCheck || (now - rfiCheck.fetched_at) > FD_STALE_THRESHOLD) {
+            try { await fetch(`${env.SITE_URL}/api/fd/rfi?_cron_key=${env.CRON_SECRET}`, { signal: AbortSignal.timeout(15000) }); } catch(e) {}
+          }
+        }
+
         const rfiCached = await env.DB.prepare(
           'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
         ).bind('fd_rfi').first();
@@ -740,6 +750,8 @@ export default {
           }
         }
       } catch(e) {}
+      const rfiCount = allBets.filter(b => b.market === 'RFI').length;
+      dbg.sports['MLB_RFI'] = { rfiGames: rfiCount };
     }
 
     dbg.allBets = allBets.length;

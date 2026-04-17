@@ -47,8 +47,15 @@ function parseEventName(name) {
 
 export async function onRequestGet(context) {
   const { request, env } = context;
-  const session = await getSession(request, env.DB);
-  if (!session) return fail(401, 'Not authenticated');
+  const reqUrl0 = new URL(request.url);
+  const cronKey = reqUrl0.searchParams.get('_cron_key');
+  let session;
+  if (cronKey && env.CRON_SECRET && cronKey === env.CRON_SECRET) {
+    session = { user_id: 0, plan: 'pro' };
+  } else {
+    session = await getSession(request, env.DB);
+    if (!session) return fail(401, 'Not authenticated');
+  }
 
   const now = Math.floor(Date.now() / 1000);
   const cacheKey = 'fd_rfi';
