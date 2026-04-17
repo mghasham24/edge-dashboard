@@ -786,14 +786,14 @@ export default {
         b.ev >= minEv && (!userSports || userSports.has(b.sport.fdKey))
       );
 
-      // Skip game+market the user already marked as taken
+      // Skip bets the user already marked as taken (per side)
       try {
         const takenRows = await env.DB.prepare(
-          'SELECT DISTINCT game, market FROM alert_messages WHERE user_id=? AND taken=1'
+          'SELECT DISTINCT game, market, side FROM alert_messages WHERE user_id=? AND taken=1'
         ).bind(user.user_id).all();
-        const takenKeys = new Set((takenRows.results || []).map(r => r.game + '|' + r.market));
+        const takenKeys = new Set((takenRows.results || []).map(r => r.game + '|' + r.market + '|' + r.side));
         if (takenKeys.size) {
-          userBets = userBets.filter(b => !takenKeys.has(b.game + '|' + b.market));
+          userBets = userBets.filter(b => !takenKeys.has(b.game + '|' + b.market + '|' + b.side));
         }
       } catch(e) {}
 
