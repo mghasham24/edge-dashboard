@@ -7442,8 +7442,10 @@
                 btn.disabled = false;
                 renderTable();
                 if (rawRows.length > 0) {
-                    // Fetch Real Sports and RFI odds in parallel; apply Real% to RFI rows once both complete
-                    Promise.all([fetchRealMarkets(currentSport, true), fetchKalshiRFI(true)]).then(function() {
+                    // Fetch RS and RFI in parallel — RFI renders immediately, RS preds applied after both finish
+                    var rsPromise = fetchRealMarkets(currentSport, true);
+                    var rfiPromise = fetchKalshiRFI(false); // false = render as soon as RFI rows land
+                    Promise.all([rsPromise, rfiPromise]).then(function() {
                         // Now lastSyncData is populated — apply Real% to RFI rows
                         var syncD = lastSyncData[currentSport];
                         if (syncD && syncD.markets) {
