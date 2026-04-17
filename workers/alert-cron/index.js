@@ -728,9 +728,8 @@ export default {
 
             const rsOutcomes = rfiMkt.outcomes || [];
             const rsVolume   = rfiMkt.volume ?? 0;
-            const rsYes = rsOutcomes.find(o => /yes/i.test(o.label));
-            const rsNo  = rsOutcomes.find(o => /no/i.test(o.label));
-            if (!rfiDbg.outcomeLabels) rfiDbg.outcomeLabels = rsOutcomes.map(o => o.label);
+            const rsYes = rsOutcomes.find(o => /yrfi/i.test(o.label));
+            const rsNo  = rsOutcomes.find(o => /nrfi/i.test(o.label));
             const gameId  = rsGameIdsRfi[rsKey] || null;
             const rsSport = rsGameSportsRfi[rsKey] || 'mlb';
             const gameUrl = buildRSUrl(gameId, rsSport);
@@ -739,7 +738,6 @@ export default {
               { side: 'Yes (YRFI)', fdFair: rfi.yesFair, fdOdds: rfi.yesAm, rsO: rsYes },
               { side: 'No (NRFI)',  fdFair: rfi.noFair,  fdOdds: rfi.noAm,  rsO: rsNo  },
             ]) {
-              if (!rfiDbg.sample) rfiDbg.sample = { game: rfiGameKey, side, fdFair: Math.round(fdFair*1000)/10, rsPct: rsO ? Math.round(rsO.probability*1000)/10 : null, vol: rsVolume, hasRsO: !!rsO };
               if (!rsO || !rsO.probability) continue;
               const ev = calcEV(fdFair, rsO.probability, rsVolume);
               if (ev == null || ev < globalMinEv) continue;
