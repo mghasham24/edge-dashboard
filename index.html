@@ -5003,6 +5003,22 @@
                     sidesHtml +
                 '</div>';
             }).join('');
+
+            // Sync taken alert bets into the main table checkboxes
+            if (window.rawRows && rawRows.length) {
+                var takenKeys = new Set(bets.map(function(b) { return b.game + '|' + b.market + '|' + b.side; }));
+                var changed = false;
+                rawRows.forEach(function(r) {
+                    if (takenKeys.has(r.game + '|' + r.mkt + '|' + r.side) && !betTaken[r.id]) {
+                        betTaken[r.id] = true;
+                        document.querySelectorAll('input[type="checkbox"][data-id="' + r.id + '"]').forEach(function(cb) { cb.checked = true; });
+                        var tr = document.querySelector('[data-row-id="' + r.id + '"]');
+                        if (tr) tr.style.opacity = '0.4';
+                        changed = true;
+                    }
+                });
+                if (changed) localStorage.setItem('raxedge_bets_taken', JSON.stringify(betTaken));
+            }
         } catch(e) {
             el.textContent = 'Failed to load.';
         }
