@@ -504,8 +504,9 @@ export default {
     if (!env.TELEGRAM_BOT_TOKEN) return;
 
     const now = Math.floor(Date.now() / 1000);
-    const FD_STALE_THRESHOLD = 30 * 60;  // 30 minutes — native caches only refresh when users visit the site
-    const RS_STALE_THRESHOLD = 4 * 60 * 60;  // 4 hours — pre-game RS odds valid for hours
+    const FD_STALE_THRESHOLD = 30 * 60;  // 30 minutes
+    const RS_STALE_THRESHOLD = 4 * 60 * 60;  // 4 hours — fallback: use cache up to 4h old if warm fails
+    const RS_WARM_THRESHOLD  = 5 * 60;   // 5 minutes — actively re-warm RS cache this often
     const RE_ALERT_EV_JUMP   = 4.0;
 
     // Debug snapshot — written to D1 at end of each run for diagnostics
@@ -568,7 +569,7 @@ export default {
       }
 
       // Warm RS cache if stale/missing, then load
-      await warmRSCache(sport.fdKey, env, now, RS_STALE_THRESHOLD);
+      await warmRSCache(sport.fdKey, env, now, RS_WARM_THRESHOLD);
       const { games: rsGames, gameIds: rsGameIds, gameSports: rsGameSports, rsAge, reason: rsReason } =
         await loadRSCache(sport.rsKey, env, now, RS_STALE_THRESHOLD);
 
