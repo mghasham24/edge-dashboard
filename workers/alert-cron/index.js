@@ -705,8 +705,10 @@ export default {
           'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
         ).bind('fd_rfi').first();
 
+        const rfiDbg = { rfiCacheAge: rfiCached ? now - rfiCached.fetched_at : null, rfiMapSize: 0, rsMatchCount: 0, rfiMktCount: 0 };
         if (rfiCached && (now - rfiCached.fetched_at) < FD_STALE_THRESHOLD) {
           const rfiMap = JSON.parse(rfiCached.data).rfi || {};
+          rfiDbg.rfiMapSize = Object.keys(rfiMap).length;
           const { games: rsGamesRfi, gameIds: rsGameIdsRfi, gameSports: rsGameSportsRfi } =
             await loadRSCache('mlb', env, now, RS_STALE_THRESHOLD);
 
@@ -717,9 +719,11 @@ export default {
             if (parts.length !== 2) continue;
             const rsKey = findRSGameKey(parts[0], parts[1], rsGamesRfi);
             if (!rsKey) continue;
+            rfiDbg.rsMatchCount++;
 
             const rfiMkt = rsGamesRfi[rsKey]?.['Run in 1st inning?'];
             if (!rfiMkt) continue;
+            rfiDbg.rfiMktCount++;
 
             const rsOutcomes = rfiMkt.outcomes || [];
             const rsVolume   = rfiMkt.volume ?? 0;
@@ -751,7 +755,7 @@ export default {
         }
       } catch(e) {}
       const rfiCount = allBets.filter(b => b.market === 'RFI').length;
-      dbg.sports['MLB_RFI'] = { rfiGames: rfiCount };
+      dbg.sports['MLB_RFI'] = { rfiGames: rfiCount, ...rfiDbg };
     }
 
     dbg.allBets = allBets.length;
