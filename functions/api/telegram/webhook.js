@@ -15,7 +15,8 @@ async function sendMessage(chatId, text, botToken) {
   });
 }
 
-export async function onRequestPost({ request, env }) {
+export async function onRequest({ request, env }) {
+  if (request.method !== 'POST') return new Response('ok', { status: 200 });
   // Verify request is from Telegram using the shared secret
   const secret = request.headers.get('X-Telegram-Bot-Api-Secret-Token') || '';
   if (!env.TELEGRAM_WEBHOOK_SECRET || secret !== env.TELEGRAM_WEBHOOK_SECRET) {
