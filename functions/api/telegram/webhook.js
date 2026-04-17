@@ -47,25 +47,21 @@ export async function onRequest({ request, env }) {
         ).bind(rowId).first();
 
         if (row && String(row.chat_id) === chatId) {
-          if (row.taken) {
-            toastText = 'Already recorded';
-          } else {
-            // Mark ALL sides of this game+market as taken — suppresses both sides
-            await env.DB.prepare(
-              'UPDATE alert_messages SET taken=1 WHERE user_id=? AND game=? AND market=?'
-            ).bind(row.user_id, row.game, row.market).run();
+          const newTaken = row.taken ? 0 : 1;
+          await env.DB.prepare(
+            'UPDATE alert_messages SET taken=? WHERE user_id=? AND game=? AND market=?'
+          ).bind(newTaken, row.user_id, row.game, row.market).run();
 
-            // Edit the button to show it's been recorded
-            await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/editMessageReplyMarkup`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                chat_id: chatId,
-                message_id: msgId,
-                reply_markup: { inline_keyboard: [[{ text: '✅ Bet Recorded', callback_data: 'noop' }]] }
-              })
-            });
-          }
+          toastText = newTaken ? '✅ Bet recorded!' : '↩️ Bet unrecorded';
+          await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/editMessageReplyMarkup`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: chatId,
+              message_id: msgId,
+              reply_markup: { inline_keyboard: [[{ text: newTaken ? '✅ Bet Recorded' : '☑️ Mark Bet Taken', callback_data: 't:' + rowId }]] }
+            })
+          });
         }
       } catch(e) {}
 

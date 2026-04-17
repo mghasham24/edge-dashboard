@@ -2942,6 +2942,7 @@
     var currentFcLeague = 'ALL';
     var rawRows = [];
     var rawRowsBySport = {}; // sport key -> parsed rows (same IDs as preds)
+    var _alertSyncedIds = new Set(); // row IDs checked via alert sync (so we can uncheck on untake)
     var preds = {};
     var vols = {}; // volume display per row id
     var yourLines = {};
@@ -4973,6 +4974,12 @@
             var bets = data.bets || [];
             if (!bets.length) {
                 el.innerHTML = '<div style="color:var(--muted);font-size:12px">No bets marked yet. Tap ✅ on a Telegram alert to record a bet.</div>';
+                if (_alertSyncedIds.size) {
+                    _alertSyncedIds.forEach(function(id) { delete betTaken[id]; });
+                    _alertSyncedIds.clear();
+                    localStorage.setItem('raxedge_bets_taken', JSON.stringify(betTaken));
+                    renderTable();
+                }
                 return;
             }
             // Group by game+market — show each group as one block with all sides checked
@@ -5011,8 +5018,15 @@
             if (!allSportRows.length && window.rawRows) allSportRows = rawRows;
             var changed = false;
             allSportRows.forEach(function(r) {
-                if (takenKeys.has(r.game + '|' + r.mkt + '|' + r.side) && !betTaken[r.id]) {
+                var key = r.game + '|' + r.mkt + '|' + r.side;
+                if (takenKeys.has(key) && !betTaken[r.id]) {
                     betTaken[r.id] = true;
+                    _alertSyncedIds.add(r.id);
+                    changed = true;
+                } else if (!takenKeys.has(key) && _alertSyncedIds.has(r.id)) {
+                    // Bet was unrecorded via Telegram — uncheck
+                    delete betTaken[r.id];
+                    _alertSyncedIds.delete(r.id);
                     changed = true;
                 }
             });
