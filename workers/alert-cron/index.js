@@ -690,6 +690,7 @@ export default {
     // ── 3c. MLB RFI (FD native, fd_rfi cache) ─────────────
 
     if (sportsNeeded.has('baseball_mlb')) {
+      const rfiDbg = { rfiCacheAge: null, rfiMapSize: 0, rsMatchCount: 0, rfiMktCount: 0 };
       try {
         // Warm fd_rfi cache if stale
         if (env.SITE_URL && env.CRON_SECRET) {
@@ -705,7 +706,7 @@ export default {
           'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
         ).bind('fd_rfi').first();
 
-        const rfiDbg = { rfiCacheAge: rfiCached ? now - rfiCached.fetched_at : null, rfiMapSize: 0, rsMatchCount: 0, rfiMktCount: 0 };
+        rfiDbg.rfiCacheAge = rfiCached ? now - rfiCached.fetched_at : null;
         if (rfiCached && (now - rfiCached.fetched_at) < FD_STALE_THRESHOLD) {
           const rfiMap = JSON.parse(rfiCached.data).rfi || {};
           rfiDbg.rfiMapSize = Object.keys(rfiMap).length;
