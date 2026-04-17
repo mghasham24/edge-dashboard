@@ -4606,7 +4606,7 @@
             var rakeU = volNumU > 100000 ? 0.034 : volNumU > 10000 ? 0.032 : volNumU > 1000 ? 0.035 : volNumU > 0 ? 0.04 : 0.034;
             evForU = (af * (1/pred) * (1-rakeU) - 1) * 100;
         }
-        var u = isPro() ? unitsEV(evForU, pred) : units(edge);
+        var u = (isPro() || r.mkt === 'ML' || r.mkt === 'RFI') ? unitsEV(evForU, pred) : units(edge);
         var bet = u * unit;
         var el = document.querySelector('.mc-side-edge[data-id="' + id + '"]');
         if (!el) return;
@@ -4688,7 +4688,14 @@
             var pr = preds[r.id];
             var pred = (pr !== undefined && pr !== '') ? parseFloat(pr) / 100 : null;
             var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
-            var u = pred != null ? units(edge) : units(edge);
+            var evForUM = null;
+            if (af != null && pred != null && pred > 0 && pred < 1) {
+                var volNumM = 0;
+                if (vols[r.id]) { var vsM = vols[r.id]; volNumM = vsM.endsWith('k') ? parseFloat(vsM)*1000 : vsM.endsWith('m') ? parseFloat(vsM)*1000000 : parseFloat(vsM); }
+                var rakeM = volNumM > 100000 ? 0.034 : volNumM > 10000 ? 0.032 : volNumM > 1000 ? 0.035 : volNumM > 0 ? 0.04 : 0.034;
+                evForUM = (af * (1/pred) * (1-rakeM) - 1) * 100;
+            }
+            var u = (isPro() || r.mkt === 'ML' || r.mkt === 'RFI') ? unitsEV(evForUM, pred) : units(edge);
             return Object.assign({}, r, { fair: fair, af: af, yl: yl, edge: edge, u: u, bet: u * unit });
         });
         var filtered = computed.filter(function(r) {
@@ -7709,7 +7716,7 @@
                 // Exception: soccer FC live ±0.5 lines can legitimately produce >100% EV
                 if (evForUnits > 100 && currentSport !== 'soccer_fc') evForUnits = null;
             }
-            var u = isPro() ? unitsEV(evForUnits, pred) : units(edge);
+            var u = (isPro() || r.mkt === 'ML' || r.mkt === 'RFI') ? unitsEV(evForUnits, pred) : units(edge);
             // When RS line differs from FD base line and DK alt data is available,
             // show DK's alt price (not FD's base price) since that's the actual line being bet.
             var dispAm = r.am, dispPt = r.pt;
@@ -7753,11 +7760,12 @@
                     if (Math.abs(parseFloat(r.pt) - parseFloat(yourLines[r.id])) > 0.001) return false;
                 }
 
-                // NBA (live or pregame): hide if DK has alt data for this game but can't find the RS line
-                // Row reappears automatically once DK adds the line to their alt spreads/totals
-                if (isNBA && r.gid && yourLines[r.id] != null) {
+                // NBA spread/total: always require DK alt data — no interpolation fallback
+                // Hide if DK has no data for the game, or has data but not the RS line
+                if (isNBA && r.gid) {
                     var dkGame = dkAltOdds[r.gid];
-                    if (dkGame) {
+                    if (!dkGame) return false;
+                    if (yourLines[r.id] != null) {
                         var dkSideKey = r.ps === 'A' ? (r.mkt === 'Spread' ? 'Away' : 'Over') : (r.mkt === 'Spread' ? 'Home' : 'Under');
                         var dkLines = r.mkt === 'Spread' ? (dkGame.spreads && dkGame.spreads[dkSideKey]) : (dkGame.totals && dkGame.totals[dkSideKey]);
                         var dkHasData = dkLines && Object.keys(dkLines).length > 0;
@@ -8033,7 +8041,7 @@
                 evH = '<span style="filter:blur(4px);font-family:var(--mono);font-size:12px;font-weight:600;color:var(--green);user-select:none">+8.4%</span><span style="font-size:9px;font-weight:700;background:var(--accent);color:#fff;border-radius:3px;padding:1px 4px;margin-left:3px;vertical-align:middle">PRO</span>';
             }
         }
-        var u = isPro() ? unitsEV(evForUnits, pred) : units(edge);
+        var u = (isPro() || r.mkt === 'ML' || r.mkt === 'RFI') ? unitsEV(evForUnits, pred) : units(edge);
         var unit = parseFloat(document.getElementById('unit-size').value) || 300;
         var es = '-', ec = 'e-none', bw = 0, bc = 'var(--muted2)';
         if (edge != null) {
@@ -8184,21 +8192,6 @@
         var overrides = SPORT_OVERRIDES[currentSport] || {};
         return overrides[key] || ABBREV_MAP[key] || abbrevOrName;
     }
-
-    // MLB team name -> Kalshi title name (first word or two of city)
-    var KALSHI_MLB_MAP = {
-        'Arizona Diamondbacks': 'Arizona', 'Atlanta Braves': 'Atlanta', 'Baltimore Orioles': 'Baltimore',
-        'Boston Red Sox': 'Boston', 'Chicago Cubs': 'Chicago', 'Chicago White Sox': 'Chicago',
-        'Cincinnati Reds': 'Cincinnati', 'Cleveland Guardians': 'Cleveland', 'Colorado Rockies': 'Colorado',
-        'Detroit Tigers': 'Detroit', 'Houston Astros': 'Houston', 'Kansas City Royals': 'Kansas City',
-        'Los Angeles Angels': 'Los Angeles', 'Los Angeles Dodgers': 'Los Angeles', 'Miami Marlins': 'Miami',
-        'Milwaukee Brewers': 'Milwaukee', 'Minnesota Twins': 'Minnesota', 'New York Mets': 'New York',
-        'New York Yankees': 'New York', 'Oakland Athletics': 'Oakland', 'Philadelphia Phillies': 'Philadelphia',
-        'Pittsburgh Pirates': 'Pittsburgh', 'San Diego Padres': 'San Diego', 'San Francisco Giants': 'San Francisco',
-        'Seattle Mariners': 'Seattle', 'St. Louis Cardinals': 'St. Louis', 'Tampa Bay Rays': 'Tampa Bay',
-        'Texas Rangers': 'Texas', 'Toronto Blue Jays': 'Toronto', 'Washington Nationals': 'Washington',
-        'Athletics': 'Oakland'
-    };
 
     function fetchKalshiRFI(skipRender) {
         return fetch('/api/fd/rfi', { credentials: 'same-origin' })
@@ -8667,7 +8660,9 @@
                         var af = adjFair(fair, r.pt, yl, r.mkt, r.ps);
                         var pred = parseFloat(preds[activeId]) / 100;
                         var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
-                        var u = units(edge);
+                        var evForUC = null;
+                        if (af != null && pred != null && pred > 0 && pred < 1) { evForUC = (af * (1/pred) * 0.966 - 1) * 100; }
+                        var u = (isPro() || r.mkt === 'ML' || r.mkt === 'RFI') ? unitsEV(evForUC, pred) : units(edge);
                         var bet = u * unit;
                         if (edge != null) {
                             var col = edge >= 8 ? 'var(--green)' : edge >= 5 ? '#7ddfab' : edge > 0 ? 'var(--yellow)' : 'var(--red)';
