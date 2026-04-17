@@ -740,6 +740,7 @@ export default {
             ]) {
               if (!rsO || !rsO.probability) continue;
               const ev = calcEV(fdFair, rsO.probability, rsVolume);
+              if (!rfiDbg.sample) rfiDbg.sample = { game: rfiGameKey, side, fdFair: Math.round(fdFair*1000)/10, rsPct: Math.round(rsO.probability*1000)/10, vol: rsVolume, ev };
               if (ev == null || ev < globalMinEv) continue;
               const u = unitsEV(ev, fdFair);
               if (u <= 0) continue;
