@@ -49,8 +49,8 @@ export async function onRequest({ request, env }) {
         if (row && String(row.chat_id) === chatId) {
           const newTaken = row.taken ? 0 : 1;
           await env.DB.prepare(
-            'UPDATE alert_messages SET taken=? WHERE user_id=? AND game=? AND market=?'
-          ).bind(newTaken, row.user_id, row.game, row.market).run();
+            'UPDATE alert_messages SET taken=? WHERE id=?'
+          ).bind(newTaken, rowId).run();
 
           toastText = newTaken ? '✅ Bet recorded!' : '↩️ Bet unrecorded';
           await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/editMessageReplyMarkup`, {
