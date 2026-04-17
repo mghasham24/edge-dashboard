@@ -506,7 +506,7 @@ export default {
     const now = Math.floor(Date.now() / 1000);
     const FD_STALE_THRESHOLD = 30 * 60;  // 30 minutes
     const RS_STALE_THRESHOLD = 4 * 60 * 60;  // 4 hours — fallback: use cache up to 4h old if warm fails
-    const RS_WARM_THRESHOLD  = 5 * 60;   // 5 minutes — actively re-warm RS cache this often
+    const RS_WARM_THRESHOLD  = 15;        // 15 seconds — warm every cron run (cron fires every 60s)
     const RE_ALERT_EV_JUMP   = 4.0;
 
     // Debug snapshot — written to D1 at end of each run for diagnostics
