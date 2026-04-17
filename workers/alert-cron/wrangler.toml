@@ -5,7 +5,10 @@
 # Required env vars (set in Cloudflare dashboard → Workers → alert-cron → Settings → Variables):
 #   TELEGRAM_BOT_TOKEN    — from @BotFather
 #   ODDS_API_KEY          — same key used by the Pages project
-#   REAL_AUTH_TOKEN       — same key used by the Pages project (for future RS direct fetch)
+#   CRON_SECRET           — shared secret with Pages project to bypass session auth on /api/real/sync
+
+[vars]
+SITE_URL = "https://raxedge.com"
 
 name = "raxedge-alert-cron"
 main = "index.js"

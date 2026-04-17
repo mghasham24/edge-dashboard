@@ -151,11 +151,20 @@ function extractGames(gamesData) {
 
 export async function onRequestGet(context) {
   const { request, env } = context;
-  const session = await getSession(request, env.DB);
-  if (!session) return fail(401, 'Not authenticated');
+
+  // Cron bypass — allows alert-cron worker to warm RS cache without a user session
+  const reqUrl0 = new URL(request.url);
+  const cronKey = reqUrl0.searchParams.get('_cron_key');
+  let session;
+  if (cronKey && env.CRON_SECRET && cronKey === env.CRON_SECRET) {
+    session = { user_id: 0, plan: 'pro', is_admin: 1 };
+  } else {
+    session = await getSession(request, env.DB);
+    if (!session) return fail(401, 'Not authenticated');
+  }
   if (!env.REAL_AUTH_TOKEN) return fail(500, 'REAL_AUTH_TOKEN not set');
 
-  const reqUrl = new URL(request.url);
+  const reqUrl = reqUrl0;
   const fdKey = reqUrl.searchParams.get('sport');
 
   // Pro gate: non-free-sport syncs require a Pro plan (server-authoritative — not bypassable client-side)

@@ -126,6 +126,25 @@ function parseRSCache(cacheData) {
   return { games, gameIds, gameSports };
 }
 
+const FDKEY_TO_RSKEY = {
+  'basketball_nba': 'nba', 'baseball_mlb': 'mlb', 'icehockey_nhl': 'nhl',
+  'soccer_fc': 'soccer', 'basketball_ncaab': 'cbb', 'mma_mixed_martial_arts': 'ufc'
+};
+
+async function warmRSCache(fdKey, env, now, staleThreshold) {
+  if (!env.SITE_URL || !env.CRON_SECRET) return;
+  try {
+    const rsKey = FDKEY_TO_RSKEY[fdKey] || fdKey;
+    const cached = await env.DB.prepare(
+      'SELECT fetched_at FROM odds_cache WHERE cache_key=?'
+    ).bind('real_sync_' + rsKey + '_v8').first();
+    if (cached && (now - cached.fetched_at) < staleThreshold) return;
+    await fetch(`${env.SITE_URL}/api/real/sync?sport=${fdKey}&_cron_key=${env.CRON_SECRET}`, {
+      signal: AbortSignal.timeout(15000)
+    });
+  } catch(e) {}
+}
+
 async function loadRSCache(rsKey, env, now, staleThreshold) {
   try {
     const cached = await env.DB.prepare(
@@ -548,7 +567,8 @@ export default {
         continue;
       }
 
-      // Load RS data
+      // Warm RS cache if stale/missing, then load
+      await warmRSCache(sport.fdKey, env, now, RS_STALE_THRESHOLD);
       const { games: rsGames, gameIds: rsGameIds, gameSports: rsGameSports, rsAge, reason: rsReason } =
         await loadRSCache(sport.rsKey, env, now, RS_STALE_THRESHOLD);
 
