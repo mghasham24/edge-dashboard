@@ -504,10 +504,13 @@ export default {
     if (!env.TELEGRAM_BOT_TOKEN) return;
 
     const now = Math.floor(Date.now() / 1000);
-    const FD_STALE_THRESHOLD = 30 * 60;  // 30 minutes
-    const RS_STALE_THRESHOLD = 4 * 60 * 60;  // 4 hours — fallback: use cache up to 4h old if warm fails
-    const RS_WARM_THRESHOLD  = 15;        // 15 seconds — warm every cron run (cron fires every 60s)
+    const FD_STALE_THRESHOLD = 30 * 60;
+    const RS_STALE_THRESHOLD = 4 * 60 * 60;
+    const RS_WARM_THRESHOLD  = 15;
     const RE_ALERT_EV_JUMP   = 4.0;
+    // Midnight ET (UTC-4 during EDT) — taken bet suppression resets each calendar day
+    const ET_OFFSET = 4 * 3600;
+    const midnightET = Math.floor((now + ET_OFFSET) / 86400) * 86400 - ET_OFFSET;
 
     // Debug snapshot — written to D1 at end of each run for diagnostics
     const dbg = { ts: now, sports: {}, allBets: 0, sampleBets: [], sentCount: 0 };
@@ -787,11 +790,11 @@ export default {
         b.ev >= minEv && (!userSports || userSports.has(b.sport.fdKey))
       );
 
-      // Skip markets the user already marked as taken (suppresses both sides of same market)
+      // Skip markets the user marked taken today (ET day) — resets each calendar day
       try {
         const takenRows = await env.DB.prepare(
-          'SELECT DISTINCT game, market FROM alert_messages WHERE user_id=? AND taken=1'
-        ).bind(user.user_id).all();
+          'SELECT DISTINCT game, market FROM alert_messages WHERE user_id=? AND taken=1 AND sent_at>=?'
+        ).bind(user.user_id, midnightET).all();
         const takenKeys = new Set((takenRows.results || []).map(r => r.game + '|' + r.market));
         if (takenKeys.size) {
           userBets = userBets.filter(b => !takenKeys.has(b.game + '|' + b.market));
