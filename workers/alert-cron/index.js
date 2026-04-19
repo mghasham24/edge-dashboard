@@ -796,7 +796,7 @@ export default {
           'SELECT game, market, MAX(ev) as taken_ev FROM alert_messages WHERE user_id=? AND taken=1 AND sent_at>=? GROUP BY game, market'
         ).bind(user.user_id, midnightET).all();
         if (takenRows.results?.length) {
-          const evBracket = ev => ev >= 15 ? 2 : ev >= 10 ? 1 : 0;
+          const evBracket = ev => ev >= 35 ? 3 : ev >= 20 ? 2 : ev >= 10 ? 1 : 0;
           const takenMap = new Map((takenRows.results || []).map(r => [r.game + '|' + r.market, r.taken_ev]));
           userBets = userBets.filter(b => {
             const takenEv = takenMap.get(b.game + '|' + b.market);
