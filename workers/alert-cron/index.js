@@ -790,14 +790,19 @@ export default {
         b.ev >= minEv && (!userSports || userSports.has(b.sport.fdKey))
       );
 
-      // Skip markets the user marked taken today (ET day) — resets each calendar day
+      // Skip markets taken today unless EV jumped to a higher bracket (5-9.9% / 10-14.9% / 15%+)
       try {
         const takenRows = await env.DB.prepare(
-          'SELECT DISTINCT game, market FROM alert_messages WHERE user_id=? AND taken=1 AND sent_at>=?'
+          'SELECT game, market, MAX(ev) as taken_ev FROM alert_messages WHERE user_id=? AND taken=1 AND sent_at>=? GROUP BY game, market'
         ).bind(user.user_id, midnightET).all();
-        const takenKeys = new Set((takenRows.results || []).map(r => r.game + '|' + r.market));
-        if (takenKeys.size) {
-          userBets = userBets.filter(b => !takenKeys.has(b.game + '|' + b.market));
+        if (takenRows.results?.length) {
+          const evBracket = ev => ev >= 15 ? 2 : ev >= 10 ? 1 : 0;
+          const takenMap = new Map((takenRows.results || []).map(r => [r.game + '|' + r.market, r.taken_ev]));
+          userBets = userBets.filter(b => {
+            const takenEv = takenMap.get(b.game + '|' + b.market);
+            if (takenEv === undefined) return true;
+            return evBracket(b.ev) > evBracket(takenEv);
+          });
         }
       } catch(e) {}
 
