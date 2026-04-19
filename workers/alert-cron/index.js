@@ -42,20 +42,26 @@ function noVigFair(amA, amB) {
   return { fa: iA / total, fb: iB / total };
 }
 
-// Volume-tiered rake — mirrors dashboard's rakeEV logic exactly
-function rakeFor(volume) {
-  if (volume > 100000) return 0.034;
-  if (volume > 10000)  return 0.032;
-  if (volume > 1000)   return 0.035;
-  if (volume > 0)      return 0.040;
+// Probability-based rake — empirically measured via RS Socket.io payout data.
+// Rake depends on RS probability (underdogs pay more), not volume.
+// Volume only affects slippage (small for typical bet sizes, ignored here).
+function rsBaseTake(p) {
+  const pts = [[0.17,0.067],[0.23,0.059],[0.32,0.046],[0.49,0.020],[0.59,0.018],[0.73,0.015],[0.76,0.012]];
+  if (p <= pts[0][0]) return pts[0][1];
+  if (p >= pts[pts.length-1][0]) return pts[pts.length-1][1];
+  for (let i = 0; i < pts.length - 1; i++) {
+    if (p >= pts[i][0] && p < pts[i+1][0]) {
+      const t = (p - pts[i][0]) / (pts[i+1][0] - pts[i][0]);
+      return pts[i][1] + t * (pts[i+1][1] - pts[i][1]);
+    }
+  }
   return 0.034;
 }
 
-// EV% — FD/DK no-vig is the "true" probability baseline; RS is the betting market.
-// Rake-adjusted to match what users see on the dashboard.
-function calcEV(fdNoVigProb, rsImpliedProb, volume) {
+// EV% — FD/DK no-vig is the "true" probability; RS is the betting market.
+function calcEV(fdNoVigProb, rsImpliedProb) {
   if (!fdNoVigProb || !rsImpliedProb || rsImpliedProb <= 0) return null;
-  const rake = rakeFor(volume ?? 0);
+  const rake = rsBaseTake(rsImpliedProb);
   return (fdNoVigProb / rsImpliedProb * (1 - rake) - 1) * 100;
 }
 
@@ -289,7 +295,7 @@ function processNativeML(sport, fdGames, rsGames, rsGameIds, rsGameSports, globa
       const rsO = findRSOutcome(name, rsOutcomes);
       if (!rsO || !rsO.probability) continue;
 
-      const ev = calcEV(fdFair, rsO.probability, rsVolume);
+      const ev = calcEV(fdFair, rsO.probability);
       if (ev == null || ev < globalMinEv) continue;
 
       const u = unitsEV(ev, fdFair);
@@ -345,7 +351,7 @@ function processNativeNBA(sport, fdGames, rsGames, rsGameIds, rsGameSports, glob
           ]) {
             const rsO = findRSOutcome(name, rsOutcomes);
             if (!rsO || !rsO.probability) continue;
-            const ev = calcEV(fdFair, rsO.probability, rsVolume);
+            const ev = calcEV(fdFair, rsO.probability);
             if (ev == null || ev < globalMinEv) continue;
             const u = unitsEV(ev, fdFair);
             if (u <= 0) continue;
@@ -384,7 +390,7 @@ function processNativeNBA(sport, fdGames, rsGames, rsGameIds, rsGameSports, glob
         const noVig = noVigFair(fdPrice, fdOtherPrice);
         if (!noVig) continue;
         const fdFair = noVig.fa;
-        const ev = calcEV(fdFair, rsO.probability, rsVolume);
+        const ev = calcEV(fdFair, rsO.probability);
         if (ev == null || ev < globalMinEv) continue;
         const u = unitsEV(ev, fdFair);
         if (u <= 0) continue;
@@ -415,7 +421,7 @@ function processNativeNBA(sport, fdGames, rsGames, rsGameIds, rsGameSports, glob
         const noVig = noVigFair(fdPrice, fdOtherPrice);
         if (!noVig) continue;
         const fdFair = noVig.fa;
-        const ev = calcEV(fdFair, rsO.probability, rsVolume);
+        const ev = calcEV(fdFair, rsO.probability);
         if (ev == null || ev < globalMinEv) continue;
         const u = unitsEV(ev, fdFair);
         if (u <= 0) continue;
@@ -478,7 +484,7 @@ function processNativeFC(sport, fdGames, rsGames, rsGameIds, rsGameSports, globa
       if (!noVig) continue;
       const fdFair = noVig.fa;
 
-      const ev = calcEV(fdFair, rsO.probability, rsVolume);
+      const ev = calcEV(fdFair, rsO.probability);
       if (ev == null || ev < globalMinEv) continue;
       const u = unitsEV(ev, fdFair);
       if (u <= 0) continue;
@@ -673,7 +679,7 @@ export default {
             const rsO    = findRSOutcome(fdO.name, rsOutcomes);
             if (!rsO || !rsO.probability) continue;
 
-            const ev = calcEV(fdFair, rsO.probability, rsVolume);
+            const ev = calcEV(fdFair, rsO.probability);
             if (ev == null || ev < globalMinEv) continue;
             const u = unitsEV(ev, fdFair);
             if (u <= 0) continue;
@@ -743,7 +749,7 @@ export default {
               { side: 'No (NRFI)',  fdFair: rfi.noFair,  fdOdds: rfi.noAm,  rsO: rsNo  },
             ]) {
               if (!rsO || !rsO.probability) continue;
-              const ev = calcEV(fdFair, rsO.probability, rsVolume);
+              const ev = calcEV(fdFair, rsO.probability);
               if (ev == null || ev < globalMinEv) continue;
               const u = unitsEV(ev, fdFair);
               if (u <= 0) continue;

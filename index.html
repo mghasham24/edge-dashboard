@@ -3805,6 +3805,22 @@
         'mma_mixed_martial_arts':    0.005
     };
 
+    // RS rake by RS probability — empirically measured via Socket.io payout data
+    // Rake is probability-dependent (underdogs pay more), NOT volume-dependent
+    // Volume only affects slippage (separate, small for typical bet sizes)
+    function rsBaseTake(p) {
+        var pts = [[0.17,0.067],[0.23,0.059],[0.32,0.046],[0.49,0.020],[0.59,0.018],[0.73,0.015],[0.76,0.012]];
+        if (p <= pts[0][0]) return pts[0][1];
+        if (p >= pts[pts.length-1][0]) return pts[pts.length-1][1];
+        for (var i = 0; i < pts.length - 1; i++) {
+            if (p >= pts[i][0] && p < pts[i+1][0]) {
+                var t = (p - pts[i][0]) / (pts[i+1][0] - pts[i][0]);
+                return pts[i][1] + t * (pts[i+1][1] - pts[i][1]);
+            }
+        }
+        return 0.034;
+    }
+
     function adjFair(fair, fd, yl, mkt, ps) {
         if (fair == null || mkt === 'ML')
             return fair;
@@ -5227,9 +5243,7 @@
             if (!pr || pr === '') return;
             var pred = parseFloat(pr) / 100;
             if (pred <= 0 || pred >= 1) return;
-            var volNum = 0;
-            if (vols[r.id]) { var vs = vols[r.id]; volNum = vs.endsWith('k') ? parseFloat(vs)*1000 : vs.endsWith('m') ? parseFloat(vs)*1000000 : parseFloat(vs); }
-            var rake = volNum > 100000 ? 0.034 : volNum > 10000 ? 0.032 : volNum > 1000 ? 0.035 : volNum > 0 ? 0.04 : 0.034;
+            var rake = rsBaseTake(pred);
             r._pred = pred; r._rake = rake;
             r._ev   = (r.af * (1/pred) * (1-rake) - 1) * 100;
             // >100% EV is a post-game artifact (RS knows result, FD market not yet settled)
@@ -8154,9 +8168,7 @@
                 if (!pr || r.af == null) return false;
                 var pred = parseFloat(pr) / 100;
                 if (pred <= 0 || pred >= 1) return false;
-                var volNum = 0;
-                if (vols[r.id]) { var vs = vols[r.id]; volNum = vs.endsWith('k') ? parseFloat(vs)*1000 : vs.endsWith('m') ? parseFloat(vs)*1000000 : parseFloat(vs); }
-                var rake = volNum > 100000 ? 0.034 : volNum > 10000 ? 0.032 : volNum > 1000 ? 0.035 : volNum > 0 ? 0.04 : 0.034;
+                var rake = rsBaseTake(pred);
                 var ev = (r.af * (1/pred) * (1-rake) - 1) * 100;
                 return ev >= 5;
             });
@@ -8280,9 +8292,7 @@
         if (predEV && r.af != null) {
             var realPctEV = parseFloat(predEV) / 100;
             if (realPctEV > 0 && realPctEV < 1) {
-                var volNumEV = 0;
-                if (vols[r.id]) { var vsEV = vols[r.id]; volNumEV = vsEV.endsWith('k') ? parseFloat(vsEV)*1000 : vsEV.endsWith('m') ? parseFloat(vsEV)*1000000 : parseFloat(vsEV); }
-                var rakeEV = volNumEV > 100000 ? 0.034 : volNumEV > 10000 ? 0.032 : volNumEV > 1000 ? 0.035 : volNumEV > 0 ? 0.04 : 0.034;
+                var rakeEV = rsBaseTake(realPctEV);
                 var ev = (r.af * (1/realPctEV) * (1-rakeEV) - 1) * 100;
                 // >100% EV = post-game artifact (RS knows result, FD market still open)
                 // Exception: soccer FC live ±0.5 lines can legitimately produce >100% EV
