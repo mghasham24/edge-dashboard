@@ -2936,6 +2936,7 @@
     var rawRowsBySport = {}; // sport key -> parsed rows (same IDs as preds)
     var _alertSyncedIds = new Set(); // row IDs checked via alert sync (so we can uncheck on untake)
     var preds = {};
+    var probsExact = {}; // full-precision RS probability per row id (from sync.js o.probability)
     var vols = {}; // volume display per row id
     var yourLines = {};
     var altOdds = {}; // gameId -> { spreads: {teamName: {point: price}}, totals: {side: {point: price}} }
@@ -5241,7 +5242,7 @@
             r._pred = null; r._rake = 0.034; r._ev = null;
             var pr = preds[r.id];
             if (!pr || pr === '') return;
-            var pred = parseFloat(pr) / 100;
+            var pred = probsExact[r.id] != null ? probsExact[r.id] : parseFloat(pr) / 100;
             if (pred <= 0 || pred >= 1) return;
             var rake = rsBaseTake(pred);
             r._pred = pred; r._rake = rake;
@@ -7446,7 +7447,7 @@
                                 var isYes = r.ps === 'A';
                                 var match = outcomes.find(function(o) { if (!o.label) return false; return isYes ? o.label.toLowerCase() === 'yes' : o.label.toLowerCase() === 'no'; });
                                 if (!match) match = isYes ? outcomes[1] : outcomes[0];
-                                if (match && match.pct != null) { preds[r.id] = match.probability != null ? (match.probability * 100).toFixed(2) : String(match.pct); if (mktData.volumeDisplay) vols[r.id] = mktData.volumeDisplay; }
+                                if (match && match.pct != null) { preds[r.id] = String(match.pct); if (match.probability != null) probsExact[r.id] = match.probability; if (mktData.volumeDisplay) vols[r.id] = mktData.volumeDisplay; }
                             });
                         }
                         renderTable();
@@ -7750,7 +7751,7 @@
                 // it's a post-game settled value — don't auto-populate, user can enter manually
                 var gameStarted = r.cm && r.cm.getTime() < Date.now();
                 if (gameStarted && (pct <= 3 || pct >= 97)) return;
-                var rsProbPct = match.probability != null ? (match.probability * 100).toFixed(2) : String(match.pct);
+                if (match.probability != null) probsExact[r.id] = match.probability;
                 // FC: use RS label sign to assign the correct DK price and store aligned pct
                 if (r.mkt === 'Spread' && (r._sport_key === 'soccer_fc' || currentSport === 'soccer_fc') && r._dkSpreads) {
                     var fcOutType2 = r.ps === 'B' ? 'Home' : 'Away';
@@ -7759,9 +7760,9 @@
                     var dkPrice3 = rsLine2 != null ? dkSpr2[String(rsLine2)] : null;
                     if (dkPrice3 != null) { r.am = dkPrice3; r.pt = rsLine2; }
                     if (rsLine2 != null) yourLines[r.id] = rsLine2;
-                    preds[r.id] = rsProbPct;
+                    preds[r.id] = String(match.pct);
                 } else {
-                    preds[r.id] = rsProbPct;
+                    preds[r.id] = String(match.pct);
                 }
                 if (mktData && mktData.volumeDisplay) vols[r.id] = mktData.volumeDisplay;
             }
@@ -8167,7 +8168,7 @@
             filtered = filtered.filter(function(r) {
                 var pr = preds[r.id];
                 if (!pr || r.af == null) return false;
-                var pred = parseFloat(pr) / 100;
+                var pred = probsExact[r.id] != null ? probsExact[r.id] : parseFloat(pr) / 100;
                 if (pred <= 0 || pred >= 1) return false;
                 var rake = rsBaseTake(pred);
                 var ev = (r.af * (1/pred) * (1-rake) - 1) * 100;
@@ -8291,7 +8292,7 @@
         var evH = '-';
         var predEV = preds[r.id];
         if (predEV && r.af != null) {
-            var realPctEV = parseFloat(predEV) / 100;
+            var realPctEV = probsExact[r.id] != null ? probsExact[r.id] : parseFloat(predEV) / 100;
             if (realPctEV > 0 && realPctEV < 1) {
                 var rakeEV = rsBaseTake(realPctEV);
                 var ev = (r.af * (1/realPctEV) * (1-rakeEV) - 1) * 100;
@@ -8653,7 +8654,8 @@
                     });
                     if (!match) match = isYes ? outcomes[1] : outcomes[0];
                     if (match && match.pct != null) {
-                        preds[r.id] = match.probability != null ? (match.probability * 100).toFixed(2) : String(match.pct);
+                        preds[r.id] = String(match.pct);
+                        if (match.probability != null) probsExact[r.id] = match.probability;
                         if (mktData.volumeDisplay) vols[r.id] = mktData.volumeDisplay;
                     }
                 });
@@ -8929,7 +8931,8 @@
                     });
                 }
                 if (match && match.pct != null) {
-                    preds[r.id] = match.probability != null ? (match.probability * 100).toFixed(2) : String(match.pct);
+                    preds[r.id] = String(match.pct);
+                    if (match.probability != null) probsExact[r.id] = match.probability;
                     if (mktData && mktData.volumeDisplay) {
                         vols[r.id] = mktData.volumeDisplay;
                         // Also set for the paired side (same game/market, opposite team)
