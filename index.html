@@ -2706,14 +2706,6 @@
 
         </div>
 
-            <!-- Taken Bets -->
-            <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:10px;padding:20px">
-                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-                    <div style="font-size:13px;font-weight:700;color:var(--fg)">Taken Bets</div>
-                    <button onclick="loadTakenBets()" style="background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;font-family:var(--sans)">↻ Refresh</button>
-                </div>
-                <div id="alerts-taken-list" style="font-size:12px;color:var(--muted)">Loading...</div>
-            </div>
 
         <!-- Portfolio Panel -->
         <div class="admin-panel" id="portfolio-panel">
@@ -4966,52 +4958,12 @@
     }
 
     async function loadTakenBets() {
-        var el = document.getElementById('alerts-taken-list');
-        if (!el) return;
         try {
             var res = await fetch('/api/alerts/taken', { credentials: 'same-origin' });
             var data = await res.json();
             var bets = data.bets || [];
-            if (!bets.length) {
-                el.innerHTML = '<div style="color:var(--muted);font-size:12px">No bets marked yet. Tap ✅ on a Telegram alert to record a bet.</div>';
-                if (_alertSyncedIds.size) {
-                    _alertSyncedIds.forEach(function(id) { delete betTaken[id]; });
-                    _alertSyncedIds.clear();
-                    localStorage.setItem('raxedge_bets_taken', JSON.stringify(betTaken));
-                    renderTable();
-                }
-                return;
-            }
-            // Group by game+market — show each group as one block with all sides checked
-            var groups = {};
-            bets.forEach(function(b) {
-                var key = b.game + '|' + b.market;
-                if (!groups[key]) groups[key] = { game: b.game, market: b.market, sport: b.sport, date: b.sent_at, sides: [] };
-                groups[key].sides.push(b);
-                if (b.sent_at > groups[key].date) groups[key].date = b.sent_at;
-            });
-            el.innerHTML = Object.values(groups).map(function(g) {
-                var date = new Date(g.date * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                var sidesHtml = g.sides.map(function(b) {
-                    var ptStr = b.pt != null ? ' ' + (b.pt > 0 ? '+' : '') + b.pt : '';
-                    var lineStr = b.market === 'ML' ? b.side : b.side + ptStr;
-                    var evStr = (b.ev >= 0 ? '+' : '') + parseFloat(b.ev).toFixed(1) + '%';
-                    return '<div style="display:flex;align-items:center;gap:8px;margin-top:6px">' +
-                        '<div style="width:16px;height:16px;border-radius:4px;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0">' +
-                            '<svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
-                        '</div>' +
-                        '<span style="font-size:12px;font-weight:600;color:var(--fg)">' + lineStr + '</span>' +
-                        '<span style="font-size:11px;color:var(--green);font-family:var(--mono);margin-left:auto">' + evStr + ' · ' + b.units + 'u (' + b.dollar_amt + ' Rax)</span>' +
-                    '</div>';
-                }).join('');
-                return '<div style="padding:10px 0;border-bottom:1px solid var(--border)">' +
-                    '<div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted2)">' + g.market + ' · ' + g.sport + ' · ' + date + '</div>' +
-                    '<div style="font-size:12px;color:var(--muted);margin-top:2px">' + g.game + '</div>' +
-                    sidesHtml +
-                '</div>';
-            }).join('');
 
-            // Sync taken alert bets into the main table checkboxes (all sports)
+            // Sync Telegram-tapped bets into dashboard checkboxes (all sports)
             var takenKeys = new Set(bets.map(function(b) { return b.game + '|' + b.market + '|' + b.side; }));
             var allSportRows = [];
             if (window.rawRowsBySport) Object.values(rawRowsBySport).forEach(function(sr) { allSportRows = allSportRows.concat(sr || []); });
@@ -5024,19 +4976,21 @@
                     _alertSyncedIds.add(r.id);
                     changed = true;
                 } else if (!takenKeys.has(key) && _alertSyncedIds.has(r.id)) {
-                    // Bet was unrecorded via Telegram — uncheck
                     delete betTaken[r.id];
                     _alertSyncedIds.delete(r.id);
                     changed = true;
                 }
             });
+            if (_alertSyncedIds.size && !bets.length) {
+                _alertSyncedIds.forEach(function(id) { delete betTaken[id]; });
+                _alertSyncedIds.clear();
+                changed = true;
+            }
             if (changed) {
                 localStorage.setItem('raxedge_bets_taken', JSON.stringify(betTaken));
                 renderTable();
             }
-        } catch(e) {
-            el.textContent = 'Failed to load.';
-        }
+        } catch(e) {}
     }
 
     function updateAlertConnectUI(verified) {
