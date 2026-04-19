@@ -4667,6 +4667,7 @@
             input.value = input.value.replace(/\.\d*/, '');
         }
         preds[id] = input.value;
+        delete probsExact[id];
         input.classList.toggle('filled', !!input.value);
 
         if (!_settingPredMobile && input.value !== '') {
@@ -8368,6 +8369,7 @@
     function setPred(input) {
         var id = input.getAttribute('data-id');
         preds[id] = input.value;
+        delete probsExact[id];
         input.classList.toggle('filled', !!input.value);
 
         var r = rawRows.find(function(x) { return x.id === id; });
