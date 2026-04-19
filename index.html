@@ -2836,6 +2836,7 @@
     var rawRows = [];
     var rawRowsBySport = {}; // sport key -> parsed rows (same IDs as preds)
     var preds = {};
+    var probsExact = {}; // full-precision RS probability per row id
     var vols = {}; // volume display per row id
     var yourLines = {};
     var altOdds = {}; // gameId -> { spreads: {teamName: {point: price}}, totals: {side: {point: price}} }
@@ -3705,6 +3706,21 @@
         'mma_mixed_martial_arts':    0.005
     };
 
+    // RS rake by RS probability — empirically measured via Socket.io payout data
+    // Rake is probability-dependent (underdogs pay more), NOT volume-dependent
+    function rsBaseTake(p) {
+        var pts = [[0.0918,0.0535],[0.13,0.065],[0.1737,0.0464],[0.32,0.046],[0.3757,0.039],[0.49,0.020],[0.59,0.018],[0.73,0.015],[0.7816,0.0125]];
+        if (p <= pts[0][0]) return pts[0][1];
+        if (p >= pts[pts.length-1][0]) return pts[pts.length-1][1];
+        for (var i = 0; i < pts.length - 1; i++) {
+            if (p >= pts[i][0] && p < pts[i+1][0]) {
+                var t = (p - pts[i][0]) / (pts[i+1][0] - pts[i][0]);
+                return pts[i][1] + t * (pts[i+1][1] - pts[i][1]);
+            }
+        }
+        return 0.034;
+    }
+
     function adjFair(fair, fd, yl, mkt, ps) {
         if (fair == null || mkt === 'ML')
             return fair;
@@ -4550,6 +4566,7 @@
             input.value = input.value.replace(/\.\d*/, '');
         }
         preds[id] = input.value;
+        delete probsExact[id];
         input.classList.toggle('filled', !!input.value);
 
         if (!_settingPredMobile && input.value !== '') {
@@ -4597,14 +4614,11 @@
         var yl = yourLines[r.id] != null ? yourLines[r.id] : null;
         var af = adjFair(fair, r.pt, yl, r.mkt, r.ps);
         var pr = preds[id];
-        var pred = (pr !== undefined && pr !== '') ? parseFloat(pr) / 100 : null;
+        var pred = (pr !== undefined && pr !== '') ? (probsExact[id] != null ? probsExact[id] : parseFloat(pr) / 100) : null;
         var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
         var evForU = null;
         if (af != null && pred != null && pred > 0 && pred < 1) {
-            var volNumU = 0;
-            if (vols[id]) { var vsU = vols[id]; volNumU = vsU.endsWith('k') ? parseFloat(vsU)*1000 : vsU.endsWith('m') ? parseFloat(vsU)*1000000 : parseFloat(vsU); }
-            var rakeU = volNumU > 100000 ? 0.034 : volNumU > 10000 ? 0.032 : volNumU > 1000 ? 0.035 : volNumU > 0 ? 0.04 : 0.034;
-            evForU = (af * (1/pred) * (1-rakeU) - 1) * 100;
+            evForU = (af * (1/pred) * (1-rsBaseTake(pred)) - 1) * 100;
         }
         var u = (isPro() || r.mkt === 'ML' || r.mkt === 'RFI') ? unitsEV(evForU, pred) : units(edge);
         var bet = u * unit;
@@ -4686,14 +4700,11 @@
             var yl = yourLines[r.id] != null ? yourLines[r.id] : null;
             var af = adjFair(fair, r.pt, yl, r.mkt, r.ps);
             var pr = preds[r.id];
-            var pred = (pr !== undefined && pr !== '') ? parseFloat(pr) / 100 : null;
+            var pred = (pr !== undefined && pr !== '') ? (probsExact[r.id] != null ? probsExact[r.id] : parseFloat(pr) / 100) : null;
             var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
             var evForUM = null;
             if (af != null && pred != null && pred > 0 && pred < 1) {
-                var volNumM = 0;
-                if (vols[r.id]) { var vsM = vols[r.id]; volNumM = vsM.endsWith('k') ? parseFloat(vsM)*1000 : vsM.endsWith('m') ? parseFloat(vsM)*1000000 : parseFloat(vsM); }
-                var rakeM = volNumM > 100000 ? 0.034 : volNumM > 10000 ? 0.032 : volNumM > 1000 ? 0.035 : volNumM > 0 ? 0.04 : 0.034;
-                evForUM = (af * (1/pred) * (1-rakeM) - 1) * 100;
+                evForUM = (af * (1/pred) * (1-rsBaseTake(pred)) - 1) * 100;
             }
             var u = (isPro() || r.mkt === 'ML' || r.mkt === 'RFI') ? unitsEV(evForUM, pred) : units(edge);
             return Object.assign({}, r, { fair: fair, af: af, yl: yl, edge: edge, u: u, bet: u * unit });
@@ -4876,11 +4887,9 @@
             r._pred = null; r._rake = 0.034; r._ev = null;
             var pr = preds[r.id];
             if (!pr || pr === '') return;
-            var pred = parseFloat(pr) / 100;
+            var pred = probsExact[r.id] != null ? probsExact[r.id] : parseFloat(pr) / 100;
             if (pred <= 0 || pred >= 1) return;
-            var volNum = 0;
-            if (vols[r.id]) { var vs = vols[r.id]; volNum = vs.endsWith('k') ? parseFloat(vs)*1000 : vs.endsWith('m') ? parseFloat(vs)*1000000 : parseFloat(vs); }
-            var rake = volNum > 100000 ? 0.034 : volNum > 10000 ? 0.032 : volNum > 1000 ? 0.035 : volNum > 0 ? 0.04 : 0.034;
+            var rake = rsBaseTake(pred);
             r._pred = pred; r._rake = rake;
             r._ev   = (r.af * (1/pred) * (1-rake) - 1) * 100;
             // >100% EV is a post-game artifact (RS knows result, FD market not yet settled)
@@ -5355,13 +5364,10 @@
                         var fair = (r.mkt === 'RFI' && r.rfiFair != null) ? r.rfiFair : (altNV3 ? (r.ps === 'A' ? altNV3.fa : altNV3.fb) : (r.ps === 'A' ? nv.fa : nv.fb));
                         var af = (r.mkt === 'RFI' && r.rfiFair != null) ? r.rfiFair : (altNV3 ? fair : adjFair(fair, r.pt, yl, r.mkt, r.ps));
                         var pr = preds[r.id];
-                        var pred = (pr !== undefined && pr !== '') ? parseFloat(pr) / 100 : null;
+                        var pred = (pr !== undefined && pr !== '') ? (probsExact[r.id] != null ? probsExact[r.id] : parseFloat(pr) / 100) : null;
                         var evForUnits = null;
                         if (af != null && pred != null && pred > 0 && pred < 1) {
-                            var volNum3 = 0;
-                            if (vols[r.id]) { var vs3 = vols[r.id]; volNum3 = vs3.endsWith('k') ? parseFloat(vs3)*1000 : vs3.endsWith('m') ? parseFloat(vs3)*1000000 : parseFloat(vs3); }
-                            var rake3 = volNum3 > 100000 ? 0.034 : volNum3 > 10000 ? 0.032 : volNum3 > 1000 ? 0.035 : volNum3 > 0 ? 0.04 : 0.034;
-                            evForUnits = (af * (1/pred) * (1-rake3) - 1) * 100;
+                            evForUnits = (af * (1/pred) * (1-rsBaseTake(pred)) - 1) * 100;
                         }
                         var u = unitsEV(evForUnits, pred);
                         var edge = (af != null && pred != null) ? (af - pred) * 100 : null;
@@ -7068,7 +7074,7 @@
                                         var _etFmt7 = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
                                         if (_etFmt7.format(new Date(rsStartMs7)) !== _etFmt7.format(r.cm)) return;
                                     }
-                                    preds[r.id] = String(match.pct); if (mktData.volumeDisplay) vols[r.id] = mktData.volumeDisplay;
+                                    preds[r.id] = String(match.pct); if (match.probability != null) probsExact[r.id] = match.probability; if (mktData.volumeDisplay) vols[r.id] = mktData.volumeDisplay;
                                 }
                             });
                         }
@@ -7379,6 +7385,7 @@
             if (match && match.pct != null) {
                 // Time guard: clear RS preds 4h after game start
                 if (r.cm && Date.now() > r.cm.getTime() + 4 * 60 * 60 * 1000) return;
+                if (match.probability != null) probsExact[r.id] = match.probability;
                 // FC: use RS label sign to assign the correct DK price and store aligned pct
                 if (r.mkt === 'Spread' && (r._sport_key === 'soccer_fc' || currentSport === 'soccer_fc') && r._dkSpreads) {
                     var fcOutType2 = r.ps === 'B' ? 'Home' : 'Away';
@@ -7703,17 +7710,14 @@
                 af = altNV ? fair : adjFair(fair, r.pt, yl, r.mkt, r.ps);
             }
             var pr = preds[r.id];
-            var pred = (pr !== undefined && pr !== '') ? parseFloat(pr) / 100 : null;
+            var pred = (pr !== undefined && pr !== '') ? (probsExact[r.id] != null ? probsExact[r.id] : parseFloat(pr) / 100) : null;
             // All sports: users bet at RS, sharp book (FD/DK) is reference (af)
             // Value = sharp novig > RS probability = RS offering longer odds than sharp fair
             // edge = (af - pred), EV = (af/pred) * (1-rake) - 1
             var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
             var evForUnits = null;
             if (af != null && pred != null && pred > 0 && pred < 1) {
-                var volNum3 = 0;
-                if (vols[r.id]) { var vs3 = vols[r.id]; volNum3 = vs3.endsWith('k') ? parseFloat(vs3)*1000 : vs3.endsWith('m') ? parseFloat(vs3)*1000000 : parseFloat(vs3); }
-                var rake3 = volNum3 > 100000 ? 0.034 : volNum3 > 10000 ? 0.032 : volNum3 > 1000 ? 0.035 : volNum3 > 0 ? 0.04 : 0.034;
-                evForUnits = (af * (1/pred) * (1-rake3) - 1) * 100;
+                evForUnits = (af * (1/pred) * (1-rsBaseTake(pred)) - 1) * 100;
                 // >100% EV is a post-game artifact — treat as no edge
                 // Exception: soccer FC live ±0.5 lines can legitimately produce >100% EV
                 if (evForUnits > 100 && currentSport !== 'soccer_fc') evForUnits = null;
@@ -7795,12 +7799,9 @@
             filtered = filtered.filter(function(r) {
                 var pr = preds[r.id];
                 if (!pr || r.af == null) return false;
-                var pred = parseFloat(pr) / 100;
+                var pred = probsExact[r.id] != null ? probsExact[r.id] : parseFloat(pr) / 100;
                 if (pred <= 0 || pred >= 1) return false;
-                var volNum = 0;
-                if (vols[r.id]) { var vs = vols[r.id]; volNum = vs.endsWith('k') ? parseFloat(vs)*1000 : vs.endsWith('m') ? parseFloat(vs)*1000000 : parseFloat(vs); }
-                var rake = volNum > 100000 ? 0.034 : volNum > 10000 ? 0.032 : volNum > 1000 ? 0.035 : volNum > 0 ? 0.04 : 0.034;
-                var ev = (r.af * (1/pred) * (1-rake) - 1) * 100;
+                var ev = (r.af * (1/pred) * (1-rsBaseTake(pred)) - 1) * 100;
                 return ev >= 5;
             });
         }
@@ -7921,12 +7922,9 @@
         var evH = '-';
         var predEV = preds[r.id];
         if (predEV && r.af != null) {
-            var realPctEV = parseFloat(predEV) / 100;
+            var realPctEV = probsExact[r.id] != null ? probsExact[r.id] : parseFloat(predEV) / 100;
             if (realPctEV > 0 && realPctEV < 1) {
-                var volNumEV = 0;
-                if (vols[r.id]) { var vsEV = vols[r.id]; volNumEV = vsEV.endsWith('k') ? parseFloat(vsEV)*1000 : vsEV.endsWith('m') ? parseFloat(vsEV)*1000000 : parseFloat(vsEV); }
-                var rakeEV = volNumEV > 100000 ? 0.034 : volNumEV > 10000 ? 0.032 : volNumEV > 1000 ? 0.035 : volNumEV > 0 ? 0.04 : 0.034;
-                var ev = (r.af * (1/realPctEV) * (1-rakeEV) - 1) * 100;
+                var ev = (r.af * (1/realPctEV) * (1-rsBaseTake(realPctEV)) - 1) * 100;
                 // >100% EV = post-game artifact (RS knows result, FD market still open)
                 // Exception: soccer FC live ±0.5 lines can legitimately produce >100% EV
                 if (ev > 100 && currentSport !== 'soccer_fc') { evH = '-'; } else {
@@ -7999,6 +7997,7 @@
     function setPred(input) {
         var id = input.getAttribute('data-id');
         preds[id] = input.value;
+        delete probsExact[id];
         input.classList.toggle('filled', !!input.value);
 
         var r = rawRows.find(function(x) { return x.id === id; });
@@ -8027,15 +8026,11 @@
         var fair = getFair(r);
         var yl = yourLines[id] != null ? yourLines[id] : null;
         var af = adjFair(fair, r.pt, yl, r.mkt, r.ps);
-        var pred = input.value !== '' ? parseFloat(input.value) / 100 : null;
+        var pred = input.value !== '' ? (probsExact[id] != null ? probsExact[id] : parseFloat(input.value) / 100) : null;
         var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
-        // EV calculation (volume-tiered rake) — mirrors buildRow logic
         var evForUnits = null, evH = '-';
         if (af != null && pred != null && pred > 0 && pred < 1) {
-            var volNumP = 0;
-            if (vols[id]) { var vsP = vols[id]; volNumP = vsP.endsWith('k') ? parseFloat(vsP)*1000 : vsP.endsWith('m') ? parseFloat(vsP)*1000000 : parseFloat(vsP); }
-            var rakeP = volNumP > 100000 ? 0.034 : volNumP > 10000 ? 0.032 : volNumP > 1000 ? 0.035 : volNumP > 0 ? 0.04 : 0.034;
-            evForUnits = (af * (1/pred) * (1-rakeP) - 1) * 100;
+            evForUnits = (af * (1/pred) * (1-rsBaseTake(pred)) - 1) * 100;
             if (isPro() || r.mkt === 'ML') {
                 var evColor = evForUnits >= 5 ? 'var(--green)' : evForUnits > 0 ? 'var(--yellow)' : 'var(--red)';
                 evH = '<span style="font-family:var(--mono);font-size:12px;font-weight:600;color:' + evColor + '">' + (evForUnits > 0 ? '+' : '') + evForUnits.toFixed(1) + '%</span>';
@@ -8293,6 +8288,7 @@
                             if (_etFmt8.format(new Date(rsStartMs8)) !== _etFmt8.format(r.cm)) return;
                         }
                         preds[r.id] = String(match.pct);
+                        if (match.probability != null) probsExact[r.id] = match.probability;
                         if (mktData.volumeDisplay) vols[r.id] = mktData.volumeDisplay;
                     }
                 });
@@ -8577,6 +8573,7 @@
                         if (_etFmtG.format(new Date(rsStartMsG)) !== _etFmtG.format(r.cm)) return;
                     }
                     preds[r.id] = String(match.pct);
+                    if (match.probability != null) probsExact[r.id] = match.probability;
                     if (mktData && mktData.volumeDisplay) {
                         vols[r.id] = mktData.volumeDisplay;
                         // Also set for the paired side (same game/market, opposite team)
