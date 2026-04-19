@@ -46,7 +46,7 @@ function noVigFair(amA, amB) {
 // Rake depends on RS probability (underdogs pay more), not volume.
 // Volume only affects slippage (small for typical bet sizes, ignored here).
 function rsBaseTake(p) {
-  const pts = [[0.13,0.065],[0.17,0.067],[0.23,0.059],[0.32,0.046],[0.49,0.020],[0.59,0.018],[0.73,0.015],[0.76,0.012]];
+  const pts = [[0.08,0.046],[0.13,0.065],[0.17,0.067],[0.23,0.059],[0.32,0.046],[0.49,0.020],[0.59,0.018],[0.73,0.015],[0.76,0.012]];
   if (p <= pts[0][0]) return pts[0][1];
   if (p >= pts[pts.length-1][0]) return pts[pts.length-1][1];
   for (let i = 0; i < pts.length - 1; i++) {
