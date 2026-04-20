@@ -4207,9 +4207,9 @@
                     side.textContent = r.side;
                     row.appendChild(side);
 
-                    // For NBA spread/total, use DK alt price when available (matches desktop rendering)
+                    // For NBA/NHL spread/total, use DK alt price when available (matches desktop rendering)
                     var dispAmMc = r.am;
-                    if (currentSport === 'basketball_nba' && r.gid && dkAltOdds[r.gid] && (r.mkt === 'Spread' || r.mkt === 'Total')) {
+                    if ((currentSport === 'basketball_nba' || currentSport === 'icehockey_nhl') && r.gid && dkAltOdds[r.gid] && (r.mkt === 'Spread' || r.mkt === 'Total')) {
                         var dkMc = dkAltOdds[r.gid];
                         var dkMcSideKey = r.mkt === 'Spread' ? (r.ps === 'A' ? 'Away' : 'Home') : (r.ps === 'A' ? 'Over' : 'Under');
                         var ylMc = yourLines[r.id] != null ? yourLines[r.id] : r.pt;
@@ -4715,14 +4715,11 @@
         var yl = yourLines[r.id] != null ? yourLines[r.id] : null;
         var af = adjFair(fair, r.pt, yl, r.mkt, r.ps);
         var pr = preds[id];
-        var pred = (pr !== undefined && pr !== '') ? parseFloat(pr) / 100 : null;
+        var pred = (pr !== undefined && pr !== '') ? (probsExact[id] != null ? probsExact[id] : parseFloat(pr) / 100) : null;
         var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
         var evForU = null;
         if (af != null && pred != null && pred > 0 && pred < 1) {
-            var volNumU = 0;
-            if (vols[id]) { var vsU = vols[id]; volNumU = vsU.endsWith('k') ? parseFloat(vsU)*1000 : vsU.endsWith('m') ? parseFloat(vsU)*1000000 : parseFloat(vsU); }
-            var rakeU = volNumU > 100000 ? 0.034 : volNumU > 10000 ? 0.032 : volNumU > 1000 ? 0.035 : volNumU > 0 ? 0.04 : 0.034;
-            evForU = (af * (1/pred) * (1-rakeU) - 1) * 100;
+            evForU = (af * (1/pred) * (1-rsBaseTake(pred)) - 1) * 100;
         }
         var u = (isPro() || r.mkt === 'ML' || r.mkt === 'RFI') ? unitsEV(evForU, pred) : units(edge);
         var bet = u * unit;
@@ -5251,8 +5248,8 @@
             // >100% EV is a post-game artifact (RS knows result, FD market not yet settled)
             // Exception: soccer_fc live ±0.5 lines can legitimately produce >100% EV
             if (r._ev > 0 && (r._ev <= 100 || sport === 'soccer_fc')) {
-                // NBA: skip spread/total rows where DK has alt data but not the RS line
-                if (sport === 'basketball_nba' && r.gid && r.yl != null && (r.mkt === 'Spread' || r.mkt === 'Total')) {
+                // NBA/NHL: skip spread/total rows where DK has alt data but not the RS line
+                if ((sport === 'basketball_nba' || sport === 'icehockey_nhl') && r.gid && r.yl != null && (r.mkt === 'Spread' || r.mkt === 'Total')) {
                     var dkGame3 = dkAltOdds[r.gid];
                     if (dkGame3) {
                         var sk3 = r.ps === 'A' ? (r.mkt === 'Spread' ? 'Away' : 'Over') : (r.mkt === 'Spread' ? 'Home' : 'Under');
@@ -5509,7 +5506,7 @@
 
         // Re-fetch fresh odds for all sports in parallel — this evicts finished games from rawRowsBySport
         evLoadingInProgress = true;
-        var noSpread = ['mma_mixed_martial_arts', 'baseball_mlb', 'icehockey_nhl'];
+        var noSpread = ['mma_mixed_martial_arts', 'baseball_mlb'];
         await Promise.all(sportsToLoad.map(async function(s) {
             try {
                 if (s.key === 'soccer_fc') {
@@ -5646,13 +5643,37 @@
                         var away = game.away, home = game.home;
                         var cm = game.cm ? new Date(game.cm) : null;
                         var gid = String(game.id);
-                        var pid = gid + '-h2h';
-                        [[away,'A'],[home,'B']].forEach(function(pair) {
-                            var teamName = pair[0], ps = pair[1];
-                            var price = game.ml[teamName];
-                            if (price == null) return;
-                            rows.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'ML', side: teamName, am: price, pt: null, pid: pid, ps: ps, gid: gid, _sport_key: 'icehockey_nhl' });
-                        });
+                        if (game.spreads) {
+                            var pid = gid + '-spreads';
+                            [[away,'A'],[home,'B']].forEach(function(pair) {
+                                var teamName = pair[0], ps = pair[1];
+                                var sideData = game.spreads[teamName];
+                                if (!sideData) return;
+                                var entry = Object.entries(sideData)[0];
+                                if (!entry) return;
+                                rows.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName, am: entry[1], pt: parseFloat(entry[0]), pid: pid, ps: ps, gid: gid, _sport_key: 'icehockey_nhl' });
+                            });
+                        }
+                        if (game.totals) {
+                            var pid = gid + '-totals';
+                            [['Over','A'],['Under','B']].forEach(function(pair) {
+                                var side = pair[0], ps = pair[1];
+                                var sideData = game.totals[side];
+                                if (!sideData) return;
+                                var entry = Object.entries(sideData)[0];
+                                if (!entry) return;
+                                rows.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'Total', side: side, am: entry[1], pt: parseFloat(entry[0]), pid: pid, ps: ps, gid: gid, _sport_key: 'icehockey_nhl' });
+                            });
+                        }
+                        if (game.ml) {
+                            var pid = gid + '-h2h';
+                            [[away,'A'],[home,'B']].forEach(function(pair) {
+                                var teamName = pair[0], ps = pair[1];
+                                var price = game.ml[teamName];
+                                if (price == null) return;
+                                rows.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'ML', side: teamName, am: price, pt: null, pid: pid, ps: ps, gid: gid, _sport_key: 'icehockey_nhl' });
+                            });
+                        }
                     });
                     rawRowsBySport[s.key] = rows;
                     return;
@@ -5720,20 +5741,17 @@
                         var fair = (r.mkt === 'RFI' && r.rfiFair != null) ? r.rfiFair : (altNV3 ? (r.ps === 'A' ? altNV3.fa : altNV3.fb) : (r.ps === 'A' ? nv.fa : nv.fb));
                         var af = (r.mkt === 'RFI' && r.rfiFair != null) ? r.rfiFair : (altNV3 ? fair : adjFair(fair, r.pt, yl, r.mkt, r.ps));
                         var pr = preds[r.id];
-                        var pred = (pr !== undefined && pr !== '') ? parseFloat(pr) / 100 : null;
+                        var pred = (pr !== undefined && pr !== '') ? (probsExact[r.id] != null ? probsExact[r.id] : parseFloat(pr) / 100) : null;
                         var evForUnits = null;
                         if (af != null && pred != null && pred > 0 && pred < 1) {
-                            var volNum3 = 0;
-                            if (vols[r.id]) { var vs3 = vols[r.id]; volNum3 = vs3.endsWith('k') ? parseFloat(vs3)*1000 : vs3.endsWith('m') ? parseFloat(vs3)*1000000 : parseFloat(vs3); }
-                            var rake3 = volNum3 > 100000 ? 0.034 : volNum3 > 10000 ? 0.032 : volNum3 > 1000 ? 0.035 : volNum3 > 0 ? 0.04 : 0.034;
-                            evForUnits = (af * (1/pred) * (1-rake3) - 1) * 100;
+                            evForUnits = (af * (1/pred) * (1-rsBaseTake(pred)) - 1) * 100;
                         }
                         var u = unitsEV(evForUnits, pred);
                         var edge = (af != null && pred != null) ? (af - pred) * 100 : null;
                         return { id: r.id, game: r.game, cm: r.cm, mkt: r.mkt, side: r.side, am: r.am, pt: r.pt, ps: r.ps, pid: r.pid, gid: r.gid, league: r.league, fair: fair, af: af, yl: yl, edge: edge, u: u };
                     }).filter(function(r) {
-                        // NBA: hide spread/total when DK has alt data for the game but not the RS line
-                        if (s.key === 'basketball_nba' && r.gid && r.yl != null && (r.mkt === 'Spread' || r.mkt === 'Total')) {
+                        // NBA/NHL: hide spread/total when DK has alt data for the game but not the RS line
+                        if ((s.key === 'basketball_nba' || s.key === 'icehockey_nhl') && r.gid && r.yl != null && (r.mkt === 'Spread' || r.mkt === 'Total')) {
                             var dkGame = dkAltOdds[r.gid];
                             if (dkGame) {
                                 var dkSideKey = r.ps === 'A' ? (r.mkt === 'Spread' ? 'Away' : 'Over') : (r.mkt === 'Spread' ? 'Home' : 'Under');
@@ -7463,9 +7481,10 @@
             return;
         }
 
-        // NHL: use FD native API for ML — no Odds API credits
+        // NHL: use FD native API — no Odds API credits
         if (currentSport === 'icehockey_nhl') {
             altOdds = {};
+            dkPreGameStore = {};
             fetch('/api/fd/nhl', { credentials: 'same-origin' })
             .then(function(r) {
                 if (r.status === 401) {
@@ -7489,13 +7508,38 @@
                     var away = game.away, home = game.home;
                     var cm = game.cm ? new Date(game.cm) : null;
                     var gid = String(game.id);
-                    var pid = gid + '-h2h';
-                    [[away, 'A'], [home, 'B']].forEach(function(pair) {
-                        var teamName = pair[0], ps = pair[1];
-                        var price = game.ml[teamName];
-                        if (price == null) return;
-                        rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'ML', side: teamName, am: price, pt: null, pid: pid, ps: ps, gid: gid });
-                    });
+                    altOdds[gid] = game;
+                    if (game.spreads) {
+                        var pid = gid + '-spreads';
+                        [[away, 'A'], [home, 'B']].forEach(function(pair) {
+                            var teamName = pair[0], ps = pair[1];
+                            var sideData = game.spreads[teamName];
+                            if (!sideData) return;
+                            var entry = Object.entries(sideData)[0];
+                            if (!entry) return;
+                            rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName, am: entry[1], pt: parseFloat(entry[0]), pid: pid, ps: ps, gid: gid });
+                        });
+                    }
+                    if (game.totals) {
+                        var pid = gid + '-totals';
+                        [['Over', 'A'], ['Under', 'B']].forEach(function(pair) {
+                            var side = pair[0], ps = pair[1];
+                            var sideData = game.totals[side];
+                            if (!sideData) return;
+                            var entry = Object.entries(sideData)[0];
+                            if (!entry) return;
+                            rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'Total', side: side, am: entry[1], pt: parseFloat(entry[0]), pid: pid, ps: ps, gid: gid });
+                        });
+                    }
+                    if (game.ml) {
+                        var pid = gid + '-h2h';
+                        [[away, 'A'], [home, 'B']].forEach(function(pair) {
+                            var teamName = pair[0], ps = pair[1];
+                            var price = game.ml[teamName];
+                            if (price == null) return;
+                            rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'ML', side: teamName, am: price, pt: null, pid: pid, ps: ps, gid: gid });
+                        });
+                    }
                 });
                 rawRows = rows;
                 rawRowsBySport[currentSport] = rawRows;
@@ -7518,11 +7562,16 @@
                 btn.disabled = false;
                 renderTable();
                 if (rawRows.length > 0) {
-                    fetchRealMarkets(currentSport);
+                    fetchRealMarkets(currentSport).then(function() { fetchDKAltLinesNHL(); });
                     if (nhlPoller) clearInterval(nhlPoller);
                     nhlPoller = setInterval(function() {
                         if (currentSport !== 'icehockey_nhl') { clearInterval(nhlPoller); nhlPoller = null; return; }
                         fetchNHLNativeUpdate();
+                    }, 5000);
+                    if (dkPoller) clearInterval(dkPoller);
+                    dkPoller = setInterval(function() {
+                        if (currentSport !== 'icehockey_nhl') { clearInterval(dkPoller); dkPoller = null; return; }
+                        fetchDKAltLinesNHL();
                     }, 5000);
                 }
             });
@@ -7530,7 +7579,7 @@
         }
 
         var sel = document.getElementById('mkt-filter').value;
-        var noSpread = ['mma_mixed_martial_arts', 'baseball_mlb', 'icehockey_nhl'];
+        var noSpread = ['mma_mixed_martial_arts', 'baseball_mlb'];
         var mkts = noSpread.indexOf(currentSport) !== -1 ? 'h2h'
             : (!isPro()) ? 'h2h'
             : sel === 'ALL' ? 'h2h,spreads,totals' : (MARKET_KEYS[sel] || 'h2h');
@@ -7774,7 +7823,7 @@
     // Never touches rawRows, currentSport, or renderTable
     async function preloadAllSports() {
         if (!isPro()) return;
-        var noSpread = ['mma_mixed_martial_arts', 'baseball_mlb', 'icehockey_nhl'];
+        var noSpread = ['mma_mixed_martial_arts', 'baseball_mlb'];
         var sportsToLoad = SPORTS.filter(function(s) { return !s.noFetch && s.key !== currentSport; });
         var evBtn = document.getElementById('ev-tab-btn');
         var barWrap = document.getElementById('ev-loading-bar-wrap');
@@ -7904,13 +7953,37 @@
                             var away = game.away, home = game.home;
                             var cm = game.cm ? new Date(game.cm) : null;
                             var gid = String(game.id);
-                            var pid = gid + '-h2h';
-                            [[away,'A'],[home,'B']].forEach(function(pair) {
-                                var teamName = pair[0], ps = pair[1];
-                                var price = game.ml[teamName];
-                                if (price == null) return;
-                                nhlRowsP.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'ML', side: teamName, am: price, pt: null, pid: pid, ps: ps, gid: gid, _sport_key: 'icehockey_nhl' });
-                            });
+                            if (game.spreads) {
+                                var pid = gid + '-spreads';
+                                [[away,'A'],[home,'B']].forEach(function(pair) {
+                                    var teamName = pair[0], ps = pair[1];
+                                    var sideData = game.spreads[teamName];
+                                    if (!sideData) return;
+                                    var entry = Object.entries(sideData)[0];
+                                    if (!entry) return;
+                                    nhlRowsP.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName, am: entry[1], pt: parseFloat(entry[0]), pid: pid, ps: ps, gid: gid, _sport_key: 'icehockey_nhl' });
+                                });
+                            }
+                            if (game.totals) {
+                                var pid = gid + '-totals';
+                                [['Over','A'],['Under','B']].forEach(function(pair) {
+                                    var side = pair[0], ps = pair[1];
+                                    var sideData = game.totals[side];
+                                    if (!sideData) return;
+                                    var entry = Object.entries(sideData)[0];
+                                    if (!entry) return;
+                                    nhlRowsP.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'Total', side: side, am: entry[1], pt: parseFloat(entry[0]), pid: pid, ps: ps, gid: gid, _sport_key: 'icehockey_nhl' });
+                                });
+                            }
+                            if (game.ml) {
+                                var pid = gid + '-h2h';
+                                [[away,'A'],[home,'B']].forEach(function(pair) {
+                                    var teamName = pair[0], ps = pair[1];
+                                    var price = game.ml[teamName];
+                                    if (price == null) return;
+                                    nhlRowsP.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'ML', side: teamName, am: price, pt: null, pid: pid, ps: ps, gid: gid, _sport_key: 'icehockey_nhl' });
+                                });
+                            }
                         });
                         rawRowsBySport[s.key] = nhlRowsP;
                         if (nhlSyncResP.ok) {
@@ -8077,17 +8150,14 @@
                 af = altNV ? fair : adjFair(fair, r.pt, yl, r.mkt, r.ps);
             }
             var pr = preds[r.id];
-            var pred = (pr !== undefined && pr !== '') ? parseFloat(pr) / 100 : null;
+            var pred = (pr !== undefined && pr !== '') ? (probsExact[r.id] != null ? probsExact[r.id] : parseFloat(pr) / 100) : null;
             // All sports: users bet at RS, sharp book (FD/DK) is reference (af)
             // Value = sharp novig > RS probability = RS offering longer odds than sharp fair
             // edge = (af - pred), EV = (af/pred) * (1-rake) - 1
             var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
             var evForUnits = null;
             if (af != null && pred != null && pred > 0 && pred < 1) {
-                var volNum3 = 0;
-                if (vols[r.id]) { var vs3 = vols[r.id]; volNum3 = vs3.endsWith('k') ? parseFloat(vs3)*1000 : vs3.endsWith('m') ? parseFloat(vs3)*1000000 : parseFloat(vs3); }
-                var rake3 = volNum3 > 100000 ? 0.034 : volNum3 > 10000 ? 0.032 : volNum3 > 1000 ? 0.035 : volNum3 > 0 ? 0.04 : 0.034;
-                evForUnits = (af * (1/pred) * (1-rake3) - 1) * 100;
+                evForUnits = (af * (1/pred) * (1-rsBaseTake(pred)) - 1) * 100;
                 // >100% EV is a post-game artifact — treat as no edge
                 // Exception: soccer FC live ±0.5 lines can legitimately produce >100% EV
                 if (evForUnits > 100 && currentSport !== 'soccer_fc') evForUnits = null;
@@ -8136,9 +8206,9 @@
                     if (Math.abs(parseFloat(r.pt) - parseFloat(yourLines[r.id])) > 0.001) return false;
                 }
 
-                // NBA spread/total: always require DK alt data — no interpolation fallback
-                // Hide if DK has no data for the game, or has data but not the RS line
-                if (isNBA && r.gid) {
+                // NBA/NHL (live or pregame): hide if DK has alt data for this game but can't find the RS line
+                // Row reappears automatically once DK adds the line to their alt spreads/totals
+                if ((isNBA || isHockey) && r.gid && yourLines[r.id] != null) {
                     var dkGame = dkAltOdds[r.gid];
                     if (!dkGame) return false;
                     if (yourLines[r.id] != null) {
@@ -8146,13 +8216,10 @@
                         var dkLines = r.mkt === 'Spread' ? (dkGame.spreads && dkGame.spreads[dkSideKey]) : (dkGame.totals && dkGame.totals[dkSideKey]);
                         var dkHasData = dkLines && Object.keys(dkLines).length > 0;
                         if (dkHasData && dkClosestPrice(dkLines, parseFloat(yourLines[r.id])) == null) return false;
+                    } else if (isHockey && r.pt != null) {
+                        // No DK alt data yet: fall back to strict puck-line rule
+                        if (Math.abs(parseFloat(yourLines[r.id]) - parseFloat(r.pt)) > 0) return false;
                     }
-                }
-
-                // NHL: hide spread/total if Real line differs from FD at all
-                if (isHockey && r.pt != null && yourLines[r.id] != null) {
-                    var gap = Math.abs(parseFloat(yourLines[r.id]) - parseFloat(r.pt));
-                    if (gap > 0) return false;
                 }
 
                 // All other sports: hide if gap exceeds 4 points
@@ -8289,7 +8356,6 @@
         }
         var uH = r.u === 0 ? '<span class="u-pass">PASS</span>' : '<span class="u-val">' + r.u + 'u</span>';
         var bH = r.u === 0 ? '<span class="u-pass">-</span>' : '<span class="bet-val">' + RAX_ICON + r.bet.toFixed(0) + '</span>';
-        // EV calculation with volume-tiered rake
         var evH = '-';
         var predEV = preds[r.id];
         if (predEV && r.af != null) {
@@ -8398,15 +8464,11 @@
         var fair = getFair(r);
         var yl = yourLines[id] != null ? yourLines[id] : null;
         var af = adjFair(fair, r.pt, yl, r.mkt, r.ps);
-        var pred = input.value !== '' ? parseFloat(input.value) / 100 : null;
+        var pred = input.value !== '' ? (probsExact[id] != null ? probsExact[id] : parseFloat(input.value) / 100) : null;
         var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
-        // EV calculation (volume-tiered rake) — mirrors buildRow logic
         var evForUnits = null, evH = '-';
         if (af != null && pred != null && pred > 0 && pred < 1) {
-            var volNumP = 0;
-            if (vols[id]) { var vsP = vols[id]; volNumP = vsP.endsWith('k') ? parseFloat(vsP)*1000 : vsP.endsWith('m') ? parseFloat(vsP)*1000000 : parseFloat(vsP); }
-            var rakeP = volNumP > 100000 ? 0.034 : volNumP > 10000 ? 0.032 : volNumP > 1000 ? 0.035 : volNumP > 0 ? 0.04 : 0.034;
-            evForUnits = (af * (1/pred) * (1-rakeP) - 1) * 100;
+            evForUnits = (af * (1/pred) * (1-rsBaseTake(pred)) - 1) * 100;
             if (isPro() || r.mkt === 'ML') {
                 var evColor = evForUnits >= 5 ? 'var(--green)' : evForUnits > 0 ? 'var(--yellow)' : 'var(--red)';
                 evH = '<span style="font-family:var(--mono);font-size:12px;font-weight:600;color:' + evColor + '">' + (evForUnits > 0 ? '+' : '') + evForUnits.toFixed(1) + '%</span>';
@@ -9169,7 +9231,38 @@
             var res = await fetch('/api/fd/nhl', { credentials: 'same-origin' });
             var data = await res.json();
             if (!data.ok || !data.games) return;
-            nativeMlUpdate(rawRows, data.games);
+
+            rawRows.forEach(function(r) {
+                if (r.mkt !== 'Spread' && r.mkt !== 'Total' && r.mkt !== 'ML') return;
+                if (!r.gid) return;
+                var game = data.games[r.game];
+                if (!game) {
+                    var fdTeams = r.game.split(' @ ');
+                    var fdAwayLast = (fdTeams[0] || '').trim().split(' ').pop().toLowerCase();
+                    var fdHomeLast = (fdTeams[1] || '').trim().split(' ').pop().toLowerCase();
+                    var matchedKey = Object.keys(data.games).find(function(k) {
+                        var kTeams = k.split(' @ ');
+                        var kAwayLast = (kTeams[0] || '').trim().split(' ').pop().toLowerCase();
+                        var kHomeLast = (kTeams[1] || '').trim().split(' ').pop().toLowerCase();
+                        return kAwayLast === fdAwayLast && kHomeLast === fdHomeLast;
+                    });
+                    if (matchedKey) game = data.games[matchedKey];
+                }
+                if (!game) return;
+                if (r.mkt === 'Spread' || r.mkt === 'Total') altOdds[r.gid] = game;
+                var isLiveRow = r.cm && r.cm <= new Date();
+                if (r.mkt === 'Spread' && !isLiveRow) {
+                    var sideData = game.spreads && game.spreads[r.side];
+                    if (sideData) { var entry = Object.entries(sideData)[0]; if (entry) { r.pt = parseFloat(entry[0]); r.am = entry[1]; } }
+                } else if (r.mkt === 'Total' && !isLiveRow) {
+                    var sideData = game.totals && game.totals[r.side];
+                    if (sideData) { var entry = Object.entries(sideData)[0]; if (entry) { r.pt = parseFloat(entry[0]); r.am = entry[1]; } }
+                } else if (r.mkt === 'ML') {
+                    var price = game.ml && game.ml[r.side];
+                    if (price != null) r.am = price;
+                }
+            });
+
             renderTable();
         } catch(e) {}
     }
@@ -9389,6 +9482,153 @@
                         var exact = entries.find(function(e) { return Math.abs(parseFloat(e[0]) - yl) <= 0.001; });
                         if (exact) { nr.am = exact[1]; nr.pt = yl; }
                         // No exact match: nr.pt stays at initial value — renderTable will hide the row
+                    } else if (nr.mkt === 'Total') {
+                        var entries = Object.entries(dkSrc.totals[nr.side] || {});
+                        var exact = entries.find(function(e) { return Math.abs(parseFloat(e[0]) - yl) <= 0.001; });
+                        if (exact) { nr.am = exact[1]; nr.pt = yl; }
+                    }
+                });
+            }
+
+            renderTable();
+        } catch(e) {}
+    }
+
+    async function fetchDKAltLinesNHL() {
+        if (currentSport !== 'icehockey_nhl') return;
+        try {
+            var res = await fetch('/api/dk/nhalalts', { credentials: 'same-origin' });
+            var data = await res.json();
+            if (!data.ok || !data.games) return;
+
+            function findDkGame(gameKey) {
+                if (data.games[gameKey]) return data.games[gameKey];
+                var fdTeams = gameKey.split(' @ ');
+                var fdAwayLast = (fdTeams[0] || '').trim().split(' ').pop().toLowerCase();
+                var fdHomeLast = (fdTeams[1] || '').trim().split(' ').pop().toLowerCase();
+                var matchedKey = Object.keys(data.games).find(function(k) {
+                    var kTeams = k.split(' @ ');
+                    var kAwayLast = (kTeams[0] || '').trim().split(' ').pop().toLowerCase();
+                    var kHomeLast = (kTeams[1] || '').trim().split(' ').pop().toLowerCase();
+                    return kAwayLast === fdAwayLast && kHomeLast === fdHomeLast;
+                });
+                return matchedKey ? data.games[matchedKey] : null;
+            }
+
+            var nowDate = new Date();
+
+            // First pass: populate dkAltOdds, cache pre-game data, update existing live rows
+            rawRows.forEach(function(r) {
+                if (!r.gid) return;
+                if (r.mkt !== 'Spread' && r.mkt !== 'Total' && r.mkt !== 'ML') return;
+                var dk = findDkGame(r.game);
+                if (!dk) return;
+
+                dkAltOdds[r.gid] = dk;
+
+                var hasSpread = Object.keys(dk.spreads['Away'] || {}).length > 0;
+                var hasTotal  = Object.keys(dk.totals['Over']  || {}).length > 0;
+                if (hasSpread || hasTotal) dkPreGameStore[r.gid] = dk;
+
+                if ((r.mkt === 'Spread' || r.mkt === 'Total') && r.cm && r.cm <= nowDate) {
+                    var dkSrc = (hasSpread || hasTotal) ? dk : dkPreGameStore[r.gid];
+                    if (!dkSrc) return;
+                    if (r.mkt === 'Spread') {
+                        var sideKey = r.ps === 'A' ? 'Away' : 'Home';
+                        var entries = Object.entries(dkSrc.spreads[sideKey] || {});
+                        if (entries.length) {
+                            var yl = yourLines[r.id];
+                            if (yl == null) {
+                                var best = entries.reduce(function(a, b) { return Math.abs(parseFloat(a[0])) <= Math.abs(parseFloat(b[0])) ? a : b; });
+                                r.am = best[1]; r.pt = parseFloat(best[0]);
+                            } else {
+                                var ylPt = parseFloat(yl);
+                                if (Math.abs(parseFloat(r.pt) - ylPt) <= 0.001) {
+                                    var exact = entries.find(function(e) { return Math.abs(parseFloat(e[0]) - ylPt) <= 0.001; });
+                                    if (exact) r.am = exact[1];
+                                } else {
+                                    var exact = entries.find(function(e) { return Math.abs(parseFloat(e[0]) - ylPt) <= 0.001; });
+                                    if (exact) { r.am = exact[1]; r.pt = ylPt; }
+                                }
+                            }
+                        }
+                    } else {
+                        var entries = Object.entries(dkSrc.totals[r.side] || {});
+                        if (entries.length) {
+                            var yl = yourLines[r.id];
+                            if (yl == null) {
+                                var best = entries.reduce(function(a, b) { return Math.abs(parseFloat(a[0])) <= Math.abs(parseFloat(b[0])) ? a : b; });
+                                r.am = best[1]; r.pt = parseFloat(best[0]);
+                            } else {
+                                var ylPt = parseFloat(yl);
+                                var exact = entries.find(function(e) { return Math.abs(parseFloat(e[0]) - ylPt) <= 0.001; });
+                                if (exact) { r.am = exact[1]; r.pt = ylPt; }
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Second pass: synthesize spread/total rows for live games where FD has suspended them
+            var existingPids = {};
+            rawRows.forEach(function(r) { existingPids[r.pid] = true; });
+            var newRows = [];
+            rawRows.forEach(function(r) {
+                if (r.mkt !== 'ML' || !r.gid || !r.cm) return;
+                if (r.cm > nowDate) return;
+                var dk = findDkGame(r.game);
+                if (dk) dkAltOdds[r.gid] = dk;
+
+                var hasCurrentData = dk && Object.keys(dk.spreads['Away'] || {}).length > 0;
+                var dkSrc = hasCurrentData ? dk : dkPreGameStore[r.gid];
+                if (!dkSrc) return;
+
+                var spreadPid = r.gid + '-spreads';
+                var totalPid  = r.gid + '-totals';
+                var gameParts = r.game.split(' @ ');
+                var away = gameParts[0] || '', home = gameParts[1] || '';
+
+                if (!existingPids[spreadPid]) {
+                    var awayEntries = Object.entries(dkSrc.spreads['Away'] || {});
+                    var homeEntries = Object.entries(dkSrc.spreads['Home'] || {});
+                    if (awayEntries.length && homeEntries.length) {
+                        var awayE = awayEntries.reduce(function(a, b) { return Math.abs(parseFloat(a[0])) <= Math.abs(parseFloat(b[0])) ? a : b; });
+                        var homeE = homeEntries.reduce(function(a, b) { return Math.abs(parseFloat(a[0])) <= Math.abs(parseFloat(b[0])) ? a : b; });
+                        newRows.push({ id: spreadPid+'-A', game: r.game, cm: r.cm, mkt: 'Spread', side: away, am: awayE[1], pt: parseFloat(awayE[0]), pid: spreadPid, ps: 'A', gid: r.gid });
+                        newRows.push({ id: spreadPid+'-B', game: r.game, cm: r.cm, mkt: 'Spread', side: home, am: homeE[1], pt: parseFloat(homeE[0]), pid: spreadPid, ps: 'B', gid: r.gid });
+                        existingPids[spreadPid] = true;
+                    }
+                }
+                if (!existingPids[totalPid]) {
+                    var overEntries  = Object.entries(dkSrc.totals['Over']  || {});
+                    var underEntries = Object.entries(dkSrc.totals['Under'] || {});
+                    if (overEntries.length && underEntries.length) {
+                        var overE  = overEntries.reduce(function(a, b) { return Math.abs(parseFloat(a[0])) <= Math.abs(parseFloat(b[0])) ? a : b; });
+                        var underE = underEntries.reduce(function(a, b) { return Math.abs(parseFloat(a[0])) <= Math.abs(parseFloat(b[0])) ? a : b; });
+                        newRows.push({ id: totalPid+'-A', game: r.game, cm: r.cm, mkt: 'Total', side: 'Over',  am: overE[1],  pt: parseFloat(overE[0]),  pid: totalPid, ps: 'A', gid: r.gid });
+                        newRows.push({ id: totalPid+'-B', game: r.game, cm: r.cm, mkt: 'Total', side: 'Under', am: underE[1], pt: parseFloat(underE[0]), pid: totalPid, ps: 'B', gid: r.gid });
+                        existingPids[totalPid] = true;
+                    }
+                }
+            });
+
+            if (newRows.length) {
+                rawRows = rawRows.concat(newRows);
+                rawRowsBySport[currentSport] = rawRows;
+                var syncD = lastSyncData[currentSport];
+                if (syncD) fillPredsFromSync(newRows, syncD);
+                newRows.forEach(function(nr) {
+                    if (yourLines[nr.id] == null) return;
+                    var dk = findDkGame(nr.game);
+                    var hasCurrentDk = dk && Object.keys((dk.spreads && dk.spreads['Away']) || {}).length > 0;
+                    var dkSrc = hasCurrentDk ? dk : dkPreGameStore[nr.gid];
+                    if (!dkSrc) return;
+                    var yl = parseFloat(yourLines[nr.id]);
+                    if (nr.mkt === 'Spread') {
+                        var sideKey = nr.ps === 'A' ? 'Away' : 'Home';
+                        var entries = Object.entries(dkSrc.spreads[sideKey] || {});
+                        var exact = entries.find(function(e) { return Math.abs(parseFloat(e[0]) - yl) <= 0.001; });
+                        if (exact) { nr.am = exact[1]; nr.pt = yl; }
                     } else if (nr.mkt === 'Total') {
                         var entries = Object.entries(dkSrc.totals[nr.side] || {});
                         var exact = entries.find(function(e) { return Math.abs(parseFloat(e[0]) - yl) <= 0.001; });
