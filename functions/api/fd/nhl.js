@@ -115,21 +115,37 @@ export async function onRequestGet(context) {
 
         const markets = evData?.attachments?.markets || {};
         const gameKey = teams.away + ' @ ' + teams.home;
-        const entry = { eventId: event.eventId, openDate: event.openDate, away: teams.away, home: teams.home, runnerNames: {}, allMarketTypes: [] };
+        const entry = { eventId: event.eventId, openDate: event.openDate, away: teams.away, home: teams.home, spreadRunners: {}, mlRunners: {}, totalRunners: {}, allMarketTypes: [] };
 
         Object.entries(markets).forEach(function([marketId, mkt]) {
           const mktType = mkt.marketType || '';
           if (!entry.allMarketTypes.includes(mktType)) entry.allMarketTypes.push(mktType);
-          if (mktType === SPREAD_TYPE)      entry.spreadId = marketId;
-          else if (mktType === ML_TYPE)     entry.mlId     = marketId;
-          else if (mktType === TOTAL_TYPE)  entry.totalId  = marketId;
-          else return;
-
-          (mkt.runners || []).forEach(function(ref) {
-            if (ref.selectionId != null && ref.runnerName) {
-              entry.runnerNames[ref.selectionId] = ref.runnerName;
+          if (mktType === SPREAD_TYPE) {
+            if (!entry.spreadId) entry.spreadId = marketId;
+            (mkt.runners || []).forEach(function(ref) {
+              if (ref.selectionId != null && ref.runnerName) entry.spreadRunners[ref.selectionId] = ref.runnerName;
+            });
+          } else if (mktType === ML_TYPE) {
+            if (!entry.mlId) entry.mlId = marketId;
+            (mkt.runners || []).forEach(function(ref) {
+              if (ref.selectionId != null && ref.runnerName) entry.mlRunners[ref.selectionId] = ref.runnerName;
+            });
+          } else if (mktType === TOTAL_TYPE) {
+            // Among multiple total markets (e.g. game total vs period total), prefer the one
+            // whose runners are named "Over"/"Under" — period totals sometimes use team names.
+            const runners = {};
+            (mkt.runners || []).forEach(function(ref) {
+              if (ref.selectionId != null && ref.runnerName) runners[ref.selectionId] = ref.runnerName;
+            });
+            const hasOverUnder = Object.values(runners).some(function(n) {
+              const nl = n.toLowerCase();
+              return nl === 'over' || nl === 'under';
+            });
+            if (hasOverUnder || !entry.totalId) {
+              entry.totalId = marketId;
+              entry.totalRunners = runners;
             }
-          });
+          }
         });
 
         if (entry.spreadId || entry.mlId || entry.totalId) {
@@ -147,7 +163,8 @@ export async function onRequestGet(context) {
         mlId: entry.mlId || null,
         totalId: entry.totalId || null,
         allMarketTypes: entry.allMarketTypes || [],
-        runnerCount: Object.keys(entry.runnerNames).length
+        spreadRunners: entry.spreadRunners,
+        totalRunners: entry.totalRunners,
       }));
       return new Response(JSON.stringify({ count: dbgGames.length, games: dbgGames }), { headers: { 'Content-Type': 'application/json' } });
     }
@@ -188,11 +205,12 @@ export async function onRequestGet(context) {
       if (!gamesMap[gameKey]) gamesMap[gameKey] = { id: entry.eventId, away: entry.away, home: entry.home, cm: entry.openDate, spreads: {}, totals: {}, ml: {} };
       const game = gamesMap[gameKey];
 
+      const runnerMap = type === 'spread' ? entry.spreadRunners : type === 'ml' ? entry.mlRunners : entry.totalRunners;
       (mp.runnerDetails || []).forEach(function(rd) {
         if (rd.runnerStatus !== 'ACTIVE') return;
         const price = rd.winRunnerOdds?.americanDisplayOdds?.americanOddsInt;
         if (price == null) return;
-        const name = entry.runnerNames[rd.selectionId] || entry.runnerNames[String(rd.selectionId)] || '';
+        const name = (runnerMap[rd.selectionId] || runnerMap[String(rd.selectionId)] || '');
         const handicap = rd.handicap;
 
         if (type === 'spread' && name && handicap != null) {
