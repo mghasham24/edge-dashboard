@@ -3747,13 +3747,13 @@
         if (!lines) return null;
         var exact = lines[target];
         if (exact != null) return exact;
-        // Find nearest available line within 1 point
+        // Find nearest available line within 0.5 — beyond that lines are too different to use as fair value
         var keys = Object.keys(lines).map(Number);
         if (!keys.length) return null;
         var closest = null, bestDist = Infinity;
         keys.forEach(function(k) {
             var d = Math.abs(k - target);
-            if (d < bestDist && d <= 1) { bestDist = d; closest = k; }
+            if (d < bestDist && d <= 0.5) { bestDist = d; closest = k; }
         });
         return closest != null ? lines[closest] : null;
     }
