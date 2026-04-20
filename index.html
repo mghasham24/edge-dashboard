@@ -9250,11 +9250,10 @@
                 }
                 if (!game) return;
                 if (r.mkt === 'Spread' || r.mkt === 'Total') altOdds[r.gid] = game;
-                var isLiveRow = r.cm && r.cm <= new Date();
-                if (r.mkt === 'Spread' && !isLiveRow) {
+                if (r.mkt === 'Spread') {
                     var sideData = game.spreads && game.spreads[r.side];
                     if (sideData) { var entry = Object.entries(sideData)[0]; if (entry) { r.pt = parseFloat(entry[0]); r.am = entry[1]; } }
-                } else if (r.mkt === 'Total' && !isLiveRow) {
+                } else if (r.mkt === 'Total') {
                     var sideData = game.totals && game.totals[r.side];
                     if (sideData) { var entry = Object.entries(sideData)[0]; if (entry) { r.pt = parseFloat(entry[0]); r.am = entry[1]; } }
                 } else if (r.mkt === 'ML') {
@@ -9529,44 +9528,6 @@
                 var hasSpread = Object.keys(dk.spreads['Away'] || {}).length > 0;
                 var hasTotal  = Object.keys(dk.totals['Over']  || {}).length > 0;
                 if (hasSpread || hasTotal) dkPreGameStore[r.gid] = dk;
-
-                if ((r.mkt === 'Spread' || r.mkt === 'Total') && r.cm && r.cm <= nowDate) {
-                    var dkSrc = (hasSpread || hasTotal) ? dk : dkPreGameStore[r.gid];
-                    if (!dkSrc) return;
-                    if (r.mkt === 'Spread') {
-                        var sideKey = r.ps === 'A' ? 'Away' : 'Home';
-                        var entries = Object.entries(dkSrc.spreads[sideKey] || {});
-                        if (entries.length) {
-                            var yl = yourLines[r.id];
-                            if (yl == null) {
-                                var best = entries.reduce(function(a, b) { return Math.abs(parseFloat(a[0])) <= Math.abs(parseFloat(b[0])) ? a : b; });
-                                r.am = best[1]; r.pt = parseFloat(best[0]);
-                            } else {
-                                var ylPt = parseFloat(yl);
-                                if (Math.abs(parseFloat(r.pt) - ylPt) <= 0.001) {
-                                    var exact = entries.find(function(e) { return Math.abs(parseFloat(e[0]) - ylPt) <= 0.001; });
-                                    if (exact) r.am = exact[1];
-                                } else {
-                                    var exact = entries.find(function(e) { return Math.abs(parseFloat(e[0]) - ylPt) <= 0.001; });
-                                    if (exact) { r.am = exact[1]; r.pt = ylPt; }
-                                }
-                            }
-                        }
-                    } else {
-                        var entries = Object.entries(dkSrc.totals[r.side] || {});
-                        if (entries.length) {
-                            var yl = yourLines[r.id];
-                            if (yl == null) {
-                                var best = entries.reduce(function(a, b) { return Math.abs(parseFloat(a[0])) <= Math.abs(parseFloat(b[0])) ? a : b; });
-                                r.am = best[1]; r.pt = parseFloat(best[0]);
-                            } else {
-                                var ylPt = parseFloat(yl);
-                                var exact = entries.find(function(e) { return Math.abs(parseFloat(e[0]) - ylPt) <= 0.001; });
-                                if (exact) { r.am = exact[1]; r.pt = ylPt; }
-                            }
-                        }
-                    }
-                }
             });
 
             // Second pass: synthesize spread/total rows for live games where FD has suspended them
