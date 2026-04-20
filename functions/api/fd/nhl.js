@@ -224,6 +224,31 @@ export async function onRequestGet(context) {
       return new Response(JSON.stringify({ rawTotals }), { headers: { 'Content-Type': 'application/json' } });
     }
 
+    if (debugMode === '4') {
+      const rawSpreads = {};
+      marketPricesList.forEach(function(mp) {
+        const mapping = marketToGame[mp.marketId];
+        if (!mapping || mapping.type !== 'spread') return;
+        const { gameKey } = mapping;
+        const entry = gameData[gameKey];
+        rawSpreads[gameKey] = {
+          spreadId: mp.marketId,
+          marketStatus: mp.marketStatus,
+          eventPageRunners: entry.spreadRunners,
+          runnerDetails: (mp.runnerDetails || []).map(function(rd) {
+            return {
+              selectionId: rd.selectionId,
+              runnerStatus: rd.runnerStatus,
+              handicap: rd.handicap,
+              price: rd.winRunnerOdds?.americanDisplayOdds?.americanOddsInt,
+              mappedName: (entry.spreadRunners[rd.selectionId] || entry.spreadRunners[String(rd.selectionId)] || '(no match)')
+            };
+          })
+        };
+      });
+      return new Response(JSON.stringify({ rawSpreads }), { headers: { 'Content-Type': 'application/json' } });
+    }
+
     const gamesMap = {};
 
     marketPricesList.forEach(function(mp) {
