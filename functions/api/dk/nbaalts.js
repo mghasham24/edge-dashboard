@@ -159,24 +159,19 @@ export async function onRequestGet(context) {
       } catch(e) {}
     }));
 
-    // Fallback: restore pre-game spread/total data separately so live totals are preserved.
-    // DK suspends alt spreads for in-game but may still have live alt totals — merge rather than replace.
+    // Fallback: restore pre-game TOTAL data when DK suspends in-game alt totals.
+    // Spreads are NOT restored — pre-game alt spread prices are stale during live games
+    // and would override FD's correct live price shown on the dashboard.
     Object.entries(oldGamesFallback).forEach(([gameKey, oldGame]) => {
-      const hadSpreads = Object.keys((oldGame.spreads && oldGame.spreads.Away) || {}).length > 0;
-      const hadTotals  = Object.keys((oldGame.totals  && oldGame.totals.Over)   || {}).length > 0;
-      if (!hadSpreads && !hadTotals) return;
+      const hadTotals = Object.keys((oldGame.totals && oldGame.totals.Over) || {}).length > 0;
+      if (!hadTotals) return;
 
       if (!gamesMap[gameKey]) {
-        // Game not in current DK response at all — restore whole old entry
-        gamesMap[gameKey] = oldGame;
+        gamesMap[gameKey] = { spreads: { Away: {}, Home: {} }, totals: oldGame.totals };
         return;
       }
       const curr = gamesMap[gameKey];
-      // Only restore what's missing — keep any live data DK is currently providing
-      if (hadSpreads && Object.keys((curr.spreads && curr.spreads.Away) || {}).length === 0) {
-        curr.spreads = oldGame.spreads;
-      }
-      if (hadTotals && Object.keys((curr.totals && curr.totals.Over) || {}).length === 0) {
+      if (Object.keys((curr.totals && curr.totals.Over) || {}).length === 0) {
         curr.totals = oldGame.totals;
       }
     });
