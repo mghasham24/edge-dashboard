@@ -9,7 +9,7 @@
 // Native cache sources (matches the site exactly):
 //   NBA → fd_nba_alts   (FD native, ML + spread + total)
 //   MLB → fd_mlb        (FD native, ML only)  + fd_rfi (RFI)
-//   NHL → fd_nhl        (FD native, ML only)
+//   NHL → fd_nhl        (FD native, ML + spread + total)
 //   FC  → fd_fc         (DK native, AH spread)
 //   NCAAB, UFC → Odds API (no native endpoint exists)
 
@@ -85,7 +85,7 @@ function unitsEV(ev, realPct) {
 const NATIVE_SPORTS = [
   { fdKey: 'basketball_nba',        rsKey: 'nba',    label: 'NBA',   cacheKey: 'fd_nba_alts', type: 'nba'     },
   { fdKey: 'baseball_mlb',          rsKey: 'mlb',    label: 'MLB',   cacheKey: 'fd_mlb',      type: 'ml_only' },
-  { fdKey: 'icehockey_nhl',         rsKey: 'nhl',    label: 'NHL',   cacheKey: 'fd_nhl',      type: 'ml_only' },
+  { fdKey: 'icehockey_nhl',         rsKey: 'nhl',    label: 'NHL',   cacheKey: 'fd_nhl',      type: 'nhl'     },
   { fdKey: 'soccer_fc',             rsKey: 'soccer', label: 'FC',    cacheKey: 'fd_fc',       type: 'fc'      },
 ];
 
@@ -407,7 +407,7 @@ function processNativeNBA(sport, fdGames, rsGames, rsGameIds, rsGameSports, glob
     }
 
     // ── Total ──
-    const rsTotalMkt = rsMarkets['Total'];
+    const rsTotalMkt = rsMarkets['Total'] || rsMarkets['Total Goals'];
     if (rsTotalMkt && game.totals) {
       const rsOutcomes = rsTotalMkt.outcomes || [];
       const rsVolume   = rsTotalMkt.volume ?? 0;
@@ -589,7 +589,7 @@ export default {
       }
 
       const beforeCount = allBets.length;
-      if (sport.type === 'nba') {
+      if (sport.type === 'nba' || sport.type === 'nhl') {
         processNativeNBA(sport, fdGames, rsGames, rsGameIds, rsGameSports, globalMinEv, allBets, now);
       } else if (sport.type === 'ml_only') {
         processNativeML(sport, fdGames, rsGames, rsGameIds, rsGameSports, globalMinEv, allBets, now);
