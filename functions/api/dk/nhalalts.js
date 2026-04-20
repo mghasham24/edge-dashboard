@@ -108,14 +108,13 @@ export async function onRequestGet(context) {
       });
     }
 
-    // Step 2: Per game, fetch alt puck lines + alt totals in parallel
+    // Step 2: Fetch all games in parallel — spread + total per game also parallel
     const gamesMap = {};
 
-    for (let i = 0; i < events.length; i++) {
-      const event = events[i];
+    await Promise.all(events.map(async function(event) {
       const away = (event.participants || []).find(p => p.venueRole === 'Away');
       const home = (event.participants || []).find(p => p.venueRole === 'Home');
-      if (!away || !home) continue;
+      if (!away || !home) return;
 
       const gameKey = away.name + ' @ ' + home.name;
 
@@ -149,9 +148,7 @@ export async function onRequestGet(context) {
 
         gamesMap[gameKey] = altData;
       } catch(e) {}
-
-      if (i < events.length - 1) await new Promise(r => setTimeout(r, 100));
-    }
+    }));
 
     // Fallback: restore pre-game data when DK suspends in-game alt lines
     Object.entries(oldGamesFallback).forEach(([gameKey, oldGame]) => {
