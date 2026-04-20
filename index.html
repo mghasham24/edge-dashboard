@@ -5156,7 +5156,7 @@
                     if (dkGame3) {
                         var sk3 = r.ps === 'A' ? (r.mkt === 'Spread' ? 'Away' : 'Over') : (r.mkt === 'Spread' ? 'Home' : 'Under');
                         var dl3 = r.mkt === 'Spread' ? (dkGame3.spreads && dkGame3.spreads[sk3]) : (dkGame3.totals && dkGame3.totals[sk3]);
-                        if (dl3 && Object.keys(dl3).length > 0 && dkClosestPrice(dl3, parseFloat(r.yl)) == null) return;
+                        if ((sport !== 'icehockey_nhl' || r.mkt !== 'Spread') && dl3 && Object.keys(dl3).length > 0 && dkClosestPrice(dl3, parseFloat(r.yl)) == null) return;
                     }
                 }
                 r._sortVal = r._ev; positive.push(r);
@@ -5659,7 +5659,7 @@
                                 var dkSideKey = r.ps === 'A' ? (r.mkt === 'Spread' ? 'Away' : 'Over') : (r.mkt === 'Spread' ? 'Home' : 'Under');
                                 var dkLines = r.mkt === 'Spread' ? (dkGame.spreads && dkGame.spreads[dkSideKey]) : (dkGame.totals && dkGame.totals[dkSideKey]);
                                 var dkHasData = dkLines && Object.keys(dkLines).length > 0;
-                                if (dkHasData && dkClosestPrice(dkLines, parseFloat(r.yl)) == null) return false;
+                                if ((s.key !== 'icehockey_nhl' || r.mkt !== 'Spread') && dkHasData && dkClosestPrice(dkLines, parseFloat(r.yl)) == null) return false;
                             }
                         }
                         return true;
@@ -8096,7 +8096,8 @@
                         var dkSideKey = r.ps === 'A' ? (r.mkt === 'Spread' ? 'Away' : 'Over') : (r.mkt === 'Spread' ? 'Home' : 'Under');
                         var dkLines = r.mkt === 'Spread' ? (dkGame.spreads && dkGame.spreads[dkSideKey]) : (dkGame.totals && dkGame.totals[dkSideKey]);
                         var dkHasData = dkLines && Object.keys(dkLines).length > 0;
-                        if (dkHasData && dkClosestPrice(dkLines, parseFloat(yourLines[r.id])) == null) return false;
+                        // NHL puck line (1.5) never appears in DK alt spreads (which start at 2.5) — don't hide based on line mismatch
+                        if ((!isHockey || r.mkt !== 'Spread') && dkHasData && dkClosestPrice(dkLines, parseFloat(yourLines[r.id])) == null) return false;
                     } else if (isHockey && r.pt != null) {
                         // No DK alt data yet: fall back to strict puck-line rule
                         if (Math.abs(parseFloat(yourLines[r.id]) - parseFloat(r.pt)) > 0) return false;
