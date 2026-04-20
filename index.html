@@ -2608,6 +2608,105 @@
             </div>
         </div>
 
+        <!-- Alerts Panel -->
+        <div class="admin-panel" id="alerts-panel">
+            <div style="margin-bottom:20px">
+                <button onclick="document.getElementById('alerts-tab-btn').click()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:7px 14px;border-radius:5px;cursor:pointer;letter-spacing:.04em">&larr; Back to Dashboard</button>
+            </div>
+            <div style="margin-bottom:28px">
+                <div style="font-size:20px;font-weight:700;margin-bottom:6px">🔔 Telegram Alerts</div>
+                <div style="font-size:13px;color:var(--muted)">Get a Telegram message the moment a pre-game bet hits your EV threshold. <strong style="color:var(--fg)">Pro only.</strong></div>
+            </div>
+
+            <!-- Step 1: Connect Telegram -->
+            <div id="alerts-connect-section" style="background:var(--bg3);border:1px solid var(--border2);border-radius:10px;padding:20px;margin-bottom:18px">
+                <div style="font-size:13px;font-weight:700;margin-bottom:14px;color:var(--fg)">Step 1 — Connect your Telegram</div>
+                <div id="alerts-status-connected" style="display:none;align-items:center;gap:10px;margin-bottom:14px">
+                    <span style="font-size:20px">✅</span>
+                    <div>
+                        <div style="font-weight:700;font-size:13px;color:var(--green)">Telegram connected</div>
+                        <div style="font-size:11px;color:var(--muted);margin-top:2px">Alerts will be sent to your Telegram account</div>
+                    </div>
+                    <button onclick="disconnectTelegram()" style="margin-left:auto;background:none;border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:11px;padding:5px 10px;border-radius:5px;cursor:pointer">Disconnect</button>
+                </div>
+                <div id="alerts-status-unconnected">
+                    <div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5">Click the button below to open Telegram. Hit <strong style="color:var(--fg)">Start</strong> in the bot chat to link your account.</div>
+                    <button id="alerts-connect-btn" onclick="connectTelegram()" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:13px;font-weight:600;padding:10px 20px;border-radius:7px;cursor:pointer;width:100%">Open Telegram to Connect →</button>
+                    <div id="alerts-connect-status" style="margin-top:10px;font-size:12px;color:var(--muted);text-align:center;display:none"></div>
+                </div>
+            </div>
+
+            <!-- Step 2: Settings -->
+            <div id="alerts-settings-section" style="background:var(--bg3);border:1px solid var(--border2);border-radius:10px;padding:20px;margin-bottom:18px;opacity:0.4;pointer-events:none" id="alerts-settings-section">
+                <div style="font-size:13px;font-weight:700;margin-bottom:18px;color:var(--fg)">Step 2 — Configure alerts</div>
+
+                <!-- Enable toggle -->
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+                    <div>
+                        <div style="font-size:13px;font-weight:600;color:var(--fg)">Alerts enabled</div>
+                        <div style="font-size:11px;color:var(--muted);margin-top:2px">Turn off to pause all alerts without disconnecting</div>
+                    </div>
+                    <label style="position:relative;display:inline-block;width:42px;height:24px;cursor:pointer">
+                        <input type="checkbox" id="alerts-enabled-toggle" style="opacity:0;width:0;height:0" onchange="saveAlertSettings()">
+                        <span id="alerts-toggle-track" style="position:absolute;inset:0;border-radius:24px;background:var(--bg4);border:1px solid var(--border2);transition:background .2s"></span>
+                        <span id="alerts-toggle-thumb" style="position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#666;transition:transform .2s,background .2s"></span>
+                    </label>
+                </div>
+
+                <!-- Min EV -->
+                <div style="margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+                        <div>
+                            <div style="font-size:13px;font-weight:600;color:var(--fg)">Minimum EV</div>
+                            <div style="font-size:11px;color:var(--muted);margin-top:2px">Only alert on bets above this threshold</div>
+                        </div>
+                        <span id="alerts-ev-display" style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--accent)">+5.0%</span>
+                    </div>
+                    <input type="range" id="alerts-ev-slider" min="1" max="20" step="0.5" value="5"
+                        style="width:100%;accent-color:var(--accent)"
+                        oninput="document.getElementById('alerts-ev-display').textContent='+'+parseFloat(this.value).toFixed(1)+'%'"
+                        onchange="saveAlertSettings()">
+                    <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted2);margin-top:4px"><span>+1%</span><span>+20%</span></div>
+                </div>
+
+                <!-- Sports filter -->
+                <div style="margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+                    <div style="font-size:13px;font-weight:600;color:var(--fg);margin-bottom:10px">Sports</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="alerts-sports-grid">
+                        <!-- populated by JS -->
+                    </div>
+                </div>
+
+                <!-- 1 Side toggle -->
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+                    <div>
+                        <div style="font-size:13px;font-weight:600;color:var(--fg)">1 Side only</div>
+                        <div style="font-size:11px;color:var(--muted);margin-top:2px">Only alert the best EV side per game, not both</div>
+                    </div>
+                    <label style="position:relative;display:inline-block;width:42px;height:24px;cursor:pointer">
+                        <input type="checkbox" id="alerts-oneside-toggle" style="opacity:0;width:0;height:0" onchange="saveAlertSettings()">
+                        <span id="alerts-oneside-track" style="position:absolute;inset:0;border-radius:24px;background:var(--bg4);border:1px solid var(--border2);transition:background .2s"></span>
+                        <span id="alerts-oneside-thumb" style="position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#666;transition:transform .2s,background .2s"></span>
+                    </label>
+                </div>
+
+                <!-- Unit size -->
+                <div>
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                        <div>
+                            <div style="font-size:13px;font-weight:600;color:var(--fg)">Unit size ($)</div>
+                            <div style="font-size:11px;color:var(--muted);margin-top:2px">Your 1u dollar amount — alerts show the actual bet size</div>
+                        </div>
+                    </div>
+                    <input type="number" id="alerts-unit-size" min="1" max="100000" step="1" value="100"
+                        style="width:100%;background:var(--bg4);border:1px solid var(--border2);color:var(--fg);font-family:var(--mono);font-size:14px;font-weight:700;padding:8px 12px;border-radius:7px;box-sizing:border-box"
+                        onchange="saveAlertSettings()">
+                </div>
+            </div>
+
+        </div>
+
+
         <!-- Portfolio Panel -->
         <div class="admin-panel" id="portfolio-panel">
             <div style="margin-bottom:20px;display:flex;align-items:center;gap:12px">
@@ -2835,8 +2934,9 @@
     var currentFcLeague = 'ALL';
     var rawRows = [];
     var rawRowsBySport = {}; // sport key -> parsed rows (same IDs as preds)
+    var _alertSyncedIds = new Set(); // row IDs checked via alert sync (so we can uncheck on untake)
     var preds = {};
-    var probsExact = {}; // full-precision RS probability per row id
+    var probsExact = {}; // full-precision RS probability per row id (from sync.js o.probability)
     var vols = {}; // volume display per row id
     var yourLines = {};
     var altOdds = {}; // gameId -> { spreads: {teamName: {point: price}}, totals: {side: {point: price}} }
@@ -3708,6 +3808,7 @@
 
     // RS rake by RS probability — empirically measured via Socket.io payout data
     // Rake is probability-dependent (underdogs pay more), NOT volume-dependent
+    // Volume only affects slippage (separate, small for typical bet sizes)
     function rsBaseTake(p) {
         var pts = [[0.0918,0.0535],[0.13,0.065],[0.1737,0.0464],[0.32,0.046],[0.3757,0.039],[0.49,0.020],[0.59,0.018],[0.73,0.015],[0.7816,0.0125]];
         if (p <= pts[0][0]) return pts[0][1];
@@ -4700,11 +4801,14 @@
             var yl = yourLines[r.id] != null ? yourLines[r.id] : null;
             var af = adjFair(fair, r.pt, yl, r.mkt, r.ps);
             var pr = preds[r.id];
-            var pred = (pr !== undefined && pr !== '') ? (probsExact[r.id] != null ? probsExact[r.id] : parseFloat(pr) / 100) : null;
+            var pred = (pr !== undefined && pr !== '') ? parseFloat(pr) / 100 : null;
             var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
             var evForUM = null;
             if (af != null && pred != null && pred > 0 && pred < 1) {
-                evForUM = (af * (1/pred) * (1-rsBaseTake(pred)) - 1) * 100;
+                var volNumM = 0;
+                if (vols[r.id]) { var vsM = vols[r.id]; volNumM = vsM.endsWith('k') ? parseFloat(vsM)*1000 : vsM.endsWith('m') ? parseFloat(vsM)*1000000 : parseFloat(vsM); }
+                var rakeM = volNumM > 100000 ? 0.034 : volNumM > 10000 ? 0.032 : volNumM > 1000 ? 0.035 : volNumM > 0 ? 0.04 : 0.034;
+                evForUM = (af * (1/pred) * (1-rakeM) - 1) * 100;
             }
             var u = (isPro() || r.mkt === 'ML' || r.mkt === 'RFI') ? unitsEV(evForUM, pred) : units(edge);
             return Object.assign({}, r, { fair: fair, af: af, yl: yl, edge: edge, u: u, bet: u * unit });
@@ -4753,6 +4857,34 @@
         document.getElementById('admin-panel').classList.remove('visible');
     }
 
+    function showAlertsTab() {
+        document.getElementById('sport-tabs').style.display = 'none';
+        document.querySelector('.controls').style.display = 'none';
+        document.querySelector('.status-bar').style.display = 'none';
+        document.querySelector('.table-wrap').style.display = 'none';
+        document.getElementById('mobile-cards').style.display = 'none';
+        document.getElementById('collapse-btn').style.display = 'none';
+        document.getElementById('refresh-btn').style.display = 'none';
+        document.getElementById('alerts-panel').classList.add('visible');
+        var btn = document.getElementById('alerts-tab-btn');
+        if (btn) { btn.classList.add('active'); btn.textContent = '<- Dashboard'; }
+        loadAlertsPanel();
+    }
+
+    function hideAlertsTab() {
+        document.getElementById('sport-tabs').style.display = '';
+        document.querySelector('.controls').style.display = '';
+        document.querySelector('.status-bar').style.display = '';
+        document.querySelector('.table-wrap').style.display = '';
+        document.getElementById('mobile-cards').style.display = '';
+        document.getElementById('collapse-btn').style.display = '';
+        document.getElementById('refresh-btn').style.display = '';
+        document.getElementById('alerts-panel').classList.remove('visible');
+        var btn = document.getElementById('alerts-tab-btn');
+        if (btn) { btn.classList.remove('active'); btn.textContent = '🔔 Alerts'; }
+        loadOdds();
+    }
+
     function showReferralTab() {
         document.getElementById('sport-tabs').style.display = 'none';
         document.getElementById('feature-tabs').style.display = 'none';
@@ -4776,6 +4908,227 @@
         document.getElementById('collapse-btn').style.display = '';
         document.getElementById('refresh-btn').style.display = '';
         document.getElementById('referral-panel').classList.remove('visible');
+    }
+
+    // ── Alerts panel ──────────────────────────────────────
+
+    var _alertsVerified = false;
+    var _alertsConnectPoll = null;
+
+    var ALERT_SPORTS = [
+        { key: 'basketball_nba',         label: 'NBA'   },
+        { key: 'icehockey_nhl',          label: 'NHL'   },
+        { key: 'baseball_mlb',           label: 'MLB'   },
+        { key: 'basketball_ncaab',       label: 'NCAAB' },
+        { key: 'mma_mixed_martial_arts', label: 'UFC'   },
+        { key: 'soccer_fc',              label: 'FC'    },
+    ];
+
+    async function loadAlertsPanel() {
+        // Build sports checkboxes if not already done
+        var grid = document.getElementById('alerts-sports-grid');
+        if (!grid.children.length) {
+            ALERT_SPORTS.forEach(function(s) {
+                var label = document.createElement('label');
+                label.style.cssText = 'display:flex;align-items:center;gap:8px;background:var(--bg4);border:1px solid var(--border);border-radius:7px;padding:8px 12px;cursor:pointer;font-size:13px;font-weight:600;color:var(--fg)';
+                label.innerHTML = '<input type="checkbox" data-sport="' + s.key + '" checked style="accent-color:var(--accent);width:15px;height:15px" onchange="saveAlertSettings()"> ' + s.label;
+                grid.appendChild(label);
+            });
+        }
+
+        try {
+            var res = await fetch('/api/alerts/settings', { credentials: 'same-origin' });
+            if (!res.ok) return;
+            var data = await res.json();
+            var s = data.settings;
+
+            _alertsVerified = s.verified;
+            updateAlertConnectUI(s.verified);
+
+            // Populate settings
+            var toggle = document.getElementById('alerts-enabled-toggle');
+            toggle.checked = s.enabled;
+            updateToggleVisual(toggle.checked);
+
+            var slider = document.getElementById('alerts-ev-slider');
+            slider.value = s.min_ev;
+            document.getElementById('alerts-ev-display').textContent = '+' + parseFloat(s.min_ev).toFixed(1) + '%';
+
+            // Sports checkboxes
+            var sportSet = s.sports === 'ALL' ? null : new Set(s.sports.split(',').map(function(x) { return x.trim(); }));
+            grid.querySelectorAll('input[data-sport]').forEach(function(cb) {
+                cb.checked = !sportSet || sportSet.has(cb.dataset.sport);
+            });
+
+            // 1 Side toggle
+            var oneSide = document.getElementById('alerts-oneside-toggle');
+            oneSide.checked = !!s.one_side;
+            updateOneSideVisual(oneSide.checked);
+
+            // Unit size
+            document.getElementById('alerts-unit-size').value = s.unit_size || 100;
+
+            loadTakenBets();
+        } catch(e) {}
+    }
+
+    async function loadTakenBets() {
+        try {
+            var res = await fetch('/api/alerts/taken', { credentials: 'same-origin' });
+            var data = await res.json();
+            var bets = data.bets || [];
+
+            // Sync Telegram-tapped bets into dashboard checkboxes (all sports)
+            var takenKeys = new Set(bets.map(function(b) { return b.game + '|' + b.market + '|' + b.side; }));
+            var allSportRows = [];
+            if (window.rawRowsBySport) Object.values(rawRowsBySport).forEach(function(sr) { allSportRows = allSportRows.concat(sr || []); });
+            if (!allSportRows.length && window.rawRows) allSportRows = rawRows;
+            var changed = false;
+            allSportRows.forEach(function(r) {
+                var key = r.game + '|' + r.mkt + '|' + r.side;
+                if (takenKeys.has(key) && !betTaken[r.id]) {
+                    betTaken[r.id] = true;
+                    _alertSyncedIds.add(r.id);
+                    changed = true;
+                } else if (!takenKeys.has(key) && _alertSyncedIds.has(r.id)) {
+                    delete betTaken[r.id];
+                    _alertSyncedIds.delete(r.id);
+                    changed = true;
+                }
+            });
+            if (_alertSyncedIds.size && !bets.length) {
+                _alertSyncedIds.forEach(function(id) { delete betTaken[id]; });
+                _alertSyncedIds.clear();
+                changed = true;
+            }
+            if (changed) {
+                localStorage.setItem('raxedge_bets_taken', JSON.stringify(betTaken));
+                renderTable();
+            }
+        } catch(e) {}
+    }
+
+    function updateAlertConnectUI(verified) {
+        var connected = document.getElementById('alerts-status-connected');
+        var unconnected = document.getElementById('alerts-status-unconnected');
+        var settingsSection = document.getElementById('alerts-settings-section');
+
+        if (verified) {
+            connected.style.display = 'flex';
+            unconnected.style.display = 'none';
+            settingsSection.style.opacity = '1';
+            settingsSection.style.pointerEvents = '';
+        } else {
+            connected.style.display = 'none';
+            unconnected.style.display = '';
+            settingsSection.style.opacity = '0.4';
+            settingsSection.style.pointerEvents = 'none';
+        }
+    }
+
+    function updateToggleVisual(checked) {
+        var track = document.getElementById('alerts-toggle-track');
+        var thumb = document.getElementById('alerts-toggle-thumb');
+        track.style.background = checked ? 'var(--accent)' : 'var(--bg4)';
+        thumb.style.background = checked ? '#fff' : '#666';
+        thumb.style.transform  = checked ? 'translateX(18px)' : 'translateX(0)';
+    }
+
+    function updateOneSideVisual(checked) {
+        var track = document.getElementById('alerts-oneside-track');
+        var thumb = document.getElementById('alerts-oneside-thumb');
+        if (!track) return;
+        track.style.background = checked ? 'var(--accent)' : 'var(--bg4)';
+        thumb.style.background = checked ? '#fff' : '#666';
+        thumb.style.transform  = checked ? 'translateX(18px)' : 'translateX(0)';
+    }
+
+    document.addEventListener('change', function(e) {
+        if (e.target && e.target.id === 'alerts-enabled-toggle') {
+            updateToggleVisual(e.target.checked);
+        }
+        if (e.target && e.target.id === 'alerts-oneside-toggle') {
+            updateOneSideVisual(e.target.checked);
+        }
+    });
+
+    async function connectTelegram() {
+        var btn = document.getElementById('alerts-connect-btn');
+        var status = document.getElementById('alerts-connect-status');
+        btn.disabled = true;
+        btn.textContent = 'Generating link…';
+        status.style.display = 'none';
+
+        try {
+            var res = await fetch('/api/alerts/connect', { method: 'POST', credentials: 'same-origin' });
+            var data = await res.json();
+            if (!data.ok || !data.deepLink) throw new Error(data.error || 'Failed');
+
+            // Open Telegram deep link
+            window.open(data.deepLink, '_blank');
+
+            btn.textContent = 'Waiting for Telegram…';
+            status.textContent = 'Link opened — press Start in the bot chat, then come back here.';
+            status.style.display = '';
+            status.style.color = 'var(--muted)';
+
+            // Poll every 3s to check if verification completed (up to 10 min)
+            if (_alertsConnectPoll) clearInterval(_alertsConnectPoll);
+            var pollCount = 0;
+            _alertsConnectPoll = setInterval(async function() {
+                pollCount++;
+                if (pollCount > 200) { clearInterval(_alertsConnectPoll); return; }
+                try {
+                    var r = await fetch('/api/alerts/settings', { credentials: 'same-origin' });
+                    var d = await r.json();
+                    if (d.settings && d.settings.verified) {
+                        clearInterval(_alertsConnectPoll);
+                        _alertsVerified = true;
+                        updateAlertConnectUI(true);
+                        btn.disabled = false;
+                        btn.textContent = 'Open Telegram to Connect →';
+                        status.style.display = 'none';
+                    }
+                } catch(e) {}
+            }, 3000);
+
+        } catch(e) {
+            btn.disabled = false;
+            btn.textContent = 'Open Telegram to Connect →';
+            status.textContent = 'Error: ' + e.message;
+            status.style.display = '';
+            status.style.color = 'var(--red)';
+        }
+    }
+
+    async function disconnectTelegram() {
+        if (!confirm('Disconnect Telegram? You will stop receiving alerts.')) return;
+        try {
+            await fetch('/api/alerts/connect', { method: 'DELETE', credentials: 'same-origin' });
+            _alertsVerified = false;
+            updateAlertConnectUI(false);
+        } catch(e) {}
+    }
+
+    async function saveAlertSettings() {
+        if (!_alertsVerified) return;
+        var enabled  = document.getElementById('alerts-enabled-toggle').checked;
+        var minEv    = parseFloat(document.getElementById('alerts-ev-slider').value);
+        var oneSide  = document.getElementById('alerts-oneside-toggle').checked;
+        var unitSize = parseFloat(document.getElementById('alerts-unit-size').value) || 100;
+
+        var sportChecks = document.querySelectorAll('#alerts-sports-grid input[data-sport]');
+        var checked = Array.from(sportChecks).filter(function(c) { return c.checked; }).map(function(c) { return c.dataset.sport; });
+        var sports = checked.length === ALERT_SPORTS.length ? 'ALL' : checked.join(',');
+
+        try {
+            await fetch('/api/alerts/settings', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled: enabled, min_ev: minEv, sports: sports, one_side: oneSide, unit_size: unitSize })
+            });
+        } catch(e) {}
     }
 
     function switchConnectTab(tab) {
@@ -6737,6 +7090,29 @@
                 ftBar.appendChild(document.getElementById('referral-tab-btn'));
             }
 
+            // 🔔 Alerts tab — for pro users
+            if (isPro()) {
+                if (!document.getElementById('alerts-tab-btn')) {
+                    var alertsTabBtn = document.createElement('button');
+                    alertsTabBtn.className = 'feature-tab sport-tab';
+                    alertsTabBtn.textContent = '🔔 Alerts';
+                    alertsTabBtn.id = 'alerts-tab-btn';
+                    alertsTabBtn.style.cssText = 'color:var(--yellow)';
+                    alertsTabBtn.onclick = function() {
+                        var isActive = this.classList.contains('active');
+                        if (isActive) {
+                            hideAlertsTab();
+                        } else {
+                            document.querySelectorAll('.sport-tab,.feature-tab').forEach(function(t) { t.classList.remove('active'); });
+                            showAlertsTab();
+                        }
+                    };
+                    ftBar.appendChild(alertsTabBtn);
+                } else {
+                    ftBar.appendChild(document.getElementById('alerts-tab-btn'));
+                }
+            }
+
             // Pro ✦ button (manage subscription) — right of Refer, only for pro users
             if (currentUser && currentUser.plan === 'pro' && !currentUser.is_admin) {
                 var existingProBtn = document.getElementById('manage-sub-btn');
@@ -7056,7 +7432,7 @@
                 if (rawRows.length > 0) {
                     // Fetch RS and RFI in parallel — RFI renders immediately, RS preds applied after both finish
                     var rsPromise = fetchRealMarkets(currentSport, true);
-                    var rfiPromise = fetchKalshiRFI(false);
+                    var rfiPromise = fetchKalshiRFI(false); // false = render as soon as RFI rows land
                     Promise.all([rsPromise, rfiPromise]).then(function() {
                         // Now lastSyncData is populated — apply Real% to RFI rows
                         var syncD = lastSyncData[currentSport];
@@ -7090,16 +7466,7 @@
                                 var isYes = r.ps === 'A';
                                 var match = outcomes.find(function(o) { if (!o.label) return false; return isYes ? o.label.toLowerCase() === 'yes' : o.label.toLowerCase() === 'no'; });
                                 if (!match) match = isYes ? outcomes[1] : outcomes[0];
-                                if (match && match.pct != null) {
-                                    // Time guard: clear RS preds 4h after game start
-                                    if (r.cm && Date.now() > r.cm.getTime() + 4 * 60 * 60 * 1000) return;
-                                    var rsStartMs7 = syncD.markets[realKey + '__startMs'];
-                                    if (rsStartMs7 && r.cm) {
-                                        var _etFmt7 = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
-                                        if (_etFmt7.format(new Date(rsStartMs7)) !== _etFmt7.format(r.cm)) return;
-                                    }
-                                    preds[r.id] = String(match.pct); if (match.probability != null) probsExact[r.id] = match.probability; if (mktData.volumeDisplay) vols[r.id] = mktData.volumeDisplay;
-                                }
+                                if (match && match.pct != null) { preds[r.id] = String(match.pct); if (match.probability != null) probsExact[r.id] = match.probability; if (mktData.volumeDisplay) vols[r.id] = mktData.volumeDisplay; }
                             });
                         }
                         renderTable();
@@ -7358,15 +7725,6 @@
             var gid = markets[realKey + '__gid'];
             if (gid) rsGameIds[r.game] = gid;
 
-            // Skip if RS market is for a different calendar day (ET) than the FD game.
-            // This prevents settled series-game odds carrying over to tomorrow's rematch,
-            // and RFI markets closed mid-inning from leaking into the next day's game.
-            var rsStartMs = markets[realKey + '__startMs'];
-            if (rsStartMs && r.cm) {
-                var _etFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
-                if (_etFmt.format(new Date(rsStartMs)) !== _etFmt.format(r.cm)) return;
-            }
-
             // Populate yourLines from Real Sports line data (spread/total)
             var gameLines = markets[realKey + '__lines'];
             if (gameLines) {
@@ -7438,8 +7796,11 @@
                 });
             }
             if (match && match.pct != null) {
-                // Time guard: clear RS preds 4h after game start
-                if (r.cm && Date.now() > r.cm.getTime() + 4 * 60 * 60 * 1000) return;
+                var pct = parseFloat(match.pct);
+                // If game has already started and RS probability is extreme (≤3% or ≥97%),
+                // it's a post-game settled value — don't auto-populate, user can enter manually
+                var gameStarted = r.cm && r.cm.getTime() < Date.now();
+                if (gameStarted && (pct <= 3 || pct >= 97)) return;
                 if (match.probability != null) probsExact[r.id] = match.probability;
                 // FC: use RS label sign to assign the correct DK price and store aligned pct
                 if (r.mkt === 'Spread' && (r._sport_key === 'soccer_fc' || currentSport === 'soccer_fc') && r._dkSpreads) {
@@ -7449,7 +7810,7 @@
                     var dkPrice3 = rsLine2 != null ? dkSpr2[String(rsLine2)] : null;
                     if (dkPrice3 != null) { r.am = dkPrice3; r.pt = rsLine2; }
                     if (rsLine2 != null) yourLines[r.id] = rsLine2;
-                    preds[r.id] = String(parseFloat(match.pct).toFixed(1));
+                    preds[r.id] = String(match.pct);
                 } else {
                     preds[r.id] = String(match.pct);
                 }
@@ -7877,7 +8238,8 @@
                 if (!pr || r.af == null) return false;
                 var pred = probsExact[r.id] != null ? probsExact[r.id] : parseFloat(pr) / 100;
                 if (pred <= 0 || pred >= 1) return false;
-                var ev = (r.af * (1/pred) * (1-rsBaseTake(pred)) - 1) * 100;
+                var rake = rsBaseTake(pred);
+                var ev = (r.af * (1/pred) * (1-rake) - 1) * 100;
                 return ev >= 5;
             });
         }
@@ -7999,7 +8361,8 @@
         if (predEV && r.af != null) {
             var realPctEV = probsExact[r.id] != null ? probsExact[r.id] : parseFloat(predEV) / 100;
             if (realPctEV > 0 && realPctEV < 1) {
-                var ev = (r.af * (1/realPctEV) * (1-rsBaseTake(realPctEV)) - 1) * 100;
+                var rakeEV = rsBaseTake(realPctEV);
+                var ev = (r.af * (1/realPctEV) * (1-rakeEV) - 1) * 100;
                 // >100% EV = post-game artifact (RS knows result, FD market still open)
                 // Exception: soccer FC live ±0.5 lines can legitimately produce >100% EV
                 if (ev > 100 && currentSport !== 'soccer_fc') { evH = '-'; } else {
@@ -8355,13 +8718,6 @@
                     });
                     if (!match) match = isYes ? outcomes[1] : outcomes[0];
                     if (match && match.pct != null) {
-                        // Time guard: clear RS preds 4h after game start
-                        if (r.cm && Date.now() > r.cm.getTime() + 4 * 60 * 60 * 1000) return;
-                        var rsStartMs8 = syncD.markets[realKey + '__startMs'];
-                        if (rsStartMs8 && r.cm) {
-                            var _etFmt8 = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
-                            if (_etFmt8.format(new Date(rsStartMs8)) !== _etFmt8.format(r.cm)) return;
-                        }
                         preds[r.id] = String(match.pct);
                         if (match.probability != null) probsExact[r.id] = match.probability;
                         if (mktData.volumeDisplay) vols[r.id] = mktData.volumeDisplay;
@@ -8639,14 +8995,6 @@
                     });
                 }
                 if (match && match.pct != null) {
-                    // Time guard: clear RS preds 4h after game start (game likely over; evening games refresh)
-                    if (r.cm && Date.now() > r.cm.getTime() + 4 * 60 * 60 * 1000) return;
-                    // Date guard: skip RS preds from a different ET day (series rematch / RFI carryover)
-                    var rsStartMsG = d.markets[realKey + '__startMs'];
-                    if (rsStartMsG && r.cm) {
-                        var _etFmtG = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
-                        if (_etFmtG.format(new Date(rsStartMsG)) !== _etFmtG.format(r.cm)) return;
-                    }
                     preds[r.id] = String(match.pct);
                     if (match.probability != null) probsExact[r.id] = match.probability;
                     if (mktData && mktData.volumeDisplay) {
@@ -8668,7 +9016,6 @@
                         var dkPrice2 = rsLine != null ? dkSpr[String(rsLine)] : null;
                         if (dkPrice2 != null) { r.am = dkPrice2; r.pt = rsLine; }
                         if (rsLine != null) yourLines[r.id] = rsLine;
-                        preds[r.id] = String(parseFloat(match.pct).toFixed(1));
                     }
                 }
                 // Auto-fill Real Line from Real Sports outcome label (e.g. "ATL +6.5" -> 6.5)
@@ -8735,7 +9082,9 @@
                         var pred = parseFloat(preds[activeId]) / 100;
                         var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
                         var evForUC = null;
-                        if (af != null && pred != null && pred > 0 && pred < 1) { evForUC = (af * (1/pred) * 0.966 - 1) * 100; }
+                        if (af != null && pred != null && pred > 0 && pred < 1) {
+                            evForUC = (af * (1/pred) * 0.966 - 1) * 100;
+                        }
                         var u = (isPro() || r.mkt === 'ML' || r.mkt === 'RFI') ? unitsEV(evForUC, pred) : units(edge);
                         var bet = u * unit;
                         if (edge != null) {
@@ -8901,11 +9250,10 @@
                 }
                 if (!game) return;
                 if (r.mkt === 'Spread' || r.mkt === 'Total') altOdds[r.gid] = game;
-                var isLiveRow = r.cm && r.cm <= new Date();
-                if (r.mkt === 'Spread' && !isLiveRow) {
+                if (r.mkt === 'Spread') {
                     var sideData = game.spreads && game.spreads[r.side];
                     if (sideData) { var entry = Object.entries(sideData)[0]; if (entry) { r.pt = parseFloat(entry[0]); r.am = entry[1]; } }
-                } else if (r.mkt === 'Total' && !isLiveRow) {
+                } else if (r.mkt === 'Total') {
                     var sideData = game.totals && game.totals[r.side];
                     if (sideData) { var entry = Object.entries(sideData)[0]; if (entry) { r.pt = parseFloat(entry[0]); r.am = entry[1]; } }
                 } else if (r.mkt === 'ML') {
@@ -9180,44 +9528,6 @@
                 var hasSpread = Object.keys(dk.spreads['Away'] || {}).length > 0;
                 var hasTotal  = Object.keys(dk.totals['Over']  || {}).length > 0;
                 if (hasSpread || hasTotal) dkPreGameStore[r.gid] = dk;
-
-                if ((r.mkt === 'Spread' || r.mkt === 'Total') && r.cm && r.cm <= nowDate) {
-                    var dkSrc = (hasSpread || hasTotal) ? dk : dkPreGameStore[r.gid];
-                    if (!dkSrc) return;
-                    if (r.mkt === 'Spread') {
-                        var sideKey = r.ps === 'A' ? 'Away' : 'Home';
-                        var entries = Object.entries(dkSrc.spreads[sideKey] || {});
-                        if (entries.length) {
-                            var yl = yourLines[r.id];
-                            if (yl == null) {
-                                var best = entries.reduce(function(a, b) { return Math.abs(parseFloat(a[0])) <= Math.abs(parseFloat(b[0])) ? a : b; });
-                                r.am = best[1]; r.pt = parseFloat(best[0]);
-                            } else {
-                                var ylPt = parseFloat(yl);
-                                if (Math.abs(parseFloat(r.pt) - ylPt) <= 0.001) {
-                                    var exact = entries.find(function(e) { return Math.abs(parseFloat(e[0]) - ylPt) <= 0.001; });
-                                    if (exact) r.am = exact[1];
-                                } else {
-                                    var exact = entries.find(function(e) { return Math.abs(parseFloat(e[0]) - ylPt) <= 0.001; });
-                                    if (exact) { r.am = exact[1]; r.pt = ylPt; }
-                                }
-                            }
-                        }
-                    } else {
-                        var entries = Object.entries(dkSrc.totals[r.side] || {});
-                        if (entries.length) {
-                            var yl = yourLines[r.id];
-                            if (yl == null) {
-                                var best = entries.reduce(function(a, b) { return Math.abs(parseFloat(a[0])) <= Math.abs(parseFloat(b[0])) ? a : b; });
-                                r.am = best[1]; r.pt = parseFloat(best[0]);
-                            } else {
-                                var ylPt = parseFloat(yl);
-                                var exact = entries.find(function(e) { return Math.abs(parseFloat(e[0]) - ylPt) <= 0.001; });
-                                if (exact) { r.am = exact[1]; r.pt = ylPt; }
-                            }
-                        }
-                    }
-                }
             });
 
             // Second pass: synthesize spread/total rows for live games where FD has suspended them
