@@ -5150,13 +5150,14 @@
             // >100% EV is a post-game artifact (RS knows result, FD market not yet settled)
             // Exception: soccer_fc live ±0.5 lines can legitimately produce >100% EV
             if (r._ev > 0 && (r._ev <= 100 || sport === 'soccer_fc')) {
-                // NBA/NHL: skip spread/total rows where DK has alt data but not the RS line
-                if ((sport === 'basketball_nba' || sport === 'icehockey_nhl') && r.gid && r.yl != null && (r.mkt === 'Spread' || r.mkt === 'Total')) {
-                    var dkGame3 = dkAltOdds[r.gid];
-                    if (dkGame3) {
+                // NBA/NHL: lines match → use FD odds. Lines differ → need DK alt at RS line, skip if missing.
+                if ((sport === 'basketball_nba' || sport === 'icehockey_nhl') && r.gid && r.yl != null && r.pt != null && (r.mkt === 'Spread' || r.mkt === 'Total')) {
+                    if (Math.abs(parseFloat(r.yl) - parseFloat(r.pt)) > 0.001) {
+                        var dkGame3 = dkAltOdds[r.gid];
+                        if (!dkGame3) return;
                         var sk3 = r.ps === 'A' ? (r.mkt === 'Spread' ? 'Away' : 'Over') : (r.mkt === 'Spread' ? 'Home' : 'Under');
                         var dl3 = r.mkt === 'Spread' ? (dkGame3.spreads && dkGame3.spreads[sk3]) : (dkGame3.totals && dkGame3.totals[sk3]);
-                        if ((sport !== 'icehockey_nhl' || r.mkt !== 'Spread') && dl3 && Object.keys(dl3).length > 0 && dkClosestPrice(dl3, parseFloat(r.yl)) == null) return;
+                        if (!dl3 || dkClosestPrice(dl3, parseFloat(r.yl)) == null) return;
                     }
                 }
                 r._sortVal = r._ev; positive.push(r);
@@ -5652,14 +5653,14 @@
                         var edge = (af != null && pred != null) ? (af - pred) * 100 : null;
                         return { id: r.id, game: r.game, cm: r.cm, mkt: r.mkt, side: r.side, am: r.am, pt: r.pt, ps: r.ps, pid: r.pid, gid: r.gid, league: r.league, fair: fair, af: af, yl: yl, edge: edge, u: u };
                     }).filter(function(r) {
-                        // NBA/NHL: hide spread/total when DK has alt data for the game but not the RS line
-                        if ((s.key === 'basketball_nba' || s.key === 'icehockey_nhl') && r.gid && r.yl != null && (r.mkt === 'Spread' || r.mkt === 'Total')) {
-                            var dkGame = dkAltOdds[r.gid];
-                            if (dkGame) {
+                        // NBA/NHL: lines match → use FD odds. Lines differ → need DK alt at RS line, hide if missing.
+                        if ((s.key === 'basketball_nba' || s.key === 'icehockey_nhl') && r.gid && r.yl != null && r.pt != null && (r.mkt === 'Spread' || r.mkt === 'Total')) {
+                            if (Math.abs(parseFloat(r.yl) - parseFloat(r.pt)) > 0.001) {
+                                var dkGame = dkAltOdds[r.gid];
+                                if (!dkGame) return false;
                                 var dkSideKey = r.ps === 'A' ? (r.mkt === 'Spread' ? 'Away' : 'Over') : (r.mkt === 'Spread' ? 'Home' : 'Under');
                                 var dkLines = r.mkt === 'Spread' ? (dkGame.spreads && dkGame.spreads[dkSideKey]) : (dkGame.totals && dkGame.totals[dkSideKey]);
-                                var dkHasData = dkLines && Object.keys(dkLines).length > 0;
-                                if ((s.key !== 'icehockey_nhl' || r.mkt !== 'Spread') && dkHasData && dkClosestPrice(dkLines, parseFloat(r.yl)) == null) return false;
+                                if (!dkLines || dkClosestPrice(dkLines, parseFloat(r.yl)) == null) return false;
                             }
                         }
                         return true;
@@ -8087,20 +8088,16 @@
                     if (Math.abs(parseFloat(r.pt) - parseFloat(yourLines[r.id])) > 0.001) return false;
                 }
 
-                // NBA/NHL (live or pregame): hide if DK has alt data for this game but can't find the RS line
-                // Row reappears automatically once DK adds the line to their alt spreads/totals
-                if ((isNBA || isHockey) && r.gid && yourLines[r.id] != null) {
-                    var dkGame = dkAltOdds[r.gid];
-                    if (!dkGame) return false;
-                    if (yourLines[r.id] != null) {
+                // NBA/NHL: lines match → use FD odds directly. Lines differ → need DK alt at RS line, hide if missing.
+                if ((isNBA || isHockey) && r.gid && (r.mkt === 'Spread' || r.mkt === 'Total') && yourLines[r.id] != null && r.pt != null) {
+                    var _rsLine = parseFloat(yourLines[r.id]);
+                    var _fdLine = parseFloat(r.pt);
+                    if (Math.abs(_rsLine - _fdLine) > 0.001) {
+                        var dkGame = dkAltOdds[r.gid];
+                        if (!dkGame) return false;
                         var dkSideKey = r.ps === 'A' ? (r.mkt === 'Spread' ? 'Away' : 'Over') : (r.mkt === 'Spread' ? 'Home' : 'Under');
                         var dkLines = r.mkt === 'Spread' ? (dkGame.spreads && dkGame.spreads[dkSideKey]) : (dkGame.totals && dkGame.totals[dkSideKey]);
-                        var dkHasData = dkLines && Object.keys(dkLines).length > 0;
-                        // NHL puck line (1.5) never appears in DK alt spreads (which start at 2.5) — don't hide based on line mismatch
-                        if ((!isHockey || r.mkt !== 'Spread') && dkHasData && dkClosestPrice(dkLines, parseFloat(yourLines[r.id])) == null) return false;
-                    } else if (isHockey && r.pt != null) {
-                        // No DK alt data yet: fall back to strict puck-line rule
-                        if (Math.abs(parseFloat(yourLines[r.id]) - parseFloat(r.pt)) > 0) return false;
+                        if (!dkLines || dkClosestPrice(dkLines, _rsLine) == null) return false;
                     }
                 }
 
