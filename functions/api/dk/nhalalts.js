@@ -10,7 +10,8 @@ const DK_ALT_SPREAD = '13189'; // alt puck line
 const DK_ALT_TOTAL  = '13192'; // alt total goals
 const CACHE_TTL     = 5;
 
-const DK_EVENTS_URL = `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${DK_LEAGUE_ID}&eventsQuery=%24filter%3DleagueId%20eq%20%27${DK_LEAGUE_ID}%27%20AND%20clientMetadata%2FSubcategories%2Fany%28s%3A%20s%2FId%20eq%20%27${DK_ALT_SPREAD}%27%29&marketsQuery=%24filter%3DclientMetadata%2FsubCategoryId%20eq%20%27${DK_ALT_SPREAD}%27%20AND%20tags%2Fall%28t%3A%20t%20ne%20%27SportcastBetBuilder%27%29&include=Events&entity=events`;
+// Filter by alt totals (13192) so we still get games where DK has suspended puck lines (13189)
+const DK_EVENTS_URL = `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${DK_LEAGUE_ID}&eventsQuery=%24filter%3DleagueId%20eq%20%27${DK_LEAGUE_ID}%27%20AND%20clientMetadata%2FSubcategories%2Fany%28s%3A%20s%2FId%20eq%20%27${DK_ALT_TOTAL}%27%29&marketsQuery=%24filter%3DclientMetadata%2FsubCategoryId%20eq%20%27${DK_ALT_TOTAL}%27%20AND%20tags%2Fall%28t%3A%20t%20ne%20%27SportcastBetBuilder%27%29&include=Events&entity=events`;
 
 function dkAltUrl(eventId, subCatId) {
   const mq = encodeURIComponent(
@@ -141,8 +142,10 @@ export async function onRequestGet(context) {
           (td.selections || []).forEach(function(sel) {
             const price = parseAmerican(sel.displayOdds && sel.displayOdds.american);
             if (price == null || sel.points == null) return;
-            const t = sel.outcomeType;
-            if (t === 'Over' || t === 'Under') altData.totals[t][sel.points] = price;
+            const tRaw = sel.outcomeType || '';
+            const tLow = tRaw.toLowerCase();
+            const t = tLow.includes('over') ? 'Over' : tLow.includes('under') ? 'Under' : null;
+            if (t) altData.totals[t][sel.points] = price;
           });
         }
 
@@ -171,6 +174,29 @@ export async function onRequestGet(context) {
 
     if (debugMode === '2') {
       return new Response(JSON.stringify({ ok: true, games: gamesMap }), { headers: { 'Content-Type': 'application/json' } });
+    }
+
+    if (debugMode === '3') {
+      // Raw DK total selections per game — use to debug outcomeType / points format
+      const rawDebug = {};
+      await Promise.all(events.map(async function(event) {
+        const away = (event.participants || []).find(p => p.venueRole === 'Away');
+        const home = (event.participants || []).find(p => p.venueRole === 'Home');
+        if (!away || !home) return;
+        const gameKey = away.name + ' @ ' + home.name;
+        try {
+          const totalRes2 = await fetch(dkAltUrl(event.id, DK_ALT_TOTAL), { headers });
+          if (totalRes2.ok) {
+            const td2 = await totalRes2.json();
+            rawDebug[gameKey] = (td2.selections || []).slice(0, 10).map(s => ({
+              outcomeType: s.outcomeType, points: s.points, american: s.displayOdds && s.displayOdds.american
+            }));
+          } else {
+            rawDebug[gameKey] = { error: totalRes2.status };
+          }
+        } catch(e) { rawDebug[gameKey] = { error: e.message }; }
+      }));
+      return new Response(JSON.stringify({ rawDebug }), { headers: { 'Content-Type': 'application/json' } });
     }
 
     const body = JSON.stringify({ ok: true, games: gamesMap });
