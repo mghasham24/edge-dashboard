@@ -82,12 +82,15 @@ export async function onRequestGet(context) {
     const events = listData?.attachments?.events || {};
     const nowMs = Date.now();
     const etFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
-    const todayET = etFmt.format(new Date());
+    const todayET     = etFmt.format(new Date());
+    const yesterdayET = etFmt.format(new Date(nowMs - 24 * 60 * 60 * 1000));
     const todayEvents = Object.values(events).filter(e => {
       if (!e.openDate) return false;
       const t = new Date(e.openDate).getTime();
-      if (t < nowMs - 3 * 60 * 60 * 1000) return false; // skip games started >3h ago
-      if (etFmt.format(new Date(e.openDate)) !== todayET) return false;
+      if (t < nowMs - 4 * 60 * 60 * 1000) return false; // skip games started >4h ago
+      // Include yesterday's ET games — late games cross the midnight ET boundary
+      const openDateET = etFmt.format(new Date(e.openDate));
+      if (openDateET !== todayET && openDateET !== yesterdayET) return false;
       // Filter out non-NHL hockey (college, etc.) by checking team names
       const teams = parseEventName(e.name);
       if (!teams) return false;
