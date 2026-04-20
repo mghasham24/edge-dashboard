@@ -2608,104 +2608,6 @@
             </div>
         </div>
 
-        <!-- Alerts Panel -->
-        <div class="admin-panel" id="alerts-panel">
-            <div style="margin-bottom:20px">
-                <button onclick="document.getElementById('alerts-tab-btn').click()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:7px 14px;border-radius:5px;cursor:pointer;letter-spacing:.04em">&larr; Back to Dashboard</button>
-            </div>
-            <div style="margin-bottom:28px">
-                <div style="font-size:20px;font-weight:700;margin-bottom:6px">🔔 Telegram Alerts</div>
-                <div style="font-size:13px;color:var(--muted)">Get a Telegram message the moment a pre-game bet hits your EV threshold. <strong style="color:var(--fg)">Pro only.</strong></div>
-            </div>
-
-            <!-- Step 1: Connect Telegram -->
-            <div id="alerts-connect-section" style="background:var(--bg3);border:1px solid var(--border2);border-radius:10px;padding:20px;margin-bottom:18px">
-                <div style="font-size:13px;font-weight:700;margin-bottom:14px;color:var(--fg)">Step 1 — Connect your Telegram</div>
-                <div id="alerts-status-connected" style="display:none;align-items:center;gap:10px;margin-bottom:14px">
-                    <span style="font-size:20px">✅</span>
-                    <div>
-                        <div style="font-weight:700;font-size:13px;color:var(--green)">Telegram connected</div>
-                        <div style="font-size:11px;color:var(--muted);margin-top:2px">Alerts will be sent to your Telegram account</div>
-                    </div>
-                    <button onclick="disconnectTelegram()" style="margin-left:auto;background:none;border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:11px;padding:5px 10px;border-radius:5px;cursor:pointer">Disconnect</button>
-                </div>
-                <div id="alerts-status-unconnected">
-                    <div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5">Click the button below to open Telegram. Hit <strong style="color:var(--fg)">Start</strong> in the bot chat to link your account.</div>
-                    <button id="alerts-connect-btn" onclick="connectTelegram()" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:13px;font-weight:600;padding:10px 20px;border-radius:7px;cursor:pointer;width:100%">Open Telegram to Connect →</button>
-                    <div id="alerts-connect-status" style="margin-top:10px;font-size:12px;color:var(--muted);text-align:center;display:none"></div>
-                </div>
-            </div>
-
-            <!-- Step 2: Settings -->
-            <div id="alerts-settings-section" style="background:var(--bg3);border:1px solid var(--border2);border-radius:10px;padding:20px;margin-bottom:18px;opacity:0.4;pointer-events:none" id="alerts-settings-section">
-                <div style="font-size:13px;font-weight:700;margin-bottom:18px;color:var(--fg)">Step 2 — Configure alerts</div>
-
-                <!-- Enable toggle -->
-                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--border)">
-                    <div>
-                        <div style="font-size:13px;font-weight:600;color:var(--fg)">Alerts enabled</div>
-                        <div style="font-size:11px;color:var(--muted);margin-top:2px">Turn off to pause all alerts without disconnecting</div>
-                    </div>
-                    <label style="position:relative;display:inline-block;width:42px;height:24px;cursor:pointer">
-                        <input type="checkbox" id="alerts-enabled-toggle" style="opacity:0;width:0;height:0" onchange="saveAlertSettings()">
-                        <span id="alerts-toggle-track" style="position:absolute;inset:0;border-radius:24px;background:var(--bg4);border:1px solid var(--border2);transition:background .2s"></span>
-                        <span id="alerts-toggle-thumb" style="position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#666;transition:transform .2s,background .2s"></span>
-                    </label>
-                </div>
-
-                <!-- Min EV -->
-                <div style="margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--border)">
-                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-                        <div>
-                            <div style="font-size:13px;font-weight:600;color:var(--fg)">Minimum EV</div>
-                            <div style="font-size:11px;color:var(--muted);margin-top:2px">Only alert on bets above this threshold</div>
-                        </div>
-                        <span id="alerts-ev-display" style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--accent)">+5.0%</span>
-                    </div>
-                    <input type="range" id="alerts-ev-slider" min="1" max="20" step="0.5" value="5"
-                        style="width:100%;accent-color:var(--accent)"
-                        oninput="document.getElementById('alerts-ev-display').textContent='+'+parseFloat(this.value).toFixed(1)+'%'"
-                        onchange="saveAlertSettings()">
-                    <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted2);margin-top:4px"><span>+1%</span><span>+20%</span></div>
-                </div>
-
-                <!-- Sports filter -->
-                <div style="margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--border)">
-                    <div style="font-size:13px;font-weight:600;color:var(--fg);margin-bottom:10px">Sports</div>
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="alerts-sports-grid">
-                        <!-- populated by JS -->
-                    </div>
-                </div>
-
-                <!-- 1 Side toggle -->
-                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--border)">
-                    <div>
-                        <div style="font-size:13px;font-weight:600;color:var(--fg)">1 Side only</div>
-                        <div style="font-size:11px;color:var(--muted);margin-top:2px">Only alert the best EV side per game, not both</div>
-                    </div>
-                    <label style="position:relative;display:inline-block;width:42px;height:24px;cursor:pointer">
-                        <input type="checkbox" id="alerts-oneside-toggle" style="opacity:0;width:0;height:0" onchange="saveAlertSettings()">
-                        <span id="alerts-oneside-track" style="position:absolute;inset:0;border-radius:24px;background:var(--bg4);border:1px solid var(--border2);transition:background .2s"></span>
-                        <span id="alerts-oneside-thumb" style="position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#666;transition:transform .2s,background .2s"></span>
-                    </label>
-                </div>
-
-                <!-- Unit size -->
-                <div>
-                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-                        <div>
-                            <div style="font-size:13px;font-weight:600;color:var(--fg)">Unit size ($)</div>
-                            <div style="font-size:11px;color:var(--muted);margin-top:2px">Your 1u dollar amount — alerts show the actual bet size</div>
-                        </div>
-                    </div>
-                    <input type="number" id="alerts-unit-size" min="1" max="100000" step="1" value="100"
-                        style="width:100%;background:var(--bg4);border:1px solid var(--border2);color:var(--fg);font-family:var(--mono);font-size:14px;font-weight:700;padding:8px 12px;border-radius:7px;box-sizing:border-box"
-                        onchange="saveAlertSettings()">
-                </div>
-            </div>
-
-        </div>
-
 
         <!-- Portfolio Panel -->
         <div class="admin-panel" id="portfolio-panel">
@@ -7090,28 +6992,7 @@
                 ftBar.appendChild(document.getElementById('referral-tab-btn'));
             }
 
-            // 🔔 Alerts tab — for pro users
-            if (isPro()) {
-                if (!document.getElementById('alerts-tab-btn')) {
-                    var alertsTabBtn = document.createElement('button');
-                    alertsTabBtn.className = 'feature-tab sport-tab';
-                    alertsTabBtn.textContent = '🔔 Alerts';
-                    alertsTabBtn.id = 'alerts-tab-btn';
-                    alertsTabBtn.style.cssText = 'color:var(--yellow)';
-                    alertsTabBtn.onclick = function() {
-                        var isActive = this.classList.contains('active');
-                        if (isActive) {
-                            hideAlertsTab();
-                        } else {
-                            document.querySelectorAll('.sport-tab,.feature-tab').forEach(function(t) { t.classList.remove('active'); });
-                            showAlertsTab();
-                        }
-                    };
-                    ftBar.appendChild(alertsTabBtn);
-                } else {
-                    ftBar.appendChild(document.getElementById('alerts-tab-btn'));
-                }
-            }
+
 
             // Pro ✦ button (manage subscription) — right of Refer, only for pro users
             if (currentUser && currentUser.plan === 'pro' && !currentUser.is_admin) {
