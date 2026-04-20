@@ -199,6 +199,31 @@ export async function onRequestGet(context) {
     const pricesRaw = await pricesRes.json();
     const marketPricesList = Array.isArray(pricesRaw) ? pricesRaw : (pricesRaw.marketPrices || []);
 
+    if (debugMode === '3') {
+      const rawTotals = {};
+      marketPricesList.forEach(function(mp) {
+        const mapping = marketToGame[mp.marketId];
+        if (!mapping || mapping.type !== 'total') return;
+        const { gameKey } = mapping;
+        const entry = gameData[gameKey];
+        rawTotals[gameKey] = {
+          totalId: mp.marketId,
+          marketStatus: mp.marketStatus,
+          eventPageRunners: entry.totalRunners,
+          runnerDetails: (mp.runnerDetails || []).map(function(rd) {
+            return {
+              selectionId: rd.selectionId,
+              runnerStatus: rd.runnerStatus,
+              handicap: rd.handicap,
+              price: rd.winRunnerOdds?.americanDisplayOdds?.americanOddsInt,
+              mappedName: (entry.totalRunners[rd.selectionId] || entry.totalRunners[String(rd.selectionId)] || '(no match)')
+            };
+          })
+        };
+      });
+      return new Response(JSON.stringify({ rawTotals }), { headers: { 'Content-Type': 'application/json' } });
+    }
+
     const gamesMap = {};
 
     marketPricesList.forEach(function(mp) {
