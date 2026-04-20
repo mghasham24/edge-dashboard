@@ -144,12 +144,10 @@ export async function onRequestGet(context) {
               const nl = n.toLowerCase();
               return nl === 'over' || nl === 'under';
             });
-            const currHasOverUnder = Object.values(entry.totalRunners || {}).some(function(n) {
-              const nl = n.toLowerCase();
-              return nl === 'over' || nl === 'under';
-            });
-            // Only overwrite if we don't have a total yet, or if this one has Over/Under and the current one doesn't
-            if (!entry.totalId || (hasOverUnder && !currHasOverUnder)) {
+            // Always keep the latest Over/Under total market (highest market ID).
+            // For live games, FD adds a new in-play total market with a higher ID —
+            // that's what FD's website shows. The original game-total market goes stale.
+            if (hasOverUnder) {
               entry.totalId = marketId;
               entry.totalRunners = runners;
             }
