@@ -141,7 +141,12 @@ export async function onRequestGet(context) {
               const nl = n.toLowerCase();
               return nl === 'over' || nl === 'under';
             });
-            if (hasOverUnder || !entry.totalId) {
+            const currHasOverUnder = Object.values(entry.totalRunners || {}).some(function(n) {
+              const nl = n.toLowerCase();
+              return nl === 'over' || nl === 'under';
+            });
+            // Only overwrite if we don't have a total yet, or if this one has Over/Under and the current one doesn't
+            if (!entry.totalId || (hasOverUnder && !currHasOverUnder)) {
               entry.totalId = marketId;
               entry.totalRunners = runners;
             }
