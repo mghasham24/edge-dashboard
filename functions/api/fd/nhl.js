@@ -118,7 +118,7 @@ export async function onRequestGet(context) {
 
         const markets = evData?.attachments?.markets || {};
         const gameKey = teams.away + ' @ ' + teams.home;
-        const entry = { eventId: event.eventId, openDate: event.openDate, away: teams.away, home: teams.home, spreadRunners: {}, mlRunners: {}, totalRunners: {}, allMarketTypes: [] };
+        const entry = { eventId: event.eventId, openDate: event.openDate, away: teams.away, home: teams.home, spreadRunners: {}, mlRunners: {}, totalRunners: {}, allMarketTypes: [], allTotalMarkets: [] };
 
         Object.entries(markets).forEach(function([marketId, mkt]) {
           const mktType = mkt.marketType || '';
@@ -134,8 +134,6 @@ export async function onRequestGet(context) {
               if (ref.selectionId != null && ref.runnerName) entry.mlRunners[ref.selectionId] = ref.runnerName;
             });
           } else if (mktType === TOTAL_TYPE) {
-            // Among multiple total markets (e.g. game total vs period total), prefer the one
-            // whose runners are named "Over"/"Under" — period totals sometimes use team names.
             const runners = {};
             (mkt.runners || []).forEach(function(ref) {
               if (ref.selectionId != null && ref.runnerName) runners[ref.selectionId] = ref.runnerName;
@@ -144,9 +142,8 @@ export async function onRequestGet(context) {
               const nl = n.toLowerCase();
               return nl === 'over' || nl === 'under';
             });
-            // Always keep the latest Over/Under total market (highest market ID).
-            // For live games, FD adds a new in-play total market with a higher ID —
-            // that's what FD's website shows. The original game-total market goes stale.
+            // Track all total markets for debugging
+            entry.allTotalMarkets.push({ marketId, runners, hasOverUnder, marketName: mkt.marketName || '' });
             if (hasOverUnder) {
               entry.totalId = marketId;
               entry.totalRunners = runners;
@@ -169,6 +166,7 @@ export async function onRequestGet(context) {
         mlId: entry.mlId || null,
         totalId: entry.totalId || null,
         allMarketTypes: entry.allMarketTypes || [],
+        allTotalMarkets: entry.allTotalMarkets || [],
         spreadRunners: entry.spreadRunners,
         totalRunners: entry.totalRunners,
       }));
