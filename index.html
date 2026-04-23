@@ -2617,11 +2617,27 @@
                 <button onclick="disconnectRealSports()" id="port-disconnect-btn" style="background:var(--bg3);border:1px solid rgba(240,82,82,.3);color:var(--red);font-family:var(--sans);font-size:11px;font-weight:600;padding:7px 14px;border-radius:5px;cursor:pointer;letter-spacing:.04em;display:none">Disconnect</button>
             </div>
 
-            <!-- Not-connected view — connection temporarily unavailable -->
+            <!-- Not-connected view — manual bet tracker -->
             <div id="portfolio-connect-view">
-                <div class="port-connect-card">
-                    <h2>Portfolio</h2>
-                    <p style="color:var(--muted)">New connections are temporarily unavailable while we work on an official integration.</p>
+                <div style="margin-bottom:20px">
+                    <div style="font-size:16px;font-weight:800;letter-spacing:.04em;color:var(--fg)">📈 Bet Tracker</div>
+                    <div style="font-size:11px;color:var(--muted2);margin-top:2px">Track your bets manually — click any row's checkbox to log a bet</div>
+                </div>
+                <div class="admin-stats" id="trk-stats-row" style="margin-bottom:24px">
+                    <div class="admin-stat"><div class="admin-stat-val" id="trk-pnl">-</div><div class="admin-stat-lbl">Total P&amp;L</div></div>
+                    <div class="admin-stat"><div class="admin-stat-val" id="trk-roi">-</div><div class="admin-stat-lbl">ROI</div></div>
+                    <div class="admin-stat"><div class="admin-stat-val" id="trk-winrate">-</div><div class="admin-stat-lbl">Win Rate</div></div>
+                    <div class="admin-stat"><div class="admin-stat-val" id="trk-count">-</div><div class="admin-stat-lbl">Total Bets</div></div>
+                </div>
+                <div class="admin-table-wrap">
+                    <table class="port-table" style="font-size:12px">
+                        <thead><tr>
+                            <th>Game</th><th>Market</th><th>Side</th>
+                            <th class="r">Odds</th><th class="r">Real%</th><th class="r">Stake</th>
+                            <th>Result</th><th class="r">P&amp;L</th><th>Date</th><th></th>
+                        </tr></thead>
+                        <tbody id="tracker-tbody"><tr><td colspan="10" style="text-align:center;color:var(--muted);padding:24px 0">No tracked bets yet — check the box on any row to log a bet</td></tr></tbody>
+                    </table>
                 </div>
             </div>
 
@@ -2845,10 +2861,14 @@
             <span id="btp-mkt" style="font-size:11px;font-weight:700;background:var(--bg3);border-radius:4px;padding:3px 7px;color:var(--fg)"></span>
             <span id="btp-side" style="font-size:11px;font-weight:600;background:var(--bg3);border-radius:4px;padding:3px 7px;color:var(--fg);max-width:170px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></span>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px">
             <div>
                 <div style="font-size:10px;font-weight:600;color:var(--muted2);margin-bottom:4px;letter-spacing:.05em">FD ODDS</div>
                 <input id="btp-odds" type="number" style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border2);border-radius:5px;color:var(--fg);font-family:var(--mono);font-size:13px;font-weight:700;padding:7px 8px;outline:none">
+            </div>
+            <div>
+                <div style="font-size:10px;font-weight:600;color:var(--muted2);margin-bottom:4px;letter-spacing:.05em">REAL %</div>
+                <input id="btp-real-pct" type="number" min="0" max="100" step="0.1" placeholder="—" style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border2);border-radius:5px;color:var(--fg);font-family:var(--mono);font-size:13px;font-weight:700;padding:7px 8px;outline:none">
             </div>
             <div>
                 <div style="font-size:10px;font-weight:600;color:var(--muted2);margin-bottom:4px;letter-spacing:.05em">STAKE (Rax)</div>
@@ -5125,6 +5145,9 @@
         document.getElementById('btp-side').textContent = r.side;
         document.getElementById('btp-odds').value = r.am;
         document.getElementById('btp-stake').value = '';
+        var pr = preds[id];
+        var prVal = pr != null && pr !== '' ? parseFloat(pr).toFixed(1) : '';
+        document.getElementById('btp-real-pct').value = prVal;
         var btn = document.getElementById('btp-submit-btn');
         btn.disabled = false;
         btn.textContent = 'Track Bet';
@@ -5159,11 +5182,13 @@
         var btn = document.getElementById('btp-submit-btn');
         btn.disabled = true; btn.textContent = 'Saving...';
         var mktLabel = r.mkt + (r.pt != null ? ' ' + (r.pt >= 0 ? '+' : '') + r.pt : '');
+        var realPctRaw = parseFloat(document.getElementById('btp-real-pct').value);
+        var realPct = isNaN(realPctRaw) ? null : realPctRaw;
         try {
             await fetch('/api/bets/log', {
                 method: 'POST', credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ game: r.game, market: mktLabel, side: r.side, odds: odds, line: r.pt ?? null, stake: stake, sport: currentSport })
+                body: JSON.stringify({ game: r.game, market: mktLabel, side: r.side, odds: odds, line: r.pt ?? null, real_pct: realPct, stake: stake, sport: currentSport })
             });
         } catch(e) {}
         hideBetTrackPopover();
@@ -5203,18 +5228,18 @@
 
     async function loadBetLog() {
         var tbody = document.getElementById('tracker-tbody');
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:24px 0">Loading...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:24px 0">Loading...</td></tr>';
         var data;
         try {
             var res = await fetch('/api/bets/log', { credentials: 'same-origin' });
             data = await res.json();
         } catch(e) {
-            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--red);padding:24px 0">Failed to load bets</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--red);padding:24px 0">Failed to load bets</td></tr>';
             return;
         }
         var bets = (data && data.bets) || [];
         if (!bets.length) {
-            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:24px 0">No tracked bets yet — check the box on any row to start tracking</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:24px 0">No tracked bets yet — check the box on any row to log a bet</td></tr>';
             document.getElementById('trk-pnl').textContent = '-';
             document.getElementById('trk-roi').textContent = '-';
             document.getElementById('trk-winrate').textContent = '-';
@@ -5243,6 +5268,7 @@
             var pnlStr = pnl === null ? '—' : (pnl >= 0 ? '+' : '') + pnl.toFixed(1);
             var pnlColor = pnl === null ? 'var(--muted)' : pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--muted)';
             var oddsStr = (b.odds >= 0 ? '+' : '') + b.odds;
+            var realPctStr = b.real_pct != null ? b.real_pct.toFixed(1) + '%' : '—';
             var dt = new Date(b.created_at * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
             var resultBtns = RESULTS.map(function(rv) {
                 var active = b.result === rv;
@@ -5250,10 +5276,11 @@
                 return '<button onclick="setBetResult(' + b.id + ',\'' + rv + '\')" style="background:' + (active ? 'var(--bg3)' : 'none') + ';border:1px solid ' + (active ? col : 'transparent') + ';border-radius:4px;color:' + col + ';font-size:10px;font-weight:700;padding:2px 6px;cursor:pointer;font-family:var(--sans);letter-spacing:.04em;text-transform:uppercase">' + rv + '</button>';
             }).join('');
             return '<tr>'
-                + '<td style="font-size:11px;max-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + escHtml(b.game) + '">' + escHtml(b.game) + '</td>'
+                + '<td style="font-size:11px;max-width:130px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + escHtml(b.game) + '">' + escHtml(b.game) + '</td>'
                 + '<td style="font-size:11px;color:var(--muted)">' + escHtml(b.market) + '</td>'
-                + '<td style="font-size:11px;max-width:110px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + escHtml(b.side) + '">' + escHtml(b.side) + '</td>'
+                + '<td style="font-size:11px;max-width:100px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + escHtml(b.side) + '">' + escHtml(b.side) + '</td>'
                 + '<td class="r" style="font-family:var(--mono);font-size:12px;font-weight:700">' + oddsStr + '</td>'
+                + '<td class="r" style="font-family:var(--mono);font-size:12px;color:var(--muted)">' + realPctStr + '</td>'
                 + '<td class="r" style="font-family:var(--mono);font-size:12px">' + b.stake + '</td>'
                 + '<td style="white-space:nowrap">' + resultBtns + '</td>'
                 + '<td class="r" style="font-family:var(--mono);font-size:12px;font-weight:700;color:' + pnlColor + '">' + pnlStr + '</td>'
@@ -6003,6 +6030,7 @@
                 dataView.style.display = 'none';
                 document.getElementById('port-refresh-btn').style.display = 'none';
                 document.getElementById('port-disconnect-btn').style.display = 'none';
+                loadBetLog();
                 return;
             }
 
