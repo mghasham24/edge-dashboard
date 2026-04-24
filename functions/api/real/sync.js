@@ -536,7 +536,14 @@ export async function onRequestGet(context) {
         homeKey: (game.homeTeam?.name || game.homeTeamKey)
       }), { headers: { 'Content-Type': 'application/json' } });
     }
-    // Full refresh — start clean so failed fetches don't leave stale keys from the old cache blob
+    // Build set of game keys RS is serving today (used to prune stale cache entries)
+    const todayGameKeys = new Set(games.map(g => {
+      const a = (g.awayTeam && g.awayTeam.name) || g.awayTeamKey;
+      const h = (g.homeTeam && g.homeTeam.name) || g.homeTeamKey;
+      return a && h ? a + ' @ ' + h : null;
+    }).filter(Boolean));
+
+    // Full refresh — start clean so stale keys from old cache blobs can't bleed in
     const freshMap = {};
     const results = [];
     for (let i = 0; i < games.length; i++) {
@@ -561,7 +568,24 @@ export async function onRequestGet(context) {
         if (result.startMs) freshMap[result.gameKey + '__startMs'] = result.startMs;
       }
     }
-    // Write back to cache — only freshMap, no stale keys carried over
+
+    // For games that failed to fetch, fall back to cached data only if it's a valid today game
+    // (prevents wrong-game bleed while keeping data for rate-limited / timed-out games)
+    const todayMidnightMs = new Date(new Date().toISOString().slice(0, 10)).getTime();
+    for (const gk of todayGameKeys) {
+      if (!freshMap[gk] && marketMap[gk]) {
+        const cachedStart = marketMap[gk + '__startMs'];
+        // Only reuse if cached entry has no startMs (can't tell) or startMs is from today onwards
+        if (!cachedStart || cachedStart >= todayMidnightMs) {
+          freshMap[gk] = marketMap[gk];
+          ['__lines', '__gid', '__sport', '__startMs'].forEach(s => {
+            if (marketMap[gk + s] != null) freshMap[gk + s] = marketMap[gk + s];
+          });
+        }
+      }
+    }
+
+    // Write back to cache — freshMap only, no stale off-list keys carried over
     try {
       await env.DB.prepare(
         'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at'
