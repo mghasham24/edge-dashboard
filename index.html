@@ -7753,7 +7753,12 @@
                                 var isYes = r.ps === 'A';
                                 var match = outcomes.find(function(o) { if (!o.label) return false; return isYes ? o.label.toLowerCase() === 'yes' : o.label.toLowerCase() === 'no'; });
                                 if (!match) match = isYes ? outcomes[1] : outcomes[0];
-                                if (match && match.pct != null) { preds[r.id] = String(match.pct); if (match.probability != null) probsExact[r.id] = match.probability; if (mktData.volumeDisplay) vols[r.id] = mktData.volumeDisplay; }
+                                if (match && match.pct != null) {
+                                    var pct = parseFloat(match.pct);
+                                    var gameStarted = r.cm && r.cm.getTime() < Date.now();
+                                    if (gameStarted && (pct <= 3 || pct >= 97)) return;
+                                    preds[r.id] = String(match.pct); if (match.probability != null) probsExact[r.id] = match.probability; if (mktData.volumeDisplay) vols[r.id] = mktData.volumeDisplay;
+                                }
                             });
                         }
                         renderTable();

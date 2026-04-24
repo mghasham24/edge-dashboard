@@ -490,6 +490,9 @@ export async function onRequestGet(context) {
           });
           for (const result of bgResults) {
             if (result && !result._err) {
+              // Prefer the later-starting game when same matchup plays consecutive days
+              const existingStartMs = bgMap[result.gameKey + '__startMs'];
+              if (existingStartMs && result.startMs && result.startMs < existingStartMs) continue;
               bgMap[result.gameKey] = result.markets;
               if (result.lines && Object.keys(result.lines).length) bgMap[result.gameKey + '__lines'] = result.lines;
               if (result.gameId) bgMap[result.gameKey + '__gid'] = result.gameId;
@@ -544,6 +547,9 @@ export async function onRequestGet(context) {
     }
     for (const result of results) {
       if (result && !result._err) {
+        // Prefer the later-starting game when same matchup plays consecutive days
+        const existingStartMs = marketMap[result.gameKey + '__startMs'];
+        if (existingStartMs && result.startMs && result.startMs < existingStartMs) continue;
         marketMap[result.gameKey] = result.markets;
         if (result.lines && Object.keys(result.lines).length) {
           marketMap[result.gameKey + '__lines'] = result.lines;
