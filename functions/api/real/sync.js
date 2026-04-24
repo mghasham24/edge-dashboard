@@ -450,7 +450,7 @@ export async function onRequestGet(context) {
     // Two-phase fetch: return cached data immediately, fetch missing games in background
     const marketMap = {};
     const now = Math.floor(Date.now() / 1000);
-    const cacheKey = 'real_sync_' + realSport + '_v8'; // v8: filter isClosed/final games; dateTime as primary start field
+    const cacheKey = 'real_sync_' + realSport + '_v9'; // v9: invalidate stale game-key blobs from partial fetch failures
     const TTL = 15;
 
     // Phase 1: Load cache
@@ -536,6 +536,8 @@ export async function onRequestGet(context) {
         homeKey: (game.homeTeam?.name || game.homeTeamKey)
       }), { headers: { 'Content-Type': 'application/json' } });
     }
+    // Full refresh — start clean so failed fetches don't leave stale keys from the old cache blob
+    const freshMap = {};
     const results = [];
     for (let i = 0; i < games.length; i++) {
       const result = await Promise.race([
@@ -548,26 +550,25 @@ export async function onRequestGet(context) {
     for (const result of results) {
       if (result && !result._err) {
         // Prefer the later-starting game when same matchup plays consecutive days
-        const existingStartMs = marketMap[result.gameKey + '__startMs'];
+        const existingStartMs = freshMap[result.gameKey + '__startMs'];
         if (existingStartMs && result.startMs && result.startMs < existingStartMs) continue;
-        marketMap[result.gameKey] = result.markets;
+        freshMap[result.gameKey] = result.markets;
         if (result.lines && Object.keys(result.lines).length) {
-          marketMap[result.gameKey + '__lines'] = result.lines;
+          freshMap[result.gameKey + '__lines'] = result.lines;
         }
-        if (result.gameId) marketMap[result.gameKey + '__gid'] = result.gameId;
-        if (result.rsSport) marketMap[result.gameKey + '__sport'] = result.rsSport;
-        if (result.startMs) marketMap[result.gameKey + '__startMs'] = result.startMs;
+        if (result.gameId) freshMap[result.gameKey + '__gid'] = result.gameId;
+        if (result.rsSport) freshMap[result.gameKey + '__sport'] = result.rsSport;
+        if (result.startMs) freshMap[result.gameKey + '__startMs'] = result.startMs;
       }
     }
-
-    // Write back to cache
+    // Write back to cache — only freshMap, no stale keys carried over
     try {
       await env.DB.prepare(
         'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at'
-      ).bind(cacheKey, JSON.stringify(marketMap), now).run();
+      ).bind(cacheKey, JSON.stringify(freshMap), now).run();
     } catch(e) {}
 
-    return new Response(JSON.stringify({ ok: true, markets: marketMap }), {
+    return new Response(JSON.stringify({ ok: true, markets: freshMap }), {
       headers: { 'Content-Type': 'application/json' }
     });
 
