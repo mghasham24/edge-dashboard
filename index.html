@@ -5264,6 +5264,8 @@
     var _trkBets = [];
 
     async function loadBetLog() {
+        // Auto-settle any pending bets whose games have ended
+        try { await fetch('/api/bets/settle', { method: 'POST', credentials: 'same-origin' }); } catch(e) {}
         var data;
         try {
             var res = await fetch('/api/bets/log', { credentials: 'same-origin' });
