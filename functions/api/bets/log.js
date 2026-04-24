@@ -7,19 +7,19 @@ export async function onRequest({ request, env }) {
 
   if (request.method === 'GET') {
     const rows = await env.DB.prepare(
-      'SELECT id, game, market, side, odds, line, real_pct, stake, sport, result, created_at FROM bet_log WHERE user_id=? ORDER BY created_at DESC LIMIT 200'
+      'SELECT id, game, market, side, odds, line, real_pct, game_time, stake, sport, result, created_at FROM bet_log WHERE user_id=? ORDER BY created_at DESC LIMIT 200'
     ).bind(session.user_id).all();
     return json({ ok: true, bets: rows.results || [] });
   }
 
   if (request.method === 'POST') {
     const b = await request.json().catch(() => ({}));
-    const { game, market, side, odds, line, real_pct, stake, sport } = b;
+    const { game, market, side, odds, line, real_pct, game_time, stake, sport } = b;
     if (!game || !market || !side || odds == null || !stake) return fail(400, 'Missing fields');
     const now = Math.floor(Date.now() / 1000);
     const res = await env.DB.prepare(
-      'INSERT INTO bet_log (user_id, game, market, side, odds, line, real_pct, stake, sport, result, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)'
-    ).bind(session.user_id, game, market, side, parseInt(odds), line ?? null, real_pct ?? null, parseFloat(stake), sport || null, 'pending', now).run();
+      'INSERT INTO bet_log (user_id, game, market, side, odds, line, real_pct, game_time, stake, sport, result, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
+    ).bind(session.user_id, game, market, side, parseInt(odds), line ?? null, real_pct ?? null, game_time ?? null, parseFloat(stake), sport || null, 'pending', now).run();
     return json({ ok: true, id: res.meta?.last_row_id });
   }
 
