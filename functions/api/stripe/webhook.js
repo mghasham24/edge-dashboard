@@ -124,6 +124,43 @@ export async function onRequestPost({ request, env }) {
       break;
     }
 
+    case 'invoice.created': {
+      // If this is a subscription renewal invoice with a charge, check referral credits.
+      // If the user has credits banked, apply a Stripe customer balance credit equal to
+      // the invoice amount so the net charge is $0, then decrement the credit counter.
+      if (obj.billing_reason !== 'subscription_cycle' && obj.billing_reason !== 'subscription_create') break;
+      if (!obj.customer || !obj.amount_due || obj.amount_due <= 0) break;
+      try {
+        const user = await env.DB.prepare(
+          'SELECT id, referral_credits FROM users WHERE stripe_customer_id=?'
+        ).bind(obj.customer).first();
+        if (!user || !user.referral_credits || user.referral_credits <= 0) break;
+
+        // Apply a credit to the Stripe customer balance — Stripe auto-applies on finalization
+        const creditRes = await fetch(
+          'https://api.stripe.com/v1/customers/' + obj.customer + '/balance_transactions',
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': 'Bearer ' + env.STRIPE_SECRET_KEY,
+              'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: new URLSearchParams({
+              amount: String(-obj.amount_due), // negative = credit
+              currency: obj.currency || 'usd',
+              description: 'Referral reward — 1 free month'
+            }).toString()
+          }
+        );
+        if (!creditRes.ok) break;
+
+        await env.DB.prepare(
+          'UPDATE users SET referral_credits = referral_credits - 1 WHERE id=?'
+        ).bind(user.id).run();
+      } catch(e) {}
+      break;
+    }
+
     case 'invoice.payment_failed': {
       await env.DB.prepare(
         'UPDATE users SET plan=\'free\' WHERE stripe_customer_id=?'
@@ -224,16 +261,25 @@ async function rewardReferrerForCustomer(stripeCustomerId, metadata, db) {
     if (!referrerId) return;
 
     const referrer = await db.prepare(
-      'SELECT id, plan, pro_expires_at FROM users WHERE id=?'
+      'SELECT id, plan, stripe_sub_id, pro_expires_at FROM users WHERE id=?'
     ).bind(referrerId).first();
     if (!referrer) return;
 
-    const now = Math.floor(Date.now() / 1000);
-    const base = (referrer.pro_expires_at && referrer.pro_expires_at > now)
-      ? referrer.pro_expires_at : now;
-    const newExpiry = base + 2592000; // +30 days
-    await db.prepare(
-      'UPDATE users SET plan=\'pro\', pro_expires_at=? WHERE id=?'
-    ).bind(newExpiry, referrer.id).run();
+    if (referrer.stripe_sub_id) {
+      // Referrer is a paying Stripe subscriber — bank a credit month so the
+      // invoice.created handler can apply it against their next renewal charge.
+      await db.prepare(
+        'UPDATE users SET referral_credits = referral_credits + 1 WHERE id=?'
+      ).bind(referrer.id).run();
+    } else {
+      // Referrer is on a free/manual pro plan — extend pro_expires_at directly.
+      const now = Math.floor(Date.now() / 1000);
+      const base = (referrer.pro_expires_at && referrer.pro_expires_at > now)
+        ? referrer.pro_expires_at : now;
+      const newExpiry = base + 2592000; // +30 days
+      await db.prepare(
+        'UPDATE users SET plan=\'pro\', pro_expires_at=? WHERE id=?'
+      ).bind(newExpiry, referrer.id).run();
+    }
   } catch(e) {}
 }
