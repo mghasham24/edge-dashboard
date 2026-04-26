@@ -450,7 +450,7 @@ export async function onRequestGet(context) {
     // Two-phase fetch: return cached data immediately, fetch missing games in background
     const marketMap = {};
     const now = Math.floor(Date.now() / 1000);
-    const cacheKey = 'real_sync_' + realSport + '_v9'; // v9: invalidate stale game-key blobs from partial fetch failures
+    const cacheKey = 'real_sync_' + realSport + '_v10'; // v10: require valid startMs for Phase 2 fallback, no null passthrough
     const TTL = 15;
 
     // Phase 1: Load cache
@@ -575,8 +575,8 @@ export async function onRequestGet(context) {
     for (const gk of todayGameKeys) {
       if (!freshMap[gk] && marketMap[gk]) {
         const cachedStart = marketMap[gk + '__startMs'];
-        // Only reuse if cached entry has no startMs (can't tell) or startMs is from today onwards
-        if (!cachedStart || cachedStart >= todayMidnightMs) {
+        // Only reuse if startMs is positively confirmed within today — null startMs is unverifiable, skip it
+        if (cachedStart && cachedStart >= todayMidnightMs && cachedStart < todayMidnightMs + 86400000) {
           freshMap[gk] = marketMap[gk];
           ['__lines', '__gid', '__sport', '__startMs'].forEach(s => {
             if (marketMap[gk + s] != null) freshMap[gk + s] = marketMap[gk + s];
