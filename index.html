@@ -2617,61 +2617,11 @@
                 <button onclick="disconnectRealSports()" id="port-disconnect-btn" style="background:var(--bg3);border:1px solid rgba(240,82,82,.3);color:var(--red);font-family:var(--sans);font-size:11px;font-weight:600;padding:7px 14px;border-radius:5px;cursor:pointer;letter-spacing:.04em;display:none">Disconnect</button>
             </div>
 
-            <!-- Not-connected view — manual bet tracker -->
+            <!-- Not-connected view -->
             <div id="portfolio-connect-view">
-                <div style="margin-bottom:20px">
-                    <div style="font-size:16px;font-weight:800;letter-spacing:.04em;color:var(--fg)">📈 Bet Tracker</div>
-                    <div style="font-size:11px;color:var(--muted2);margin-top:2px">Track your bets manually — click any row's checkbox to log a bet</div>
-                </div>
-                <div class="admin-stats" id="trk-stats-row" style="margin-bottom:24px">
-                    <div class="admin-stat"><div class="admin-stat-val" id="trk-pnl">-</div><div class="admin-stat-lbl">Total P&amp;L</div></div>
-                    <div class="admin-stat"><div class="admin-stat-val" id="trk-roi">-</div><div class="admin-stat-lbl">ROI</div></div>
-                    <div class="admin-stat"><div class="admin-stat-val" id="trk-winrate">-</div><div class="admin-stat-lbl">Win Rate</div></div>
-                    <div class="admin-stat"><div class="admin-stat-val" id="trk-count">-</div><div class="admin-stat-lbl">Total Bets</div></div>
-                </div>
-
-                <!-- Calendar -->
-                <div style="margin-bottom:28px">
-                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-                        <button onclick="trkCalPrev()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);border-radius:5px;padding:3px 10px;cursor:pointer;font-size:13px">&lsaquo;</button>
-                        <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2)" id="trk-cal-label"></div>
-                        <button onclick="trkCalNext()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);border-radius:5px;padding:3px 10px;cursor:pointer;font-size:13px">&rsaquo;</button>
-                        <div style="margin-left:auto;font-size:13px;font-weight:700;font-family:var(--mono)" id="trk-cal-monthly-total"></div>
-                    </div>
-                    <div id="trk-calendar"></div>
-                </div>
-
-                <!-- Needs Result -->
-                <div id="trk-needs-result-wrap" style="display:none;margin-bottom:24px">
-                    <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--yellow);margin-bottom:10px">⚠ Needs Result</div>
-                    <div class="admin-table-wrap">
-                        <table class="port-table" style="font-size:12px">
-                            <thead><tr><th>Game</th><th>Market</th><th>Side</th><th class="r">Odds</th><th class="r">Real%</th><th class="r">Stake</th><th>Result</th><th class="r">P&amp;L</th><th>Date</th><th></th></tr></thead>
-                            <tbody id="trk-needs-result-tbody"></tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <!-- Open Bets -->
-                <div style="margin-bottom:24px">
-                    <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:10px">Open Bets</div>
-                    <div class="admin-table-wrap">
-                        <table class="port-table" style="font-size:12px">
-                            <thead><tr><th>Game</th><th>Market</th><th>Side</th><th class="r">Odds</th><th class="r">Real%</th><th class="r">Stake</th><th>Result</th><th class="r">P&amp;L</th><th>Date</th><th></th></tr></thead>
-                            <tbody id="trk-open-tbody"><tr><td colspan="10" style="text-align:center;color:var(--muted);padding:16px 0;font-size:12px">No open bets — check the box on any row to log a bet</td></tr></tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <!-- Settled -->
-                <div>
-                    <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:10px">Settled</div>
-                    <div class="admin-table-wrap">
-                        <table class="port-table" style="font-size:12px">
-                            <thead><tr><th>Game</th><th>Market</th><th>Side</th><th class="r">Odds</th><th class="r">Real%</th><th class="r">Stake</th><th>Result</th><th class="r">P&amp;L</th><th>Date</th><th></th></tr></thead>
-                            <tbody id="tracker-tbody"><tr><td colspan="10" style="text-align:center;color:var(--muted);padding:16px 0;font-size:12px">No settled bets yet</td></tr></tbody>
-                        </table>
-                    </div>
+                <div class="port-connect-card">
+                    <h2>Portfolio</h2>
+                    <p style="color:var(--muted)">New connections are temporarily unavailable while we work on an official integration.</p>
                 </div>
             </div>
 
@@ -2854,63 +2804,8 @@
             </div>
         </div>
 
-        <!-- Bet Tracker panel -->
-        <div class="admin-panel" id="tracker-panel" style="display:none">
-            <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap">
-                <div style="flex:1;min-width:0">
-                    <div style="font-size:16px;font-weight:800;letter-spacing:.04em;color:var(--fg)">📈 Bet Tracker</div>
-                    <div style="font-size:11px;color:var(--muted2);margin-top:2px">Your manually tracked bets</div>
-                </div>
-                <button onclick="document.getElementById('tracker-tab-btn').click()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:7px 14px;border-radius:5px;cursor:pointer;letter-spacing:.04em">&larr; Back to Dashboard</button>
-            </div>
-            <div class="admin-stats" id="tracker-stats" style="margin-bottom:24px">
-                <div class="admin-stat"><div class="admin-stat-val" id="trk-pnl">-</div><div class="admin-stat-lbl">Total P&amp;L</div></div>
-                <div class="admin-stat"><div class="admin-stat-val" id="trk-roi">-</div><div class="admin-stat-lbl">ROI</div></div>
-                <div class="admin-stat"><div class="admin-stat-val" id="trk-winrate">-</div><div class="admin-stat-lbl">Win Rate</div></div>
-                <div class="admin-stat"><div class="admin-stat-val" id="trk-count">-</div><div class="admin-stat-lbl">Total Bets</div></div>
-            </div>
-            <div class="admin-table-wrap">
-                <table class="port-table" style="font-size:12px">
-                    <thead><tr>
-                        <th>Game</th><th>Market</th><th>Side</th>
-                        <th class="r">Odds</th><th class="r">Stake</th>
-                        <th>Result</th><th class="r">P&amp;L</th><th>Date</th><th></th>
-                    </tr></thead>
-                    <tbody id="tracker-tbody"><tr><td colspan="9" style="text-align:center;color:var(--muted);padding:24px 0">No tracked bets yet — check the box on any row to start tracking</td></tr></tbody>
-                </table>
-            </div>
-        </div>
-
     </div>
     <!-- end #dashboard -->
-
-    <!-- Bet Track Popover -->
-    <div id="bet-track-popover" style="display:none;position:fixed;z-index:9999;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:18px;width:272px;box-shadow:0 8px 40px rgba(0,0,0,.55)">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-            <div style="font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted2)">Track Bet</div>
-            <button onclick="hideBetTrackPopover()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:20px;line-height:1;padding:0;margin:0">&times;</button>
-        </div>
-        <div id="btp-game" style="font-size:11px;color:var(--muted);margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>
-        <div style="display:flex;gap:5px;margin-bottom:12px;flex-wrap:wrap">
-            <span id="btp-mkt" style="font-size:11px;font-weight:700;background:var(--bg3);border-radius:4px;padding:3px 7px;color:var(--fg)"></span>
-            <span id="btp-side" style="font-size:11px;font-weight:600;background:var(--bg3);border-radius:4px;padding:3px 7px;color:var(--fg);max-width:170px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></span>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px">
-            <div>
-                <div style="font-size:10px;font-weight:600;color:var(--muted2);margin-bottom:4px;letter-spacing:.05em">FD ODDS</div>
-                <input id="btp-odds" type="number" style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border2);border-radius:5px;color:var(--fg);font-family:var(--mono);font-size:13px;font-weight:700;padding:7px 8px;outline:none">
-            </div>
-            <div>
-                <div style="font-size:10px;font-weight:600;color:var(--muted2);margin-bottom:4px;letter-spacing:.05em">REAL %</div>
-                <input id="btp-real-pct" type="number" min="0" max="100" step="0.1" placeholder="—" style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border2);border-radius:5px;color:var(--fg);font-family:var(--mono);font-size:13px;font-weight:700;padding:7px 8px;outline:none">
-            </div>
-            <div>
-                <div style="font-size:10px;font-weight:600;color:var(--muted2);margin-bottom:4px;letter-spacing:.05em">STAKE (Rax)</div>
-                <input id="btp-stake" type="number" min="1" placeholder="0" style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border2);border-radius:5px;color:var(--fg);font-family:var(--mono);font-size:13px;font-weight:700;padding:7px 8px;outline:none">
-            </div>
-        </div>
-        <button id="btp-submit-btn" onclick="submitBetTrack()" style="width:100%;background:var(--accent);border:none;border-radius:6px;color:#fff;font-family:var(--sans);font-size:13px;font-weight:700;padding:9px;cursor:pointer;letter-spacing:.04em">Track Bet</button>
-    </div>
 
     <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script>
     <script>
@@ -3414,7 +3309,6 @@
         localStorage.setItem('raxedge_bets_taken', JSON.stringify(betTaken));
         try { posthog.capture(betTaken[id] ? 'bet_checked' : 'bet_unchecked', { sport: currentSport }); } catch(e) {}
         if (betTaken[id] && exclusiveBets) applyExclusiveBet(id);
-        if (betTaken[id]) showBetTrackPopover(id);
         // Sync to server so state persists across devices
         fetch('/api/bets/taken', {
             method: 'POST',
@@ -5165,279 +5059,6 @@
         });
     }
 
-    // ── Bet Tracker ──────────────────────────────────────────────────────────
-
-    var _btpRowId = null;
-
-    function showBetTrackPopover(id) {
-        var r = rawRows.find(function(row) { return row.id === id; });
-        if (!r) return;
-        _btpRowId = id;
-        var mktLabel = r.mkt + (r.pt != null ? ' ' + (r.pt >= 0 ? '+' : '') + r.pt : '');
-        document.getElementById('btp-game').textContent = r.game;
-        document.getElementById('btp-mkt').textContent = mktLabel;
-        document.getElementById('btp-side').textContent = r.side;
-        document.getElementById('btp-odds').value = r.am;
-        document.getElementById('btp-stake').value = '';
-        var pr = preds[id];
-        var prVal = pr != null && pr !== '' ? parseFloat(pr).toFixed(1) : '';
-        document.getElementById('btp-real-pct').value = prVal;
-        var btn = document.getElementById('btp-submit-btn');
-        btn.disabled = false;
-        btn.textContent = 'Track Bet';
-        document.getElementById('bet-track-popover').style.display = 'block';
-        setTimeout(function() { document.addEventListener('click', _btpOutside); }, 60);
-        setTimeout(function() { var s = document.getElementById('btp-stake'); if (s) s.focus(); }, 80);
-    }
-
-    function _btpOutside(e) {
-        var pop = document.getElementById('bet-track-popover');
-        if (pop && !pop.contains(e.target)) hideBetTrackPopover();
-    }
-
-    function hideBetTrackPopover() {
-        document.getElementById('bet-track-popover').style.display = 'none';
-        document.removeEventListener('click', _btpOutside);
-        _btpRowId = null;
-    }
-
-    async function submitBetTrack() {
-        var id = _btpRowId;
-        if (!id) return;
-        var r = rawRows.find(function(row) { return row.id === id; });
-        if (!r) return;
-        var odds = parseInt(document.getElementById('btp-odds').value, 10);
-        var stake = parseFloat(document.getElementById('btp-stake').value);
-        if (!odds || isNaN(stake) || stake <= 0) {
-            document.getElementById('btp-stake').style.borderColor = 'var(--red)';
-            setTimeout(function() { document.getElementById('btp-stake').style.borderColor = ''; }, 1200);
-            return;
-        }
-        var btn = document.getElementById('btp-submit-btn');
-        btn.disabled = true; btn.textContent = 'Saving...';
-        var mktLabel = r.mkt + (r.pt != null ? ' ' + (r.pt >= 0 ? '+' : '') + r.pt : '');
-        var realPctRaw = parseFloat(document.getElementById('btp-real-pct').value);
-        var realPct = isNaN(realPctRaw) ? null : realPctRaw;
-        try {
-            await fetch('/api/bets/log', {
-                method: 'POST', credentials: 'same-origin',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ game: r.game, market: mktLabel, side: r.side, odds: odds, line: r.pt ?? null, real_pct: realPct, game_time: r.cm ? Math.floor(r.cm.getTime() / 1000) : null, stake: stake, sport: currentSport })
-            });
-        } catch(e) {}
-        hideBetTrackPopover();
-    }
-
-    function betPnl(odds, stake, result) {
-        if (result === 'pending') return null;
-        if (result === 'push') return 0;
-        if (result === 'loss') return -stake;
-        return odds > 0 ? stake * odds / 100 : stake * 100 / Math.abs(odds);
-    }
-
-    function showTrackerTab() {
-        document.getElementById('sport-tabs').style.display = 'none';
-        document.getElementById('feature-tabs').style.display = 'none';
-        document.querySelector('.controls').style.display = 'none';
-        document.querySelector('.status-bar').style.display = 'none';
-        document.querySelector('.table-wrap').style.display = 'none';
-        document.getElementById('mobile-cards').style.display = 'none';
-        document.getElementById('collapse-btn').style.display = 'none';
-        document.getElementById('refresh-btn').style.display = 'none';
-        document.getElementById('tracker-panel').style.display = 'block';
-        loadBetLog();
-    }
-
-    function hideTrackerTab() {
-        document.getElementById('sport-tabs').style.display = '';
-        document.getElementById('feature-tabs').style.display = '';
-        document.querySelector('.controls').style.display = '';
-        document.querySelector('.status-bar').style.display = '';
-        document.querySelector('.table-wrap').style.display = '';
-        document.getElementById('mobile-cards').style.display = '';
-        document.getElementById('collapse-btn').style.display = '';
-        document.getElementById('refresh-btn').style.display = '';
-        document.getElementById('tracker-panel').style.display = 'none';
-    }
-
-    var _trkCalYear = new Date().getFullYear(), _trkCalMonth = new Date().getMonth();
-    var _trkBets = [];
-
-    async function loadBetLog() {
-        // Auto-settle any pending bets whose games have ended
-        try { await fetch('/api/bets/settle', { method: 'POST', credentials: 'same-origin' }); } catch(e) {}
-        var data;
-        try {
-            var res = await fetch('/api/bets/log', { credentials: 'same-origin' });
-            data = await res.json();
-        } catch(e) {}
-        _trkBets = (data && data.bets) || [];
-        _trkCalYear = new Date().getFullYear();
-        _trkCalMonth = new Date().getMonth();
-        renderBetLog();
-    }
-
-    function renderBetLog() {
-        var bets = _trkBets;
-        var now = Math.floor(Date.now() / 1000);
-        var RESULT_COLORS = { pending: 'var(--muted)', win: 'var(--green)', loss: 'var(--red)', push: 'var(--yellow)' };
-
-        // Stats
-        var totalStaked = 0, totalPnl = 0, wins = 0, losses = 0;
-        bets.forEach(function(b) {
-            var pnl = betPnl(b.odds, b.stake, b.result);
-            if (pnl !== null) { totalPnl += pnl; totalStaked += b.stake; }
-            if (b.result === 'win') wins++;
-            if (b.result === 'loss') losses++;
-        });
-        var roi = totalStaked > 0 ? (totalPnl / totalStaked * 100) : null;
-        var wr  = (wins + losses) > 0 ? (wins / (wins + losses) * 100) : null;
-        var pnlEl = document.getElementById('trk-pnl');
-        pnlEl.textContent = totalStaked > 0 ? (totalPnl >= 0 ? '+' : '') + totalPnl.toFixed(1) + ' Rax' : '-';
-        pnlEl.style.color = totalPnl > 0 ? 'var(--green)' : totalPnl < 0 ? 'var(--red)' : '';
-        document.getElementById('trk-roi').textContent = roi !== null ? (roi >= 0 ? '+' : '') + roi.toFixed(1) + '%' : '-';
-        document.getElementById('trk-winrate').textContent = wr !== null ? wr.toFixed(0) + '%' : '-';
-        document.getElementById('trk-count').textContent = bets.length;
-
-        // Calendar
-        renderTrkCalendar();
-
-        // Separate buckets
-        var needsResult = bets.filter(function(b) { return b.result === 'pending' && b.game_time && b.game_time < now - 3 * 3600; });
-        var openBets    = bets.filter(function(b) { return b.result === 'pending' && !(b.game_time && b.game_time < now - 3 * 3600); });
-        var settled     = bets.filter(function(b) { return b.result !== 'pending'; });
-
-        function betRow(b, highlight) {
-            var pnl = betPnl(b.odds, b.stake, b.result);
-            var pnlStr = pnl === null ? '—' : (pnl >= 0 ? '+' : '') + pnl.toFixed(1);
-            var pnlColor = pnl === null ? 'var(--muted)' : pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--muted)';
-            var oddsStr = (b.odds >= 0 ? '+' : '') + b.odds;
-            var realPctStr = b.real_pct != null ? b.real_pct.toFixed(1) + '%' : '—';
-            var dt = new Date(b.created_at * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-            var RESULTS = b.result === 'pending' ? ['win', 'loss', 'push'] : ['win', 'loss', 'push'];
-            var resultBtns = RESULTS.map(function(rv) {
-                var active = b.result === rv;
-                var col = active ? RESULT_COLORS[rv] : (highlight && rv !== 'pending' ? 'var(--fg)' : 'var(--muted2)');
-                return '<button onclick="setBetResult(' + b.id + ',\'' + rv + '\')" style="background:' + (active ? 'var(--bg3)' : 'none') + ';border:1px solid ' + (active ? col : (highlight ? 'var(--border2)' : 'transparent')) + ';border-radius:4px;color:' + col + ';font-size:10px;font-weight:700;padding:2px 7px;cursor:pointer;font-family:var(--sans);letter-spacing:.04em;text-transform:uppercase">' + rv + '</button>';
-            }).join('');
-            var rowBg = highlight ? 'background:rgba(234,179,8,.06);' : '';
-            return '<tr style="' + rowBg + '">'
-                + '<td style="font-size:11px;max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + escHtml(b.game) + '">' + escHtml(b.game) + '</td>'
-                + '<td style="font-size:11px;color:var(--muted)">' + escHtml(b.market) + '</td>'
-                + '<td style="font-size:11px;max-width:90px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + escHtml(b.side) + '">' + escHtml(b.side) + '</td>'
-                + '<td class="r" style="font-family:var(--mono);font-size:12px;font-weight:700">' + oddsStr + '</td>'
-                + '<td class="r" style="font-family:var(--mono);font-size:12px;color:var(--muted)">' + realPctStr + '</td>'
-                + '<td class="r" style="font-family:var(--mono);font-size:12px">' + b.stake + '</td>'
-                + '<td style="white-space:nowrap">' + resultBtns + '</td>'
-                + '<td class="r" style="font-family:var(--mono);font-size:12px;font-weight:700;color:' + pnlColor + '">' + pnlStr + '</td>'
-                + '<td style="font-size:11px;color:var(--muted);white-space:nowrap">' + dt + '</td>'
-                + '<td><button onclick="deleteBetLog(' + b.id + ')" style="background:none;border:none;color:var(--muted2);cursor:pointer;font-size:14px;padding:2px 4px" title="Delete">&times;</button></td>'
-                + '</tr>';
-        }
-
-        var tableHead = '<thead><tr><th>Game</th><th>Market</th><th>Side</th><th class="r">Odds</th><th class="r">Real%</th><th class="r">Stake</th><th>Result</th><th class="r">P&L</th><th>Date</th><th></th></tr></thead>';
-
-        // Needs Result section
-        var nrWrap = document.getElementById('trk-needs-result-wrap');
-        if (needsResult.length) {
-            nrWrap.style.display = '';
-            document.getElementById('trk-needs-result-tbody').innerHTML = needsResult.map(function(b) { return betRow(b, true); }).join('');
-        } else {
-            nrWrap.style.display = 'none';
-        }
-
-        // Open bets
-        var openTbody = document.getElementById('trk-open-tbody');
-        openTbody.innerHTML = openBets.length
-            ? openBets.map(function(b) { return betRow(b, false); }).join('')
-            : '<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:16px 0;font-size:12px">No open bets — check the box on any row to log a bet</td></tr>';
-
-        // Settled
-        var settledTbody = document.getElementById('tracker-tbody');
-        settledTbody.innerHTML = settled.length
-            ? settled.map(function(b) { return betRow(b, false); }).join('')
-            : '<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:16px 0;font-size:12px">No settled bets yet</td></tr>';
-    }
-
-    function renderTrkCalendar() {
-        var calEl = document.getElementById('trk-calendar');
-        if (!calEl) return;
-        var year = _trkCalYear, month = _trkCalMonth;
-        var label = new Date(year, month, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-        document.getElementById('trk-cal-label').textContent = label;
-
-        // Build daily P&L map from settled bets
-        var dailyMap = {};
-        _trkBets.forEach(function(b) {
-            if (b.result === 'pending') return;
-            var pnl = betPnl(b.odds, b.stake, b.result);
-            if (pnl === null) return;
-            var d = new Date(b.created_at * 1000);
-            var key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-            if (!dailyMap[key]) dailyMap[key] = { pnl: 0, bets: 0 };
-            dailyMap[key].pnl += pnl;
-            dailyMap[key].bets++;
-        });
-
-        // Monthly total
-        var monthPrefix = year + '-' + String(month + 1).padStart(2, '0') + '-';
-        var monthTotal = 0;
-        Object.keys(dailyMap).forEach(function(k) { if (k.startsWith(monthPrefix)) monthTotal += dailyMap[k].pnl; });
-        var mtEl = document.getElementById('trk-cal-monthly-total');
-        if (mtEl) {
-            mtEl.textContent = monthTotal !== 0 ? (monthTotal >= 0 ? '+' : '') + monthTotal.toFixed(1) + ' Rax' : '';
-            mtEl.style.color = monthTotal > 0 ? 'var(--green)' : monthTotal < 0 ? 'var(--red)' : 'var(--muted)';
-        }
-
-        var firstDay = new Date(year, month, 1).getDay();
-        var daysInMonth = new Date(year, month + 1, 0).getDate();
-        var days = ['Su','Mo','Tu','We','Th','Fr','Sa'];
-        var html = '<div class="port-cal">';
-        html += days.map(function(d) { return '<div class="port-cal-hdr">' + d + '</div>'; }).join('');
-        for (var i = 0; i < firstDay; i++) html += '<div class="port-cal-day empty"></div>';
-        for (var d2 = 1; d2 <= daysInMonth; d2++) {
-            var key = year + '-' + String(month + 1).padStart(2, '0') + '-' + String(d2).padStart(2, '0');
-            var dayData = dailyMap[key];
-            var cls = 'port-cal-day' + (dayData ? ' has-data' : '');
-            var inner = '<div class="port-cal-dn">' + d2 + '</div>';
-            if (dayData) {
-                var pColor = dayData.pnl >= 0 ? 'var(--green)' : 'var(--red)';
-                inner += '<div class="port-cal-pnl" style="color:' + pColor + '">' + (dayData.pnl >= 0 ? '+' : '') + dayData.pnl.toFixed(1) + '</div>';
-                inner += '<div class="port-cal-bets">' + dayData.bets + ' bet' + (dayData.bets > 1 ? 's' : '') + '</div>';
-            }
-            html += '<div class="' + cls + '">' + inner + '</div>';
-        }
-        html += '</div>';
-        calEl.innerHTML = html;
-    }
-
-    function trkCalPrev() { _trkCalMonth--; if (_trkCalMonth < 0) { _trkCalMonth = 11; _trkCalYear--; } renderTrkCalendar(); }
-    function trkCalNext() { _trkCalMonth++; if (_trkCalMonth > 11) { _trkCalMonth = 0; _trkCalYear++; } renderTrkCalendar(); }
-
-    async function setBetResult(id, result) {
-        try {
-            await fetch('/api/bets/log', {
-                method: 'PATCH', credentials: 'same-origin',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: id, result: result })
-            });
-        } catch(e) {}
-        loadBetLog();
-    }
-
-    async function deleteBetLog(id) {
-        try {
-            await fetch('/api/bets/log', {
-                method: 'DELETE', credentials: 'same-origin',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: id })
-            });
-        } catch(e) {}
-        loadBetLog();
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
-
     function showPortfolioTab() {
         document.getElementById('sport-tabs').style.display = 'none';
         document.getElementById('feature-tabs').style.display = 'none';
@@ -6153,7 +5774,6 @@
                 dataView.style.display = 'none';
                 document.getElementById('port-refresh-btn').style.display = 'none';
                 document.getElementById('port-disconnect-btn').style.display = 'none';
-                loadBetLog();
                 return;
             }
 
@@ -7319,31 +6939,6 @@
                 ftBar.appendChild(evTabBtn);
             } else {
                 ftBar.appendChild(document.getElementById('ev-tab-btn'));
-            }
-
-            // Bet Tracker tab
-            if (!document.getElementById('tracker-tab-btn')) {
-                var trkTabBtn = document.createElement('button');
-                trkTabBtn.className = 'feature-tab sport-tab';
-                trkTabBtn.textContent = '📈 Track';
-                trkTabBtn.id = 'tracker-tab-btn';
-                trkTabBtn.onclick = function() {
-                    var isActive = this.classList.contains('active');
-                    if (isActive) {
-                        this.classList.remove('active');
-                        this.textContent = '📈 Track';
-                        hideTrackerTab();
-                        loadOdds();
-                    } else {
-                        document.querySelectorAll('.sport-tab,.feature-tab').forEach(function(t) { t.classList.remove('active'); });
-                        this.classList.add('active');
-                        this.textContent = '<- Dashboard';
-                        showTrackerTab();
-                    }
-                };
-                ftBar.appendChild(trkTabBtn);
-            } else {
-                ftBar.appendChild(document.getElementById('tracker-tab-btn'));
             }
 
             // Portfolio tab
