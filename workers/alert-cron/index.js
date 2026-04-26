@@ -143,7 +143,7 @@ async function warmRSCache(fdKey, env, now, staleThreshold) {
     const rsKey = FDKEY_TO_RSKEY[fdKey] || fdKey;
     const cached = await env.DB.prepare(
       'SELECT fetched_at FROM odds_cache WHERE cache_key=?'
-    ).bind('real_sync_' + rsKey + '_v8').first();
+    ).bind('real_sync_' + rsKey + '_v9').first();
     if (cached && (now - cached.fetched_at) < staleThreshold) return;
     await fetch(`${env.SITE_URL}/api/real/sync?sport=${fdKey}&_cron_key=${env.CRON_SECRET}`, {
       signal: AbortSignal.timeout(15000)
@@ -155,7 +155,7 @@ async function loadRSCache(rsKey, env, now, staleThreshold) {
   try {
     const cached = await env.DB.prepare(
       'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
-    ).bind('real_sync_' + rsKey + '_v8').first();
+    ).bind('real_sync_' + rsKey + '_v9').first();
     const age = cached ? now - cached.fetched_at : null;
     if (cached && age < staleThreshold) {
       return { ...parseRSCache(JSON.parse(cached.data)), rsAge: age };
@@ -512,7 +512,7 @@ export default {
     const now = Math.floor(Date.now() / 1000);
     const FD_STALE_THRESHOLD = 30 * 60;
     const RS_STALE_THRESHOLD = 4 * 60 * 60;
-    const RS_WARM_THRESHOLD  = 5;
+    const RS_WARM_THRESHOLD  = 90;
     const RE_ALERT_EV_JUMP   = 4.0;
     // Midnight ET (UTC-4 during EDT) — taken bet suppression resets each calendar day
     const ET_OFFSET = 4 * 3600;
