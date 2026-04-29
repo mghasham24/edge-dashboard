@@ -109,6 +109,12 @@ export async function onRequestPost({ request, env }) {
             await env.DB.prepare(
               'UPDATE users SET plan=\'free\', stripe_sub_id=NULL, pro_expires_at=NULL, had_free_trial=0 WHERE stripe_customer_id=?'
             ).bind(obj.customer).run();
+          } else {
+            // Activate pro immediately — don't rely on subscription.created webhook firing successfully
+            const proExpiresAt = subData.trial_end || subData.current_period_end || null;
+            await env.DB.prepare(
+              'UPDATE users SET plan=\'pro\', stripe_sub_id=?, pro_expires_at=?, had_free_trial=1 WHERE stripe_customer_id=?'
+            ).bind(obj.subscription, proExpiresAt, obj.customer).run();
           }
         }
 
