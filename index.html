@@ -7577,9 +7577,12 @@
         var resolvedMap = {};
         marketKeys.forEach(function(k) {
             if (k.endsWith('__lines') || k.endsWith('__gid')) return;
-            var parts = k.split(' @ ');
+            // Strip " (2)" before resolving team names so the suffix doesn't corrupt abbreviation lookup
+            var dhSuffix = k.endsWith(' (2)') ? ' (2)' : '';
+            var kBase = dhSuffix ? k.slice(0, -4) : k;
+            var parts = kBase.split(' @ ');
             if (parts.length !== 2) return;
-            var resolvedKey = resolveTeamName(parts[0].trim()) + ' @ ' + resolveTeamName(parts[1].trim());
+            var resolvedKey = resolveTeamName(parts[0].trim()) + ' @ ' + resolveTeamName(parts[1].trim()) + dhSuffix;
             resolvedMap[resolvedKey] = k;
             resolvedMap[k] = k;
         });
@@ -8680,9 +8683,12 @@
             var resolvedMap = {};
             marketKeys.forEach(function(k) {
                 if (k.endsWith('__lines')) return;
-                var parts = k.split(' @ ');
+                // Strip " (2)" before resolving team names so the suffix doesn't corrupt abbreviation lookup
+                var dhSuffix = k.endsWith(' (2)') ? ' (2)' : '';
+                var kBase = dhSuffix ? k.slice(0, -4) : k;
+                var parts = kBase.split(' @ ');
                 if (parts.length !== 2) return;
-                var resolvedKey = resolveNickname(parts[0].trim()) + ' @ ' + resolveNickname(parts[1].trim());
+                var resolvedKey = resolveNickname(parts[0].trim()) + ' @ ' + resolveNickname(parts[1].trim()) + dhSuffix;
                 resolvedMap[resolvedKey] = k;
                 resolvedMap[k] = k; // also keep original
             });
