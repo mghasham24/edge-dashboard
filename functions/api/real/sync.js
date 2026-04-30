@@ -556,9 +556,34 @@ export async function onRequestGet(context) {
     }
     for (const result of results) {
       if (result && !result._err) {
-        // Prefer the later-starting game when same matchup plays consecutive days
         const existingStartMs = freshMap[result.gameKey + '__startMs'];
-        if (existingStartMs && result.startMs && result.startMs < existingStartMs) continue;
+        if (existingStartMs && result.startMs) {
+          const diff = Math.abs(result.startMs - existingStartMs);
+          if (diff < 43200000) {
+            // Same-day doubleheader — store both: earlier = primary key, later = key + ' (2)'
+            const dh2Key = result.gameKey + ' (2)';
+            const incomingIsEarlier = result.startMs < existingStartMs;
+            if (incomingIsEarlier) {
+              // Move existing (later) to (2) key, then store incoming as primary
+              freshMap[dh2Key] = freshMap[result.gameKey];
+              if (freshMap[result.gameKey + '__lines']) freshMap[dh2Key + '__lines'] = freshMap[result.gameKey + '__lines'];
+              if (freshMap[result.gameKey + '__gid'])   freshMap[dh2Key + '__gid']   = freshMap[result.gameKey + '__gid'];
+              if (freshMap[result.gameKey + '__sport']) freshMap[dh2Key + '__sport'] = freshMap[result.gameKey + '__sport'];
+              freshMap[dh2Key + '__startMs'] = existingStartMs;
+            } else {
+              // Incoming is later — store at (2) key, leave primary intact
+              freshMap[dh2Key] = result.markets;
+              if (result.lines && Object.keys(result.lines).length) freshMap[dh2Key + '__lines'] = result.lines;
+              if (result.gameId)  freshMap[dh2Key + '__gid']   = result.gameId;
+              if (result.rsSport) freshMap[dh2Key + '__sport'] = result.rsSport;
+              freshMap[dh2Key + '__startMs'] = result.startMs;
+              continue;
+            }
+          } else if (result.startMs < existingStartMs) {
+            // Next-day scenario — keep the later-starting game
+            continue;
+          }
+        }
         freshMap[result.gameKey] = result.markets;
         if (result.lines && Object.keys(result.lines).length) {
           freshMap[result.gameKey + '__lines'] = result.lines;

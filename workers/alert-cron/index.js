@@ -178,22 +178,39 @@ function normName(name) {
     .trim();
 }
 
-function findRSGameKey(fdAway, fdHome, rsGames) {
-  const directKey = fdAway + ' @ ' + fdHome;
-  if (rsGames[directKey]) return directKey;
+function findRSGameKey(fdAway, fdHome, rsGames, fdGameKey) {
+  const gameNumMatch = fdGameKey && fdGameKey.match(/\(Game (\d+)\)/);
+  const isDH2 = gameNumMatch && parseInt(gameNumMatch[1]) >= 2;
+  const baseKey = fdAway + ' @ ' + fdHome;
+  const dh2Key  = baseKey + ' (2)';
+
+  if (isDH2) {
+    if (rsGames[dh2Key])  return dh2Key;
+    if (rsGames[baseKey]) return baseKey;
+  } else {
+    if (rsGames[baseKey]) return baseKey;
+  }
+
   const nAway = normName(fdAway);
   const nHome = normName(fdHome);
+  let fallback = null;
   for (const rsKey of Object.keys(rsGames)) {
-    const parts = rsKey.split(' @ ');
+    const isVariant = rsKey.endsWith(' (2)');
+    if (!isDH2 && isVariant) continue;
+    const basePart = isVariant ? rsKey.slice(0, -4) : rsKey;
+    const parts = basePart.split(' @ ');
     if (parts.length !== 2) continue;
     const nRA = normName(parts[0]);
     const nRH = normName(parts[1]);
     if (
       (nRA.includes(nAway) || nAway.includes(nRA)) &&
       (nRH.includes(nHome) || nHome.includes(nRH))
-    ) return rsKey;
+    ) {
+      if (isDH2 && isVariant) return rsKey;
+      fallback = rsKey;
+    }
   }
-  return null;
+  return fallback;
 }
 
 // Find matching RS outcome by team/side name (normalized)
@@ -262,7 +279,7 @@ function processNativeML(sport, fdGames, rsGames, rsGameIds, rsGameSports, globa
     const commenceTime = game.cm ? Math.floor(new Date(game.cm).getTime() / 1000) : 0;
     if (commenceTime && commenceTime <= now) continue;
 
-    const rsKey = findRSGameKey(game.away, game.home, rsGames);
+    const rsKey = findRSGameKey(game.away, game.home, rsGames, gameKey);
     if (!rsKey) continue;
 
     const rsMarkets = rsGames[rsKey];
@@ -325,7 +342,7 @@ function processNativeNBA(sport, fdGames, rsGames, rsGameIds, rsGameSports, glob
     const commenceTime = game.cm ? Math.floor(new Date(game.cm).getTime() / 1000) : 0;
     if (commenceTime && commenceTime <= now) continue;
 
-    const rsKey = findRSGameKey(game.away, game.home, rsGames);
+    const rsKey = findRSGameKey(game.away, game.home, rsGames, gameKey);
     if (!rsKey) continue;
 
     const rsMarkets = rsGames[rsKey];
@@ -449,7 +466,7 @@ function processNativeFC(sport, fdGames, rsGames, rsGameIds, rsGameSports, globa
     const commenceTime = game.cm ? Math.floor(new Date(game.cm).getTime() / 1000) : 0;
     if (commenceTime && commenceTime <= now) continue;
 
-    const rsKey = findRSGameKey(game.away, game.home, rsGames);
+    const rsKey = findRSGameKey(game.away, game.home, rsGames, gameKey);
     if (!rsKey) continue;
 
     const rsMarkets = rsGames[rsKey];
@@ -645,7 +662,7 @@ export default {
           if (!fdAway || !fdHome) continue;
 
           const gameKey = fdAway + ' @ ' + fdHome;
-          const rsKey   = findRSGameKey(fdAway, fdHome, rsGames);
+          const rsKey   = findRSGameKey(fdAway, fdHome, rsGames, gameKey);
           if (!rsKey) continue;
 
           const rsMarkets = rsGames[rsKey];
