@@ -7593,28 +7593,25 @@
 
             // Try exact/resolved match first, then fuzzy fallback
             var realKey = resolvedMap[r.game];
-            // Doubleheader: FD uses "(Game N)" suffix, RS cache uses "(2)" for the later game
-            var _dhSkipFuzzy2 = false;
+            // Doubleheader: try (2) and base key first; fall through to fuzzy (RS uses short nicknames)
             if (!realKey) {
                 var _dhm2 = r.game.match(/\(Game (\d+)\)/);
                 if (_dhm2) {
-                    var _dhNum2 = parseInt(_dhm2[1]);
                     var _dhBase2 = r.game.replace(/\s*\(Game \d+\)/, "").trim();
+                    var _dhNum2 = parseInt(_dhm2[1]);
                     if (_dhNum2 >= 2) {
-                        if (resolvedMap[_dhBase2 + ' (2)']) {
-                            realKey = resolvedMap[_dhBase2 + ' (2)'];
-                        } else if (resolvedMap[_dhBase2]) {
-                            realKey = resolvedMap[_dhBase2]; // RS has one game for matchup — it's Game 2 (Game 1 is live/closed)
-                        } else {
-                            _dhSkipFuzzy2 = true;
-                        }
+                        if (resolvedMap[_dhBase2 + ' (2)']) realKey = resolvedMap[_dhBase2 + ' (2)'];
+                        else if (resolvedMap[_dhBase2]) realKey = resolvedMap[_dhBase2];
+                        // else: fall through to fuzzy — RS uses short nicknames so exact resolved fails
                     } else {
                         if (resolvedMap[_dhBase2]) realKey = resolvedMap[_dhBase2];
                     }
                 }
             }
-            if (!realKey && !_dhSkipFuzzy2) {
-                var fdTeams = r.game.split(' @ ');
+            if (!realKey) {
+                // Strip (Game N) so it doesn't pollute team name matching
+                var _fuzzyGame2 = r.game.replace(/\s*\(Game \d+\)/, '').trim();
+                var fdTeams = _fuzzyGame2.split(' @ ');
                 // Normalize accents so "Atlético" matches "Atletico Madrid"
                 function normSync(s) { return (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); }
                 var fdAway = normSync(fdTeams[0] || '');
@@ -8727,30 +8724,27 @@
                 // Try exact match first, then resolved abbreviation match
                 var realKey = resolvedMap[r.game];
 
-                // Doubleheader: FD uses "(Game N)" suffix, RS cache uses "(2)" for the later game
-                var _dhSkipFuzzy = false;
+                // Doubleheader: FD uses "(Game N)" suffix, RS uses one key per matchup (short nicknames)
+                // Try resolved base key and (2) key first; then fall through to fuzzy.
                 if (!realKey) {
                     var _dhm = r.game.match(/\(Game (\d+)\)/);
                     if (_dhm) {
-                        var _dhNum = parseInt(_dhm[1]);
                         var _dhBase = r.game.replace(/\s*\(Game \d+\)/, '').trim();
+                        var _dhNum = parseInt(_dhm[1]);
                         if (_dhNum >= 2) {
-                            if (resolvedMap[_dhBase + ' (2)']) {
-                                realKey = resolvedMap[_dhBase + ' (2)']; // RS returned both games
-                            } else if (resolvedMap[_dhBase]) {
-                                realKey = resolvedMap[_dhBase]; // RS has one game for matchup — it's Game 2 (Game 1 is live/closed)
-                            } else {
-                                _dhSkipFuzzy = true; // no RS data at all for this matchup
-                            }
+                            if (resolvedMap[_dhBase + ' (2)']) realKey = resolvedMap[_dhBase + ' (2)'];
+                            else if (resolvedMap[_dhBase]) realKey = resolvedMap[_dhBase];
+                            // else: fall through to fuzzy — RS uses short nicknames so exact resolved fails
                         } else {
                             if (resolvedMap[_dhBase]) realKey = resolvedMap[_dhBase];
                         }
                     }
                 }
 
-                // Fallback: fuzzy word match (blocked for Game 2 when RS data would be wrong)
-                if (!realKey && !_dhSkipFuzzy) {
-                    var fdTeams = r.game.split(' @ ');
+                // Fallback: fuzzy word match — strip (Game N) so it doesn't pollute team name matching
+                if (!realKey) {
+                    var _fuzzyGame = r.game.replace(/\s*\(Game \d+\)/, '').trim();
+                    var fdTeams = _fuzzyGame.split(' @ ');
                     var fdAway = norm(fdTeams[0] || '');
                     var fdHome = norm(fdTeams[1] || '');
                     var fdAwayLast = fdAway.split(' ').pop();
