@@ -218,13 +218,13 @@ export async function onRequestGet(context) {
           const name = entry.runnerNames[rd.selectionId] || entry.runnerNames[String(rd.selectionId)] || '';
           if (name) gamesMap[gameKey].ml[name] = price;
         });
-      } else {
-        // Market suspended (game live) — freeze last known pre-game odds from cache
-        // Try exact key first, then the other game-number variant from previous cache
+      } else if (mp.marketStatus === 'SUSPENDED') {
+        // Game in progress — freeze last known pre-game odds so the row stays visible
         const frozen = prevGames[gameKey] || prevGames[entry.away + ' @ ' + entry.home] || null;
         if (frozen && frozen.ml && Object.keys(frozen.ml).length) {
           gamesMap[gameKey] = { ...frozen, id: entry.eventId, away: entry.away, home: entry.home, cm: entry.openDate, live: true };
         }
+        // Any other status (RESULTED, SETTLED, CLOSED) = game over, let it drop off naturally
       }
     });
 
