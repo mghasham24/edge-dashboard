@@ -335,8 +335,30 @@ export async function onRequestGet(context) {
       });
     }
 
+    // Detect doubleheaders: same matchup appears twice → tag the later game with ' (2)' suffix
+    const _dhGroups = {};
+    games.forEach(g => {
+      const a = (g.awayTeam?.name) || g.awayTeamKey || '';
+      const h = (g.homeTeam?.name) || g.homeTeamKey || '';
+      const base = a + ' @ ' + h;
+      if (!_dhGroups[base]) _dhGroups[base] = [];
+      _dhGroups[base].push(g);
+    });
+    const gameKeySuffixes = new Map(); // gameId (string) → key suffix
+    Object.values(_dhGroups).forEach(group => {
+      if (group.length < 2) return;
+      group.sort((a, b) => {
+        const aMs = new Date(a.dateTime || a.commenceTime || 0).getTime();
+        const bMs = new Date(b.dateTime || b.commenceTime || 0).getTime();
+        return aMs - bMs;
+      });
+      group.forEach((g, i) => {
+        if (i > 0) gameKeySuffixes.set(String(g.id || g.gameId), ' (2)');
+      });
+    });
+
     // Fetch market data with retry logic — sequential to avoid rate limiting
-    async function fetchGameMarkets(game, tokenOffset) {
+    async function fetchGameMarkets(game, tokenOffset, suffix) {
       const gameId = game.id || game.gameId;
       // Handle fighters array (UFC/MMA) vs awayTeam/homeTeam (team sports)
       const fighters = game.fighters || game.athletes || game.players;
@@ -370,7 +392,7 @@ export async function onRequestGet(context) {
             if (mData.statusCode === 429 || mData.error === 'Too Many Requests') {
               break; // Skip this game, rely on merge cache
             }
-            const gameKey = awayKey + ' @ ' + homeKey;
+            const gameKey = awayKey + ' @ ' + homeKey + (suffix || '');
             // Build initials -> full name map for this fight
             const keyToName = {};
             if (game.awayTeam) keyToName[game.awayTeam.key] = game.awayTeam.name;
@@ -450,7 +472,7 @@ export async function onRequestGet(context) {
     // Two-phase fetch: return cached data immediately, fetch missing games in background
     const marketMap = {};
     const now = Math.floor(Date.now() / 1000);
-    const cacheKey = 'real_sync_' + realSport + '_v10'; // v10: require valid startMs for Phase 2 fallback, no null passthrough
+    const cacheKey = 'real_sync_' + realSport + '_v11'; // v11: doubleheader suffix baked into gameKey via gameKeySuffixes
     const TTL = 15;
 
     // Phase 1: Load cache
@@ -465,7 +487,8 @@ export async function onRequestGet(context) {
           const missingGames = games.filter(g => {
             const awayKey = (g.awayTeam && g.awayTeam.name) || g.awayTeamKey;
             const homeKey = (g.homeTeam && g.homeTeam.name) || g.homeTeamKey;
-            const gameKey = awayKey + ' @ ' + homeKey;
+            const suffix  = gameKeySuffixes.get(String(g.id || g.gameId)) || '';
+            const gameKey = awayKey + ' @ ' + homeKey + suffix;
             return !marketMap[gameKey] || !marketMap[gameKey + '__gid'];
           });
           if (missingGames.length === 0) {
@@ -478,7 +501,7 @@ export async function onRequestGet(context) {
           const bgResults = [];
           for (let i = 0; i < missingGames.length; i++) {
             const result = await Promise.race([
-              fetchGameMarkets(missingGames[i], i * 100),
+              fetchGameMarkets(missingGames[i], i * 100, gameKeySuffixes.get(String(missingGames[i].id || missingGames[i].gameId)) || ''),
               new Promise(r => setTimeout(() => r({ _err: 'timeout' }), 5000))
             ]);
             bgResults.push(result);
@@ -490,9 +513,6 @@ export async function onRequestGet(context) {
           });
           for (const result of bgResults) {
             if (result && !result._err) {
-              // Prefer the later-starting game when same matchup plays consecutive days
-              const existingStartMs = bgMap[result.gameKey + '__startMs'];
-              if (existingStartMs && result.startMs && result.startMs < existingStartMs) continue;
               bgMap[result.gameKey] = result.markets;
               if (result.lines && Object.keys(result.lines).length) bgMap[result.gameKey + '__lines'] = result.lines;
               if (result.gameId) bgMap[result.gameKey + '__gid'] = result.gameId;
@@ -540,7 +560,8 @@ export async function onRequestGet(context) {
     const todayGameKeys = new Set(games.map(g => {
       const a = (g.awayTeam && g.awayTeam.name) || g.awayTeamKey;
       const h = (g.homeTeam && g.homeTeam.name) || g.homeTeamKey;
-      return a && h ? a + ' @ ' + h : null;
+      const suffix = gameKeySuffixes.get(String(g.id || g.gameId)) || '';
+      return a && h ? a + ' @ ' + h + suffix : null;
     }).filter(Boolean));
 
     // Full refresh — start clean so stale keys from old cache blobs can't bleed in
@@ -548,7 +569,7 @@ export async function onRequestGet(context) {
     const results = [];
     for (let i = 0; i < games.length; i++) {
       const result = await Promise.race([
-        fetchGameMarkets(games[i], i * 100),
+        fetchGameMarkets(games[i], i * 100, gameKeySuffixes.get(String(games[i].id || games[i].gameId)) || ''),
         new Promise(r => setTimeout(() => r({ _err: 'timeout' }), 5000))
       ]);
       results.push(result);
@@ -556,34 +577,6 @@ export async function onRequestGet(context) {
     }
     for (const result of results) {
       if (result && !result._err) {
-        const existingStartMs = freshMap[result.gameKey + '__startMs'];
-        if (existingStartMs && result.startMs) {
-          const diff = Math.abs(result.startMs - existingStartMs);
-          if (diff < 43200000) {
-            // Same-day doubleheader — store both: earlier = primary key, later = key + ' (2)'
-            const dh2Key = result.gameKey + ' (2)';
-            const incomingIsEarlier = result.startMs < existingStartMs;
-            if (incomingIsEarlier) {
-              // Move existing (later) to (2) key, then store incoming as primary
-              freshMap[dh2Key] = freshMap[result.gameKey];
-              if (freshMap[result.gameKey + '__lines']) freshMap[dh2Key + '__lines'] = freshMap[result.gameKey + '__lines'];
-              if (freshMap[result.gameKey + '__gid'])   freshMap[dh2Key + '__gid']   = freshMap[result.gameKey + '__gid'];
-              if (freshMap[result.gameKey + '__sport']) freshMap[dh2Key + '__sport'] = freshMap[result.gameKey + '__sport'];
-              freshMap[dh2Key + '__startMs'] = existingStartMs;
-            } else {
-              // Incoming is later — store at (2) key, leave primary intact
-              freshMap[dh2Key] = result.markets;
-              if (result.lines && Object.keys(result.lines).length) freshMap[dh2Key + '__lines'] = result.lines;
-              if (result.gameId)  freshMap[dh2Key + '__gid']   = result.gameId;
-              if (result.rsSport) freshMap[dh2Key + '__sport'] = result.rsSport;
-              freshMap[dh2Key + '__startMs'] = result.startMs;
-              continue;
-            }
-          } else if (result.startMs < existingStartMs) {
-            // Next-day scenario — keep the later-starting game
-            continue;
-          }
-        }
         freshMap[result.gameKey] = result.markets;
         if (result.lines && Object.keys(result.lines).length) {
           freshMap[result.gameKey + '__lines'] = result.lines;
