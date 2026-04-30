@@ -7597,9 +7597,23 @@
                 if (_dhm2) {
                     var _dhNum2 = parseInt(_dhm2[1]);
                     var _dhBase2 = r.game.replace(/\s*\(Game \d+\)/, "").trim();
-                    var _dhRsKey2 = _dhNum2 >= 2 ? _dhBase2 + " (2)" : _dhBase2;
-                    if (resolvedMap[_dhRsKey2]) realKey = resolvedMap[_dhRsKey2];
-                    else if (_dhNum2 >= 2) _dhSkipFuzzy2 = true;
+                    if (_dhNum2 >= 2) {
+                        if (resolvedMap[_dhBase2 + ' (2)']) {
+                            realKey = resolvedMap[_dhBase2 + ' (2)'];
+                        } else if (resolvedMap[_dhBase2]) {
+                            var _rsMs2 = markets[resolvedMap[_dhBase2] + '__startMs'];
+                            var _fdMs2 = r.cm ? r.cm.getTime() : 0;
+                            if (_fdMs2 && _rsMs2 && _rsMs2 >= _fdMs2 - 5400000) {
+                                realKey = resolvedMap[_dhBase2];
+                            } else {
+                                _dhSkipFuzzy2 = true;
+                            }
+                        } else {
+                            _dhSkipFuzzy2 = true;
+                        }
+                    } else {
+                        if (resolvedMap[_dhBase2]) realKey = resolvedMap[_dhBase2];
+                    }
                 }
             }
             if (!realKey && !_dhSkipFuzzy2) {
@@ -8720,13 +8734,29 @@
                     if (_dhm) {
                         var _dhNum = parseInt(_dhm[1]);
                         var _dhBase = r.game.replace(/\s*\(Game \d+\)/, '').trim();
-                        var _dhRsKey = _dhNum >= 2 ? _dhBase + ' (2)' : _dhBase;
-                        if (resolvedMap[_dhRsKey]) realKey = resolvedMap[_dhRsKey];
-                        else if (_dhNum >= 2) _dhSkipFuzzy = true; // no (2) key → block fuzzy to avoid wrong Game 1 match
+                        if (_dhNum >= 2) {
+                            if (resolvedMap[_dhBase + ' (2)']) {
+                                realKey = resolvedMap[_dhBase + ' (2)']; // RS returned both games
+                            } else if (resolvedMap[_dhBase]) {
+                                // RS returned only one game — use it only if its start time
+                                // aligns with FD Game 2 (within 90 min). If much earlier it's Game 1 live data.
+                                var _rsMs = d.markets[resolvedMap[_dhBase] + '__startMs'];
+                                var _fdMs = r.cm ? r.cm.getTime() : 0;
+                                if (_fdMs && _rsMs && _rsMs >= _fdMs - 5400000) {
+                                    realKey = resolvedMap[_dhBase];
+                                } else {
+                                    _dhSkipFuzzy = true; // startMs mismatch → Game 1 live data, block fuzzy
+                                }
+                            } else {
+                                _dhSkipFuzzy = true; // no RS data at all for this matchup
+                            }
+                        } else {
+                            if (resolvedMap[_dhBase]) realKey = resolvedMap[_dhBase];
+                        }
                     }
                 }
 
-                // Fallback: fuzzy word match (skip for Game 2 when no (2) RS key exists)
+                // Fallback: fuzzy word match (blocked for Game 2 when RS data would be wrong)
                 if (!realKey && !_dhSkipFuzzy) {
                     var fdTeams = r.game.split(' @ ');
                     var fdAway = norm(fdTeams[0] || '');
