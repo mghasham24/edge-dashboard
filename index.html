@@ -7601,13 +7601,7 @@
                         if (resolvedMap[_dhBase2 + ' (2)']) {
                             realKey = resolvedMap[_dhBase2 + ' (2)'];
                         } else if (resolvedMap[_dhBase2]) {
-                            var _rsMs2 = markets[resolvedMap[_dhBase2] + '__startMs'];
-                            var _fdMs2 = r.cm ? r.cm.getTime() : 0;
-                            if (_fdMs2 && _rsMs2 && _rsMs2 >= _fdMs2 - 5400000) {
-                                realKey = resolvedMap[_dhBase2];
-                            } else {
-                                _dhSkipFuzzy2 = true;
-                            }
+                            realKey = resolvedMap[_dhBase2]; // RS has one game for matchup — it's Game 2 (Game 1 is live/closed)
                         } else {
                             _dhSkipFuzzy2 = true;
                         }
@@ -8738,15 +8732,7 @@
                             if (resolvedMap[_dhBase + ' (2)']) {
                                 realKey = resolvedMap[_dhBase + ' (2)']; // RS returned both games
                             } else if (resolvedMap[_dhBase]) {
-                                // RS returned only one game — use it only if its start time
-                                // aligns with FD Game 2 (within 90 min). If much earlier it's Game 1 live data.
-                                var _rsMs = d.markets[resolvedMap[_dhBase] + '__startMs'];
-                                var _fdMs = r.cm ? r.cm.getTime() : 0;
-                                if (_fdMs && _rsMs && _rsMs >= _fdMs - 5400000) {
-                                    realKey = resolvedMap[_dhBase];
-                                } else {
-                                    _dhSkipFuzzy = true; // startMs mismatch → Game 1 live data, block fuzzy
-                                }
+                                realKey = resolvedMap[_dhBase]; // RS has one game for matchup — it's Game 2 (Game 1 is live/closed)
                             } else {
                                 _dhSkipFuzzy = true; // no RS data at all for this matchup
                             }

@@ -40,7 +40,8 @@ function novig(amA, amB) {
 }
 
 function parseEventName(name) {
-  const m = name.match(/^(.+?)\s*(?:\([^)]*\))?\s*@\s*(.+?)\s*(?:\([^)]*\))?\s*$/);
+  const cleaned = name.replace(/\s*\([^)]*\)/g, '').trim();
+  const m = cleaned.match(/^(.+?)\s*@\s*(.+?)\s*$/);
   if (!m) return null;
   return { away: m[1].trim(), home: m[2].trim() };
 }
@@ -98,13 +99,32 @@ export async function onRequestGet(context) {
       return new Response(JSON.stringify({ ok: true, rfi: {} }), { headers: { 'Content-Type': 'application/json' } });
     }
 
+    // Detect doubleheaders: assign "(Game N)" suffix by openDate order
+    const parsedToday = todayEvents.map(e => {
+      const t = parseEventName(e.name);
+      return t ? { event: e, away: t.away, home: t.home } : null;
+    }).filter(Boolean);
+
+    const matchupGroups = {};
+    parsedToday.forEach(p => {
+      const base = p.away + ' @ ' + p.home;
+      if (!matchupGroups[base]) matchupGroups[base] = [];
+      matchupGroups[base].push(p);
+    });
+    const eventSuffix = {};
+    Object.values(matchupGroups).forEach(group => {
+      if (group.length < 2) return;
+      group.sort((a, b) => new Date(a.event.openDate) - new Date(b.event.openDate));
+      group.forEach((p, i) => { eventSuffix[p.event.eventId] = ' (Game ' + (i + 1) + ')'; });
+    });
+
     // Step 2: Fetch each event-page to collect RFI market ID + selection IDs
     const gameData = {}; // gameKey → { marketId, overSelId, underSelId }
 
-    for (let i = 0; i < todayEvents.length; i++) {
-      const event = todayEvents[i];
-      const teams = parseEventName(event.name);
-      if (!teams) continue;
+    for (let i = 0; i < parsedToday.length; i++) {
+      const { event, away, home } = parsedToday[i];
+      const suffix  = eventSuffix[event.eventId] || '';
+      const gameKey = away + ' @ ' + home + suffix;
 
       try {
         const evRes = await fetch(FD_EVENT_URL(event.eventId), { headers });
@@ -121,7 +141,6 @@ export async function onRequestGet(context) {
         const under = runners.find(r => r.runnerName === 'Under');
         if (!over || !under) continue;
 
-        const gameKey = teams.away + ' @ ' + teams.home;
         gameData[gameKey] = {
           marketId,
           overSelId:  over.selectionId,
@@ -129,7 +148,7 @@ export async function onRequestGet(context) {
         };
       } catch(e) {}
 
-      if (i < todayEvents.length - 1) await new Promise(r => setTimeout(r, 150));
+      if (i < parsedToday.length - 1) await new Promise(r => setTimeout(r, 150));
     }
 
     if (!Object.keys(gameData).length) {
