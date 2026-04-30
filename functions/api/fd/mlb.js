@@ -34,8 +34,9 @@ function fail(status, msg) {
 }
 
 function parseEventName(name) {
-  // Capture optional suffix like "(Game 1)" after home team for doubleheader disambiguation
-  const m = name.match(/^(.+?)\s*(?:\([^)]*\))?\s*@\s*(.+?)\s*(\(Game \d+\))?\s*$/);
+  // Strip pitcher/matchup parens from both teams (e.g. "(B Elder)", "(C Sanchez)") but keep "(Game N)"
+  const cleaned = name.replace(/\s*\((?!Game \d+\))[^)]*\)/g, '');
+  const m = cleaned.match(/^(.+?)\s*@\s*(.+?)\s*(\(Game \d+\))?\s*$/);
   if (!m) return null;
   return { away: m[1].trim(), home: m[2].trim(), suffix: m[3] ? m[3].trim() : '' };
 }
