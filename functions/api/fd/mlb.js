@@ -34,11 +34,11 @@ function fail(status, msg) {
 }
 
 function parseEventName(name) {
-  // Strip pitcher/matchup parens from both teams (e.g. "(B Elder)", "(C Sanchez)") but keep "(Game N)"
-  const cleaned = name.replace(/\s*\((?!Game \d+\))[^)]*\)/g, '');
-  const m = cleaned.match(/^(.+?)\s*@\s*(.+?)\s*(\(Game \d+\))?\s*$/);
+  // Strip all parentheticals (pitchers, labels) — game numbers are assigned by time ordering
+  const cleaned = name.replace(/\s*\([^)]*\)/g, '').trim();
+  const m = cleaned.match(/^(.+?)\s*@\s*(.+?)\s*$/);
   if (!m) return null;
-  return { away: m[1].trim(), home: m[2].trim(), suffix: m[3] ? m[3].trim() : '' };
+  return { away: m[1].trim(), home: m[2].trim() };
 }
 
 export async function onRequestGet(context) {
@@ -111,14 +111,40 @@ export async function onRequestGet(context) {
       });
     }
 
+    // Parse clean team names for all events, then assign (Game N) by start time for doubleheaders
+    const parsedToday = todayEvents.map(e => {
+      const t = parseEventName(e.name);
+      return t ? { event: e, away: t.away, home: t.home } : null;
+    }).filter(Boolean);
+
+    const matchupGroups = {};
+    parsedToday.forEach(p => {
+      const base = p.away + ' @ ' + p.home;
+      if (!matchupGroups[base]) matchupGroups[base] = [];
+      matchupGroups[base].push(p);
+    });
+    const eventSuffix = {};
+    Object.values(matchupGroups).forEach(group => {
+      if (group.length < 2) return;
+      group.sort((a, b) => new Date(a.event.openDate) - new Date(b.event.openDate));
+      group.forEach((p, i) => { eventSuffix[p.event.eventId] = '(Game ' + (i + 1) + ')'; });
+    });
+
+    // Load previous cache so we can freeze odds for live games with suspended markets
+    let prevGames = {};
+    try {
+      const prev = await env.DB.prepare('SELECT data FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
+      if (prev) prevGames = JSON.parse(prev.data).games || {};
+    } catch(e) {}
+
     // Fetch event-pages to collect ML market IDs + runner names
     const gameData = {};
     const eventPageDebug = [];
 
-    for (let i = 0; i < todayEvents.length; i++) {
-      const event = todayEvents[i];
-      const teams = parseEventName(event.name);
-      if (!teams) { eventPageDebug.push({ name: event.name, err: 'parse failed' }); continue; }
+    for (let i = 0; i < parsedToday.length; i++) {
+      const { event, away, home } = parsedToday[i];
+      const suffix  = eventSuffix[event.eventId] || '';
+      const gameKey = away + ' @ ' + home + (suffix ? ' ' + suffix : '');
 
       try {
         const evRes = await fetch(FD_EVENT_URL(event.eventId), { headers });
@@ -126,8 +152,7 @@ export async function onRequestGet(context) {
         const evData = await evRes.json();
 
         const markets = evData?.attachments?.markets || {};
-        const gameKey = teams.away + ' @ ' + teams.home + (teams.suffix ? ' ' + teams.suffix : '');
-        const entry = { eventId: event.eventId, openDate: event.openDate, away: teams.away, home: teams.home, runnerNames: {} };
+        const entry = { eventId: event.eventId, openDate: event.openDate, away, home, runnerNames: {} };
         const marketTypes = Object.values(markets).map(m => m.marketType);
 
         Object.entries(markets).forEach(function([marketId, mkt]) {
@@ -144,7 +169,7 @@ export async function onRequestGet(context) {
         if (entry.mlId) gameData[gameKey] = entry;
       } catch(e) { eventPageDebug.push({ name: event.name, err: e.message }); }
 
-      if (i < todayEvents.length - 1) await new Promise(r => setTimeout(r, 150));
+      if (i < parsedToday.length - 1) await new Promise(r => setTimeout(r, 150));
     }
 
     if (debugMode === '2') {
@@ -181,17 +206,26 @@ export async function onRequestGet(context) {
     (Array.isArray(marketPricesList) ? marketPricesList : []).forEach(function(mp) {
       const gameKey = marketToGame[mp.marketId];
       pricesDebug.push({ marketId: mp.marketId, gameKey: gameKey || '?', marketStatus: mp.marketStatus });
-      if (!gameKey || mp.marketStatus !== 'OPEN') return;
       const entry = gameData[gameKey];
-      if (!gamesMap[gameKey]) gamesMap[gameKey] = { id: entry.eventId, away: entry.away, home: entry.home, cm: entry.openDate, ml: {} };
+      if (!gameKey || !entry) return;
 
-      (mp.runnerDetails || []).forEach(function(rd) {
-        if (rd.runnerStatus !== 'ACTIVE') return;
-        const price = rd.winRunnerOdds?.americanDisplayOdds?.americanOddsInt;
-        if (price == null) return;
-        const name = entry.runnerNames[rd.selectionId] || entry.runnerNames[String(rd.selectionId)] || '';
-        if (name) gamesMap[gameKey].ml[name] = price;
-      });
+      if (mp.marketStatus === 'OPEN') {
+        if (!gamesMap[gameKey]) gamesMap[gameKey] = { id: entry.eventId, away: entry.away, home: entry.home, cm: entry.openDate, ml: {} };
+        (mp.runnerDetails || []).forEach(function(rd) {
+          if (rd.runnerStatus !== 'ACTIVE') return;
+          const price = rd.winRunnerOdds?.americanDisplayOdds?.americanOddsInt;
+          if (price == null) return;
+          const name = entry.runnerNames[rd.selectionId] || entry.runnerNames[String(rd.selectionId)] || '';
+          if (name) gamesMap[gameKey].ml[name] = price;
+        });
+      } else {
+        // Market suspended (game live) — freeze last known pre-game odds from cache
+        // Try exact key first, then the other game-number variant from previous cache
+        const frozen = prevGames[gameKey] || prevGames[entry.away + ' @ ' + entry.home] || null;
+        if (frozen && frozen.ml && Object.keys(frozen.ml).length) {
+          gamesMap[gameKey] = { ...frozen, id: entry.eventId, away: entry.away, home: entry.home, cm: entry.openDate, live: true };
+        }
+      }
     });
 
     if (debugMode === '3') {
