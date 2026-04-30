@@ -34,9 +34,10 @@ function fail(status, msg) {
 }
 
 function parseEventName(name) {
-  const m = name.match(/^(.+?)\s*(?:\([^)]*\))?\s*@\s*(.+?)\s*(?:\([^)]*\))?\s*$/);
+  // Capture optional suffix like "(Game 1)" after home team for doubleheader disambiguation
+  const m = name.match(/^(.+?)\s*(?:\([^)]*\))?\s*@\s*(.+?)\s*(\(Game \d+\))?\s*$/);
   if (!m) return null;
-  return { away: m[1].trim(), home: m[2].trim() };
+  return { away: m[1].trim(), home: m[2].trim(), suffix: m[3] ? m[3].trim() : '' };
 }
 
 export async function onRequestGet(context) {
@@ -124,7 +125,7 @@ export async function onRequestGet(context) {
         const evData = await evRes.json();
 
         const markets = evData?.attachments?.markets || {};
-        const gameKey = teams.away + ' @ ' + teams.home;
+        const gameKey = teams.away + ' @ ' + teams.home + (teams.suffix ? ' ' + teams.suffix : '');
         const entry = { eventId: event.eventId, openDate: event.openDate, away: teams.away, home: teams.home, runnerNames: {} };
         const marketTypes = Object.values(markets).map(m => m.marketType);
 
