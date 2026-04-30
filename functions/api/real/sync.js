@@ -357,6 +357,23 @@ export async function onRequestGet(context) {
       });
     });
 
+    if (debugMode === 'dh') {
+      // Return DH detection results + current cache keys for diagnosis
+      const generatedKeys = games.map(g => {
+        const a = (g.awayTeam?.name) || g.awayTeamKey || '';
+        const h = (g.homeTeam?.name) || g.homeTeamKey || '';
+        const suffix = gameKeySuffixes.get(String(g.id || g.gameId)) || '';
+        return { id: String(g.id || g.gameId), key: a + ' @ ' + h + suffix, dateTime: g.dateTime || g.commenceTime };
+      });
+      let cacheKeys = [];
+      try {
+        const cr = await env.DB.prepare('SELECT data FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
+        if (cr) cacheKeys = Object.keys(JSON.parse(cr.data));
+      } catch(e) {}
+      const dhGroups = Object.entries(_dhGroups).map(([base, group]) => ({ base, count: group.length, ids: group.map(g => String(g.id || g.gameId)) }));
+      return new Response(JSON.stringify({ dhGroups, generatedKeys, cacheKeys }), { headers: { 'Content-Type': 'application/json' } });
+    }
+
     // Fetch market data with retry logic — sequential to avoid rate limiting
     async function fetchGameMarkets(game, tokenOffset, suffix) {
       const gameId = game.id || game.gameId;
@@ -472,7 +489,7 @@ export async function onRequestGet(context) {
     // Two-phase fetch: return cached data immediately, fetch missing games in background
     const marketMap = {};
     const now = Math.floor(Date.now() / 1000);
-    const cacheKey = 'real_sync_' + realSport + '_v11'; // v11: doubleheader suffix baked into gameKey via gameKeySuffixes
+    const cacheKey = 'real_sync_' + realSport + '_v12'; // v12: resolvedMap DH suffix fix
     const TTL = 15;
 
     // Phase 1: Load cache
