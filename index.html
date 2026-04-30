@@ -7578,6 +7578,16 @@
 
             // Try exact/resolved match first, then fuzzy fallback
             var realKey = resolvedMap[r.game];
+            // Doubleheader: FD uses "(Game N)" suffix, RS cache uses "(2)" for the later game
+            if (!realKey) {
+                var _dhm2 = r.game.match(/\(Game (\d+)\)/);
+                if (_dhm2) {
+                    var _dhNum2 = parseInt(_dhm2[1]);
+                    var _dhBase2 = r.game.replace(/\s*\(Game \d+\)/, "").trim();
+                    var _dhRsKey2 = _dhNum2 >= 2 ? _dhBase2 + " (2)" : _dhBase2;
+                    if (resolvedMap[_dhRsKey2]) realKey = resolvedMap[_dhRsKey2];
+                }
+            }
             if (!realKey) {
                 var fdTeams = r.game.split(' @ ');
                 // Normalize accents so "Atlético" matches "Atletico Madrid"
@@ -8684,6 +8694,17 @@
             rawRows.forEach(function(r) {
                 // Try exact match first, then resolved abbreviation match
                 var realKey = resolvedMap[r.game];
+
+                // Doubleheader: FD uses "(Game N)" suffix, RS cache uses "(2)" for the later game
+                if (!realKey) {
+                    var _dhm = r.game.match(/\(Game (\d+)\)/);
+                    if (_dhm) {
+                        var _dhNum = parseInt(_dhm[1]);
+                        var _dhBase = r.game.replace(/\s*\(Game \d+\)/, '').trim();
+                        var _dhRsKey = _dhNum >= 2 ? _dhBase + ' (2)' : _dhBase;
+                        if (resolvedMap[_dhRsKey]) realKey = resolvedMap[_dhRsKey];
+                    }
+                }
 
                 // Fallback: fuzzy word match
                 if (!realKey) {
