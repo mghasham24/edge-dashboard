@@ -3992,10 +3992,22 @@
             iconEl.innerHTML = sportLogoHtml(currentSport, gameRows[0] && gameRows[0].league, 20);
             hdr.appendChild(iconEl);
 
+            var _mobDhMatch = (teams[1] || '').match(/^(.*?)\s*(\(Game (\d+)\))\s*$/);
+            var _mobHomeTeam = _mobDhMatch ? _mobDhMatch[1].trim() : (teams[1] || '');
+            var _mobGameNum  = _mobDhMatch ? _mobDhMatch[3] : null;
+
             var title = document.createElement('span');
             title.className = 'gc-title';
-            title.innerHTML = '<div style="display:grid;grid-template-columns:auto minmax(0,1fr) auto auto minmax(0,1fr);align-items:center;gap:4px;flex:1;min-width:0">' + teamLogoHtml(teams[0], 22) + teamNameHtml(teams[0] || '') + '<span style="color:var(--muted2);font-weight:400;text-align:center;padding:0 2px">@</span>' + teamLogoHtml(teams[1], 22) + teamNameHtml(teams[1] || '') + '</div>';
+            title.innerHTML = '<div style="display:grid;grid-template-columns:auto minmax(0,1fr) auto auto minmax(0,1fr);align-items:center;gap:4px;flex:1;min-width:0">' + teamLogoHtml(teams[0], 22) + teamNameHtml(teams[0] || '') + '<span style="color:var(--muted2);font-weight:400;text-align:center;padding:0 2px">@</span>' + teamLogoHtml(_mobHomeTeam, 22) + teamNameHtml(_mobHomeTeam) + '</div>';
             hdr.appendChild(title);
+
+            if (_mobGameNum) {
+                var _gnBadge = document.createElement('span');
+                _gnBadge.className = 'gh-badge';
+                _gnBadge.style.cssText = 'flex-shrink:0;margin-right:4px;background:rgba(255,255,255,0.1);color:var(--muted2);font-size:10px;letter-spacing:.06em';
+                _gnBadge.textContent = 'GAME ' + _mobGameNum;
+                hdr.appendChild(_gnBadge);
+            }
 
             var arrow = document.createElement('span');
             arrow.className = 'gc-arrow' + (isC ? '' : ' up');
@@ -7579,6 +7591,7 @@
             // Try exact/resolved match first, then fuzzy fallback
             var realKey = resolvedMap[r.game];
             // Doubleheader: FD uses "(Game N)" suffix, RS cache uses "(2)" for the later game
+            var _dhSkipFuzzy2 = false;
             if (!realKey) {
                 var _dhm2 = r.game.match(/\(Game (\d+)\)/);
                 if (_dhm2) {
@@ -7586,9 +7599,10 @@
                     var _dhBase2 = r.game.replace(/\s*\(Game \d+\)/, "").trim();
                     var _dhRsKey2 = _dhNum2 >= 2 ? _dhBase2 + " (2)" : _dhBase2;
                     if (resolvedMap[_dhRsKey2]) realKey = resolvedMap[_dhRsKey2];
+                    else if (_dhNum2 >= 2) _dhSkipFuzzy2 = true;
                 }
             }
-            if (!realKey) {
+            if (!realKey && !_dhSkipFuzzy2) {
                 var fdTeams = r.game.split(' @ ');
                 // Normalize accents so "Atlético" matches "Atletico Madrid"
                 function normSync(s) { return (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); }
@@ -8700,6 +8714,7 @@
                 var realKey = resolvedMap[r.game];
 
                 // Doubleheader: FD uses "(Game N)" suffix, RS cache uses "(2)" for the later game
+                var _dhSkipFuzzy = false;
                 if (!realKey) {
                     var _dhm = r.game.match(/\(Game (\d+)\)/);
                     if (_dhm) {
@@ -8707,11 +8722,12 @@
                         var _dhBase = r.game.replace(/\s*\(Game \d+\)/, '').trim();
                         var _dhRsKey = _dhNum >= 2 ? _dhBase + ' (2)' : _dhBase;
                         if (resolvedMap[_dhRsKey]) realKey = resolvedMap[_dhRsKey];
+                        else if (_dhNum >= 2) _dhSkipFuzzy = true; // no (2) key → block fuzzy to avoid wrong Game 1 match
                     }
                 }
 
-                // Fallback: fuzzy word match
-                if (!realKey) {
+                // Fallback: fuzzy word match (skip for Game 2 when no (2) RS key exists)
+                if (!realKey && !_dhSkipFuzzy) {
                     var fdTeams = r.game.split(' @ ');
                     var fdAway = norm(fdTeams[0] || '');
                     var fdHome = norm(fdTeams[1] || '');
