@@ -538,8 +538,9 @@ export default {
     const RS_WARM_THRESHOLD  = 90;
     const RE_ALERT_EV_JUMP   = 4.0;
     // Midnight ET (UTC-4 during EDT) — taken bet suppression resets each calendar day
+    // Formula: subtract offset to convert to ET, floor to day, add offset back to UTC
     const ET_OFFSET = 4 * 3600;
-    const midnightET = Math.floor((now + ET_OFFSET) / 86400) * 86400 - ET_OFFSET;
+    const midnightET = Math.floor((now - ET_OFFSET) / 86400) * 86400 + ET_OFFSET;
 
     // Debug snapshot — written to D1 at end of each run for diagnostics
     const dbg = { ts: now, sports: {}, allBets: 0, sampleBets: [], sentCount: 0 };
