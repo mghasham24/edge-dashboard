@@ -908,9 +908,11 @@ export default {
 
     await writeDebug(env, dbg);
 
+    // Reset alert_sent_log at midnight ET — entries from before today are cleared so
+    // each new calendar day gets fresh alerts (same game in a series re-alerts correctly)
     try {
       await env.DB.prepare('DELETE FROM alert_sent_log WHERE sent_at < ?')
-        .bind(now - 36 * 3600).run();
+        .bind(midnightET).run();
     } catch(e) {}
 
     try {
