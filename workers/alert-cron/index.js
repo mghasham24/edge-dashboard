@@ -141,9 +141,10 @@ async function warmRSCache(fdKey, env, now, staleThreshold) {
   if (!env.SITE_URL || !env.CRON_SECRET) return;
   try {
     const rsKey = FDKEY_TO_RSKEY[fdKey] || fdKey;
+    // Use LIKE to match any version of the RS sync cache key
     const cached = await env.DB.prepare(
-      'SELECT fetched_at FROM odds_cache WHERE cache_key=?'
-    ).bind('real_sync_' + rsKey + '_v10').first();
+      "SELECT fetched_at FROM odds_cache WHERE cache_key LIKE ? ORDER BY fetched_at DESC LIMIT 1"
+    ).bind('real_sync_' + rsKey + '_%').first();
     if (cached && (now - cached.fetched_at) < staleThreshold) return;
     await fetch(`${env.SITE_URL}/api/real/sync?sport=${fdKey}&_cron_key=${env.CRON_SECRET}`, {
       signal: AbortSignal.timeout(15000)
@@ -153,9 +154,11 @@ async function warmRSCache(fdKey, env, now, staleThreshold) {
 
 async function loadRSCache(rsKey, env, now, staleThreshold) {
   try {
+    // Use LIKE to match any version of the RS sync cache key — version bumps in sync.js
+    // no longer break the alert cron
     const cached = await env.DB.prepare(
-      'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
-    ).bind('real_sync_' + rsKey + '_v10').first();
+      "SELECT data, fetched_at FROM odds_cache WHERE cache_key LIKE ? ORDER BY fetched_at DESC LIMIT 1"
+    ).bind('real_sync_' + rsKey + '_%').first();
     const age = cached ? now - cached.fetched_at : null;
     if (cached && age < staleThreshold) {
       return { ...parseRSCache(JSON.parse(cached.data)), rsAge: age };
@@ -276,6 +279,7 @@ function formatAlert(sport, game, market, side, ev, units, dollarAmt, pt, rsPct,
 // Cache: { ok, games: { "Away @ Home": { id, away, home, cm, ml: { TeamName: price } } } }
 function processNativeML(sport, fdGames, rsGames, rsGameIds, rsGameSports, globalMinEv, allBets, now) {
   for (const [gameKey, game] of Object.entries(fdGames)) {
+    if (game.live) continue; // skip in-progress games (frozen FD odds)
     const commenceTime = game.cm ? Math.floor(new Date(game.cm).getTime() / 1000) : 0;
     if (commenceTime && commenceTime <= now) continue;
 
@@ -339,6 +343,7 @@ function processNativeML(sport, fdGames, rsGames, rsGameIds, rsGameSports, globa
 // } } }
 function processNativeNBA(sport, fdGames, rsGames, rsGameIds, rsGameSports, globalMinEv, allBets, now) {
   for (const [gameKey, game] of Object.entries(fdGames)) {
+    if (game.live) continue;
     const commenceTime = game.cm ? Math.floor(new Date(game.cm).getTime() / 1000) : 0;
     if (commenceTime && commenceTime <= now) continue;
 
@@ -463,6 +468,7 @@ function processNativeNBA(sport, fdGames, rsGames, rsGameIds, rsGameSports, glob
 // } } }
 function processNativeFC(sport, fdGames, rsGames, rsGameIds, rsGameSports, globalMinEv, allBets, now) {
   for (const [gameKey, game] of Object.entries(fdGames)) {
+    if (game.live) continue;
     const commenceTime = game.cm ? Math.floor(new Date(game.cm).getTime() / 1000) : 0;
     if (commenceTime && commenceTime <= now) continue;
 
@@ -858,12 +864,9 @@ export default {
 
       for (const bet of userBets) {
         const entry = existingLog[bet.betKey];
-        if (entry) {
-          const hoursSince = (now - entry.sentAt) / 3600;
-          // Suppress re-alert only if: EV hasn't jumped 4%+ AND last alert was within 2 hours
-          // The 2h escape hatch prevents algorithm-change EV mismatches from silencing alerts forever
-          if (bet.ev - entry.ev < RE_ALERT_EV_JUMP && hoursSince < 2) continue;
-        }
+        // Suppress re-alert unless EV jumped by RE_ALERT_EV_JUMP — no time-based escape hatch
+        // (time escape caused infinite re-alerts every 2h for the same bet)
+        if (entry && bet.ev - entry.ev < RE_ALERT_EV_JUMP) continue;
 
         const dollarAmt = Math.round(bet.units * unitSize);
         const message   = formatAlert(bet.sport, bet.game, bet.market, bet.side, bet.ev, bet.units, dollarAmt, bet.pt, bet.rsPct, bet.adjFairPct, bet.gameUrl);
