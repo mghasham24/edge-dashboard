@@ -1,31 +1,89 @@
 // workers/rs-poster/index.js
-// Polls RS open positions every 5 minutes and posts new ones to the RS group.
+// Polls RS open positions every minute and posts new ones to the RS group.
+// Auto-authenticates using stored credentials when the session token expires.
 //
 // Secrets required (Cloudflare dashboard → Workers → rs-poster → Settings → Variables):
-//   RS_AUTH_INFO   — real-auth-info header value from your RS session
-//   RS_GROUP_ID    — numeric group ID of your RaxEdge Predictions RS group
+//   RS_LOGIN      — RS phone number / email
+//   RS_PASSWORD   — RS password
+//   RS_GROUP_ID   — numeric group ID of your RaxEdge Predictions RS group
 
-const RS_BASE        = 'https://web.realapp.com';
-const RS_WEB_BASE    = 'https://www.realapp.com';
-const RS_OPEN_POS    = RS_BASE + '/predictions/openpositions';
-const RS_POS_DETAIL  = (id) => RS_BASE + '/predictions/position/' + id;
-const RS_GROUP_POST  = (groupId) => RS_BASE + '/comments/groups/' + groupId;
+const RS_BASE       = 'https://web.realapp.com';
+const RS_WEB_BASE   = 'https://www.realapp.com';
+const RS_LOGIN_URL  = RS_BASE + '/login';
+const RS_OPEN_POS   = RS_BASE + '/predictions/openpositions';
+const RS_POS_DETAIL = (id) => RS_BASE + '/predictions/position/' + id;
+const RS_GROUP_POST = (groupId) => RS_BASE + '/comments/groups/' + groupId;
+const AUTH_CACHE_KEY = 'rs_auth_token';
 
-function rsHeaders(env) {
+function rsHeaders(authToken) {
   return {
     'Content-Type':       'application/json',
     'Accept':             'application/json',
     'Accept-Language':    'en-US,en;q=0.9',
-    'Origin':             'https://www.realapp.com',
-    'Referer':            'https://www.realapp.com/',
+    'Origin':             'https://realsports.io',
+    'Referer':            'https://realsports.io/',
     'User-Agent':         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
-    'real-device-uuid':   env.RS_DEVICE_UUID || '2e0a38e2-0ee8-4f93-9a34-218ac1d10161',
+    'real-device-uuid':   '2e0a38e2-0ee8-4f93-9a34-218ac1d10161',
     'real-device-name':   '5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
     'real-device-type':   'desktop_web',
     'real-version':       '31',
     'real-request-token': Math.random().toString(36).slice(2, 18),
-    'real-auth-info':     env.RS_AUTH_INFO,
+    'real-auth-info':     authToken || '',
   };
+}
+
+async function getCachedToken(db) {
+  try {
+    const row = await db.prepare(
+      "SELECT data FROM odds_cache WHERE cache_key=?"
+    ).bind(AUTH_CACHE_KEY).first();
+    return row?.data || null;
+  } catch { return null; }
+}
+
+async function setCachedToken(db, token) {
+  const now = Math.floor(Date.now() / 1000);
+  await db.prepare(
+    "INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at"
+  ).bind(AUTH_CACHE_KEY, token, now).run();
+}
+
+async function login(env) {
+  if (!env.RS_LOGIN || !env.RS_PASSWORD) {
+    console.error('rs-poster: RS_LOGIN or RS_PASSWORD not set');
+    return null;
+  }
+  const res = await fetch(RS_LOGIN_URL, {
+    method: 'POST',
+    headers: rsHeaders(null),
+    body: JSON.stringify({
+      login: env.RS_LOGIN,
+      password: env.RS_PASSWORD,
+      tfaAuthCode: '',
+      attestationToken: null,
+      attestChallenge: null,
+    }),
+  });
+  if (!res.ok) {
+    console.error('rs-poster: login failed', res.status);
+    return null;
+  }
+  const data = await res.json();
+  const token = data?.authInfo || data?.real_auth_info || data?.token || data?.auth;
+  if (!token) {
+    console.error('rs-poster: login response missing token', JSON.stringify(data).slice(0, 200));
+    return null;
+  }
+  console.log('rs-poster: logged in successfully');
+  return token;
+}
+
+async function getAuthToken(env) {
+  const cached = await getCachedToken(env.DB);
+  if (cached) return cached;
+  const fresh = await login(env);
+  if (fresh) await setCachedToken(env.DB, fresh);
+  return fresh;
 }
 
 function formatPost(pos) {
@@ -36,7 +94,6 @@ function formatPost(pos) {
   const avg  = details['Avg']  || '—';
   const cost = details['Cost'] || '—';
   const pays = details['Pays'] || '—';
-
   return `New Pick: ${game}\n${label} — ${outcome}\nAvg: ${avg} | Cost: ${cost} | Pays: ${pays}`;
 }
 
@@ -56,17 +113,35 @@ export default {
 };
 
 async function run(env) {
-  if (!env.RS_AUTH_INFO) { console.error('rs-poster: RS_AUTH_INFO not set'); return; }
-  if (!env.RS_GROUP_ID)  { console.error('rs-poster: RS_GROUP_ID not set');  return; }
-
+  if (!env.RS_GROUP_ID) { console.error('rs-poster: RS_GROUP_ID not set'); return; }
   await ensureTable(env.DB);
 
+  // Get auth token — use cache, re-login if missing
+  let authToken = await getAuthToken(env);
+  if (!authToken) { console.error('rs-poster: could not obtain auth token'); return; }
+
   // 1. Fetch open positions
-  const posRes = await fetch(RS_OPEN_POS, { headers: rsHeaders(env) });
-  if (!posRes.ok) { console.error('rs-poster: openpositions failed', posRes.status); return; }
+  let posRes = await fetch(RS_OPEN_POS, { headers: rsHeaders(authToken) });
+
+  // If 401, token expired — re-login and retry once
+  if (posRes.status === 401) {
+    console.log('rs-poster: token expired, re-authenticating...');
+    await setCachedToken(env.DB, ''); // clear cached token
+    authToken = await login(env);
+    if (!authToken) { console.error('rs-poster: re-login failed'); return; }
+    await setCachedToken(env.DB, authToken);
+    posRes = await fetch(RS_OPEN_POS, { headers: rsHeaders(authToken) });
+  }
+
+  if (!posRes.ok) {
+    const body = await posRes.text();
+    console.error('rs-poster: openpositions failed', posRes.status, body.slice(0, 200));
+    return;
+  }
+
   const posData = await posRes.json();
   const positions = posData.positions || [];
-  if (!positions.length) return;
+  if (!positions.length) { console.log('rs-poster: no open positions'); return; }
 
   // 2. Find which ones we haven't posted yet
   const ids = positions.map(p => p.sharedPositionId).filter(Boolean);
@@ -85,8 +160,7 @@ async function run(env) {
   for (const pos of newPositions) {
     const posId = pos.sharedPositionId;
     try {
-      // Fetch individual position to get marketDisplay.path
-      const detailRes = await fetch(RS_POS_DETAIL(posId), { headers: rsHeaders(env) });
+      const detailRes = await fetch(RS_POS_DETAIL(posId), { headers: rsHeaders(authToken) });
       if (!detailRes.ok) { console.error('rs-poster: position detail failed', posId, detailRes.status); continue; }
       const detail = await detailRes.json();
       const path = detail.position?.marketDisplay?.path;
@@ -95,10 +169,9 @@ async function run(env) {
       const shareUrl = RS_WEB_BASE + path;
       const text = formatPost(pos) + '\n\n' + shareUrl;
 
-      // Post to RS group
       const groupRes = await fetch(RS_GROUP_POST(env.RS_GROUP_ID), {
         method: 'POST',
-        headers: rsHeaders(env),
+        headers: rsHeaders(authToken),
         body: JSON.stringify({ groupId: parseInt(env.RS_GROUP_ID), text, parentCommentId: null }),
       });
 
@@ -112,7 +185,6 @@ async function run(env) {
         console.error('rs-poster: group post failed', posId, groupRes.status, errText);
       }
 
-      // Small delay between posts to avoid rate limiting
       if (newPositions.indexOf(pos) < newPositions.length - 1) {
         await new Promise(r => setTimeout(r, 1000));
       }
