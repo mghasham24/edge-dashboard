@@ -1,0 +1,11 @@
+{
+  "name": "rs-poster-node",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "cron": "^3.1.6"
+  }
+}

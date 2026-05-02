@@ -2,6 +2,21 @@
 // Receives a fresh RS auth token from the Tampermonkey script and saves it to D1.
 // Protected by RS_TOKEN_SECRET env variable.
 
+export async function onRequestGet({ request, env }) {
+  const secret = new URL(request.url).searchParams.get('key');
+  if (!secret || secret !== env.RS_TOKEN_SECRET) {
+    return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+  }
+  const row = await env.DB.prepare(
+    "SELECT data FROM odds_cache WHERE cache_key='rs_auth_token'"
+  ).first();
+  if (!row?.data) return new Response(JSON.stringify({ error: 'No token' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+  let parsed;
+  try { parsed = JSON.parse(row.data); } catch { return new Response(JSON.stringify({ error: 'Bad data' }), { status: 500, headers: { 'Content-Type': 'application/json' } }); }
+  if (!parsed.token) return new Response(JSON.stringify({ error: 'No token' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+  return new Response(JSON.stringify({ token: parsed.token, deviceUuid: parsed.deviceUuid || '' }), { headers: { 'Content-Type': 'application/json' } });
+}
+
 export async function onRequestPost({ request, env }) {
   const secret = new URL(request.url).searchParams.get('key');
   if (!secret || secret !== env.RS_TOKEN_SECRET) {
