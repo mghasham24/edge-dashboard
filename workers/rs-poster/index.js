@@ -37,7 +37,8 @@ async function getCachedToken(db) {
     const row = await db.prepare(
       "SELECT data FROM odds_cache WHERE cache_key=?"
     ).bind(AUTH_CACHE_KEY).first();
-    return row?.data || null;
+    const val = row?.data;
+    return (val && val !== '__expired__') ? val : null;
   } catch { return null; }
 }
 
@@ -99,6 +100,7 @@ async function login(env) {
 async function getAuthToken(env) {
   const cached = await getCachedToken(env.DB);
   if (cached) return cached;
+  if (env.RS_AUTH_INFO) return env.RS_AUTH_INFO;
   const fresh = await login(env);
   if (fresh) await setCachedToken(env.DB, fresh);
   return fresh;
@@ -141,12 +143,12 @@ async function run(env) {
   // 1. Fetch open positions
   let posRes = await fetch(RS_OPEN_POS, { headers: rsHeaders(authToken) });
 
-  // If 401, token expired — re-login and retry once
+  // If 401, token expired — clear cache and re-login once
   if (posRes.status === 401) {
     console.log('rs-poster: token expired, re-authenticating...');
-    await setCachedToken(env.DB, ''); // clear cached token
+    await setCachedToken(env.DB, '__expired__');
     authToken = await login(env);
-    if (!authToken) { console.error('rs-poster: re-login failed'); return; }
+    if (!authToken) { console.error('rs-poster: re-login failed, need fresh RS_AUTH_INFO'); return; }
     await setCachedToken(env.DB, authToken);
     posRes = await fetch(RS_OPEN_POS, { headers: rsHeaders(authToken) });
   }
