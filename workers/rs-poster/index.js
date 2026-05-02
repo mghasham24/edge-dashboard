@@ -48,7 +48,7 @@ async function setCachedToken(db, token) {
   ).bind(AUTH_CACHE_KEY, token, now).run();
 }
 
-function loginHeaders() {
+function loginHeaders(deviceUuid) {
   return {
     'Content-Type':       'application/json',
     'Accept':             'application/json',
@@ -56,7 +56,7 @@ function loginHeaders() {
     'Origin':             'https://realsports.io',
     'Referer':            'https://realsports.io/',
     'User-Agent':         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
-    'real-device-uuid':   '2e0a38e2-0ee8-4f93-9a34-218ac1d10161',
+    'real-device-uuid':   deviceUuid,
     'real-device-name':   '5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
     'real-device-type':   'desktop_web',
     'real-version':       '31',
@@ -72,7 +72,7 @@ async function login(env) {
   console.log('rs-poster: logging in as', env.RS_LOGIN);
   const res = await fetch(RS_LOGIN_URL, {
     method: 'POST',
-    headers: loginHeaders(),
+    headers: loginHeaders(env.RS_DEVICE_UUID),
     body: JSON.stringify({
       login: env.RS_LOGIN,
       password: env.RS_PASSWORD,
