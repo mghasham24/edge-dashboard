@@ -9,6 +9,7 @@ export async function onRequest({ request, env, next }) {
 
   if (url.pathname.startsWith('/api/auth')) return next();
   if (url.pathname === '/api/stripe/webhook') return next();
+  if (url.pathname === '/api/admin/rs-token') return next();
 
   const token   = getToken(request);
   const session = await getSession(env.DB, token);
