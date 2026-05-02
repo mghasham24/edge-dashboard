@@ -51,6 +51,7 @@ async function run() {
     const token = process.env.RS_AUTH_INFO;
     const deviceUuid = process.env.RS_DEVICE_UUID || '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e';
     if (!token) { console.log('rs-poster: RS_AUTH_INFO not set'); return; }
+    console.log('rs-poster: token len', token.length, 'starts', token.slice(0, 8), 'uuid', deviceUuid);
 
     const posRes = await fetch(RS_OPEN_POS, { headers: rsHeaders(token, deviceUuid) });
     if (!posRes.ok) {
