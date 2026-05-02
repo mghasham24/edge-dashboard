@@ -48,14 +48,31 @@ async function setCachedToken(db, token) {
   ).bind(AUTH_CACHE_KEY, token, now).run();
 }
 
+function loginHeaders() {
+  return {
+    'Content-Type':       'application/json',
+    'Accept':             'application/json',
+    'Accept-Language':    'en-US,en;q=0.9',
+    'Origin':             'https://realsports.io',
+    'Referer':            'https://realsports.io/',
+    'User-Agent':         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
+    'real-device-uuid':   '2e0a38e2-0ee8-4f93-9a34-218ac1d10161',
+    'real-device-name':   '5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
+    'real-device-type':   'desktop_web',
+    'real-version':       '31',
+    'real-request-token': Math.random().toString(36).slice(2, 18),
+  };
+}
+
 async function login(env) {
   if (!env.RS_LOGIN || !env.RS_PASSWORD) {
     console.error('rs-poster: RS_LOGIN or RS_PASSWORD not set');
     return null;
   }
+  console.log('rs-poster: logging in as', env.RS_LOGIN);
   const res = await fetch(RS_LOGIN_URL, {
     method: 'POST',
-    headers: rsHeaders(null),
+    headers: loginHeaders(),
     body: JSON.stringify({
       login: env.RS_LOGIN,
       password: env.RS_PASSWORD,
@@ -65,13 +82,14 @@ async function login(env) {
     }),
   });
   if (!res.ok) {
-    console.error('rs-poster: login failed', res.status);
+    const body = await res.text();
+    console.error('rs-poster: login failed', res.status, body.slice(0, 300));
     return null;
   }
   const data = await res.json();
   const token = data?.authInfo || data?.real_auth_info || data?.token || data?.auth;
   if (!token) {
-    console.error('rs-poster: login response missing token', JSON.stringify(data).slice(0, 200));
+    console.error('rs-poster: login response missing token', JSON.stringify(data).slice(0, 300));
     return null;
   }
   console.log('rs-poster: logged in successfully');
