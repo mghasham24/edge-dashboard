@@ -6728,6 +6728,11 @@
             var data = await res.json();
             if (data.ok) {
                 btn.textContent = 'Synced (' + (data.upgraded || 0) + ' up, ' + (data.downgraded || 0) + ' down)';
+                var lines = [];
+                if (data.detail.upgraded.length) lines.push('UPGRADED:\n' + data.detail.upgraded.map(function(u) { return '  ' + u.email + ' (' + u.from + ' → pro, ' + u.status + ')'; }).join('\n'));
+                if (data.detail.downgraded.length) lines.push('DOWNGRADED:\n' + data.detail.downgraded.map(function(u) { return '  ' + u.email + ' → free (' + u.status + ')'; }).join('\n'));
+                if (data.detail.errors.length) lines.push('ERRORS:\n' + data.detail.errors.map(function(e) { return '  ' + e; }).join('\n'));
+                if (lines.length) alert(lines.join('\n\n'));
             } else {
                 btn.textContent = 'Error';
             }

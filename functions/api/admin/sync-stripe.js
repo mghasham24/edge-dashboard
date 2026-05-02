@@ -34,7 +34,7 @@ export async function onRequestPost({ request, env }) {
 
         try {
           const user = await env.DB.prepare(
-            'SELECT id, plan, stripe_sub_id FROM users WHERE stripe_customer_id=?'
+            'SELECT id, email, plan, stripe_sub_id FROM users WHERE stripe_customer_id=?'
           ).bind(customerId).first();
           if (!user) continue;
 
@@ -44,9 +44,9 @@ export async function onRequestPost({ request, env }) {
           ).bind(sub.id, proExpiresAt, user.id).run();
 
           if (user.plan !== 'pro') {
-            report.upgraded.push({ customerId, userId: user.id, from: user.plan, status });
+            report.upgraded.push({ email: user.email, userId: user.id, from: user.plan, status });
           } else {
-            report.unchanged.push({ customerId, plan: 'pro', status });
+            report.unchanged.push({ email: user.email, plan: 'pro', status });
           }
         } catch(e) {
           report.errors.push(customerId + ': ' + e.message);
@@ -80,7 +80,7 @@ export async function onRequestPost({ request, env }) {
 
         try {
           const user = await env.DB.prepare(
-            'SELECT id, plan FROM users WHERE stripe_customer_id=?'
+            'SELECT id, email, plan FROM users WHERE stripe_customer_id=?'
           ).bind(customerId).first();
           if (!user) continue;
 
@@ -88,9 +88,9 @@ export async function onRequestPost({ request, env }) {
             await env.DB.prepare(
               'UPDATE users SET plan=\'free\', pro_expires_at=NULL WHERE id=?'
             ).bind(user.id).run();
-            report.downgraded.push({ customerId, userId: user.id, status });
+            report.downgraded.push({ email: user.email, userId: user.id, status });
           } else {
-            report.unchanged.push({ customerId, plan: 'free', status });
+            report.unchanged.push({ email: user.email, plan: 'free', status });
           }
         } catch(e) {
           report.errors.push(customerId + ': ' + e.message);
