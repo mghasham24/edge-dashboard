@@ -54,8 +54,8 @@ function buildHeaders(token, deviceUuid) {
   return {
     'Accept': 'application/json',
     'Content-Type': 'application/json',
-    'Origin': 'https://realsports.io',
-    'Referer': 'https://realsports.io/',
+    'Origin': 'https://www.realapp.com',
+    'Referer': 'https://www.realapp.com/',
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
     'real-auth-info': token,
     'real-device-name': '5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
