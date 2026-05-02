@@ -9,8 +9,6 @@
 
 import { CronJob } from 'cron';
 
-const RAXEDGE_URL    = process.env.RAXEDGE_URL || 'https://raxedge.com';
-const TOKEN_ENDPOINT = `${RAXEDGE_URL}/api/admin/rs-token?key=${process.env.RS_TOKEN_SECRET}`;
 const RS_GROUP_ID    = process.env.RS_GROUP_ID;
 const RS_BASE        = 'https://web.realapp.com';
 const RS_OPEN_POS    = RS_BASE + '/predictions/openpositions';
@@ -50,10 +48,9 @@ function formatPost(pos) {
 
 async function run() {
   try {
-    const tokenRes = await fetch(TOKEN_ENDPOINT);
-    if (!tokenRes.ok) { console.log('rs-poster: no token in D1'); return; }
-    const { token, deviceUuid } = await tokenRes.json();
-    if (!token) { console.log('rs-poster: empty token'); return; }
+    const token = process.env.RS_AUTH_TOKEN;
+    const deviceUuid = process.env.RS_DEVICE_UUID || '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e';
+    if (!token) { console.log('rs-poster: RS_AUTH_TOKEN not set'); return; }
 
     const posRes = await fetch(RS_OPEN_POS, { headers: rsHeaders(token, deviceUuid) });
     if (!posRes.ok) {
