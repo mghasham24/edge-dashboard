@@ -2541,6 +2541,10 @@
                     <tbody id="admin-tbody"></tbody>
                 </table>
             </div>
+            <div id="admin-load-more-wrap" style="display:none;justify-content:center;align-items:center;gap:12px;margin-top:16px">
+                <span id="admin-load-more-lbl" style="font-family:var(--mono);font-size:12px;color:var(--muted)"></span>
+                <button onclick="adminLoadMore()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;font-weight:600;padding:7px 18px;border-radius:5px;cursor:pointer">Load More</button>
+            </div>
         </div>
 
         <!-- Referral Panel -->
@@ -4745,6 +4749,8 @@
     // Admin state
     var currentUser = null;
     var adminSearchTimer = null;
+    var adminOffset = 0;
+    var adminHasMore = false;
 
     function showAdminTab() {
         document.getElementById('sport-tabs').style.display = 'none';
@@ -6640,36 +6646,41 @@
         } catch (e) {}
     }
 
-    async function loadAdminUsers(q) {
+    async function loadAdminUsers(q, offset, append) {
+        if (offset === undefined) offset = 0;
         var plan = document.getElementById('admin-plan-filter') ? document.getElementById('admin-plan-filter').value : '';
         var sort = document.getElementById('admin-sort') ? document.getElementById('admin-sort').value : '';
-        var params = [];
+        var params = ['limit=50', 'offset=' + offset];
         if (q) params.push('q=' + encodeURIComponent(q));
         if (plan) params.push('plan=' + encodeURIComponent(plan));
         if (sort) params.push('sort=' + encodeURIComponent(sort));
-        var url = '/api/admin/users' + (params.length ? '?' + params.join('&') : '');
+        var url = '/api/admin/users?' + params.join('&');
         try {
             var res = await fetch(url, { credentials: 'same-origin' });
             var data = await res.json();
             if (!data.ok) return;
-            renderAdminUsers(data.users || []);
+            adminOffset = offset + (data.users || []).length;
+            adminHasMore = data.hasMore || false;
+            renderAdminUsers(data.users || [], append, data.total);
         } catch (e) {}
     }
 
     function adminSearch() {
         clearTimeout(adminSearchTimer);
         adminSearchTimer = setTimeout(function() {
-            loadAdminUsers(document.getElementById('admin-search').value.trim());
+            loadAdminUsers(document.getElementById('admin-search').value.trim(), 0, false);
         }, 300);
     }
 
-    function renderAdminUsers(users) {
+    function renderAdminUsers(users, append, total) {
         var tb = document.getElementById('admin-tbody');
-        if (!users.length) {
-            tb.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:40px">No users found</td></tr>';
+        var loadMoreWrap = document.getElementById('admin-load-more-wrap');
+        if (!append && !users.length) {
+            tb.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:40px">No users found</td></tr>';
+            if (loadMoreWrap) loadMoreWrap.style.display = 'none';
             return;
         }
-        tb.innerHTML = users.map(function(u) {
+        var rows = users.map(function(u) {
             var date = new Date(u.created_at * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
             var proExpires = (u.plan === 'pro' && u.pro_expires_at) ? new Date(u.pro_expires_at * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
             var planBadge = u.plan === 'pro' ? '<span class="badge-pro">PRO</span>' : '<span class="badge-free">FREE</span>';
@@ -6693,6 +6704,25 @@
                 + '<td>' + actions + '</td>'
                 + '</tr>';
         }).join('');
+        if (append) {
+            tb.innerHTML += rows;
+        } else {
+            tb.innerHTML = rows;
+        }
+        if (loadMoreWrap) {
+            if (adminHasMore) {
+                loadMoreWrap.style.display = 'flex';
+                var lbl = document.getElementById('admin-load-more-lbl');
+                if (lbl && total) lbl.textContent = 'Showing ' + adminOffset + ' of ' + total;
+            } else {
+                loadMoreWrap.style.display = 'none';
+            }
+        }
+    }
+
+    function adminLoadMore() {
+        var q = document.getElementById('admin-search').value.trim();
+        loadAdminUsers(q, adminOffset, true);
     }
 
     async function adminChangePlan(sel) {
@@ -6703,19 +6733,19 @@
 
     async function adminForceLogout(id) {
         await fetch('/api/admin/users?id=' + id, { method: 'POST', credentials: 'same-origin' });
-        loadAdminUsers(document.getElementById('admin-search').value.trim());
+        loadAdminUsers(document.getElementById('admin-search').value.trim(), 0, false);
         loadAdminStats();
     }
 
     async function adminSetBanned(id, banned) {
         await fetch('/api/admin/users', { method: 'PATCH', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, banned }) });
-        loadAdminUsers(document.getElementById('admin-search').value.trim());
+        loadAdminUsers(document.getElementById('admin-search').value.trim(), 0, false);
     }
 
     async function adminDeleteUser(id, email) {
         if (!confirm('Permanently delete ' + email + '? This cannot be undone.')) return;
         await fetch('/api/admin/users?id=' + id, { method: 'DELETE', credentials: 'same-origin' });
-        loadAdminUsers(document.getElementById('admin-search').value.trim());
+        loadAdminUsers(document.getElementById('admin-search').value.trim(), 0, false);
         loadAdminStats();
     }
 
@@ -6739,7 +6769,7 @@
         } catch(e) {
             btn.textContent = 'Error';
         }
-        loadAdminUsers(document.getElementById('admin-search').value.trim());
+        loadAdminUsers(document.getElementById('admin-search').value.trim(), 0, false);
         loadAdminStats();
         setTimeout(function() { btn.textContent = 'Sync Stripe'; btn.disabled = false; }, 4000);
     }

@@ -8,38 +8,31 @@ export async function onRequest({ request, env }) {
   const url    = new URL(request.url);
   const method = request.method;
 
-  // GET /api/admin/users — list all users
+  // GET /api/admin/users — list users (paginated)
   if (method === 'GET') {
     const search = url.searchParams.get('q') || '';
     const plan   = url.searchParams.get('plan') || '';
     const sort   = url.searchParams.get('sort') || 'signup_desc';
+    const limit  = Math.min(parseInt(url.searchParams.get('limit') || '50', 10), 200);
+    const offset = parseInt(url.searchParams.get('offset') || '0', 10);
 
     const orderBy = sort === 'signup_asc'  ? 'created_at ASC'
                   : sort === 'pro_desc'    ? 'pro_expires_at DESC NULLS LAST'
                   : sort === 'pro_asc'     ? 'pro_expires_at ASC NULLS LAST'
                   : 'created_at DESC';
 
-    let rows;
-    if (search && plan) {
-      rows = await env.DB.prepare(
-        `SELECT id, email, plan, is_admin, banned, created_at, pro_expires_at FROM users WHERE email LIKE ? AND plan=? ORDER BY ${orderBy}`
-      ).bind('%' + search + '%', plan).all();
-    } else if (search) {
-      rows = await env.DB.prepare(
-        `SELECT id, email, plan, is_admin, banned, created_at, pro_expires_at FROM users WHERE email LIKE ? ORDER BY ${orderBy}`
-      ).bind('%' + search + '%').all();
-    } else if (plan) {
-      rows = await env.DB.prepare(
-        `SELECT id, email, plan, is_admin, banned, created_at, pro_expires_at FROM users WHERE plan=? ORDER BY ${orderBy}`
-      ).bind(plan).all();
-    } else {
-      rows = await env.DB.prepare(
-        `SELECT id, email, plan, is_admin, banned, created_at, pro_expires_at FROM users ORDER BY ${orderBy}`
-      ).all();
-    }
+    const where = [];
+    const binds = [];
+    if (search) { where.push('email LIKE ?'); binds.push('%' + search + '%'); }
+    if (plan)   { where.push('plan=?');        binds.push(plan); }
+    const whereClause = where.length ? 'WHERE ' + where.join(' AND ') : '';
 
-    // Attach active session count per user
-    const ids = (rows.results || []).map(r => r.id);
+    const [countRow, rows] = await Promise.all([
+      env.DB.prepare(`SELECT COUNT(*) as total FROM users ${whereClause}`).bind(...binds).first(),
+      env.DB.prepare(`SELECT id, email, plan, is_admin, banned, created_at, pro_expires_at FROM users ${whereClause} ORDER BY ${orderBy} LIMIT ? OFFSET ?`).bind(...binds, limit, offset).all(),
+    ]);
+
+    const total = countRow?.total || 0;
     const now = Math.floor(Date.now() / 1000);
     const users = await Promise.all((rows.results || []).map(async u => {
       const sc = await env.DB.prepare(
@@ -48,7 +41,7 @@ export async function onRequest({ request, env }) {
       return { ...u, sessions: sc ? sc.c : 0 };
     }));
 
-    return ok({ users });
+    return ok({ users, total, hasMore: offset + users.length < total });
   }
 
   // PATCH /api/admin/users — update plan or banned
