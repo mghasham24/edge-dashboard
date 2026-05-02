@@ -1,0 +1,32 @@
+# workers/rs-poster/wrangler.toml
+# Deploy this worker separately from the Pages project:
+#   cd workers/rs-poster && npx wrangler deploy
+#
+# Required secrets (set in Cloudflare dashboard → Workers → rs-poster → Settings → Variables):
+#   RS_AUTH_INFO      — value of real-auth-info header from RS session
+#   RS_GROUP_ID       — numeric ID of the RaxEdge Predictions RS group
+
+name = "raxedge-rs-poster"
+main = "index.js"
+compatibility_date = "2024-09-23"
+
+[vars]
+RS_DEVICE_UUID = "2e0a38e2-0ee8-4f93-9a34-218ac1d10161"
+
+# ── D1 binding — same database as the Pages project ───
+[[d1_databases]]
+binding = "DB"
+database_name = "edge-db"
+database_id = "ff9b93f1-81f8-4370-bd57-f634e0300443"
+
+# ── Cron trigger: every 5 minutes ─────────────────────
+[triggers]
+crons = ["*/5 * * * *"]
+
+# ── Observability ──────────────────────────────────────
+[observability]
+enabled = true
+
+[observability.logs]
+enabled = true
+invocation_logs = true
