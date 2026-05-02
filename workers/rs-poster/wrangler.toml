@@ -19,9 +19,9 @@ binding = "DB"
 database_name = "edge-db"
 database_id = "ff9b93f1-81f8-4370-bd57-f634e0300443"
 
-# ── Cron trigger: every 5 minutes ─────────────────────
+# ── Cron trigger: every minute ────────────────────────
 [triggers]
-crons = ["*/5 * * * *"]
+crons = ["* * * * *"]
 
 # ── Observability ──────────────────────────────────────
 [observability]
