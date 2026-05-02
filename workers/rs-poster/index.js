@@ -154,16 +154,11 @@ async function run(env) {
   // 1. Fetch open positions
   let posRes = await fetch(RS_OPEN_POS, { headers: rsHeaders(authToken, deviceUuid) });
 
-  // If 401, token expired — clear all cached tokens and re-login once
+  // RS blocks Cloudflare IPs — posting is handled by Railway (rs-poster-node).
+  // Do not clear D1 tokens on 401, sync.js needs them for odds data.
   if (posRes.status === 401) {
-    console.log('rs-poster: token expired, re-authenticating...');
-    await setCachedToken(env.DB, '__expired__');
-    await env.DB.prepare("UPDATE odds_cache SET data='{\"token\":\"\"}' WHERE cache_key='rs_auth_token'").run();
-    const fresh = await login(env);
-    if (!fresh) { console.error('rs-poster: re-login failed, need fresh token from RS'); return; }
-    authToken = fresh;
-    await setCachedToken(env.DB, fresh);
-    posRes = await fetch(RS_OPEN_POS, { headers: rsHeaders(authToken, deviceUuid) });
+    console.log('rs-poster: CF Worker blocked by RS IP filter — Railway handles posting');
+    return;
   }
 
   if (!posRes.ok) {
