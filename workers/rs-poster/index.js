@@ -15,7 +15,7 @@ const RS_POS_DETAIL = (id) => RS_BASE + '/predictions/position/' + id;
 const RS_GROUP_POST = (groupId) => RS_BASE + '/comments/groups/' + groupId;
 const AUTH_CACHE_KEY = 'rs_auth_token';
 
-function rsHeaders(authToken) {
+function rsHeaders(authToken, deviceUuid) {
   return {
     'Content-Type':       'application/json',
     'Accept':             'application/json',
@@ -23,7 +23,7 @@ function rsHeaders(authToken) {
     'Origin':             'https://realsports.io',
     'Referer':            'https://realsports.io/',
     'User-Agent':         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
-    'real-device-uuid':   '2e0a38e2-0ee8-4f93-9a34-218ac1d10161',
+    'real-device-uuid':   deviceUuid || '2e0a38e2-0ee8-4f93-9a34-218ac1d10161',
     'real-device-name':   '5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
     'real-device-type':   'desktop_web',
     'real-version':       '31',
@@ -34,12 +34,22 @@ function rsHeaders(authToken) {
 
 async function getCachedToken(db) {
   try {
+    // First check Tampermonkey-pushed token (rs_auth_token)
+    const tm = await db.prepare(
+      "SELECT data FROM odds_cache WHERE cache_key='rs_auth_token'"
+    ).first();
+    if (tm?.data) {
+      const parsed = JSON.parse(tm.data);
+      if (parsed.token) return { token: parsed.token, deviceUuid: parsed.deviceUuid || '2e0a38e2-0ee8-4f93-9a34-218ac1d10161' };
+    }
+    // Fall back to worker-managed cache
     const row = await db.prepare(
       "SELECT data FROM odds_cache WHERE cache_key=?"
     ).bind(AUTH_CACHE_KEY).first();
     const val = row?.data;
-    return (val && val !== '__expired__') ? val : null;
-  } catch { return null; }
+    if (val && val !== '__expired__') return { token: val, deviceUuid: '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e' };
+  } catch {}
+  return null;
 }
 
 async function setCachedToken(db, token) {
@@ -100,10 +110,10 @@ async function login(env) {
 async function getAuthToken(env) {
   const cached = await getCachedToken(env.DB);
   if (cached) return cached;
-  if (env.RS_AUTH_INFO) return env.RS_AUTH_INFO;
+  if (env.RS_AUTH_INFO) return { token: env.RS_AUTH_INFO, deviceUuid: env.RS_DEVICE_UUID };
   const fresh = await login(env);
   if (fresh) await setCachedToken(env.DB, fresh);
-  return fresh;
+  return fresh ? { token: fresh, deviceUuid: env.RS_DEVICE_UUID } : null;
 }
 
 function formatPost(pos) {
@@ -136,21 +146,23 @@ async function run(env) {
   if (!env.RS_GROUP_ID) { console.error('rs-poster: RS_GROUP_ID not set'); return; }
   await ensureTable(env.DB);
 
-  // Get auth token — use cache, re-login if missing
-  let authToken = await getAuthToken(env);
-  if (!authToken) { console.error('rs-poster: could not obtain auth token'); return; }
+  // Get auth token — Tampermonkey cache → env secret → login
+  let authInfo = await getAuthToken(env);
+  if (!authInfo) { console.error('rs-poster: could not obtain auth token'); return; }
+  let { token: authToken, deviceUuid } = authInfo;
 
   // 1. Fetch open positions
-  let posRes = await fetch(RS_OPEN_POS, { headers: rsHeaders(authToken) });
+  let posRes = await fetch(RS_OPEN_POS, { headers: rsHeaders(authToken, deviceUuid) });
 
-  // If 401, token expired — clear cache and re-login once
+  // If 401, token expired — clear fallback cache and re-login once
   if (posRes.status === 401) {
     console.log('rs-poster: token expired, re-authenticating...');
     await setCachedToken(env.DB, '__expired__');
-    authToken = await login(env);
-    if (!authToken) { console.error('rs-poster: re-login failed, need fresh RS_AUTH_INFO'); return; }
-    await setCachedToken(env.DB, authToken);
-    posRes = await fetch(RS_OPEN_POS, { headers: rsHeaders(authToken) });
+    const fresh = await login(env);
+    if (!fresh) { console.error('rs-poster: re-login failed, need fresh token from RS'); return; }
+    authToken = fresh;
+    await setCachedToken(env.DB, fresh);
+    posRes = await fetch(RS_OPEN_POS, { headers: rsHeaders(authToken, deviceUuid) });
   }
 
   if (!posRes.ok) {
@@ -180,7 +192,7 @@ async function run(env) {
   for (const pos of newPositions) {
     const posId = pos.sharedPositionId;
     try {
-      const detailRes = await fetch(RS_POS_DETAIL(posId), { headers: rsHeaders(authToken) });
+      const detailRes = await fetch(RS_POS_DETAIL(posId), { headers: rsHeaders(authToken, deviceUuid) });
       if (!detailRes.ok) { console.error('rs-poster: position detail failed', posId, detailRes.status); continue; }
       const detail = await detailRes.json();
       const path = detail.position?.marketDisplay?.path;
@@ -191,7 +203,7 @@ async function run(env) {
 
       const groupRes = await fetch(RS_GROUP_POST(env.RS_GROUP_ID), {
         method: 'POST',
-        headers: rsHeaders(authToken),
+        headers: rsHeaders(authToken, deviceUuid),
         body: JSON.stringify({ groupId: parseInt(env.RS_GROUP_ID), text, parentCommentId: null }),
       });
 

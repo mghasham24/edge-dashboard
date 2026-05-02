@@ -50,17 +50,17 @@ function hashidsEncode(number) {
   return ret.join('');
 }
 
-function buildHeaders(env) {
+function buildHeaders(token, deviceUuid) {
   return {
     'Accept': 'application/json',
     'Content-Type': 'application/json',
     'Origin': 'https://realsports.io',
     'Referer': 'https://realsports.io/',
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
-    'real-auth-info': env.REAL_AUTH_TOKEN,
+    'real-auth-info': token,
     'real-device-name': '5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
     'real-device-type': 'desktop_web',
-    'real-device-uuid': '2e0a38e2-0ee8-4f93-9a34-218ac1d10161',
+    'real-device-uuid': deviceUuid,
     'real-request-token': hashidsEncode(Date.now()),
     'real-version': '28'
   };
@@ -162,7 +162,19 @@ export async function onRequestGet(context) {
     session = await getSession(request, env.DB);
     if (!session) return fail(401, 'Not authenticated');
   }
-  if (!env.REAL_AUTH_TOKEN) return fail(500, 'REAL_AUTH_TOKEN not set');
+  // Read auth token from D1 cache (pushed by Tampermonkey) or fall back to env var
+  let rsAuthToken = env.REAL_AUTH_TOKEN || '';
+  let rsDeviceUuid = '2e0a38e2-0ee8-4f93-9a34-218ac1d10161';
+  try {
+    const cached = await env.DB.prepare(
+      "SELECT data FROM odds_cache WHERE cache_key='rs_auth_token'"
+    ).first();
+    if (cached?.data) {
+      const parsed = JSON.parse(cached.data);
+      if (parsed.token) { rsAuthToken = parsed.token; rsDeviceUuid = parsed.deviceUuid || rsDeviceUuid; }
+    }
+  } catch(e) {}
+  if (!rsAuthToken) return fail(500, 'RS auth token not available');
 
   const reqUrl = reqUrl0;
   const fdKey = reqUrl.searchParams.get('sport');
@@ -190,10 +202,10 @@ export async function onRequestGet(context) {
   try {
     // For soccer_fc, also fetch UCL in parallel — RS treats UCL as a separate sport
     const fetchPromises = [
-      fetch(`https://web.realapp.com/home/${realSport}/next?cohort=0`, { headers: buildHeaders(env) })
+      fetch(`https://web.realapp.com/home/${realSport}/next?cohort=0`, { headers: buildHeaders(rsAuthToken, rsDeviceUuid) })
     ];
     if (realSport === 'soccer') {
-      fetchPromises.push(fetch('https://web.realapp.com/home/ucl/next?cohort=0', { headers: buildHeaders(env) }));
+      fetchPromises.push(fetch('https://web.realapp.com/home/ucl/next?cohort=0', { headers: buildHeaders(rsAuthToken, rsDeviceUuid) }));
     }
     const [gamesRes, uclRes] = await Promise.all(fetchPromises);
 
@@ -258,7 +270,7 @@ export async function onRequestGet(context) {
       if (!firstGame) return new Response(JSON.stringify({ error: 'no games' }), { headers: { 'Content-Type': 'application/json' } });
       const gameId = firstGame.id || firstGame.gameId;
       const mUrl = `https://web.realapp.com/predictions/game/${realSport}/${gameId}/markets`;
-      const mRes = await fetch(mUrl, { headers: buildHeaders(env) });
+      const mRes = await fetch(mUrl, { headers: buildHeaders(rsAuthToken, rsDeviceUuid) });
       const mText = await mRes.text();
       return new Response(JSON.stringify({ gameId, rawMarkets: JSON.parse(mText) }), {
         headers: { 'Content-Type': 'application/json' }
@@ -277,7 +289,7 @@ export async function onRequestGet(context) {
       if (!targetGame) return new Response(JSON.stringify({ error: 'game not found', keys: games.map(g => (g.awayTeam?.name || g.awayTeamKey) + ' @ ' + (g.homeTeam?.name || g.homeTeamKey)) }), { headers: { 'Content-Type': 'application/json' } });
       const gameId = targetGame.id || targetGame.gameId;
       const mUrl = `https://web.realapp.com/predictions/game/${realSport}/${gameId}/markets`;
-      const mRes = await fetch(mUrl, { headers: buildHeaders(env) });
+      const mRes = await fetch(mUrl, { headers: buildHeaders(rsAuthToken, rsDeviceUuid) });
       const mText = await mRes.text();
       return new Response(JSON.stringify({ gameId, status: mRes.status, rawMarkets: mText.slice(0, 2000) }), {
         headers: { 'Content-Type': 'application/json' }
@@ -287,7 +299,7 @@ export async function onRequestGet(context) {
     if (debugMode === '7') {
       const testId = reqUrl.searchParams.get('id') || '23560';
       const mUrl = `https://web.realapp.com/predictions/game/${realSport}/${testId}/markets`;
-      const mRes = await fetch(mUrl, { headers: buildHeaders(env) });
+      const mRes = await fetch(mUrl, { headers: buildHeaders(rsAuthToken, rsDeviceUuid) });
       const mText = await mRes.text();
       return new Response(JSON.stringify({ status: mRes.status, body: mText.slice(0, 10000) }), {
         headers: { 'Content-Type': 'application/json' }
@@ -312,7 +324,7 @@ export async function onRequestGet(context) {
       const gameId = game.id || game.gameId;
       const gameSport = game._rsSport || realSport;
       const mUrl = `https://web.realapp.com/predictions/game/${gameSport}/${gameId}/markets`;
-      const mRes = await fetch(mUrl, { headers: buildHeaders(env) });
+      const mRes = await fetch(mUrl, { headers: buildHeaders(rsAuthToken, rsDeviceUuid) });
       let mData = null;
       try { mData = await mRes.json(); } catch(e) {}
       const gameObj = JSON.parse(JSON.stringify(game));
@@ -384,7 +396,7 @@ export async function onRequestGet(context) {
       const homeKey = (game.homeTeam && game.homeTeam.name) || game.homeTeamKey || game.homeTeam?.key
                    || (fighters && fighters[1] && (fighters[1].name || fighters[1].displayName));
       if (!gameId || !awayKey || !homeKey) return { _err: 'no keys', gameId };
-      const headers = buildHeaders(env);
+      const headers = buildHeaders(rsAuthToken, rsDeviceUuid);
       if (tokenOffset) headers['real-request-token'] = hashidsEncode(Date.now() + (tokenOffset || 0));
 
       const gameSport = game._rsSport || realSport;
@@ -394,7 +406,7 @@ export async function onRequestGet(context) {
       let lastErr = null;
       while (attempt < 3) {
         try {
-          const mRes = await fetch(url, { headers: attempt === 0 ? headers : buildHeaders(env) });
+          const mRes = await fetch(url, { headers: attempt === 0 ? headers : buildHeaders(rsAuthToken, rsDeviceUuid) });
           lastStatus = mRes.status;
           if (mRes.ok) {
             let mData;
@@ -557,7 +569,7 @@ export async function onRequestGet(context) {
       if (!game) return new Response(JSON.stringify({ error: 'game not found' }), { headers: { 'Content-Type': 'application/json' } });
       const gameId = game.id || game.gameId;
       const url = `https://web.realapp.com/predictions/game/${realSport}/${gameId}/markets`;
-      const mRes = await fetch(url, { headers: buildHeaders(env) });
+      const mRes = await fetch(url, { headers: buildHeaders(rsAuthToken, rsDeviceUuid) });
       const mText = await mRes.text();
       let mData = null;
       let parseErr = null;
