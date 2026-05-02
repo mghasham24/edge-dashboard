@@ -2523,6 +2523,7 @@
                     <option value="pro_desc">Pro Expires Soonest</option>
                     <option value="pro_asc">Pro Expires Latest</option>
                 </select>
+                <button id="sync-stripe-btn" onclick="adminSyncStripe()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:5px;cursor:pointer;letter-spacing:.04em">Sync Stripe</button>
             </div>
             <!-- User table -->
             <div class="admin-table-wrap">
@@ -6716,6 +6717,26 @@
         await fetch('/api/admin/users?id=' + id, { method: 'DELETE', credentials: 'same-origin' });
         loadAdminUsers(document.getElementById('admin-search').value.trim());
         loadAdminStats();
+    }
+
+    async function adminSyncStripe() {
+        var btn = document.getElementById('sync-stripe-btn');
+        btn.textContent = 'Syncing...';
+        btn.disabled = true;
+        try {
+            var res = await fetch('/api/admin/sync-stripe', { method: 'POST', credentials: 'same-origin' });
+            var data = await res.json();
+            if (data.ok) {
+                btn.textContent = 'Synced (' + (data.upgraded || 0) + ' up, ' + (data.downgraded || 0) + ' down)';
+            } else {
+                btn.textContent = 'Error';
+            }
+        } catch(e) {
+            btn.textContent = 'Error';
+        }
+        loadAdminUsers(document.getElementById('admin-search').value.trim());
+        loadAdminStats();
+        setTimeout(function() { btn.textContent = 'Sync Stripe'; btn.disabled = false; }, 4000);
     }
 
     function onMktChange() {
