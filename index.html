@@ -2814,6 +2814,7 @@
                 </div>
                 <div style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
                     <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);font-family:var(--sans);font-weight:600;white-space:nowrap">Unit $<input id="ev-unit-size" type="number" min="1" step="1" value="300" oninput="onEvUnitChange(this.value)" style="width:64px;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--mono);font-size:12px;font-weight:700;padding:4px 6px;border-radius:5px;text-align:right"></label>
+                    <button id="ev-hide-taken-btn" onclick="toggleEvHideTaken()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:11px;font-weight:700;padding:7px 14px;border-radius:6px;cursor:pointer;letter-spacing:.04em">Hide Taken</button>
                     <button onclick="loadAllEvSports()" id="ev-load-btn" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:11px;font-weight:700;padding:7px 16px;border-radius:6px;cursor:pointer;letter-spacing:.04em">&#8635; Refresh</button>
                     <button onclick="document.getElementById('ev-tab-btn').click()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:7px 14px;border-radius:6px;cursor:pointer;letter-spacing:.04em">&larr; Back</button>
                 </div>
@@ -2920,6 +2921,7 @@
     var portSearchQuery   = '';
     var evTabCache        = {};   // sport key -> array of positive-EV row objects
     var evTabVisible      = false;
+    var evHideTaken       = localStorage.getItem('raxedge_ev_hide_taken') === '1';
     var evLoadingInProgress = false; // true while loadAllEvSports Phase1/2 running — suppresses mid-load renders
     var evAutoRefreshTimer = null;
     var EV_REFRESH_MS = 15000; // refresh every 15 seconds (server caches absorb repeated hits)
@@ -3320,6 +3322,28 @@
             renderEvTab();
         });
     })();
+
+    function toggleEvHideTaken() {
+        evHideTaken = !evHideTaken;
+        localStorage.setItem('raxedge_ev_hide_taken', evHideTaken ? '1' : '0');
+        var btn = document.getElementById('ev-hide-taken-btn');
+        if (btn) {
+            btn.style.background = evHideTaken ? 'var(--accent)' : 'var(--bg3)';
+            btn.style.color = evHideTaken ? '#fff' : 'var(--muted)';
+            btn.style.borderColor = evHideTaken ? 'var(--accent)' : 'var(--border2)';
+        }
+        renderEvTab();
+    }
+
+    function initEvHideTaken() {
+        var btn = document.getElementById('ev-hide-taken-btn');
+        if (!btn) return;
+        if (evHideTaken) {
+            btn.style.background = 'var(--accent)';
+            btn.style.color = '#fff';
+            btn.style.borderColor = 'var(--accent)';
+        }
+    }
 
     function onEvUnitChange(val) {
         localStorage.setItem('raxedge_unit_size', val);
@@ -5160,6 +5184,7 @@
         if (fcPoller)   { clearInterval(fcPoller);   fcPoller   = null; }
         try { posthog.capture('best_ev_opened'); } catch(e) {}
         evTabVisible = true;
+        initEvHideTaken();
         // Sync unit size from main dashboard
         var mainUnit = document.getElementById('unit-size');
         var evUnit = document.getElementById('ev-unit-size');
@@ -5314,6 +5339,8 @@
                 all.push(r);
             });
         });
+        // Optionally hide rows the user has already checked off
+        if (evHideTaken) all = all.filter(function(r) { return !betTaken[r.id]; });
         // All rows have positive EV — sort by EV descending
         all.sort(function(a, b) { return (b._ev || 0) - (a._ev || 0); });
         if (!all.length) {
