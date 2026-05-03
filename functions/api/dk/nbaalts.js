@@ -6,8 +6,10 @@
 
 const DK_BASE    = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
 const DK_LEAGUE_ID = '42648'; // NBA
-const DK_ALT_SPREAD = '13202';
-const DK_ALT_TOTAL  = '13201';
+const DK_ALT_SPREAD  = '13202';
+const DK_ALT_TOTAL   = '13201';
+const DK_MAIN_SPREAD = '4511';
+const DK_MAIN_TOTAL  = '4513';
 const CACHE_TTL = 5;
 
 const DK_EVENTS_URL = `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${DK_LEAGUE_ID}&eventsQuery=%24filter%3DleagueId%20eq%20%27${DK_LEAGUE_ID}%27%20AND%20clientMetadata%2FSubcategories%2Fany%28s%3A%20s%2FId%20eq%20%274511%27%29&marketsQuery=%24filter%3DclientMetadata%2FsubCategoryId%20eq%20%274511%27%20AND%20tags%2Fall%28t%3A%20t%20ne%20%27SportcastBetBuilder%27%29&include=Events&entity=events`;
@@ -128,30 +130,60 @@ export async function onRequestGet(context) {
       const gameKey = away.name + ' @ ' + home.name;
 
       try {
-        const [spreadRes, totalRes] = await Promise.all([
-          fetch(dkAltUrl(event.id, DK_ALT_SPREAD), { headers }),
-          fetch(dkAltUrl(event.id, DK_ALT_TOTAL),  { headers })
+        const [spreadRes, totalRes, mainSpreadRes, mainTotalRes] = await Promise.all([
+          fetch(dkAltUrl(event.id, DK_ALT_SPREAD),  { headers }),
+          fetch(dkAltUrl(event.id, DK_ALT_TOTAL),   { headers }),
+          fetch(dkAltUrl(event.id, DK_MAIN_SPREAD), { headers }),
+          fetch(dkAltUrl(event.id, DK_MAIN_TOTAL),  { headers }),
         ]);
 
         const altData = { spreads: { Away: {}, Home: {} }, totals: { Over: {}, Under: {} } };
 
+        // Alt spreads (excludes DK main line)
         if (spreadRes.ok) {
           const sd = await spreadRes.json();
           (sd.selections || []).forEach(function(sel) {
             const price = parseAmerican(sel.displayOdds && sel.displayOdds.american);
             if (price == null || sel.points == null) return;
-            const t = sel.outcomeType; // 'Away' or 'Home'
+            const t = sel.outcomeType;
             if (t === 'Away' || t === 'Home') altData.spreads[t][sel.points] = price;
           });
         }
 
+        // Alt totals (excludes DK main line)
         if (totalRes.ok) {
           const td = await totalRes.json();
           (td.selections || []).forEach(function(sel) {
             const price = parseAmerican(sel.displayOdds && sel.displayOdds.american);
             if (price == null || sel.points == null) return;
-            const t = sel.outcomeType; // 'Over' or 'Under'
+            const t = sel.outcomeType;
             if (t === 'Over' || t === 'Under') altData.totals[t][sel.points] = price;
+          });
+        }
+
+        // DK main spread — fill in the line that alt market omits
+        if (mainSpreadRes.ok) {
+          const msd = await mainSpreadRes.json();
+          (msd.selections || []).forEach(function(sel) {
+            const price = parseAmerican(sel.displayOdds && sel.displayOdds.american);
+            if (price == null || sel.points == null) return;
+            const t = sel.outcomeType;
+            if ((t === 'Away' || t === 'Home') && altData.spreads[t][sel.points] == null) {
+              altData.spreads[t][sel.points] = price;
+            }
+          });
+        }
+
+        // DK main total — fill in the line that alt market omits
+        if (mainTotalRes.ok) {
+          const mtd = await mainTotalRes.json();
+          (mtd.selections || []).forEach(function(sel) {
+            const price = parseAmerican(sel.displayOdds && sel.displayOdds.american);
+            if (price == null || sel.points == null) return;
+            const t = sel.outcomeType;
+            if ((t === 'Over' || t === 'Under') && altData.totals[t][sel.points] == null) {
+              altData.totals[t][sel.points] = price;
+            }
           });
         }
 
