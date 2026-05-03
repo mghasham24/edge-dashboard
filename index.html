@@ -2824,6 +2824,9 @@
         key: 'basketball_nba',
         label: 'NBA'
     }, {
+        key: 'basketball_wnba',
+        label: 'WNBA'
+    }, {
         key: 'baseball_mlb',
         label: 'MLB'
     }, {
@@ -2854,11 +2857,12 @@
     var vols = {}; // volume display per row id
     var yourLines = {};
     var altOdds = {}; // gameId -> { spreads: {teamName: {point: price}}, totals: {side: {point: price}} }
-    var nbaPoller = null;
-    var mlbPoller = null;
-    var nhlPoller = null;
-    var dkPoller  = null;
-    var fcPoller  = null;
+    var nbaPoller  = null;
+    var wnbaPoller = null;
+    var mlbPoller  = null;
+    var nhlPoller  = null;
+    var dkPoller   = null;
+    var fcPoller   = null;
     var dkAltOdds = {}; // gid -> { spreads: { Away: {line: price}, Home: {line: price} }, totals: { Over: {line: price}, Under: {line: price} } }
     var dkPreGameStore = {}; // gid -> last known DK alt lines before/during game (persists when DK suspends in-game)
     var lastSyncData = {}; // sport -> last Real Sports sync response (d.markets object)
@@ -3232,6 +3236,7 @@
 
     var _sportLogoMap = {
         basketball_nba:        'https://a.espncdn.com/i/teamlogos/leagues/500/nba.png',
+        basketball_wnba:       'https://a.espncdn.com/i/teamlogos/leagues/500/wnba.png',
         basketball_ncaab:      'https://a.espncdn.com/i/teamlogos/leagues/500/ncaa.png',
         icehockey_nhl:         'https://a.espncdn.com/i/teamlogos/leagues/500/nhl.png',
         baseball_mlb:          'https://a.espncdn.com/i/teamlogos/leagues/500/mlb.png',
@@ -3728,6 +3733,7 @@
         'icehockey_nhl':             0.025,
         'baseball_mlb':              0.02,
         'basketball_nba':            0.005,
+        'basketball_wnba':           0.005,
         'basketball_ncaab':          0.005,
         'soccer_fc':                 0.03,
         'mma_mixed_martial_arts':    0.005
@@ -5138,11 +5144,12 @@
         // and would race with loadAllEvSports' sequential phase, causing cross-sport
         // contamination in evTabCache (e.g. FC rows written under 'baseball_mlb' key).
         // loadAllEvSports uses its own 15s refresh timer to keep EV data fresh.
-        if (nbaPoller) { clearInterval(nbaPoller); nbaPoller = null; }
-        if (mlbPoller) { clearInterval(mlbPoller); mlbPoller = null; }
-        if (nhlPoller) { clearInterval(nhlPoller); nhlPoller = null; }
-        if (dkPoller)  { clearInterval(dkPoller);  dkPoller  = null; }
-        if (fcPoller)  { clearInterval(fcPoller);  fcPoller  = null; }
+        if (nbaPoller)  { clearInterval(nbaPoller);  nbaPoller  = null; }
+        if (wnbaPoller) { clearInterval(wnbaPoller); wnbaPoller = null; }
+        if (mlbPoller)  { clearInterval(mlbPoller);  mlbPoller  = null; }
+        if (nhlPoller)  { clearInterval(nhlPoller);  nhlPoller  = null; }
+        if (dkPoller)   { clearInterval(dkPoller);   dkPoller   = null; }
+        if (fcPoller)   { clearInterval(fcPoller);   fcPoller   = null; }
         try { posthog.capture('best_ev_opened'); } catch(e) {}
         evTabVisible = true;
         // Sync unit size from main dashboard
@@ -5274,6 +5281,7 @@
             'baseball_mlb': 4 * 3600000,
             'americanfootball_nfl': 4 * 3600000,
             'basketball_nba': 3 * 3600000,
+            'basketball_wnba': 3 * 3600000,
             'basketball_ncaab': 3 * 3600000,
             'icehockey_nhl': 3 * 3600000,
             'soccer_fc': 2.5 * 3600000,
@@ -5570,6 +5578,51 @@
                                 var price = game.ml[teamName];
                                 if (price == null) return;
                                 rows.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'ML', side: teamName, am: price, pt: null, pid: pid, ps: ps, gid: gid, _sport_key: 'basketball_nba' });
+                            });
+                        }
+                    });
+                    rawRowsBySport[s.key] = rows;
+                    return;
+                }
+                if (s.key === 'basketball_wnba') {
+                    // WNBA uses FD native API — no Odds API credits
+                    var wnbaRes = await fetch('/api/fd/wnbaalts', { credentials: 'same-origin' });
+                    var wnbaData = wnbaRes.ok ? await wnbaRes.json() : null;
+                    if (!wnbaData || !wnbaData.ok || !wnbaData.games) return;
+                    var rows = [];
+                    Object.entries(wnbaData.games).forEach(function([gameKey, game]) {
+                        var away = game.away, home = game.home;
+                        var cm = game.cm ? new Date(game.cm) : null;
+                        var gid = String(game.id);
+                        if (game.spreads) {
+                            var pid = gid + '-spreads';
+                            [[away, 'A'], [home, 'B']].forEach(function(pair) {
+                                var teamName = pair[0], ps = pair[1];
+                                var sideData = game.spreads[teamName];
+                                if (!sideData) return;
+                                var entry = Object.entries(sideData)[0];
+                                if (!entry) return;
+                                rows.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName, am: entry[1], pt: parseFloat(entry[0]), pid: pid, ps: ps, gid: gid, _sport_key: 'basketball_wnba' });
+                            });
+                        }
+                        if (game.totals) {
+                            var pid = gid + '-totals';
+                            [['Over','A'],['Under','B']].forEach(function(pair) {
+                                var side = pair[0], ps = pair[1];
+                                var sideData = game.totals[side];
+                                if (!sideData) return;
+                                var entry = Object.entries(sideData)[0];
+                                if (!entry) return;
+                                rows.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'Total', side: side, am: entry[1], pt: parseFloat(entry[0]), pid: pid, ps: ps, gid: gid, _sport_key: 'basketball_wnba' });
+                            });
+                        }
+                        if (game.ml) {
+                            var pid = gid + '-h2h';
+                            [[away,'A'],[home,'B']].forEach(function(pair) {
+                                var teamName = pair[0], ps = pair[1];
+                                var price = game.ml[teamName];
+                                if (price == null) return;
+                                rows.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'ML', side: teamName, am: price, pt: null, pid: pid, ps: ps, gid: gid, _sport_key: 'basketball_wnba' });
                             });
                         }
                     });
@@ -7265,10 +7318,103 @@
             return;
         }
 
+        // WNBA: use FD native API directly — no Odds API credits
+        if (currentSport === 'basketball_wnba') {
+            altOdds = {};
+            dkPreGameStore = {};
+            fetch('/api/fd/wnbaalts', { credentials: 'same-origin' })
+            .then(function(r) {
+                if (r.status === 401) {
+                    dot.className = 'sdot error';
+                    stxt.textContent = 'Session expired — please log in again.';
+                    btn.disabled = false;
+                    setTimeout(function() { location.reload(); }, 2000);
+                    return Promise.reject('unauth');
+                }
+                return r.json();
+            })
+            .then(function(data) {
+                if (!data.ok || !data.games) {
+                    rawRows = []; rsGameIds = {};
+                    dot.className = 'sdot error';
+                    stxt.textContent = 'No WNBA games right now';
+                    return;
+                }
+                var rows = [];
+                Object.entries(data.games).forEach(function([gameKey, game]) {
+                    var away = game.away, home = game.home;
+                    var cm = game.cm ? new Date(game.cm) : null;
+                    var gid = String(game.id);
+                    altOdds[gid] = game;
+
+                    if (game.spreads) {
+                        var pid = gid + '-spreads';
+                        [[away, 'A'], [home, 'B']].forEach(function(pair) {
+                            var teamName = pair[0], ps = pair[1];
+                            var sideData = game.spreads[teamName];
+                            if (!sideData) return;
+                            var entry = Object.entries(sideData)[0];
+                            if (!entry) return;
+                            rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName, am: entry[1], pt: parseFloat(entry[0]), pid: pid, ps: ps, gid: gid });
+                        });
+                    }
+                    if (game.totals) {
+                        var pid = gid + '-totals';
+                        [['Over', 'A'], ['Under', 'B']].forEach(function(pair) {
+                            var side = pair[0], ps = pair[1];
+                            var sideData = game.totals[side];
+                            if (!sideData) return;
+                            var entry = Object.entries(sideData)[0];
+                            if (!entry) return;
+                            rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'Total', side: side, am: entry[1], pt: parseFloat(entry[0]), pid: pid, ps: ps, gid: gid });
+                        });
+                    }
+                    if (game.ml) {
+                        var pid = gid + '-h2h';
+                        [[away, 'A'], [home, 'B']].forEach(function(pair) {
+                            var teamName = pair[0], ps = pair[1];
+                            var price = game.ml[teamName];
+                            if (price == null) return;
+                            rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'ML', side: teamName, am: price, pt: null, pid: pid, ps: ps, gid: gid });
+                        });
+                    }
+                });
+                rawRows = rows;
+                rawRowsBySport[currentSport] = rawRows;
+                var nowStr = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+                if (rawRows.length) {
+                    dot.className = 'sdot live';
+                    stxt.textContent = 'Updated ' + nowStr + ' - ' + Object.keys(data.games).length + ' games - FanDuel';
+                } else {
+                    dot.className = 'sdot error';
+                    stxt.textContent = 'No WNBA games right now';
+                }
+            })
+            .catch(function(e) {
+                if (e === 'unauth') return;
+                rawRows = []; rsGameIds = {};
+                dot.className = 'sdot error';
+                stxt.textContent = 'Error fetching WNBA data';
+            })
+            .then(function() {
+                btn.disabled = false;
+                renderTable();
+                if (rawRows.length > 0) fetchRealMarkets(currentSport);
+                // Start auto-poll to keep WNBA odds live
+                if (wnbaPoller) clearInterval(wnbaPoller);
+                wnbaPoller = setInterval(function() {
+                    if (currentSport !== 'basketball_wnba') { clearInterval(wnbaPoller); wnbaPoller = null; return; }
+                    fetchAltLinesForWNBA();
+                }, 5000);
+            });
+            return;
+        }
+
         // Stop all native pollers when switching sports
-        if (nbaPoller) { clearInterval(nbaPoller); nbaPoller = null; }
-        if (mlbPoller) { clearInterval(mlbPoller); mlbPoller = null; }
-        if (nhlPoller) { clearInterval(nhlPoller); nhlPoller = null; }
+        if (nbaPoller)  { clearInterval(nbaPoller);  nbaPoller  = null; }
+        if (wnbaPoller) { clearInterval(wnbaPoller); wnbaPoller = null; }
+        if (mlbPoller)  { clearInterval(mlbPoller);  mlbPoller  = null; }
+        if (nhlPoller)  { clearInterval(nhlPoller);  nhlPoller  = null; }
         if (dkPoller)  { clearInterval(dkPoller);  dkPoller  = null; }
         if (fcPoller)  { clearInterval(fcPoller);  fcPoller  = null; }
         dkAltOdds = {};
@@ -7944,6 +8090,62 @@
                             var nbaSyncDataP = await nbaSyncResP.json();
                             fillPredsFromSync(nbaRowsP, nbaSyncDataP);
                             lastSyncData[s.key] = nbaSyncDataP;
+                        }
+                    }
+                    done++;
+                    setBar(Math.round(done / total * 100));
+                    return;
+                }
+                // WNBA: use FD native — no Odds API credits
+                if (s.key === 'basketball_wnba') {
+                    var [wnbaResP, wnbaSyncResP] = await Promise.all([
+                        fetch('/api/fd/wnbaalts', { credentials: 'same-origin' }),
+                        fetch('/api/real/sync?sport=basketball_wnba', { credentials: 'same-origin' })
+                    ]);
+                    var wnbaDataP = wnbaResP.ok ? await wnbaResP.json() : null;
+                    if (wnbaDataP && wnbaDataP.ok && wnbaDataP.games) {
+                        var wnbaRowsP = [];
+                        Object.entries(wnbaDataP.games).forEach(function([gameKey, game]) {
+                            var away = game.away, home = game.home;
+                            var cm = game.cm ? new Date(game.cm) : null;
+                            var gid = String(game.id);
+                            if (game.spreads) {
+                                var pid = gid + '-spreads';
+                                [[away,'A'],[home,'B']].forEach(function(pair) {
+                                    var teamName = pair[0], ps = pair[1];
+                                    var sideData = game.spreads[teamName];
+                                    if (!sideData) return;
+                                    var entry = Object.entries(sideData)[0];
+                                    if (!entry) return;
+                                    wnbaRowsP.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName, am: entry[1], pt: parseFloat(entry[0]), pid: pid, ps: ps, gid: gid, _sport_key: 'basketball_wnba' });
+                                });
+                            }
+                            if (game.totals) {
+                                var pid = gid + '-totals';
+                                [['Over','A'],['Under','B']].forEach(function(pair) {
+                                    var side = pair[0], ps = pair[1];
+                                    var sideData = game.totals[side];
+                                    if (!sideData) return;
+                                    var entry = Object.entries(sideData)[0];
+                                    if (!entry) return;
+                                    wnbaRowsP.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'Total', side: side, am: entry[1], pt: parseFloat(entry[0]), pid: pid, ps: ps, gid: gid, _sport_key: 'basketball_wnba' });
+                                });
+                            }
+                            if (game.ml) {
+                                var pid = gid + '-h2h';
+                                [[away,'A'],[home,'B']].forEach(function(pair) {
+                                    var teamName = pair[0], ps = pair[1];
+                                    var price = game.ml[teamName];
+                                    if (price == null) return;
+                                    wnbaRowsP.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'ML', side: teamName, am: price, pt: null, pid: pid, ps: ps, gid: gid, _sport_key: 'basketball_wnba' });
+                                });
+                            }
+                        });
+                        rawRowsBySport[s.key] = wnbaRowsP;
+                        if (wnbaSyncResP.ok) {
+                            var wnbaSyncDataP = await wnbaSyncResP.json();
+                            fillPredsFromSync(wnbaRowsP, wnbaSyncDataP);
+                            lastSyncData[s.key] = wnbaSyncDataP;
                         }
                     }
                     done++;
@@ -9193,6 +9395,58 @@
 
                 // Override displayed values with FD native real-time data
                 // For live games DK owns spread/total pts — skip FD overwrite to avoid flicker
+                var isLiveRow = r.cm && r.cm <= new Date();
+                if (r.mkt === 'Spread' && !isLiveRow) {
+                    var sideData = game.spreads && game.spreads[r.side];
+                    if (sideData) {
+                        var entry = Object.entries(sideData)[0];
+                        if (entry) { r.pt = parseFloat(entry[0]); r.am = entry[1]; }
+                    }
+                } else if (r.mkt === 'Total' && !isLiveRow) {
+                    var sideData = game.totals && game.totals[r.side];
+                    if (sideData) {
+                        var entry = Object.entries(sideData)[0];
+                        if (entry) { r.pt = parseFloat(entry[0]); r.am = entry[1]; }
+                    }
+                } else if (r.mkt === 'ML') {
+                    var price = game.ml && game.ml[r.side];
+                    if (price != null) r.am = price;
+                }
+            });
+
+            renderTable();
+        } catch(e) {}
+    }
+
+    async function fetchAltLinesForWNBA() {
+        if (currentSport !== 'basketball_wnba') return;
+
+        try {
+            var res = await fetch('/api/fd/wnbaalts', { credentials: 'same-origin' });
+            var data = await res.json();
+            if (!data.ok || !data.games) return;
+
+            rawRows.forEach(function(r) {
+                if (r.mkt !== 'Spread' && r.mkt !== 'Total' && r.mkt !== 'ML') return;
+                if (!r.gid) return;
+
+                var game = data.games[r.game];
+                if (!game) {
+                    var fdTeams = r.game.split(' @ ');
+                    var fdAwayLast = (fdTeams[0] || '').trim().split(' ').pop().toLowerCase();
+                    var fdHomeLast = (fdTeams[1] || '').trim().split(' ').pop().toLowerCase();
+                    var matchedKey = Object.keys(data.games).find(function(k) {
+                        var kTeams = k.split(' @ ');
+                        var kAwayLast = (kTeams[0] || '').trim().split(' ').pop().toLowerCase();
+                        var kHomeLast = (kTeams[1] || '').trim().split(' ').pop().toLowerCase();
+                        return kAwayLast === fdAwayLast && kHomeLast === fdHomeLast;
+                    });
+                    if (matchedKey) game = data.games[matchedKey];
+                }
+                if (!game) return;
+
+                if (r.mkt === 'Spread' || r.mkt === 'Total') altOdds[r.gid] = game;
+
                 var isLiveRow = r.cm && r.cm <= new Date();
                 if (r.mkt === 'Spread' && !isLiveRow) {
                     var sideData = game.spreads && game.spreads[r.side];

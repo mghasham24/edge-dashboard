@@ -68,6 +68,7 @@ function buildHeaders(token, deviceUuid) {
 
 const SPORT_MAP = {
   'basketball_nba': 'nba',
+  'basketball_wnba': 'wnba',
   'icehockey_nhl': 'nhl',
   'baseball_mlb': 'mlb',
   'basketball_ncaab': 'cbb',
