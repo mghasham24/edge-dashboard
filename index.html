@@ -6056,8 +6056,18 @@
 
                 var portGameUrl = getPortfolioGameUrl(p);
                 var portGameLink = portGameUrl ? ' <a href="' + portGameUrl + '" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--accent);font-size:11px;text-decoration:none;opacity:0.85" title="View on Real Sports">&#8599;</a>' : '';
+
+                var isLivePos = false;
+                if (matchedRow && matchedRow.cm) {
+                    isLivePos = matchedRow.cm.getTime() <= Date.now();
+                } else {
+                    var statusLower = (status || '').toLowerCase();
+                    isLivePos = statusLower.indexOf('progress') !== -1 || statusLower.indexOf('live') !== -1;
+                }
+                var liveDot = isLivePos ? '<span class="live-dot" style="display:inline-block;margin-right:5px;vertical-align:middle"></span>' : '';
+
                 return '<tr' + (trStyle ? ' style="' + trStyle + '"' : '') + '>'
-                    + '<td data-label="Matchup">' + escHtml(matchup) + portGameLink + '</td>'
+                    + '<td data-label="Matchup">' + liveDot + escHtml(matchup) + portGameLink + '</td>'
                     + '<td data-label="Sport" style="font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--muted)">' + escHtml(sportLbl) + '</td>'
                     + '<td data-label="Market"><span class="mkt-badge">' + escHtml(market) + '</span></td>'
                     + '<td data-label="Side">' + escHtml(side) + edgeBadge + '</td>'
