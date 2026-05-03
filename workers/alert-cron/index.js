@@ -914,9 +914,12 @@ export default {
 
       for (const bet of userBets) {
         const entry = existingLog[bet.betKey];
-        // Suppress re-alert unless EV jumped by RE_ALERT_EV_JUMP — no time-based escape hatch
-        // (time escape caused infinite re-alerts every 2h for the same bet)
-        if (entry && bet.ev - entry.ev < RE_ALERT_EV_JUMP) continue;
+        if (entry) {
+          // Live game, last alert was pre-game → fire one re-alert at game start
+          // After that, entry.sentAt >= commenceTime so the 4% jump rule resumes
+          const wasAlertedPreGame = bet.isLive && bet.commenceTime && entry.sentAt < bet.commenceTime;
+          if (!wasAlertedPreGame && bet.ev - entry.ev < RE_ALERT_EV_JUMP) continue;
+        }
 
         const dollarAmt = Math.round(bet.units * unitSize);
         const message   = formatAlert(bet.sport, bet.game, bet.market, bet.side, bet.ev, bet.units, dollarAmt, bet.pt, bet.rsPct, bet.adjFairPct, bet.gameUrl, bet.isLive);
