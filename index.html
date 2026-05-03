@@ -5970,6 +5970,16 @@
             });
         });
 
+        // Build gid → commenceTime from ALL cached sports (rawRows only covers current sport tab)
+        var allCachedRows = Object.values(rawRowsBySport || {}).reduce(function(acc, sr) { return acc.concat(sr || []); }, rawRows || []);
+        var gidToCm = {};
+        Object.keys(rsGameIds || {}).forEach(function(gameKey) {
+            var gid = String(rsGameIds[gameKey]);
+            if (gidToCm[gid]) return;
+            var row = allCachedRows.find(function(r) { return r.game === gameKey && r.cm; });
+            if (row) gidToCm[gid] = row.cm;
+        });
+
         // marketType → mkt normalisation
         var mktMap = { gamewinner: 'ML', pointspread: 'Spread', total: 'Total', moneyline: 'ML' };
 
@@ -6058,8 +6068,9 @@
                 var portGameLink = portGameUrl ? ' <a href="' + portGameUrl + '" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--accent);font-size:11px;text-decoration:none;opacity:0.85" title="View on Real Sports">&#8599;</a>' : '';
 
                 var isLivePos = false;
-                if (matchedRow && matchedRow.cm) {
-                    isLivePos = matchedRow.cm.getTime() <= Date.now();
+                var posCm = (matchedRow && matchedRow.cm) || (gid && gidToCm[gid]) || null;
+                if (posCm) {
+                    isLivePos = posCm.getTime() <= Date.now();
                 } else {
                     var statusLower = (status || '').toLowerCase();
                     isLivePos = statusLower.indexOf('progress') !== -1 || statusLower.indexOf('live') !== -1;
