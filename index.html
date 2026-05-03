@@ -8374,7 +8374,7 @@
         var evH = '-';
         var predEV = preds[r.id];
         if (predEV && r.af != null) {
-            var realPctEV = probsExact[r.id] != null ? probsExact[r.id] : parseFloat(predEV) / 100;
+            var realPctEV = Math.min(0.999, Math.max(0.001, (probsExact[r.id] != null ? probsExact[r.id] : parseFloat(predEV) / 100) + rsPredAdj / 100));
             if (realPctEV > 0 && realPctEV < 1) {
                 var rakeEV = rsBaseTake(realPctEV);
                 var ev = (r.af * (1/realPctEV) * (1-rakeEV) - 1) * 100;
@@ -8386,7 +8386,8 @@
                 }
             }
         }
-        var pv = preds[r.id] || '';
+        var _rawPv = parseFloat(preds[r.id]);
+        var pv = isFinite(_rawPv) ? (rsPredAdj ? String(Math.min(99, Math.max(1, Math.round(_rawPv + rsPredAdj)))) : preds[r.id]) : '';
         var ylv = (r.yl != null && r.yl !== '') ? r.yl : '';
         var ph = r.pt != null ? r.pt : '';
         var lc = afChanged ? ' line-changed' : '';
