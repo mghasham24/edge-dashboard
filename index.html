@@ -3787,7 +3787,7 @@
         return 0.034;
     }
 
-    function adjFair(fair, fd, yl, mkt, ps) {
+    function adjFair(fair, fd, yl, mkt, ps, sport) {
         if (fair == null || mkt === 'ML')
             return fair;
         if (fd == null || yl == null || yl === '')
@@ -3796,7 +3796,7 @@
         if (!isFinite(d) || d === 0)
             return fair;
         d = Math.max(Math.min(d, 3.5), -3.5); // cap at 3.5 pts to prevent large line gap distortion
-        var rate = LINE_ADJ_RATE[currentSport] || 0.005;
+        var rate = LINE_ADJ_RATE[sport || currentSport] || 0.005;
         var adj = (d / 0.5) * rate;
         if (mkt === 'Total') {
             adj = ps === 'A' ? -adj : adj;
@@ -5214,6 +5214,49 @@
         if (evAutoRefreshTimer) { clearInterval(evAutoRefreshTimer); evAutoRefreshTimer = null; }
     }
 
+    // Compute EV for a sport's rows and cache+render immediately — safe to call in parallel
+    // (uses sport param explicitly, never reads currentSport)
+    function computeAndCacheEv(sportRows, sportKey, syncData) {
+        if (!sportRows || !sportRows.length) return;
+        if (syncData) {
+            fillPredsFromSync(sportRows, syncData);
+            lastSyncData[sportKey] = syncData;
+        }
+        var pairs = {};
+        sportRows.forEach(function(r) { if (!pairs[r.pid]) pairs[r.pid] = {}; pairs[r.pid][r.ps] = r; });
+        var computed = sportRows.map(function(r) {
+            var p = pairs[r.pid] || {};
+            var nv = novig(p.A ? imp(p.A.am) : null, p.B ? imp(p.B.am) : null);
+            var yl = yourLines[r.id] != null ? yourLines[r.id] : null;
+            var altNV = getAltFair(r, yl, p.A, p.B);
+            var fair = (r.mkt === 'RFI' && r.rfiFair != null) ? r.rfiFair : (altNV ? (r.ps === 'A' ? altNV.fa : altNV.fb) : (r.ps === 'A' ? nv.fa : nv.fb));
+            var af = (r.mkt === 'RFI' && r.rfiFair != null) ? r.rfiFair : (altNV ? fair : adjFair(fair, r.pt, yl, r.mkt, r.ps, sportKey));
+            var pr = preds[r.id];
+            var pred = (pr !== undefined && pr !== '') ? (probsExact[r.id] != null ? probsExact[r.id] : parseFloat(pr) / 100) : null;
+            var evForUnits = null;
+            if (af != null && pred != null && pred > 0 && pred < 1) {
+                evForUnits = (af * (1/pred) * (1-rsBaseTake(pred)) - 1) * 100;
+            }
+            var u = unitsEV(evForUnits, pred);
+            var edge = (af != null && pred != null) ? (af - pred) * 100 : null;
+            return { id: r.id, game: r.game, cm: r.cm, mkt: r.mkt, side: r.side, am: r.am, pt: r.pt, ps: r.ps, pid: r.pid, gid: r.gid, league: r.league, fair: fair, af: af, yl: yl, edge: edge, u: u, _sport_key: sportKey };
+        }).filter(function(r) {
+            if ((sportKey === 'basketball_nba' || sportKey === 'icehockey_nhl') && r.gid && r.yl != null && r.pt != null && (r.mkt === 'Spread' || r.mkt === 'Total')) {
+                if (Math.abs(parseFloat(r.yl) - parseFloat(r.pt)) > 0.001) {
+                    var dkGame = dkAltOdds[r.gid];
+                    if (!dkGame) return false;
+                    var dkSideKey = r.ps === 'A' ? (r.mkt === 'Spread' ? 'Away' : 'Over') : (r.mkt === 'Spread' ? 'Home' : 'Under');
+                    var dkLines = r.mkt === 'Spread' ? (dkGame.spreads && dkGame.spreads[dkSideKey]) : (dkGame.totals && dkGame.totals[dkSideKey]);
+                    if (!dkLines || dkClosestPrice(dkLines, parseFloat(r.yl)) == null) return false;
+                }
+            }
+            return true;
+        });
+        cacheEvRows(computed, sportKey);
+        done++;
+        updateStatus();
+    }
+
     function cacheEvRows(rows, sport, skipRender) {
         // Only show rows with a prediction AND positive EV
         var positive = [];
@@ -5578,12 +5621,11 @@
                     return;
                 }
                 if (s.key === 'basketball_nba') {
-                    // NBA uses FD native API — fetch odds + RS sync in parallel
                     var [nbaRes, nbaSyncEv] = await Promise.all([
                         fetch('/api/fd/nbaalts', { credentials: 'same-origin' }),
                         fetch('/api/real/sync?sport=basketball_nba', { credentials: 'same-origin' })
                     ]);
-                    if (nbaSyncEv.ok) { try { freshSyncData[s.key] = await nbaSyncEv.json(); } catch(e) {} }
+                    var _nbaSd = nbaSyncEv.ok ? await nbaSyncEv.json() : null;
                     var nbaData = nbaRes.ok ? await nbaRes.json() : null;
                     if (!nbaData || !nbaData.ok || !nbaData.games) return;
                     var rows = [];
@@ -5624,15 +5666,15 @@
                         }
                     });
                     rawRowsBySport[s.key] = rows;
+                    computeAndCacheEv(rows, s.key, _nbaSd);
                     return;
                 }
                 if (s.key === 'basketball_wnba') {
-                    // WNBA uses FD native API — fetch odds + RS sync in parallel
                     var [wnbaRes, wnbaSyncEv] = await Promise.all([
                         fetch('/api/fd/wnbaalts', { credentials: 'same-origin' }),
                         fetch('/api/real/sync?sport=basketball_wnba', { credentials: 'same-origin' })
                     ]);
-                    if (wnbaSyncEv.ok) { try { freshSyncData[s.key] = await wnbaSyncEv.json(); } catch(e) {} }
+                    var _wnbaSd = wnbaSyncEv.ok ? await wnbaSyncEv.json() : null;
                     var wnbaData = wnbaRes.ok ? await wnbaRes.json() : null;
                     if (!wnbaData || !wnbaData.ok || !wnbaData.games) return;
                     var rows = [];
@@ -5673,15 +5715,15 @@
                         }
                     });
                     rawRowsBySport[s.key] = rows;
+                    computeAndCacheEv(rows, s.key, _wnbaSd);
                     return;
                 }
                 if (s.key === 'icehockey_nhl') {
-                    // NHL uses FD native API — fetch odds + RS sync in parallel
                     var [nhlRes, nhlSyncEv] = await Promise.all([
                         fetch('/api/fd/nhl', { credentials: 'same-origin' }),
                         fetch('/api/real/sync?sport=icehockey_nhl', { credentials: 'same-origin' })
                     ]);
-                    if (nhlSyncEv.ok) { try { freshSyncData[s.key] = await nhlSyncEv.json(); } catch(e) {} }
+                    var _nhlSd = nhlSyncEv.ok ? await nhlSyncEv.json() : null;
                     var nhlData = nhlRes.ok ? await nhlRes.json() : null;
                     if (!nhlData || !nhlData.ok || !nhlData.games) return;
                     var rows = [];
@@ -5722,14 +5764,16 @@
                         }
                     });
                     rawRowsBySport[s.key] = rows;
+                    computeAndCacheEv(rows, s.key, _nhlSd);
                     return;
                 }
+                // MMA and other Odds API sports
                 var mkts = noSpread.indexOf(s.key) !== -1 ? 'h2h' : 'h2h,spreads,totals';
                 var [resp, syncRespEv] = await Promise.all([
                     fetch('/api/odds?sport=' + s.key + '&markets=' + mkts + '&bookmakers=fanduel'),
                     fetch('/api/real/sync?sport=' + s.key, { credentials: 'same-origin' })
                 ]);
-                if (syncRespEv.ok) { try { freshSyncData[s.key] = await syncRespEv.json(); } catch(e) {} }
+                var _mmasd = syncRespEv.ok ? await syncRespEv.json() : null;
                 var _remEv = resp.headers.get('x-requests-remaining');
                 if (_remEv) { var _remEvEl = document.getElementById('api-remaining'); if (_remEvEl) _remEvEl.textContent = _remEv + ' requests left'; }
                 if (!resp.ok) return;
@@ -5740,90 +5784,34 @@
                 currentSport = s.key;
                 var parsed = parseGames(games);
                 currentSport = savedSport4;
-                rawRowsBySport[s.key] = parsed; // always overwrite — empty means no active games
+                rawRowsBySport[s.key] = parsed;
+                computeAndCacheEv(parsed, s.key, _mmasd);
             } catch(e) {}
         }));
 
-        // Phase 1 done — allow cacheEvRows to render progressively as each sport finishes
+        // MLB and FC need fetchRealMarkets (uses global rawRows/currentSport) — sequential after parallel phase
         evLoadingInProgress = false;
-
-        // Load each sport sequentially to avoid hammering the API
-        for (var i = 0; i < sportsToLoad.length; i++) {
-            var s = sportsToLoad[i];
+        var mlbFcSports = sportsToLoad.filter(function(s) { return s.key === 'baseball_mlb' || s.key === 'soccer_fc'; });
+        for (var i = 0; i < mlbFcSports.length; i++) {
+            var s = mlbFcSports[i];
             try {
-                // For MLB and FC, run fetchRealMarkets against their rows (not current rawRows)
-                // so preds are populated before cacheEvRows runs.
                 if (s.key === 'baseball_mlb' && (rawRowsBySport[s.key] || []).length) {
-                    var savedSportEv = currentSport;
-                    var savedRawRowsEv = rawRows;
-                    currentSport = 'baseball_mlb';
-                    rawRows = rawRowsBySport['baseball_mlb']; // point fetchRealMarkets at MLB rows
+                    var savedSportEv = currentSport, savedRawRowsEv = rawRows;
+                    currentSport = 'baseball_mlb'; rawRows = rawRowsBySport['baseball_mlb'];
                     await fetchRealMarkets('baseball_mlb', true);
-                    rawRowsBySport['baseball_mlb'] = rawRows; // sync back (fetchRealMarkets may filter rows)
-                    rawRows = savedRawRowsEv;
-                    currentSport = savedSportEv;
+                    rawRowsBySport['baseball_mlb'] = rawRows;
+                    rawRows = savedRawRowsEv; currentSport = savedSportEv;
+                    computeAndCacheEv(rawRowsBySport['baseball_mlb'], 'baseball_mlb', null);
                 }
                 if (s.key === 'soccer_fc' && (rawRowsBySport[s.key] || []).length) {
-                    var savedSportEvFc = currentSport;
-                    var savedRawRowsEvFc = rawRows;
-                    currentSport = 'soccer_fc';
-                    rawRows = rawRowsBySport['soccer_fc'];
+                    var savedSportEvFc = currentSport, savedRawRowsEvFc = rawRows;
+                    currentSport = 'soccer_fc'; rawRows = rawRowsBySport['soccer_fc'];
                     await fetchRealMarkets('soccer_fc', true);
                     rawRowsBySport['soccer_fc'] = rawRows;
-                    rawRows = savedRawRowsEvFc;
-                    currentSport = savedSportEvFc;
+                    rawRows = savedRawRowsEvFc; currentSport = savedSportEvFc;
+                    computeAndCacheEv(rawRowsBySport['soccer_fc'], 'soccer_fc', null);
                 }
-                var sportRows = rawRowsBySport[s.key] || [];
-                // For non-MLB/FC sports: re-apply cached RS sync data to new row IDs so preds are populated.
-                // Phase 1 may have fetched fresh odds (new row IDs), so preds from prior tab load may be stale.
-                // fillPredsFromSync matches by game/team name, not ID — safe to call with refreshed rows.
-                if (s.key !== 'baseball_mlb' && s.key !== 'soccer_fc' && sportRows.length) {
-                    var syncToUse = freshSyncData[s.key] || lastSyncData[s.key];
-                    if (syncToUse) {
-                        fillPredsFromSync(sportRows, syncToUse);
-                        lastSyncData[s.key] = syncToUse;
-                    }
-                }
-                if (sportRows.length) {
-                    var savedSport3 = currentSport;
-                    currentSport = s.key;
-                    var pairs3 = {};
-                    sportRows.forEach(function(r) { if (!pairs3[r.pid]) pairs3[r.pid] = {}; pairs3[r.pid][r.ps] = r; });
-                    var computed3 = sportRows.map(function(r) {
-                        var p = pairs3[r.pid] || {};
-                        var nv = novig(p.A ? imp(p.A.am) : null, p.B ? imp(p.B.am) : null);
-                        var yl = yourLines[r.id] != null ? yourLines[r.id] : null;
-                        var altNV3 = getAltFair(r, yl, p.A, p.B);
-                        var fair = (r.mkt === 'RFI' && r.rfiFair != null) ? r.rfiFair : (altNV3 ? (r.ps === 'A' ? altNV3.fa : altNV3.fb) : (r.ps === 'A' ? nv.fa : nv.fb));
-                        var af = (r.mkt === 'RFI' && r.rfiFair != null) ? r.rfiFair : (altNV3 ? fair : adjFair(fair, r.pt, yl, r.mkt, r.ps));
-                        var pr = preds[r.id];
-                        var pred = (pr !== undefined && pr !== '') ? (probsExact[r.id] != null ? probsExact[r.id] : parseFloat(pr) / 100) : null;
-                        var evForUnits = null;
-                        if (af != null && pred != null && pred > 0 && pred < 1) {
-                            evForUnits = (af * (1/pred) * (1-rsBaseTake(pred)) - 1) * 100;
-                        }
-                        var u = unitsEV(evForUnits, pred);
-                        var edge = (af != null && pred != null) ? (af - pred) * 100 : null;
-                        return { id: r.id, game: r.game, cm: r.cm, mkt: r.mkt, side: r.side, am: r.am, pt: r.pt, ps: r.ps, pid: r.pid, gid: r.gid, league: r.league, fair: fair, af: af, yl: yl, edge: edge, u: u };
-                    }).filter(function(r) {
-                        // NBA/NHL: lines match → use FD odds. Lines differ → need DK alt at RS line, hide if missing.
-                        if ((s.key === 'basketball_nba' || s.key === 'icehockey_nhl') && r.gid && r.yl != null && r.pt != null && (r.mkt === 'Spread' || r.mkt === 'Total')) {
-                            if (Math.abs(parseFloat(r.yl) - parseFloat(r.pt)) > 0.001) {
-                                var dkGame = dkAltOdds[r.gid];
-                                if (!dkGame) return false;
-                                var dkSideKey = r.ps === 'A' ? (r.mkt === 'Spread' ? 'Away' : 'Over') : (r.mkt === 'Spread' ? 'Home' : 'Under');
-                                var dkLines = r.mkt === 'Spread' ? (dkGame.spreads && dkGame.spreads[dkSideKey]) : (dkGame.totals && dkGame.totals[dkSideKey]);
-                                if (!dkLines || dkClosestPrice(dkLines, parseFloat(r.yl)) == null) return false;
-                            }
-                        }
-                        return true;
-                    });
-                    currentSport = savedSport3;
-                    cacheEvRows(computed3, s.key);
-                }
-            } catch(e) { /* skip sport on error */ }
-            done++;
-            updateStatus();
+            } catch(e) {}
         }
         if (btn) { btn.disabled = false; btn.textContent = '↺ Refresh'; }
         evLoadingInProgress = false;
