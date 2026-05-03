@@ -211,6 +211,18 @@ export async function onRequestGet(context) {
       });
     });
 
+    // Safety net: if FD removed a live game from its event list entirely,
+    // rescue it from prevGames so the cron can still alert on it
+    const nowMs2 = Date.now();
+    for (const [gameKey, prev] of Object.entries(prevGames)) {
+      if (gamesMap[gameKey] || !prev.cm) continue;
+      const cmMs = new Date(prev.cm).getTime();
+      if (cmMs > nowMs2 || cmMs < nowMs2 - 4 * 60 * 60 * 1000) continue;
+      if (Object.keys(prev.ml || {}).length || Object.keys(prev.spreads || {}).length) {
+        gamesMap[gameKey] = { ...prev, live: true };
+      }
+    }
+
     const body = JSON.stringify({ ok: true, games: gamesMap });
     try {
       await env.DB.prepare(

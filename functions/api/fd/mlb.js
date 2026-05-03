@@ -234,6 +234,17 @@ export async function onRequestGet(context) {
       }
     });
 
+    // Safety net: rescue live games FD removed from its event list
+    const nowMsSafe = Date.now();
+    for (const [gameKey, prev] of Object.entries(prevGames)) {
+      if (gamesMap[gameKey] || !prev.cm) continue;
+      const cmMs = new Date(prev.cm).getTime();
+      if (cmMs > nowMsSafe || cmMs < nowMsSafe - 5 * 60 * 60 * 1000) continue;
+      if (Object.keys(prev.ml || {}).length) {
+        gamesMap[gameKey] = { ...prev, live: true };
+      }
+    }
+
     if (debugMode === '3') {
       return new Response(JSON.stringify({ gamesMapCount: Object.keys(gamesMap).length, pricesDebug }), { headers: { 'Content-Type': 'application/json' } });
     }
