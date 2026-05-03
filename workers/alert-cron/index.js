@@ -566,7 +566,7 @@ export default {
     const FD_STALE_THRESHOLD = 30 * 60;
     const FD_WARM_THRESHOLD  = 30;  // refresh FD if no recent site traffic (keeps live odds current)
     const RS_STALE_THRESHOLD = 4 * 60 * 60;
-    const RS_WARM_THRESHOLD  = 90;
+    const RS_WARM_THRESHOLD  = 30;  // warm every cron run (cron fires every 60s > 30s threshold)
     const RE_ALERT_EV_JUMP   = 4.0;
     // Midnight ET (UTC-4 during EDT) — taken bet suppression resets each calendar day
     // Formula: subtract offset to convert to ET, floor to day, add offset back to UTC
@@ -607,10 +607,17 @@ export default {
 
     // ── 3a. Native sports (FD/DK caches) ──────────────────
 
+    // Warm all FD + RS caches in parallel before processing — avoids sequential 15s×N wait
+    const sportsNativeNeeded = NATIVE_SPORTS.filter(s => sportsNeeded.has(s.fdKey));
+    await Promise.all(sportsNativeNeeded.flatMap(s => [
+      warmFDCache(s.fdKey, s.cacheKey, env, now, FD_WARM_THRESHOLD),
+      warmRSCache(s.fdKey, env, now, RS_WARM_THRESHOLD),
+    ]));
+
     for (const sport of NATIVE_SPORTS) {
       if (!sportsNeeded.has(sport.fdKey)) continue;
 
-      // Load native FD/DK odds cache
+      // Load native FD/DK odds cache (fresh after parallel warm above)
       let fdGames = null;
       let fdAge = null;
       try {
@@ -631,26 +638,6 @@ export default {
         dbg.sports[sport.label] = { fdGames: 0, fdAge, rsGames: 0, reason: 'no_fd_cache' };
         continue;
       }
-
-      // Warm FD + RS caches in parallel — keeps live odds fresh even with no site traffic
-      await Promise.all([
-        warmFDCache(sport.fdKey, sport.cacheKey, env, now, FD_WARM_THRESHOLD),
-        warmRSCache(sport.fdKey, env, now, RS_WARM_THRESHOLD),
-      ]);
-
-      // Re-read FD cache after potential warm (may now be fresher)
-      try {
-        const refreshed = await env.DB.prepare(
-          'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
-        ).bind(sport.cacheKey).first();
-        if (refreshed) {
-          fdAge = now - refreshed.fetched_at;
-          if (fdAge < FD_STALE_THRESHOLD) {
-            const parsed = JSON.parse(refreshed.data);
-            fdGames = parsed.games || null;
-          }
-        }
-      } catch(e) {}
 
       const { games: rsGames, gameIds: rsGameIds, gameSports: rsGameSports, rsAge, reason: rsReason } =
         await loadRSCache(sport.rsKey, env, now, RS_STALE_THRESHOLD);
