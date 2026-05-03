@@ -160,6 +160,14 @@ export async function onRequestGet(context) {
     }
 
     // Step 2: Fetch all event spread lines in parallel
+
+    // Load previous cache to freeze odds when DK suspends the AH market (halftime, live suspension)
+    let prevGames = {};
+    try {
+      const prev = await env.DB.prepare('SELECT data FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
+      if (prev) prevGames = JSON.parse(prev.data).games || {};
+    } catch(e) {}
+
     const gamesMap = {};
 
     await Promise.all(todayEvents.map(async (ev) => {
@@ -190,7 +198,14 @@ export async function onRequestGet(context) {
           return;
         }
 
-        if (!Object.keys(spreads.Home).length && !Object.keys(spreads.Away).length) return;
+        if (!Object.keys(spreads.Home).length && !Object.keys(spreads.Away).length) {
+          // DK suspended the AH market — freeze last known odds so the game stays in cache
+          const frozen = prevGames[gameKey] || prevGames[ev.away + ' @ ' + ev.home] || null;
+          if (frozen && (Object.keys(frozen.spreads?.Home || {}).length || Object.keys(frozen.spreads?.Away || {}).length)) {
+            gamesMap[gameKey] = { ...frozen, id: parseInt(ev.eventId), away: ev.away, home: ev.home, cm: ev.openDate, live: true };
+          }
+          return;
+        }
 
         gamesMap[gameKey] = {
           id: parseInt(ev.eventId),
