@@ -8183,7 +8183,9 @@
                 }
 
                 // NBA/NHL: lines match → use FD odds directly. Lines differ → need DK alt at RS line, hide if missing.
-                if ((isNBA || isHockey) && r.gid && (r.mkt === 'Spread' || r.mkt === 'Total') && yourLines[r.id] != null && r.pt != null) {
+                // Live games: skip DK alt requirement — RS may show live lines FD/DK don't carry.
+                var isLiveGame = r.cm && r.cm <= now;
+                if ((isNBA || isHockey) && r.gid && (r.mkt === 'Spread' || r.mkt === 'Total') && yourLines[r.id] != null && r.pt != null && !isLiveGame) {
                     var _rsLine = parseFloat(yourLines[r.id]);
                     var _fdLine = parseFloat(r.pt);
                     if (Math.abs(_rsLine - _fdLine) > 0.001) {
