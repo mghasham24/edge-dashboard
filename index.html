@@ -8187,16 +8187,15 @@
                     if (Math.abs(parseFloat(r.pt) - parseFloat(yourLines[r.id])) > 0.001) return false;
                 }
 
-                // NBA/NHL: lines match → use FD odds directly. Lines differ → need DK alt at RS line, hide if missing.
+                // NBA/NHL: lines match → use FD odds directly. Lines differ → need DK data for this game.
+                // We only hide when DK has no game data at all. If DK has data but not the exact RS line
+                // (e.g. 8.5 is DK's main spread so it doesn't appear in the alt-spread market),
+                // the row still shows and adjFair approximates via line-shift rate.
                 if ((isNBA || isHockey) && r.gid && (r.mkt === 'Spread' || r.mkt === 'Total') && yourLines[r.id] != null && r.pt != null) {
                     var _rsLine = parseFloat(yourLines[r.id]);
                     var _fdLine = parseFloat(r.pt);
                     if (Math.abs(_rsLine - _fdLine) > 0.001) {
-                        var dkGame = dkAltOdds[r.gid];
-                        if (!dkGame) return false;
-                        var dkSideKey = r.ps === 'A' ? (r.mkt === 'Spread' ? 'Away' : 'Over') : (r.mkt === 'Spread' ? 'Home' : 'Under');
-                        var dkLines = r.mkt === 'Spread' ? (dkGame.spreads && dkGame.spreads[dkSideKey]) : (dkGame.totals && dkGame.totals[dkSideKey]);
-                        if (!dkLines || dkClosestPrice(dkLines, _rsLine) == null) return false;
+                        if (!dkAltOdds[r.gid]) return false;
                     }
                 }
 
