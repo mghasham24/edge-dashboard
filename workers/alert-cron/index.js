@@ -5,12 +5,14 @@
 //   2. Calculate EV vs RS fair probabilities
 //   3. Alert if EV >= user threshold and bet not already sent
 //   4. Re-alert if EV jumped +4% since last message (new unit tier)
+//   5. Includes live in-game bets (FD/DK still showing open markets)
 //
 // Native cache sources (matches the site exactly):
-//   NBA → fd_nba_alts   (FD native, ML + spread + total)
-//   MLB → fd_mlb        (FD native, ML only)  + fd_rfi (RFI)
-//   NHL → fd_nhl        (FD native, ML + spread + total)
-//   FC  → fd_fc         (DK native, AH spread)
+//   NBA  → fd_nba_alts   (FD native, ML + spread + total)
+//   WNBA → fd_wnba_alts  (FD native, ML + spread + total)
+//   MLB  → fd_mlb        (FD native, ML only)  + fd_rfi (RFI)
+//   NHL  → fd_nhl        (FD native, ML + spread + total)
+//   FC   → fd_fc         (DK native, AH spread)
 //   NCAAB, UFC → Odds API (no native endpoint exists)
 
 import Hashids from 'hashids';
@@ -83,11 +85,21 @@ function unitsEV(ev, realPct) {
 
 // Native sports: read from FD/DK D1 cache (same source as the site)
 const NATIVE_SPORTS = [
-  { fdKey: 'basketball_nba',        rsKey: 'nba',    label: 'NBA',   cacheKey: 'fd_nba_alts', type: 'nba'     },
-  { fdKey: 'baseball_mlb',          rsKey: 'mlb',    label: 'MLB',   cacheKey: 'fd_mlb',      type: 'ml_only' },
-  { fdKey: 'icehockey_nhl',         rsKey: 'nhl',    label: 'NHL',   cacheKey: 'fd_nhl',      type: 'nhl'     },
-  { fdKey: 'soccer_fc',             rsKey: 'soccer', label: 'FC',    cacheKey: 'fd_fc',       type: 'fc'      },
+  { fdKey: 'basketball_nba',        rsKey: 'nba',    label: 'NBA',   cacheKey: 'fd_nba_alts',  type: 'nba'     },
+  { fdKey: 'basketball_wnba',       rsKey: 'wnba',   label: 'WNBA',  cacheKey: 'fd_wnba_alts', type: 'nba'     },
+  { fdKey: 'baseball_mlb',          rsKey: 'mlb',    label: 'MLB',   cacheKey: 'fd_mlb',       type: 'ml_only' },
+  { fdKey: 'icehockey_nhl',         rsKey: 'nhl',    label: 'NHL',   cacheKey: 'fd_nhl',       type: 'nhl'     },
+  { fdKey: 'soccer_fc',             rsKey: 'soccer', label: 'FC',    cacheKey: 'fd_fc',        type: 'fc'      },
 ];
+
+// FD/DK site endpoints — cron calls these to keep odds fresh during live games
+const FD_ENDPOINT_MAP = {
+  'basketball_nba':  '/api/fd/nbaalts',
+  'basketball_wnba': '/api/fd/wnbaalts',
+  'baseball_mlb':    '/api/fd/mlb',
+  'icehockey_nhl':   '/api/fd/nhl',
+  'soccer_fc':       '/api/fd/fc',
+};
 
 // Odds API sports: no native endpoint exists yet
 const ODDS_API_SPORTS = [
@@ -133,8 +145,9 @@ function parseRSCache(cacheData) {
 }
 
 const FDKEY_TO_RSKEY = {
-  'basketball_nba': 'nba', 'baseball_mlb': 'mlb', 'icehockey_nhl': 'nhl',
-  'soccer_fc': 'soccer', 'basketball_ncaab': 'cbb', 'mma_mixed_martial_arts': 'ufc'
+  'basketball_nba': 'nba', 'basketball_wnba': 'wnba', 'baseball_mlb': 'mlb',
+  'icehockey_nhl': 'nhl', 'soccer_fc': 'soccer', 'basketball_ncaab': 'cbb',
+  'mma_mixed_martial_arts': 'ufc'
 };
 
 async function warmRSCache(fdKey, env, now, staleThreshold) {
@@ -147,6 +160,22 @@ async function warmRSCache(fdKey, env, now, staleThreshold) {
     ).bind('real_sync_' + rsKey + '_%').first();
     if (cached && (now - cached.fetched_at) < staleThreshold) return;
     await fetch(`${env.SITE_URL}/api/real/sync?sport=${fdKey}&_cron_key=${env.CRON_SECRET}`, {
+      signal: AbortSignal.timeout(15000)
+    });
+  } catch(e) {}
+}
+
+// Keeps FD/DK native odds cache fresh during live games — cron calls site endpoint with cron key bypass
+async function warmFDCache(fdKey, cacheKey, env, now, staleThreshold) {
+  if (!env.SITE_URL || !env.CRON_SECRET) return;
+  const endpoint = FD_ENDPOINT_MAP[fdKey];
+  if (!endpoint) return;
+  try {
+    const cached = await env.DB.prepare(
+      'SELECT fetched_at FROM odds_cache WHERE cache_key=?'
+    ).bind(cacheKey).first();
+    if (cached && (now - cached.fetched_at) < staleThreshold) return;
+    await fetch(`${env.SITE_URL}${endpoint}?_cron_key=${env.CRON_SECRET}`, {
       signal: AbortSignal.timeout(15000)
     });
   } catch(e) {}
@@ -253,7 +282,7 @@ async function sendTelegram(chatId, text, botToken, replyMarkup) {
   } catch(e) { return null; }
 }
 
-function formatAlert(sport, game, market, side, ev, units, dollarAmt, pt, rsPct, adjFairPct, gameUrl) {
+function formatAlert(sport, game, market, side, ev, units, dollarAmt, pt, rsPct, adjFairPct, gameUrl, isLive) {
   const evStr    = (ev >= 0 ? '+' : '') + ev.toFixed(1) + '% EV';
   const unitStr  = units + 'u (' + dollarAmt + ' Rax)';
   const ptStr    = pt != null ? ' ' + (pt > 0 ? '+' : '') + pt : '';
@@ -264,8 +293,9 @@ function formatAlert(sport, game, market, side, ev, units, dollarAmt, pt, rsPct,
   const teams    = game.split(' @ ');
   const shortGame = (teams[0] || game) + ' @ ' + (teams[1] || '');
   const linkLine = gameUrl ? `\n<a href="${gameUrl}">View on Real Sports ↗</a>` : '';
+  const header   = isLive ? '⚡ <b>LIVE Alert</b>' : '🔔 <b>RaxEdge Alert</b>';
   return (
-    `🔔 <b>RaxEdge Alert</b>\n\n` +
+    `${header}\n\n` +
     `<b>${lineStr}</b> · ${market} · ${sport.label}\n` +
     `${evStr} · ${unitStr}\n` +
     (statsStr ? statsStr + '\n' : '') +
@@ -279,9 +309,9 @@ function formatAlert(sport, game, market, side, ev, units, dollarAmt, pt, rsPct,
 // Cache: { ok, games: { "Away @ Home": { id, away, home, cm, ml: { TeamName: price } } } }
 function processNativeML(sport, fdGames, rsGames, rsGameIds, rsGameSports, globalMinEv, allBets, now) {
   for (const [gameKey, game] of Object.entries(fdGames)) {
-    if (game.live) continue; // skip in-progress games (frozen FD odds)
     const commenceTime = game.cm ? Math.floor(new Date(game.cm).getTime() / 1000) : 0;
-    if (commenceTime && commenceTime <= now) continue;
+    if (commenceTime && commenceTime < now - 4 * 3600) continue; // skip games ended >4h ago
+    const isLive = commenceTime > 0 && commenceTime <= now;
 
     const rsKey = findRSGameKey(game.away, game.home, rsGames, gameKey);
     if (!rsKey) continue;
@@ -327,7 +357,7 @@ function processNativeML(sport, fdGames, rsGames, rsGameIds, rsGameSports, globa
         ev: Math.round(ev * 10) / 10, units: u, fdOdds, pt: null,
         rsPct: Math.round(rsO.probability * 1000) / 10,
         adjFairPct: Math.round(fdFair * 1000) / 10,
-        gameUrl, commenceTime,
+        gameUrl, commenceTime, isLive,
         betKey: `${sport.fdKey}|${gameKey}|ML|${name}|`,
       });
     }
@@ -343,9 +373,9 @@ function processNativeML(sport, fdGames, rsGames, rsGameIds, rsGameSports, globa
 // } } }
 function processNativeNBA(sport, fdGames, rsGames, rsGameIds, rsGameSports, globalMinEv, allBets, now) {
   for (const [gameKey, game] of Object.entries(fdGames)) {
-    if (game.live) continue;
     const commenceTime = game.cm ? Math.floor(new Date(game.cm).getTime() / 1000) : 0;
-    if (commenceTime && commenceTime <= now) continue;
+    if (commenceTime && commenceTime < now - 4 * 3600) continue; // skip games ended >4h ago
+    const isLive = commenceTime > 0 && commenceTime <= now;
 
     const rsKey = findRSGameKey(game.away, game.home, rsGames, gameKey);
     if (!rsKey) continue;
@@ -382,7 +412,7 @@ function processNativeNBA(sport, fdGames, rsGames, rsGameIds, rsGameSports, glob
               ev: Math.round(ev * 10) / 10, units: u, fdOdds, pt: null,
               rsPct: Math.round(rsO.probability * 1000) / 10,
               adjFairPct: Math.round(fdFair * 1000) / 10,
-              gameUrl, commenceTime,
+              gameUrl, commenceTime, isLive,
               betKey: `${sport.fdKey}|${gameKey}|ML|${name}|`,
             });
           }
@@ -422,7 +452,7 @@ function processNativeNBA(sport, fdGames, rsGames, rsGameIds, rsGameSports, glob
           ev: Math.round(ev * 10) / 10, units: u, fdOdds: fdPrice, pt,
           rsPct: Math.round(rsO.probability * 1000) / 10,
           adjFairPct: Math.round(fdFair * 1000) / 10,
-          gameUrl, commenceTime,
+          gameUrl, commenceTime, isLive,
           betKey: `${sport.fdKey}|${gameKey}|Spread|${fdTeam}|${pt ?? ''}`,
         });
       }
@@ -453,7 +483,7 @@ function processNativeNBA(sport, fdGames, rsGames, rsGameIds, rsGameSports, glob
           ev: Math.round(ev * 10) / 10, units: u, fdOdds: fdPrice, pt,
           rsPct: Math.round(rsO.probability * 1000) / 10,
           adjFairPct: Math.round(fdFair * 1000) / 10,
-          gameUrl, commenceTime,
+          gameUrl, commenceTime, isLive,
           betKey: `${sport.fdKey}|${gameKey}|Total|${side}|${pt ?? ''}`,
         });
       }
@@ -468,9 +498,9 @@ function processNativeNBA(sport, fdGames, rsGames, rsGameIds, rsGameSports, glob
 // } } }
 function processNativeFC(sport, fdGames, rsGames, rsGameIds, rsGameSports, globalMinEv, allBets, now) {
   for (const [gameKey, game] of Object.entries(fdGames)) {
-    if (game.live) continue;
     const commenceTime = game.cm ? Math.floor(new Date(game.cm).getTime() / 1000) : 0;
-    if (commenceTime && commenceTime <= now) continue;
+    if (commenceTime && commenceTime < now - 4 * 3600) continue; // skip games ended >4h ago
+    const isLive = commenceTime > 0 && commenceTime <= now;
 
     const rsKey = findRSGameKey(game.away, game.home, rsGames, gameKey);
     if (!rsKey) continue;
@@ -519,7 +549,7 @@ function processNativeFC(sport, fdGames, rsGames, rsGameIds, rsGameSports, globa
         ev: Math.round(ev * 10) / 10, units: u, fdOdds: fdPrice, pt,
         rsPct: Math.round(rsO.probability * 1000) / 10,
         adjFairPct: Math.round(fdFair * 1000) / 10,
-        gameUrl, commenceTime,
+        gameUrl, commenceTime, isLive,
         betKey: `${sport.fdKey}|${gameKey}|Spread|${sideName}|${pt ?? ''}`,
       });
     }
@@ -534,6 +564,7 @@ export default {
 
     const now = Math.floor(Date.now() / 1000);
     const FD_STALE_THRESHOLD = 30 * 60;
+    const FD_WARM_THRESHOLD  = 30;  // refresh FD if no recent site traffic (keeps live odds current)
     const RS_STALE_THRESHOLD = 4 * 60 * 60;
     const RS_WARM_THRESHOLD  = 90;
     const RE_ALERT_EV_JUMP   = 4.0;
@@ -601,8 +632,26 @@ export default {
         continue;
       }
 
-      // Warm RS cache if stale/missing, then load
-      await warmRSCache(sport.fdKey, env, now, RS_WARM_THRESHOLD);
+      // Warm FD + RS caches in parallel — keeps live odds fresh even with no site traffic
+      await Promise.all([
+        warmFDCache(sport.fdKey, sport.cacheKey, env, now, FD_WARM_THRESHOLD),
+        warmRSCache(sport.fdKey, env, now, RS_WARM_THRESHOLD),
+      ]);
+
+      // Re-read FD cache after potential warm (may now be fresher)
+      try {
+        const refreshed = await env.DB.prepare(
+          'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
+        ).bind(sport.cacheKey).first();
+        if (refreshed) {
+          fdAge = now - refreshed.fetched_at;
+          if (fdAge < FD_STALE_THRESHOLD) {
+            const parsed = JSON.parse(refreshed.data);
+            fdGames = parsed.games || null;
+          }
+        }
+      } catch(e) {}
+
       const { games: rsGames, gameIds: rsGameIds, gameSports: rsGameSports, rsAge, reason: rsReason } =
         await loadRSCache(sport.rsKey, env, now, RS_STALE_THRESHOLD);
 
@@ -870,7 +919,7 @@ export default {
         if (entry && bet.ev - entry.ev < RE_ALERT_EV_JUMP) continue;
 
         const dollarAmt = Math.round(bet.units * unitSize);
-        const message   = formatAlert(bet.sport, bet.game, bet.market, bet.side, bet.ev, bet.units, dollarAmt, bet.pt, bet.rsPct, bet.adjFairPct, bet.gameUrl);
+        const message   = formatAlert(bet.sport, bet.game, bet.market, bet.side, bet.ev, bet.units, dollarAmt, bet.pt, bet.rsPct, bet.adjFairPct, bet.gameUrl, bet.isLive);
 
         let alertRowId = null;
         try {
