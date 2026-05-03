@@ -64,7 +64,7 @@
         font-size: 14px;
         min-height: 100vh;
         padding: 0 0 80px;
-        overflow-x: hidden;
+        overflow-x: clip;
         width: 100%;
         max-width: 100vw
     }
@@ -84,6 +84,9 @@
         top: 0;
         z-index: 200;
         background: var(--bg2)
+    }
+    .subheader-sticky.sticky-off {
+        position: relative
     }
 
     .moe-badge {
@@ -2415,6 +2418,7 @@
                 <div class="api-remaining" id="api-remaining" style="display:none">-- requests left</div>
                 <button class="refresh-btn" id="collapse-btn" onclick="toggleAll()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted)" class="desktop-only">Collapse All</button>
                 <button class="refresh-btn" id="refresh-btn" onclick="loadOdds()">Refresh</button>
+                <button id="sticky-btn" onclick="toggleStickyHeader()" title="Toggle sticky header" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:14px;padding:6px 10px;border-radius:5px;cursor:pointer;line-height:1">📌</button>
                 <button id="theme-btn" onclick="toggleTheme()" title="Toggle light/dark mode" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:14px;padding:6px 10px;border-radius:5px;cursor:pointer;line-height:1">🌙</button>
                 <button class="refresh-btn" onclick="logOut()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted)" title="Log out">⏻</button>
             </div>
@@ -6869,6 +6873,22 @@
         if (btn) btn.textContent = isLight ? '☀️' : '🌙';
     }
 
+    function toggleStickyHeader() {
+        var el = document.querySelector('.subheader-sticky');
+        var btn = document.getElementById('sticky-btn');
+        var isOff = el.classList.toggle('sticky-off');
+        localStorage.setItem('raxedge_sticky_off', isOff ? '1' : '0');
+        if (btn) btn.style.opacity = isOff ? '0.4' : '1';
+    }
+
+    function initStickyHeader() {
+        var isOff = localStorage.getItem('raxedge_sticky_off') === '1';
+        var el = document.querySelector('.subheader-sticky');
+        var btn = document.getElementById('sticky-btn');
+        if (isOff && el) el.classList.add('sticky-off');
+        if (btn) btn.style.opacity = isOff ? '0.4' : '1';
+    }
+
     function initTheme() {
         var saved = localStorage.getItem('raxedge_theme');
         var isLight = saved === 'light';
@@ -9908,6 +9928,7 @@
 
     handleCheckoutReturn();
     initTheme();
+    initStickyHeader();
     checkSession();
     // Restore exclusive bets button state
     (function() {
