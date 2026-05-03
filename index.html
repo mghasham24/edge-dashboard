@@ -5210,7 +5210,7 @@
         Object.values(evTabCache).forEach(function(arr) {
             arr.forEach(function(x) { if (x.id === cardId) r = x; });
         });
-        var rake = (r && r._rake != null) ? r._rake : 0.034;
+        var rake = rsBaseTake(pred);
         var af   = (r && r.af != null)   ? r.af    : null;
         if (!af) return;
         var ev     = (af * (1/pred) * (1-rake) - 1) * 100;

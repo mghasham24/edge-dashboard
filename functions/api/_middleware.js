@@ -13,6 +13,7 @@ export async function onRequest({ request, env, next }) {
   if (url.pathname === '/api/admin/rs-positions') return next();
   if (url.pathname === '/api/admin/rs-mark-posted') return next();
   if (url.pathname === '/api/admin/rs-check-position') return next();
+  if (url.pathname === '/api/admin/rs-check-simple') return next();
 
   const token   = getToken(request);
   const session = await getSession(env.DB, token);
