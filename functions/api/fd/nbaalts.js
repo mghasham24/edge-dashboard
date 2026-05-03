@@ -160,13 +160,32 @@ export async function onRequestGet(context) {
 
     // Step 4: Map prices back to games in altOdds-compatible format
     // { spreads: { teamName: { handicap: price } }, totals: { Over: { line: price }, Under: { line: price } }, ml: { teamName: price } }
+
+    // Load previous cache to freeze odds for live games with suspended markets
+    let prevGames = {};
+    try {
+      const prev = await env.DB.prepare('SELECT data FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
+      if (prev) prevGames = JSON.parse(prev.data).games || {};
+    } catch(e) {}
+
     const gamesMap = {};
 
     marketPricesList.forEach(function(mp) {
       const mapping = marketToGame[mp.marketId];
-      if (!mapping || mp.marketStatus !== 'OPEN') return;
+      if (!mapping) return;
       const { gameKey, type } = mapping;
       const entry = gameData[gameKey];
+
+      if (mp.marketStatus === 'SUSPENDED') {
+        if (!gamesMap[gameKey]) {
+          const frozen = prevGames[gameKey] || prevGames[entry.away + ' @ ' + entry.home] || null;
+          if (frozen && (Object.keys(frozen.ml || {}).length || Object.keys(frozen.spreads || {}).length)) {
+            gamesMap[gameKey] = { ...frozen, id: entry.eventId, away: entry.away, home: entry.home, cm: entry.openDate, live: true };
+          }
+        }
+        return;
+      }
+      if (mp.marketStatus !== 'OPEN') return;
       if (!gamesMap[gameKey]) gamesMap[gameKey] = { id: entry.eventId, away: entry.away, home: entry.home, cm: entry.openDate, spreads: {}, totals: {}, ml: {} };
       const game = gamesMap[gameKey];
 
