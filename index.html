@@ -5666,7 +5666,7 @@
                         }
                     });
                     rawRowsBySport[s.key] = rows;
-                    computeAndCacheEv(rows, s.key, _nbaSd);
+                    freshSyncData[s.key] = _nbaSd;
                     return;
                 }
                 if (s.key === 'basketball_wnba') {
@@ -5715,7 +5715,7 @@
                         }
                     });
                     rawRowsBySport[s.key] = rows;
-                    computeAndCacheEv(rows, s.key, _wnbaSd);
+                    freshSyncData[s.key] = _wnbaSd;
                     return;
                 }
                 if (s.key === 'icehockey_nhl') {
@@ -5764,7 +5764,7 @@
                         }
                     });
                     rawRowsBySport[s.key] = rows;
-                    computeAndCacheEv(rows, s.key, _nhlSd);
+                    freshSyncData[s.key] = _nhlSd;
                     return;
                 }
                 // MMA and other Odds API sports
@@ -5785,36 +5785,43 @@
                 var parsed = parseGames(games);
                 currentSport = savedSport4;
                 rawRowsBySport[s.key] = parsed;
-                computeAndCacheEv(parsed, s.key, _mmasd);
+                freshSyncData[s.key] = _mmasd;
             } catch(e) {}
         }));
 
-        // MLB and FC need fetchRealMarkets (uses global rawRows/currentSport) — sequential after parallel phase
+        // All parallel fetches done — compute EV for all non-MLB/FC sports, then render once
+        evLoadingInProgress = true; // suppress per-sport renders during batch
+        sportsToLoad.forEach(function(s) {
+            if (s.key === 'baseball_mlb' || s.key === 'soccer_fc') return;
+            var rows = rawRowsBySport[s.key];
+            if (rows && rows.length) computeAndCacheEv(rows, s.key, freshSyncData[s.key] || null);
+        });
         evLoadingInProgress = false;
-        var mlbFcSports = sportsToLoad.filter(function(s) { return s.key === 'baseball_mlb' || s.key === 'soccer_fc'; });
-        for (var i = 0; i < mlbFcSports.length; i++) {
-            var s = mlbFcSports[i];
-            try {
-                if (s.key === 'baseball_mlb' && (rawRowsBySport[s.key] || []).length) {
-                    var savedSportEv = currentSport, savedRawRowsEv = rawRows;
-                    currentSport = 'baseball_mlb'; rawRows = rawRowsBySport['baseball_mlb'];
-                    await fetchRealMarkets('baseball_mlb', true);
-                    rawRowsBySport['baseball_mlb'] = rawRows;
-                    rawRows = savedRawRowsEv; currentSport = savedSportEv;
-                    computeAndCacheEv(rawRowsBySport['baseball_mlb'], 'baseball_mlb', null);
-                }
-                if (s.key === 'soccer_fc' && (rawRowsBySport[s.key] || []).length) {
-                    var savedSportEvFc = currentSport, savedRawRowsEvFc = rawRows;
-                    currentSport = 'soccer_fc'; rawRows = rawRowsBySport['soccer_fc'];
-                    await fetchRealMarkets('soccer_fc', true);
-                    rawRowsBySport['soccer_fc'] = rawRows;
-                    rawRows = savedRawRowsEvFc; currentSport = savedSportEvFc;
-                    computeAndCacheEv(rawRowsBySport['soccer_fc'], 'soccer_fc', null);
-                }
-            } catch(e) {}
-        }
+        renderEvTab();
+
+        // MLB and FC: fetch RS sync sequentially (needs global state), then render once together
+        evLoadingInProgress = true;
+        try {
+            if (rawRowsBySport['baseball_mlb'] && rawRowsBySport['baseball_mlb'].length) {
+                var savedSportEv = currentSport, savedRawRowsEv = rawRows;
+                currentSport = 'baseball_mlb'; rawRows = rawRowsBySport['baseball_mlb'];
+                await fetchRealMarkets('baseball_mlb', true);
+                rawRowsBySport['baseball_mlb'] = rawRows;
+                rawRows = savedRawRowsEv; currentSport = savedSportEv;
+                computeAndCacheEv(rawRowsBySport['baseball_mlb'], 'baseball_mlb', null);
+            }
+            if (rawRowsBySport['soccer_fc'] && rawRowsBySport['soccer_fc'].length) {
+                var savedSportEvFc = currentSport, savedRawRowsEvFc = rawRows;
+                currentSport = 'soccer_fc'; rawRows = rawRowsBySport['soccer_fc'];
+                await fetchRealMarkets('soccer_fc', true);
+                rawRowsBySport['soccer_fc'] = rawRows;
+                rawRows = savedRawRowsEvFc; currentSport = savedSportEvFc;
+                computeAndCacheEv(rawRowsBySport['soccer_fc'], 'soccer_fc', null);
+            }
+        } catch(e) {}
+        evLoadingInProgress = false;
+        renderEvTab();
         if (btn) { btn.disabled = false; btn.textContent = '↺ Refresh'; }
-        evLoadingInProgress = false;
         // Start 60s countdown to next auto-refresh in status bar
         var _evCountdown = EV_REFRESH_MS / 1000;
         var _evCountdownTick = setInterval(function() {
