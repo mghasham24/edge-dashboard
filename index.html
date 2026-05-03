@@ -7101,9 +7101,10 @@
             var books = g.bookmakers || [];
             if (!books.length) return;
             var fd = books.find(function(b) { return b.key === 'fanduel'; });
-            // Live games: FD often suspends markets — fall back to DK to keep the row visible
+            // Live games: FD suspends markets — fall back to DK so ML can still show.
+            // Spread/Total rows with mismatched DK live lines get filtered out downstream.
             if (!fd && g.commence_time && new Date(g.commence_time) <= new Date()) {
-                fd = books.find(function(b) { return b.key === 'draftkings'; }) || books[0];
+                fd = books.find(function(b) { return b.key === 'draftkings'; });
             }
             if (!fd) return;
             // For MMA, only show today's fights
@@ -8187,9 +8188,7 @@
                 }
 
                 // NBA/NHL: lines match → use FD odds directly. Lines differ → need DK alt at RS line, hide if missing.
-                // Live games: skip DK alt requirement — RS may show live lines FD/DK don't carry.
-                var isLiveGame = r.cm && r.cm <= now;
-                if ((isNBA || isHockey) && r.gid && (r.mkt === 'Spread' || r.mkt === 'Total') && yourLines[r.id] != null && r.pt != null && !isLiveGame) {
+                if ((isNBA || isHockey) && r.gid && (r.mkt === 'Spread' || r.mkt === 'Total') && yourLines[r.id] != null && r.pt != null) {
                     var _rsLine = parseFloat(yourLines[r.id]);
                     var _fdLine = parseFloat(r.pt);
                     if (Math.abs(_rsLine - _fdLine) > 0.001) {
