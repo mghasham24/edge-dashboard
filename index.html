@@ -76,10 +76,14 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        height: var(--header-h);
+        height: var(--header-h)
+    }
+
+    .subheader-sticky {
         position: sticky;
         top: 0;
-        z-index: 200
+        z-index: 200;
+        background: var(--bg2)
     }
 
     .moe-badge {
@@ -233,13 +237,6 @@
     .fc-league-tab.active {
         color: var(--accent);
         border-bottom-color: var(--accent)
-    }
-
-    .subheader-sticky {
-        position: sticky;
-        top: var(--header-h);
-        z-index: 199;
-        background: var(--bg2)
     }
 
     .controls {
@@ -2407,10 +2404,11 @@
     </div>
 
     <div id="dashboard" style="display:none">
+        <div class="subheader-sticky">
         <header class="header">
             <div class="logo">
                 <span class="logo-dot"></span>
-                RAXEDGE 
+                RAXEDGE
                 <span class="moe-badge">made by @moe_</span>
             </div>
             <div style="display:flex;align-items:center;gap:10px">
@@ -2421,8 +2419,6 @@
                 <button class="refresh-btn" onclick="logOut()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted)" title="Log out">⏻</button>
             </div>
         </header>
-
-        <div class="subheader-sticky">
         <div id="feature-tabs" style="display:flex;gap:6px;padding:6px 12px 0;border-bottom:1px solid var(--border)"></div>
 
         <nav class="sport-tabs" id="sport-tabs"></nav>
@@ -7859,7 +7855,10 @@
             try {
                 // FC: use FD native DK AH endpoint — not Odds API
                 if (s.key === 'soccer_fc') {
-                    var fcRes = await fetch('/api/fd/fc', { credentials: 'same-origin' });
+                    var [fcRes, fcSyncResp] = await Promise.all([
+                        fetch('/api/fd/fc', { credentials: 'same-origin' }),
+                        fetch('/api/real/sync?sport=soccer_fc', { credentials: 'same-origin' })
+                    ]);
                     var fcData = fcRes.ok ? await fcRes.json() : null;
                     if (fcData && fcData.ok && fcData.games) {
                         var fcRows = [];
@@ -7885,7 +7884,6 @@
                             });
                         });
                         rawRowsBySport[s.key] = fcRows;
-                        var fcSyncResp = await fetch('/api/real/sync?sport=soccer_fc', { credentials: 'same-origin' });
                         if (fcSyncResp.ok) {
                             var fcSyncData = await fcSyncResp.json();
                             fillPredsFromSync(fcRows, fcSyncData);

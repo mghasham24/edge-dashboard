@@ -103,25 +103,24 @@ export async function onRequestGet(context) {
 
 
   try {
-    // Step 1: Get today's events from each target league
-    const todayEvents = [];
-
-    for (const [leagueId, leagueLabel] of Object.entries(DK_SOCCER_LEAGUES)) {
+    // Step 1: Fetch all leagues in parallel
+    const leagueEntries = Object.entries(DK_SOCCER_LEAGUES);
+    const leagueResults = await Promise.all(leagueEntries.map(async ([leagueId, leagueLabel]) => {
+      const events = [];
       try {
         const r = await fetch(dkLeagueEventsUrl(leagueId), { headers });
         if (!r.ok) {
-          if (debugMode === '1') todayEvents.push({ _error: `league ${leagueId} status ${r.status}` });
-          continue;
+          if (debugMode === '1') events.push({ _error: `league ${leagueId} status ${r.status}` });
+          return events;
         }
         const d = await r.json();
-        if (debugMode === '1' && !d.events) todayEvents.push({ _warn: `league ${leagueId} no events key`, keys: Object.keys(d) });
+        if (debugMode === '1' && !d.events) events.push({ _warn: `league ${leagueId} no events key`, keys: Object.keys(d) });
 
         for (const ev of d.events || []) {
           if (!isToday_ET(ev.startEventDate)) continue;
           const t = new Date(ev.startEventDate).getTime();
-          if (t < nowMs - 4 * 60 * 60 * 1000) continue; // skip games started >4h ago (covers 90min + stoppage + halftime)
+          if (t < nowMs - 4 * 60 * 60 * 1000) continue;
 
-          // Resolve home/away from participants array (most reliable)
           let home, away;
           const parts_arr = ev.participants || [];
           const homeP = parts_arr.find(p => p.venueRole === 'Home');
@@ -129,18 +128,18 @@ export async function onRequestGet(context) {
           if (homeP && awayP) {
             home = homeP.name; away = awayP.name;
           } else {
-            // Fallback: DK soccer event name format: "Home vs Away"
             const parts = (ev.name || '').split(' vs ');
             if (parts.length !== 2) continue;
             home = parts[0].trim(); away = parts[1].trim();
           }
 
-          todayEvents.push({ eventId: ev.id, home, away, league: leagueLabel, openDate: ev.startEventDate });
+          events.push({ eventId: ev.id, home, away, league: leagueLabel, openDate: ev.startEventDate });
         }
       } catch(e) {}
+      return events;
+    }));
 
-      await new Promise(r => setTimeout(r, 80));
-    }
+    const todayEvents = leagueResults.flat();
 
     if (debugMode === '1') {
       return new Response(JSON.stringify({ todayEventsFound: todayEvents.length, events: todayEvents }), {
@@ -154,20 +153,16 @@ export async function onRequestGet(context) {
       });
     }
 
-    // Step 2: For each event, fetch ALL AH spread lines so frontend can match RS's actual line
+    // Step 2: Fetch all event spread lines in parallel
     const gamesMap = {};
 
-    for (let i = 0; i < todayEvents.length; i++) {
-      const ev = todayEvents[i];
+    await Promise.all(todayEvents.map(async (ev) => {
       const gameKey = ev.away + ' @ ' + ev.home;
-
       try {
         const r = await fetch(dkEventSubcatUrl(ev.eventId), { headers });
-        if (!r.ok) continue;
+        if (!r.ok) return;
         const d = await r.json();
 
-        // Build spreads map: { Home: { '-0.5': price, '-1.5': price, ... }, Away: { '0.5': price, '1.5': price, ... } }
-        // Keyed by String(pts) so frontend can look up any RS line directly.
         const spreads = { Home: {}, Away: {} };
         for (const sel of d.selections || []) {
           const pts = sel.points;
@@ -178,7 +173,6 @@ export async function onRequestGet(context) {
           spreads[ot][String(pts)] = price;
         }
 
-        // ±0.5 shorthand for initial display (before RS tells us the actual line)
         const homeMinus = spreads.Home['-0.5'] || null;
         const homePlus  = spreads.Home['0.5']  || null;
         const awayMinus = spreads.Away['-0.5'] || null;
@@ -187,10 +181,10 @@ export async function onRequestGet(context) {
         if (debugMode === '2') {
           const allSels = (d.selections || []).map(s => ({ label: s.label, outcomeType: s.outcomeType, points: s.points, odds: s.displayOdds && s.displayOdds.american }));
           gamesMap[gameKey] = { home: ev.home, away: ev.away, hm: homeMinus, hp: homePlus, awm: awayMinus, awp: awayPlus, spreads, allSels };
-          continue;
+          return;
         }
 
-        if (!Object.keys(spreads.Home).length && !Object.keys(spreads.Away).length) continue;
+        if (!Object.keys(spreads.Home).length && !Object.keys(spreads.Away).length) return;
 
         gamesMap[gameKey] = {
           id: parseInt(ev.eventId),
@@ -198,17 +192,14 @@ export async function onRequestGet(context) {
           home: ev.home,
           cm: ev.openDate,
           league: ev.league,
-          hm: homeMinus,  // home -0.5 (for initial display before RS sync)
+          hm: homeMinus,
           hp: homePlus,
           awm: awayMinus,
           awp: awayPlus,
-          spreads          // full map — frontend picks the line RS actually uses
+          spreads
         };
-
       } catch(e) {}
-
-      if (i < todayEvents.length - 1) await new Promise(r => setTimeout(r, 100));
-    }
+    }));
 
     if (debugMode === '2') {
       return new Response(JSON.stringify({ ok: true, games: gamesMap }), {
