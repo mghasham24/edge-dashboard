@@ -7101,6 +7101,10 @@
             var books = g.bookmakers || [];
             if (!books.length) return;
             var fd = books.find(function(b) { return b.key === 'fanduel'; });
+            // Live games: FD often suspends markets — fall back to DK to keep the row visible
+            if (!fd && g.commence_time && new Date(g.commence_time) <= new Date()) {
+                fd = books.find(function(b) { return b.key === 'draftkings'; }) || books[0];
+            }
             if (!fd) return;
             // For MMA, only show today's fights
             if (currentSport === 'mma_mixed_martial_arts' && g.commence_time) {
