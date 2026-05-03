@@ -7711,16 +7711,23 @@
                     if (parts.length !== 2) return false;
                     var ra = normSync(resolveTeamName(parts[0].trim()));
                     var rh = normSync(resolveTeamName(parts[1].trim()));
+                    // Also keep raw (pre-resolved) names as fallback — guards against cross-sport
+                    // nickname collisions (e.g. "Spurs" resolves to San Antonio in NBA context
+                    // but should match Tottenham Hotspur for soccer when currentSport isn't set to FC)
+                    var raRaw = normSync(parts[0].trim());
+                    var rhRaw = normSync(parts[1].trim());
                     var raNick = nickname(ra);
                     var rhNick = nickname(rh);
                     // Nickname match first, then any-word match (for soccer short names like "Atletico" vs "Atletico Madrid")
-                    var awayOk = raNick === fdAwayNick || ra.indexOf(fdAwayNick) !== -1 || fdAway.indexOf(raNick) !== -1
-                               || ra.split(' ').some(function(w) { return w.length > 2 && fdAway.indexOf(w) !== -1; })
-                               || fdAway.split(' ').some(function(w) { return w.length > 2 && ra.indexOf(w) !== -1; });
-                    var homeOk = rhNick === fdHomeNick || rh.indexOf(fdHomeNick) !== -1 || fdHome.indexOf(rhNick) !== -1
-                               || rh.split(' ').some(function(w) { return w.length > 2 && fdHome.indexOf(w) !== -1; })
-                               || fdHome.split(' ').some(function(w) { return w.length > 2 && rh.indexOf(w) !== -1; });
-                    return awayOk && homeOk;
+                    function matchSide(r1, r1Nick, r1Raw, fd, fdNick) {
+                        return r1Nick === fdNick || r1.indexOf(fdNick) !== -1 || fd.indexOf(r1Nick) !== -1
+                            || r1.split(' ').some(function(w) { return w.length > 2 && fd.indexOf(w) !== -1; })
+                            || fd.split(' ').some(function(w) { return w.length > 2 && r1.indexOf(w) !== -1; })
+                            || r1Raw.indexOf(fdNick) !== -1 || fd.indexOf(nickname(r1Raw)) !== -1
+                            || r1Raw.split(' ').some(function(w) { return w.length > 2 && fd.indexOf(w) !== -1; })
+                            || fd.split(' ').some(function(w) { return w.length > 2 && r1Raw.indexOf(w) !== -1; });
+                    }
+                    return matchSide(ra, raNick, raRaw, fdAway, fdAwayNick) && matchSide(rh, rhNick, rhRaw, fdHome, fdHomeNick);
                 });
                 if (found) realKey = found;
             }
@@ -8626,6 +8633,16 @@
             'Ducks': 'Anaheim Ducks',
             'Sharks': 'San Jose Sharks'
         };
+        // FC soccer overrides: some nicknames collide with NBA/NFL teams — handle before NICKNAMES lookup
+        if (currentSport === 'soccer_fc') {
+            var FC_NICKS = {
+                'Spurs': 'Tottenham Hotspur',
+                'Hotspur': 'Tottenham Hotspur',
+                'Hotspurs': 'Tottenham Hotspur',
+                'Villa': 'Aston Villa',
+            };
+            if (FC_NICKS.hasOwnProperty(abbrevOrName)) return FC_NICKS[abbrevOrName];
+        }
         if (NICKNAMES.hasOwnProperty(abbrevOrName) && NICKNAMES[abbrevOrName]) {
             return NICKNAMES[abbrevOrName];
         }
