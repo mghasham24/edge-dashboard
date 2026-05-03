@@ -5495,6 +5495,7 @@
         // Re-fetch fresh odds for all sports in parallel — this evicts finished games from rawRowsBySport
         evLoadingInProgress = true;
         var noSpread = ['mma_mixed_martial_arts', 'baseball_mlb'];
+        var freshSyncData = {}; // sport key -> RS sync response fetched in parallel with odds
         await Promise.all(sportsToLoad.map(async function(s) {
             try {
                 if (s.key === 'soccer_fc') {
@@ -5577,8 +5578,12 @@
                     return;
                 }
                 if (s.key === 'basketball_nba') {
-                    // NBA uses FD native API — no Odds API credits
-                    var nbaRes = await fetch('/api/fd/nbaalts', { credentials: 'same-origin' });
+                    // NBA uses FD native API — fetch odds + RS sync in parallel
+                    var [nbaRes, nbaSyncEv] = await Promise.all([
+                        fetch('/api/fd/nbaalts', { credentials: 'same-origin' }),
+                        fetch('/api/real/sync?sport=basketball_nba', { credentials: 'same-origin' })
+                    ]);
+                    if (nbaSyncEv.ok) { try { freshSyncData[s.key] = await nbaSyncEv.json(); } catch(e) {} }
                     var nbaData = nbaRes.ok ? await nbaRes.json() : null;
                     if (!nbaData || !nbaData.ok || !nbaData.games) return;
                     var rows = [];
@@ -5622,8 +5627,12 @@
                     return;
                 }
                 if (s.key === 'basketball_wnba') {
-                    // WNBA uses FD native API — no Odds API credits
-                    var wnbaRes = await fetch('/api/fd/wnbaalts', { credentials: 'same-origin' });
+                    // WNBA uses FD native API — fetch odds + RS sync in parallel
+                    var [wnbaRes, wnbaSyncEv] = await Promise.all([
+                        fetch('/api/fd/wnbaalts', { credentials: 'same-origin' }),
+                        fetch('/api/real/sync?sport=basketball_wnba', { credentials: 'same-origin' })
+                    ]);
+                    if (wnbaSyncEv.ok) { try { freshSyncData[s.key] = await wnbaSyncEv.json(); } catch(e) {} }
                     var wnbaData = wnbaRes.ok ? await wnbaRes.json() : null;
                     if (!wnbaData || !wnbaData.ok || !wnbaData.games) return;
                     var rows = [];
@@ -5667,8 +5676,12 @@
                     return;
                 }
                 if (s.key === 'icehockey_nhl') {
-                    // NHL uses FD native API — no Odds API credits
-                    var nhlRes = await fetch('/api/fd/nhl', { credentials: 'same-origin' });
+                    // NHL uses FD native API — fetch odds + RS sync in parallel
+                    var [nhlRes, nhlSyncEv] = await Promise.all([
+                        fetch('/api/fd/nhl', { credentials: 'same-origin' }),
+                        fetch('/api/real/sync?sport=icehockey_nhl', { credentials: 'same-origin' })
+                    ]);
+                    if (nhlSyncEv.ok) { try { freshSyncData[s.key] = await nhlSyncEv.json(); } catch(e) {} }
                     var nhlData = nhlRes.ok ? await nhlRes.json() : null;
                     if (!nhlData || !nhlData.ok || !nhlData.games) return;
                     var rows = [];
@@ -5712,7 +5725,11 @@
                     return;
                 }
                 var mkts = noSpread.indexOf(s.key) !== -1 ? 'h2h' : 'h2h,spreads,totals';
-                var resp = await fetch('/api/odds?sport=' + s.key + '&markets=' + mkts + '&bookmakers=fanduel');
+                var [resp, syncRespEv] = await Promise.all([
+                    fetch('/api/odds?sport=' + s.key + '&markets=' + mkts + '&bookmakers=fanduel'),
+                    fetch('/api/real/sync?sport=' + s.key, { credentials: 'same-origin' })
+                ]);
+                if (syncRespEv.ok) { try { freshSyncData[s.key] = await syncRespEv.json(); } catch(e) {} }
                 var _remEv = resp.headers.get('x-requests-remaining');
                 if (_remEv) { var _remEvEl = document.getElementById('api-remaining'); if (_remEvEl) _remEvEl.textContent = _remEv + ' requests left'; }
                 if (!resp.ok) return;
@@ -5761,8 +5778,11 @@
                 // Phase 1 may have fetched fresh odds (new row IDs), so preds from prior tab load may be stale.
                 // fillPredsFromSync matches by game/team name, not ID — safe to call with refreshed rows.
                 if (s.key !== 'baseball_mlb' && s.key !== 'soccer_fc' && sportRows.length) {
-                    var cachedSync = lastSyncData[s.key];
-                    if (cachedSync) fillPredsFromSync(sportRows, cachedSync);
+                    var syncToUse = freshSyncData[s.key] || lastSyncData[s.key];
+                    if (syncToUse) {
+                        fillPredsFromSync(sportRows, syncToUse);
+                        lastSyncData[s.key] = syncToUse;
+                    }
                 }
                 if (sportRows.length) {
                     var savedSport3 = currentSport;
