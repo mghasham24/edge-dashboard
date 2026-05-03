@@ -76,8 +76,12 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        height: var(--header-h)
+        height: var(--header-h);
+        overflow-x: auto;
+        gap: 12px
     }
+    .header::-webkit-scrollbar { display: none }
+    .header { scrollbar-width: none }
 
     .subheader-sticky {
         position: sticky;
@@ -2409,12 +2413,12 @@
     <div id="dashboard" style="display:none">
         <div class="subheader-sticky">
         <header class="header">
-            <div class="logo">
+            <div class="logo" style="flex-shrink:0">
                 <span class="logo-dot"></span>
                 RAXEDGE
                 <span class="moe-badge">made by @moe_</span>
             </div>
-            <div style="display:flex;align-items:center;gap:10px">
+            <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;margin-left:auto">
                 <div class="api-remaining" id="api-remaining" style="display:none">-- requests left</div>
                 <button class="refresh-btn" id="collapse-btn" onclick="toggleAll()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted)" class="desktop-only">Collapse All</button>
                 <button class="refresh-btn" id="refresh-btn" onclick="loadOdds()">Refresh</button>
