@@ -5189,6 +5189,8 @@
         var mainUnit = document.getElementById('unit-size');
         var evUnit = document.getElementById('ev-unit-size');
         if (mainUnit && evUnit) evUnit.value = mainUnit.value;
+        // Render from preloader cache instantly, then refresh in background
+        if (Object.keys(evTabCache).length > 0) renderEvTab();
         // Auto-load on open, then refresh every 15s
         loadAllEvSports();
         if (!evAutoRefreshTimer) {
@@ -5473,12 +5475,6 @@
     }
 
     async function loadAllEvSports() {
-        // Re-verify plan from server — prevents console bypass (currentUser.plan = 'pro')
-        try {
-            var meRes = await fetch('/api/auth/me', { credentials: 'same-origin' });
-            if (meRes.ok) currentUser = await meRes.json();
-        } catch(e) {}
-        if (!isPro()) return;
         var btn = document.getElementById('ev-load-btn');
         var status = document.getElementById('ev-load-status');
         if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
@@ -5489,6 +5485,12 @@
             if (status) status.textContent = 'Loading ' + done + '/' + total + '…';
         }
         updateStatus();
+
+        // Re-verify plan in parallel with odds fetch — don't block start
+        fetch('/api/auth/me', { credentials: 'same-origin' })
+            .then(function(r) { if (r.ok) return r.json(); })
+            .then(function(u) { if (u) { currentUser = u; if (!isPro()) { renderEvTab(); } } })
+            .catch(function() {});
 
         // Re-fetch fresh odds for all sports in parallel — this evicts finished games from rawRowsBySport
         evLoadingInProgress = true;
@@ -5725,6 +5727,9 @@
             } catch(e) {}
         }));
 
+        // Phase 1 done — allow cacheEvRows to render progressively as each sport finishes
+        evLoadingInProgress = false;
+
         // Load each sport sequentially to avoid hammering the API
         for (var i = 0; i < sportsToLoad.length; i++) {
             var s = sportsToLoad[i];
@@ -5794,7 +5799,7 @@
                         return true;
                     });
                     currentSport = savedSport3;
-                    cacheEvRows(computed3, s.key, true);
+                    cacheEvRows(computed3, s.key);
                 }
             } catch(e) { /* skip sport on error */ }
             done++;
@@ -5802,7 +5807,6 @@
         }
         if (btn) { btn.disabled = false; btn.textContent = '↺ Refresh'; }
         evLoadingInProgress = false;
-        renderEvTab();
         // Start 60s countdown to next auto-refresh in status bar
         var _evCountdown = EV_REFRESH_MS / 1000;
         var _evCountdownTick = setInterval(function() {
