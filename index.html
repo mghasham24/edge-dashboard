@@ -2928,6 +2928,7 @@
     var rfiOdds = {}; // game key -> {yesFair, noFair, yesAm, noAm}
     var rsGameIds = {}; // game string -> Real Sports numeric gameId
     var rsGameSports = {}; // game string -> RS sport key (e.g. 'mls', 'epl') for URL generation
+    var rsGameStartMs = {}; // game string -> game start epoch ms (from RS __startMs)
 
     function edgeBg(edge) {
         if (edge == null || edge <= 0) return '';
@@ -5970,14 +5971,17 @@
             });
         });
 
-        // Build gid → commenceTime from ALL cached sports (rawRows only covers current sport tab)
+        // Build gid → commenceTime from all cached sports + RS sync startMs
+        // RS startMs is the most reliable fallback: it's still present even after FD drops resulted games
         var allCachedRows = Object.values(rawRowsBySport || {}).reduce(function(acc, sr) { return acc.concat(sr || []); }, rawRows || []);
         var gidToCm = {};
         Object.keys(rsGameIds || {}).forEach(function(gameKey) {
             var gid = String(rsGameIds[gameKey]);
             if (gidToCm[gid]) return;
             var row = allCachedRows.find(function(r) { return r.game === gameKey && r.cm; });
-            if (row) gidToCm[gid] = row.cm;
+            if (row) { gidToCm[gid] = row.cm; return; }
+            var startMs = rsGameStartMs[gameKey];
+            if (startMs) gidToCm[gid] = new Date(startMs);
         });
 
         // marketType → mkt normalisation
@@ -7969,6 +7973,8 @@
             // Populate rsGameIds so Real Sports links work in Best EV
             var gid = markets[realKey + '__gid'];
             if (gid) rsGameIds[r.game] = gid;
+            var startMs = markets[realKey + '__startMs'];
+            if (startMs) rsGameStartMs[r.game] = startMs;
 
             // Populate yourLines from Real Sports line data (spread/total)
             var gameLines = markets[realKey + '__lines'];
@@ -9181,6 +9187,8 @@
                 if (!realKey) return;
                 var gameGid = d.markets[realKey + '__gid'];
                 if (gameGid) rsGameIds[r.game] = gameGid;
+                var gameStartMs = d.markets[realKey + '__startMs'];
+                if (gameStartMs) rsGameStartMs[r.game] = gameStartMs;
                 // Store RS-level sport key so getRealSportsUrl picks the right sport ID for deep links
                 var gameRsSport = d.markets[realKey + '__sport'];
                 if (gameRsSport) rsGameSports[r.game] = gameRsSport;
