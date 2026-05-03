@@ -609,10 +609,15 @@ export default {
 
     // Warm all FD + RS caches in parallel before processing — avoids sequential 15s×N wait
     const sportsNativeNeeded = NATIVE_SPORTS.filter(s => sportsNeeded.has(s.fdKey));
-    await Promise.all(sportsNativeNeeded.flatMap(s => [
-      warmFDCache(s.fdKey, s.cacheKey, env, now, FD_WARM_THRESHOLD),
-      warmRSCache(s.fdKey, env, now, RS_WARM_THRESHOLD),
-    ]));
+    const sportsOddsApiNeeded = ODDS_API_SPORTS.filter(s => sportsNeeded.has(s.fdKey));
+    await Promise.all([
+      ...sportsNativeNeeded.flatMap(s => [
+        warmFDCache(s.fdKey, s.cacheKey, env, now, FD_WARM_THRESHOLD),
+        warmRSCache(s.fdKey, env, now, RS_WARM_THRESHOLD),
+      ]),
+      // Odds API sports have no FD endpoint to warm, but RS still needs to be kept fresh
+      ...sportsOddsApiNeeded.map(s => warmRSCache(s.fdKey, env, now, RS_WARM_THRESHOLD)),
+    ]);
 
     for (const sport of NATIVE_SPORTS) {
       if (!sportsNeeded.has(sport.fdKey)) continue;
