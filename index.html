@@ -5790,18 +5790,15 @@
             } catch(e) {}
         }));
 
-        // All parallel fetches done — compute EV for all non-MLB/FC sports, then render once
-        evLoadingInProgress = true; // suppress per-sport renders during batch
+        // All parallel fetches done — compute EV for all non-MLB/FC sports
+        // Keep evLoadingInProgress=true so there's no partial render before MLB/FC are ready
         sportsToLoad.forEach(function(s) {
             if (s.key === 'baseball_mlb' || s.key === 'soccer_fc') return;
             var rows = rawRowsBySport[s.key];
             if (rows && rows.length) computeAndCacheEv(rows, s.key, freshSyncData[s.key] || null);
         });
-        evLoadingInProgress = false;
-        renderEvTab();
 
-        // MLB and FC: fetch RS sync sequentially (needs global state), then render once together
-        evLoadingInProgress = true;
+        // MLB and FC: fetch RS sync sequentially (needs global state), then render once for all sports
         try {
             if (rawRowsBySport['baseball_mlb'] && rawRowsBySport['baseball_mlb'].length) {
                 var savedSportEv = currentSport, savedRawRowsEv = rawRows;
