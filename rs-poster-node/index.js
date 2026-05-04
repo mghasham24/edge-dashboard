@@ -122,9 +122,18 @@ async function ensureSession() {
   _sessionReady = false;
 
   console.log('rs-poster: launching headless Chrome');
-  _browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-setuid-sandbox', '--no-zygote', '--disable-gpu'] });
+  _browser = await chromium.launch({ headless: true, args: [
+    '--no-sandbox', '--disable-dev-shm-usage', '--disable-setuid-sandbox',
+    '--no-zygote', '--disable-gpu',
+    '--disable-blink-features=AutomationControlled',
+  ]});
   const ctx = await _browser.newContext({
     userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
+  });
+  // Remove navigator.webdriver so realapp.com doesn't detect headless automation
+  await ctx.addInitScript(() => {
+    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+    delete navigator.__proto__.webdriver;
   });
 
   const page = await ctx.newPage();
