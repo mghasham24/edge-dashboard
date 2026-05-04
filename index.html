@@ -2815,6 +2815,7 @@
                 <div style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
                     <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);font-family:var(--sans);font-weight:600;white-space:nowrap">Unit $<input id="ev-unit-size" type="number" min="1" step="1" value="300" oninput="onEvUnitChange(this.value)" style="width:64px;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--mono);font-size:12px;font-weight:700;padding:4px 6px;border-radius:5px;text-align:right"></label>
                     <button id="ev-hide-taken-btn" onclick="toggleEvHideTaken()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:11px;font-weight:700;padding:7px 14px;border-radius:6px;cursor:pointer;letter-spacing:.04em">Hide Taken</button>
+                    <button id="ev-rs-adj-btn" onclick="toggleRsAdj()" title="Shift RS% by +1 or +2 points to test sensitivity to price movement" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:11px;font-weight:700;padding:7px 14px;border-radius:6px;cursor:pointer;letter-spacing:.04em">RS +0%</button>
                     <button onclick="loadAllEvSports()" id="ev-load-btn" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:11px;font-weight:700;padding:7px 16px;border-radius:6px;cursor:pointer;letter-spacing:.04em">&#8635; Refresh</button>
                     <button onclick="document.getElementById('ev-tab-btn').click()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:7px 14px;border-radius:6px;cursor:pointer;letter-spacing:.04em">&larr; Back</button>
                 </div>
@@ -3404,15 +3405,21 @@
 
     function toggleRsAdj() {
         rsPredAdj = (rsPredAdj + 1) % 3;
-        var btn = document.getElementById('rs-adj-btn');
-        if (btn) {
-            var active = rsPredAdj > 0;
-            btn.textContent = 'RS +' + rsPredAdj + '%';
-            btn.style.background = active ? 'var(--accent)' : 'var(--bg3)';
-            btn.style.color = active ? '#fff' : 'var(--muted)';
-            btn.style.borderColor = active ? 'var(--accent)' : 'var(--border2)';
-        }
+        var active = rsPredAdj > 0;
+        var label = 'RS +' + rsPredAdj + '%';
+        var activeStyle = { bg: 'var(--accent)', color: '#fff', border: 'var(--accent)' };
+        var inactiveStyle = { bg: 'var(--bg3)', color: 'var(--muted)', border: 'var(--border2)' };
+        var s = active ? activeStyle : inactiveStyle;
+        ['rs-adj-btn', 'ev-rs-adj-btn'].forEach(function(id) {
+            var btn = document.getElementById(id);
+            if (!btn) return;
+            btn.textContent = label;
+            btn.style.background = s.bg;
+            btn.style.color = s.color;
+            btn.style.borderColor = s.border;
+        });
         renderTable();
+        if (evTabVisible && !evLoadingInProgress) renderEvTab();
     }
 
     function toggleExclusiveBets() {
@@ -5385,7 +5392,18 @@
         });
         // Optionally hide rows the user has already checked off
         if (evHideTaken) all = all.filter(function(r) { return !betTaken[r.id]; });
-        // All rows have positive EV — sort by EV descending
+        // Apply RS% adjustment — same sensitivity analysis as the main tab's RS+% button
+        if (rsPredAdj) {
+            all = all.map(function(r) {
+                if (!r._pred || r.af == null) return r;
+                var adjPred = Math.min(0.999, Math.max(0.001, r._pred + rsPredAdj / 100));
+                var adjRake = rsBaseTake(adjPred);
+                var adjEv   = (r.af * (1 / adjPred) * (1 - adjRake) - 1) * 100;
+                var adjU    = unitsEV(adjEv, adjPred);
+                return Object.assign({}, r, { _ev: adjEv, _pred: adjPred, u: adjU });
+            }).filter(function(r) { return r._ev > 0; });
+        }
+        // Sort by EV descending
         all.sort(function(a, b) { return (b._ev || 0) - (a._ev || 0); });
         if (!all.length) {
             container.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:40px 0">No positive EV bets found. Navigate to a sport tab first or wait for preload.</div>';
