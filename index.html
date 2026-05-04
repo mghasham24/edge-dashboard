@@ -8305,9 +8305,10 @@
                 }
                 // MLB: use FD native — no Odds API credits
                 if (s.key === 'baseball_mlb') {
-                    var [mlbResP, rfiResP] = await Promise.all([
+                    var [mlbResP, rfiResP, mlbSyncResP] = await Promise.all([
                         fetch('/api/fd/mlb', { credentials: 'same-origin' }),
-                        fetch('/api/fd/rfi', { credentials: 'same-origin' })
+                        fetch('/api/fd/rfi', { credentials: 'same-origin' }),
+                        fetch('/api/real/sync?sport=baseball_mlb', { credentials: 'same-origin' })
                     ]);
                     var mlbDataP = mlbResP.ok ? await mlbResP.json() : null;
                     var rfiDataP = rfiResP.ok ? await rfiResP.json() : null;
@@ -8346,6 +8347,11 @@
                             }
                         });
                         rawRowsBySport[s.key] = mlbRowsP;
+                        if (mlbSyncResP.ok) {
+                            var mlbSyncDataP = await mlbSyncResP.json();
+                            fillPredsFromSync(mlbRowsP, mlbSyncDataP);
+                            lastSyncData[s.key] = mlbSyncDataP;
+                        }
                     }
                     done++;
                     setBar(Math.round(done / total * 100));
