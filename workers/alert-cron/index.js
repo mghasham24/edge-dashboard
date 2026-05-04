@@ -101,6 +101,12 @@ const FD_ENDPOINT_MAP = {
   'soccer_fc':       '/api/fd/fc',
 };
 
+// DK alt lines endpoints — NBA and NHL only; alt spreads/totals stay open longer during live games
+const DK_ALT_ENDPOINT_MAP = {
+  'basketball_nba': { endpoint: '/api/dk/nbaalts', cacheKey: 'dk_nba_alts' },
+  'icehockey_nhl':  { endpoint: '/api/dk/nhalalts', cacheKey: 'dk_nhl_alts' },
+};
+
 // Odds API sports: no native endpoint exists yet
 const ODDS_API_SPORTS = [
   { fdKey: 'basketball_ncaab',       rsKey: 'cbb',    label: 'NCAAB' },
@@ -160,15 +166,15 @@ async function warmRSCache(fdKey, env, now, staleThreshold) {
     ).bind('real_sync_' + rsKey + '_%').first();
     if (cached && (now - cached.fetched_at) < staleThreshold) return;
     await fetch(`${env.SITE_URL}/api/real/sync?sport=${fdKey}&_cron_key=${env.CRON_SECRET}`, {
-      signal: AbortSignal.timeout(15000)
+      signal: AbortSignal.timeout(25000)
     });
   } catch(e) {}
 }
 
 // Keeps FD/DK native odds cache fresh during live games — cron calls site endpoint with cron key bypass
-async function warmFDCache(fdKey, cacheKey, env, now, staleThreshold) {
+async function warmFDCache(fdKey, cacheKey, env, now, staleThreshold, endpointOverride) {
   if (!env.SITE_URL || !env.CRON_SECRET) return;
-  const endpoint = FD_ENDPOINT_MAP[fdKey];
+  const endpoint = endpointOverride || FD_ENDPOINT_MAP[fdKey];
   if (!endpoint) return;
   try {
     const cached = await env.DB.prepare(
@@ -611,10 +617,14 @@ export default {
     const sportsNativeNeeded = NATIVE_SPORTS.filter(s => sportsNeeded.has(s.fdKey));
     const sportsOddsApiNeeded = ODDS_API_SPORTS.filter(s => sportsNeeded.has(s.fdKey));
     await Promise.all([
-      ...sportsNativeNeeded.flatMap(s => [
-        warmFDCache(s.fdKey, s.cacheKey, env, now, FD_WARM_THRESHOLD),
-        warmRSCache(s.fdKey, env, now, RS_WARM_THRESHOLD),
-      ]),
+      ...sportsNativeNeeded.flatMap(s => {
+        const dkAlt = DK_ALT_ENDPOINT_MAP[s.fdKey];
+        return [
+          warmFDCache(s.fdKey, s.cacheKey, env, now, FD_WARM_THRESHOLD),
+          warmRSCache(s.fdKey, env, now, RS_WARM_THRESHOLD),
+          ...(dkAlt ? [warmFDCache(s.fdKey, dkAlt.cacheKey, env, now, FD_WARM_THRESHOLD, dkAlt.endpoint)] : []),
+        ];
+      }),
       // Odds API sports have no FD endpoint to warm, but RS still needs to be kept fresh
       ...sportsOddsApiNeeded.map(s => warmRSCache(s.fdKey, env, now, RS_WARM_THRESHOLD)),
     ]);
@@ -651,6 +661,46 @@ export default {
       if (!rsCount) {
         dbg.sports[sport.label] = { fdGames: fdCount, fdAge, rsGames: 0, rsAge, reason: rsReason || 'no_rs_cache' };
         continue;
+      }
+
+      // Merge DK alt spread/total lines into fdGames for NBA/NHL
+      // DK alt markets stay open longer during live play — fills gaps when FD suspends its alt markets
+      const dkAltCfg = DK_ALT_ENDPOINT_MAP[sport.fdKey];
+      if (dkAltCfg) {
+        try {
+          const dkRow = await env.DB.prepare(
+            'SELECT data FROM odds_cache WHERE cache_key=?'
+          ).bind(dkAltCfg.cacheKey).first();
+          if (dkRow) {
+            const dkGames = JSON.parse(dkRow.data).games || {};
+            for (const [gameKey, game] of Object.entries(fdGames)) {
+              const dkGame = dkGames[gameKey];
+              if (!dkGame) continue;
+              if (dkGame.spreads) {
+                if (!game.spreads) game.spreads = {};
+                if ((!game.spreads[game.away] || !Object.keys(game.spreads[game.away]).length) &&
+                    dkGame.spreads.Away && Object.keys(dkGame.spreads.Away).length) {
+                  game.spreads[game.away] = dkGame.spreads.Away;
+                }
+                if ((!game.spreads[game.home] || !Object.keys(game.spreads[game.home]).length) &&
+                    dkGame.spreads.Home && Object.keys(dkGame.spreads.Home).length) {
+                  game.spreads[game.home] = dkGame.spreads.Home;
+                }
+              }
+              if (dkGame.totals) {
+                if (!game.totals) game.totals = {};
+                if ((!game.totals.Over  || !Object.keys(game.totals.Over ).length) &&
+                    dkGame.totals.Over  && Object.keys(dkGame.totals.Over ).length) {
+                  game.totals.Over  = dkGame.totals.Over;
+                }
+                if ((!game.totals.Under || !Object.keys(game.totals.Under).length) &&
+                    dkGame.totals.Under && Object.keys(dkGame.totals.Under).length) {
+                  game.totals.Under = dkGame.totals.Under;
+                }
+              }
+            }
+          }
+        } catch(e) {}
       }
 
       const beforeCount = allBets.length;
