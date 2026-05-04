@@ -526,16 +526,20 @@ export async function onRequestGet(context) {
               headers: { 'Content-Type': 'application/json' }
             });
           }
-          // Fetch missing games with 3s timeout per game, then return combined result
+          // Fetch missing games in parallel batches of 4
           const bgMap = { ...marketMap };
           const bgResults = [];
-          for (let i = 0; i < missingGames.length; i++) {
-            const result = await Promise.race([
-              fetchGameMarkets(missingGames[i], i * 100, gameKeySuffixes.get(String(missingGames[i].id || missingGames[i].gameId)) || ''),
-              new Promise(r => setTimeout(() => r({ _err: 'timeout' }), 5000))
-            ]);
-            bgResults.push(result);
-            if (i < missingGames.length - 1) await new Promise(r => setTimeout(r, 300));
+          const BG_BATCH = 4;
+          for (let i = 0; i < missingGames.length; i += BG_BATCH) {
+            const batch = missingGames.slice(i, i + BG_BATCH);
+            const batchRes = await Promise.all(batch.map((g, j) =>
+              Promise.race([
+                fetchGameMarkets(g, (i + j) * 100, gameKeySuffixes.get(String(g.id || g.gameId)) || ''),
+                new Promise(r => setTimeout(() => r({ _err: 'timeout' }), 5000))
+              ])
+            ));
+            bgResults.push(...batchRes);
+            if (i + BG_BATCH < missingGames.length) await new Promise(r => setTimeout(r, 400));
           }
           const bgDebug = bgResults.map((r, i) => {
             const g = missingGames[i];
@@ -594,16 +598,20 @@ export async function onRequestGet(context) {
       return a && h ? a + ' @ ' + h + suffix : null;
     }).filter(Boolean));
 
-    // Full refresh — start clean so stale keys from old cache blobs can't bleed in
+    // Full refresh in parallel batches of 4 — sequential was too slow for MLB (15+ games × 5s = timeout)
     const freshMap = {};
     const results = [];
-    for (let i = 0; i < games.length; i++) {
-      const result = await Promise.race([
-        fetchGameMarkets(games[i], i * 100, gameKeySuffixes.get(String(games[i].id || games[i].gameId)) || ''),
-        new Promise(r => setTimeout(() => r({ _err: 'timeout' }), 5000))
-      ]);
-      results.push(result);
-      if (i < games.length - 1) await new Promise(r => setTimeout(r, 300));
+    const BATCH_SIZE = 4;
+    for (let i = 0; i < games.length; i += BATCH_SIZE) {
+      const batch = games.slice(i, i + BATCH_SIZE);
+      const batchResults = await Promise.all(batch.map((game, j) =>
+        Promise.race([
+          fetchGameMarkets(game, (i + j) * 100, gameKeySuffixes.get(String(game.id || game.gameId)) || ''),
+          new Promise(r => setTimeout(() => r({ _err: 'timeout' }), 5000))
+        ])
+      ));
+      results.push(...batchResults);
+      if (i + BATCH_SIZE < games.length) await new Promise(r => setTimeout(r, 400));
     }
     for (const result of results) {
       if (result && !result._err) {
