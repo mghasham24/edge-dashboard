@@ -9,7 +9,6 @@
     "node": ">=20"
   },
   "dependencies": {
-    "cron": "^3.1.6",
-    "playwright": "^1.50.0"
+    "cron": "^3.1.6"
   }
 }
