@@ -1,7 +1,6 @@
 // rs-poster-node/index.js
 // Polls RS open positions every minute and posts new ones to the RS group.
-// Uses Playwright headless Chrome — logs in via browser form to get a real session,
-// then makes RS API calls via context.request (Chromium network stack, carries session cookies).
+// Uses Playwright headless Chrome — logs in via browser UI form to get a real session.
 //
 // Required env vars:
 //   RS_LOGIN      — RS email / phone number
@@ -19,8 +18,10 @@ const RS_WEB_BASE = 'https://www.realapp.com';
 const DEVICE_UUID = process.env.RS_DEVICE_UUID || '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e';
 
 const postedIds = new Set();
-let _browser = null;
-let _context = null;
+let _browser      = null;
+let _context      = null;
+let _sessionReady = false;
+let _running      = false; // mutex — prevents concurrent cron overlaps
 
 function rsHeaders() {
   return {
@@ -44,50 +45,75 @@ async function loginViaForm(page) {
 
   console.log('rs-poster: navigating to login page');
   await page.goto(RS_WEB_BASE + '/login', { waitUntil: 'domcontentloaded', timeout: 30000 });
-  await page.waitForTimeout(2000);
+  await page.waitForTimeout(3000);
   console.log('rs-poster: login page URL:', page.url());
 
-  // Fill first visible input (email/phone)
-  const firstInput = page.locator('input').first();
-  await firstInput.waitFor({ timeout: 8000 });
-  await firstInput.fill(login);
+  // Log visible inputs for debugging
+  const inputCount = await page.locator('input').count();
+  console.log('rs-poster: visible inputs on page:', inputCount);
 
-  // Check if password field is already visible (single-step) or need to continue (multi-step)
+  // Step 1: fill login (email / phone)
+  const firstInput = page.locator('input').first();
+  await firstInput.waitFor({ timeout: 10000 });
+  await firstInput.fill(login);
+  console.log('rs-poster: filled login field');
+
+  // Step 1 submit — click whichever button advances the form
+  const stepOneBtn = page.locator('button').first();
+  await stepOneBtn.click();
+  console.log('rs-poster: clicked step-1 button');
+  await page.waitForTimeout(2000);
+  console.log('rs-poster: URL after step 1:', page.url());
+
+  // Step 2: password field should now be visible
   const pwInput = page.locator('input[type="password"]');
-  if (await pwInput.count() === 0) {
-    await page.locator('button').first().click();
-    await page.waitForTimeout(1500);
+  try {
+    await pwInput.waitFor({ timeout: 8000 });
+    await pwInput.fill(password);
+    console.log('rs-poster: filled password field');
+  } catch {
+    // Log page state to understand what RS is showing
+    const bodySnippet = await page.locator('body').textContent().catch(() => '');
+    console.error('rs-poster: password field not found. Page text:', bodySnippet.slice(0, 400));
+    throw new Error('password field not found after step-1 button click');
   }
 
-  await page.locator('input[type="password"]').fill(password);
+  // Step 2 submit
+  await page.locator('button').first().click();
+  console.log('rs-poster: clicked step-2 submit button');
 
-  // Submit
-  await page.locator('button[type="submit"]').click();
-
-  // Wait for navigation away from login
+  // Wait for navigation away from /login
   try {
     await page.waitForURL(url => !url.includes('/login'), { timeout: 20000 });
-    console.log('rs-poster: logged in, URL:', page.url());
+    console.log('rs-poster: logged in! URL:', page.url());
   } catch {
-    const bodyText = await page.locator('body').textContent().catch(() => '');
-    console.error('rs-poster: login may have failed. Body snippet:', bodyText.slice(0, 300));
+    const bodySnippet = await page.locator('body').textContent().catch(() => '');
+    console.error('rs-poster: login did not redirect. Page text:', bodySnippet.slice(0, 400));
     throw new Error('login form did not redirect away from /login');
   }
 }
 
 async function ensureSession() {
-  if (_browser && _browser.isConnected() && _context) return;
+  if (_browser && _browser.isConnected() && _context && _sessionReady) return;
+
+  // Close any stale browser
   if (_browser) { try { await _browser.close(); } catch {} }
+  _browser      = null;
+  _context      = null;
+  _sessionReady = false;
 
   console.log('rs-poster: launching headless Chrome');
   _browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
-  _context = await _browser.newContext({
+  const ctx = await _browser.newContext({
     userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
   });
 
-  const page = await _context.newPage();
+  const page = await ctx.newPage();
   try {
     await loginViaForm(page);
+    // Only store context + mark ready after successful login
+    _context      = ctx;
+    _sessionReady = true;
   } finally {
     await page.close();
   }
@@ -113,6 +139,8 @@ function formatPost(pos) {
 }
 
 async function run() {
+  if (_running) { console.log('rs-poster: previous run still in progress, skipping'); return; }
+  _running = true;
   try {
     await ensureSession();
 
@@ -120,9 +148,7 @@ async function run() {
     if (!posResult.ok) {
       console.error('rs-poster: openpositions failed', posResult.status, posResult.body.slice(0, 200));
       if (posResult.status === 401 || posResult.status === 403) {
-        _context = null;
-        try { await _browser.close(); } catch {}
-        _browser = null;
+        _sessionReady = false; // force re-login next run
       }
       return;
     }
@@ -163,8 +189,10 @@ async function run() {
     }
   } catch (e) {
     console.error('rs-poster: run error', e.message);
-    _context = null;
-    if (_browser) { try { await _browser.close(); } catch {} _browser = null; }
+    _sessionReady = false;
+    if (_browser) { try { await _browser.close(); } catch {} _browser = null; _context = null; }
+  } finally {
+    _running = false;
   }
 }
 
