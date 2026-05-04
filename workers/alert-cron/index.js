@@ -572,7 +572,7 @@ export default {
     const FD_STALE_THRESHOLD = 30 * 60;
     const FD_WARM_THRESHOLD  = 30;  // refresh FD if no recent site traffic (keeps live odds current)
     const RS_STALE_THRESHOLD = 4 * 60 * 60;
-    const RS_WARM_THRESHOLD  = 30;  // warm every cron run (cron fires every 60s > 30s threshold)
+    const RS_WARM_THRESHOLD  = 0;   // always warm RS — sync endpoint returns in <1s if cache is fresh (15s TTL), so no wasted work
     const RE_ALERT_EV_JUMP   = 4.0;
     // Midnight ET (UTC-4 during EDT) — taken bet suppression resets each calendar day
     // Formula: subtract offset to convert to ET, floor to day, add offset back to UTC
