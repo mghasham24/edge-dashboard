@@ -54,15 +54,15 @@ function buildHeaders(token, deviceUuid) {
   return {
     'Accept': 'application/json',
     'Content-Type': 'application/json',
-    'Origin': 'https://www.realapp.com',
-    'Referer': 'https://www.realapp.com/',
+    'Origin': 'https://realsports.io',
+    'Referer': 'https://realsports.io/',
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
     'real-auth-info': token,
     'real-device-name': '5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
     'real-device-type': 'desktop_web',
     'real-device-uuid': deviceUuid,
     'real-request-token': hashidsEncode(Date.now()),
-    'real-version': '28'
+    'real-version': '31'
   };
 }
 
@@ -162,17 +162,20 @@ async function getRSAuth(env) {
   if (_rsAuthToken && (now - _rsAuthFetchedAt) < RS_AUTH_CACHE_TTL) {
     return { token: _rsAuthToken, deviceUuid: _rsDeviceUuid };
   }
+  // Env var takes priority — allows updating token from Cloudflare dashboard without touching D1
   let token = env.REAL_AUTH_TOKEN || '';
-  let deviceUuid = _rsDeviceUuid;
-  try {
-    const cached = await env.DB.prepare(
-      "SELECT data FROM odds_cache WHERE cache_key='rs_auth_token'"
-    ).first();
-    if (cached?.data) {
-      const parsed = JSON.parse(cached.data);
-      if (parsed.token) { token = parsed.token; deviceUuid = parsed.deviceUuid || deviceUuid; }
-    }
-  } catch(e) {}
+  let deviceUuid = env.REAL_DEVICE_UUID || _rsDeviceUuid;
+  if (!token) {
+    try {
+      const cached = await env.DB.prepare(
+        "SELECT data FROM odds_cache WHERE cache_key='rs_auth_token'"
+      ).first();
+      if (cached?.data) {
+        const parsed = JSON.parse(cached.data);
+        if (parsed.token) { token = parsed.token; deviceUuid = parsed.deviceUuid || deviceUuid; }
+      }
+    } catch(e) {}
+  }
   if (token) { _rsAuthToken = token; _rsDeviceUuid = deviceUuid; _rsAuthFetchedAt = now; }
   return { token, deviceUuid };
 }
