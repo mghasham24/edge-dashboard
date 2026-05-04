@@ -61,35 +61,42 @@ async function loginViaForm(page) {
   const inputCount = await page.locator('input').count();
   console.log('rs-poster: visible inputs on page:', inputCount);
 
-  // Step 1: fill login (email / phone)
+  // Fill first input (email / phone)
   const firstInput = page.locator('input').first();
   await firstInput.waitFor({ timeout: 10000 });
   await firstInput.fill(login);
-  console.log('rs-poster: filled login field');
+  console.log('rs-poster: filled input 1');
 
-  // Step 1 submit — click whichever button advances the form
-  const stepOneBtn = page.locator('button').first();
-  await stepOneBtn.click();
-  console.log('rs-poster: clicked step-1 button');
-  await page.waitForTimeout(2000);
-  console.log('rs-poster: URL after step 1:', page.url());
+  // Check if second input is a password field (single-step form) or something else (multi-step)
+  const secondInput = page.locator('input').nth(1);
+  const secondType  = await secondInput.getAttribute('type').catch(() => '');
+  console.log('rs-poster: input 2 type:', secondType);
 
-  // Step 2: password field should now be visible
-  const pwInput = page.locator('input[type="password"]');
-  try {
-    await pwInput.waitFor({ timeout: 8000 });
-    await pwInput.fill(password);
-    console.log('rs-poster: filled password field');
-  } catch {
-    // Log page state to understand what RS is showing
-    const bodySnippet = await page.locator('body').textContent().catch(() => '');
-    console.error('rs-poster: password field not found. Page text:', bodySnippet.slice(0, 400));
-    throw new Error('password field not found after step-1 button click');
+  if (secondType === 'password') {
+    // Single-step form — both fields visible at once
+    await secondInput.fill(password);
+    console.log('rs-poster: filled password (single-step)');
+    await page.keyboard.press('Enter');
+    console.log('rs-poster: pressed Enter to submit');
+  } else {
+    // Multi-step — advance to password step via Enter
+    await firstInput.press('Enter');
+    await page.waitForTimeout(2500);
+    console.log('rs-poster: URL after step 1:', page.url());
+
+    const pwInput = page.locator('input[type="password"]');
+    try {
+      await pwInput.waitFor({ timeout: 10000 });
+      await pwInput.fill(password);
+      console.log('rs-poster: filled password (multi-step)');
+      await page.keyboard.press('Enter');
+      console.log('rs-poster: pressed Enter to submit');
+    } catch {
+      const bodySnippet = await page.locator('body').textContent().catch(() => '');
+      console.error('rs-poster: no password field after step 1. Page text:', bodySnippet.slice(0, 500));
+      throw new Error('password field not found — RS may require OTP or phone verification');
+    }
   }
-
-  // Step 2 submit
-  await page.locator('button').first().click();
-  console.log('rs-poster: clicked step-2 submit button');
 
   // Wait for navigation away from /login
   try {
