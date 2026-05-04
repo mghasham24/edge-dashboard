@@ -5254,8 +5254,6 @@
             return true;
         });
         cacheEvRows(computed, sportKey);
-        done++;
-        updateStatus();
     }
 
     function cacheEvRows(rows, sport, skipRender) {
@@ -5796,6 +5794,7 @@
             if (s.key === 'baseball_mlb' || s.key === 'soccer_fc') return;
             var rows = rawRowsBySport[s.key];
             if (rows && rows.length) computeAndCacheEv(rows, s.key, freshSyncData[s.key] || null);
+            done++; updateStatus();
         });
 
         // MLB and FC: fetch RS sync sequentially (needs global state), then render once for all sports
@@ -5808,6 +5807,7 @@
                 rawRows = savedRawRowsEv; currentSport = savedSportEv;
                 computeAndCacheEv(rawRowsBySport['baseball_mlb'], 'baseball_mlb', null);
             }
+            done++; updateStatus();
             if (rawRowsBySport['soccer_fc'] && rawRowsBySport['soccer_fc'].length) {
                 var savedSportEvFc = currentSport, savedRawRowsEvFc = rawRows;
                 currentSport = 'soccer_fc'; rawRows = rawRowsBySport['soccer_fc'];
@@ -5816,6 +5816,7 @@
                 rawRows = savedRawRowsEvFc; currentSport = savedSportEvFc;
                 computeAndCacheEv(rawRowsBySport['soccer_fc'], 'soccer_fc', null);
             }
+            done++; updateStatus();
         } catch(e) {}
         evLoadingInProgress = false;
         renderEvTab();
