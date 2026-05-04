@@ -46,7 +46,7 @@ async function loginViaForm(page) {
   console.log('rs-poster: navigating to login page');
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      await page.goto(RS_WEB_BASE + '/login', { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await page.goto(RS_WEB_BASE + '/login', { waitUntil: 'networkidle', timeout: 30000 });
       break;
     } catch (e) {
       if (attempt === 3) throw e;
@@ -103,8 +103,11 @@ async function loginViaForm(page) {
     await page.waitForURL(url => !url.includes('/login'), { timeout: 20000 });
     console.log('rs-poster: logged in! URL:', page.url());
   } catch {
-    const bodySnippet = await page.locator('body').textContent().catch(() => '');
-    console.error('rs-poster: login did not redirect. Page text:', bodySnippet.slice(0, 400));
+    const bodyText = await page.locator('body').textContent().catch(() => '');
+    const bodyHtml = await page.evaluate(() => document.body.innerHTML.slice(0, 3000)).catch(() => '');
+    console.error('rs-poster: login did not redirect. URL:', page.url());
+    console.error('rs-poster: page text:', bodyText.slice(0, 800));
+    console.error('rs-poster: page html:', bodyHtml);
     throw new Error('login form did not redirect away from /login');
   }
 }
