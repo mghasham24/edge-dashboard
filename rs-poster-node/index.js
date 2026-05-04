@@ -52,7 +52,7 @@ async function rsFetch(method, url, body, token, deviceUuid) {
       'real-request-token': Math.random().toString(36).slice(2, 18),
       'real-auth-info':     token,
     };
-    const opts = { method, headers };
+    const opts = { method, headers, credentials: 'include' };
     if (body) opts.body = JSON.stringify(body);
     const res  = await fetch(url, opts);
     const text = await res.text();
