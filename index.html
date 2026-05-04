@@ -8384,6 +8384,14 @@
             setBar(Math.round(done / total * 100));
         }));
 
+        // Pre-compute EV for all sports so Best EV tab renders instantly on click
+        // fillPredsFromSync already ran for each sport during the fetch above,
+        // so preds/probsExact are populated — pass null for syncData to skip re-applying.
+        SPORTS.filter(function(s) { return !s.noFetch; }).forEach(function(s) {
+            var rows = rawRowsBySport[s.key];
+            if (rows && rows.length) computeAndCacheEv(rows, s.key, null);
+        });
+
         // All sports loaded — enable Best EV button
         if (evBtn) {
             evBtn.disabled = false;
