@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/playwright:v1.50.0-noble
+FROM mcr.microsoft.com/playwright:v1.59.1-noble
 WORKDIR /app
 COPY package*.json ./
 RUN npm install
