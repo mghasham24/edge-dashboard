@@ -1,98 +1,63 @@
 // rs-poster-node/index.js
-// Runs every minute on Hetzner via Coolify. Polls RS open positions and posts new ones to the RS group.
-// Authenticates with RS_LOGIN + RS_PASSWORD on startup; refreshes token automatically on 401.
+// Polls RS open positions every minute and posts new ones to the RS group.
+// Uses Playwright (headless Chrome) so RS sees a real browser TLS fingerprint.
+// RS_AUTH_INFO token is long-lived — set once, never expires.
 //
 // Required env vars:
-//   RS_LOGIN      — RS email / phone
-//   RS_PASSWORD   — RS password
+//   RS_AUTH_INFO  — real-auth-info token from browser DevTools (long-lived)
 //   RS_GROUP_ID   — numeric RS group ID
 // Optional:
-//   RS_DEVICE_UUID — device UUID (stable across restarts)
+//   RS_DEVICE_UUID — device UUID matching the token
 
+import { chromium } from 'playwright';
 import { CronJob } from 'cron';
 
-const RS_GROUP_ID   = process.env.RS_GROUP_ID;
-const RS_BASE       = 'https://web.realapp.com';
-const RS_LOGIN_URL  = RS_BASE + '/login';
-const RS_OPEN_POS   = RS_BASE + '/predictions/openpositions';
-const RS_POS_DETAIL = (id) => RS_BASE + '/predictions/position/' + id;
-const RS_GROUP_POST = (groupId) => RS_BASE + '/comments/groups/' + groupId;
-const DEVICE_UUID   = process.env.RS_DEVICE_UUID || '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e';
+const RS_GROUP_ID = process.env.RS_GROUP_ID;
+const RS_BASE     = 'https://web.realapp.com';
+const RS_WEB_BASE = 'https://www.realapp.com';
+const AUTH_TOKEN  = process.env.RS_AUTH_INFO || '';
+const DEVICE_UUID = process.env.RS_DEVICE_UUID || '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e';
 
-// In-memory set — good enough since restarts are rare and worst case is a double-post
 const postedIds = new Set();
+let _browser = null;
+let _page    = null;
 
-// In-memory auth token cache
-let _token = '';
-let _tokenFetchedAt = 0;
-const TOKEN_TTL = 55 * 60; // re-login after 55 minutes
-
-function rsHeaders(token) {
-  return {
-    'Content-Type':       'application/json',
-    'Accept':             'application/json',
-    'Accept-Language':    'en-US,en;q=0.9',
-    'Accept-Encoding':    'gzip, deflate, br',
-    'Cache-Control':      'max-age=0',
-    'Origin':             'https://www.realapp.com',
-    'Referer':            'https://www.realapp.com/',
-    'User-Agent':         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
-    'Sec-Fetch-Site':     'same-site',
-    'Sec-Fetch-Mode':     'cors',
-    'Sec-Fetch-Dest':     'empty',
-    'real-device-uuid':   DEVICE_UUID,
-    'real-device-name':   '5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
-    'real-device-type':   'desktop_web',
-    'real-version':       '31',
-    'real-request-token': Math.random().toString(36).slice(2, 18),
-    'real-auth-info':     token,
-  };
+async function ensureBrowser() {
+  if (_browser && _browser.isConnected() && _page && !_page.isClosed()) return;
+  if (_browser) { try { await _browser.close(); } catch {} }
+  console.log('rs-poster: launching headless Chrome');
+  _browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+  const ctx = await _browser.newContext({
+    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
+  });
+  _page = await ctx.newPage();
+  // Navigate to realapp.com so the page is on the right origin for CORS + session cookies
+  await _page.goto(RS_WEB_BASE, { waitUntil: 'domcontentloaded', timeout: 30000 });
+  console.log('rs-poster: browser ready at', RS_WEB_BASE);
 }
 
-async function login() {
-  const login    = process.env.RS_LOGIN;
-  const password = process.env.RS_PASSWORD;
-  if (!login || !password) { console.error('rs-poster: RS_LOGIN or RS_PASSWORD not set'); return null; }
-
-  console.log('rs-poster: logging in as', login);
-  const res = await fetch(RS_LOGIN_URL, {
-    method:  'POST',
-    headers: {
+// All RS API calls run inside the actual Chrome process — real browser TLS fingerprint
+async function rsFetch(method, url, body, token, deviceUuid) {
+  return _page.evaluate(async ({ method, url, body, token, deviceUuid }) => {
+    const headers = {
       'Content-Type':       'application/json',
       'Accept':             'application/json',
       'Accept-Language':    'en-US,en;q=0.9',
       'Origin':             'https://www.realapp.com',
       'Referer':            'https://www.realapp.com/',
-      'User-Agent':         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
-      'real-device-uuid':   DEVICE_UUID,
+      'real-device-uuid':   deviceUuid,
       'real-device-name':   '5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
       'real-device-type':   'desktop_web',
       'real-version':       '31',
       'real-request-token': Math.random().toString(36).slice(2, 18),
-    },
-    body: JSON.stringify({ login, password, tfaAuthCode: '', attestationToken: null, attestChallenge: null }),
-  });
-
-  if (!res.ok) {
-    const body = await res.text();
-    console.error('rs-poster: login failed', res.status, body.slice(0, 300));
-    return null;
-  }
-
-  const data  = await res.json();
-  const token = data?.authInfo || data?.real_auth_info || data?.token || data?.auth;
-  if (!token) { console.error('rs-poster: login response missing token', JSON.stringify(data).slice(0, 300)); return null; }
-
-  console.log('rs-poster: logged in, token len', token.length);
-  _token = token;
-  _tokenFetchedAt = Math.floor(Date.now() / 1000);
-  return token;
-}
-
-async function getToken() {
-  const now = Math.floor(Date.now() / 1000);
-  if (_token && (now - _tokenFetchedAt) < TOKEN_TTL) return _token;
-  return login();
+      'real-auth-info':     token,
+    };
+    const opts = { method, headers };
+    if (body) opts.body = JSON.stringify(body);
+    const res  = await fetch(url, opts);
+    const text = await res.text();
+    return { ok: res.ok, status: res.status, body: text };
+  }, { method, url, body, token, deviceUuid });
 }
 
 function formatPost(pos) {
@@ -108,27 +73,20 @@ function formatPost(pos) {
 
 async function run() {
   try {
-    let token = await getToken();
-    if (!token) { console.error('rs-poster: could not obtain auth token'); return; }
+    await ensureBrowser();
 
-    let posRes = await fetch(RS_OPEN_POS, { headers: rsHeaders(token) });
-
-    // On 401, try re-login once
-    if (posRes.status === 401) {
-      console.log('rs-poster: 401 on openpositions — re-logging in');
-      _token = '';
-      token = await login();
-      if (!token) { console.error('rs-poster: re-login failed'); return; }
-      posRes = await fetch(RS_OPEN_POS, { headers: rsHeaders(token) });
-    }
-
-    if (!posRes.ok) {
-      const body = await posRes.text();
-      console.error('rs-poster: openpositions failed', posRes.status, body.slice(0, 200));
+    const posResult = await rsFetch('GET', RS_BASE + '/predictions/openpositions', null, AUTH_TOKEN, DEVICE_UUID);
+    if (!posResult.ok) {
+      console.error('rs-poster: openpositions failed', posResult.status, posResult.body.slice(0, 200));
+      if (posResult.status === 401 || posResult.status === 403) {
+        _page = null;
+        try { await _browser.close(); } catch {}
+        _browser = null;
+      }
       return;
     }
 
-    const positions = (await posRes.json()).positions || [];
+    const positions = JSON.parse(posResult.body).positions || [];
     if (!positions.length) { console.log('rs-poster: no open positions'); return; }
 
     const newPositions = positions.filter(p => p.sharedPositionId && !postedIds.has(p.sharedPositionId));
@@ -140,24 +98,21 @@ async function run() {
       const pos   = newPositions[i];
       const posId = pos.sharedPositionId;
       try {
-        const detailRes = await fetch(RS_POS_DETAIL(posId), { headers: rsHeaders(token) });
-        const detail    = detailRes.ok ? await detailRes.json() : {};
-        const path      = detail.position?.marketDisplay?.path;
-        const shareUrl  = path ? 'https://www.realapp.com' + path : '';
-        const text      = formatPost(pos) + (shareUrl ? '\n\n' + shareUrl : '');
+        const detailResult = await rsFetch('GET', RS_BASE + '/predictions/position/' + posId, null, AUTH_TOKEN, DEVICE_UUID);
+        const detail       = detailResult.ok ? JSON.parse(detailResult.body) : {};
+        const path         = detail.position?.marketDisplay?.path;
+        const shareUrl     = path ? RS_WEB_BASE + path : '';
+        const text         = formatPost(pos) + (shareUrl ? '\n\n' + shareUrl : '');
 
-        const groupRes = await fetch(RS_GROUP_POST(RS_GROUP_ID), {
-          method:  'POST',
-          headers: rsHeaders(token),
-          body:    JSON.stringify({ groupId: parseInt(RS_GROUP_ID), text, parentCommentId: null }),
-        });
+        const groupResult = await rsFetch('POST', RS_BASE + '/comments/groups/' + RS_GROUP_ID, {
+          groupId: parseInt(RS_GROUP_ID), text, parentCommentId: null,
+        }, AUTH_TOKEN, DEVICE_UUID);
 
-        if (groupRes.ok) {
+        if (groupResult.ok) {
           console.log('rs-poster: posted', posId);
           postedIds.add(posId);
         } else {
-          const err = await groupRes.text();
-          console.error('rs-poster: group post failed', posId, groupRes.status, err.slice(0, 200));
+          console.error('rs-poster: group post failed', posId, groupResult.status, groupResult.body.slice(0, 200));
         }
 
         if (i < newPositions.length - 1) await new Promise(r => setTimeout(r, 1000));
@@ -167,10 +122,13 @@ async function run() {
     }
   } catch (e) {
     console.error('rs-poster: run error', e.message);
+    _page = null;
+    if (_browser) { try { await _browser.close(); } catch {} _browser = null; }
   }
 }
 
-if (!RS_GROUP_ID) { console.error('rs-poster: RS_GROUP_ID not set'); process.exit(1); }
+if (!RS_GROUP_ID) { console.error('rs-poster: RS_GROUP_ID not set');  process.exit(1); }
+if (!AUTH_TOKEN)  { console.error('rs-poster: RS_AUTH_INFO not set'); process.exit(1); }
 
 console.log('rs-poster: starting, group', RS_GROUP_ID);
 run();

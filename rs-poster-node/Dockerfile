@@ -1,6 +1,6 @@
-FROM node:20-alpine
+FROM mcr.microsoft.com/playwright:v1.50.0-noble
 WORKDIR /app
-COPY package.json .
-RUN npm install --production --ignore-scripts
-COPY index.js .
+COPY package*.json ./
+RUN npm ci
+COPY index.js ./
 CMD ["node", "index.js"]
