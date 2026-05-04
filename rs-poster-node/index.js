@@ -13,7 +13,7 @@ const RS_GROUP_ID  = process.env.RS_GROUP_ID;
 const RS_AUTH_INFO = process.env.RS_AUTH_INFO;
 const DEVICE_UUID  = process.env.RS_DEVICE_UUID || '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e';
 const RS_BASE      = 'https://web.realapp.com';
-const RS_WEB_BASE  = 'https://www.realapp.com';
+const RS_WEB_BASE  = 'https://realsports.io';
 
 const postedIds = new Set();
 let _running = false;
