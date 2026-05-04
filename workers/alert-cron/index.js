@@ -299,9 +299,13 @@ function formatAlert(sport, game, market, side, ev, units, dollarAmt, pt, rsPct,
   // EV sensitivity at RS+1% — shows how much edge erodes with a 1pt RS probability shift
   let sensStr = '';
   if (rsPct != null && adjFairPct != null) {
-    const rsProb1 = Math.min(0.999, rsPct / 100 + 0.01);
-    const evPlus1 = calcEV(adjFairPct / 100, rsProb1);
-    sensStr = 'RS+1%: ' + (evPlus1 >= 0 ? '+' : '') + evPlus1.toFixed(1) + '% EV\n';
+    const rsProb1  = Math.min(0.999, rsPct / 100 + 0.01);
+    const fdFair   = adjFairPct / 100;
+    const evPlus1  = calcEV(fdFair, rsProb1);
+    const uPlus1   = unitsEV(evPlus1, fdFair);
+    const evP1Str  = (evPlus1 >= 0 ? '+' : '') + evPlus1.toFixed(1) + '% EV';
+    const uP1Str   = uPlus1 > 0 ? ' · ' + uPlus1 + 'u (' + Math.round(uPlus1 * dollarAmt / units) + ' Rax)' : ' · 0u';
+    sensStr = 'RS+1%: ' + evP1Str + uP1Str + '\n';
   }
   const teams    = game.split(' @ ');
   const shortGame = (teams[0] || game) + ' @ ' + (teams[1] || '');
