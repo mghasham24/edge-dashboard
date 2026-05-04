@@ -1,11 +1,11 @@
 // rs-poster-node/index.js
 // Runs every minute on Railway. Polls RS open positions and posts new ones to the RS group.
-// RS auth token is fetched from RaxEdge D1 (pushed there by Tampermonkey).
+// Auth token is set once as a Railway env var (RS_AUTH_INFO) — no re-auth needed per Justin.
 //
 // Required env vars:
-//   RS_TOKEN_SECRET  — matches RaxEdge RS_TOKEN_SECRET
+//   RS_AUTH_INFO     — RS real-auth-info token (set once in Railway, long-lived)
+//   RS_DEVICE_UUID   — device UUID matching the token
 //   RS_GROUP_ID      — numeric RS group ID
-//   RAXEDGE_URL      — e.g. https://raxedge.com
 
 import { CronJob } from 'cron';
 
@@ -23,9 +23,14 @@ function rsHeaders(token, deviceUuid) {
     'Content-Type':       'application/json',
     'Accept':             'application/json',
     'Accept-Language':    'en-US,en;q=0.9',
+    'Accept-Encoding':    'gzip, deflate, br',
+    'Cache-Control':      'max-age=0',
     'Origin':             'https://www.realapp.com',
     'Referer':            'https://www.realapp.com/',
     'User-Agent':         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
+    'Sec-Fetch-Site':     'same-site',
+    'Sec-Fetch-Mode':     'cors',
+    'Sec-Fetch-Dest':     'empty',
     'real-device-uuid':   deviceUuid,
     'real-device-name':   '5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
     'real-device-type':   'desktop_web',
