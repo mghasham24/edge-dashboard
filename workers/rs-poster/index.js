@@ -32,7 +32,15 @@ function rsHeaders(authToken, deviceUuid) {
   };
 }
 
+// Module-level token cache — persists across invocations within the same Worker instance
+// Avoids a D1 read on every scheduled run; re-reads only when the token is missing or expired
+let _cachedToken = null;
+let _cachedTokenFetchedAt = 0;
+const TOKEN_CACHE_TTL = 10 * 60; // re-read from D1 at most once every 10 minutes
+
 async function getCachedToken(db) {
+  const now = Math.floor(Date.now() / 1000);
+  if (_cachedToken && (now - _cachedTokenFetchedAt) < TOKEN_CACHE_TTL) return _cachedToken;
   try {
     // First check Tampermonkey-pushed token (rs_auth_token)
     const tm = await db.prepare(
@@ -40,14 +48,22 @@ async function getCachedToken(db) {
     ).first();
     if (tm?.data) {
       const parsed = JSON.parse(tm.data);
-      if (parsed.token) return { token: parsed.token, deviceUuid: parsed.deviceUuid || '2e0a38e2-0ee8-4f93-9a34-218ac1d10161' };
+      if (parsed.token) {
+        _cachedToken = { token: parsed.token, deviceUuid: parsed.deviceUuid || '2e0a38e2-0ee8-4f93-9a34-218ac1d10161' };
+        _cachedTokenFetchedAt = now;
+        return _cachedToken;
+      }
     }
     // Fall back to worker-managed cache
     const row = await db.prepare(
       "SELECT data FROM odds_cache WHERE cache_key=?"
     ).bind(AUTH_CACHE_KEY).first();
     const val = row?.data;
-    if (val && val !== '__expired__') return { token: val, deviceUuid: '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e' };
+    if (val && val !== '__expired__') {
+      _cachedToken = { token: val, deviceUuid: '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e' };
+      _cachedTokenFetchedAt = now;
+      return _cachedToken;
+    }
   } catch {}
   return null;
 }
@@ -57,6 +73,9 @@ async function setCachedToken(db, token) {
   await db.prepare(
     "INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at"
   ).bind(AUTH_CACHE_KEY, token, now).run();
+  // Update in-memory cache so the new token is used immediately without another D1 read
+  _cachedToken = { token, deviceUuid: '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e' };
+  _cachedTokenFetchedAt = now;
 }
 
 function loginHeaders(deviceUuid) {

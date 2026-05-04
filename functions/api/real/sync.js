@@ -150,6 +150,33 @@ function extractGames(gamesData) {
   return all;
 }
 
+// Module-level auth cache — survives across requests within the same Worker instance
+// Re-read from D1 at most once every 5 minutes instead of on every request
+let _rsAuthToken = '';
+let _rsDeviceUuid = '2e0a38e2-0ee8-4f93-9a34-218ac1d10161';
+let _rsAuthFetchedAt = 0;
+const RS_AUTH_CACHE_TTL = 5 * 60; // seconds
+
+async function getRSAuth(env) {
+  const now = Math.floor(Date.now() / 1000);
+  if (_rsAuthToken && (now - _rsAuthFetchedAt) < RS_AUTH_CACHE_TTL) {
+    return { token: _rsAuthToken, deviceUuid: _rsDeviceUuid };
+  }
+  let token = env.REAL_AUTH_TOKEN || '';
+  let deviceUuid = _rsDeviceUuid;
+  try {
+    const cached = await env.DB.prepare(
+      "SELECT data FROM odds_cache WHERE cache_key='rs_auth_token'"
+    ).first();
+    if (cached?.data) {
+      const parsed = JSON.parse(cached.data);
+      if (parsed.token) { token = parsed.token; deviceUuid = parsed.deviceUuid || deviceUuid; }
+    }
+  } catch(e) {}
+  if (token) { _rsAuthToken = token; _rsDeviceUuid = deviceUuid; _rsAuthFetchedAt = now; }
+  return { token, deviceUuid };
+}
+
 export async function onRequestGet(context) {
   const { request, env } = context;
 
@@ -163,18 +190,7 @@ export async function onRequestGet(context) {
     session = await getSession(request, env.DB);
     if (!session) return fail(401, 'Not authenticated');
   }
-  // Read auth token from D1 cache (pushed by Tampermonkey) or fall back to env var
-  let rsAuthToken = env.REAL_AUTH_TOKEN || '';
-  let rsDeviceUuid = '2e0a38e2-0ee8-4f93-9a34-218ac1d10161';
-  try {
-    const cached = await env.DB.prepare(
-      "SELECT data FROM odds_cache WHERE cache_key='rs_auth_token'"
-    ).first();
-    if (cached?.data) {
-      const parsed = JSON.parse(cached.data);
-      if (parsed.token) { rsAuthToken = parsed.token; rsDeviceUuid = parsed.deviceUuid || rsDeviceUuid; }
-    }
-  } catch(e) {}
+  const { token: rsAuthToken, deviceUuid: rsDeviceUuid } = await getRSAuth(env);
   if (!rsAuthToken) return fail(500, 'RS auth token not available');
 
   const reqUrl = reqUrl0;
