@@ -296,6 +296,13 @@ function formatAlert(sport, game, market, side, ev, units, dollarAmt, pt, rsPct,
   const rsPctStr = rsPct != null ? rsPct.toFixed(1) + '% RS' : '';
   const adjStr   = adjFairPct != null ? adjFairPct.toFixed(1) + '% Fair' : '';
   const statsStr = [rsPctStr, adjStr].filter(Boolean).join(' · ');
+  // EV sensitivity at RS+1% — shows how much edge erodes with a 1pt RS probability shift
+  let sensStr = '';
+  if (rsPct != null && adjFairPct != null) {
+    const rsProb1 = Math.min(0.999, rsPct / 100 + 0.01);
+    const evPlus1 = calcEV(adjFairPct / 100, rsProb1);
+    sensStr = 'RS+1%: ' + (evPlus1 >= 0 ? '+' : '') + evPlus1.toFixed(1) + '% EV\n';
+  }
   const teams    = game.split(' @ ');
   const shortGame = (teams[0] || game) + ' @ ' + (teams[1] || '');
   const linkLine = gameUrl ? `\n<a href="${gameUrl}">View on Real Sports ↗</a>` : '';
@@ -304,6 +311,7 @@ function formatAlert(sport, game, market, side, ev, units, dollarAmt, pt, rsPct,
     `${header}\n\n` +
     `<b>${lineStr}</b> · ${market} · ${sport.label}\n` +
     `${evStr} · ${unitStr}\n` +
+    sensStr +
     (statsStr ? statsStr + '\n' : '') +
     `\n<i>${shortGame}</i>${linkLine}`
   );
