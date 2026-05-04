@@ -44,7 +44,16 @@ async function loginViaForm(page) {
   if (!login || !password) throw new Error('RS_LOGIN or RS_PASSWORD not set');
 
   console.log('rs-poster: navigating to login page');
-  await page.goto(RS_WEB_BASE + '/login', { waitUntil: 'domcontentloaded', timeout: 30000 });
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      await page.goto(RS_WEB_BASE + '/login', { waitUntil: 'domcontentloaded', timeout: 30000 });
+      break;
+    } catch (e) {
+      if (attempt === 3) throw e;
+      console.log('rs-poster: page.goto attempt', attempt, 'failed:', e.message.split('\n')[0], '— retrying');
+      await new Promise(r => setTimeout(r, 2000));
+    }
+  }
   await page.waitForTimeout(3000);
   console.log('rs-poster: login page URL:', page.url());
 
@@ -103,7 +112,7 @@ async function ensureSession() {
   _sessionReady = false;
 
   console.log('rs-poster: launching headless Chrome');
-  _browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+  _browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-setuid-sandbox', '--no-zygote', '--disable-gpu'] });
   const ctx = await _browser.newContext({
     userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
   });
