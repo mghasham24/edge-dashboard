@@ -580,7 +580,7 @@ export default {
     const midnightET = Math.floor((now - ET_OFFSET) / 86400) * 86400 + ET_OFFSET;
 
     // Debug snapshot — written to D1 at end of each run for diagnostics
-    const dbg = { ts: now, sports: {}, allBets: 0, sampleBets: [], sentCount: 0 };
+    const dbg = { ts: now, sports: {}, allBets: 0, sampleBets: [], sentCount: 0, suppressedCount: 0, failedSends: 0 };
 
     // 1. Load all verified, enabled users
     const users = await env.DB.prepare(
@@ -910,6 +910,8 @@ export default {
       let userBets = allBets.filter(b =>
         b.ev >= minEv && (!userSports || userSports.has(b.sport.fdKey))
       );
+      if (!dbg.userBets) dbg.userBets = {};
+      dbg.userBets[user.user_id] = { minEv, betsAfterFilter: userBets.length };
 
       // Skip markets taken today unless EV jumped to a higher bracket (5-9.9% / 10-14.9% / 15%+)
       try {
@@ -960,7 +962,7 @@ export default {
           // Live game, last alert was pre-game → fire one re-alert at game start
           // After that, entry.sentAt >= commenceTime so the 4% jump rule resumes
           const wasAlertedPreGame = bet.isLive && bet.commenceTime && entry.sentAt < bet.commenceTime;
-          if (!wasAlertedPreGame && bet.ev - entry.ev < RE_ALERT_EV_JUMP) continue;
+          if (!wasAlertedPreGame && bet.ev - entry.ev < RE_ALERT_EV_JUMP) { dbg.suppressedCount++; continue; }
         }
 
         const dollarAmt = Math.round(bet.units * unitSize);
@@ -980,20 +982,23 @@ export default {
         } : undefined;
 
         const msgId = await sendTelegram(user.telegram_chat_id, message, env.TELEGRAM_BOT_TOKEN, replyMarkup);
-        if (msgId) dbg.sentCount++;
-
-        if (msgId && alertRowId) {
+        if (msgId) {
+          dbg.sentCount++;
+          if (alertRowId) {
+            try {
+              await env.DB.prepare('UPDATE alert_messages SET msg_id=? WHERE id=?').bind(msgId, alertRowId).run();
+            } catch(e) {}
+          }
+          // Only log after confirmed send — prevents suppressing bets on future runs when Telegram failed
           try {
-            await env.DB.prepare('UPDATE alert_messages SET msg_id=? WHERE id=?').bind(msgId, alertRowId).run();
+            await env.DB.prepare(
+              `INSERT INTO alert_sent_log (user_id, bet_key, last_ev, sent_at) VALUES (?,?,?,?)
+               ON CONFLICT(user_id, bet_key) DO UPDATE SET last_ev=excluded.last_ev, sent_at=excluded.sent_at`
+            ).bind(user.user_id, bet.betKey, bet.ev, now).run();
           } catch(e) {}
+        } else {
+          dbg.failedSends++;
         }
-
-        try {
-          await env.DB.prepare(
-            `INSERT INTO alert_sent_log (user_id, bet_key, last_ev, sent_at) VALUES (?,?,?,?)
-             ON CONFLICT(user_id, bet_key) DO UPDATE SET last_ev=excluded.last_ev, sent_at=excluded.sent_at`
-          ).bind(user.user_id, bet.betKey, bet.ev, now).run();
-        } catch(e) {}
 
         await new Promise(r => setTimeout(r, 50));
       }
