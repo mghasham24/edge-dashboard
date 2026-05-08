@@ -279,8 +279,12 @@ export async function onRequestGet(context) {
         latestDayContentDay: gamesData.latestDayContent && gamesData.latestDayContent.day,
         latestDayContentGamesCount: gamesData.latestDayContent && gamesData.latestDayContent.games && gamesData.latestDayContent.games.length,
         extractedGamesCount: games.length,
-        extractedGameKeys: games.map(g => ((g.awayTeam && g.awayTeam.name) || g.awayTeamKey || '?') + ' @ ' + ((g.homeTeam && g.homeTeam.name) || g.homeTeamKey || '?')),
-        gameIds: games.map(g => ({ id: g.id, away: (g.awayTeam?.name || g.awayTeamKey), home: (g.homeTeam?.name || g.homeTeamKey) }))
+        extractedGameKeys: games.map(g => {
+          const a = (g.awayTeam?.name) || g.awayTeamKey || g.awayTeam?.key || g.awayTeamName || g.away?.name || g.teams?.[0]?.name || '?';
+          const h = (g.homeTeam?.name) || g.homeTeamKey || g.homeTeam?.key || g.homeTeamName || g.home?.name || g.teams?.[1]?.name || '?';
+          return a + ' @ ' + h;
+        }),
+        gameIds: games.map(g => ({ id: g.id, gameId: g.gameId, topKeys: Object.keys(g).slice(0,12), away: (g.awayTeam?.name || g.awayTeamKey || g.awayTeamName || g.away?.name || '?'), home: (g.homeTeam?.name || g.homeTeamKey || g.homeTeamName || g.home?.name || '?') }))
       }), { headers: { 'Content-Type': 'application/json' } });
     }
 
@@ -380,8 +384,8 @@ export async function onRequestGet(context) {
     // Detect doubleheaders: same matchup appears twice → tag the later game with ' (2)' suffix
     const _dhGroups = {};
     games.forEach(g => {
-      const a = (g.awayTeam?.name) || g.awayTeamKey || '';
-      const h = (g.homeTeam?.name) || g.homeTeamKey || '';
+      const a = (g.awayTeam?.name) || g.awayTeamKey || g.awayTeam?.key || g.awayTeamName || (g.away?.name) || (g.teams?.[0]?.name) || '';
+      const h = (g.homeTeam?.name) || g.homeTeamKey || g.homeTeam?.key || g.homeTeamName || (g.home?.name) || (g.teams?.[1]?.name) || '';
       const base = a + ' @ ' + h;
       if (!_dhGroups[base]) _dhGroups[base] = [];
       _dhGroups[base].push(g);
@@ -402,10 +406,10 @@ export async function onRequestGet(context) {
     if (debugMode === 'dh') {
       // Return DH detection results + current cache keys for diagnosis
       const generatedKeys = games.map(g => {
-        const a = (g.awayTeam?.name) || g.awayTeamKey || '';
-        const h = (g.homeTeam?.name) || g.homeTeamKey || '';
+        const a = (g.awayTeam?.name) || g.awayTeamKey || g.awayTeam?.key || g.awayTeamName || g.away?.name || g.teams?.[0]?.name || '?';
+        const h = (g.homeTeam?.name) || g.homeTeamKey || g.homeTeam?.key || g.homeTeamName || g.home?.name || g.teams?.[1]?.name || '?';
         const suffix = gameKeySuffixes.get(String(g.id || g.gameId)) || '';
-        return { id: String(g.id || g.gameId), key: a + ' @ ' + h + suffix, dateTime: g.dateTime || g.commenceTime };
+        return { id: String(g.id || g.gameId), key: a + ' @ ' + h + suffix, dateTime: g.dateTime || g.commenceTime, rawFields: Object.keys(g) };
       });
       let cacheKeys = [];
       try {
@@ -422,8 +426,10 @@ export async function onRequestGet(context) {
       // Handle fighters array (UFC/MMA) vs awayTeam/homeTeam (team sports)
       const fighters = game.fighters || game.athletes || game.players;
       const awayKey = (game.awayTeam && game.awayTeam.name) || game.awayTeamKey || game.awayTeam?.key
+                   || game.awayTeamName || (game.away?.name) || (game.teams?.[0]?.name)
                    || (fighters && fighters[0] && (fighters[0].name || fighters[0].displayName));
       const homeKey = (game.homeTeam && game.homeTeam.name) || game.homeTeamKey || game.homeTeam?.key
+                   || game.homeTeamName || (game.home?.name) || (game.teams?.[1]?.name)
                    || (fighters && fighters[1] && (fighters[1].name || fighters[1].displayName));
       if (!gameId || !awayKey || !homeKey) return { _err: 'no keys', gameId };
       const headers = buildHeaders(rsAuthToken, rsDeviceUuid);
@@ -620,8 +626,8 @@ export async function onRequestGet(context) {
     }
     // Build set of game keys RS is serving today (used to prune stale cache entries)
     const todayGameKeys = new Set(games.map(g => {
-      const a = (g.awayTeam && g.awayTeam.name) || g.awayTeamKey;
-      const h = (g.homeTeam && g.homeTeam.name) || g.homeTeamKey;
+      const a = (g.awayTeam?.name) || g.awayTeamKey || g.awayTeam?.key || g.awayTeamName || g.away?.name || g.teams?.[0]?.name;
+      const h = (g.homeTeam?.name) || g.homeTeamKey || g.homeTeam?.key || g.homeTeamName || g.home?.name || g.teams?.[1]?.name;
       const suffix = gameKeySuffixes.get(String(g.id || g.gameId)) || '';
       return a && h ? a + ' @ ' + h + suffix : null;
     }).filter(Boolean));
