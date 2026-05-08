@@ -1,0 +1,9 @@
+{
+  "name": "auction-scanner",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "playwright": "^1.44.0",
+    "hashids": "^2.3.0"
+  }
+}
