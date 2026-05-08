@@ -155,7 +155,7 @@ function extractGames(gamesData) {
 let _rsAuthToken = '';
 let _rsDeviceUuid = '2e0a38e2-0ee8-4f93-9a34-218ac1d10161';
 let _rsAuthFetchedAt = 0;
-const RS_AUTH_CACHE_TTL = 5 * 60; // seconds
+const RS_AUTH_CACHE_TTL = 20; // seconds — keep short so fresh tokens from D1 are picked up quickly
 
 async function getRSAuth(env) {
   const now = Math.floor(Date.now() / 1000);
@@ -193,9 +193,6 @@ export async function onRequestGet(context) {
     session = await getSession(request, env.DB);
     if (!session) return fail(401, 'Not authenticated');
   }
-  const { token: rsAuthToken, deviceUuid: rsDeviceUuid } = await getRSAuth(env);
-  if (!rsAuthToken) return fail(500, 'RS auth token not available');
-
   const reqUrl = reqUrl0;
   const fdKey = reqUrl.searchParams.get('sport');
 
@@ -205,6 +202,7 @@ export async function onRequestGet(context) {
   }
   const realSport = SPORT_MAP[fdKey] || fdKey;
   const debugMode = reqUrl.searchParams.get('debug');
+  const now = Math.floor(Date.now() / 1000);
 
   // Return empty markets for unsupported sports
   if (UNSUPPORTED_SPORTS.has(fdKey)) {
@@ -212,6 +210,25 @@ export async function onRequestGet(context) {
       headers: { 'Content-Type': 'application/json' }
     });
   }
+
+  // Cache-first: if D1 has fresh data (< 5 min), serve it without calling RS API.
+  // This lets Tampermonkey-pushed data serve all users even when RS API auth fails.
+  if (!debugMode) {
+    try {
+      const cacheKey = 'real_sync_' + realSport + '_v12';
+      const cached = await env.DB.prepare(
+        'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
+      ).bind(cacheKey).first();
+      if (cached && (now - cached.fetched_at) < 300) {
+        return new Response(JSON.stringify({ ok: true, markets: JSON.parse(cached.data) }), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    } catch(e) {}
+  }
+
+  const { token: rsAuthToken, deviceUuid: rsDeviceUuid } = await getRSAuth(env);
+  if (!rsAuthToken) return fail(500, 'RS auth token not available');
 
   if (debugMode === '1') {
     return new Response(JSON.stringify({ fdKey, realSport, hasToken: !!env.REAL_AUTH_TOKEN }), {
@@ -520,7 +537,6 @@ export async function onRequestGet(context) {
 
     // Two-phase fetch: return cached data immediately, fetch missing games in background
     const marketMap = {};
-    const now = Math.floor(Date.now() / 1000);
     const cacheKey = 'real_sync_' + realSport + '_v12'; // v12: resolvedMap DH suffix fix
     const TTL = 15;
 
@@ -674,6 +690,42 @@ export async function onRequestGet(context) {
   } catch(e) {
     return fail(500, e.message + ' | ' + (e.stack||'').slice(0,300));
   }
+}
+
+// POST /api/real/sync — Tampermonkey pushes pre-fetched RS market data directly.
+// Bypasses server-side RS API call entirely; browser auth context handles the fetching.
+const TM_SYNC_PUSH_KEY = 'rax-bridge-9w2k5j7n';
+
+export async function onRequestPost({ request, env }) {
+  const url = new URL(request.url);
+  const key = url.searchParams.get('_tm_key');
+  if (!key || key !== TM_SYNC_PUSH_KEY) {
+    return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+  }
+  let body;
+  try { body = await request.json(); } catch { return new Response(JSON.stringify({ error: 'Bad JSON' }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }); }
+
+  const { sport, markets } = body;
+  if (!sport || !markets || typeof markets !== 'object') {
+    return new Response(JSON.stringify({ error: 'Missing sport or markets' }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+  }
+  const realSport = SPORT_MAP[sport] || sport;
+  const cacheKey = 'real_sync_' + realSport + '_v12';
+  const now = Math.floor(Date.now() / 1000);
+  try {
+    await env.DB.prepare(
+      'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at'
+    ).bind(cacheKey, JSON.stringify(markets), now).run();
+  } catch(e) {
+    return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+  }
+  return new Response(JSON.stringify({ ok: true, sport, keys: Object.keys(markets).length }), {
+    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+  });
+}
+
+export async function onRequestOptions() {
+  return new Response(null, { headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST', 'Access-Control-Allow-Headers': 'Content-Type' } });
 }
 
 function fail(status, msg) {

@@ -17,7 +17,7 @@ import { createServer } from 'http';
 const RS_GROUP_ID  = process.env.RS_GROUP_ID;
 const DEVICE_UUID  = process.env.RS_DEVICE_UUID || '2e0a38e2-0ee8-4f93-9a34-218ac1d10161';
 const RS_BASE      = 'https://web.realapp.com';
-const RS_WEB_BASE  = 'https://realsports.io';
+const RS_WEB_BASE  = 'https://www.realsports.io';
 const TOKEN_PORT   = parseInt(process.env.TOKEN_PORT || '27182');
 
 // Live auth token — updated by Tampermonkey bridge
@@ -49,7 +49,7 @@ const tokenServer = createServer((req, res) => {
   } else if (req.method === 'GET' && req.url === '/status') {
     const ageSec = Math.floor((Date.now() - tokenUpdatedAt) / 1000);
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ok: true, tokenAge: ageSec, hasToken: !!currentAuthInfo }));
+    res.end(JSON.stringify({ ok: true, tokenAge: ageSec, hasToken: !!currentAuthInfo, token: currentAuthInfo }));
   } else {
     res.writeHead(404); res.end();
   }
@@ -129,10 +129,10 @@ async function run() {
         const shareUrl  = path ? RS_WEB_BASE + path : '';
         const text      = formatPost(pos) + (shareUrl ? '\n\n' + shareUrl : '');
 
-        const groupRes = await fetch(RS_BASE + '/comments/groups/' + RS_GROUP_ID, {
+        const groupRes = await fetch(RS_BASE + '/groups/' + RS_GROUP_ID + '/posts', {
           method:  'POST',
           headers: rsHeaders(),
-          body:    JSON.stringify({ groupId: parseInt(RS_GROUP_ID), text, parentCommentId: null }),
+          body:    JSON.stringify({ content: { nodes: [{ type: 'Paragraph', children: [{ text, type: 'Text' }] }] } }),
         });
 
         if (groupRes.ok) {

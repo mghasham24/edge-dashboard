@@ -1,60 +1,64 @@
 // ==UserScript==
-// @name         RaxEdge RS Auto-Poster
-// @namespace    https://raxedge.com
-// @version      1.3
-// @description  Posts new RS open positions to the RS group every minute, directly from your browser session
-// @match        https://www.realapp.com/*
+// @name         RS Auto-Poster
+// @namespace    raxedge
+// @version      2.0
+// @description  Polls RS open positions every 60s and posts new ones to the group
 // @match        https://realsports.io/*
-// @grant        GM_setValue
-// @grant        GM_getValue
-// @connect      web.realapp.com
-// @run-at       document-idle
+// @match        https://www.realsports.io/*
+// @grant        none
+// @run-at       document-start
 // ==/UserScript==
 
 (function() {
   'use strict';
 
-  const GROUP_ID         = 61979;
-  const RS_API_BASE      = 'https://web.realapp.com';
-  const RS_WEB_BASE      = 'https://realsports.io';
-  const POSTED_KEY       = 'rs_auto_posted_ids';
-  const POLL_INTERVAL_MS = 60 * 1000;
+  const RS_GROUP_ID  = '61979';
+  const RS_BASE      = 'https://web.realapp.com';
+  const RS_WEB_BASE  = 'https://realsports.io';
+  const POSTED_KEY   = 'rs_poster_posted_ids';
+  const POLL_MS      = 60000;
+
+  let _running = false;
 
   function getAuth() {
     try {
       const accounts = JSON.parse(localStorage.getItem('e-accounts') || '[]');
-      const info = accounts[0]?.authInfo;
-      if (!info?.userId || !info?.token) return null;
-      const authHeader = `${info.userId}!${info.deviceId || ''}!${info.token}`;
-      const deviceUuid = localStorage.getItem('realdeviceuuid') || '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e';
-      return { authHeader, deviceUuid };
-    } catch {
-      return null;
-    }
+      const info = (accounts[0] || {}).authInfo || {};
+      if (info.userId && info.deviceId && info.token) {
+        return info.userId + '!' + info.deviceId + '!' + info.token;
+      }
+    } catch(e) {}
+    return null;
+  }
+
+  function getDeviceUUID() {
+    return '6d6af134-cb55-476e-b13e-16f37bc96838';
+  }
+
+  function makeHeaders(auth) {
+    return {
+      'Accept':             'application/json',
+      'Content-Type':       'application/json',
+      'Origin':             RS_WEB_BASE,
+      'Referer':            RS_WEB_BASE + '/',
+      'real-auth-info':     auth,
+      'real-device-uuid':   getDeviceUUID(),
+      'real-device-name':   navigator.userAgent,
+      'real-device-type':   'desktop_web',
+      'real-version':       '31',
+      'real-request-token': Math.random().toString(36).slice(2, 18),
+    };
   }
 
   function getPostedIds() {
-    try { return new Set(JSON.parse(GM_getValue(POSTED_KEY, '[]'))); } catch { return new Set(); }
+    try { return new Set(JSON.parse(localStorage.getItem(POSTED_KEY) || '[]')); }
+    catch(e) { return new Set(); }
   }
 
   function savePostedId(id) {
     const ids = getPostedIds();
     ids.add(id);
-    GM_setValue(POSTED_KEY, JSON.stringify([...ids].slice(-1000)));
-  }
-
-  function rsHeaders(authHeader, deviceUuid) {
-    return {
-      'Content-Type':       'application/json',
-      'Accept':             'application/json',
-      'Accept-Language':    'en-US,en;q=0.9',
-      'real-device-uuid':   deviceUuid,
-      'real-device-name':   '5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
-      'real-device-type':   'desktop_web',
-      'real-version':       '31',
-      'real-request-token': Math.random().toString(36).slice(2, 18),
-      'real-auth-info':     authHeader,
-    };
+    localStorage.setItem(POSTED_KEY, JSON.stringify(Array.from(ids).slice(-500)));
   }
 
   function formatPost(pos) {
@@ -68,75 +72,70 @@
     return `New Pick: ${game}\n${label} — ${outcome}\nAvg: ${avg} | Cost: ${cost} | Pays: ${pays}`;
   }
 
-  // Use the page's own fetch (via unsafeWindow) so requests are indistinguishable
-  // from the React app's own calls — same TLS fingerprint, same origin headers.
-  const pageFetch = unsafeWindow.fetch.bind(unsafeWindow);
-
-  async function poll() {
-    console.log('[RS Auto-Poster] polling…');
+  async function run() {
+    if (_running) return;
     const auth = getAuth();
-    if (!auth) {
-      console.warn('[RS Auto-Poster] no auth in localStorage — are you logged in?');
-      return;
-    }
-    const { authHeader, deviceUuid } = auth;
+    if (!auth) { console.log('[RS Poster] No auth'); return; }
+    _running = true;
 
-    let posRes;
     try {
-      posRes = await pageFetch(RS_API_BASE + '/predictions/openpositions', {
-        headers: rsHeaders(authHeader, deviceUuid),
-      });
-    } catch (e) {
-      console.error('[RS Auto-Poster] openpositions error:', e.message);
-      return;
-    }
-
-    if (!posRes.ok) {
-      console.warn('[RS Auto-Poster] openpositions', posRes.status, (await posRes.text()).slice(0, 300));
-      return;
-    }
-
-    const positions    = (await posRes.json()).positions || [];
-    const postedIds    = getPostedIds();
-    const newPositions = positions.filter(p => p.sharedPositionId && !postedIds.has(p.sharedPositionId));
-
-    if (!newPositions.length) { console.log('[RS Auto-Poster] no new positions'); return; }
-
-    console.log('[RS Auto-Poster] found', newPositions.length, 'new position(s)');
-
-    for (let i = 0; i < newPositions.length; i++) {
-      const pos   = newPositions[i];
-      const posId = pos.sharedPositionId;
-      try {
-        const detailRes = await pageFetch(RS_API_BASE + '/predictions/position/' + posId, {
-          headers: rsHeaders(authHeader, deviceUuid),
-        });
-        const detail   = detailRes.ok ? await detailRes.json() : {};
-        const path     = detail.position?.marketDisplay?.path;
-        const shareUrl = path ? RS_WEB_BASE + path : '';
-        const text     = formatPost(pos) + (shareUrl ? '\n\n' + shareUrl : '');
-
-        const groupRes = await pageFetch(RS_API_BASE + '/comments/groups/' + GROUP_ID, {
-          method:  'POST',
-          headers: rsHeaders(authHeader, deviceUuid),
-          body:    JSON.stringify({ groupId: GROUP_ID, text, parentCommentId: null }),
-        });
-
-        if (groupRes.ok) {
-          console.log('[RS Auto-Poster] posted', posId);
-          savePostedId(posId);
-        } else {
-          console.error('[RS Auto-Poster] group post failed', posId, groupRes.status, (await groupRes.text()).slice(0, 300));
-        }
-
-        if (i < newPositions.length - 1) await new Promise(r => setTimeout(r, 1000));
-      } catch (e) {
-        console.error('[RS Auto-Poster] error for', posId, e.message);
+      const posRes = await fetch(RS_BASE + '/predictions/openpositions', { headers: makeHeaders(auth) });
+      if (!posRes.ok) {
+        console.error('[RS Poster] openpositions', posRes.status, await posRes.text());
+        return;
       }
+
+      const positions    = (await posRes.json()).positions || [];
+      const postedIds    = getPostedIds();
+      const newPositions = positions.filter(p => p.sharedPositionId && !postedIds.has(p.sharedPositionId));
+
+      if (!positions.length)    { console.log('[RS Poster] No open positions'); return; }
+      if (!newPositions.length) { console.log('[RS Poster] No new positions');  return; }
+
+      console.log('[RS Poster] Found', newPositions.length, 'new position(s)');
+
+      for (let i = 0; i < newPositions.length; i++) {
+        const pos   = newPositions[i];
+        const posId = pos.sharedPositionId;
+        try {
+          const detailRes = await fetch(RS_BASE + '/predictions/position/' + posId, { headers: makeHeaders(auth) });
+          const detail    = detailRes.ok ? await detailRes.json() : {};
+          const path      = detail.position?.marketDisplay?.path;
+          const shareUrl  = path ? RS_WEB_BASE + path : '';
+          const text      = formatPost(pos) + (shareUrl ? '\n\n' + shareUrl : '');
+
+          const groupRes = await fetch(RS_BASE + '/groups/' + RS_GROUP_ID + '/posts', {
+            method:  'POST',
+            headers: makeHeaders(auth),
+            body:    JSON.stringify({ content: { nodes: [{ type: 'Paragraph', children: [{ text, type: 'Text' }] }] } }),
+          });
+
+          if (groupRes.ok) {
+            console.log('[RS Poster] Posted', posId);
+            savePostedId(posId);
+          } else {
+            console.error('[RS Poster] Post failed', posId, groupRes.status, await groupRes.text());
+          }
+
+          if (i < newPositions.length - 1) await new Promise(r => setTimeout(r, 1500));
+        } catch(e) {
+          console.error('[RS Poster] Error for', posId, e.message);
+        }
+      }
+    } catch(e) {
+      console.error('[RS Poster] Run error', e.message);
+    } finally {
+      _running = false;
     }
   }
 
-  poll();
-  setInterval(poll, POLL_INTERVAL_MS);
+  function start() {
+    const auth = getAuth();
+    if (!auth) { setTimeout(start, 3000); return; }
+    console.log('[RS Poster] Started as', auth.split('!')[0]);
+    run();
+    setInterval(run, POLL_MS);
+  }
 
+  setTimeout(start, 3000);
 })();

@@ -404,7 +404,9 @@ function processNativeNBA(sport, fdGames, rsGames, rsGameIds, rsGameSports, glob
     const gameUrl   = buildRSUrl(gameId, rsSport);
 
     // ── ML ──
-    const rsMlLabel = RS_ML_LABELS.find(l => rsMarkets[l]);
+    // Skip ML for live games where FD has suspended and frozen pre-game prices.
+    // RS live probability moves with the game state but FD fair is stale → false EV.
+    const rsMlLabel = (!isLive || !game.live) ? RS_ML_LABELS.find(l => rsMarkets[l]) : null;
     if (rsMlLabel) {
       const rsMkt      = rsMarkets[rsMlLabel];
       const rsOutcomes = rsMkt.outcomes || [];
@@ -688,24 +690,26 @@ export default {
             for (const [gameKey, game] of Object.entries(fdGames)) {
               const dkGame = dkGames[gameKey];
               if (!dkGame) continue;
+              // For live games with frozen FD data, prefer fresh DK alt prices over stale frozen FD prices
+              const preferDk = game.live === true;
               if (dkGame.spreads) {
                 if (!game.spreads) game.spreads = {};
-                if ((!game.spreads[game.away] || !Object.keys(game.spreads[game.away]).length) &&
+                if ((preferDk || !game.spreads[game.away] || !Object.keys(game.spreads[game.away]).length) &&
                     dkGame.spreads.Away && Object.keys(dkGame.spreads.Away).length) {
                   game.spreads[game.away] = dkGame.spreads.Away;
                 }
-                if ((!game.spreads[game.home] || !Object.keys(game.spreads[game.home]).length) &&
+                if ((preferDk || !game.spreads[game.home] || !Object.keys(game.spreads[game.home]).length) &&
                     dkGame.spreads.Home && Object.keys(dkGame.spreads.Home).length) {
                   game.spreads[game.home] = dkGame.spreads.Home;
                 }
               }
               if (dkGame.totals) {
                 if (!game.totals) game.totals = {};
-                if ((!game.totals.Over  || !Object.keys(game.totals.Over ).length) &&
+                if ((preferDk || !game.totals.Over  || !Object.keys(game.totals.Over ).length) &&
                     dkGame.totals.Over  && Object.keys(dkGame.totals.Over ).length) {
                   game.totals.Over  = dkGame.totals.Over;
                 }
-                if ((!game.totals.Under || !Object.keys(game.totals.Under).length) &&
+                if ((preferDk || !game.totals.Under || !Object.keys(game.totals.Under).length) &&
                     dkGame.totals.Under && Object.keys(dkGame.totals.Under).length) {
                   game.totals.Under = dkGame.totals.Under;
                 }
