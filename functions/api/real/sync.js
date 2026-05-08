@@ -204,22 +204,6 @@ export async function onRequestGet(context) {
     });
   }
 
-  // Cache-first: if D1 has fresh data (< 5 min), serve it without calling RS API.
-  // This lets Tampermonkey-pushed data serve all users even when RS API auth fails.
-  if (!debugMode) {
-    try {
-      const cacheKey = 'real_sync_' + realSport + '_v12';
-      const cached = await env.DB.prepare(
-        'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
-      ).bind(cacheKey).first();
-      if (cached && (now - cached.fetched_at) < 300) {
-        return new Response(JSON.stringify({ ok: true, markets: JSON.parse(cached.data) }), {
-          headers: { 'Content-Type': 'application/json' }
-        });
-      }
-    } catch(e) {}
-  }
-
   const { token: rsAuthToken, deviceUuid: rsDeviceUuid } = await getRSAuth(env);
   if (!rsAuthToken) return fail(500, 'RS auth token not available');
 
@@ -712,6 +696,13 @@ export async function onRequestPost({ request, env }) {
   const cacheKey = 'real_sync_' + realSport + '_v12';
   const now = Math.floor(Date.now() / 1000);
   try {
+    // Only write if D1 is stale (> 10 min) — CF worker owns fresh data, TM bridge is emergency backup
+    const existing = await env.DB.prepare('SELECT fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
+    if (existing && (now - existing.fetched_at) < 600) {
+      return new Response(JSON.stringify({ ok: true, sport, skipped: true, age: now - existing.fetched_at }), {
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+      });
+    }
     await env.DB.prepare(
       'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at'
     ).bind(cacheKey, JSON.stringify(markets), now).run();
