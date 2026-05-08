@@ -99,7 +99,6 @@ function extractGames(gamesData) {
   const seen = new Set();
   const all = [];
 
-  const cutoff = Date.now() - 5 * 60 * 60 * 1000; // drop games that started >5h ago
   function addGame(g) {
     if (!g) return;
     const id = g.id || g.gameId;
@@ -107,12 +106,6 @@ function extractGames(gamesData) {
     // Drop settled/closed games — RS sets isClosed=true and status='final' when resolved
     if (g.isClosed === true) return;
     if (g.status === 'final' || g.status === 'closed' || g.status === 'completed') return;
-    // Filter out games that started >5h ago — RS field is 'dateTime' (primary) with fallbacks
-    const startRaw = g.dateTime || g.commenceTime || g.startTime || g.scheduledAt || g.gameTime || g.startDate;
-    if (startRaw) {
-      const ms = typeof startRaw === 'number' ? startRaw : new Date(startRaw).getTime();
-      if (ms < cutoff) return; // definitely over, skip
-    }
     seen.add(id);
     all.push(g);
   }

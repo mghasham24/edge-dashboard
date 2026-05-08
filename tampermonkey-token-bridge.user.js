@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RS Token Bridge
 // @namespace    raxedge
-// @version      2.0
+// @version      2.1
 // @description  Pushes RS auth token every 30s + full market data every 4min to RaxEdge
 // @match        https://realsports.io/*
 // @match        https://www.realsports.io/*
@@ -72,7 +72,6 @@
 
   function extractGames(data) {
     var seen = {}, games = [];
-    var cutoff = Date.now() - 5 * 60 * 60 * 1000;
     function add(g) {
       if (!g) return;
       var id = g.id || g.gameId;
@@ -80,11 +79,6 @@
       if (g.isClosed) return;
       var s = g.status;
       if (s === 'final' || s === 'closed' || s === 'completed') return;
-      var raw = g.dateTime || g.commenceTime || g.startTime || g.scheduledAt || g.gameTime;
-      if (raw) {
-        var ms = typeof raw === 'number' ? raw : new Date(raw).getTime();
-        if (ms < cutoff) return;
-      }
       seen[id] = true; games.push(g);
     }
     function addArr(arr) { if (Array.isArray(arr)) arr.forEach(add); }
