@@ -103,9 +103,9 @@ function extractGames(gamesData) {
     if (!g) return;
     const id = g.id || g.gameId;
     if (!id || seen.has(id)) return;
-    // Drop settled/closed games — RS sets isClosed=true and status='final' when resolved
-    if (g.isClosed === true) return;
-    if (g.status === 'final' || g.status === 'closed' || g.status === 'completed') return;
+    // Drop settled/closed games
+    if (g.isClosed) return;
+    if (['final', 'closed', 'completed', 'complete', 'ended', 'finished', 'postgame'].includes(g.status)) return;
     seen.add(id);
     all.push(g);
   }
@@ -643,19 +643,27 @@ export async function onRequestGet(context) {
       }
     }
 
-    // For games that failed to fetch, fall back to cached data only if it's a valid today game
-    // (prevents wrong-game bleed while keeping data for rate-limited / timed-out games)
-    const todayMidnightMs = new Date(new Date().toISOString().slice(0, 10)).getTime();
+    // Build map of gameKey → today's expected game ID so merge-cache can reject stale series data
+    const todayGidByKey = new Map();
+    games.forEach(g => {
+      const a = (g.awayTeam?.name) || g.awayTeamKey || g.awayTeam?.key || g.awayTeamName || g.away?.name || g.teams?.[0]?.name;
+      const h = (g.homeTeam?.name) || g.homeTeamKey || g.homeTeam?.key || g.homeTeamName || g.home?.name || g.teams?.[1]?.name;
+      const suffix = gameKeySuffixes.get(String(g.id || g.gameId)) || '';
+      if (a && h) todayGidByKey.set(a + ' @ ' + h + suffix, String(g.id || g.gameId));
+    });
+
+    // For games that failed to fetch, fall back to cached data only if it's the same game (same ID).
+    // The old startMs/UTC-midnight check failed for late ET games (9pm ET = 1am UTC next day) in series.
     for (const gk of todayGameKeys) {
       if (!freshMap[gk] && marketMap[gk]) {
-        const cachedStart = marketMap[gk + '__startMs'];
-        // Only reuse if startMs is positively confirmed within today — null startMs is unverifiable, skip it
-        if (cachedStart && cachedStart >= todayMidnightMs && cachedStart < todayMidnightMs + 86400000) {
-          freshMap[gk] = marketMap[gk];
-          ['__lines', '__gid', '__sport', '__startMs'].forEach(s => {
-            if (marketMap[gk + s] != null) freshMap[gk + s] = marketMap[gk + s];
-          });
-        }
+        const cachedGid = marketMap[gk + '__gid'];
+        const expectedGid = todayGidByKey.get(gk);
+        // If we know both IDs and they differ, this is a different day's game — skip it
+        if (cachedGid && expectedGid && String(cachedGid) !== expectedGid) continue;
+        freshMap[gk] = marketMap[gk];
+        ['__lines', '__gid', '__sport', '__startMs'].forEach(s => {
+          if (marketMap[gk + s] != null) freshMap[gk + s] = marketMap[gk + s];
+        });
       }
     }
 
