@@ -172,7 +172,7 @@ async function checkPackCards(cards, sport) {
     const ratingStr = rating != null ? ` | Rating: ${rating}` : '';
     const ownerStr  = owner ? `\nOwned by: ${owner}` : '';
     const numericId = card.id ?? card.cardId ?? card.playId;
-    const cardHash  = card.hashId || (numericId != null ? HASHIDS.encode([10, 0, 0, numericId]) : '');
+    const cardHash  = card.hashId || (numericId != null ? HASHIDS.encode([20, 0, 0, numericId]) : '');
     const cardUrl   = cardHash ? `https://www.realapp.com/${cardHash}` : '';
     const urlLine   = cardUrl ? `\n<a href="${cardUrl}">View Card ↗</a>` : '';
     const msg = `🃏 <b>Pack Alert</b> (${sport.toUpperCase()})\n${name}${rarity ? ` (${rarity})` : ''}${ratingStr}${ownerStr}${urlLine}`;
