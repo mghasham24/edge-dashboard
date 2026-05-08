@@ -178,9 +178,9 @@ async function checkPackCards(cards, sport) {
     const msg = `🃏 <b>Pack Alert</b> (${sport.toUpperCase()})\n${name}${rarity ? ` (${rarity})` : ''}${ratingStr}${ownerStr}${urlLine}`;
     console.log('auction-scanner: PACK ALERT', name, rarity, sport, cardUrl || '(no url)');
     await sendTelegram(msg);
+    savePackSeen(); // persist immediately so restarts don't re-alert
     found++;
   }
-  savePackSeen();
   if (!found && cards.length) console.log('auction-scanner: no target packs in', cards.length, sport, 'card(s)');
 }
 
@@ -216,7 +216,8 @@ async function scan() {
   let liveToken         = null;
   let liveDeviceUuid    = null;
   let liveCookie        = '';
-  let capturedHeaders   = null; // full headers from a marketplace request (used for GC API)
+  let capturedHeaders   = null; // full headers from a marketplace request
+  let capturedGcHeaders = null; // auth headers captured from a successful globalcards request
   let listingsFromRoute = [];
   let gcScanning        = false;
   let pendingGcData     = null; // { cards, ts } populated by response listener
@@ -241,10 +242,21 @@ async function scan() {
       const origUrl = route.request().url();
       let fetchUrl = origUrl;
       if (origUrl.includes('filterEntityId')) {
-        fetchUrl = origUrl.includes('sort=') ? fetchUrl.replace(/sort=[^&]+/, 'sort=new') : fetchUrl + '&sort=new';
+        fetchUrl = fetchUrl.includes('view=') ? fetchUrl.replace(/view=[^&]+/, 'view=new') : fetchUrl + '&view=new';
+        fetchUrl = fetchUrl.includes('sort=') ? fetchUrl.replace(/sort=[^&]+/, 'sort=new') : fetchUrl + '&sort=new';
         fetchUrl = fetchUrl.includes('pageSize=') ? fetchUrl.replace(/pageSize=\d+/, 'pageSize=50') : fetchUrl + '&pageSize=50';
+        fetchUrl = fetchUrl.includes('limit=') ? fetchUrl.replace(/limit=\d+/, 'limit=50') : fetchUrl + '&limit=50';
       }
-      const response = await route.fetch(fetchUrl !== origUrl ? { url: fetchUrl } : undefined);
+      // Always capture auth headers from globalcards requests (these are the correct headers for this endpoint)
+      const reqHeaders = route.request().headers();
+      if (reqHeaders['real-auth-info']) capturedGcHeaders = { ...reqHeaders };
+
+      // Inject captured auth headers when making the fetch so direct API path benefits too
+      const fetchOpts = { url: fetchUrl };
+      if (capturedGcHeaders && !reqHeaders['real-auth-info']) {
+        fetchOpts.headers = capturedGcHeaders;
+      }
+      const response = await route.fetch(fetchOpts);
       const status   = response.status();
       const text     = await response.text();
       if (status !== 200) {
@@ -297,11 +309,9 @@ async function scan() {
       return route.continue();
     }
     try {
-      // Capture auth headers once from a real marketplace request (same auth as globalcards)
-      if (!capturedHeaders) {
-        const h = route.request().headers();
-        if (h['real-auth-info']) capturedHeaders = { ...h };
-      }
+      // Always refresh auth headers from marketplace requests so direct API path stays fresh
+      const h = route.request().headers();
+      if (h['real-auth-info']) capturedHeaders = { ...h };
       const sortedUrl = url.includes('sort=')
         ? url.replace(/sort=[^&]+/, 'sort=new')
         : url + '&sort=new';
@@ -621,26 +631,25 @@ async function scan() {
     }
   }
 
-  // ── Direct API globalcards fetch (fast path once entity IDs are known) ──────────
+  // ── Direct API globalcards fetch via browser context (uses session cookies) ─────
 
   async function fetchPlayerGlobalCardsAPI(target) {
     const info = gcEntityIds[target];
-    if (!info || !capturedHeaders) return null;
+    if (!info) return null;
     const { entityId, apiUrl } = info;
-    const url = `${apiUrl}?filterEntityId=${entityId}&filterEntityType=player&rarity=all&sort=new&pageSize=50`;
-    // Use captured marketplace headers (same auth) with a fresh request token
-    const headers = {
-      ...capturedHeaders,
-      'real-request-token': randomBytes(12).toString('base64').replace(/[+/=]/g, '').slice(0, 16),
-    };
+    const url = `${apiUrl}?filterEntityId=${entityId}&filterEntityType=player&rarity=all&view=new&sort=new&pageSize=50&limit=50`;
     try {
-      const res = await fetch(url, { headers });
-      if (!res.ok) {
-        console.log('auction-scanner: GC API error for', target, res.status);
+      // Run fetch inside browser context so session cookies/auth are included automatically
+      const result = await page.evaluate(async (fetchUrl) => {
+        const res = await fetch(fetchUrl);
+        if (!res.ok) return { error: res.status };
+        return await res.json();
+      }, url);
+      if (result?.error) {
+        console.log('auction-scanner: GC API error for', target, result.error);
         return null;
       }
-      const data  = await res.json();
-      const cards = data.cards || data.items || data.data || data.plays || [];
+      const cards = result?.cards || result?.items || result?.data || result?.plays || [];
       console.log('auction-scanner: GC API', target, '→', cards.length, 'card(s)');
       return cards;
     } catch(e) {
