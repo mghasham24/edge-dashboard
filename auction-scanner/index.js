@@ -239,9 +239,11 @@ async function scan() {
   await page.route('**/globalcards**', async route => {
     try {
       const origUrl = route.request().url();
-      const fetchUrl = origUrl.includes('filterEntityId')
-        ? (origUrl.includes('sort=') ? origUrl.replace(/sort=[^&]+/, 'sort=new') : origUrl + '&sort=new')
-        : origUrl;
+      let fetchUrl = origUrl;
+      if (origUrl.includes('filterEntityId')) {
+        fetchUrl = origUrl.includes('sort=') ? fetchUrl.replace(/sort=[^&]+/, 'sort=new') : fetchUrl + '&sort=new';
+        fetchUrl = fetchUrl.includes('pageSize=') ? fetchUrl.replace(/pageSize=\d+/, 'pageSize=50') : fetchUrl + '&pageSize=50';
+      }
       const response = await route.fetch(fetchUrl !== origUrl ? { url: fetchUrl } : undefined);
       const status   = response.status();
       const text     = await response.text();
@@ -625,7 +627,7 @@ async function scan() {
     const info = gcEntityIds[target];
     if (!info || !capturedHeaders) return null;
     const { entityId, apiUrl } = info;
-    const url = `${apiUrl}?filterEntityId=${entityId}&filterEntityType=player&rarity=all&sort=new`;
+    const url = `${apiUrl}?filterEntityId=${entityId}&filterEntityType=player&rarity=all&sort=new&pageSize=50`;
     // Use captured marketplace headers (same auth) with a fresh request token
     const headers = {
       ...capturedHeaders,
