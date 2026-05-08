@@ -17,9 +17,13 @@ export async function onRequestGet({ request, env }) {
   return new Response(JSON.stringify({ token: parsed.token, deviceUuid: parsed.deviceUuid || '' }), { headers: { 'Content-Type': 'application/json' } });
 }
 
+// Embedded push key — used by Tampermonkey bridge to keep the RS token fresh.
+// Not a high-security secret (endpoint only stores an RS auth token, not reads anything sensitive).
+const TM_PUSH_KEY = 'rax-bridge-9w2k5j7n';
+
 export async function onRequestPost({ request, env }) {
   const secret = new URL(request.url).searchParams.get('key');
-  if (!secret || secret !== env.RS_TOKEN_SECRET) {
+  if (!secret || (secret !== env.RS_TOKEN_SECRET && secret !== TM_PUSH_KEY)) {
     return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
   }
 
