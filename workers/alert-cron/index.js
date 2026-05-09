@@ -588,6 +588,7 @@ export default {
     const RS_STALE_THRESHOLD = 4 * 60 * 60;
     const RS_WARM_THRESHOLD  = 0;   // always warm RS — sync endpoint returns in <1s if cache is fresh (15s TTL), so no wasted work
     const RE_ALERT_EV_JUMP   = 4.0;
+    const RESEND_AFTER_SECS  = 2 * 3600; // re-alert on persistent +EV bets every 2 hours
     // Midnight ET (UTC-4 during EDT) — taken bet suppression resets each calendar day
     // Formula: subtract offset to convert to ET, floor to day, add offset back to UTC
     const ET_OFFSET = 4 * 3600;
@@ -978,7 +979,8 @@ export default {
           // Live game, last alert was pre-game → fire one re-alert at game start
           // After that, entry.sentAt >= commenceTime so the 4% jump rule resumes
           const wasAlertedPreGame = bet.isLive && bet.commenceTime && entry.sentAt < bet.commenceTime;
-          if (!wasAlertedPreGame && bet.ev - entry.ev < RE_ALERT_EV_JUMP) { dbg.suppressedCount++; continue; }
+          const isStale = (now - entry.sentAt) >= RESEND_AFTER_SECS;
+          if (!wasAlertedPreGame && !isStale && bet.ev - entry.ev < RE_ALERT_EV_JUMP) { dbg.suppressedCount++; continue; }
         }
 
         const dollarAmt = Math.round(bet.units * unitSize);
