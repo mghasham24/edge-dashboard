@@ -24,7 +24,7 @@ export async function onRequest({ request, env, next }) {
   // Plan enforcement on /api/odds
   if (url.pathname.startsWith('/api/odds')) {
     // Free promo — set date to future to activate, past to disable
-    const FREE_PROMO_END = new Date('2030-01-01T00:00:00Z');
+    const FREE_PROMO_END = new Date('2026-04-06T04:59:00Z');
     const isPro = session.plan === 'pro' || session.is_admin || new Date() < FREE_PROMO_END;
     if (!isPro) {
       // Check sport
