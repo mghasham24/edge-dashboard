@@ -305,7 +305,8 @@ function formatAlert(sport, game, market, side, ev, units, dollarAmt, pt, rsPct,
     const uPlus1   = unitsEV(evPlus1, fdFair);
     const evP1Str  = (evPlus1 >= 0 ? '+' : '') + evPlus1.toFixed(1) + '% EV';
     const uP1Str   = uPlus1 > 0 ? ' · ' + uPlus1 + 'u (' + Math.round(uPlus1 * dollarAmt / units) + ' Rax)' : ' · 0u';
-    sensStr = 'RS+1%: ' + evP1Str + uP1Str + '\n';
+    const rsOddLabel = (rsProb1 * 100).toFixed(1) + '% RS: ';
+    sensStr = rsOddLabel + evP1Str + uP1Str + '\n';
   }
   const teams    = game.split(' @ ');
   const shortGame = (teams[0] || game) + ' @ ' + (teams[1] || '');
