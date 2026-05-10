@@ -289,35 +289,41 @@ async function sendTelegram(chatId, text, botToken, replyMarkup) {
 }
 
 function formatAlert(sport, game, market, side, ev, units, dollarAmt, pt, rsPct, adjFairPct, gameUrl, isLive) {
-  const evStr    = (ev >= 0 ? '+' : '') + ev.toFixed(1) + '% EV';
-  const unitStr  = units + 'u (' + dollarAmt + ' Rax)';
-  const ptStr    = pt != null ? ' ' + (pt > 0 ? '+' : '') + pt : '';
-  const lineStr  = market === 'ML' || market === 'RFI' ? side : side + ptStr;
-  const rsPctStr = rsPct != null ? rsPct.toFixed(1) + '% RS' : '';
-  const adjStr   = adjFairPct != null ? adjFairPct.toFixed(1) + '% Fair' : '';
-  const statsStr = [rsPctStr, adjStr].filter(Boolean).join(' · ');
-  // EV sensitivity at RS+1% — shows how much edge erodes with a 1pt RS probability shift
-  let sensStr = '';
+  const ptStr   = pt != null ? ' ' + (pt > 0 ? '+' : '') + pt : '';
+  const lineStr = market === 'ML' || market === 'RFI' ? side : side + ptStr;
+  const header  = isLive ? '⚡ <b>Live Alert</b>' : '🔔 <b>RaxEdge Alert</b>';
+
+  const evStr  = (ev >= 0 ? '+' : '') + ev.toFixed(1) + '% EV';
+  const rsLine = rsPct != null
+    ? rsPct.toFixed(1) + '% RS · ' + evStr + ' · ' + units + 'u · ' + dollarAmt + ' Rax'
+    : evStr + ' · ' + units + 'u · ' + dollarAmt + ' Rax';
+
+  let sensLine = '';
+  let fairLine = '';
   if (rsPct != null && adjFairPct != null) {
     const rsProb1  = Math.min(0.999, rsPct / 100 + 0.01);
     const fdFair   = adjFairPct / 100;
     const evPlus1  = calcEV(fdFair, rsProb1);
     const uPlus1   = unitsEV(evPlus1, fdFair);
     const evP1Str  = (evPlus1 >= 0 ? '+' : '') + evPlus1.toFixed(1) + '% EV';
-    const uP1Str   = uPlus1 > 0 ? ' · ' + uPlus1 + 'u (' + Math.round(uPlus1 * dollarAmt / units) + ' Rax)' : ' · 0u';
-    const rsOddLabel = (rsProb1 * 100).toFixed(1) + '% RS: ';
-    sensStr = rsOddLabel + evP1Str + uP1Str + '\n';
+    const bet1     = uPlus1 > 0 ? Math.round(uPlus1 * dollarAmt / units) : 0;
+    const u1Str    = uPlus1 > 0 ? uPlus1 + 'u · ' + bet1 + ' Rax' : '0u';
+    sensLine = (rsProb1 * 100).toFixed(1) + '% RS · ' + evP1Str + ' · ' + u1Str + '\n';
+    fairLine = adjFairPct.toFixed(1) + '% Fair\n';
+  } else if (adjFairPct != null) {
+    fairLine = adjFairPct.toFixed(1) + '% Fair\n';
   }
-  const teams    = game.split(' @ ');
+
+  const teams     = game.split(' @ ');
   const shortGame = (teams[0] || game) + ' @ ' + (teams[1] || '');
-  const linkLine = gameUrl ? `\n<a href="${gameUrl}">View on Real Sports ↗</a>` : '';
-  const header   = isLive ? '⚡ <b>LIVE Alert</b>' : '🔔 <b>RaxEdge Alert</b>';
+  const linkLine  = gameUrl ? `\n<a href="${gameUrl}">View on Real Sports ↗</a>` : '';
+
   return (
     `${header}\n\n` +
     `<b>${lineStr}</b> · ${market} · ${sport.label}\n` +
-    `${evStr} · ${unitStr}\n` +
-    sensStr +
-    (statsStr ? statsStr + '\n' : '') +
+    `${rsLine}\n` +
+    sensLine +
+    fairLine +
     `\n<i>${shortGame}</i>${linkLine}`
   );
 }
