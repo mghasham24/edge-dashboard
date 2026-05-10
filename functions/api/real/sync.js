@@ -190,7 +190,10 @@ export async function onRequestGet(context) {
   const fdKey = reqUrl.searchParams.get('sport');
 
   // Pro gate: non-free-sport syncs require a Pro plan (server-authoritative — not bypassable client-side)
-  if (!FREE_PLAN_SPORTS.has(fdKey) && session.plan !== 'pro' && !session.is_admin) {
+  // Free promo — set date to future to activate, past to disable
+  const FREE_PROMO_END = new Date('2026-04-06T04:59:00Z');
+  const isPromo = new Date() < FREE_PROMO_END;
+  if (!FREE_PLAN_SPORTS.has(fdKey) && session.plan !== 'pro' && !session.is_admin && !isPromo) {
     return fail(403, 'Pro plan required');
   }
   const realSport = SPORT_MAP[fdKey] || fdKey;
