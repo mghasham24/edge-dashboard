@@ -14,6 +14,15 @@ export async function onRequest(context) {
   const session = await getSession(request, env.DB);
   if (!session) return fail(401, 'Not authenticated');
 
+  // UFC only runs on Saturdays — block on all other days to save Odds API credits.
+  // Allow Saturday (6) and Sunday (0) UTC to cover late-night fights past midnight.
+  if (sport === 'mma_mixed_martial_arts' && !session.is_admin) {
+    const day = new Date().getUTCDay();
+    if (day !== 6 && day !== 0) {
+      return new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+  }
+
   // Strip spreads/totals for non-Pro users server-side — defeats client console bypass
   const allowedMarkets = session.plan === 'pro'
     ? markets
