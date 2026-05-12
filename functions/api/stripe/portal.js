@@ -1,3 +1,5 @@
+import { getSession } from '../../_lib/session.js';
+import { stripePost } from '../../_lib/stripe.js';
 // functions/api/stripe/portal.js
 export async function onRequestPost({ request, env }) {
   const session = await getSession(request, env.DB);
@@ -16,43 +18,6 @@ export async function onRequestPost({ request, env }) {
   return new Response(JSON.stringify({ ok: true, url: portal.url }), {
     headers: { 'Content-Type': 'application/json' }
   });
-}
-
-async function stripePost(endpoint, params, secretKey) {
-  const body = Object.entries(flattenParams(params))
-    .map(([k, v]) => encodeURIComponent(k) + '=' + encodeURIComponent(v))
-    .join('&');
-  const res = await fetch('https://api.stripe.com/v1/' + endpoint, {
-    method: 'POST',
-    headers: {
-      'Authorization': 'Bearer ' + secretKey,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body
-  });
-  return res.json();
-}
-
-function flattenParams(obj, prefix) {
-  return Object.entries(obj).reduce((acc, [k, v]) => {
-    const key = prefix ? prefix + '[' + k + ']' : k;
-    if (v !== null && typeof v === 'object') {
-      Object.assign(acc, flattenParams(v, key));
-    } else {
-      acc[key] = v;
-    }
-    return acc;
-  }, {});
-}
-
-async function getSession(request, db) {
-  const c = request.headers.get('Cookie') || '';
-  const m = c.match(/(?:^|;\s*)session=([^;]+)/);
-  if (!m) return null;
-  const now = Math.floor(Date.now() / 1000);
-  return db.prepare(
-    'SELECT u.id, u.email, u.plan, u.stripe_customer_id FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires_at>?'
-  ).bind(m[1], now).first();
 }
 
 function fail(status, msg) {

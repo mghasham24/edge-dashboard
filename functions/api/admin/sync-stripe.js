@@ -1,3 +1,4 @@
+import { getSession } from '../../_lib/session.js';
 // functions/api/admin/sync-stripe.js
 // Syncs Stripe subscription statuses → D1.
 // Processes active/trialing FIRST (pro), tracks those customers,
@@ -110,16 +111,6 @@ export async function onRequestPost({ request, env }) {
     errors: report.errors.length,
     detail: report
   }), { headers: { 'Content-Type': 'application/json' } });
-}
-
-async function getSession(request, db) {
-  const c = request.headers.get('Cookie') || '';
-  const m = c.match(/(?:^|;\s*)session=([^;]+)/);
-  if (!m) return null;
-  const now = Math.floor(Date.now() / 1000);
-  return db.prepare(
-    'SELECT u.id as user_id, u.is_admin FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires_at>?'
-  ).bind(m[1], now).first();
 }
 
 function fail(status, msg) {

@@ -1,3 +1,4 @@
+import { getSession } from '../../_lib/session.js';
 // functions/api/alerts/settings.js
 // GET  → return current alert settings for the authenticated user
 // POST → update settings (min_ev, sports, enabled)
@@ -6,16 +7,6 @@ const VALID_SPORTS = new Set([
   'basketball_nba', 'icehockey_nhl', 'baseball_mlb',
   'basketball_ncaab', 'mma_mixed_martial_arts', 'soccer_fc'
 ]);
-
-async function getSession(request, db) {
-  const c = request.headers.get('Cookie') || '';
-  const m = c.match(/(?:^|;\s*)session=([^;]+)/);
-  if (!m) return null;
-  const now = Math.floor(Date.now() / 1000);
-  return db.prepare(
-    'SELECT u.id as user_id, u.plan, u.is_admin FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires_at>?'
-  ).bind(m[1], now).first();
-}
 
 function fail(status, msg) {
   return new Response(JSON.stringify({ error: msg }), {

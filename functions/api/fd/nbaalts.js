@@ -1,3 +1,4 @@
+import { getSession } from '../../_lib/session.js';
 // functions/api/fd/nbaalts.js
 // Fetches FanDuel real-time NBA spread, ML, and total odds via FD's native API
 // Step 1: Get today's NBA event IDs from content-managed-page
@@ -13,16 +14,6 @@ const CACHE_TTL = 5;
 const SPREAD_TYPE = 'MATCH_HANDICAP_(2-WAY)';
 const ML_TYPE     = 'MONEY_LINE';
 const TOTAL_TYPE  = 'TOTAL_POINTS_(OVER/UNDER)';
-
-async function getSession(request, db) {
-  const c = request.headers.get('Cookie') || '';
-  const m = c.match(/(?:^|;\s*)session=([^;]+)/);
-  if (!m) return null;
-  const now = Math.floor(Date.now() / 1000);
-  return db.prepare(
-    'SELECT u.id as user_id, u.plan FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires_at>?'
-  ).bind(m[1], now).first();
-}
 
 function fail(status, msg) {
   return new Response(JSON.stringify({ error: msg }), {

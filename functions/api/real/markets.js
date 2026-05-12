@@ -1,3 +1,4 @@
+import { getSession } from '../../_lib/session.js';
 // functions/api/real/markets.js
 // Proxies Real Sports market data with proper auth headers
 
@@ -75,15 +76,6 @@ function hashidsEncode(number, salt = 'realwebapp', minLen = 16) {
 }
 
 // ── Session middleware ────────────────────────────────
-async function getSession(request, db) {
-  const c = request.headers.get('Cookie') || '';
-  const m = c.match(/(?:^|;\s*)session=([^;]+)/);
-  if (!m) return null;
-  const now = Math.floor(Date.now() / 1000);
-  return db.prepare(
-    'SELECT u.id as user_id, u.plan FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires_at>?'
-  ).bind(m[1], now).first();
-}
 
 // ── Handler ───────────────────────────────────────────
 export async function onRequestGet({ request, env }) {

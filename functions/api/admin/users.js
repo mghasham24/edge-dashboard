@@ -1,3 +1,4 @@
+import { getSession } from '../../_lib/session.js';
 // functions/api/admin/users.js
 export async function onRequest({ request, env }) {
   // Auth + admin check
@@ -85,15 +86,6 @@ export async function onRequest({ request, env }) {
 }
 
 // ── Helpers ───────────────────────────────────────────
-async function getSession(request, db) {
-  const c = request.headers.get('Cookie') || '';
-  const m = c.match(/(?:^|;\s*)session=([^;]+)/);
-  if (!m) return null;
-  const now = Math.floor(Date.now() / 1000);
-  return db.prepare(
-    'SELECT u.id, u.email, u.plan, u.is_admin FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires_at>?'
-  ).bind(m[1], now).first();
-}
 
 function ok(data) {
   return new Response(JSON.stringify({ ok: true, ...data }), {

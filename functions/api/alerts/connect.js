@@ -1,16 +1,7 @@
+import { getSession } from '../../_lib/session.js';
 // functions/api/alerts/connect.js
 // POST → generates a one-time verification token and returns a Telegram deep link
 // DELETE → disconnects Telegram from this account
-
-async function getSession(request, db) {
-  const c = request.headers.get('Cookie') || '';
-  const m = c.match(/(?:^|;\s*)session=([^;]+)/);
-  if (!m) return null;
-  const now = Math.floor(Date.now() / 1000);
-  return db.prepare(
-    'SELECT u.id as user_id, u.plan, u.is_admin FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires_at>?'
-  ).bind(m[1], now).first();
-}
 
 function fail(status, msg) {
   return new Response(JSON.stringify({ error: msg }), {

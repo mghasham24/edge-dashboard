@@ -1,0 +1,17 @@
+[Unit]
+Description=RaxEdge Auction Scanner
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/raxedge/vps-scanner
+ExecStart=/usr/bin/node index.js
+Restart=always
+RestartSec=10
+EnvironmentFile=/root/raxedge/vps-scanner/.env
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

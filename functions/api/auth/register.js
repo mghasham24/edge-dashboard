@@ -46,7 +46,7 @@ export async function onRequestPost({ request, env }) {
     'cool.fr.nf','jetable.fr.nf','nospam.ze.tc','nomail.xl.cx','mega.zik.dj',
     'speed.1s.fr','courriel.fr.nf','moncourrier.fr.nf','monemail.fr.nf','monmail.fr.nf',
     'spamgourmet.com','spamgourmet.net','spamgourmet.org','spamgourmet.me',
-    'spamgourmet.net','jnxjn.com','tnef.com','10minutemail.com','10minutemail.net',
+    'jnxjn.com','tnef.com','10minutemail.com','10minutemail.net',
     'fakeinbox.com','filzmail.com','gowiki.com','humaility.com','incognitomail.com',
     'mail-temporaire.fr','mytrashmail.com','nobulk.com','nospamfor.us','nowmymail.com',
     'objectmail.com','obobbo.com','proxymail.eu','rcpt.at','recursor.net','shiftmail.com',
@@ -54,7 +54,7 @@ export async function onRequestPost({ request, env }) {
     'sogetthis.com','spamevader.com','spamfree24.org','spamhole.com','spamify.com',
     'spamoff.de','spamobox.com','spamthisplease.com','supergreatmail.com','suremail.info',
     'tempemail.net','tempinbox.co.uk','tempinbox.com','thanksnospam.info','thisisnotmyrealemail.com',
-    'throwam.com','tradermail.info','trash-mail.at','trash-mail.com','trash-mail.de',
+    'tradermail.info','trash-mail.at','trash-mail.com','trash-mail.de',
     'trash-mail.io','trash-mail.me','trash-mail.net','trash2009.com','trashdevil.com',
     'trashdevil.de','trashemail.de','trashimail.com','trashmail.at','travestimail.com',
     'trbvm.com','turual.com','twinmail.de','tyldd.com','uggsrock.com','uroid.com',
@@ -77,8 +77,8 @@ export async function onRequestPost({ request, env }) {
 
   // Block offensive email prefixes
   const localPart = email.split('@')[0];
-  const BLOCKED_PREFIXES = ['fuckpalestine','fuckisrael','fuckjews','fuckarab','fuckmuslim','fuckchrist'];
-  if (BLOCKED_PREFIXES.some(p => localPart.includes(p))) return err('Invalid email address.');
+  const BLOCKED_PREFIXES = /fuck(?:palestine|israel|jews|arab|muslim|christ)/i;
+  if (BLOCKED_PREFIXES.test(localPart)) return err('Invalid email address.');
 
   const existing = await env.DB.prepare('SELECT id FROM users WHERE email=?').bind(email).first();
   if (existing) return err('An account with that email already exists', 409);
@@ -128,6 +128,7 @@ export async function onRequestPost({ request, env }) {
         from: 'RaxEdge <noreply@raxedge.com>',
         to: email,
         subject: 'Welcome to RaxEdge',
+        text: `Welcome to RaxEdge!\n\nYou now have access to real-time FanDuel odds, no-vig fair value, and instant edge calculations for your Rax predictions.\n\nYour referral code is ${newRefCode} — share it with friends to earn free Pro months!\n\nGo to RaxEdge: https://raxedge.com\n\nMade by @moe_ · raxedge.com`,
         html: `
           <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:40px 24px;background:#0a0a0c;color:#f0eff5;border-radius:12px">
             <div style="font-size:20px;font-weight:700;margin-bottom:8px">RaxEdge</div>

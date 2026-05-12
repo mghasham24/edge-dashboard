@@ -37,6 +37,7 @@ export async function onRequestPost({ request, env }) {
         from: 'RaxEdge <noreply@raxedge.com>',
         to: email,
         subject: 'Reset your RaxEdge password',
+        text: `Reset your RaxEdge password\n\nClick the link below to reset your password. This link expires in 1 hour.\n\n${resetUrl}\n\nIf you didn't request this, you can safely ignore this email.`,
         html: `
           <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:40px 24px;background:#0a0a0c;color:#f0eff5;border-radius:12px">
             <div style="font-size:20px;font-weight:700;margin-bottom:8px">RaxEdge</div>

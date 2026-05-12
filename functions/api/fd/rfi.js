@@ -1,3 +1,4 @@
+import { getSession } from '../../_lib/session.js';
 // functions/api/fd/rfi.js
 // Fetches YRFI/NRFI odds from FanDuel's native API
 // Step 1: Get today's MLB event IDs from content-managed-page
@@ -14,16 +15,6 @@ const FD_EVENT_URL = (id) => `https://sbapi.nj.sportsbook.fanduel.com/api/event-
 const FD_PRICES_URL = 'https://smp.nj.sportsbook.fanduel.com/api/sports/fixedodds/readonly/v1/getMarketPrices?priceHistory=0';
 const RFI_MARKET_TYPE = '***OVER/UNDER_0.5_RUNS_1ST_INNINGS';
 const CACHE_TTL = 30;
-
-async function getSession(request, db) {
-  const c = request.headers.get('Cookie') || '';
-  const m = c.match(/(?:^|;\s*)session=([^;]+)/);
-  if (!m) return null;
-  const now = Math.floor(Date.now() / 1000);
-  return db.prepare(
-    'SELECT u.id as user_id, u.plan FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires_at>?'
-  ).bind(m[1], now).first();
-}
 
 function fail(status, msg) {
   return new Response(JSON.stringify({ error: msg }), {

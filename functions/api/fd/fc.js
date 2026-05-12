@@ -1,3 +1,4 @@
+import { getSession } from '../../_lib/session.js';
 // functions/api/fd/fc.js
 // Fetches DraftKings real-time soccer Asian Handicap ±0.5 spread odds for top European leagues
 // Subcat 13170 = actual 2-way ±0.5 AH (Home -0.5 / Away +0.5), exact same market as Real Sports
@@ -48,16 +49,6 @@ function isToday_ET(dateStr) {
   if (!dateStr) return false;
   const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
   return fmt.format(new Date(dateStr)) === fmt.format(new Date());
-}
-
-async function getSession(request, db) {
-  const c = request.headers.get('Cookie') || '';
-  const m = c.match(/(?:^|;\s*)session=([^;]+)/);
-  if (!m) return null;
-  const now = Math.floor(Date.now() / 1000);
-  return db.prepare(
-    'SELECT u.id as user_id, u.plan, u.is_admin FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires_at>?'
-  ).bind(m[1], now).first();
 }
 
 function fail(status, msg) {

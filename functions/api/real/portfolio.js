@@ -1,3 +1,4 @@
+import { getSession } from '../../_lib/session.js';
 // functions/api/real/portfolio.js
 // GET /api/real/portfolio — fetches user's portfolio from Real Sports API
 
@@ -207,15 +208,6 @@ function getToken(req) {
   const c = req.headers.get('Cookie') || '';
   const m = c.match(/(?:^|;\s*)session=([^;]+)/);
   return m ? m[1] : null;
-}
-
-async function getSession(request, db) {
-  const token = getToken(request);
-  if (!token) return null;
-  const now = Math.floor(Date.now() / 1000);
-  return db.prepare(
-    'SELECT u.id as user_id FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires_at>?'
-  ).bind(token, now).first();
 }
 
 function json(data) {

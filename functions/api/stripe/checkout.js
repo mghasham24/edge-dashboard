@@ -1,3 +1,5 @@
+import { getSession } from '../../_lib/session.js';
+import { stripeGet, stripePost } from '../../_lib/stripe.js';
 // functions/api/stripe/checkout.js
 const TRIAL_DAYS = 14;
 
@@ -17,7 +19,7 @@ export async function onRequestPost({ request, env }) {
     if (code) {
       const referrer = await env.DB.prepare(
         'SELECT id FROM users WHERE referral_code=? AND id!=?'
-      ).bind(code, session.id).first();
+      ).bind(code, session.user_id).first();
       if (referrer) referrerId = referrer.id;
     }
     isAnnual = body.billing === 'annual';
@@ -36,23 +38,23 @@ export async function onRequestPost({ request, env }) {
     );
     if (existingList.data && existingList.data.length > 0) {
       const matched = existingList.data.find(
-        c => c.metadata && String(c.metadata.user_id) === String(session.id)
+        c => c.metadata && String(c.metadata.user_id) === String(session.user_id)
       );
       customerId = (matched || existingList.data[0]).id;
       // Ensure metadata has this user's id (may be missing on old customers)
       await stripePost('customers/' + customerId, {
-        metadata: { user_id: String(session.id) }
+        metadata: { user_id: String(session.user_id) }
       }, env.STRIPE_SECRET_KEY);
     } else {
       const customer = await stripePost('customers', {
         email: session.email,
-        metadata: { user_id: String(session.id) }
+        metadata: { user_id: String(session.user_id) }
       }, env.STRIPE_SECRET_KEY);
       if (customer.error) return fail(500, 'Failed to create customer');
       customerId = customer.id;
     }
     await env.DB.prepare('UPDATE users SET stripe_customer_id=? WHERE id=?')
-      .bind(customerId, session.id).run();
+      .bind(customerId, session.user_id).run();
   }
 
   // Block if customer already has an active or trialing subscription
@@ -112,59 +114,6 @@ export async function onRequestPost({ request, env }) {
   return new Response(JSON.stringify({ ok: true, url: checkout.url, trial: trialEligible }), {
     headers: { 'Content-Type': 'application/json' }
   });
-}
-
-// ── Stripe API helpers ────────────────────────────────
-async function stripeGet(endpoint, secretKey) {
-  const res = await fetch('https://api.stripe.com/v1/' + endpoint, {
-    headers: { 'Authorization': 'Bearer ' + secretKey }
-  });
-  return res.json();
-}
-
-async function stripePost(endpoint, params, secretKey) {
-  const body = Object.entries(flattenParams(params))
-    .map(([k, v]) => encodeURIComponent(k) + '=' + encodeURIComponent(v))
-    .join('&');
-  const res = await fetch('https://api.stripe.com/v1/' + endpoint, {
-    method: 'POST',
-    headers: {
-      'Authorization': 'Bearer ' + secretKey,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body
-  });
-  return res.json();
-}
-
-function flattenParams(obj, prefix) {
-  return Object.entries(obj).reduce((acc, [k, v]) => {
-    const key = prefix ? prefix + '[' + k + ']' : k;
-    if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
-      Object.assign(acc, flattenParams(v, key));
-    } else if (Array.isArray(v)) {
-      v.forEach(function(item, i) {
-        if (typeof item === 'object') {
-          Object.assign(acc, flattenParams(item, key + '[' + i + ']'));
-        } else {
-          acc[key + '[' + i + ']'] = item;
-        }
-      });
-    } else {
-      acc[key] = v;
-    }
-    return acc;
-  }, {});
-}
-
-async function getSession(request, db) {
-  const c = request.headers.get('Cookie') || '';
-  const m = c.match(/(?:^|;\s*)session=([^;]+)/);
-  if (!m) return null;
-  const now = Math.floor(Date.now() / 1000);
-  return db.prepare(
-    'SELECT u.id, u.email, u.plan, u.stripe_customer_id, u.had_free_trial FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires_at>?'
-  ).bind(m[1], now).first();
 }
 
 function fail(status, msg) {

@@ -1,3 +1,4 @@
+import { getSession } from '../../_lib/session.js';
 // functions/api/admin/stats.js
 export async function onRequest({ request, env }) {
   const session = await getSession(request, env.DB);
@@ -38,16 +39,6 @@ export async function onRequest({ request, env }) {
     plans:    planRow.results || [],
     daily
   }), { headers: { 'Content-Type': 'application/json' } });
-}
-
-async function getSession(request, db) {
-  const c = request.headers.get('Cookie') || '';
-  const m = c.match(/(?:^|;\s*)session=([^;]+)/);
-  if (!m) return null;
-  const now = Math.floor(Date.now() / 1000);
-  return db.prepare(
-    'SELECT u.id, u.email, u.is_admin FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires_at>?'
-  ).bind(m[1], now).first();
 }
 
 function fail(status, msg) {
