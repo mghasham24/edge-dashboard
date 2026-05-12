@@ -1,3 +1,4 @@
+import { hashPassword } from '../../_lib/password.js';
 // functions/api/auth/reset.js
 export async function onRequestPost({ request, env }) {
   let body;
@@ -21,15 +22,6 @@ export async function onRequestPost({ request, env }) {
   await env.DB.prepare('DELETE FROM sessions WHERE user_id=?').bind(row.user_id).run();
 
   return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json' } });
-}
-
-async function hashPassword(pw) {
-  const enc  = new TextEncoder();
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const key  = await crypto.subtle.importKey('raw', enc.encode(pw), 'PBKDF2', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits({ name:'PBKDF2', hash:'SHA-256', salt, iterations:100000 }, key, 256);
-  const h2   = b => b.toString(16).padStart(2,'0');
-  return [...salt].map(h2).join('') + ':' + [...new Uint8Array(bits)].map(h2).join('');
 }
 
 function fail(msg) {

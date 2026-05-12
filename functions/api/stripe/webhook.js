@@ -21,9 +21,15 @@ async function verifyStripeSignature(payload, sigHeader, secret) {
     'raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
   );
   const mac = await crypto.subtle.sign('HMAC', key, enc.encode(signedPayload));
-  const expected = Array.from(new Uint8Array(mac))
-    .map(b => b.toString(16).padStart(2, '0')).join('');
-  return signatures.some(sig => sig === expected);
+  const expectedBytes = new Uint8Array(mac);
+  // Constant-time compare — XOR all bytes so runtime doesn't leak match position
+  return signatures.some(sig => {
+    const sigBytes = new Uint8Array(sig.match(/.{2}/g).map(h => parseInt(h, 16)));
+    if (sigBytes.length !== expectedBytes.length) return false;
+    let diff = 0;
+    for (let i = 0; i < expectedBytes.length; i++) diff |= sigBytes[i] ^ expectedBytes[i];
+    return diff === 0;
+  });
 }
 
 // ── Handler ───────────────────────────────────────────
@@ -37,6 +43,18 @@ export async function onRequestPost({ request, env }) {
   let event;
   try { event = JSON.parse(rawBody); }
   catch { return new Response('Bad JSON', { status: 400 }); }
+
+  // Idempotency guard — Stripe retries on non-2xx or network errors.
+  // Insert the event id; if it conflicts, we already processed it.
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    await env.DB.prepare(
+      'INSERT INTO processed_webhook_events (event_id, processed_at) VALUES (?,?)'
+    ).bind(event.id, now).run();
+  } catch(e) {
+    // Unique constraint violation — duplicate delivery, already handled
+    if (e && e.message && e.message.includes('UNIQUE')) return new Response('ok', { status: 200 });
+  }
 
   const obj = event.data.object;
 

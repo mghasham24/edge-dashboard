@@ -1,7 +1,9 @@
+import { getSession } from '../../_lib/session.js';
+import { checkRateLimit } from '../../_lib/rateLimit.js';
 // functions/api/real/public.js
 // GET /api/real/public?username=HANDLE
-// Probes Real Sports public API for a given username — no auth required.
-// Returns whatever public data is accessible (profile, predictions, leaderboard, etc.)
+// Probes Real Sports public API for a given username.
+// Requires a valid session to prevent use as an anonymous RS API relay.
 
 function hashidsEncode(number) {
   const saltChars = Array.from('realwebapp');
@@ -84,7 +86,14 @@ async function tryFetch(url, headers, timeoutMs = 5000) {
   }
 }
 
-export async function onRequestGet({ request }) {
+export async function onRequestGet({ request, env }) {
+  const session = await getSession(request, env.DB);
+  if (!session) return fail(401, 'Not authenticated');
+
+  // 10 lookups per minute per IP — prevents use as anonymous RS relay
+  const allowed = await checkRateLimit(env.DB, request, 'real_public', 10, 60);
+  if (!allowed) return fail(429, 'Too many requests');
+
   const url = new URL(request.url);
   const username = (url.searchParams.get('username') || '').trim().replace(/^@/, '');
 

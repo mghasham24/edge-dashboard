@@ -596,10 +596,16 @@ export default {
     const RS_WARM_THRESHOLD  = 0;   // always warm RS — sync endpoint returns in <1s if cache is fresh (15s TTL), so no wasted work
     const RE_ALERT_EV_JUMP   = 4.0;
     const RESEND_AFTER_SECS  = 1 * 3600; // re-alert on persistent +EV bets every hour
-    // Midnight ET (UTC-4 during EDT) — taken bet suppression resets each calendar day
-    // Formula: subtract offset to convert to ET, floor to day, add offset back to UTC
-    const ET_OFFSET = 4 * 3600;
-    const midnightET = Math.floor((now - ET_OFFSET) / 86400) * 86400 + ET_OFFSET;
+    // Midnight ET — taken bet suppression resets each calendar day.
+    // Compute by asking Intl how many seconds into the current ET day we are,
+    // then subtracting that from now. Handles EDT/EST automatically.
+    const _etParts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+    }).formatToParts(new Date(now * 1000));
+    const _etH = parseInt(_etParts.find(p => p.type === 'hour').value);
+    const _etMin = parseInt(_etParts.find(p => p.type === 'minute').value);
+    const _etSec = parseInt(_etParts.find(p => p.type === 'second').value);
+    const midnightET = now - (_etH * 3600 + _etMin * 60 + _etSec);
 
     // Debug snapshot — written to D1 at end of each run for diagnostics
     const dbg = { ts: now, sports: {}, allBets: 0, sampleBets: [], sentCount: 0, suppressedCount: 0, failedSends: 0 };
