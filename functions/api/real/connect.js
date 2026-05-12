@@ -55,6 +55,11 @@ export async function onRequest({ request, env }) {
     return json({ ok: true, method: 'token' });
   }
 
+  if (request.method === 'DELETE') {
+    await env.DB.prepare('DELETE FROM real_auth WHERE user_id = ?').bind(session.user_id).run();
+    return json({ ok: true });
+  }
+
   return fail(405, 'Method not allowed');
 }
 

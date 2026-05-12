@@ -3126,12 +3126,7 @@
     async function disconnectRealSports() {
         if (!confirm('Disconnect your Real Sports account from RaxEdge?')) return;
         try {
-            await fetch('/api/real/connect', {
-                method: 'POST',
-                credentials: 'same-origin',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ auth_token: 'disconnected!0!0' })
-            });
+            await fetch('/api/real/connect', { method: 'DELETE', credentials: 'same-origin' });
         } catch(e) {}
         portfolioConnected = false;
         portHistoryAll = []; portHistoryCursor = null; portHistoryMore = false;

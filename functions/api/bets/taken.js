@@ -25,6 +25,7 @@ export async function onRequest({ request, env }) {
 
     if (taken) {
       if (!ids.includes(id)) ids.push(id);
+      if (ids.length > 1000) ids.splice(0, ids.length - 1000);
     } else {
       ids = ids.filter(i => i !== id);
     }
