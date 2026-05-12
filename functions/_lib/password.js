@@ -1,5 +1,5 @@
 // functions/_lib/password.js
-const ITERATIONS = 600000;
+const ITERATIONS = 100000;
 const LEGACY_ITERATIONS = 100000;
 
 // Hash format: `<hex-salt>:<hex-derived>:<iterations>`
