@@ -1,7 +1,10 @@
 {
   "name": "RaxEdge",
   "short_name": "RaxEdge",
+  "description": "Real-time FanDuel odds, no-vig fair value, and edge calculations for Rax predictions.",
+  "lang": "en",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#0a0a0c",
   "theme_color": "#0a0a0c",

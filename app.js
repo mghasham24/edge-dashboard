@@ -753,6 +753,25 @@
         document.getElementById('gate-err').style.display = 'none';
     }
 
+    function showToast(msg, type) {
+        var el = document.getElementById('_toast');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = '_toast';
+            el.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#18181f;border:1px solid rgba(255,255,255,.15);color:#f0eff5;font-size:13px;padding:10px 20px;border-radius:8px;z-index:9999;max-width:480px;text-align:center;white-space:pre-line;box-shadow:0 4px 16px rgba(0,0,0,.4);transition:opacity .3s';
+            document.body.appendChild(el);
+        }
+        el.textContent = msg;
+        el.style.borderColor = type === 'error' ? 'rgba(240,82,82,.4)' : 'rgba(255,255,255,.15)';
+        el.style.display = 'block';
+        el.style.opacity = '1';
+        clearTimeout(el._t);
+        el._t = setTimeout(function() {
+            el.style.opacity = '0';
+            setTimeout(function() { el.style.display = 'none'; }, 300);
+        }, type === 'error' ? 6000 : 4000);
+    }
+
     async function submitAuth() {
         // Short delay so browser autofill (Safari/Chrome) commits values to the DOM
         // before we read them — without this, .value can be empty on first autofill tap
@@ -3132,7 +3151,7 @@
                 });
                 var connData = await connRes.json();
                 if (!connData.ok) {
-                    alert('Failed to save Real Sports token: ' + (connData.error || 'Unknown error'));
+                    showToast('Failed to save Real Sports token: ' + (connData.error || 'Unknown error'), 'error');
                     return;
                 }
                 portfolioConnected = true;
@@ -4177,7 +4196,7 @@
                 if (data.detail.upgraded.length) lines.push('UPGRADED:\n' + data.detail.upgraded.map(function(u) { return '  ' + u.email + ' (' + u.from + ' → pro, ' + u.status + ')'; }).join('\n'));
                 if (data.detail.downgraded.length) lines.push('DOWNGRADED:\n' + data.detail.downgraded.map(function(u) { return '  ' + u.email + ' → free (' + u.status + ')'; }).join('\n'));
                 if (data.detail.errors.length) lines.push('ERRORS:\n' + data.detail.errors.map(function(e) { return '  ' + e; }).join('\n'));
-                if (lines.length) alert(lines.join('\n\n'));
+                if (lines.length) showToast(lines.join('\n\n'));
             } else {
                 btn.textContent = 'Error';
             }
@@ -4276,12 +4295,12 @@
             } else {
                 btn.textContent = defaultLabel;
                 btn.disabled = false;
-                alert(data.error || 'Something went wrong. Please try again.');
+                showToast(data.error || 'Something went wrong. Please try again.', 'error');
             }
         } catch (e) {
             btn.textContent = defaultLabel;
             btn.disabled = false;
-            alert('Network error -- please try again.');
+            showToast('Network error -- please try again.', 'error');
         }
     }
 

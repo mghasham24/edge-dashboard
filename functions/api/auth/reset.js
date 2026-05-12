@@ -1,4 +1,5 @@
 import { hashPassword } from '../../_lib/password.js';
+import { genToken, err } from '../../_lib/response.js';
 // functions/api/auth/reset.js
 const SESSION_DAYS = 30;
 
@@ -7,15 +8,15 @@ export async function onRequestPost({ request, env }) {
   try { body = await request.json(); } catch { return fail('Invalid request'); }
 
   const { token, password } = body;
-  if (!token || !password) return fail('Missing fields');
-  if (password.length < 8) return fail('Password must be at least 8 characters');
+  if (!token || !password) return err('Missing fields');
+  if (password.length < 8) return err('Password must be at least 8 characters');
 
   const now = Math.floor(Date.now() / 1000);
   const row = await env.DB.prepare(
     'SELECT user_id FROM password_resets WHERE token=? AND expires_at>?'
   ).bind(token, now).first();
 
-  if (!row) return fail('Reset link is invalid or has expired');
+  if (!row) return err('Reset link is invalid or has expired');
 
   const hash = await hashPassword(password);
   await env.DB.prepare('UPDATE users SET password_hash=? WHERE id=?').bind(hash, row.user_id).run();
@@ -38,10 +39,3 @@ export async function onRequestPost({ request, env }) {
   });
 }
 
-function genToken() {
-  return [...crypto.getRandomValues(new Uint8Array(32))].map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-function fail(msg) {
-  return new Response(JSON.stringify({ error: msg }), { status: 400, headers: { 'Content-Type': 'application/json' } });
-}

@@ -1,0 +1,4 @@
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0a0a0c;color:#f0eff5;font-family:'Barlow',system-ui,sans-serif;font-size:15px}
+.logo{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:15px;letter-spacing:.08em;color:#f0eff5;text-decoration:none;display:flex;align-items:center;gap:8px}
+.dot{width:8px;height:8px;border-radius:50%;background:#4f6ef7}
