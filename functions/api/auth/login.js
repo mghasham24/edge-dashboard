@@ -1,5 +1,6 @@
 // functions/api/auth/login.js
 import { checkRateLimit } from '../../_lib/rateLimit.js';
+import { hashPassword, verifyPassword } from '../../_lib/password.js';
 
 const SESSION_DAYS = 30;
 
@@ -23,13 +24,18 @@ export async function onRequestPost({ request, env }) {
 
     // Always verify to prevent timing attacks
     const dummy = 'a'.repeat(32) + ':' + 'a'.repeat(64);
-    const valid  = user
+    const result = user
       ? await verifyPassword(password, user.password_hash)
-      : (await verifyPassword(password, dummy), false);
+      : (await verifyPassword(password, dummy), { valid: false, needsRehash: false });
 
-    if (!user || !valid) return err('Incorrect email or password', 401);
+    if (!user || !result.valid) return err('Incorrect email or password', 401);
 
     if (user.banned) return err('Your account has been suspended. Contact support.', 403);
+
+    if (result.needsRehash) {
+      const newHash = await hashPassword(password);
+      await env.DB.prepare('UPDATE users SET password_hash=? WHERE id=?').bind(newHash, user.id).run();
+    }
 
     const token = genToken();
     const exp   = Math.floor(Date.now()/1000) + SESSION_DAYS * 86400;
@@ -48,17 +54,6 @@ export async function onRequestPost({ request, env }) {
 }
 
 // ── Helpers ───────────────────────────────────────────
-async function verifyPassword(pw, stored) {
-  const parts = (stored || '').split(':');
-  if (parts.length !== 2) return false;
-  const salt = new Uint8Array(parts[0].match(/.{2}/g).map(b => parseInt(b, 16)));
-  const enc  = new TextEncoder();
-  const key  = await crypto.subtle.importKey('raw', enc.encode(pw), 'PBKDF2', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits({ name:'PBKDF2', hash:'SHA-256', salt, iterations:100000 }, key, 256);
-  const hex  = [...new Uint8Array(bits)].map(b=>b.toString(16).padStart(2,'0')).join('');
-  return hex === parts[1];
-}
-
 function genToken() {
   return [...crypto.getRandomValues(new Uint8Array(32))].map(b=>b.toString(16).padStart(2,'0')).join('');
 }
