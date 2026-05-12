@@ -1051,6 +1051,11 @@ export default {
       await env.DB.prepare('DELETE FROM telegram_verify_tokens WHERE expires_at < ?')
         .bind(now).run();
     } catch(e) {}
+
+    try {
+      await env.DB.prepare('DELETE FROM sessions WHERE expires_at < ?')
+        .bind(now - 86400).run();
+    } catch(e) {}
   }
 };
 

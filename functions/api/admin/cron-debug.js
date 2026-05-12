@@ -4,8 +4,8 @@ import { getSession } from '../../_lib/session.js';
 
 export async function onRequestGet({ request, env }) {
   const session = await getSession(request, env.DB);
-  if (!session) return new Response('Unauthorized', { status: 401 });
-  if (!session.is_admin) return new Response('Forbidden', { status: 403 });
+  if (!session) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+  if (!session.is_admin) return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
 
   const now = Math.floor(Date.now() / 1000);
 
