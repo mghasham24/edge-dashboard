@@ -793,39 +793,38 @@
     }
 
     /* ── Landing page ───────────────────────────────────── */
-    @import url('https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@400;700;800;900&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,700;0,6..96,900;1,6..96,400;1,6..96,700&family=Lora:ital,wght@0,400;0,500;1,400;1,500&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
-    /* ── Landing — Sharp Money Noir ─────────────────────── */
+    /* ── Landing — Premium Editorial ────────────────────── */
     #landing {
-        --lp-a: #f59e0b;
-        --lp-a-dim: rgba(245,158,11,.07);
-        --lp-a-border: rgba(245,158,11,.22);
-        --lp-fg: #f0ede6;
-        --lp-muted: rgba(240,237,230,.35);
-        --lp-border: rgba(255,255,255,.07);
-        --lp-bsd: 'Big Shoulders Display', sans-serif;
-        --lp-mono: 'IBM Plex Mono', monospace;
-        background: #09090c;
-        background-image: radial-gradient(ellipse 70% 40% at 50% -5%, rgba(245,158,11,.07) 0%, transparent 55%)
+        --lp-bg: #f4f0e8;
+        --lp-ink: #141110;
+        --lp-red: #bf3117;
+        --lp-red-dim: rgba(191,49,23,.06);
+        --lp-red-border: rgba(191,49,23,.18);
+        --lp-muted: #8a7e79;
+        --lp-border: rgba(20,17,16,.1);
+        --lp-bm: 'Bodoni Moda', serif;
+        --lp-serif: 'Lora', serif;
+        --lp-jb: 'JetBrains Mono', monospace;
+        background: var(--lp-bg);
+        color: var(--lp-ink)
     }
 
     @keyframes lp-ticker { from{transform:translateX(0)}to{transform:translateX(-50%)} }
-    @keyframes lp-fade-up { from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:translateY(0)} }
-    @keyframes lp-glow { 0%,100%{box-shadow:0 0 14px rgba(245,158,11,.12)}50%{box-shadow:0 0 32px rgba(245,158,11,.42)} }
-    @keyframes lp-pulse { 0%,100%{opacity:1}50%{opacity:.2} }
-    @keyframes lp-scan { from{top:-2px}to{top:100%} }
+    @keyframes lp-fade-up { from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)} }
+    @keyframes lp-rule { from{width:0}to{width:100%} }
 
-    /* Grain overlay */
+    /* Paper grain */
     #landing::before {
         content: '';
         position: fixed;
         inset: 0;
         pointer-events: none;
         z-index: 9999;
-        opacity: .028;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
-        background-repeat: repeat;
-        background-size: 180px 180px
+        opacity: .032;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E");
+        background-size: 200px 200px
     }
 
     /* Nav */
@@ -838,236 +837,204 @@
         border-bottom: 1px solid var(--lp-border);
         position: sticky;
         top: 0;
-        background: rgba(9,9,12,.95);
-        backdrop-filter: blur(20px);
+        background: rgba(244,240,232,.96);
+        backdrop-filter: blur(12px);
         z-index: 100
     }
     .lp-logo {
-        font-family: var(--lp-bsd);
-        font-weight: 800;
-        font-size: 20px;
+        font-family: var(--lp-bm);
+        font-weight: 700;
+        font-size: 17px;
         letter-spacing: .08em;
         display: flex;
         align-items: center;
-        gap: 10px;
-        color: var(--lp-fg)
+        gap: 12px;
+        color: var(--lp-ink)
     }
     .lp-logo-mark {
-        width: 18px; height: 18px;
-        border: 2px solid var(--lp-a);
-        transform: rotate(45deg);
-        flex-shrink: 0;
-        animation: lp-glow 3s ease-in-out infinite;
-        position: relative
-    }
-    .lp-logo-mark::after {
-        content: '';
-        position: absolute;
-        top: 50%; left: 50%;
-        transform: translate(-50%,-50%) rotate(-45deg);
-        width: 6px; height: 6px;
-        background: var(--lp-a)
+        width: 5px;
+        height: 26px;
+        background: var(--lp-red);
+        flex-shrink: 0
     }
     .moe-badge {
-        font-family: var(--lp-mono);
+        font-family: var(--lp-jb);
         font-size: 9px;
-        color: rgba(240,237,230,.22);
-        letter-spacing: .05em;
+        color: var(--lp-muted);
+        letter-spacing: .04em;
         font-weight: 400
     }
     .lp-nav-btns { display: flex; gap: 8px; align-items: center }
     .lp-btn-ghost {
         background: none;
-        border: 1px solid rgba(240,237,230,.12);
-        color: rgba(240,237,230,.45);
-        font-family: var(--lp-mono);
+        border: 1px solid var(--lp-border);
+        color: var(--lp-muted);
+        font-family: var(--lp-jb);
         font-size: 10px;
         padding: 8px 18px;
         cursor: pointer;
-        letter-spacing: .08em;
+        letter-spacing: .06em;
         transition: color .15s, border-color .15s
     }
-    .lp-btn-ghost:hover { color: var(--lp-fg); border-color: rgba(240,237,230,.3) }
+    .lp-btn-ghost:hover { color: var(--lp-ink); border-color: rgba(20,17,16,.35) }
     .lp-btn-primary {
-        background: var(--lp-a);
+        background: var(--lp-red);
         border: none;
-        color: #000;
-        font-family: var(--lp-mono);
+        color: #fff;
+        font-family: var(--lp-jb);
         font-size: 10px;
         font-weight: 600;
         padding: 8px 20px;
         cursor: pointer;
-        letter-spacing: .08em;
-        transition: opacity .15s, transform .12s
+        letter-spacing: .06em;
+        transition: opacity .15s
     }
-    .lp-btn-primary:hover { opacity: .88; transform: translateY(-1px) }
+    .lp-btn-primary:hover { opacity: .88 }
 
     /* Hero */
     .lp-hero {
-        padding: 80px 48px 0;
+        padding: 96px 48px 0;
         position: relative;
         overflow: hidden;
-        min-height: 82vh;
+        min-height: 88vh;
         display: flex;
         flex-direction: column;
         justify-content: center;
-        animation: lp-fade-up .6s ease both;
-        background-image: radial-gradient(rgba(245,158,11,.09) 1px, transparent 1px);
-        background-size: 28px 28px
-    }
-    .lp-hero::before {
-        content: '';
-        position: absolute;
-        left: 0; right: 0;
-        height: 1px;
-        background: linear-gradient(90deg, transparent 0%, rgba(245,158,11,.15) 40%, rgba(245,158,11,.4) 50%, rgba(245,158,11,.15) 60%, transparent 100%);
-        animation: lp-scan 9s linear infinite;
-        pointer-events: none;
-        z-index: 1
+        border-bottom: 1px solid var(--lp-border);
+        animation: lp-fade-up .65s ease both
     }
     .lp-hero-bg-text {
         position: absolute;
-        right: -10px;
-        top: 50%;
-        transform: translateY(-50%);
-        font-family: var(--lp-bsd);
-        font-size: clamp(160px, 24vw, 340px);
+        right: -6px;
+        bottom: -24px;
+        font-family: var(--lp-bm);
+        font-size: clamp(120px, 18vw, 260px);
         font-weight: 900;
-        color: rgba(245,158,11,.04);
-        letter-spacing: .02em;
+        font-style: italic;
+        color: rgba(191,49,23,.055);
+        letter-spacing: -.02em;
         pointer-events: none;
         user-select: none;
-        line-height: .85;
-        white-space: nowrap;
-        text-transform: uppercase
+        line-height: .85
     }
     .lp-eyebrow {
         display: inline-flex;
         align-items: center;
         gap: 12px;
-        color: var(--lp-a);
-        font-family: var(--lp-mono);
-        font-size: 10px;
-        letter-spacing: .22em;
+        color: var(--lp-red);
+        font-family: var(--lp-jb);
+        font-size: 9px;
+        letter-spacing: .24em;
         text-transform: uppercase;
-        margin-bottom: 28px
+        margin-bottom: 36px
     }
     .lp-eyebrow-line {
-        width: 28px;
+        width: 32px;
         height: 1px;
-        background: var(--lp-a);
-        opacity: .7;
+        background: var(--lp-red);
         flex-shrink: 0
     }
     .lp-h1 {
-        font-family: var(--lp-bsd);
-        font-size: clamp(72px, 12vw, 164px);
+        font-family: var(--lp-bm);
+        font-size: clamp(64px, 10vw, 136px);
         font-weight: 900;
         line-height: .88;
-        letter-spacing: .01em;
+        letter-spacing: -.02em;
         margin-bottom: 0;
-        color: var(--lp-fg);
-        max-width: 900px;
-        text-transform: uppercase
+        color: var(--lp-ink);
+        max-width: 820px
     }
     .lp-h1 em {
-        font-style: normal;
-        color: var(--lp-a);
-        -webkit-text-fill-color: var(--lp-a)
+        font-style: italic;
+        color: var(--lp-red);
+        -webkit-text-fill-color: var(--lp-red)
     }
     .lp-hero-bottom {
         display: grid;
         grid-template-columns: 1fr auto;
         align-items: end;
         gap: 48px;
-        padding: 48px 0 72px;
-        border-bottom: 1px solid var(--lp-border)
+        padding: 52px 0 80px
     }
     .lp-sub {
-        font-size: 13px;
+        font-size: 15px;
         color: var(--lp-muted);
-        line-height: 1.9;
-        max-width: 420px;
-        font-family: var(--lp-mono);
+        line-height: 1.85;
+        max-width: 400px;
+        font-family: var(--lp-serif);
+        font-style: italic;
         margin: 0
     }
     .lp-hero-right { display: flex; flex-direction: column; align-items: flex-end; gap: 16px }
     .lp-hero-btns { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; margin: 0 }
     .lp-cta {
-        background: var(--lp-a);
+        background: var(--lp-red);
         border: none;
-        color: #000;
-        font-family: var(--lp-mono);
-        font-size: 11px;
+        color: #fff;
+        font-family: var(--lp-jb);
+        font-size: 10px;
         font-weight: 600;
         padding: 16px 36px;
         cursor: pointer;
         letter-spacing: .1em;
         text-transform: uppercase;
-        transition: opacity .15s, transform .12s
+        transition: opacity .15s
     }
-    .lp-cta:hover { opacity: .88; transform: translateY(-2px) }
+    .lp-cta:hover { opacity: .88 }
     .lp-cta-ghost {
         background: none;
-        border: 1px solid rgba(240,237,230,.15);
-        color: rgba(240,237,230,.45);
-        font-family: var(--lp-mono);
-        font-size: 11px;
+        border: 1px solid var(--lp-border);
+        color: var(--lp-muted);
+        font-family: var(--lp-jb);
+        font-size: 10px;
         padding: 16px 28px;
         cursor: pointer;
         letter-spacing: .06em;
         transition: color .15s, border-color .15s
     }
-    .lp-cta-ghost:hover { color: var(--lp-fg); border-color: rgba(240,237,230,.3) }
+    .lp-cta-ghost:hover { color: var(--lp-ink); border-color: rgba(20,17,16,.35) }
     .lp-hero-note {
         font-size: 9px;
-        color: rgba(240,237,230,.22);
-        font-family: var(--lp-mono);
-        letter-spacing: .08em;
+        color: var(--lp-muted);
+        font-family: var(--lp-jb);
+        letter-spacing: .07em;
         text-align: right
     }
 
-    /* Stats — scrolling ticker */
+    /* Stats — inverted dark ticker (only dark element on the page) */
     .lp-stats {
         overflow: hidden;
         border-bottom: 1px solid var(--lp-border);
-        background: var(--lp-a-dim);
-        background-image: repeating-linear-gradient(
-            -45deg,
-            transparent,
-            transparent 12px,
-            rgba(245,158,11,.025) 12px,
-            rgba(245,158,11,.025) 13px
-        );
+        background: var(--lp-ink);
         white-space: nowrap;
         cursor: default
     }
     .lp-stats-track {
         display: inline-flex;
-        animation: lp-ticker 28s linear infinite
+        animation: lp-ticker 30s linear infinite
     }
     .lp-stats:hover .lp-stats-track { animation-play-state: paused }
     .lp-stat {
         display: inline-flex;
         flex-direction: column;
-        gap: 4px;
-        padding: 20px 48px;
-        border-right: 1px solid rgba(255,255,255,.05)
+        gap: 3px;
+        padding: 18px 52px;
+        border-right: 1px solid rgba(255,255,255,.07)
     }
     .lp-stat-val {
-        font-family: var(--lp-bsd);
-        font-size: 30px;
-        color: var(--lp-fg);
+        font-family: var(--lp-bm);
+        font-size: 26px;
+        color: #f4f0e8;
         line-height: 1;
         font-weight: 700;
-        letter-spacing: .02em
+        letter-spacing: .01em
     }
     .lp-stat-lbl {
         font-size: 8px;
-        color: var(--lp-a);
+        color: var(--lp-red);
         letter-spacing: .2em;
         text-transform: uppercase;
-        font-family: var(--lp-mono)
+        font-family: var(--lp-jb)
     }
 
     /* Sections */
@@ -1078,10 +1045,10 @@
     }
     .lp-section-eyebrow {
         font-size: 9px;
-        letter-spacing: .28em;
+        letter-spacing: .26em;
         text-transform: uppercase;
-        color: var(--lp-a);
-        font-family: var(--lp-mono);
+        color: var(--lp-red);
+        font-family: var(--lp-jb);
         margin-bottom: 20px;
         display: flex;
         align-items: center;
@@ -1091,126 +1058,86 @@
         content: '';
         flex: 1;
         height: 1px;
-        background: rgba(255,255,255,.06)
-    }
-    .lp-section-h2 {
-        font-family: var(--lp-bsd);
-        font-size: clamp(48px, 7vw, 88px);
-        font-weight: 900;
-        letter-spacing: .02em;
-        margin-bottom: 10px;
-        color: var(--lp-fg);
-        line-height: .9;
-        text-transform: uppercase
-    }
-    .lp-section-sub {
-        font-size: 12px;
-        color: var(--lp-muted);
-        max-width: 360px;
-        margin: 0 0 60px;
-        line-height: 1.85;
-        font-family: var(--lp-mono)
-    }
-
-    /* Features — bento card grid */
-    .lp-features {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 1px;
         background: var(--lp-border)
     }
-    .lp-feature {
-        background: #09090c;
-        padding: 32px 28px;
-        display: flex;
-        flex-direction: column;
-        position: relative;
-        transition: background .2s;
-        cursor: default;
-        overflow: hidden
-    }
-    .lp-feature::before {
-        content: '';
-        position: absolute;
-        left: 0; top: 0;
-        width: 2px; height: 0;
-        background: var(--lp-a);
-        transition: height .3s ease
-    }
-    .lp-feature:hover { background: rgba(245,158,11,.03) }
-    .lp-feature:hover::before { height: 100% }
-    .lp-feature::after {
-        position: absolute;
-        right: 12px; bottom: -16px;
-        font-family: var(--lp-bsd);
-        font-size: 96px;
+    .lp-section-h2 {
+        font-family: var(--lp-bm);
+        font-size: clamp(44px, 6vw, 80px);
         font-weight: 900;
-        color: rgba(245,158,11,.045);
-        line-height: 1;
-        pointer-events: none;
-        user-select: none
+        letter-spacing: -.02em;
+        margin-bottom: 10px;
+        color: var(--lp-ink);
+        line-height: .9
     }
-    .lp-feature:nth-child(1)::after{content:'01'}
-    .lp-feature:nth-child(2)::after{content:'02'}
-    .lp-feature:nth-child(3)::after{content:'03'}
-    .lp-feature:nth-child(4)::after{content:'04'}
-    .lp-feature:nth-child(5)::after{content:'05'}
-    .lp-feature:nth-child(6)::after{content:'06'}
-    .lp-feature:nth-child(7)::after{content:'07'}
-    .lp-feature:nth-child(8)::after{content:'08'}
-    .lp-feature:nth-child(9)::after{content:'09'}
+    .lp-section-sub {
+        font-size: 14px;
+        color: var(--lp-muted);
+        max-width: 360px;
+        margin: 0 0 56px;
+        line-height: 1.8;
+        font-family: var(--lp-serif);
+        font-style: italic
+    }
+
+    /* Features — editorial ruled rows */
+    .lp-features { display: block }
+    .lp-feature {
+        display: grid;
+        grid-template-columns: 72px 1fr 1fr auto;
+        align-items: start;
+        gap: 0 44px;
+        padding: 30px 0;
+        border-top: 1px solid var(--lp-border);
+        position: relative;
+        transition: background .18s;
+        cursor: default
+    }
+    .lp-feature:last-child { border-bottom: 1px solid var(--lp-border) }
+    .lp-feature:hover { background: rgba(191,49,23,.025); margin: 0 -20px; padding-left: 20px; padding-right: 20px }
     .lp-feature-num {
-        font-family: var(--lp-mono);
-        font-size: 10px;
-        color: rgba(240,237,230,.15);
-        letter-spacing: .06em;
-        margin-bottom: 20px;
-        display: block
-    }
-    .lp-feature-icon {
-        font-size: 20px;
+        font-family: var(--lp-bm);
+        font-size: 38px;
+        font-weight: 700;
+        color: rgba(20,17,16,.09);
         line-height: 1;
-        margin-bottom: 14px;
-        display: block
+        letter-spacing: -.02em;
+        padding-top: 2px
     }
+    .lp-feature-icon { display: none }
     .lp-feature-title {
-        font-family: var(--lp-bsd);
-        font-size: 22px;
-        font-weight: 800;
-        color: var(--lp-fg);
-        letter-spacing: .04em;
-        line-height: 1;
-        margin-bottom: 12px;
-        text-transform: uppercase;
-        display: block
+        font-family: var(--lp-bm);
+        font-size: 21px;
+        font-weight: 700;
+        color: var(--lp-ink);
+        letter-spacing: -.01em;
+        line-height: 1.05;
+        padding-top: 4px
     }
     .lp-feature-desc {
-        font-size: 11px;
-        color: rgba(240,237,230,.35);
-        line-height: 1.75;
-        font-family: var(--lp-mono);
-        flex: 1
+        font-size: 13px;
+        color: var(--lp-muted);
+        line-height: 1.8;
+        font-family: var(--lp-serif)
     }
     .lp-feature-badge {
-        font-family: var(--lp-mono);
+        font-family: var(--lp-jb);
         font-size: 7px;
         font-weight: 600;
         letter-spacing: .16em;
-        padding: 3px 8px;
-        background: var(--lp-a);
-        color: #000;
+        padding: 4px 9px;
+        background: var(--lp-red);
+        color: #fff;
         text-transform: uppercase;
         white-space: nowrap;
         display: inline-block;
-        margin-top: 16px;
-        align-self: flex-start
+        margin-top: 6px
     }
-    .lp-feature-badge-wrap { display: flex; margin-top: 16px }
+    .lp-feature-badge-wrap { display: flex; justify-content: flex-end; padding-top: 4px }
 
-    /* Pricing — two cards */
+    /* Pricing */
     .lp-pricing {
         display: grid;
-        grid-template-columns: 1fr 1.08fr;
+        grid-template-columns: 1fr 1.06fr;
         gap: 16px;
         max-width: 860px
     }
@@ -1218,123 +1145,125 @@
         padding: 48px 40px;
         border: 1px solid var(--lp-border);
         position: relative;
-        background: transparent
+        background: #fff
     }
     .lp-plan::before {
         content: '';
         position: absolute;
         top: 0; left: 0; right: 0;
-        height: 2px;
-        background: rgba(255,255,255,.08)
+        height: 3px;
+        background: var(--lp-border)
     }
-    .lp-plan.featured::before { background: var(--lp-a) }
+    .lp-plan.featured::before { background: var(--lp-red) }
     .lp-plan::after {
         content: '';
         position: absolute;
         bottom: 0; right: 0;
-        width: 24px; height: 24px;
-        border-bottom: 1px solid rgba(255,255,255,.1);
-        border-right: 1px solid rgba(255,255,255,.1)
+        width: 22px; height: 22px;
+        border-bottom: 1px solid rgba(20,17,16,.12);
+        border-right: 1px solid rgba(20,17,16,.12)
     }
-    .lp-plan.featured::after { border-color: var(--lp-a-border) }
+    .lp-plan.featured::after { border-color: var(--lp-red-border) }
     .lp-plan-badge {
         display: inline-block;
-        background: var(--lp-a);
-        color: #000;
-        font-family: var(--lp-mono);
+        background: var(--lp-red);
+        color: #fff;
+        font-family: var(--lp-jb);
         font-size: 8px;
         font-weight: 600;
-        letter-spacing: .16em;
+        letter-spacing: .14em;
         padding: 4px 10px;
         text-transform: uppercase;
         margin-bottom: 28px
     }
     .lp-plan-name {
-        font-family: var(--lp-mono);
+        font-family: var(--lp-jb);
         font-size: 9px;
-        letter-spacing: .24em;
+        letter-spacing: .22em;
         text-transform: uppercase;
-        color: rgba(240,237,230,.28);
+        color: var(--lp-muted);
         margin-bottom: 12px
     }
-    .lp-plan.featured .lp-plan-name { color: var(--lp-a) }
+    .lp-plan.featured .lp-plan-name { color: var(--lp-red) }
     .lp-plan-price {
-        font-family: var(--lp-bsd);
-        font-size: 96px;
+        font-family: var(--lp-bm);
+        font-size: 88px;
         font-weight: 900;
-        letter-spacing: -.01em;
+        letter-spacing: -.02em;
         line-height: .85;
         margin-bottom: 10px;
-        color: var(--lp-fg)
+        color: var(--lp-ink)
     }
-    .lp-plan.featured .lp-plan-price { color: var(--lp-a) }
+    .lp-plan.featured .lp-plan-price { color: var(--lp-red) }
     .lp-plan-per {
-        font-size: 10px;
-        color: rgba(240,237,230,.25);
+        font-size: 11px;
+        color: var(--lp-muted);
         margin-bottom: 36px;
-        font-family: var(--lp-mono);
-        letter-spacing: .05em
+        font-family: var(--lp-jb);
+        letter-spacing: .04em
     }
     .lp-plan-features {
         list-style: none;
         display: flex;
         flex-direction: column;
-        gap: 11px;
+        gap: 12px;
         margin-bottom: 36px
     }
     .lp-plan-features li {
-        font-size: 11px;
-        color: rgba(240,237,230,.45);
+        font-size: 13px;
+        color: rgba(20,17,16,.6);
         display: flex;
         align-items: flex-start;
         gap: 10px;
         line-height: 1.4;
-        font-family: var(--lp-mono)
+        font-family: var(--lp-serif)
     }
-    .lp-plan-features li span.check { color: var(--lp-a); font-size: 11px; flex-shrink: 0; margin-top: 1px }
-    .lp-plan-features li span.x { color: rgba(255,255,255,.12); font-size: 11px; flex-shrink: 0; margin-top: 1px }
+    .lp-plan-features li span.check { color: var(--lp-red); font-size: 11px; flex-shrink: 0; margin-top: 2px }
+    .lp-plan-features li span.x { color: rgba(20,17,16,.18); font-size: 11px; flex-shrink: 0; margin-top: 2px }
     .lp-plan-btn {
         width: 100%;
         padding: 15px;
-        font-family: var(--lp-mono);
+        font-family: var(--lp-jb);
         font-size: 10px;
         font-weight: 600;
         cursor: pointer;
-        letter-spacing: .12em;
+        letter-spacing: .1em;
         text-transform: uppercase;
         border: none;
-        transition: opacity .15s, transform .1s
+        transition: opacity .15s
     }
-    .lp-plan-btn:hover { opacity: .88; transform: translateY(-1px) }
-    .lp-plan-btn.free-btn { background: rgba(240,237,230,.05); color: rgba(240,237,230,.4); border: 1px solid rgba(240,237,230,.1) }
-    .lp-plan-btn.pro-btn { background: var(--lp-a); color: #000 }
+    .lp-plan-btn:hover { opacity: .88 }
+    .lp-plan-btn.free-btn { background: rgba(20,17,16,.06); color: rgba(20,17,16,.5); border: 1px solid var(--lp-border) }
+    .lp-plan-btn.pro-btn { background: var(--lp-red); color: #fff }
 
     /* Footer */
     .lp-footer {
         padding: 28px 48px;
-        border-top: 1px solid rgba(255,255,255,.05);
+        border-top: 1px solid var(--lp-border);
         font-size: 10px;
-        color: rgba(240,237,230,.18);
-        font-family: var(--lp-mono);
-        letter-spacing: .06em
+        color: var(--lp-muted);
+        font-family: var(--lp-jb);
+        letter-spacing: .05em
     }
 
     @media (max-width: 760px) {
         .lp-nav { padding: 0 20px }
         .lp-hero { padding: 56px 20px 0; min-height: auto }
         .lp-hero-bg-text { display: none }
-        .lp-hero-bottom { grid-template-columns: 1fr; gap: 28px; padding-bottom: 52px }
+        .lp-hero-bottom { grid-template-columns: 1fr; gap: 28px; padding-bottom: 56px }
         .lp-hero-right { align-items: flex-start }
         .lp-hero-btns { justify-content: flex-start }
         .lp-hero-note { text-align: left }
-        .lp-features { grid-template-columns: 1fr }
+        .lp-feature { grid-template-columns: 52px 1fr; grid-template-rows: auto auto }
+        .lp-feature-desc { grid-column: 2; margin-top: 8px }
+        .lp-feature-badge-wrap { grid-column: 2; justify-content: flex-start; margin-top: 8px }
         .lp-pricing { grid-template-columns: 1fr }
         .lp-section { padding: 60px 20px }
         .lp-footer { padding: 24px 20px }
-        .lp-stat { padding: 16px 32px }
+        .lp-stat { padding: 16px 36px }
     }
     @media (max-width: 960px) and (min-width: 761px) {
-        .lp-features { grid-template-columns: repeat(2, 1fr) }
+        .lp-feature { grid-template-columns: 60px 1fr 1fr auto }
         .lp-section { padding: 72px 32px }
         .lp-nav { padding: 0 32px }
         .lp-hero { padding: 72px 32px 0 }
@@ -2324,7 +2253,7 @@
         <nav class="lp-nav">
             <div class="lp-logo">
                 <div class="lp-logo-mark"></div>
-                RAXEDGE
+                Rax<i style="font-style:italic">Edge</i>
                 <span class="moe-badge">by @moe_</span>
             </div>
             <div class="lp-nav-btns">
@@ -2335,9 +2264,9 @@
 
         <!-- Hero -->
         <div class="lp-hero">
-            <div class="lp-hero-bg-text">EDGE</div>
+            <div class="lp-hero-bg-text">Edge</div>
             <div class="lp-eyebrow"><span class="lp-eyebrow-line"></span>Edge Calculator for Rax Bettors</div>
-            <h1 class="lp-h1">Bet Rax<br>With an <em>Edge</em>,<br>Not a Guess</h1>
+            <h1 class="lp-h1">Bet Rax<br>With an <em>Edge,</em><br>Not a Guess</h1>
             <div class="lp-hero-bottom">
                 <p class="lp-sub">RaxEdge syncs with Real Sports to calculate EV on every market across 7 sports — spreads, totals, moneylines.</p>
                 <div class="lp-hero-right">
