@@ -155,18 +155,22 @@ export async function onRequestPost({ request, env }) {
     }
 
     case 'invoice.created': {
-      // If this is a subscription renewal invoice with a charge, check referral credits.
-      // If the user has credits banked, apply a Stripe customer balance credit equal to
-      // the invoice amount so the net charge is $0, then decrement the credit counter.
+      // Only act on subscription invoices with a real charge while still in draft.
+      // If the invoice is already past draft (finalized/paid), the credit would miss it.
       if (obj.billing_reason !== 'subscription_cycle' && obj.billing_reason !== 'subscription_create') break;
       if (!obj.customer || !obj.amount_due || obj.amount_due <= 0) break;
+      if (obj.status !== 'draft') break; // too late — invoice already finalized
       try {
-        const user = await env.DB.prepare(
-          'SELECT id, referral_credits FROM users WHERE stripe_customer_id=?'
-        ).bind(obj.customer).first();
-        if (!user || !user.referral_credits || user.referral_credits <= 0) break;
+        // Decrement first, atomically. If changes=0, another delivery already handled it.
+        const { meta } = await env.DB.prepare(
+          'UPDATE users SET referral_credits = referral_credits - 1 WHERE stripe_customer_id=? AND referral_credits > 0'
+        ).bind(obj.customer).run();
+        if (!meta.changes) break; // no credits to spend, or already decremented by a retry
 
         // Apply a credit to the Stripe customer balance — Stripe auto-applies on finalization
+        const user = await env.DB.prepare(
+          'SELECT id FROM users WHERE stripe_customer_id=?'
+        ).bind(obj.customer).first();
         const creditRes = await fetch(
           'https://api.stripe.com/v1/customers/' + obj.customer + '/balance_transactions',
           {
@@ -182,11 +186,12 @@ export async function onRequestPost({ request, env }) {
             }).toString()
           }
         );
-        if (!creditRes.ok) break;
-
-        await env.DB.prepare(
-          'UPDATE users SET referral_credits = referral_credits - 1 WHERE id=?'
-        ).bind(user.id).run();
+        // If Stripe call fails, restore the credit so it isn't silently lost
+        if (!creditRes.ok && user) {
+          await env.DB.prepare(
+            'UPDATE users SET referral_credits = referral_credits + 1 WHERE id=?'
+          ).bind(user.id).run();
+        }
       } catch(e) {}
       break;
     }
