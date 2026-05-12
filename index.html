@@ -7288,15 +7288,14 @@
         var banner = document.getElementById('trial-nudge-banner');
         var msg    = document.getElementById('trial-nudge-msg');
         if (!banner || !msg) return;
-        if (user.plan !== 'pro' || !user.had_free_trial || !user.pro_expires_at) { banner.style.display = 'none'; return; }
-        // Only nudge if no active Stripe subscription (trial cancelled or manual pro)
-        // OR if expires_at is within 3 days (active trial nearing end)
-        var now     = Math.floor(Date.now() / 1000);
+        // Only nudge users who cancelled their trial — active subs auto-renew, no action needed
+        if (user.plan !== 'pro' || !user.had_free_trial || !user.pro_expires_at || user.stripe_sub_id) { banner.style.display = 'none'; return; }
+        var now      = Math.floor(Date.now() / 1000);
         var secsLeft = user.pro_expires_at - now;
         if (secsLeft <= 0 || secsLeft > 3 * 86400) { banner.style.display = 'none'; return; }
         var daysLeft = Math.ceil(secsLeft / 86400);
         var dayLabel = daysLeft === 1 ? '1 day' : daysLeft + ' days';
-        msg.textContent = 'Your free trial ends in ' + dayLabel + '.';
+        msg.textContent = 'Your trial ends in ' + dayLabel + ' — resubscribe to keep access.';
         banner.style.display = 'block';
     }
 
