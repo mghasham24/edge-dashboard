@@ -26,12 +26,17 @@ export async function onRequestPost({ request, env }) {
   if (!customerId) {
     // Before creating, search Stripe for an existing customer with this email
     // to prevent duplicate customers on retry (e.g. if DB write failed last time).
+    // Fetch up to 10 — prefer the one whose metadata.user_id matches this session
+    // to avoid picking an orphaned record belonging to a different user.
     const existingList = await stripeGet(
-      'customers?email=' + encodeURIComponent(session.email) + '&limit=1',
+      'customers?email=' + encodeURIComponent(session.email) + '&limit=10',
       env.STRIPE_SECRET_KEY
     );
     if (existingList.data && existingList.data.length > 0) {
-      customerId = existingList.data[0].id;
+      const matched = existingList.data.find(
+        c => c.metadata && String(c.metadata.user_id) === String(session.id)
+      );
+      customerId = (matched || existingList.data[0]).id;
       // Ensure metadata has this user's id (may be missing on old customers)
       await stripePost('customers/' + customerId, {
         metadata: { user_id: String(session.id) }
