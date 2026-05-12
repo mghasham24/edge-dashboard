@@ -1,5 +1,11 @@
 // functions/api/auth/forgot.js
+import { checkRateLimit } from '../../_lib/rateLimit.js';
+
 export async function onRequestPost({ request, env }) {
+  // 3 attempts per hour per IP — prevents Resend credit drain
+  const allowed = await checkRateLimit(env.DB, request, 'forgot', 3, 3600);
+  if (!allowed) return ok(); // silent — don't reveal rate-limit to scrapers
+
   let body;
   try { body = await request.json(); } catch { return ok(); }
 

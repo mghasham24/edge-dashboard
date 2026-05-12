@@ -1,10 +1,14 @@
 // functions/api/auth/login.js
-const SESSION_DAYS = 30; // 30-day sessions
+import { checkRateLimit } from '../../_lib/rateLimit.js';
 
-
+const SESSION_DAYS = 30;
 
 export async function onRequestPost({ request, env }) {
   try {
+    // 10 attempts per 15 minutes per IP
+    const allowed = await checkRateLimit(env.DB, request, 'login', 10, 900);
+    if (!allowed) return err('Too many login attempts. Please try again later.', 429);
+
     let body;
     try { body = await request.json(); } catch { return err('Invalid JSON'); }
 
