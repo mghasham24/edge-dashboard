@@ -3656,10 +3656,10 @@
     function showForgotPassword() {
         var email = document.getElementById('gate-email').value.trim();
         document.getElementById('gate-fields').style.display = 'none';
-        document.getElementById('gate-tabs').style.display = 'none';
-        document.getElementById('gate-forgot').style.display = 'flex';
-        document.getElementById('gate-forgot').style.flexDirection = 'column';
-        document.getElementById('gate-forgot').style.alignItems = 'center';
+        var fw = document.getElementById('gate-forgot');
+        fw.style.display = 'flex';
+        fw.style.flexDirection = 'column';
+        fw.style.alignItems = 'center';
         document.getElementById('forgot-email').value = email;
         document.getElementById('forgot-err').textContent = '';
         document.getElementById('forgot-ok').textContent = '';
@@ -3669,7 +3669,6 @@
     function hideForgotPassword() {
         document.getElementById('gate-forgot').style.display = 'none';
         document.getElementById('gate-fields').style.display = '';
-        document.getElementById('gate-tabs').style.display = '';
     }
 
     async function submitForgot() {
@@ -3703,7 +3702,6 @@
         document.getElementById('gate-btn').textContent = tab === 'login' ? 'Log In' : 'Create Account';
         var fl = document.getElementById('forgot-link');
         if (fl) fl.style.display = tab === 'login' ? '' : 'none';
-        // Reset forgot view when switching tabs
         document.getElementById('gate-forgot').style.display = 'none';
         document.getElementById('gate-fields').style.display = '';
         document.getElementById('gate-err').style.display = 'none';
