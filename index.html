@@ -162,6 +162,8 @@
         opacity:.85
     }
 
+    @keyframes btn-spin { to { transform: rotate(360deg) } }
+    .refresh-btn-spinning::before { content:''; display:inline-block; width:10px; height:10px; border:2px solid rgba(255,255,255,.3); border-top-color:#fff; border-radius:50%; animation:btn-spin .7s linear infinite; margin-right:6px; vertical-align:middle }
     .refresh-btn:disabled {
         opacity: .4;
         cursor: not-allowed
@@ -2512,7 +2514,7 @@
                 <span class="logo-dot"></span>
                 RAXEDGE
             </div>
-            <div class="gate-tabs">
+            <div class="gate-tabs" id="gate-tabs">
                 <button class="gate-tab active" id="tab-login" onclick="switchTab('login')">Log In</button>
                 <button class="gate-tab" id="tab-signup" onclick="switchTab('signup')">Sign Up</button>
             </div>
@@ -2526,8 +2528,8 @@
             </div>
             <!-- Forgot password inline view -->
             <div id="gate-forgot" style="display:none;width:100%">
-                <div style="font-size:13px;font-weight:600;color:var(--fg);margin-bottom:6px;font-family:var(--mono);letter-spacing:.04em">RESET PASSWORD</div>
-                <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Enter your email and we'll send you a reset link.</div>
+                <div id="forgot-heading" style="font-size:13px;font-weight:600;color:var(--fg);margin-bottom:6px;font-family:var(--mono);letter-spacing:.04em">RESET PASSWORD</div>
+                <div id="forgot-subtitle" style="font-size:12px;color:var(--muted);margin-bottom:14px">Enter your email and we'll send you a reset link.</div>
                 <input class="gate-inp" id="forgot-email" type="email" placeholder="Email address" autocomplete="email">
                 <button class="gate-btn" id="forgot-btn" onclick="submitForgot()">Send Reset Link</button>
                 <span class="gate-err" id="forgot-err" style="display:none"></span>
@@ -3659,10 +3661,14 @@
     function showForgotPassword() {
         var email = document.getElementById('gate-email').value.trim();
         document.getElementById('gate-fields').style.display = 'none';
+        document.getElementById('gate-tabs').style.display = 'none';
+        document.getElementById('gate-back-home').style.display = 'none';
         var fw = document.getElementById('gate-forgot');
         fw.style.display = 'flex';
         fw.style.flexDirection = 'column';
         fw.style.alignItems = 'center';
+        document.getElementById('forgot-heading').style.display = '';
+        document.getElementById('forgot-subtitle').style.display = '';
         document.getElementById('forgot-email').value = email;
         document.getElementById('forgot-email').style.display = '';
         document.getElementById('forgot-btn').style.display = '';
@@ -3676,6 +3682,8 @@
     function hideForgotPassword() {
         document.getElementById('gate-forgot').style.display = 'none';
         document.getElementById('gate-fields').style.display = '';
+        document.getElementById('gate-tabs').style.display = '';
+        document.getElementById('gate-back-home').style.display = '';
     }
 
     async function submitForgot() {
@@ -3695,6 +3703,8 @@
                 body: JSON.stringify({ email })
             });
         } catch(e) {}
+        document.getElementById('forgot-heading').style.display = 'none';
+        document.getElementById('forgot-subtitle').style.display = 'none';
         document.getElementById('forgot-email').style.display = 'none';
         btn.style.display = 'none';
         okEl.style.display = 'block';
@@ -3711,6 +3721,7 @@
         if (fl) fl.style.display = tab === 'login' ? '' : 'none';
         document.getElementById('gate-forgot').style.display = 'none';
         document.getElementById('gate-fields').style.display = '';
+        document.getElementById('gate-back-home').style.display = '';
         document.getElementById('gate-err').style.display = 'none';
         document.getElementById('gate-ok').style.display = 'none';
         document.getElementById('gate-pass').setAttribute('autocomplete', tab === 'login' ? 'current-password' : 'new-password');
@@ -7575,6 +7586,14 @@
         return rows;
     }
 
+    function resetRefreshBtn() {
+        var b = document.getElementById('refresh-btn');
+        if (!b) return;
+        b.disabled = false;
+        b.classList.remove('refresh-btn-spinning');
+        b.textContent = 'Refresh';
+    }
+
     function loadOdds() {
         if (!isPro()) {
             currentSport = FREE_SPORTS.indexOf(currentSport) !== -1 ? currentSport : FREE_SPORTS[0];
@@ -7588,6 +7607,8 @@
         var lbl = sp ? sp.label : currentSport;
 
         btn.disabled = true;
+        btn.classList.add('refresh-btn-spinning');
+        btn.textContent = 'Loading';
         dot.className = 'sdot loading';
         stxt.textContent = 'Fetching ' + lbl + '...';
         document.getElementById('tbody').innerHTML = '<tr class="state-row"><td colspan="13">Loading...</td></tr>';
@@ -7601,7 +7622,7 @@
                 if (r.status === 401) {
                     dot.className = 'sdot error';
                     stxt.textContent = 'Session expired — please log in again.';
-                    btn.disabled = false;
+                    resetRefreshBtn();
                     setTimeout(function() { location.reload(); }, 2000);
                     return Promise.reject('unauth');
                 }
@@ -7671,7 +7692,7 @@
                 stxt.textContent = 'Error fetching NBA data';
             })
             .then(function() {
-                btn.disabled = false;
+                resetRefreshBtn();
                 renderTable();
                 if (rawRows.length > 0) fetchRealMarkets(currentSport);
                 // Start auto-poll to keep NBA odds live
@@ -7700,7 +7721,7 @@
                 if (r.status === 401) {
                     dot.className = 'sdot error';
                     stxt.textContent = 'Session expired — please log in again.';
-                    btn.disabled = false;
+                    resetRefreshBtn();
                     setTimeout(function() { location.reload(); }, 2000);
                     return Promise.reject('unauth');
                 }
@@ -7770,7 +7791,7 @@
                 stxt.textContent = 'Error fetching WNBA data';
             })
             .then(function() {
-                btn.disabled = false;
+                resetRefreshBtn();
                 renderTable();
                 if (rawRows.length > 0) fetchRealMarkets(currentSport);
                 // Start auto-poll to keep WNBA odds live
@@ -7801,7 +7822,7 @@
                 if (r.status === 401) {
                     dot.className = 'sdot error';
                     stxt.textContent = 'Session expired — please log in again.';
-                    btn.disabled = false;
+                    resetRefreshBtn();
                     setTimeout(function() { location.reload(); }, 2000);
                     return Promise.reject('unauth');
                 }
@@ -7858,7 +7879,7 @@
                 stxt.textContent = 'Error fetching FC data';
             })
             .then(function() {
-                btn.disabled = false;
+                resetRefreshBtn();
                 renderTable();
                 if (rawRows.length > 0) fetchRealMarkets(currentSport);
                 if (fcPoller) clearInterval(fcPoller);
@@ -7878,7 +7899,7 @@
                 if (r.status === 401) {
                     dot.className = 'sdot error';
                     stxt.textContent = 'Session expired — please log in again.';
-                    btn.disabled = false;
+                    resetRefreshBtn();
                     setTimeout(function() { location.reload(); }, 2000);
                     return Promise.reject('unauth');
                 }
@@ -7922,7 +7943,7 @@
                 stxt.textContent = 'Error fetching MLB data';
             })
             .then(function() {
-                btn.disabled = false;
+                resetRefreshBtn();
                 renderTable();
                 if (rawRows.length > 0) {
                     // Fetch RS and RFI in parallel — RFI renders immediately, RS preds applied after both finish
@@ -7990,7 +8011,7 @@
                 if (r.status === 401) {
                     dot.className = 'sdot error';
                     stxt.textContent = 'Session expired — please log in again.';
-                    btn.disabled = false;
+                    resetRefreshBtn();
                     setTimeout(function() { location.reload(); }, 2000);
                     return Promise.reject('unauth');
                 }
@@ -8059,7 +8080,7 @@
                 stxt.textContent = 'Error fetching NHL data';
             })
             .then(function() {
-                btn.disabled = false;
+                resetRefreshBtn();
                 renderTable();
                 if (rawRows.length > 0) {
                     fetchRealMarkets(currentSport).then(function() { fetchDKAltLinesNHL(); });
@@ -8090,14 +8111,14 @@
             if (r.status === 401) {
                 dot.className = 'sdot error';
                 stxt.textContent = 'Session expired — please log in again.';
-                btn.disabled = false;
+                resetRefreshBtn();
                 setTimeout(function() { location.reload(); }, 2000);
                 return Promise.reject('unauth');
             }
             if (r.status === 429) {
                 dot.className = 'sdot error';
                 stxt.textContent = 'Daily refresh limit reached. Resets tomorrow.';
-                btn.disabled = false;
+                resetRefreshBtn();
                 return Promise.reject('rate');
             }
             if (r.status === 403) {
@@ -8111,14 +8132,14 @@
                     // Plan restriction — show upgrade prompt, not "suspended"
                     dot.className = 'sdot error';
                     stxt.textContent = 'Pro required for this sport/market.';
-                    btn.disabled = false;
+                    resetRefreshBtn();
                     showUpgradeModal(msg || 'Upgrade to Pro to access this sport and market.');
                     return Promise.reject('banned');
                 }).catch(function(e) {
                     if (e === 'banned') return Promise.reject('banned');
                     dot.className = 'sdot error';
                     stxt.textContent = 'Access denied.';
-                    btn.disabled = false;
+                    resetRefreshBtn();
                     return Promise.reject('banned');
                 });
             }
@@ -8127,7 +8148,7 @@
                     rawRows = []; rsGameIds = {};
                     dot.className = 'sdot error';
                     stxt.textContent = (d && d.error ? d.error.slice(0, 80) : 'HTTP ' + r.status);
-                    btn.disabled = false;
+                    resetRefreshBtn();
                     return Promise.reject('http' + r.status);
                 });
             }
@@ -8161,7 +8182,7 @@
             stxt.textContent = 'Error: ' + e.message;
         })
         .then(function() {
-            btn.disabled = false;
+            resetRefreshBtn();
             renderTable();
             if (rawRows.length > 0) fetchRealMarkets(currentSport).then(function() { fetchAltLinesForNBA(); });
             if (currentSport === 'baseball_mlb') fetchKalshiRFI();
@@ -10301,6 +10322,25 @@
     initTheme();
     initStickyHeader();
     checkSession();
+
+    // Keyboard shortcuts (only when dashboard is visible and focus is not in an input)
+    document.addEventListener('keydown', function(e) {
+        if (!document.getElementById('dashboard') || document.getElementById('dashboard').style.display === 'none') return;
+        var tag = document.activeElement && document.activeElement.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+        if (e.metaKey || e.ctrlKey || e.altKey) return;
+        // R — refresh
+        if (e.key === 'r' || e.key === 'R') {
+            var rb = document.getElementById('refresh-btn');
+            if (rb && !rb.disabled && rb.style.display !== 'none') { e.preventDefault(); loadOdds(); }
+        }
+        // 1–7 — switch sport tabs
+        var num = parseInt(e.key, 10);
+        if (num >= 1 && num <= 7) {
+            var tabs = document.querySelectorAll('#sport-tabs .sport-tab');
+            if (tabs[num - 1]) { e.preventDefault(); tabs[num - 1].click(); }
+        }
+    });
     // Restore exclusive bets button state
     (function() {
         var btn = document.getElementById('excl-bets-btn');
@@ -10329,6 +10369,9 @@
             + '</div>';
         document.body.appendChild(banner);
     })();
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').catch(function() {});
+    }
     </script>
 </body>
 </html>
