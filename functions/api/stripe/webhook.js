@@ -45,15 +45,31 @@ export async function onRequestPost({ request, env }) {
       const status = obj.status;
       const plan   = (status === 'active' || status === 'trialing') ? 'pro' : 'free';
       const proExpiresAt = (plan === 'pro' && obj.current_period_end) ? obj.current_period_end : null;
-      await env.DB.prepare(
-        'UPDATE users SET plan=?, stripe_sub_id=?, pro_expires_at=? WHERE stripe_customer_id=?'
-      ).bind(plan, obj.id, proExpiresAt, obj.customer).run();
 
       if (status === 'trialing') {
-        // Mark trial used — fingerprint abuse check happens in checkout.session.completed
+        // Run fingerprint check here AND in checkout.session.completed — Stripe does not
+        // guarantee delivery order, so whichever fires first catches abuse, the other confirms.
+        const pmId   = obj.default_payment_method;
+        const abused = await checkFingerprintByPmId(pmId, obj.customer, env.DB, env.STRIPE_SECRET_KEY);
+        if (abused) {
+          try {
+            await fetch('https://api.stripe.com/v1/subscriptions/' + obj.id, {
+              method: 'DELETE',
+              headers: { 'Authorization': 'Bearer ' + env.STRIPE_SECRET_KEY }
+            });
+          } catch(e) {}
+          await env.DB.prepare(
+            'UPDATE users SET plan=\'free\', stripe_sub_id=NULL, pro_expires_at=NULL, had_free_trial=0 WHERE stripe_customer_id=?'
+          ).bind(obj.customer).run();
+          break;
+        }
         await env.DB.prepare(
-          'UPDATE users SET had_free_trial=1 WHERE stripe_customer_id=?'
-        ).bind(obj.customer).run();
+          'UPDATE users SET plan=?, stripe_sub_id=?, pro_expires_at=?, had_free_trial=1 WHERE stripe_customer_id=?'
+        ).bind(plan, obj.id, proExpiresAt, obj.customer).run();
+      } else {
+        await env.DB.prepare(
+          'UPDATE users SET plan=?, stripe_sub_id=?, pro_expires_at=? WHERE stripe_customer_id=?'
+        ).bind(plan, obj.id, proExpiresAt, obj.customer).run();
       }
       break;
     }
