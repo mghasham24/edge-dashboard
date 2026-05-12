@@ -2574,6 +2574,13 @@
         </div>
     </div>
 
+    <!-- Trial-ending nudge banner -->
+    <div id="trial-nudge-banner" style="display:none;background:linear-gradient(90deg,rgba(79,110,247,.18),rgba(168,85,247,.12));border-bottom:1px solid rgba(79,110,247,.3);padding:10px 20px;text-align:center;font-size:12px;font-family:var(--mono);color:var(--fg)">
+        <span id="trial-nudge-msg"></span>
+        <button onclick="showUpgradeModal('Keep your Pro access going.')" style="margin-left:12px;background:var(--accent);border:none;color:#fff;font-family:var(--mono);font-size:11px;font-weight:700;padding:4px 12px;border-radius:4px;cursor:pointer;letter-spacing:.04em">UPGRADE NOW</button>
+        <button onclick="document.getElementById('trial-nudge-banner').style.display='none'" style="margin-left:8px;background:none;border:none;color:var(--muted2);font-size:14px;cursor:pointer;padding:0;line-height:1">×</button>
+    </div>
+
     <div id="dashboard" style="display:none">
         <div class="subheader-sticky">
         <header class="header">
@@ -3751,6 +3758,7 @@
                 document.getElementById('gate').style.display = 'none';
                 document.getElementById('landing').classList.remove('visible');
                 document.getElementById('dashboard').style.display = 'block';
+                showTrialNudge(data);
                 buildTabs();
                 await loadBetsTaken();
                 // If redirected back from bookmarklet, open portfolio tab
@@ -3791,6 +3799,7 @@
                 document.getElementById('gate').style.display = 'none';
                 document.getElementById('landing').classList.remove('visible');
                 document.getElementById('dashboard').style.display = 'block';
+                showTrialNudge(data);
                 buildTabs();
                 await loadBetsTaken();
                 // If redirected back from bookmarklet, open portfolio tab
@@ -7275,6 +7284,22 @@
     function closeUpgradeModal() {
         document.getElementById('upgrade-modal').style.display = 'none';
     }
+    function showTrialNudge(user) {
+        var banner = document.getElementById('trial-nudge-banner');
+        var msg    = document.getElementById('trial-nudge-msg');
+        if (!banner || !msg) return;
+        if (user.plan !== 'pro' || !user.had_free_trial || !user.pro_expires_at) { banner.style.display = 'none'; return; }
+        // Only nudge if no active Stripe subscription (trial cancelled or manual pro)
+        // OR if expires_at is within 3 days (active trial nearing end)
+        var now     = Math.floor(Date.now() / 1000);
+        var secsLeft = user.pro_expires_at - now;
+        if (secsLeft <= 0 || secsLeft > 3 * 86400) { banner.style.display = 'none'; return; }
+        var daysLeft = Math.ceil(secsLeft / 86400);
+        var dayLabel = daysLeft === 1 ? '1 day' : daysLeft + ' days';
+        msg.textContent = 'Your free trial ends in ' + dayLabel + '.';
+        banner.style.display = 'block';
+    }
+
     function toggleReferralInput() {
         var wrap = document.getElementById('upgrade-referral-wrap');
         var btn  = document.getElementById('upgrade-code-btn');
