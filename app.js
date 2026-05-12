@@ -91,6 +91,7 @@
     var evTabCache        = {};   // sport key -> array of positive-EV row objects
     var evTabVisible      = false;
     var evHideTaken       = localStorage.getItem('raxedge_ev_hide_taken') === '1';
+    var evMinEv           = parseFloat(localStorage.getItem('raxedge_ev_min_ev') || '5');
     var evLoadingInProgress = false; // true while loadAllEvSports Phase1/2 running — suppresses mid-load renders
     var evAutoRefreshTimer = null;
     var EV_REFRESH_MS = 15000; // refresh every 15 seconds (server caches absorb repeated hits)
@@ -519,6 +520,12 @@
         localStorage.setItem('raxedge_unit_size', val);
         var el = document.getElementById('unit-size');
         if (el) { el.value = val; renderTable(); }
+        renderEvTab();
+    }
+
+    function onEvMinEvChange(val) {
+        evMinEv = parseFloat(val) || 0;
+        localStorage.setItem('raxedge_ev_min_ev', String(evMinEv));
         renderEvTab();
     }
 
@@ -2401,6 +2408,9 @@
         var mainUnit = document.getElementById('unit-size');
         var evUnit = document.getElementById('ev-unit-size');
         if (mainUnit && evUnit) evUnit.value = mainUnit.value;
+        // Restore saved min EV floor
+        var evMinEl = document.getElementById('ev-min-ev');
+        if (evMinEl) evMinEl.value = evMinEv;
         // Render from preloader cache instantly, then refresh in background
         if (Object.keys(evTabCache).length > 0) renderEvTab();
         // Auto-load on open, then refresh every 15s
@@ -2607,6 +2617,8 @@
                 return Object.assign({}, r, { _ev: adjEv, _pred: adjPred, u: adjU });
             }).filter(function(r) { return r._ev > 0; });
         }
+        // Apply minimum EV floor set by the user
+        if (evMinEv > 0) all = all.filter(function(r) { return (r._ev || 0) >= evMinEv; });
         // Sort by EV descending
         all.sort(function(a, b) { return (b._ev || 0) - (a._ev || 0); });
         if (!all.length) {
