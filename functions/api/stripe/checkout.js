@@ -8,8 +8,9 @@ export async function onRequestPost({ request, env }) {
 
   const origin = new URL(request.url).origin;
 
-  // Read optional referral code from request body
+  // Read optional referral code and billing period from request body
   let referrerId = null;
+  let isAnnual = false;
   try {
     const body = await request.json().catch(() => ({}));
     const code = (body.referral_code || '').trim().toUpperCase();
@@ -19,6 +20,7 @@ export async function onRequestPost({ request, env }) {
       ).bind(code, session.id).first();
       if (referrer) referrerId = referrer.id;
     }
+    isAnnual = body.billing === 'annual';
   } catch {}
 
   // Create or retrieve Stripe customer
@@ -71,13 +73,21 @@ export async function onRequestPost({ request, env }) {
     }
   }
 
-  const trialEligible = !session.had_free_trial;
+  const trialEligible = !isAnnual && !session.had_free_trial;
+
+  // Annual requires a separate Stripe price — fall back to monthly if not configured
+  const priceId = (isAnnual && env.STRIPE_ANNUAL_PRICE_ID)
+    ? env.STRIPE_ANNUAL_PRICE_ID
+    : env.STRIPE_PRICE_ID;
+  if (isAnnual && !env.STRIPE_ANNUAL_PRICE_ID) {
+    return fail(500, 'Annual plan not yet configured');
+  }
 
   // Build Checkout session params
   const checkoutParams = {
     customer: customerId,
     mode: 'subscription',
-    line_items: [{ price: env.STRIPE_PRICE_ID, quantity: 1 }],
+    line_items: [{ price: priceId, quantity: 1 }],
     success_url: origin + '/?checkout=success',
     cancel_url:  origin + '/?checkout=cancel',
     allow_promotion_codes: true,
@@ -91,8 +101,9 @@ export async function onRequestPost({ request, env }) {
       metadata: referrerId ? { referrer_id: String(referrerId) } : {}
     };
   } else {
-    // No trial — immediate payment, store referrer in checkout metadata for webhook
-    if (referrerId) checkoutParams.metadata = { referrer_id: String(referrerId) };
+    // No trial — immediate payment (annual or already-trialed monthly)
+    // Store referrer in subscription metadata for webhook
+    if (referrerId) checkoutParams.subscription_data = { metadata: { referrer_id: String(referrerId) } };
   }
 
   const checkout = await stripePost('checkout/sessions', checkoutParams, env.STRIPE_SECRET_KEY);
