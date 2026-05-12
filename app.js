@@ -41,6 +41,29 @@
     var nhlPoller  = null;
     var dkPoller   = null;
     var fcPoller   = null;
+
+    function stopAllPollers() {
+        if (nbaPoller)  { clearInterval(nbaPoller);  nbaPoller  = null; }
+        if (wnbaPoller) { clearInterval(wnbaPoller); wnbaPoller = null; }
+        if (mlbPoller)  { clearInterval(mlbPoller);  mlbPoller  = null; }
+        if (nhlPoller)  { clearInterval(nhlPoller);  nhlPoller  = null; }
+        if (dkPoller)   { clearInterval(dkPoller);   dkPoller   = null; }
+        if (fcPoller)   { clearInterval(fcPoller);   fcPoller   = null; }
+        if (evAutoRefreshTimer) { clearInterval(evAutoRefreshTimer); evAutoRefreshTimer = null; }
+    }
+
+    document.addEventListener('visibilitychange', function() {
+        if (document.hidden) {
+            stopAllPollers();
+        } else {
+            // Restart the active poller when tab becomes visible again
+            if (evTabVisible) {
+                loadAllEvSports();
+            } else {
+                loadOdds();
+            }
+        }
+    });
     var dkAltOdds = {}; // gid -> { spreads: { Away: {line: price}, Home: {line: price} }, totals: { Over: {line: price}, Under: {line: price} } }
     var dkPreGameStore = {}; // gid -> last known DK alt lines before/during game (persists when DK suspends in-game)
     var lastSyncData = {}; // sport -> last Real Sports sync response (d.markets object)

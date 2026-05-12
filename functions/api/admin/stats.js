@@ -15,19 +15,21 @@ export async function onRequest({ request, env }) {
     env.DB.prepare("SELECT plan, COUNT(*) as c FROM users GROUP BY plan").all(),
   ]);
 
-  // Daily signups for last 14 days
+  // Daily signups for last 14 days — single query using integer day buckets
   const todayStart = now - (now % 86400);
+  const windowStart = todayStart - 13 * 86400;
+  const buckets = await env.DB.prepare(
+    'SELECT (created_at / 86400) * 86400 AS day_ts, COUNT(*) AS c FROM users WHERE created_at>=? GROUP BY day_ts'
+  ).bind(windowStart).all();
+  const bucketMap = {};
+  (buckets.results || []).forEach(r => { bucketMap[r.day_ts] = r.c; });
   const daily = [];
   for (let i = 13; i >= 0; i--) {
     const dayStart = todayStart - i * 86400;
-    const dayEnd   = dayStart + 86400;
-    const row = await env.DB.prepare(
-      'SELECT COUNT(*) as c FROM users WHERE created_at>=? AND created_at<?'
-    ).bind(dayStart, dayEnd).first();
     const d = new Date(dayStart * 1000);
     daily.push({
       date: d.toLocaleDateString('en-US', { month:'short', day:'numeric' }),
-      count: row ? row.c : 0
+      count: bucketMap[dayStart] || 0
     });
   }
 

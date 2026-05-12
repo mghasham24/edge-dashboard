@@ -28,19 +28,14 @@ export async function onRequest({ request, env }) {
     if (plan)   { where.push('plan=?');        binds.push(plan); }
     const whereClause = where.length ? 'WHERE ' + where.join(' AND ') : '';
 
+    const now = Math.floor(Date.now() / 1000);
     const [countRow, rows] = await Promise.all([
       env.DB.prepare(`SELECT COUNT(*) as total FROM users ${whereClause}`).bind(...binds).first(),
-      env.DB.prepare(`SELECT id, email, plan, is_admin, banned, created_at, pro_expires_at FROM users ${whereClause} ORDER BY ${orderBy} LIMIT ? OFFSET ?`).bind(...binds, limit, offset).all(),
+      env.DB.prepare(`SELECT u.id, u.email, u.plan, u.is_admin, u.banned, u.created_at, u.pro_expires_at, COUNT(s.id) as sessions FROM users u LEFT JOIN sessions s ON s.user_id=u.id AND s.expires_at>? ${whereClause ? whereClause.replace('WHERE', 'AND') : ''} GROUP BY u.id ORDER BY ${orderBy} LIMIT ? OFFSET ?`).bind(now, ...binds, limit, offset).all(),
     ]);
 
     const total = countRow?.total || 0;
-    const now = Math.floor(Date.now() / 1000);
-    const users = await Promise.all((rows.results || []).map(async u => {
-      const sc = await env.DB.prepare(
-        'SELECT COUNT(*) as c FROM sessions WHERE user_id=? AND expires_at>?'
-      ).bind(u.id, now).first();
-      return { ...u, sessions: sc ? sc.c : 0 };
-    }));
+    const users = rows.results || [];
 
     return ok({ users, total, hasMore: offset + users.length < total });
   }
@@ -53,6 +48,7 @@ export async function onRequest({ request, env }) {
     if (!id) return fail(400, 'Missing user id');
 
     if (plan !== undefined) {
+      if (!['free', 'pro'].includes(plan)) return fail(400, 'Invalid plan — must be free or pro');
       await env.DB.prepare('UPDATE users SET plan=? WHERE id=?').bind(plan, id).run();
     }
     if (banned !== undefined) {
@@ -65,11 +61,19 @@ export async function onRequest({ request, env }) {
     return ok({ updated: true });
   }
 
-  // DELETE /api/admin/users?id=X — delete user + sessions
+  // DELETE /api/admin/users?id=X — fully delete user and all dependent rows
   if (method === 'DELETE') {
     const id = url.searchParams.get('id');
     if (!id) return fail(400, 'Missing user id');
-    await env.DB.prepare('DELETE FROM sessions WHERE user_id=?').bind(id).run();
+    const tables = [
+      'sessions', 'bets_taken', 'notification_settings', 'telegram_verify_tokens',
+      'real_auth', 'password_resets', 'trial_fingerprints', 'alert_messages', 'alert_sent_log'
+    ];
+    for (const t of tables) {
+      await env.DB.prepare(`DELETE FROM ${t} WHERE user_id=?`).bind(id).run().catch(() => {});
+    }
+    // referrals has two foreign keys
+    await env.DB.prepare('DELETE FROM referrals WHERE referrer_id=? OR referred_id=?').bind(id, id).run().catch(() => {});
     await env.DB.prepare('DELETE FROM users WHERE id=?').bind(id).run();
     return ok({ deleted: true });
   }

@@ -2,8 +2,8 @@
 // App-shell strategy: cache the HTML shell on install, serve from cache on
 // repeat visits for instant load. All API requests always go to the network.
 
-const CACHE = 'raxedge-shell-v1';
-const SHELL = ['/'];
+const CACHE = 'raxedge-shell-v2';
+const SHELL = ['/', '/app.css', '/app.js'];
 
 self.addEventListener('install', function(e) {
   e.waitUntil(
