@@ -6,13 +6,15 @@
 // @match        https://realsports.io/*
 // @match        https://www.realsports.io/*
 // @grant        GM_xmlhttpRequest
-// @connect      api.telegram.org
+// @connect      raxedge.com
 // @connect      178.156.194.254
 // @run-at       document-start
 // ==/UserScript==
 
-var VPS_URL    = 'http://178.156.194.254:3001/token';
-var VPS_SECRET = 'raxedge-vps-2026';
+var VPS_URL     = 'http://178.156.194.254:3001/token';
+var VPS_SECRET  = 'raxedge-vps-2026';
+var ALERT_URL   = 'https://raxedge.com/api/auction/alert';
+var AUCTION_KEY = 'raxedge-auction-2026';
 
 // ─── TM context: drain Telegram queue + push token to VPS ────────────────────
 
@@ -21,7 +23,7 @@ setInterval(function() {
     var root = document.documentElement;
     if (!root) return;
 
-    // Drain Telegram queue
+    // Drain Telegram queue — relay through raxedge.com so token stays server-side
     var rawTg = root.getAttribute('data-raxedge-tg');
     if (rawTg) {
       root.removeAttribute('data-raxedge-tg');
@@ -30,9 +32,9 @@ setInterval(function() {
         msgs.forEach(function(m) {
           GM_xmlhttpRequest({
             method:  'POST',
-            url:     'https://api.telegram.org/bot' + m.botToken + '/sendMessage',
+            url:     ALERT_URL,
             headers: { 'Content-Type': 'application/json' },
-            data:    JSON.stringify({ chat_id: m.chatId, text: m.text, parse_mode: 'HTML' }),
+            data:    JSON.stringify({ text: m.text, key: AUCTION_KEY }),
             onerror:   function() {},
             ontimeout: function() {},
           });
@@ -63,8 +65,6 @@ setInterval(function() {
 const s = document.createElement('script');
 s.textContent = `
 (function() {
-  var TG_TOKEN  = '8258151239:AAGX4Qvmb9GcY88Sil3713lSiAsQEla5Qbk';
-  var TG_CHAT   = '5439959074';
   var MAX_PRICE = 100;
   var TARGETS   = ['dimarco', 'mckennie', 'locatelli', 'grimaldo'];
   var SEEN_KEY  = 'rs_auction_alert_seen';
@@ -76,7 +76,7 @@ s.textContent = `
     try {
       var root = document.documentElement;
       var q = JSON.parse(root.getAttribute('data-raxedge-tg') || '[]');
-      q.push({ botToken: TG_TOKEN, chatId: TG_CHAT, text: text });
+      q.push({ text: text });
       root.setAttribute('data-raxedge-tg', JSON.stringify(q));
     } catch(e) {}
   }

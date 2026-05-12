@@ -18,8 +18,8 @@ const PACK_SEEN_FILE  = join(__dir, 'pack-seen-ids.json');
 const ENTITY_FILE     = join(__dir, 'gc-entity-ids.json');
 
 const HASHIDS   = new Hashids('routing', 11);
-const TG_TOKEN  = '8258151239:AAGX4Qvmb9GcY88Sil3713lSiAsQEla5Qbk';
-const TG_CHAT   = '5439959074';
+const TG_TOKEN  = process.env.TG_TOKEN  || '';
+const TG_CHAT   = process.env.TG_CHAT   || '5439959074';
 
 // Marketplace + pack alert targets (same list for both)
 const GC_FC_TARGETS  = ['dimarco', 'mckennie', 'grimaldo', 'locatelli'];

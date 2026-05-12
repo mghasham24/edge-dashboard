@@ -31,7 +31,12 @@ const tokenServer = createServer((req, res) => {
     req.on('data', d => { body += d; });
     req.on('end', () => {
       try {
-        const { token } = JSON.parse(body);
+        const BRIDGE_SECRET = process.env.BRIDGE_SECRET;
+        const { token, key } = JSON.parse(body);
+        if (BRIDGE_SECRET && key !== BRIDGE_SECRET) {
+          res.writeHead(403); res.end('forbidden');
+          return;
+        }
         if (token && typeof token === 'string' && token.split('!').length === 3) {
           currentAuthInfo = token;
           tokenUpdatedAt  = Date.now();
@@ -49,7 +54,7 @@ const tokenServer = createServer((req, res) => {
   } else if (req.method === 'GET' && req.url === '/status') {
     const ageSec = Math.floor((Date.now() - tokenUpdatedAt) / 1000);
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ok: true, tokenAge: ageSec, hasToken: !!currentAuthInfo, token: currentAuthInfo }));
+    res.end(JSON.stringify({ ok: true, tokenAge: ageSec, hasToken: !!currentAuthInfo }));
   } else {
     res.writeHead(404); res.end();
   }
