@@ -753,6 +753,12 @@
         document.getElementById('gate-err').style.display = 'none';
     }
 
+    function handleUnauthenticated() {
+        stopAllPollers();
+        document.getElementById('dashboard').style.display = 'none';
+        document.getElementById('landing').classList.add('visible');
+    }
+
     function showToast(msg, type) {
         var el = document.getElementById('_toast');
         if (!el) {
@@ -4661,7 +4667,7 @@
                     dot.className = 'sdot error';
                     stxt.textContent = 'Session expired — please log in again.';
                     resetRefreshBtn();
-                    setTimeout(function() { location.reload(); }, 2000);
+                    handleUnauthenticated();
                     return Promise.reject('unauth');
                 }
                 return r.json();
@@ -4760,7 +4766,7 @@
                     dot.className = 'sdot error';
                     stxt.textContent = 'Session expired — please log in again.';
                     resetRefreshBtn();
-                    setTimeout(function() { location.reload(); }, 2000);
+                    handleUnauthenticated();
                     return Promise.reject('unauth');
                 }
                 return r.json();
@@ -4861,7 +4867,7 @@
                     dot.className = 'sdot error';
                     stxt.textContent = 'Session expired — please log in again.';
                     resetRefreshBtn();
-                    setTimeout(function() { location.reload(); }, 2000);
+                    handleUnauthenticated();
                     return Promise.reject('unauth');
                 }
                 return r.json();
@@ -4938,7 +4944,7 @@
                     dot.className = 'sdot error';
                     stxt.textContent = 'Session expired — please log in again.';
                     resetRefreshBtn();
-                    setTimeout(function() { location.reload(); }, 2000);
+                    handleUnauthenticated();
                     return Promise.reject('unauth');
                 }
                 return r.json();
@@ -5050,7 +5056,7 @@
                     dot.className = 'sdot error';
                     stxt.textContent = 'Session expired — please log in again.';
                     resetRefreshBtn();
-                    setTimeout(function() { location.reload(); }, 2000);
+                    handleUnauthenticated();
                     return Promise.reject('unauth');
                 }
                 return r.json();
@@ -5150,7 +5156,7 @@
                 dot.className = 'sdot error';
                 stxt.textContent = 'Session expired — please log in again.';
                 resetRefreshBtn();
-                setTimeout(function() { location.reload(); }, 2000);
+                handleUnauthenticated();
                 return Promise.reject('unauth');
             }
             if (r.status === 429) {
