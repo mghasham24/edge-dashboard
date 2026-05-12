@@ -129,18 +129,19 @@ export async function onRequestGet(context) {
       if (prev) prevGames = JSON.parse(prev.data).games || {};
     } catch(e) {}
 
-    // Fetch event-pages to collect ML market IDs + runner names
+    // Fetch event-pages in parallel with a 5s per-request timeout
     const gameData = {};
     const eventPageDebug = [];
 
-    for (let i = 0; i < parsedToday.length; i++) {
-      const { event, away, home } = parsedToday[i];
+    await Promise.all(parsedToday.map(async ({ event, away, home }) => {
       const suffix  = eventSuffix[event.eventId] || '';
       const gameKey = away + ' @ ' + home + (suffix ? ' ' + suffix : '');
-
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 5000);
       try {
-        const evRes = await fetch(FD_EVENT_URL(event.eventId), { headers });
-        if (!evRes.ok) { eventPageDebug.push({ name: event.name, evStatus: evRes.status }); continue; }
+        const evRes = await fetch(FD_EVENT_URL(event.eventId), { headers, signal: ctrl.signal });
+        clearTimeout(timer);
+        if (!evRes.ok) { eventPageDebug.push({ name: event.name, evStatus: evRes.status }); return; }
         const evData = await evRes.json();
 
         const markets = evData?.attachments?.markets || {};
@@ -159,10 +160,11 @@ export async function onRequestGet(context) {
 
         eventPageDebug.push({ name: event.name, evStatus: evRes.status, marketCount: Object.keys(markets).length, marketTypes: marketTypes.slice(0, 6), mlId: entry.mlId || null });
         if (entry.mlId) gameData[gameKey] = entry;
-      } catch(e) { eventPageDebug.push({ name: event.name, err: e.message }); }
-
-      if (i < parsedToday.length - 1) await new Promise(r => setTimeout(r, 150));
-    }
+      } catch(e) {
+        clearTimeout(timer);
+        eventPageDebug.push({ name: event.name, err: e.message });
+      }
+    }));
 
     if (debugMode === '2') {
       return new Response(JSON.stringify({ todayCount: todayEvents.length, gameDataCount: Object.keys(gameData).length, eventPageDebug }), { headers: { 'Content-Type': 'application/json' } });
