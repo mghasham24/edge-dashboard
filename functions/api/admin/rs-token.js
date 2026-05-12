@@ -8,7 +8,7 @@ export async function onRequestGet({ request, env }) {
     return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
   }
   const row = await env.DB.prepare(
-    "SELECT data FROM odds_cache WHERE cache_key='rs_auth_token'"
+    "SELECT data FROM odds_cache WHERE cache_key='meta:rs_auth_token'"
   ).first();
   if (!row?.data) return new Response(JSON.stringify({ error: 'No token' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
   let parsed;
@@ -17,13 +17,10 @@ export async function onRequestGet({ request, env }) {
   return new Response(JSON.stringify({ token: parsed.token, deviceUuid: parsed.deviceUuid || '' }), { headers: { 'Content-Type': 'application/json' } });
 }
 
-// Embedded push key — used by Tampermonkey bridge to keep the RS token fresh.
-// Not a high-security secret (endpoint only stores an RS auth token, not reads anything sensitive).
-const TM_PUSH_KEY = 'rax-bridge-9w2k5j7n';
-
 export async function onRequestPost({ request, env }) {
   const secret = new URL(request.url).searchParams.get('key');
-  if (!secret || (secret !== env.RS_TOKEN_SECRET && secret !== TM_PUSH_KEY)) {
+  const tmKey = env.TM_PUSH_KEY || 'rax-bridge-9w2k5j7n';
+  if (!secret || (secret !== env.RS_TOKEN_SECRET && secret !== tmKey)) {
     return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
   }
 
@@ -37,7 +34,7 @@ export async function onRequestPost({ request, env }) {
   const data = JSON.stringify({ token, deviceUuid: deviceUuid || '' });
 
   await env.DB.prepare(
-    "INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES ('rs_auth_token',?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at"
+    "INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES ('meta:rs_auth_token',?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at"
   ).bind(data, now).run();
 
   return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });

@@ -77,7 +77,7 @@ export async function onRequestPost({ request, env }) {
 
   // Block offensive email prefixes
   const localPart = email.split('@')[0];
-  const BLOCKED_PREFIXES = /fuck(?:palestine|israel|jews|arab|muslim|christ)/i;
+  const BLOCKED_PREFIXES = /(?:^|[^a-zA-Z])fuck(?:palestine|israel|jews|arab|muslim|christ)/i;
   if (BLOCKED_PREFIXES.test(localPart)) return err('Invalid email address.');
 
   const existing = await env.DB.prepare('SELECT id FROM users WHERE email=?').bind(email).first();
@@ -93,7 +93,7 @@ export async function onRequestPost({ request, env }) {
   }
 
   // Generate referral code for new user
-  const newRefCode = generateCode();
+  const newRefCode = await generateUniqueCode(env.DB);
 
   const hash = await hashPassword(password);
   const { meta } = await env.DB.prepare(
@@ -147,10 +147,15 @@ export async function onRequestPost({ request, env }) {
   return ok({ email, plan: 'free' }, 201, cookie(token, exp));
 }
 
-function generateCode() {
+async function generateUniqueCode(db) {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  return Array.from(crypto.getRandomValues(new Uint8Array(5)))
-    .map(b => chars[b % chars.length]).join('');
+  for (let i = 0; i < 10; i++) {
+    const code = Array.from(crypto.getRandomValues(new Uint8Array(5)))
+      .map(b => chars[b % chars.length]).join('');
+    const exists = await db.prepare('SELECT 1 FROM users WHERE referral_code=?').bind(code).first();
+    if (!exists) return code;
+  }
+  throw new Error('Failed to generate unique referral code');
 }
 
 // ── Helpers ───────────────────────────────────────────
