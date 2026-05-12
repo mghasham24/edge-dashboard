@@ -23,7 +23,7 @@ export async function onRequestPost({ request, env }) {
     'INSERT INTO password_resets (user_id, token, expires_at) VALUES (?,?,?) ON CONFLICT(user_id) DO UPDATE SET token=excluded.token, expires_at=excluded.expires_at'
   ).bind(user.id, token, expires).run();
 
-  const resetUrl = 'https://raxedge.com/reset?token=' + token;
+  const resetUrl = new URL(request.url).origin + '/reset?token=' + token;
 
   // Send email via Resend
   if (env.RESEND_API_KEY) {

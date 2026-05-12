@@ -63,9 +63,9 @@ async function doReset() {
     });
     var data = await res.json();
     if (res.ok) {
-      msg.textContent = 'Password updated! Redirecting...';
+      msg.textContent = 'Password updated! Logging you in...';
       msg.className = 'msg ok';
-      setTimeout(function(){ window.location.href = '/'; }, 1500);
+      setTimeout(function(){ window.location.href = '/'; }, 800);
     } else {
       msg.textContent = data.error || 'Something went wrong.';
       msg.className = 'msg err';

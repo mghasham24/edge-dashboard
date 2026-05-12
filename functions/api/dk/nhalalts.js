@@ -1,4 +1,4 @@
-import { getSession } from '../../_lib/session.js';
+import { getSessionOrCron } from '../../_lib/auth.js';
 // functions/api/dk/nhalalts.js
 // Fetches DraftKings alternate puck line + total lines for NHL games
 // Used as fallback fair value source when FD line ≠ Real Sports line
@@ -36,16 +36,9 @@ function fail(status, msg) {
 
 export async function onRequestGet(context) {
   const { request, env } = context;
-  const reqUrl = new URL(request.url);
-  const cronKey = reqUrl.searchParams.get('_cron_key');
-  let session;
-  if (cronKey && env.CRON_SECRET && cronKey === env.CRON_SECRET) {
-    session = { user_id: 0, plan: 'pro', is_admin: 1 };
-  } else {
-    session = await getSession(request, env.DB);
-    if (!session) return fail(401, 'Not authenticated');
-    if (session.plan !== 'pro' && !session.is_admin) return fail(403, 'Pro plan required');
-  }
+  const session = await getSessionOrCron(request, env);
+  if (!session) return fail(401, 'Not authenticated');
+  if (session.plan !== 'pro' && !session.is_admin) return fail(403, 'Pro plan required');
 
   const debugMode = reqUrl.searchParams.get('debug');
 

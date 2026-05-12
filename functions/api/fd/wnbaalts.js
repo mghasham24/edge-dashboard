@@ -1,4 +1,4 @@
-import { getSession } from '../../_lib/session.js';
+import { getSessionOrCron } from '../../_lib/auth.js';
 // functions/api/fd/wnbaalts.js
 // Fetches FanDuel real-time WNBA spread, ML, and total odds via FD's native API
 // Identical flow to nbaalts.js — only customPageId differs (wnba vs nba)
@@ -27,16 +27,9 @@ function parseEventName(name) {
 
 export async function onRequestGet(context) {
   const { request, env } = context;
-  const reqUrl = new URL(request.url);
-  const cronKey = reqUrl.searchParams.get('_cron_key');
-  let session;
-  if (cronKey && env.CRON_SECRET && cronKey === env.CRON_SECRET) {
-    session = { user_id: 0, plan: 'pro', is_admin: 1 };
-  } else {
-    session = await getSession(request, env.DB);
-    if (!session) return fail(401, 'Not authenticated');
-    if (session.plan !== 'pro' && !session.is_admin) return fail(403, 'Pro plan required');
-  }
+  const session = await getSessionOrCron(request, env);
+  if (!session) return fail(401, 'Not authenticated');
+  if (session.plan !== 'pro' && !session.is_admin) return fail(403, 'Pro plan required');
 
   const now = Math.floor(Date.now() / 1000);
   const cacheKey = 'fd_wnba_alts';

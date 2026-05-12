@@ -159,7 +159,7 @@ function genToken() {
 }
 
 function cookie(token, exp) {
-  return `session=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Expires=${new Date(exp*1000).toUTCString()}`;
+  return `__Host-session=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Expires=${new Date(exp*1000).toUTCString()}`;
 }
 
 function ok(data, status, setCookie) {

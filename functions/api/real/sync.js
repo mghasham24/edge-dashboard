@@ -1,4 +1,4 @@
-import { getSession } from '../../_lib/session.js';
+import { getSessionOrCron } from '../../_lib/auth.js';
 // functions/api/real/sync.js
 function hashidsEncode(number) {
   const saltChars = Array.from('realwebapp');
@@ -167,17 +167,9 @@ async function getRSAuth(env) {
 export async function onRequestGet(context) {
   const { request, env } = context;
 
-  // Cron bypass — allows alert-cron worker to warm RS cache without a user session
-  const reqUrl0 = new URL(request.url);
-  const cronKey = reqUrl0.searchParams.get('_cron_key');
-  let session;
-  if (cronKey && env.CRON_SECRET && cronKey === env.CRON_SECRET) {
-    session = { user_id: 0, plan: 'pro', is_admin: 1 };
-  } else {
-    session = await getSession(request, env.DB);
-    if (!session) return fail(401, 'Not authenticated');
-  }
-  const reqUrl = reqUrl0;
+  const session = await getSessionOrCron(request, env);
+  if (!session) return fail(401, 'Not authenticated');
+  const reqUrl = new URL(request.url);
   const fdKey = reqUrl.searchParams.get('sport');
 
   // Pro gate: non-free-sport syncs require a Pro plan (server-authoritative — not bypassable client-side)
@@ -189,6 +181,7 @@ export async function onRequestGet(context) {
   }
   const realSport = SPORT_MAP[fdKey] || fdKey;
   const debugMode = reqUrl.searchParams.get('debug');
+  if (debugMode && !session.is_admin) return fail(403, 'Admin only');
   const now = Math.floor(Date.now() / 1000);
 
   // Return empty markets for unsupported sports
