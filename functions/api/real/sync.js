@@ -135,7 +135,7 @@ function extractGames(gamesData) {
 }
 
 // Module-level auth cache — survives across requests within the same Worker instance
-// Re-read from D1 at most once every 5 minutes instead of on every request
+// Re-read from D1 at most once every 20 seconds so fresh tokens are picked up quickly
 let _rsAuthToken = '';
 let _rsDeviceUuid = '2e0a38e2-0ee8-4f93-9a34-218ac1d10161';
 let _rsAuthFetchedAt = 0;
@@ -174,7 +174,7 @@ export async function onRequestGet(context) {
 
   // Pro gate: non-free-sport syncs require a Pro plan (server-authoritative — not bypassable client-side)
   // Free promo — set date to future to activate, past to disable
-  const FREE_PROMO_END = new Date('2026-04-06T04:59:00Z');
+  const FREE_PROMO_END = new Date(env.FREE_PROMO_END || '2026-04-06T04:59:00Z');
   const isPromo = new Date() < FREE_PROMO_END;
   if (!FREE_PLAN_SPORTS.has(fdKey) && session.plan !== 'pro' && !session.is_admin && !isPromo) {
     return fail(403, 'Pro plan required');

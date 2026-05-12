@@ -4613,6 +4613,7 @@
     }
 
     function loadOdds() {
+        stopAllPollers();
         if (!isPro()) {
             currentSport = FREE_SPORTS.indexOf(currentSport) !== -1 ? currentSport : FREE_SPORTS[0];
             var mktEl = document.getElementById('mkt-filter');

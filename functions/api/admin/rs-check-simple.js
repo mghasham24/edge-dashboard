@@ -16,13 +16,6 @@ export async function onRequestGet({ request, env }) {
 
   if (!id) return new Response(JSON.stringify({ posted: true }), { headers: { 'Content-Type': 'application/json' } });
 
-  await env.DB.prepare(`
-    CREATE TABLE IF NOT EXISTS rs_posted_positions (
-      position_id TEXT PRIMARY KEY,
-      posted_at   INTEGER NOT NULL
-    )
-  `).run();
-
   const row = await env.DB.prepare(
     'SELECT position_id FROM rs_posted_positions WHERE position_id = ?'
   ).bind(id).first();

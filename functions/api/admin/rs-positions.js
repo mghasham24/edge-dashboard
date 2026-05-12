@@ -15,13 +15,6 @@ export async function onRequestPost({ request, env }) {
   const positions = body.positions || [];
   if (!positions.length) return new Response(JSON.stringify({ toPost: [] }), { headers: { 'Content-Type': 'application/json' } });
 
-  await env.DB.prepare(`
-    CREATE TABLE IF NOT EXISTS rs_posted_positions (
-      position_id TEXT PRIMARY KEY,
-      posted_at   INTEGER NOT NULL
-    )
-  `).run();
-
   const ids = positions.map(p => p.sharedPositionId).filter(Boolean);
   if (!ids.length) return new Response(JSON.stringify({ toPost: [] }), { headers: { 'Content-Type': 'application/json' } });
 

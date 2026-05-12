@@ -19,13 +19,6 @@ export async function onRequestPost({ request, env }) {
 
   const id = pos.sharedPositionId;
 
-  await env.DB.prepare(`
-    CREATE TABLE IF NOT EXISTS rs_posted_positions (
-      position_id TEXT PRIMARY KEY,
-      posted_at   INTEGER NOT NULL
-    )
-  `).run();
-
   const row = await env.DB.prepare(
     'SELECT position_id FROM rs_posted_positions WHERE position_id = ?'
   ).bind(id).first();

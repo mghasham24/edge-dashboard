@@ -40,11 +40,21 @@ export async function onRequestPost({ request, env }) {
       const matched = existingList.data.find(
         c => c.metadata && String(c.metadata.user_id) === String(session.user_id)
       );
-      customerId = (matched || existingList.data[0]).id;
-      // Ensure metadata has this user's id (may be missing on old customers)
-      await stripePost('customers/' + customerId, {
-        metadata: { user_id: String(session.user_id) }
-      }, env.STRIPE_SECRET_KEY);
+      if (matched) {
+        customerId = matched.id;
+        // Ensure metadata is stamped (may be missing on older customers)
+        await stripePost('customers/' + customerId, {
+          metadata: { user_id: String(session.user_id) }
+        }, env.STRIPE_SECRET_KEY);
+      } else {
+        // Email exists in Stripe but belongs to a different user — create fresh
+        const customer = await stripePost('customers', {
+          email: session.email,
+          metadata: { user_id: String(session.user_id) }
+        }, env.STRIPE_SECRET_KEY);
+        if (customer.error) return fail(500, 'Failed to create customer');
+        customerId = customer.id;
+      }
     } else {
       const customer = await stripePost('customers', {
         email: session.email,
