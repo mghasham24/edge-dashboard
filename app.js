@@ -56,7 +56,8 @@
         if (document.hidden) {
             stopAllPollers();
         } else {
-            // Restart the active poller when tab becomes visible again
+            // Only restart pollers if the user is actually logged in
+            if (!currentUser) return;
             if (evTabVisible) {
                 loadAllEvSports();
             } else {
