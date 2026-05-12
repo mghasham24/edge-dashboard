@@ -66,7 +66,7 @@ export async function onRequestGet({ request, env }) {
   const url  = new URL(request.url);
 
   // ?debug=1 — probe candidate paths sequentially, stop at first 200
-  if (url.searchParams.get('debug') === '1') {
+  if (url.searchParams.get('debug') === '1' && session.is_admin) {
     const candidates = [
       '/portfolio',
       '/portfolio/overview',
@@ -92,7 +92,7 @@ export async function onRequestGet({ request, env }) {
 
   // ?path=/some/endpoint — test a single specific path and return full body
   const testPath = url.searchParams.get('path');
-  if (testPath) {
+  if (testPath && session.is_admin) {
     const r = await probe(`${base}${testPath}`, hdrs, 5000);
     return json({ ok: true, connected: true, path: testPath, status: r.status, body: r.body });
   }
@@ -100,7 +100,7 @@ export async function onRequestGet({ request, env }) {
   // ?probepagination=LAST_ITEM_ID&ts=LAST_TRANSACTED_AT — targeted pagination probe
   // e.g. /api/real/portfolio?probepagination=history-3187-6373&ts=2026-04-06T01:40:32.355Z
   const probeId = url.searchParams.get('probepagination');
-  if (probeId) {
+  if (probeId && session.is_admin) {
     const ts = url.searchParams.get('ts') || '';
     // Only 6 candidates, sequential, 3s abort each = max ~18s
     const candidates = [

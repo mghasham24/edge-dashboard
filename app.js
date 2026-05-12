@@ -4037,7 +4037,7 @@
     }
 
     function escHtml(s) {
-        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
     async function loadReferralStats() {
@@ -4134,10 +4134,10 @@
                 '<div style="display:flex;gap:6px;flex-wrap:wrap">'
                 + '<button class="admin-btn logout-btn" onclick="adminForceLogout(' + u.id + ')">Logout</button>'
                 + banBtn
-                + '<button class="admin-btn del-btn" onclick="adminDeleteUser(' + u.id + ',\'' + u.email + '\')">Delete</button>'
+                + '<button class="admin-btn del-btn" data-uid="' + u.id + '" data-email="' + escHtml(u.email) + '" onclick="adminDeleteUser(+this.dataset.uid, this.dataset.email)">Delete</button>'
                 + '</div>';
             return '<tr>'
-                + '<td><span style="font-family:var(--mono);font-size:12px">' + u.email + '</span>' + adminBadge + bannedBadge + '</td>'
+                + '<td><span style="font-family:var(--mono);font-size:12px">' + escHtml(u.email) + '</span>' + adminBadge + bannedBadge + '</td>'
                 + '<td><select class="plan-sel" data-uid="' + u.id + '" onchange="adminChangePlan(this)"><option value="free"' + (u.plan === 'free' ? ' selected' : '') + '>Free</option><option value="pro"' + (u.plan === 'pro' ? ' selected' : '') + '>Pro</option></select></td>'
                 + '<td style="font-family:var(--mono);color:var(--muted)">' + u.sessions + '</td>'
                 + '<td style="font-family:var(--mono);font-size:12px;color:var(--muted)">' + date + '</td>'
