@@ -2530,13 +2530,16 @@
                 <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Enter your email and we'll send you a reset link.</div>
                 <input class="gate-inp" id="forgot-email" type="email" placeholder="Email address" autocomplete="email">
                 <button class="gate-btn" id="forgot-btn" onclick="submitForgot()">Send Reset Link</button>
-                <span class="gate-err" id="forgot-err"></span>
-                <span class="gate-ok" id="forgot-ok"></span>
-                <button onclick="hideForgotPassword()" style="background:none;border:none;color:var(--muted2);font-size:12px;cursor:pointer;margin-top:6px;font-family:var(--sans)">← Back to login</button>
+                <span class="gate-err" id="forgot-err" style="display:none"></span>
+                <div id="forgot-ok" style="display:none;margin-top:10px;color:#10b981;font-size:13px;font-weight:600;font-family:var(--mono)">✓ Reset link sent — check your email</div>
+                <div style="display:flex;gap:8px;margin-top:12px;width:100%">
+                    <button onclick="hideForgotPassword()" style="flex:1;background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--mono);font-size:11px;font-weight:600;padding:8px 0;border-radius:6px;cursor:pointer">← Login</button>
+                    <button onclick="closegate()" style="flex:1;background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--mono);font-size:11px;font-weight:600;padding:8px 0;border-radius:6px;cursor:pointer">← Home</button>
+                </div>
             </div>
             <span class="gate-err" id="gate-err"></span>
             <span class="gate-ok" id="gate-ok"></span>
-            <button onclick="closegate()" style="background:none;border:none;color:var(--muted2);font-size:12px;cursor:pointer;margin-top:4px;font-family:var(--sans)">← Back to home</button>
+            <button onclick="closegate()" id="gate-back-home" style="background:none;border:none;color:var(--muted2);font-size:12px;cursor:pointer;margin-top:4px;font-family:var(--sans)">← Back to home</button>
         </div>
     </div>
 
@@ -3661,8 +3664,12 @@
         fw.style.flexDirection = 'column';
         fw.style.alignItems = 'center';
         document.getElementById('forgot-email').value = email;
-        document.getElementById('forgot-err').textContent = '';
-        document.getElementById('forgot-ok').textContent = '';
+        document.getElementById('forgot-email').style.display = '';
+        document.getElementById('forgot-btn').style.display = '';
+        document.getElementById('forgot-btn').textContent = 'Send Reset Link';
+        document.getElementById('forgot-btn').disabled = false;
+        document.getElementById('forgot-err').style.display = 'none';
+        document.getElementById('forgot-ok').style.display = 'none';
         document.getElementById('forgot-email').focus();
     }
 
@@ -3676,11 +3683,11 @@
         var email = document.getElementById('forgot-email').value.trim().toLowerCase();
         var errEl = document.getElementById('forgot-err');
         var okEl  = document.getElementById('forgot-ok');
-        if (!email) { errEl.textContent = 'Please enter your email.'; return; }
+        if (!email) { errEl.textContent = 'Please enter your email.'; errEl.style.display = 'block'; return; }
         btn.textContent = 'Sending...';
         btn.disabled = true;
-        errEl.textContent = '';
-        okEl.textContent = '';
+        errEl.style.display = 'none';
+        okEl.style.display = 'none';
         try {
             await fetch('/api/auth/forgot', {
                 method: 'POST',
@@ -3688,9 +3695,9 @@
                 body: JSON.stringify({ email })
             });
         } catch(e) {}
-        okEl.textContent = 'If that email exists, a reset link has been sent.';
-        btn.textContent = 'Send Reset Link';
-        btn.disabled = false;
+        document.getElementById('forgot-email').style.display = 'none';
+        btn.style.display = 'none';
+        okEl.style.display = 'block';
     }
 
     function switchTab(tab) {
@@ -5609,7 +5616,14 @@
         // Sort by EV descending
         all.sort(function(a, b) { return (b._ev || 0) - (a._ev || 0); });
         if (!all.length) {
-            container.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:40px 0">No positive EV bets found. Navigate to a sport tab first or wait for preload.</div>';
+            var hasCache = Object.keys(evTabCache).length > 0;
+            container.innerHTML = '<div style="text-align:center;padding:60px 20px">'
+                + '<div style="font-size:28px;margin-bottom:12px">📭</div>'
+                + '<div style="font-family:var(--mono);font-weight:700;font-size:14px;color:var(--fg);margin-bottom:8px">No positive EV lines right now</div>'
+                + '<div style="font-size:12px;color:var(--muted);line-height:1.6">'
+                + (hasCache ? 'All current lines are negative EV — check back as odds move.' : 'Loading data… navigate to a sport tab first or wait for preload.')
+                + '</div>'
+                + '</div>';
             return;
         }
         var evUnit = parseFloat(document.getElementById('ev-unit-size').value) || 300;
