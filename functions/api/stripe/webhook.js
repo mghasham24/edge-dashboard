@@ -91,9 +91,17 @@ export async function onRequestPost({ request, env }) {
     }
 
     case 'customer.subscription.deleted': {
-      await env.DB.prepare(
-        'UPDATE users SET plan=\'free\', stripe_sub_id=NULL, pro_expires_at=NULL WHERE stripe_customer_id=?'
-      ).bind(obj.customer).run();
+      const now = Math.floor(Date.now() / 1000);
+      if (obj.trial_end && obj.trial_end > now) {
+        // Cancelled during active trial — keep pro until trial_end, just detach sub
+        await env.DB.prepare(
+          'UPDATE users SET stripe_sub_id=NULL, pro_expires_at=? WHERE stripe_customer_id=?'
+        ).bind(obj.trial_end, obj.customer).run();
+      } else {
+        await env.DB.prepare(
+          'UPDATE users SET plan=\'free\', stripe_sub_id=NULL, pro_expires_at=NULL WHERE stripe_customer_id=?'
+        ).bind(obj.customer).run();
+      }
       break;
     }
 
