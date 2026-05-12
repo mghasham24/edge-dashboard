@@ -63,6 +63,7 @@ export async function onRequestGet(context) {
   if (!session) return fail(401, 'Not authenticated');
   if (session.plan !== 'pro' && !session.is_admin) return fail(403, 'Pro plan required');
 
+  const reqUrl = new URL(request.url);
   const debugMode = reqUrl.searchParams.get('debug');
   const freshMode = reqUrl.searchParams.get('fresh'); // ?fresh=1 skips cache read (used on initial tab load)
 
