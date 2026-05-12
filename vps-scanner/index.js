@@ -16,7 +16,7 @@ const __dir      = dirname(fileURLToPath(import.meta.url));
 const SEEN_FILE  = join(__dir, 'seen-ids.json');
 const TOKEN_FILE = join(__dir, 'auth-token.json');
 
-const TG_TOKEN   = '8258151239:AAEAgFjbcYdpHU8Jyd6kR6xoj5uSiOvZDeY';
+const TG_TOKEN   = '8258151239:AAGX4Qvmb9GcY88Sil3713lSiAsQEla5Qbk';
 const TG_CHAT    = '5439959074';
 const MAX_PRICE  = 100;
 const TARGETS    = ['dimarco', 'mckennie', 'locatelli', 'grimaldo'];

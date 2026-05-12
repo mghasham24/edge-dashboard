@@ -63,7 +63,7 @@ setInterval(function() {
 const s = document.createElement('script');
 s.textContent = `
 (function() {
-  var TG_TOKEN  = '8258151239:AAEAgFjbcYdpHU8Jyd6kR6xoj5uSiOvZDeY';
+  var TG_TOKEN  = '8258151239:AAGX4Qvmb9GcY88Sil3713lSiAsQEla5Qbk';
   var TG_CHAT   = '5439959074';
   var MAX_PRICE = 100;
   var TARGETS   = ['dimarco', 'mckennie', 'locatelli', 'grimaldo'];
