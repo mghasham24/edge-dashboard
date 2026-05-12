@@ -168,9 +168,9 @@ export async function onRequestPost({ request, env }) {
     }
 
     case 'invoice.payment_failed': {
-      await env.DB.prepare(
-        'UPDATE users SET plan=\'free\' WHERE stripe_customer_id=?'
-      ).bind(obj.customer).run();
+      // Intentionally no-op. Stripe retries failed payments via its dunning schedule.
+      // Downgrade only happens when Stripe gives up and fires customer.subscription.deleted.
+      // Immediately dropping to free on first failure punishes users before Stripe even retries.
       break;
     }
   }
