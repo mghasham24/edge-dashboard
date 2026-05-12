@@ -2288,3 +2288,29 @@
         .ev-desktop-table { display: none !important; }
         .ev-mobile-grid { display: grid !important; }
     }
+
+    /* ── Accessibility ────────────────────────────────────────────────────────── */
+
+    /* Keyboard focus rings — visible to keyboard users, hidden for mouse/touch */
+    button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+    }
+
+    /* Minimum tap target size for mobile (44px per WCAG 2.5.5) */
+    @media (max-width: 768px) {
+        button, [role="button"], a.btn, .tab-btn, .sport-tab, .gate-btn,
+        .admin-btn, .lp-cta, .refresh-btn, .plan-sel {
+            min-height: 44px;
+        }
+        /* Suppress iOS tap highlight on interactive elements */
+        button, a, select, input { -webkit-tap-highlight-color: transparent; }
+    }
+
+    /* Disable animations for users who prefer reduced motion */
+    @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+            transition: none !important;
+            animation: none !important;
+        }
+    }

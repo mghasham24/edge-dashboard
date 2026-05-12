@@ -779,6 +779,31 @@
         }, type === 'error' ? 6000 : 4000);
     }
 
+    function showConfirm(msg, onYes) {
+        var overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px';
+        var box = document.createElement('div');
+        box.style.cssText = 'background:#18181f;border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:24px;max-width:360px;width:100%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,.6)';
+        var txt = document.createElement('p');
+        txt.style.cssText = 'color:#f0eff5;font-size:14px;line-height:1.5;margin-bottom:20px';
+        txt.textContent = msg;
+        var btns = document.createElement('div');
+        btns.style.cssText = 'display:flex;gap:10px;justify-content:center';
+        var cancel = document.createElement('button');
+        cancel.textContent = 'Cancel';
+        cancel.style.cssText = 'flex:1;padding:10px;border:1px solid rgba(255,255,255,.2);background:transparent;color:#f0eff5;border-radius:6px;cursor:pointer;font-size:13px;min-height:44px';
+        var confirm2 = document.createElement('button');
+        confirm2.textContent = 'Confirm';
+        confirm2.style.cssText = 'flex:1;padding:10px;border:none;background:#f05252;color:#fff;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;min-height:44px';
+        function close() { document.body.removeChild(overlay); }
+        cancel.onclick = close;
+        confirm2.onclick = function() { close(); onYes(); };
+        overlay.onclick = function(e) { if (e.target === overlay) close(); };
+        btns.appendChild(cancel); btns.appendChild(confirm2);
+        box.appendChild(txt); box.appendChild(btns);
+        overlay.appendChild(box); document.body.appendChild(overlay);
+    }
+
     async function submitAuth() {
         // Short delay so browser autofill (Safari/Chrome) commits values to the DOM
         // before we read them — without this, .value can be empty on first autofill tap
@@ -2350,7 +2375,10 @@
     }
 
     async function disconnectTelegram() {
-        if (!confirm('Disconnect Telegram? You will stop receiving alerts.')) return;
+        showConfirm('Disconnect Telegram? You will stop receiving alerts.', async function() { await _doDisconnectTelegram(); });
+        return;
+    }
+    async function _doDisconnectTelegram() {
         try {
             await fetch('/api/alerts/connect', { method: 'DELETE', credentials: 'same-origin' });
             _alertsVerified = false;
@@ -3124,7 +3152,10 @@
     }
 
     async function disconnectRealSports() {
-        if (!confirm('Disconnect your Real Sports account from RaxEdge?')) return;
+        showConfirm('Disconnect your Real Sports account from RaxEdge?', async function() { await _doDisconnectRealSports(); });
+        return;
+    }
+    async function _doDisconnectRealSports() {
         try {
             await fetch('/api/real/connect', { method: 'DELETE', credentials: 'same-origin' });
         } catch(e) {}
@@ -4179,7 +4210,10 @@
     }
 
     async function adminDeleteUser(id, email) {
-        if (!confirm('Permanently delete ' + email + '? This cannot be undone.')) return;
+        showConfirm('Permanently delete ' + email + '? This cannot be undone.', async function() { await _doAdminDeleteUser(id); });
+        return;
+    }
+    async function _doAdminDeleteUser(id) {
         await fetch('/api/admin/users?id=' + id, { method: 'DELETE', credentials: 'same-origin' });
         loadAdminUsers(document.getElementById('admin-search').value.trim(), 0, false);
         loadAdminStats();
