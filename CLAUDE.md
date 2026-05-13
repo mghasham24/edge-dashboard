@@ -30,7 +30,7 @@ Cloudflare Pages (static frontend) + Cloudflare Functions (API) + D1 (SQLite) + 
 | `functions/api/fd/wnbaalts.js` | FD WNBA spread/ML/total odds (native) |
 | `functions/api/fd/nhl.js` | FD NHL odds (native) |
 | `functions/api/fd/mlb.js` | FD MLB odds — parallelized with Promise.all + 5s AbortController timeout per game |
-| `functions/api/fd/fc.js` | DK soccer alt handicap odds for FC tab (subcat 13170) |
+| `functions/api/fd/fc.js` | DK soccer alt handicap odds for FC tab (subcat 13170). DK league IDs: EPL=40253, La Liga=40031, Serie A=40030, Ligue 1=40032, Bundesliga=40481 |
 | `functions/api/fd/rfi.js` | FD RFI (run first innings) odds |
 | `functions/api/dk/nbaalts.js` | DK NBA alt lines |
 | `functions/api/dk/nhalalts.js` | DK NHL alt lines |
@@ -45,7 +45,10 @@ Cloudflare Pages (static frontend) + Cloudflare Functions (API) + D1 (SQLite) + 
 | `functions/api/alerts/settings.js` | Telegram alert preferences |
 | `functions/api/alerts/connect.js` | Telegram connection/verify |
 | `workers/alert-cron/index.js` | Telegram bet alert cron — runs every 60s on Cloudflare |
-| `workers/rs-poster/` | Dead CF Worker (DO NOT redeploy — was firing blank 401s every minute) |
+| `workers/rs-poster/` | Dead CF Worker (DO NOT redeploy — deleted from CF dashboard, was 401-ing every minute) |
+| `rs-poster-node/index.js` | Local Node.js RS group auto-poster — runs on Mac via LaunchAgent, polls RS open positions, posts to RS group 61979. Token refreshed by Tampermonkey bridge on port 27182. Currently STOPPED (rate-limited). |
+| `vps-scanner/index.js` | Hetzner VPS auction scanner — scans RS FC player card auction for target players (dimarco, mckennie, locatelli, grimaldo) below max price 100. Receives live RS tokens pushed by Tampermonkey every 30s. Sends Telegram alerts directly via TG_TOKEN env var on the VPS. |
+| `tampermonkey-auction-alert.user.js` | Browser userscript (install in Tampermonkey on realsports.io). Detects FC auction listings, queues Telegram alerts, pushes live RS auth tokens to VPS scanner at 178.156.194.254:3001. NOTE: the CF relay endpoint (`/api/auction/alert`) was deleted — Telegram alerts now go through vps-scanner only. |
 | `migrations/0001_initial.sql` | Full D1 schema snapshot — use to recreate DB from scratch |
 
 ## Sports Model
@@ -65,6 +68,22 @@ Cloudflare Pages (static frontend) + Cloudflare Functions (API) + D1 (SQLite) + 
 - **soccer_fc**: users bet at RS. GREEN = DK novig > RS novig (RS offers longer odds than DK fair = value at RS).
 - Formula: `edge = (af - pred)`, `EV = (af/pred * (1-rake)) - 1`
 - Always preserve the `currentSport === 'soccer_fc'` checks in all edge/EV paths.
+
+## Deleted / Removed (do not recreate)
+- `auction-scanner/` — CF-based auction scanner, removed entirely. The `vps-scanner/` on Hetzner handles this now.
+- `functions/api/auction/alert.js` — CF relay endpoint for TM script Telegram alerts, deleted with auction-scanner. TM script's ALERT_URL now 404s — alerts go through vps-scanner directly.
+- `workers/rs-poster` CF Worker — deleted from Cloudflare dashboard. Local `rs-poster-node/` on Mac is the replacement.
+
+## Pricing
+- **Monthly**: $4.99/mo (14-day free trial for new users)
+- **Annual**: $39/yr (no trial)
+- Stripe price IDs: monthly = `env.STRIPE_MONTHLY_PRICE_ID`, annual = `env.STRIPE_ANNUAL_PRICE_ID`
+- Trial eligibility: `users.had_free_trial = 0` — set to 1 on first checkout, blocks second trial
+
+## Working With Claude
+- **Ask clarifying questions** when a request is ambiguous rather than inferring and acting. User explicitly wants this.
+- **Never cite Odds API credits** for FD/DK fetch decisions — those are native calls, zero cost. Only cite Odds API for UFC.
+- **Push staging first** (`git push origin main:staging`), then explicitly push main when user says so.
 
 ## Deploy Conventions
 - **Always push to `origin main:staging` first** — never push directly to `origin/main` without explicit user confirmation.
@@ -128,6 +147,9 @@ Cloudflare Pages (static frontend) + Cloudflare Functions (API) + D1 (SQLite) + 
 | Stripe events not updating plan | Check `processed_webhook_events` for duplicates; confirm `subscription.deleted` event fires |
 | D1 schema missing table | Run `npx wrangler d1 execute edge-db --remote --file=migrations/0001_initial.sql` |
 
+## Audit 1 — Completed (reference only)
+All Audit 1 items are done: rate limiting on login/forgot, hashPassword extracted to `_lib/password.js`, annual plan ($39/yr), trial-ending nudge, PWA service worker, `getSession` extracted to `_lib/session.js`, Stripe helpers to `_lib/stripe.js`, index.html split into app.js + app.css, email plaintext alts, BLOCKED_PREFIXES regex, PostHog error tracking, refresh spinner, empty state for 0 EV lines, referral credit race fix, and more. Do not re-suggest these.
+
 ## Open Audit Backlog (Audit 2 — 2026-05-12)
 Items without ✅ are unfinished. "whats next" = first uncompleted item.
 
@@ -162,11 +184,10 @@ Items without ✅ are unfinished. "whats next" = first uncompleted item.
 - [ ] `admin/cron-debug.js` returns plain text `'Unauthorized'` instead of JSON
 
 ## Feature Ideas (not yet built)
-- Live NBA scores/quarter/clock from FD event-page API (zero extra requests — data already in response)
-- RS WebSocket payout API for exact EV (`PredictionMarketGetExpectedPayout`) — replaces rake approximation
-- Slippage-adjusted EV for large RS bets (~1% shift per 1k Rax at 100k volume)
+- Live NBA scores/quarter/clock from FD event-page API (zero extra requests — data already in response; start with debug=3 on fd/nbaalts.js)
+- RS WebSocket payout API for exact EV (`PredictionMarketGetExpectedPayout`, event `wss://web.realsports.io/socket.io/`) — replaces rake approximation; use REAL_AUTH_TOKEN with $10 stake per market
+- Slippage-adjusted EV for large RS bets (~1% shift per 1k Rax at 100k volume; needs more data before building)
 - URL deeplinks for sport/tab
 - Referral leaderboard
 - Default to OS light/dark preference
-- Annual plan toggle in upgrade modal
 - Auto-login after password reset
