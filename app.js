@@ -186,7 +186,6 @@
         'Seattle Storm':'https://a.espncdn.com/i/teamlogos/wnba/500/sea.png',
         'Washington Mystics':'https://a.espncdn.com/i/teamlogos/wnba/500/wsh.png',
         'Toronto Tempo':'https://a.espncdn.com/i/teamlogos/wnba/500/tor.png',
-        'Phoenix Fire':'https://a.espncdn.com/i/teamlogos/wnba/500/phxf.png',
         'Portland Fire':'https://a.espncdn.com/i/teamlogos/wnba/500/por.png',
         // NHL (DK uses abbreviated city names e.g. "BOS Bruins")
         'Anaheim Ducks':'https://a.espncdn.com/i/teamlogos/nhl/500/ana.png','ANA Ducks':'https://a.espncdn.com/i/teamlogos/nhl/500/ana.png',
