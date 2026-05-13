@@ -49,6 +49,13 @@ Cloudflare Pages (static frontend) + Cloudflare Functions (API) + D1 (SQLite) + 
 | `rs-poster-node/index.js` | Local Node.js RS group auto-poster — runs on Mac via LaunchAgent, polls RS open positions, posts to RS group 61979. Token refreshed by Tampermonkey bridge on port 27182. Currently STOPPED (rate-limited). |
 | `vps-scanner/index.js` | Hetzner VPS auction scanner — scans RS FC player card auction for target players (dimarco, mckennie, locatelli, grimaldo) below max price 100. Receives live RS tokens pushed by Tampermonkey every 30s. Sends Telegram alerts directly via TG_TOKEN env var on the VPS. |
 | `tampermonkey-auction-alert.user.js` | Browser userscript (install in Tampermonkey on realsports.io). Detects FC auction listings, queues Telegram alerts, pushes live RS auth tokens to VPS scanner at 178.156.194.254:3001. NOTE: the CF relay endpoint (`/api/auction/alert`) was deleted — Telegram alerts now go through vps-scanner only. |
+| `tampermonkey-rs-poster.user.js` | Browser-based RS auto-poster — polls RS open positions every 60s from within the browser (realsports.io tab) and posts new ones to RS group 61979. Alternative to rs-poster-node when running in browser. |
+| `tampermonkey-rs-token.js` | Pushes user's live RS auth token to `/api/admin/rs-token?key=RS_TOKEN_SECRET` silently whenever they use RS. Used to keep the shared `RS_AUTH_TOKEN` fresh without manual rotation. |
+| `tampermonkey-token-bridge.user.js` | Pushes RS auth token every 30s + full market data every 4min to RaxEdge. TOKEN_URL = `/api/admin/rs-token?key=rax-bridge-9w2k5j7n`, SYNC_URL = `/api/real/sync?_tm_key=rax-bridge-9w2k5j7n`. |
+| `functions/api/admin/rs-token.js` | POST: receives RS token from TM bridge, stores in D1 as `odds_cache` key `meta:rs_auth_token`. GET: retrieves stored token. Protected by `RS_TOKEN_SECRET` env var or `TM_PUSH_KEY` (currently hardcoded `rax-bridge-9w2k5j7n`). |
+| `chrome.css` | Minimal shared CSS for standalone pages: `reset.html`, `terms.html`, `privacy.html`. Not the main app CSS. |
+| `sw.js` | PWA service worker — app-shell cache, offline fallback. |
+| `tests/webhook.test.js` | Vitest test suite for Stripe webhook handler (12 tests). Run with `npx vitest`. |
 | `migrations/0001_initial.sql` | Full D1 schema snapshot — use to recreate DB from scratch |
 
 ## Sports Model
@@ -70,9 +77,10 @@ Cloudflare Pages (static frontend) + Cloudflare Functions (API) + D1 (SQLite) + 
 - Always preserve the `currentSport === 'soccer_fc'` checks in all edge/EV paths.
 
 ## Deleted / Removed (do not recreate)
-- `auction-scanner/` — CF-based auction scanner, removed entirely. The `vps-scanner/` on Hetzner handles this now.
+- `auction-scanner/` — CF-based auction scanner, removed from git. **The directory still exists on disk** with leftover files (`seen-ids.json`, `auth-state.json`, etc.) but is not tracked or deployed. The `vps-scanner/` on Hetzner handles this now.
 - `functions/api/auction/alert.js` — CF relay endpoint for TM script Telegram alerts, deleted with auction-scanner. TM script's ALERT_URL now 404s — alerts go through vps-scanner directly.
 - `workers/rs-poster` CF Worker — deleted from Cloudflare dashboard. Local `rs-poster-node/` on Mac is the replacement.
+- **Railway** — a Railway service called `edge-dashboard` was connected to the GitHub repo and appears as failing checks on PRs. It was deleted. The 3/4 check status on GitHub is Railway noise — ignore it. Cloudflare Pages is the only real deployment.
 
 ## Pricing
 - **Monthly**: $4.99/mo (14-day free trial for new users)
@@ -109,13 +117,29 @@ Cloudflare Pages (static frontend) + Cloudflare Functions (API) + D1 (SQLite) + 
 | Var | Used by |
 |---|---|
 | `RS_AUTH_TOKEN` | `real/sync.js` — shared RS token for Best EV. If Best EV empty across all sports, check this first. |
-| `CRON_SECRET` | `alert-cron`, all `/api/real/sync` and odds cron calls |
+| `CRON_SECRET` | `alert-cron`, all `/api/real/sync` and odds cron calls via `?_cron_key=` |
+| `TM_PUSH_KEY` | TM token bridge key — currently hardcoded `rax-bridge-9w2k5j7n` in code (audit 2 item to fix) |
+| `RS_TOKEN_SECRET` | Admin-only key for `/api/admin/rs-token` GET endpoint |
 | `SITE_URL` | `alert-cron` — e.g. `https://raxedge.com` |
-| `TELEGRAM_BOT_TOKEN` | `alert-cron` — main alerts bot |
+| `TELEGRAM_BOT_TOKEN` | `alert-cron` — **main betting alerts bot** (CF Worker). Different from vps-scanner's TG bot. |
 | `FREE_PROMO_END` | Optional override for promo window |
 | `STRIPE_SECRET_KEY` | Stripe API |
 | `STRIPE_WEBHOOK_SECRET` | Webhook signature verification |
+| `STRIPE_ANNUAL_PRICE_ID` | Stripe price ID for $39/yr plan |
 | `RESEND_API_KEY` | Email (register, forgot) |
+
+### Two Telegram Bots
+- **Main alerts bot** (`TELEGRAM_BOT_TOKEN` in CF Worker `alert-cron`) — sends bet EV alerts to users who connected Telegram in settings.
+- **Auction/VPS bot** (`TG_TOKEN` env var on Hetzner VPS) — sends FC auction alerts via `vps-scanner`. AuctionBot (`@RealSAuctionBot`), token rotated 2026-05-13. Completely separate from the main bot.
+
+### RS Token Flow
+RS auth token can be sourced two ways:
+1. **TM token bridge** (`tampermonkey-token-bridge.user.js`) — pushes token to `/api/admin/rs-token` every 30s while user has RS open in browser. Stored in D1 as `odds_cache` key `meta:rs_auth_token`.
+2. **`RS_AUTH_TOKEN` CF env var** — manual fallback. `real/sync.js` checks D1 first, falls back to env var.
+
+**Hetzner VPS is IP-blocked by RS API** — cannot make RS API calls from the VPS directly. That's why:
+- `vps-scanner` only hits the public RS auction (not auth-gated RS API)
+- `rs-poster-node` runs on Mac (residential IP), not the VPS
 
 ## Coding Conventions
 - **XSS**: Always use `escHtml()` for any user data in innerHTML. `escHtml()` encodes `<`, `>`, `&`, `"`, `'`. Use `data-*` attributes for passing values into onclick handlers — never interpolate into JS strings.
@@ -155,12 +179,12 @@ Items without ✅ are unfinished. "whats next" = first uncompleted item.
 
 **Critical**
 - [ ] PBKDF2 iterations still 100k — `ITERATIONS = 600000`, keep `LEGACY_ITERATIONS = 100000`, rehash on login
-- [ ] `/api/real/public.js` has no auth — open RS API relay
+- ✅ `/api/real/public.js` has no auth — already fixed, uses `getSession`
 - [ ] Stripe webhook not idempotent for referrer reward (double-reward on retry)
 - [ ] Webhook signature compare not constant-time (`===`)
 
 **High**
-- [ ] `alert-cron` ET offset was hardcoded — confirm Intl fix is live
+- ✅ `alert-cron` ET offset hardcoded — fixed with `Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York' })`
 - [ ] N+1 queries in `admin/stats.js` (14-day loop) and `admin/users.js` (per-user session count)
 - [ ] `admin/users.js` PATCH accepts arbitrary plan values (no validation)
 - [ ] DELETE `/api/admin/users` doesn't cascade — orphan rows in 9 tables
@@ -171,7 +195,8 @@ Items without ✅ are unfinished. "whats next" = first uncompleted item.
 - [ ] `real/sync.js` has 9 debug modes with no admin gate
 - [ ] Stripe customer fallback creates wrong match — should create fresh customer
 - [ ] `register.js` `generateCode` doesn't retry on collision
-- [ ] `TM_PUSH_KEY` hardcoded in two server files — should be `env.TM_PUSH_KEY`
+- ✅ Cron-key-vs-session preamble — extracted to `_lib/auth.js` as `getSessionOrCron()`
+- [ ] `TM_PUSH_KEY` hardcoded in `rs-token.js` — should be `env.TM_PUSH_KEY`
 - [ ] `forgot.js` reset URL hardcoded to `https://raxedge.com` (breaks on staging)
 - [ ] Login cookie missing `__Host-` prefix
 - [ ] Sessions table never garbage-collected — no cron to delete expired rows
