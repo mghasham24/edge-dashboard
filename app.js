@@ -185,6 +185,7 @@
         'Phoenix Mercury':'https://a.espncdn.com/i/teamlogos/wnba/500/phx.png',
         'Seattle Storm':'https://a.espncdn.com/i/teamlogos/wnba/500/sea.png',
         'Washington Mystics':'https://a.espncdn.com/i/teamlogos/wnba/500/wsh.png',
+        'Golden State Valkyries':'https://a.espncdn.com/i/teamlogos/wnba/500/gsv.png',
         'Toronto Tempo':'https://a.espncdn.com/i/teamlogos/wnba/500/tor.png',
         'Portland Fire':'https://a.espncdn.com/i/teamlogos/wnba/500/por.png',
         // NHL (DK uses abbreviated city names e.g. "BOS Bruins")
@@ -401,6 +402,12 @@
         'Sporting Kansas City':'#002b5c','Houston Dynamo':'#f4911e',
         'San Jose Earthquakes':'#003087','New England Revolution':'#ce0e2d',
         'Charlotte FC':'#1a85c8','St. Louis City':'#d42929','Austin FC':'#00b140',
+        // WNBA
+        'Atlanta Dream':'#c8102e','Chicago Sky':'#418fde','Connecticut Sun':'#e56020',
+        'Dallas Wings':'#002b5c','Indiana Fever':'#e03a3e','Las Vegas Aces':'#c8102e',
+        'Los Angeles Sparks':'#552583','Minnesota Lynx':'#0c2340','New York Liberty':'#00471b',
+        'Phoenix Mercury':'#cb6015','Seattle Storm':'#2c5234','Washington Mystics':'#e31837',
+        'Golden State Valkyries':'#1d428a','Toronto Tempo':'#7b3f8c','Portland Fire':'#cc0000',
     };
 
     function teamColorHue(name) {
