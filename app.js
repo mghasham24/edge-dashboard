@@ -2876,6 +2876,10 @@
 
         // Re-fetch fresh odds for all sports in parallel — this evicts finished games from rawRowsBySport
         evLoadingInProgress = true;
+        var _evLoadTimeout = setTimeout(function() {
+            evLoadingInProgress = false;
+            if (btn) { btn.disabled = false; btn.textContent = '↺ Refresh'; }
+        }, 25000);
         var noSpread = ['mma_mixed_martial_arts', 'baseball_mlb'];
         var freshSyncData = {}; // sport key -> RS sync response fetched in parallel with odds
         await Promise.all(sportsToLoad.map(async function(s) {
@@ -3158,6 +3162,7 @@
             }
             done++; updateStatus();
         } catch(e) {}
+        clearTimeout(_evLoadTimeout);
         evLoadingInProgress = false;
         renderEvTab();
         if (btn) { btn.disabled = false; btn.textContent = '↺ Refresh'; }
