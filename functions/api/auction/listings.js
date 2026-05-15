@@ -14,8 +14,9 @@ export async function onRequestGet({ request, env }) {
     });
   }
 
-  // Get RS auth token — D1 first, env var fallback
-  let authInfo = null;
+  // Get RS auth token + device UUID — D1 first (freshest from TM bridge), env var fallback
+  let authInfo   = null;
+  let deviceUuid = env.REAL_DEVICE_UUID || '2e0a38e2-0ee8-4f93-9a34-218ac1d10161';
   try {
     const row = await env.DB.prepare(
       "SELECT data FROM odds_cache WHERE cache_key='meta:rs_auth_token'"
@@ -23,6 +24,7 @@ export async function onRequestGet({ request, env }) {
     if (row?.data) {
       const parsed = JSON.parse(row.data);
       if (parsed.token) authInfo = parsed.token;
+      if (parsed.deviceUuid) deviceUuid = parsed.deviceUuid;
     }
   } catch (_) {}
 
@@ -34,8 +36,6 @@ export async function onRequestGet({ request, env }) {
     });
   }
 
-  const [userId, deviceId, token] = authInfo.split('!');
-
   const headers = {
     'Accept': 'application/json',
     'Content-Type': 'application/json',
@@ -43,7 +43,7 @@ export async function onRequestGet({ request, env }) {
     'Referer': 'https://realsports.io/',
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15',
     'real-auth-info': authInfo,
-    'real-device-uuid': deviceId || '2e0a38e2-0ee8-4f93-9a34-218ac1d10161',
+    'real-device-uuid': deviceUuid,
     'real-device-type': 'desktop_web',
     'real-version': '30',
   };

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RS Pack Alert
 // @namespace    raxedge
-// @version      1.0
+// @version      2.0
 // @description  Alerts via Telegram when target FC/UFC player cards are pulled in the RS global marketplace
 // @match        https://realsports.io/*
 // @match        https://www.realsports.io/*
@@ -46,10 +46,18 @@ s.textContent = `
 
   var TARGETS       = ['dimarco', 'mckennie', 'locatelli', 'grimaldo', 'maia'];
   var PACK_SEEN_KEY = 'rs_pack_alert_seen_v2';
-  var FRESH_MS      = 10 * 60 * 1000;  // ignore cards older than 10 min
-  var POLL_MS       = 3  * 60 * 1000;  // poll every 3 min
-  var GC_SOCCER_URL = 'https://web.realapp.com/globalcards/soccer/?view=new&sort=new&pageSize=50&limit=50';
-  var GC_UFC_URL    = 'https://web.realapp.com/globalcards/ufc/?view=new&sort=new&pageSize=50&limit=50';
+  var FRESH_MS      = 10 * 60 * 1000;
+  var POLL_MS       = 3  * 60 * 1000;
+  var FRESH_MS      = 10 * 60 * 1000;
+
+  // Entity IDs captured from live RS traffic — needed for proactive polling
+  var ENTITY_MAP = {
+    dimarco:   { entityId: '733389', sport: 'soccer', apiUrl: 'https://web.realapp.com/collection/soccer/season/2025/entity/play/globalcards' },
+    mckennie:  { entityId: '734301', sport: 'soccer', apiUrl: 'https://web.realapp.com/collection/soccer/season/2025/entity/play/globalcards' },
+    grimaldo:  { entityId: '732879', sport: 'soccer', apiUrl: 'https://web.realapp.com/collection/soccer/season/2025/entity/play/globalcards' },
+    locatelli: { entityId: '734326', sport: 'soccer', apiUrl: 'https://web.realapp.com/collection/soccer/season/2025/entity/play/globalcards' },
+    maia:      { entityId: '326',    sport: 'ufc',    apiUrl: 'https://web.realapp.com/collection/ufc/season/2023/entity/play/globalcards' },
+  };
 
   var _capturedHeaders = null;
 
@@ -74,7 +82,7 @@ s.textContent = `
     } catch(e) {}
   }
 
-  // ── Extract player name from global card object ──
+  // ── Player name extraction ──
 
   function getPackPlayerName(card) {
     if (card.label && /\\s/.test(card.label) && !/^\\d/.test(card.label)) return card.label;
@@ -111,7 +119,7 @@ s.textContent = `
     return (!isNaN(n) && n > 0) ? n : null;
   }
 
-  // ── Check cards for target players ──
+  // ── Check cards + send alerts ──
 
   function checkCards(cards, sport) {
     if (!cards || !cards.length) return;
@@ -135,7 +143,7 @@ s.textContent = `
       var rating  = cardRating(card) || cardRating(card.card) || cardRating(card.play);
       var owner   = card.username || card.ownerUsername || (card.user && card.user.username) || '';
       var label   = sport === 'ufc' ? 'UFC' : 'FC';
-      var msg = '🃏 <b>Pack Alert</b> (' + label + ')\\n'
+      var msg = '\\uD83C\\uDCCF <b>Pack Alert</b> (' + label + ')\\n'
               + name + (rarity ? ' (' + rarity + ')' : '')
               + (rating != null ? ' | Rating: ' + rating : '')
               + (owner ? '\\nOwned by: ' + owner : '');
@@ -145,7 +153,7 @@ s.textContent = `
     if (changed) saveSeen(seen);
   }
 
-  // ── Intercept fetch — catches globalcards as RS loads them + captures auth headers ──
+  // ── Intercept fetch — catches globalcards whenever RS loads them ──
 
   var _origFetch = window.fetch;
   window.fetch = function(input, init) {
@@ -179,7 +187,7 @@ s.textContent = `
     });
   };
 
-  // ── Proactive polling every 3 min (runs only when auth headers are captured) ──
+  // ── Proactive polling — uses credentials so RS session cookies are included ──
 
   function makeHeaders() {
     var h = Object.assign({}, _capturedHeaders || {});
@@ -189,27 +197,29 @@ s.textContent = `
 
   async function pollGlobalCards() {
     if (!_capturedHeaders) return;
-    var endpoints = [
-      { url: GC_SOCCER_URL, sport: 'soccer' },
-      { url: GC_UFC_URL,    sport: 'ufc'    },
-    ];
-    for (var i = 0; i < endpoints.length; i++) {
-      var ep = endpoints[i];
+    var targets = Object.keys(ENTITY_MAP);
+    for (var i = 0; i < targets.length; i++) {
+      var name = targets[i];
+      var info = ENTITY_MAP[name];
+      var url = info.apiUrl + '?filterEntityId=' + info.entityId + '&filterEntityType=player&rarity=all&sort=new&pageSize=50';
       try {
-        var res = await _origFetch(ep.url, { headers: makeHeaders() });
-        if (!res.ok) { console.log('[Pack Alert] poll', ep.sport, res.status); continue; }
+        var res = await _origFetch(url, {
+          headers:     makeHeaders(),
+          credentials: 'include',   // include realapp.com session cookies
+        });
+        if (!res.ok) { console.log('[Pack Alert] poll', name, res.status); continue; }
         var data  = await res.json();
         var cards = data.cards || data.items || data.data || data.plays || [];
-        console.log('[Pack Alert] poll', ep.sport, '->', cards.length, 'card(s)');
-        checkCards(cards, ep.sport);
+        console.log('[Pack Alert] poll', name, '->', cards.length, 'card(s)');
+        checkCards(cards, info.sport);
       } catch(e) {
-        console.log('[Pack Alert] poll error', ep.sport, ':', e.message);
+        console.log('[Pack Alert] poll error', name, ':', e.message);
       }
     }
   }
 
   setInterval(pollGlobalCards, POLL_MS);
-  console.log('[Pack Alert] active v1.0, targets:', TARGETS.join(', '));
+  console.log('[Pack Alert] v2.0 active, targets:', TARGETS.join(', '));
 
 })();
 `;
