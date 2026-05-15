@@ -1,4 +1,4 @@
-// functions/api/auction/globalcards.js
+// functions/api/auction/globalcards.js  v2
 // Proxies RS global card feed for the VPS pack-alert scanner.
 // VPS cannot call RS API directly (IP blocked) — this CF Worker acts as relay.
 // Protected by AUCTION_PUSH_SECRET env var (same key as vps-scanner).
