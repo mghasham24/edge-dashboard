@@ -232,7 +232,8 @@ async function fetchGlobalCards(sport) {
   const res = await fetch(CF_GLOBALCARDS_URL(sport));
   if (res.status === 401) { tokenStale = true; return null; }
   if (!res.ok) { console.error('vps-scanner: globalcards error', sport, res.status); return null; }
-  return res.json();
+  try { return await res.json(); }
+  catch (e) { console.error('vps-scanner: globalcards parse error', sport, e.message); return null; }
 }
 
 // ─── Poll loops ───────────────────────────────────────────────────────────────
