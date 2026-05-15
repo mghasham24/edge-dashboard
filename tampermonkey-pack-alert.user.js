@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RS Pack Alert
 // @namespace    raxedge
-// @version      2.0
+// @version      2.1
 // @description  Alerts via Telegram when target FC/UFC player cards are pulled in the RS global marketplace
 // @match        https://realsports.io/*
 // @match        https://www.realsports.io/*
@@ -47,19 +47,6 @@ s.textContent = `
   var TARGETS       = ['dimarco', 'mckennie', 'locatelli', 'grimaldo', 'maia'];
   var PACK_SEEN_KEY = 'rs_pack_alert_seen_v2';
   var FRESH_MS      = 10 * 60 * 1000;
-  var POLL_MS       = 3  * 60 * 1000;
-  var FRESH_MS      = 10 * 60 * 1000;
-
-  // Entity IDs captured from live RS traffic — needed for proactive polling
-  var ENTITY_MAP = {
-    dimarco:   { entityId: '733389', sport: 'soccer', apiUrl: 'https://web.realapp.com/collection/soccer/season/2025/entity/play/globalcards' },
-    mckennie:  { entityId: '734301', sport: 'soccer', apiUrl: 'https://web.realapp.com/collection/soccer/season/2025/entity/play/globalcards' },
-    grimaldo:  { entityId: '732879', sport: 'soccer', apiUrl: 'https://web.realapp.com/collection/soccer/season/2025/entity/play/globalcards' },
-    locatelli: { entityId: '734326', sport: 'soccer', apiUrl: 'https://web.realapp.com/collection/soccer/season/2025/entity/play/globalcards' },
-    maia:      { entityId: '326',    sport: 'ufc',    apiUrl: 'https://web.realapp.com/collection/ufc/season/2023/entity/play/globalcards' },
-  };
-
-  var _capturedHeaders = null;
 
   // ── Seen IDs ──
 
@@ -157,18 +144,6 @@ s.textContent = `
 
   var _origFetch = window.fetch;
   window.fetch = function(input, init) {
-    try {
-      var url = (typeof input === 'string' ? input : (input && input.url)) || '';
-      if (url.indexOf('realapp.com') !== -1 && init && init.headers) {
-        var h   = init.headers;
-        var ai  = h['real-auth-info'] || h['Real-Auth-Info'];
-        if (ai && !_capturedHeaders) {
-          _capturedHeaders = Object.assign({}, h);
-          console.log('[Pack Alert] auth captured, prefix:', ai.split('!')[0]);
-        }
-      }
-    } catch(e) {}
-
     return _origFetch.apply(this, arguments).then(function(res) {
       try {
         var url = (typeof input === 'string' ? input : (input && input.url)) || '';
@@ -187,39 +162,7 @@ s.textContent = `
     });
   };
 
-  // ── Proactive polling — uses credentials so RS session cookies are included ──
-
-  function makeHeaders() {
-    var h = Object.assign({}, _capturedHeaders || {});
-    h['real-request-token'] = Math.random().toString(36).slice(2, 18);
-    return h;
-  }
-
-  async function pollGlobalCards() {
-    if (!_capturedHeaders) return;
-    var targets = Object.keys(ENTITY_MAP);
-    for (var i = 0; i < targets.length; i++) {
-      var name = targets[i];
-      var info = ENTITY_MAP[name];
-      var url = info.apiUrl + '?filterEntityId=' + info.entityId + '&filterEntityType=player&rarity=all&sort=new&pageSize=50';
-      try {
-        var res = await _origFetch(url, {
-          headers:     makeHeaders(),
-          credentials: 'include',   // include realapp.com session cookies
-        });
-        if (!res.ok) { console.log('[Pack Alert] poll', name, res.status); continue; }
-        var data  = await res.json();
-        var cards = data.cards || data.items || data.data || data.plays || [];
-        console.log('[Pack Alert] poll', name, '->', cards.length, 'card(s)');
-        checkCards(cards, info.sport);
-      } catch(e) {
-        console.log('[Pack Alert] poll error', name, ':', e.message);
-      }
-    }
-  }
-
-  setInterval(pollGlobalCards, POLL_MS);
-  console.log('[Pack Alert] v2.0 active, targets:', TARGETS.join(', '));
+  console.log('[Pack Alert] v2.1 active (passive intercept), targets:', TARGETS.join(', '));
 
 })();
 `;
