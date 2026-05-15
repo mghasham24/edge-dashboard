@@ -16,20 +16,27 @@ const __dir      = dirname(fileURLToPath(import.meta.url));
 const SEEN_FILE  = join(__dir, 'seen-ids.json');
 const TOKEN_FILE = join(__dir, 'auth-token.json');
 
-const TG_TOKEN   = process.env.TG_TOKEN  || '';
-const TG_CHAT    = process.env.TG_CHAT   || '5439959074';
-const MAX_PRICE  = 100;
-const TARGETS    = ['dimarco', 'mckennie', 'locatelli', 'grimaldo'];
-const POLL_MS    = 2 * 60 * 1000;
-const PORT       = 3001;
+const TG_TOKEN    = process.env.TG_TOKEN  || '';
+const TG_CHAT     = process.env.TG_CHAT   || '5439959074';
+const MAX_PRICE   = 100;
+const TARGETS     = ['dimarco', 'mckennie', 'locatelli', 'grimaldo'];
+const POLL_MS     = 2 * 60 * 1000;
+const PORT        = 3001;
 const PUSH_SECRET = process.env.PUSH_SECRET || 'raxedge-vps-2026';
+const CF_LISTINGS_URL = `https://raxedge.com/api/auction/listings?key=${PUSH_SECRET}`;
 
 // ─── Token state (pushed from Tampermonkey) ───────────────────────────────────
 
 let authInfo   = null; // real-auth-info header value
-let deviceUuid = null; // real-device-uuid header value
+let deviceUuid = process.env.DEVICE_UUID || null; // real-device-uuid header value
 let cookieStr  = '';   // cookie header from browser session
 let tokenStale = false;
+
+// Bootstrap from env vars — no expiry, permanent fallback
+if (process.env.AUTH_INFO) {
+  authInfo = process.env.AUTH_INFO;
+  deviceUuid = process.env.DEVICE_UUID || '2e0a38e2-0ee8-4f93-9a34-218ac1d10161';
+}
 
 function saveToken(ai, du, ck) {
   writeFileSync(TOKEN_FILE, JSON.stringify({ authInfo: ai, deviceUuid: du, cookie: ck, at: Date.now() }));
@@ -96,14 +103,8 @@ function rsHeaders() {
 }
 
 async function fetchListings() {
-  if (!authInfo) {
-    console.log('vps-scanner: no token yet — waiting for Tampermonkey push');
-    return null;
-  }
-  const res = await fetch(
-    'https://web.realapp.com/cardmarketplacelistings?sport=soccer&sort=new&offset=0',
-    { headers: rsHeaders() }
-  );
+  // Route through CF Worker — VPS IP is blocked by RS directly
+  const res = await fetch(CF_LISTINGS_URL);
   if (res.status === 401) {
     console.log('vps-scanner: 401 — token stale, waiting for next push');
     tokenStale = true;
