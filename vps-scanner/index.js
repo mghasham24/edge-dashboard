@@ -27,7 +27,7 @@ const PACK_FRESH_MS = 10 * 60 * 1000;    // ignore pack cards older than 10 min
 const PORT        = 3001;
 const PUSH_SECRET = process.env.PUSH_SECRET || 'raxedge-vps-2026';
 const CF_LISTINGS_URL   = `https://raxedge.com/api/auction/listings?key=${PUSH_SECRET}`;
-const CF_GLOBALCARDS_URL = (sport) => `https://raxedge.com/api/auction/globalcards?key=${PUSH_SECRET}&sport=${sport}`;
+const CF_GLOBALCARDS_URL = `https://raxedge.com/api/auction/globalcards?key=${PUSH_SECRET}`;
 
 // ─── Token state (pushed from Tampermonkey) ───────────────────────────────────
 
@@ -190,7 +190,7 @@ function cardRating(obj) {
   return (!isNaN(n) && n > 0) ? n : null;
 }
 
-async function checkPackCards(cards, sport) {
+async function checkPackCards(cards) {
   let found = 0;
   for (const card of cards) {
     const id = String(card.id || card.cardId || card.playId || '');
@@ -204,6 +204,7 @@ async function checkPackCards(cards, sport) {
     }
     const name = getPackPlayerName(card);
     if (!name || !TARGETS.some(t => name.toLowerCase().includes(t))) continue;
+    const sport     = card._sport || 'soccer';
     const rarity    = card.rarityLabel || card.card?.rarityLabel || '';
     const rating    = cardRating(card) ?? cardRating(card.card) ?? cardRating(card.play);
     const owner     = card.username || card.ownerUsername || card.user?.username || '';
@@ -216,7 +217,7 @@ async function checkPackCards(cards, sport) {
     found++;
   }
   savePackSeen();
-  if (!found && cards.length) console.log('vps-scanner: no target packs in', cards.length, sport, 'card(s)');
+  if (!found && cards.length) console.log('vps-scanner: no target packs in', cards.length, 'card(s)');
 }
 
 // ─── Fetch helpers ────────────────────────────────────────────────────────────
@@ -228,12 +229,11 @@ async function fetchListings() {
   return res.json();
 }
 
-async function fetchGlobalCards(sport) {
-  const res = await fetch(CF_GLOBALCARDS_URL(sport));
-  if (res.status === 401) { tokenStale = true; return null; }
-  if (!res.ok) { console.error('vps-scanner: globalcards error', sport, res.status); return null; }
+async function fetchGlobalCards() {
+  const res = await fetch(CF_GLOBALCARDS_URL);
+  if (!res.ok) { console.error('vps-scanner: globalcards error', res.status); return null; }
   try { return await res.json(); }
-  catch (e) { console.error('vps-scanner: globalcards parse error', sport, e.message); return null; }
+  catch (e) { console.error('vps-scanner: globalcards parse error', e.message); return null; }
 }
 
 // ─── Poll loops ───────────────────────────────────────────────────────────────
@@ -250,16 +250,13 @@ async function poll() {
 }
 
 async function pollPackAlerts() {
-  if (tokenStale) { console.log('vps-scanner: token stale, skipping pack poll'); return; }
   console.log('vps-scanner: pack poll', new Date().toISOString());
-  for (const sport of ['soccer', 'ufc']) {
-    const data = await fetchGlobalCards(sport);
-    if (!data) continue;
-    const cards = data.cards || data.items || data.data || data.plays || [];
-    console.log('vps-scanner: got', cards.length, sport, 'global card(s)');
-    if (cards.length) await checkPackCards(cards, sport);
-    else console.log('vps-scanner: empty globalcards response for', sport);
-  }
+  const data = await fetchGlobalCards();
+  if (!data) return;
+  const cards = data.cards || [];
+  console.log('vps-scanner: got', cards.length, 'global card(s) across all targets');
+  if (cards.length) await checkPackCards(cards);
+  else console.log('vps-scanner: empty globalcards response');
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────

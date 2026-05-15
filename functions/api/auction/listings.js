@@ -26,7 +26,7 @@ export async function onRequestGet({ request, env }) {
     }
   } catch (_) {}
 
-  if (!authInfo) authInfo = env.RS_AUTH_TOKEN || '';
+  if (!authInfo) authInfo = env.REAL_AUTH_TOKEN || '';
 
   if (!authInfo) {
     return new Response(JSON.stringify({ error: 'No RS auth token available' }), {
