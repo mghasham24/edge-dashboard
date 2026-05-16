@@ -1,7 +1,7 @@
 // auction-scanner/index.js — pack alert scanner
 // Playwright headless Chromium. Logs into RS via saved auth-state.json.
-// Navigates to RS global cards (no player filter), grabs newest 50 cards,
-// checks all targets client-side. Scans every 60s.
+// Navigates the RS global cards UI, filters by each target player, checks for
+// recent packs. Runs every 60s (scans take ~40-50s).
 // Setup: node index.js --setup  (opens headed browser to log in, saves session)
 // Run:   node index.js          (headless, runs forever, managed by systemd)
 
@@ -15,6 +15,7 @@ import { dirname, join }                           from 'path';
 const __dir          = dirname(fileURLToPath(import.meta.url));
 const STATE_FILE     = join(__dir, 'auth-state.json');
 const PACK_SEEN_FILE = join(__dir, 'pack-seen-ids.json');
+const ENTITY_FILE    = join(__dir, 'gc-entity-ids.json');
 
 const HASHIDS        = new Hashids('routing', 11);
 const TG_TOKEN       = '8258151239:AAFYPbSM5N0KJ8Fns40EVOWLeuoOYTaxsLw';
@@ -23,6 +24,8 @@ const TG_CHAT        = '5439959074';
 const GC_FC_TARGETS  = ['dimarco', 'mckennie', 'grimaldo', 'locatelli', 'guilavogui', 'ojeda'];
 const GC_UFC_TARGETS = ['maia'];
 const TARGETS        = [...GC_FC_TARGETS, ...GC_UFC_TARGETS];
+
+const GC_SEARCH_OVERRIDES = { maia: 'demian' };
 
 const GLOBAL_SCAN_MS = 60 * 1000;
 const PACK_FRESH_MS  = 10 * 60 * 1000;
@@ -143,24 +146,41 @@ async function scan() {
   const context = await browser.newContext({ storageState: STATE_FILE });
   const page    = await context.newPage();
 
-  let liveToken     = null;
-  let gcScanning    = false;
-  let pendingGcData = null;
+  let liveToken         = null;
+  let capturedGcHeaders = null;
+  let gcScanning        = false;
+  let pendingGcData     = null;
+
+  const gcEntityIds = (() => {
+    try { return JSON.parse(readFileSync(ENTITY_FILE, 'utf8')); } catch(_) { return {}; }
+  })();
+  function saveEntityIds() {
+    writeFileSync(ENTITY_FILE, JSON.stringify(gcEntityIds, null, 2));
+  }
+
+  const filterQueue = [];
 
   // Intercept globalcards — force sort=new, pageSize=50, capture card data
   await page.route('**/globalcards**', async route => {
     try {
       const origUrl = route.request().url();
       let fetchUrl = origUrl;
-      fetchUrl = fetchUrl.includes('view=')     ? fetchUrl.replace(/view=[^&]+/,     'view=new')     : fetchUrl + '&view=new';
-      fetchUrl = fetchUrl.includes('sort=')     ? fetchUrl.replace(/sort=[^&]+/,     'sort=new')     : fetchUrl + '&sort=new';
-      fetchUrl = fetchUrl.includes('pageSize=') ? fetchUrl.replace(/pageSize=\d+/,   'pageSize=50')  : fetchUrl + '&pageSize=50';
-      fetchUrl = fetchUrl.includes('limit=')    ? fetchUrl.replace(/limit=\d+/,      'limit=50')     : fetchUrl + '&limit=50';
-      const response = await route.fetch({ url: fetchUrl });
+      if (origUrl.includes('filterEntityId')) {
+        fetchUrl = fetchUrl.includes('view=')     ? fetchUrl.replace(/view=[^&]+/,   'view=new')    : fetchUrl + '&view=new';
+        fetchUrl = fetchUrl.includes('sort=')     ? fetchUrl.replace(/sort=[^&]+/,   'sort=new')    : fetchUrl + '&sort=new';
+        fetchUrl = fetchUrl.includes('pageSize=') ? fetchUrl.replace(/pageSize=\d+/, 'pageSize=50') : fetchUrl + '&pageSize=50';
+        fetchUrl = fetchUrl.includes('limit=')    ? fetchUrl.replace(/limit=\d+/,    'limit=50')    : fetchUrl + '&limit=50';
+      }
+      const reqHeaders = route.request().headers();
+      if (reqHeaders['real-auth-info']) capturedGcHeaders = { ...reqHeaders };
+      const fetchOpts = { url: fetchUrl };
+      if (capturedGcHeaders && !reqHeaders['real-auth-info']) fetchOpts.headers = capturedGcHeaders;
+      const response = await route.fetch(fetchOpts);
       const status   = response.status();
       const text     = await response.text();
       if (status !== 200) {
-        console.log('pack-scanner: GC route', status);
+        const shortened = origUrl.includes('filterEntityId') ? origUrl.replace(/.*filterEntityId=(\d+).*/, 'filterEntityId=$1') : '(unfiltered)';
+        console.log('pack-scanner: GC route', status, shortened);
         await route.fulfill({ response, body: text });
         return;
       }
@@ -168,8 +188,26 @@ async function scan() {
         const data  = JSON.parse(text);
         const sport = origUrl.includes('/ufc/') ? 'ufc' : 'soccer';
         const cards = data.cards || data.items || data.data || data.plays || [];
-        console.log('pack-scanner: GC captured', sport, cards.length, 'card(s)');
-        pendingGcData = { cards, sport, ts: Date.now() };
+        if (origUrl.includes('filterEntityId')) {
+          console.log('pack-scanner: GC captured', sport, cards.length, 'card(s)');
+          pendingGcData = { cards, sport, ts: Date.now() };
+          if (cards.length) checkPackCards(cards, sport).catch(() => {});
+          if (filterQueue.length) {
+            const target = filterQueue.shift();
+            if (!gcEntityIds[target]) {
+              try {
+                const u        = new URL(origUrl);
+                const entityId = u.searchParams.get('filterEntityId');
+                const apiUrl   = u.origin + u.pathname;
+                if (entityId) {
+                  gcEntityIds[target] = { entityId, apiUrl };
+                  saveEntityIds();
+                  console.log('pack-scanner: GC entity ID saved:', target, '=', entityId);
+                }
+              } catch(_) {}
+            }
+          }
+        }
       } catch(_) {}
       await route.fulfill({ response, body: text });
     } catch(e) { await route.continue(); }
@@ -184,7 +222,7 @@ async function scan() {
     }
   });
 
-  // ── Navigation ────────────────────────────────────────────────────────────────
+  // ── Navigation helpers ────────────────────────────────────────────────────────
 
   async function clickTab(label) {
     try {
@@ -198,21 +236,226 @@ async function scan() {
           }
         }
       }, label);
-      await page.waitForTimeout(800);
+      await page.waitForTimeout(600);
     } catch(e) {}
   }
 
   async function navigateToGlobalView(sport) {
     const sportLabel = sport === 'soccer' ? 'FC' : 'UFC';
     await page.goto('https://realsports.io', { timeout: 15000 }).catch(() => {});
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(800);
     await page.mouse.click(140, 128); // Cards sidebar icon
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(800);
     await clickTab(sportLabel);
     await clickTab(sport === 'soccer' ? 'Plays' : 'Rounds');
     await clickTab('Owned');
     await clickTab('Global');
-    await page.waitForTimeout(800);
+    await page.waitForTimeout(600);
+  }
+
+  async function filterByPlayer(searchTerm) {
+    const typeTerm = GC_SEARCH_OVERRIDES[searchTerm] || searchTerm;
+    try {
+      const knownFragments = ['dimarco', 'mckennie', 'grimaldo', 'locatelli', 'maia',
+                              'guilavogui', 'ojeda', 'alejandro', 'weston', 'federico',
+                              'manuel', 'demian', 'morgan', 'martin'];
+      const chipText = await page.evaluate((frags) => {
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+        let node;
+        while ((node = walker.nextNode())) {
+          const val = node.nodeValue.trim().toLowerCase();
+          if (!frags.some(f => val.includes(f))) continue;
+          const el = node.parentElement;
+          if (!el?.offsetParent) continue;
+          const rect = el.getBoundingClientRect();
+          if (rect.y > 95 && rect.y < 130 && rect.x > 150 && rect.x < 700) {
+            el.click();
+            return node.nodeValue.trim();
+          }
+        }
+        return null;
+      }, knownFragments);
+      if (!chipText) await page.mouse.click(369, 112);
+      console.log('pack-scanner: GC open-filter:', chipText ?? 'coord-click', 'for', searchTerm);
+      await page.waitForTimeout(400);
+
+      const isSameChip = chipText && (
+        chipText.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        chipText.toLowerCase().includes(typeTerm.toLowerCase())
+      );
+      if (isSameChip) {
+        const cleared = await page.evaluate(() => {
+          const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+          let node;
+          while ((node = walker.nextNode())) {
+            if (node.nodeValue.trim() !== 'Clear') continue;
+            const el = node.parentElement;
+            if (!el?.offsetParent) continue;
+            el.click();
+            return true;
+          }
+          return false;
+        });
+        console.log('pack-scanner: GC clear-filter:', cleared, 'for', searchTerm);
+        await page.waitForTimeout(600);
+        await page.mouse.click(369, 112);
+        await page.waitForTimeout(400);
+      }
+
+      const findPlayerFighter = async () => page.evaluate(() => {
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+        let node;
+        while ((node = walker.nextNode())) {
+          const val = node.nodeValue.trim();
+          if (val === 'Player' || val === 'Fighter') {
+            const el = node.parentElement;
+            if (el?.offsetParent) {
+              const rect = el.getBoundingClientRect();
+              if (rect.y > 80 && rect.y < 700 && rect.x < 900) { el.click(); return true; }
+            }
+          }
+        }
+        return false;
+      });
+      let playerClicked = await findPlayerFighter();
+
+      if (!playerClicked) {
+        const allClicked = await page.evaluate(() => {
+          let best = null;
+          const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+          let node;
+          while ((node = walker.nextNode())) {
+            if (node.nodeValue.trim() !== 'All') continue;
+            const el = node.parentElement;
+            if (!el?.offsetParent) continue;
+            const rect = el.getBoundingClientRect();
+            if (rect.y > 95 && rect.y < 130 && rect.x > 150 && rect.x < 700) {
+              if (!best || rect.x > best.x) { best = { el, x: rect.x }; }
+            }
+          }
+          if (best) { best.el.click(); return true; }
+          return false;
+        });
+        if (allClicked) {
+          await page.waitForTimeout(400);
+          playerClicked = await findPlayerFighter();
+        }
+      }
+
+      console.log('pack-scanner: GC player-clicked:', playerClicked, 'for', searchTerm);
+      await page.waitForTimeout(400);
+
+      const inputPos = await page.evaluate(() => {
+        for (const input of document.querySelectorAll('input')) {
+          if (!input.offsetParent) continue;
+          const rect = input.getBoundingClientRect();
+          if (rect.width > 80 && rect.height > 16) {
+            return { x: Math.round(rect.x + rect.width / 2), y: Math.round(rect.y + rect.height / 2) };
+          }
+        }
+        return null;
+      });
+      if (inputPos) {
+        await page.mouse.click(inputPos.x, inputPos.y);
+        await page.waitForTimeout(150);
+      }
+
+      await page.keyboard.press('Control+a');
+      await page.keyboard.press('Delete');
+      await page.keyboard.type(typeTerm);
+      await page.waitForTimeout(1500);
+
+      pendingGcData = null;
+      filterQueue.push(searchTerm);
+      const t0 = Date.now();
+
+      const resultClicked = await page.evaluate((term) => {
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+        let node;
+        while ((node = walker.nextNode())) {
+          if (node.nodeValue.trim().toLowerCase().includes(term.toLowerCase())) {
+            let el = node.parentElement;
+            while (el && el !== document.body) {
+              const rect = el.getBoundingClientRect();
+              if (rect.y > 100 && rect.y < 700 && rect.width > 150) {
+                el.click();
+                return node.nodeValue.trim();
+              }
+              el = el.parentElement;
+            }
+          }
+        }
+        return null;
+      }, typeTerm);
+
+      if (!resultClicked) {
+        const acPos = await page.evaluate((term) => {
+          const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+          let node;
+          while ((node = walker.nextNode())) {
+            if (node.nodeValue.toLowerCase().includes(term.toLowerCase())) {
+              let el = node.parentElement;
+              while (el && el !== document.body) {
+                const rect = el.getBoundingClientRect();
+                if (rect.y > 100 && rect.y < 700 && rect.width > 150) {
+                  return { x: Math.round(rect.x + rect.width / 2), y: Math.round(rect.y + rect.height / 2) };
+                }
+                el = el.parentElement;
+              }
+            }
+          }
+          return null;
+        }, typeTerm);
+        if (acPos) {
+          console.log('pack-scanner: GC mouse-ac:', JSON.stringify(acPos), 'for', searchTerm);
+          await page.mouse.click(acPos.x, acPos.y);
+        } else {
+          console.log('pack-scanner: GC no-result for', searchTerm);
+          if (filterQueue.length > 0 && filterQueue[0] === searchTerm) filterQueue.shift();
+          return null;
+        }
+      } else {
+        console.log('pack-scanner: GC result-clicked:', resultClicked, 'for', searchTerm);
+      }
+
+      const maxWait = 10000;
+      while (Date.now() - t0 < maxWait) {
+        await page.waitForTimeout(250);
+        if (pendingGcData && pendingGcData.ts > t0) return pendingGcData.cards;
+      }
+      if (pendingGcData && pendingGcData.ts > t0) return pendingGcData.cards;
+
+      console.log('pack-scanner: GC poll timeout for', searchTerm);
+      if (filterQueue.length > 0 && filterQueue[0] === searchTerm) filterQueue.shift();
+      return null;
+    } catch(e) {
+      console.log('pack-scanner: filter error for', searchTerm, ':', e.message);
+      return null;
+    }
+  }
+
+  async function fetchPlayerGlobalCardsAPI(target) {
+    const info = gcEntityIds[target];
+    if (!info) return null;
+    const { entityId, apiUrl } = info;
+    const url = `${apiUrl}?filterEntityId=${entityId}&filterEntityType=player&rarity=all&view=new&sort=new&pageSize=50&limit=50`;
+    try {
+      const result = await page.evaluate(async (fetchUrl) => {
+        const res = await fetch(fetchUrl);
+        if (!res.ok) return { error: res.status };
+        return await res.json();
+      }, url);
+      if (result?.error) {
+        console.log('pack-scanner: GC API error for', target, result.error);
+        return null;
+      }
+      const cards = result?.cards || result?.items || result?.data || result?.plays || [];
+      console.log('pack-scanner: GC API', target, '→', cards.length, 'card(s)');
+      return cards;
+    } catch(e) {
+      console.log('pack-scanner: GC API error for', target, ':', e.message);
+      return null;
+    }
   }
 
   // ── Global cards scan ─────────────────────────────────────────────────────────
@@ -223,18 +466,67 @@ async function scan() {
     try {
       console.log('pack-scanner: scan start');
 
-      for (const sport of ['soccer', 'ufc']) {
-        pendingGcData = null;
-        const t0 = Date.now();
-        await navigateToGlobalView(sport);
-        // Wait up to 10s after navigation starts for the card data to arrive
-        while (Date.now() - t0 < 20000) {
-          await page.waitForTimeout(300);
-          if (pendingGcData && pendingGcData.ts > t0) break;
+      const fcNeedUI  = [];
+      const ufcNeedUI = [];
+
+      for (const target of GC_FC_TARGETS) {
+        if (gcEntityIds[target]) {
+          const cards = await fetchPlayerGlobalCardsAPI(target);
+          if (cards !== null) {
+            if (cards.length) await checkPackCards(cards, 'soccer');
+            continue;
+          }
         }
-        const cards = pendingGcData?.cards ?? [];
-        console.log(`pack-scanner: ${sport} → ${cards.length} card(s)`);
-        if (cards.length) await checkPackCards(cards, sport);
+        fcNeedUI.push(target);
+      }
+      for (const target of GC_UFC_TARGETS) {
+        if (gcEntityIds[target]) {
+          const cards = await fetchPlayerGlobalCardsAPI(target);
+          if (cards !== null) {
+            if (cards.length) await checkPackCards(cards, 'ufc');
+            continue;
+          }
+        }
+        ufcNeedUI.push(target);
+      }
+
+      if (fcNeedUI.length) {
+        await navigateToGlobalView('soccer');
+        let needRenavigate = false;
+        for (const target of fcNeedUI) {
+          if (needRenavigate) {
+            await navigateToGlobalView('soccer').catch(() => {});
+            needRenavigate = false;
+          }
+          const cards = await filterByPlayer(target);
+          if (cards === null) {
+            console.log('pack-scanner: GC no response for FC:', target);
+            needRenavigate = true;
+            continue;
+          }
+          needRenavigate = false;
+          console.log('pack-scanner: GC UI', target, '→', cards.length, 'card(s)');
+          if (cards.length) await checkPackCards(cards, 'soccer');
+        }
+      }
+      if (ufcNeedUI.length) {
+        await navigateToGlobalView('ufc');
+        let needRenavigate = false;
+        for (const target of ufcNeedUI) {
+          if (needRenavigate) {
+            await navigateToGlobalView('ufc').catch(() => {});
+            needRenavigate = false;
+          }
+          const cards = await filterByPlayer(target);
+          if (cards === null) {
+            console.log('pack-scanner: GC no response for UFC:', target);
+            needRenavigate = true;
+            continue;
+          }
+          needRenavigate = false;
+          console.log('pack-scanner: GC UI', target, '→', cards.length, 'card(s)');
+          if (cards.length) await checkPackCards(cards, 'ufc');
+        }
       }
 
       console.log('pack-scanner: scan done');
@@ -260,11 +552,11 @@ async function scan() {
   console.log(`pack-scanner: scanning every ${GLOBAL_SCAN_MS / 1000}s, targets: ${TARGETS.join(', ')}`);
   await sendTelegram('✅ Pack alert scanner started (60s). Targets: ' + TARGETS.join(', '));
 
-  // Watchdog: if no scan completes within 4 min, exit so systemd restarts fresh
+  // Watchdog: if no scan completes within 5 min, exit so systemd restarts fresh
   let lastScanDone = Date.now();
   setInterval(() => {
-    if (Date.now() - lastScanDone > 4 * 60 * 1000) {
-      console.log('pack-scanner: watchdog — scan stuck >4min, exiting for restart');
+    if (Date.now() - lastScanDone > 5 * 60 * 1000) {
+      console.log('pack-scanner: watchdog — scan stuck >5min, exiting for restart');
       process.exit(1);
     }
   }, 60 * 1000);
