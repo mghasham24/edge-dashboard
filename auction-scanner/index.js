@@ -525,6 +525,12 @@ async function scan() {
       console.log('pack-scanner: scan done');
     } catch(e) {
       console.log('pack-scanner: scan error', e.message);
+      // Browser crash — exit immediately so systemd restarts clean (10s) instead of
+      // waiting 5min for the watchdog while every scan throws the same error.
+      if (e.message.includes('Target crashed') || e.message.includes('browser has been closed')) {
+        console.log('pack-scanner: browser crash detected, exiting for fast restart');
+        process.exit(1);
+      }
     } finally {
       gcScanning = false;
     }
@@ -555,6 +561,7 @@ async function scan() {
     }
   }, 60 * 1000);
 
+  let scanCount = 0;
   const wrappedScan = async () => {
     await scanGlobalCards();
     if (seeding) {
@@ -564,6 +571,11 @@ async function scan() {
       await sendTelegram('✅ Seeded (' + packSeen.size + ' cards). Alerting live now.');
     }
     lastScanDone = Date.now();
+    // Proactive restart every 50 scans (~50min) to shed accumulated memory
+    if (++scanCount >= 50) {
+      console.log('pack-scanner: proactive restart after 50 scans');
+      process.exit(0);
+    }
   };
 
   await wrappedScan();
