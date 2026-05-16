@@ -20,7 +20,7 @@ const HASHIDS        = new Hashids('routing', 11);
 const TG_TOKEN       = '8258151239:AAFYPbSM5N0KJ8Fns40EVOWLeuoOYTaxsLw';
 const TG_CHAT        = '5439959074';
 
-const GC_FC_TARGETS  = ['dimarco', 'mckennie', 'grimaldo', 'locatelli'];
+const GC_FC_TARGETS  = ['dimarco', 'mckennie', 'grimaldo', 'locatelli', 'guilavogui'];
 const GC_UFC_TARGETS = ['maia'];
 const TARGETS        = [...GC_FC_TARGETS, ...GC_UFC_TARGETS];
 
