@@ -28,7 +28,10 @@ const TARGETS        = [...GC_FC_TARGETS, ...GC_UFC_TARGETS];
 const GC_SEARCH_OVERRIDES = { maia: 'demian' };
 
 const GLOBAL_SCAN_MS = 60 * 1000;
-const PACK_FRESH_MS  = 10 * 60 * 1000;
+
+// Seeding: true on first-ever run (empty packSeen) to avoid alerting on all
+// existing global cards. After the first scan completes, set to false.
+let seeding = false;
 
 // ─── Pack seen IDs ─────────────────────────────────────────────────────────────
 
@@ -70,13 +73,6 @@ function getPackPlayerName(card) {
   return card.playerName || card.name || card.label || '';
 }
 
-function isPackCardFresh(card) {
-  const ts = card.createdAt || card.earned || card.updatedAt
-          || card.play?.createdAt || card.card?.createdAt || card.earnedAt;
-  if (!ts) return true;
-  return Date.now() - new Date(ts).getTime() < PACK_FRESH_MS;
-}
-
 function cardRating(card) {
   if (!card) return null;
   const r = card.value ?? card.score ?? card.rating ?? card.overallScore ?? card.overallRating ?? null;
@@ -92,10 +88,7 @@ async function checkPackCards(cards, sport) {
     const alreadySeen = packSeen.has(id);
     packSeen.add(id);
     if (alreadySeen) continue;
-    if (!isPackCardFresh(card)) {
-      console.log('pack-scanner: card too old, skipping id:', id);
-      continue;
-    }
+    if (seeding) continue; // First scan: populate seen list silently, no alerts
     const name = getPackPlayerName(card);
     if (!name || !TARGETS.some(t => name.toLowerCase().includes(t))) continue;
     const rarity    = card.rarityLabel || card.card?.rarityLabel || '';
@@ -114,7 +107,7 @@ async function checkPackCards(cards, sport) {
     savePackSeen();
     found++;
   }
-  if (!found && cards.length) console.log('pack-scanner: no target packs in', cards.length, sport, 'card(s)');
+  if (!seeding && !found && cards.length) console.log('pack-scanner: no new target packs in', cards.length, sport, 'card(s)');
 }
 
 // ─── Setup mode ───────────────────────────────────────────────────────────────
@@ -549,7 +542,8 @@ async function scan() {
     console.log('pack-scanner: initial load timeout');
   });
 
-  console.log(`pack-scanner: scanning every ${GLOBAL_SCAN_MS / 1000}s, targets: ${TARGETS.join(', ')}`);
+  seeding = packSeen.size === 0;
+  console.log(`pack-scanner: scanning every ${GLOBAL_SCAN_MS / 1000}s, targets: ${TARGETS.join(', ')}${seeding ? ' (seeding)' : ''}`);
   await sendTelegram('✅ Pack alert scanner started (60s). Targets: ' + TARGETS.join(', '));
 
   // Watchdog: if no scan completes within 7 min, exit so systemd restarts fresh
@@ -561,7 +555,16 @@ async function scan() {
     }
   }, 60 * 1000);
 
-  const wrappedScan = async () => { await scanGlobalCards(); lastScanDone = Date.now(); };
+  const wrappedScan = async () => {
+    await scanGlobalCards();
+    if (seeding) {
+      seeding = false;
+      savePackSeen();
+      console.log('pack-scanner: seed done,', packSeen.size, 'cards known. Alerting live.');
+      await sendTelegram('✅ Seeded (' + packSeen.size + ' cards). Alerting live now.');
+    }
+    lastScanDone = Date.now();
+  };
 
   await wrappedScan();
   setInterval(() => wrappedScan().catch(e => console.error('pack-scanner error:', e.message)), GLOBAL_SCAN_MS);
