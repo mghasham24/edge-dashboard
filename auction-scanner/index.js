@@ -240,14 +240,16 @@ async function scan() {
     } catch(e) {}
   }
 
-  async function navigateToGlobalView(sport) {
+  async function navigateToGlobalView(sport, cardType = 'plays') {
     const sportLabel = sport === 'soccer' ? 'FC' : 'UFC';
+    const typeLabel  = cardType === 'performances' ? 'Performances'
+                     : sport === 'soccer' ? 'Plays' : 'Rounds';
     await page.goto('https://realsports.io', { timeout: 15000 }).catch(() => {});
     await page.waitForTimeout(800);
     await page.mouse.click(140, 128); // Cards sidebar icon
     await page.waitForTimeout(800);
     await clickTab(sportLabel);
-    await clickTab(sport === 'soccer' ? 'Plays' : 'Rounds');
+    await clickTab(typeLabel);
     await clickTab('Owned');
     await clickTab('Global');
     await page.waitForTimeout(600);
@@ -490,41 +492,39 @@ async function scan() {
         ufcNeedUI.push(target);
       }
 
+      // FC Plays
       if (fcNeedUI.length) {
-        await navigateToGlobalView('soccer');
+        await navigateToGlobalView('soccer', 'plays');
         let needRenavigate = false;
         for (const target of fcNeedUI) {
-          if (needRenavigate) {
-            await navigateToGlobalView('soccer').catch(() => {});
-            needRenavigate = false;
-          }
+          if (needRenavigate) { await navigateToGlobalView('soccer', 'plays').catch(() => {}); needRenavigate = false; }
           const cards = await filterByPlayer(target);
-          if (cards === null) {
-            console.log('pack-scanner: GC no response for FC:', target);
-            needRenavigate = true;
-            continue;
-          }
-          needRenavigate = false;
-          console.log('pack-scanner: GC UI', target, '→', cards.length, 'card(s)');
+          if (cards === null) { console.log('pack-scanner: Plays no response:', target); needRenavigate = true; continue; }
+          console.log('pack-scanner: Plays', target, '→', cards.length, 'card(s)');
           if (cards.length) await checkPackCards(cards, 'soccer');
         }
       }
+
+      // FC Performances (always UI — same targets, separate card type)
+      await navigateToGlobalView('soccer', 'performances');
+      let needRenavPerf = false;
+      for (const target of GC_FC_TARGETS) {
+        if (needRenavPerf) { await navigateToGlobalView('soccer', 'performances').catch(() => {}); needRenavPerf = false; }
+        const cards = await filterByPlayer(target);
+        if (cards === null) { console.log('pack-scanner: Perf no response:', target); needRenavPerf = true; continue; }
+        console.log('pack-scanner: Perf', target, '→', cards.length, 'card(s)');
+        if (cards.length) await checkPackCards(cards, 'soccer');
+      }
+
+      // UFC Rounds
       if (ufcNeedUI.length) {
-        await navigateToGlobalView('ufc');
+        await navigateToGlobalView('ufc', 'rounds');
         let needRenavigate = false;
         for (const target of ufcNeedUI) {
-          if (needRenavigate) {
-            await navigateToGlobalView('ufc').catch(() => {});
-            needRenavigate = false;
-          }
+          if (needRenavigate) { await navigateToGlobalView('ufc', 'rounds').catch(() => {}); needRenavigate = false; }
           const cards = await filterByPlayer(target);
-          if (cards === null) {
-            console.log('pack-scanner: GC no response for UFC:', target);
-            needRenavigate = true;
-            continue;
-          }
-          needRenavigate = false;
-          console.log('pack-scanner: GC UI', target, '→', cards.length, 'card(s)');
+          if (cards === null) { console.log('pack-scanner: Rounds no response:', target); needRenavigate = true; continue; }
+          console.log('pack-scanner: Rounds', target, '→', cards.length, 'card(s)');
           if (cards.length) await checkPackCards(cards, 'ufc');
         }
       }
@@ -552,11 +552,11 @@ async function scan() {
   console.log(`pack-scanner: scanning every ${GLOBAL_SCAN_MS / 1000}s, targets: ${TARGETS.join(', ')}`);
   await sendTelegram('✅ Pack alert scanner started (60s). Targets: ' + TARGETS.join(', '));
 
-  // Watchdog: if no scan completes within 5 min, exit so systemd restarts fresh
+  // Watchdog: if no scan completes within 7 min, exit so systemd restarts fresh
   let lastScanDone = Date.now();
   setInterval(() => {
-    if (Date.now() - lastScanDone > 5 * 60 * 1000) {
-      console.log('pack-scanner: watchdog — scan stuck >5min, exiting for restart');
+    if (Date.now() - lastScanDone > 7 * 60 * 1000) {
+      console.log('pack-scanner: watchdog — scan stuck >7min, exiting for restart');
       process.exit(1);
     }
   }, 60 * 1000);
