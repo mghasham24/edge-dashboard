@@ -44,7 +44,7 @@ s.textContent = `
 (function() {
   'use strict';
 
-  var TARGETS       = ['dimarco', 'mckennie', 'locatelli', 'grimaldo', 'maia', 'guilavogui'];
+  var TARGETS       = ['dimarco', 'mckennie', 'locatelli', 'grimaldo', 'maia', 'guilavogui', 'ojeda'];
   var PACK_SEEN_KEY = 'rs_pack_alert_seen_v2';
   var FRESH_MS      = 10 * 60 * 1000;
 
