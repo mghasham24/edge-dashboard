@@ -578,8 +578,21 @@ async function scan() {
   console.log(`pack-scanner: scanning every ${GLOBAL_SCAN_MS / 60000} min, targets: ${TARGETS.join(', ')}`);
   await sendTelegram('✅ Pack alert scanner started. Targets: ' + TARGETS.join(', '));
 
-  await scanGlobalCards();
-  setInterval(() => scanGlobalCards().catch(e => console.error('pack-scanner error:', e.message)), GLOBAL_SCAN_MS);
+  // Watchdog: if no scan completes within 8 min, exit so systemd restarts fresh
+  let lastScanDone = Date.now();
+  setInterval(() => {
+    if (Date.now() - lastScanDone > 8 * 60 * 1000) {
+      console.log('pack-scanner: watchdog — scan stuck >8min, exiting for restart');
+      process.exit(1);
+    }
+  }, 60 * 1000);
+
+  const _origScan = scanGlobalCards;
+  // eslint-disable-next-line no-global-assign
+  const wrappedScan = async () => { await _origScan(); lastScanDone = Date.now(); };
+
+  await wrappedScan();
+  setInterval(() => wrappedScan().catch(e => console.error('pack-scanner error:', e.message)), GLOBAL_SCAN_MS);
 }
 
 // ─── Entry ────────────────────────────────────────────────────────────────────
