@@ -165,9 +165,10 @@ async function warmRSCache(fdKey, env, now, staleThreshold) {
       "SELECT fetched_at FROM odds_cache WHERE cache_key LIKE ? ORDER BY fetched_at DESC LIMIT 1"
     ).bind('real_sync_' + rsKey + '_%').first();
     if (cached && (now - cached.fetched_at) < staleThreshold) return;
-    await fetch(`${env.SITE_URL}/api/real/sync?sport=${fdKey}&_cron_key=${env.CRON_SECRET}`, {
+    const r = await fetch(`${env.SITE_URL}/api/real/sync?sport=${fdKey}&_cron_key=${env.CRON_SECRET}`, {
       signal: AbortSignal.timeout(25000)
     });
+    await r.body?.cancel();
   } catch(e) {}
 }
 
@@ -181,9 +182,10 @@ async function warmFDCache(fdKey, cacheKey, env, now, staleThreshold, endpointOv
       'SELECT fetched_at FROM odds_cache WHERE cache_key=?'
     ).bind(cacheKey).first();
     if (cached && (now - cached.fetched_at) < staleThreshold) return;
-    await fetch(`${env.SITE_URL}${endpoint}?_cron_key=${env.CRON_SECRET}`, {
+    const r = await fetch(`${env.SITE_URL}${endpoint}?_cron_key=${env.CRON_SECRET}`, {
       signal: AbortSignal.timeout(15000)
     });
+    await r.body?.cancel();
   } catch(e) {}
 }
 

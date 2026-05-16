@@ -10,7 +10,6 @@
 name = "raxedge-alert-cron"
 main = "index.js"
 compatibility_date = "2024-09-23"
-usage_model = "unbound"
 
 [vars]
 SITE_URL = "https://raxedge.com"
