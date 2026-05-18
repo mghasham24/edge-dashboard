@@ -1,7 +1,7 @@
 // functions/api/auth/logout.js
 export async function onRequestPost({ request, env }) {
   const c = request.headers.get('Cookie') || '';
-  const m = c.match(/(?:^|;\s*)__Host-session=([^;]+)/);
+  const m = c.match(/(?:^|;\s*)(?:__Host-)?session=([^;]+)/);
   if (m) await env.DB.prepare('DELETE FROM sessions WHERE token=?').bind(m[1]).run();
   return new Response(JSON.stringify({ ok: true }), {
     headers: {

@@ -46,7 +46,7 @@ export async function onRequest({ request, env, next }) {
 
 function getToken(req) {
   const c = req.headers.get('Cookie') || '';
-  const m = c.match(/(?:^|;\s*)__Host-session=([^;]+)/);
+  const m = c.match(/(?:^|;\s*)(?:__Host-)?session=([^;]+)/);
   return m ? m[1] : null;
 }
 
