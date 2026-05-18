@@ -6,7 +6,7 @@ export async function onRequestPost({ request, env }) {
   return new Response(JSON.stringify({ ok: true }), {
     headers: {
       'Content-Type': 'application/json',
-      'Set-Cookie': '__Host-session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0'
+      'Set-Cookie': 'session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0'
     }
   });
 }

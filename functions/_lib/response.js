@@ -4,7 +4,7 @@ export function genToken() {
 }
 
 export function cookie(token, exp) {
-  return `__Host-session=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Expires=${new Date(exp * 1000).toUTCString()}`;
+  return `session=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Expires=${new Date(exp * 1000).toUTCString()}`;
 }
 
 export function ok(data, status, setCookie) {
