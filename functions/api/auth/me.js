@@ -1,7 +1,7 @@
 // functions/api/auth/me.js
 export async function onRequestGet({ request, env }) {
   const c = request.headers.get('Cookie') || '';
-  const m = c.match(/(?:^|;\s*)session=([^;]+)/);
+  const m = c.match(/(?:^|;\s*)(?:__Host-)?session=([^;]+)/);
   if (!m) return fail();
 
   const now = Math.floor(Date.now() / 1000);
