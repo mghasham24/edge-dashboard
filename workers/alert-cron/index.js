@@ -588,6 +588,48 @@ function processNativeFC(sport, fdGames, rsGames, rsGameIds, rsGameSports, globa
 // ── Main scheduled handler ─────────────────────────────
 
 export default {
+  async fetch(request, env, ctx) {
+    if (request.method !== 'POST') return new Response('ok');
+    const secret = request.headers.get('X-Telegram-Bot-Api-Secret-Token');
+    if (!env.TELEGRAM_WEBHOOK_SECRET || secret !== env.TELEGRAM_WEBHOOK_SECRET)
+      return new Response('Forbidden', { status: 403 });
+    const body = await request.json().catch(() => null);
+    if (!body?.callback_query) return new Response('ok');
+    const { id: queryId, data, message } = body.callback_query;
+    const chatId    = message?.chat?.id;
+    const messageId = message?.message_id;
+    let nowTaken = false;
+    if (data?.startsWith('t:')) {
+      const alertId = parseInt(data.slice(2));
+      if (alertId) {
+        try {
+          const row = await env.DB.prepare('SELECT taken FROM alert_messages WHERE id=?').bind(alertId).first();
+          nowTaken = !row?.taken; // toggle
+          await env.DB.prepare('UPDATE alert_messages SET taken=? WHERE id=?').bind(nowTaken ? 1 : 0, alertId).run();
+        } catch(e) {}
+      }
+    }
+    const base = `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}`;
+    await fetch(`${base}/answerCallbackQuery`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ callback_query_id: queryId, text: nowTaken ? '✅ Bet marked as taken' : 'Bet unmarked' }),
+    }).catch(() => {});
+    if (chatId && messageId) {
+      const buttonText = nowTaken ? '✅ Bet Taken' : 'Mark Bet Taken';
+      await fetch(`${base}/editMessageReplyMarkup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          message_id: messageId,
+          reply_markup: { inline_keyboard: [[{ text: buttonText, callback_data: data }]] },
+        }),
+      }).catch(() => {});
+    }
+    return new Response('ok');
+  },
+
   async scheduled(event, env, ctx) {
     if (!env.TELEGRAM_BOT_TOKEN) return;
 
@@ -643,10 +685,11 @@ export default {
 
     // ── 3a. Native sports (FD/DK caches) ──────────────────
 
-    // Warm all FD + RS caches in parallel before processing — avoids sequential 15s×N wait
+    // Warm FD + RS caches in background — fired via ctx.waitUntil so they don't consume
+    // CPU budget on the critical path. Next cron tick reads whatever is in D1 already.
     const sportsNativeNeeded = NATIVE_SPORTS.filter(s => sportsNeeded.has(s.fdKey));
     const sportsOddsApiNeeded = ODDS_API_SPORTS.filter(s => sportsNeeded.has(s.fdKey));
-    await Promise.all([
+    ctx.waitUntil(Promise.all([
       ...sportsNativeNeeded.flatMap(s => {
         const dkAlt = DK_ALT_ENDPOINT_MAP[s.fdKey];
         return [
@@ -655,9 +698,8 @@ export default {
           ...(dkAlt ? [warmFDCache(s.fdKey, dkAlt.cacheKey, env, now, FD_WARM_THRESHOLD, dkAlt.endpoint)] : []),
         ];
       }),
-      // Odds API sports have no FD endpoint to warm, but RS still needs to be kept fresh
       ...sportsOddsApiNeeded.map(s => warmRSCache(s.fdKey, env, now, RS_WARM_THRESHOLD)),
-    ]);
+    ]));
 
     for (const sport of NATIVE_SPORTS) {
       if (!sportsNeeded.has(sport.fdKey)) continue;

@@ -920,7 +920,8 @@
         location.reload();
     }
 
-    async function checkSession() {
+    async function checkSession(retries) {
+        retries = retries || 0;
         try {
             var res = await fetch('/api/auth/me', {
                 credentials: 'same-origin'
@@ -944,11 +945,20 @@
                     setTimeout(loadOdds, 50);
                     setTimeout(preloadAllSports, 3000); // background preload after current sport loads
                 }
+            } else if (res.status === 401 || res.status === 403) {
+                document.getElementById('landing').classList.add('visible');
+            } else if (retries < 3) {
+                setTimeout(function() { checkSession(retries + 1); }, 2000);
             } else {
                 document.getElementById('landing').classList.add('visible');
             }
         } catch (e) {
-            document.getElementById('landing').classList.add('visible');
+            // Network error during refresh (common on mobile) — retry before showing login
+            if (retries < 3) {
+                setTimeout(function() { checkSession(retries + 1); }, 2000);
+            } else {
+                document.getElementById('landing').classList.add('visible');
+            }
         }
     }
 
