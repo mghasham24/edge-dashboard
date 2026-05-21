@@ -47,7 +47,7 @@ async function getRsToken(env) {
     ).first();
     if (row?.value) return row.value;
   } catch {}
-  return env.RS_AUTH_TOKEN || null;
+  return env.RS_AUTH_TOKEN || env.REAL_AUTH_TOKEN || null;
 }
 
 export async function onRequestGet({ request, env }) {
