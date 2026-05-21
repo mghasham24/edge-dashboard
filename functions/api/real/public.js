@@ -26,10 +26,14 @@ function buildHeaders(rsToken, deviceUuid = '2e0a38e2-0ee8-4f93-9a34-218ac1d1016
 }
 
 async function rsGet(path, hdrs, timeoutMs = 6000) {
+  return rsGetUrl(`${BASE}${path}`, hdrs, timeoutMs);
+}
+
+async function rsGetUrl(url, hdrs, timeoutMs = 6000) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const res = await fetch(`${BASE}${path}`, { headers: hdrs, signal: ctrl.signal });
+    const res = await fetch(url, { headers: hdrs, signal: ctrl.signal });
     clearTimeout(timer);
     const text = await res.text();
     let body = null;
@@ -90,7 +94,6 @@ export async function onRequestGet({ request, env }) {
   }
 
   // Step 2: check if this RS user has connected their account to RaxEdge
-  // Match by rs_username (case-insensitive) or rs_user_id
   let userToken = null;
   let userDeviceUuid = null;
   try {
@@ -106,10 +109,11 @@ export async function onRequestGet({ request, env }) {
     }
   } catch {}
 
-  // Step 3: fetch open positions using the user's own token (if connected)
+  // Step 3: try fetching open positions in order of preference
   let positions = null;
   let positionsSource = null;
 
+  // 3a. User has connected their RS account — use their own token (best accuracy)
   if (userToken) {
     const userHdrs = buildHeaders(userToken, userDeviceUuid || undefined);
     const posRes = await rsGet('/predictions/openpositions', userHdrs);
@@ -119,12 +123,73 @@ export async function onRequestGet({ request, env }) {
     }
   }
 
+  // 3b. Try public / no-auth paths — RS may expose positions without auth for public profiles
+  if (!positions) {
+    const noAuthHdrs = {
+      'Accept': 'application/json',
+      'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+      'Origin': 'https://realsports.io',
+      'Referer': `https://realsports.io/user/${username}`,
+    };
+
+    // Candidates based on network analysis of Justin's site (meowbot-ap... backend calls /activity)
+    // His backend hits RS with a shared token — "activity" is the key term
+    const publicCandidates = [
+      // activity-style paths (new — based on Justin's /activity endpoint name)
+      { url: `https://web.realapp.com/user/${userId}/activity`, hdrs: sharedHdrs },
+      { url: `https://web.realapp.com/user/${username}/activity`, hdrs: sharedHdrs },
+      { url: `https://web.realapp.com/activity?userId=${userId}`, hdrs: sharedHdrs },
+      { url: `https://web.realapp.com/activity/user/${userId}`, hdrs: sharedHdrs },
+      { url: `https://web.realapp.com/predictions/activity?userId=${userId}`, hdrs: sharedHdrs },
+      { url: `https://web.realapp.com/user/${userId}/activity?type=predictions`, hdrs: sharedHdrs },
+      { url: `https://web.realapp.com/user/${userId}/activity?type=open`, hdrs: sharedHdrs },
+      // cross-user open positions (shared token, other user's ID)
+      { url: `https://web.realapp.com/user/${userId}/openpositions`, hdrs: sharedHdrs },
+      { url: `https://web.realapp.com/user/${userId}/predictions/open`, hdrs: sharedHdrs },
+      { url: `https://web.realapp.com/predictions/openpositions?targetUserId=${userId}`, hdrs: sharedHdrs },
+      { url: `https://web.realapp.com/user/${userId}/feed`, hdrs: sharedHdrs },
+      { url: `https://web.realapp.com/user/${userId}/stats`, hdrs: sharedHdrs },
+      // no auth at all
+      { url: `https://web.realapp.com/user/${userId}/activity`, hdrs: noAuthHdrs },
+      { url: `https://web.realapp.com/user/${userId}/openpositions`, hdrs: noAuthHdrs },
+    ];
+
+    const publicResults = await Promise.all(
+      publicCandidates.map(({ url, hdrs }) =>
+        rsGetUrl(url, hdrs).then(r => ({ url, status: r.status, body: r.body }))
+      )
+    );
+
+    const publicHit = publicResults.find(r => r.status === 200 && r.body && typeof r.body === 'object');
+    if (publicHit) {
+      positions = publicHit.body;
+      positionsSource = `public:${publicHit.url}`;
+    }
+
+    // Return probe results for debugging when no public hit found
+    if (!publicHit) {
+      return json({
+        ok: true,
+        username: rsUserName,
+        userId,
+        displayName: rsDisplayName,
+        positions: null,
+        positionsSource: null,
+        isConnected: !!userToken,
+        publicProbe: publicResults.map(r => ({
+          url: r.url,
+          status: r.status,
+          bodySnippet: typeof r.body === 'string' ? r.body.slice(0, 100) : (r.body ? JSON.stringify(r.body).slice(0, 100) : null)
+        }))
+      });
+    }
+  }
+
   return json({
     ok: true,
     username: rsUserName,
     userId,
     displayName: rsDisplayName,
-    profile,
     positions,
     positionsSource,
     isConnected: !!userToken
