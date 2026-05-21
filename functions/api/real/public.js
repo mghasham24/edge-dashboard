@@ -54,12 +54,15 @@ export async function onRequestGet({ request, env }) {
   const session = await getSession(request, env.DB);
   if (!session) return fail(401, 'Not authenticated');
 
-  const allowed = await checkRateLimit(env.DB, request, 'real_public', 10, 60);
-  if (!allowed) return fail(429, 'Too many requests');
-
   const url = new URL(request.url);
   const before = url.searchParams.get('before') || null;
   const paramUserId = url.searchParams.get('userId') || null;
+
+  // Pagination requests are cheap (1 RS call) — high limit. Search requests are expensive (3 RS calls) — low limit.
+  const rlKey = (before && paramUserId) ? 'real_public_page' : 'real_public_search';
+  const rlMax = (before && paramUserId) ? 120 : 10;
+  const allowed = await checkRateLimit(env.DB, request, rlKey, rlMax, 60);
+  if (!allowed) return fail(429, 'Too many requests');
 
   const PAGE = `limit=100&pageSize=100&size=100&count=100`;
 
