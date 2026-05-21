@@ -137,45 +137,24 @@ async function handleGet(request, env) {
     }
   }
 
-  // Step 3: parallel fetches — all RS history endpoints are session-scoped (userId param ignored).
-  // betHistory + openPositions require the searched user's OWN stored token from real_auth.
-  // activity is public but contains only social/comment events, not bet history.
   const userHdrs = userRow ? buildHeaders(userRow.auth_token, userRow.device_uuid || undefined) : null;
 
-  const userHdrs2 = userRow ? buildHeaders(userRow.auth_token, userRow.device_uuid || undefined) : null;
-
-  // Probe path-based public history endpoints (query-param userId= is session-scoped and ignored)
-  const [r1, r2, r3, r4, r5, r6] = await Promise.all([
-    rsGet(`/user/${userId}/predictions/historyrollup?${PAGE}`, hdrs),
-    rsGet(`/user/${userId}/predictions/history?${PAGE}`, hdrs),
-    rsGet(`/user/${userId}/history?${PAGE}`, hdrs),
-    rsGet(`/predictions/history/${userId}?${PAGE}`, hdrs),
-    rsGet(`/predictions/historyrollup/${userId}?${PAGE}`, hdrs),
-    rsGet(`/user/${userId}/portfolio`, hdrs),
+  const [activityRes, betHistoryRes, openPosRes] = await Promise.all([
+    rsGet(`/activity?userId=${userId}`, hdrs),
+    userHdrs ? rsGet(`/predictions/historyrollup?${PAGE}`, userHdrs) : Promise.resolve(null),
+    userHdrs ? rsGet('/predictions/openpositions', userHdrs) : Promise.resolve(null),
   ]);
 
-  // Also fetch with user's own token for comparison (if connected)
-  const ownRollup = userHdrs2 ? await rsGet(`/predictions/historyrollup?${PAGE}`, userHdrs2) : null;
-
-  function probe(r, name) {
-    const ok = r?.status === 200 && r.body && typeof r.body === 'object';
-    const uid = ok ? (r.body.items?.[0]?.userId || r.body.userId || 'no userId found') : null;
-    return { status: r?.status, firstUserId: uid, keys: ok ? Object.keys(r.body).join(',') : null };
-  }
-
   return json({
-    ok: true, username: rsUserName, userId, displayName,
-    betHistory: null, openPositions: null, isConnected: !!userRow,
-    _probe: {
-      searchedUserId: userId,
-      'user/{id}/predictions/historyrollup': probe(r1),
-      'user/{id}/predictions/history':       probe(r2),
-      'user/{id}/history':                   probe(r3),
-      'predictions/history/{id}':            probe(r4),
-      'predictions/historyrollup/{id}':      probe(r5),
-      'user/{id}/portfolio':                 probe(r6),
-      'own_rollup_firstUserId': ownRollup?.status === 200 ? (ownRollup.body?.items?.[0]?.userId || 'n/a') : ownRollup?.status,
-    }
+    ok: true,
+    username: rsUserName,
+    userId,
+    displayName,
+    profile,
+    activity:      activityRes?.status === 200 ? activityRes.body : null,
+    betHistory:    betHistoryRes?.status === 200 ? betHistoryRes.body : null,
+    openPositions: openPosRes?.status === 200 ? openPosRes.body : null,
+    isConnected:   !!userRow
   });
 } // end handleGet
 
