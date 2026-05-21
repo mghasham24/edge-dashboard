@@ -134,22 +134,30 @@ async function handleGet(request, env) {
     }
   }
 
-  // Step 3: parallel fetches (3 calls max)
-  // - activity: public, works for any userId with shared token
-  // - publicHist: /predictions/history?userId= — testing if this is public (respects userId)
-  // - openPositions: session-scoped, needs the searched user's own stored token
+  // Step 3: probe multiple public endpoint candidates + session-scoped openPositions
   const userHdrs = userRow ? buildHeaders(userRow.auth_token, userRow.device_uuid || undefined) : null;
 
-  const [activityRes, publicHistRes, openPosRes] = await Promise.all([
+  // No-auth headers: test if RS has fully public endpoints (no real-auth-info required)
+  const noAuthHdrs = {
+    'Accept': 'application/json',
+    'Content-Type': 'application/json',
+    'Origin': 'https://realsports.io',
+    'Referer': 'https://realsports.io/',
+    'real-device-type': 'desktop_web',
+    'real-version': '31'
+  };
+
+  const [activityRes, histNoAuthRes, histAuthRes, portfolioRes, openPosRes] = await Promise.all([
     rsGet(`/activity?userId=${userId}`, hdrs),
+    rsGet(`/predictions/history?userId=${userId}&${PAGE}`, noAuthHdrs),
     rsGet(`/predictions/history?userId=${userId}&${PAGE}`, hdrs),
+    rsGet(`/predictions/portfolio?userId=${userId}`, hdrs),
     userHdrs ? rsGet('/predictions/openpositions', userHdrs) : Promise.resolve(null),
   ]);
 
-  // /predictions/history with userId — if public, this returns that user's history regardless of token
-  const publicHistOk = publicHistRes?.status === 200 && publicHistRes.body &&
-                       typeof publicHistRes.body === 'object';
-  const betHistory = publicHistOk ? publicHistRes.body : null;
+  const actSample = activityRes?.status === 200 && activityRes.body?.items?.length
+    ? activityRes.body.items.slice(0, 2)
+    : null;
 
   return json({
     ok: true,
@@ -158,9 +166,20 @@ async function handleGet(request, env) {
     displayName,
     profile,
     activity:      activityRes?.status === 200 ? activityRes.body : null,
-    betHistory,
+    betHistory:    null,
     openPositions: openPosRes?.status === 200 ? openPosRes.body : null,
-    isConnected:   !!userRow
+    isConnected:   !!userRow,
+    _probe: {
+      activityStatus:    activityRes?.status,
+      activitySample:    actSample,
+      histNoAuthStatus:  histNoAuthRes?.status,
+      histNoAuthItems:   histNoAuthRes?.status === 200 ? (histNoAuthRes.body?.items?.length ?? 'no items key') : null,
+      histNoAuthUserId:  histNoAuthRes?.status === 200 && histNoAuthRes.body?.items?.[0]?.userId,
+      histAuthStatus:    histAuthRes?.status,
+      histAuthUserId:    histAuthRes?.status === 200 && histAuthRes.body?.items?.[0]?.userId,
+      portfolioStatus:   portfolioRes?.status,
+      portfolioSample:   portfolioRes?.status === 200 ? JSON.stringify(portfolioRes.body).slice(0, 300) : null,
+    }
   });
 } // end handleGet
 
