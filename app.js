@@ -2596,12 +2596,8 @@
         document.getElementById('tracker-username-header').innerHTML =
             escHtml(u.name || data.username) +
             (u.isVerified ? ' <span style="color:var(--accent);font-size:13px">✓</span>' : '') +
-            ' <span style="color:var(--muted);font-size:13px;font-weight:400">@' + escHtml(u.userName || data.username) + '</span>';
-
-        document.getElementById('trk-karma').textContent = karma;
-        document.getElementById('trk-record').innerHTML = pollW + '<span style="color:var(--muted);font-size:14px">/' + pollL + '</span>';
-        document.getElementById('trk-winrate').textContent = winPct !== null ? winPct + '%' : '—';
-        document.getElementById('trk-winrate').style.color = winColor;
+            ' <span style="color:var(--muted);font-size:13px;font-weight:400">@' + escHtml(u.userName || data.username) + '</span>' +
+            '<span style="font-size:12px;font-weight:400;color:var(--muted2);margin-left:14px">' + escHtml(karma) + ' karma · ' + pollW + 'W/' + pollL + 'L' + (winPct !== null ? ' · <span style="color:' + winColor + '">' + winPct + '%</span>' : '') + '</span>';
 
         // Load bet history
         var items = (data.betHistory && data.betHistory.items) || [];
