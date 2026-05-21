@@ -2588,23 +2588,65 @@
             posEl.innerHTML = '';
         }
 
-        // Activity feed — prediction payouts and notable entries
-        var acts = data.activity && data.activity.activities;
-        if (acts && acts.length) {
-            var predKeywords = ['prediction market payout', 'Rax earned for prediction', 'rax earned for prediction'];
-            var items = acts.slice(0, 30).map(function(a) {
-                var display = (a.additionalInfo && a.additionalInfo.display) ? a.additionalInfo.display.trim() : '';
-                if (!display) return '';
-                var isPred = predKeywords.some(function(k) { return display.toLowerCase().indexOf(k.toLowerCase()) !== -1; });
-                var ts = a.bumpedAt ? new Date(a.bumpedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
-                return '<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">' +
-                    '<div style="flex:1;font-size:12px;color:' + (isPred ? 'var(--fg)' : 'var(--muted)') + ';font-weight:' + (isPred ? '600' : '400') + '">' + escHtml(display) + '</div>' +
-                    '<div style="font-size:11px;color:var(--muted2);white-space:nowrap;padding-top:1px">' + escHtml(ts) + '</div>' +
-                    '</div>';
-            }).filter(Boolean).join('');
-            document.getElementById('rs-lookup-activity').innerHTML =
-                '<div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:8px">Recent Activity</div>' +
-                '<div>' + items + '</div>';
+        // Recent Bets (historyrollup)
+        var actEl = document.getElementById('rs-lookup-activity');
+        var betItems = data.betHistory && data.betHistory.items;
+        if (betItems && betItems.length) {
+            var betRows = betItems.slice(0, 30).map(function(p) {
+                var matchup = (p.marketDisplay && p.marketDisplay.display) || '—';
+                var market  = p.headerLabel || '—';
+                var side    = p.outcomeLabel || '—';
+                var details = Array.isArray(p.details) ? p.details : [];
+                var costDet = details.find(function(d) { return d.label === 'Cost'; }) || {};
+                var paidDet = details.find(function(d) { return d.label === 'Paid'; }) || {};
+                var costDisp = costDet.display || '—';
+                var paidDisp = paidDet.display || '—';
+                var paidNum  = parseFloat(String(paidDet.display || '').replace(/,/g, '')) || 0;
+                var isWin  = paidDet.color === 'green' && paidNum > 0;
+                var isLoss = paidDet.display === '0' || (!isWin && paidDet.color === 'default');
+                var resLbl = isWin ? 'W' : isLoss ? 'L' : '—';
+                var resColor = isWin ? 'var(--green)' : isLoss ? 'var(--red)' : 'var(--muted)';
+                var ts = p.transactedAt ? new Date(p.transactedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+                return '<tr>' +
+                    '<td style="padding:7px 10px;font-size:11px;color:var(--muted);white-space:nowrap">' + escHtml(ts) + '</td>' +
+                    '<td style="padding:7px 10px;font-size:12px">' + escHtml(matchup) + '</td>' +
+                    '<td style="padding:7px 10px;font-size:11px"><span class="mkt-badge" style="font-size:10px">' + escHtml(market) + '</span></td>' +
+                    '<td style="padding:7px 10px;font-size:12px;font-weight:600">' + escHtml(side) + '</td>' +
+                    '<td style="padding:7px 10px;font-size:12px;color:var(--muted);text-align:right;font-family:var(--mono)">' + escHtml(costDisp) + '</td>' +
+                    '<td style="padding:7px 10px;font-size:12px;text-align:right;font-family:var(--mono)">' + escHtml(paidDisp) + '</td>' +
+                    '<td style="padding:7px 10px;font-size:13px;font-weight:800;text-align:center;color:' + resColor + '">' + resLbl + '</td>' +
+                    '</tr>';
+            }).join('');
+            actEl.innerHTML = '<div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:8px">Recent Bets</div>' +
+                '<div class="admin-table-wrap"><table class="port-table" style="width:100%"><thead><tr>' +
+                '<th style="padding:6px 10px;text-align:left;font-size:10px;color:var(--muted2)">Date</th>' +
+                '<th style="padding:6px 10px;text-align:left;font-size:10px;color:var(--muted2)">Matchup</th>' +
+                '<th style="padding:6px 10px;text-align:left;font-size:10px;color:var(--muted2)">Market</th>' +
+                '<th style="padding:6px 10px;text-align:left;font-size:10px;color:var(--muted2)">Side</th>' +
+                '<th style="padding:6px 10px;text-align:right;font-size:10px;color:var(--muted2)">Cost</th>' +
+                '<th style="padding:6px 10px;text-align:right;font-size:10px;color:var(--muted2)">Paid</th>' +
+                '<th style="padding:6px 10px;text-align:center;font-size:10px;color:var(--muted2)">Result</th>' +
+                '</tr></thead><tbody>' + betRows + '</tbody></table></div>';
+        } else {
+            // Fallback: activity feed (auction/karma events) if no bet history returned
+            var acts = data.activity && data.activity.activities;
+            if (acts && acts.length) {
+                var predKeywords = ['prediction market payout', 'Rax earned for prediction'];
+                var feedItems = acts.slice(0, 20).map(function(a) {
+                    var display = (a.additionalInfo && a.additionalInfo.display) ? a.additionalInfo.display.trim() : '';
+                    if (!display) return '';
+                    var isPred = predKeywords.some(function(k) { return display.toLowerCase().indexOf(k.toLowerCase()) !== -1; });
+                    var ts = a.bumpedAt ? new Date(a.bumpedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+                    return '<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">' +
+                        '<div style="flex:1;font-size:12px;color:' + (isPred ? 'var(--fg)' : 'var(--muted)') + ';font-weight:' + (isPred ? '600' : '400') + '">' + escHtml(display) + '</div>' +
+                        '<div style="font-size:11px;color:var(--muted2);white-space:nowrap;padding-top:1px">' + escHtml(ts) + '</div>' +
+                        '</div>';
+                }).filter(Boolean).join('');
+                actEl.innerHTML = '<div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:8px">Recent Activity</div>' +
+                    '<div>' + feedItems + '</div>';
+            } else {
+                actEl.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:16px 0">No bet history available.</div>';
+            }
         }
     }
 

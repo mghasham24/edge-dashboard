@@ -83,10 +83,11 @@ export async function onRequestGet({ request, env }) {
     return json({ ok: false, username, message: 'Profile found but could not extract userId.', profile });
   }
 
-  // Step 2: fetch activity feed (works with any valid RS token — public endpoint)
-  // Returns: notifications, prediction payouts, auction activity
-  const [activityRes, openPosRes] = await Promise.all([
+  // Step 2: parallel fetches
+  const [activityRes, betHistoryRes, openPosRes] = await Promise.all([
     rsGet(`/activity?userId=${userId}`, hdrs),
+    // historyrollup = settled bet history; userId param makes it public-accessible
+    rsGet(`/predictions/historyrollup?userId=${userId}&limit=50`, hdrs),
     // Step 3: check for connected RS account to fetch open positions
     (async () => {
       try {
@@ -105,6 +106,7 @@ export async function onRequestGet({ request, env }) {
   ]);
 
   const activity = activityRes.status === 200 ? activityRes.body : null;
+  const betHistory = betHistoryRes.status === 200 ? betHistoryRes.body : null;
   const openPositions = openPosRes;
 
   return json({
@@ -113,9 +115,11 @@ export async function onRequestGet({ request, env }) {
     userId,
     displayName,
     profile,
-    activity,        // prediction payouts + notifications + auction activity — always available
-    openPositions,   // current open bets — only available if user connected RS to RaxEdge
-    isConnected: !!openPositions
+    activity,        // notifications + auction activity
+    betHistory,      // settled prediction bets (historyrollup)
+    openPositions,   // current open bets — only if user connected RS to RaxEdge
+    isConnected: !!openPositions,
+    _debug: { betHistoryStatus: betHistoryRes.status }
   });
 }
 
