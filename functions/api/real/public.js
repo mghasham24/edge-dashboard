@@ -83,7 +83,7 @@ async function handleGet(request, env) {
     if (!sharedToken) return fail(503, 'RS token unavailable — try again later');
     const hdrs = buildHeaders(sharedToken);
     const r = await rsGet(`/predictions/history?userId=${paramUserId}&${PAGE}&before=${encodeURIComponent(before)}`, hdrs);
-    return json({ ok: true, betHistory: r.status === 200 ? r.body : null, _dbg: { histStatus: r.status } });
+    return json({ ok: true, betHistory: r.status === 200 ? r.body : null });
   }
 
   const username = (url.searchParams.get('username') || '').trim().replace(/^@/, '');
@@ -160,11 +160,7 @@ async function handleGet(request, env) {
     activity:      activityRes?.status === 200 ? activityRes.body : null,
     betHistory,
     openPositions: openPosRes?.status === 200 ? openPosRes.body : null,
-    isConnected:   !!userRow,
-    _dbg: {
-      publicHistStatus: publicHistRes?.status,
-      publicHistItems:  publicHistOk ? (publicHistRes.body.items?.length ?? 'no items key') : null,
-    }
+    isConnected:   !!userRow
   });
 } // end handleGet
 
