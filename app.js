@@ -2490,6 +2490,124 @@
         document.getElementById('portfolio-panel').classList.remove('visible');
     }
 
+    function showRsLookupTab() {
+        document.getElementById('sport-tabs').style.display = 'none';
+        document.getElementById('feature-tabs').style.display = 'none';
+        document.querySelector('.controls').style.display = 'none';
+        document.querySelector('.status-bar').style.display = 'none';
+        document.querySelector('.table-wrap').style.display = 'none';
+        document.getElementById('mobile-cards').style.display = 'none';
+        document.getElementById('collapse-btn').style.display = 'none';
+        document.getElementById('refresh-btn').style.display = 'none';
+        document.getElementById('rs-lookup-panel').classList.add('visible');
+        setTimeout(function() { var inp = document.getElementById('rs-lookup-input'); if (inp) inp.focus(); }, 100);
+    }
+
+    function hideRsLookupTab() {
+        document.getElementById('sport-tabs').style.display = '';
+        document.getElementById('feature-tabs').style.display = '';
+        document.querySelector('.controls').style.display = '';
+        document.querySelector('.status-bar').style.display = '';
+        document.querySelector('.table-wrap').style.display = '';
+        document.getElementById('mobile-cards').style.display = '';
+        document.getElementById('collapse-btn').style.display = '';
+        document.getElementById('refresh-btn').style.display = '';
+        document.getElementById('rs-lookup-panel').classList.remove('visible');
+    }
+
+    function lookupRsUser() {
+        var inp = document.getElementById('rs-lookup-input');
+        var username = (inp ? inp.value : '').trim().replace(/^@/, '');
+        if (!username) return;
+        var status = document.getElementById('rs-lookup-status');
+        var result = document.getElementById('rs-lookup-result');
+        status.textContent = 'Looking up @' + escHtml(username) + '…';
+        result.style.display = 'none';
+        document.getElementById('rs-lookup-profile').innerHTML = '';
+        document.getElementById('rs-lookup-activity').innerHTML = '';
+        document.getElementById('rs-lookup-positions').innerHTML = '';
+        fetch('/api/real/public?username=' + encodeURIComponent(username))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data.ok) {
+                    status.textContent = data.message || 'User not found.';
+                    return;
+                }
+                status.textContent = '';
+                result.style.display = '';
+                renderRsLookup(data);
+            })
+            .catch(function() { status.textContent = 'Error — please try again.'; });
+    }
+
+    function renderRsLookup(data) {
+        var u = (data.profile && data.profile.user) ? data.profile.user : {};
+        var karma = u.karma ? u.karma.toLocaleString() : '—';
+        var pollW = u.pollRecord ? u.pollRecord.wins : 0;
+        var pollL = u.pollRecord ? u.pollRecord.losses : 0;
+        var winPct = (pollW + pollL) > 0 ? Math.round(pollW / (pollW + pollL) * 100) : null;
+
+        // Profile card
+        document.getElementById('rs-lookup-profile').innerHTML =
+            '<div style="background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:16px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">' +
+            '<div style="min-width:0;flex:1">' +
+            '<div style="font-size:16px;font-weight:800;color:var(--fg)">' + escHtml(u.name || data.username) + (u.isVerified ? ' <span style="color:var(--accent);font-size:12px">✓</span>' : '') + '</div>' +
+            '<div style="font-size:12px;color:var(--muted);margin-top:2px">@' + escHtml(u.userName || data.username) + '</div>' +
+            '</div>' +
+            '<div style="display:flex;gap:20px;flex-wrap:wrap">' +
+            '<div style="text-align:center"><div style="font-size:16px;font-weight:800;color:var(--fg)">' + karma + '</div><div style="font-size:10px;color:var(--muted2);letter-spacing:.06em;text-transform:uppercase">Karma</div></div>' +
+            '<div style="text-align:center"><div style="font-size:16px;font-weight:800;color:var(--fg)">' + pollW + '<span style="color:var(--muted);font-size:12px">/' + pollL + '</span></div><div style="font-size:10px;color:var(--muted2);letter-spacing:.06em;text-transform:uppercase">W/L</div></div>' +
+            (winPct !== null ? '<div style="text-align:center"><div style="font-size:16px;font-weight:800;color:' + (winPct >= 55 ? 'var(--green)' : winPct >= 45 ? 'var(--fg)' : 'var(--red)') + '">' + winPct + '%</div><div style="font-size:10px;color:var(--muted2);letter-spacing:.06em;text-transform:uppercase">Win%</div></div>' : '') +
+            '</div>' +
+            '</div>';
+
+        // Open positions (only if connected to RaxEdge)
+        var posEl = document.getElementById('rs-lookup-positions');
+        var positions = data.openPositions && data.openPositions.positions;
+        if (positions && positions.length) {
+            var rows = positions.slice(0, 20).map(function(p) {
+                var cost = (p.details || []).find(function(d) { return d.isRax && d.label === 'Cost'; });
+                var pays = (p.details || []).find(function(d) { return d.isRax && d.label === 'Pays'; });
+                return '<tr>' +
+                    '<td style="padding:8px 10px;color:var(--muted);font-size:11px;white-space:nowrap">' + escHtml(p.sportLabel || p.sport || '') + '</td>' +
+                    '<td style="padding:8px 10px;font-size:12px;font-weight:600">' + escHtml(p.marketDisplay && p.marketDisplay.display || '') + '</td>' +
+                    '<td style="padding:8px 10px;font-size:12px">' + escHtml(p.outcomeLabel || '') + '</td>' +
+                    '<td style="padding:8px 10px;font-size:12px;color:var(--muted);text-align:right">' + escHtml(cost ? cost.display + ' Rax' : '—') + '</td>' +
+                    '<td style="padding:8px 10px;font-size:12px;color:var(--green);text-align:right">' + escHtml(pays ? pays.display + ' Rax' : '—') + '</td>' +
+                    '</tr>';
+            }).join('');
+            posEl.innerHTML = '<div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:8px">Open Positions</div>' +
+                '<div class="admin-table-wrap"><table class="port-table" style="width:100%"><thead><tr>' +
+                '<th style="padding:6px 10px;text-align:left;font-size:10px;color:var(--muted2)">Sport</th>' +
+                '<th style="padding:6px 10px;text-align:left;font-size:10px;color:var(--muted2)">Game</th>' +
+                '<th style="padding:6px 10px;text-align:left;font-size:10px;color:var(--muted2)">Side</th>' +
+                '<th style="padding:6px 10px;text-align:right;font-size:10px;color:var(--muted2)">Cost</th>' +
+                '<th style="padding:6px 10px;text-align:right;font-size:10px;color:var(--muted2)">Pays</th>' +
+                '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+        } else {
+            posEl.innerHTML = '';
+        }
+
+        // Activity feed — prediction payouts and notable entries
+        var acts = data.activity && data.activity.activities;
+        if (acts && acts.length) {
+            var predKeywords = ['prediction market payout', 'Rax earned for prediction', 'rax earned for prediction'];
+            var items = acts.slice(0, 30).map(function(a) {
+                var display = (a.additionalInfo && a.additionalInfo.display) ? a.additionalInfo.display.trim() : '';
+                if (!display) return '';
+                var isPred = predKeywords.some(function(k) { return display.toLowerCase().indexOf(k.toLowerCase()) !== -1; });
+                var ts = a.bumpedAt ? new Date(a.bumpedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+                return '<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">' +
+                    '<div style="flex:1;font-size:12px;color:' + (isPred ? 'var(--fg)' : 'var(--muted)') + ';font-weight:' + (isPred ? '600' : '400') + '">' + escHtml(display) + '</div>' +
+                    '<div style="font-size:11px;color:var(--muted2);white-space:nowrap;padding-top:1px">' + escHtml(ts) + '</div>' +
+                    '</div>';
+            }).filter(Boolean).join('');
+            document.getElementById('rs-lookup-activity').innerHTML =
+                '<div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:8px">Recent Activity</div>' +
+                '<div>' + items + '</div>';
+        }
+    }
+
     function showEvTab() {
         document.getElementById('sport-tabs').style.display = 'none';
         document.getElementById('feature-tabs').style.display = 'none';
@@ -4630,6 +4748,31 @@
             }
 
 
+
+            // RS Lookup tab
+            if (!document.getElementById('rs-lookup-tab-btn')) {
+                var rsLookupTabBtn = document.createElement('button');
+                rsLookupTabBtn.className = 'feature-tab sport-tab';
+                rsLookupTabBtn.textContent = '🔍 RS Lookup';
+                rsLookupTabBtn.id = 'rs-lookup-tab-btn';
+                rsLookupTabBtn.onclick = function() {
+                    var isActive = this.classList.contains('active');
+                    if (isActive) {
+                        this.classList.remove('active');
+                        this.textContent = '🔍 RS Lookup';
+                        hideRsLookupTab();
+                        loadOdds();
+                    } else {
+                        document.querySelectorAll('.sport-tab,.feature-tab').forEach(function(t) { t.classList.remove('active'); });
+                        this.classList.add('active');
+                        this.textContent = '<- Dashboard';
+                        showRsLookupTab();
+                    }
+                };
+                ftBar.appendChild(rsLookupTabBtn);
+            } else {
+                ftBar.appendChild(document.getElementById('rs-lookup-tab-btn'));
+            }
 
             // Pro ✦ button (manage subscription) — right of Refer, only for pro users
             if (currentUser && currentUser.plan === 'pro' && !currentUser.is_admin) {

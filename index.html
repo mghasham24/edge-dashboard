@@ -729,6 +729,27 @@
             </div>
         </div>
 
+        <!-- RS Lookup panel -->
+        <div class="admin-panel" id="rs-lookup-panel">
+            <div style="margin-bottom:20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                <button onclick="document.getElementById('rs-lookup-tab-btn').click()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:7px 14px;border-radius:5px;cursor:pointer;letter-spacing:.04em">&larr; Back to Dashboard</button>
+                <div style="font-size:16px;font-weight:800;letter-spacing:.04em;color:var(--fg)">🔍 RS User Lookup</div>
+            </div>
+            <div style="display:flex;gap:8px;max-width:420px;margin-bottom:24px">
+                <input id="rs-lookup-input" type="text" placeholder="RS username…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+                    style="flex:1;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--mono);font-size:13px;font-weight:600;padding:8px 12px;border-radius:6px;outline:none"
+                    onkeydown="if(event.key==='Enter')lookupRsUser()">
+                <button id="rs-lookup-btn" onclick="lookupRsUser()"
+                    style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:12px;font-weight:700;padding:8px 18px;border-radius:6px;cursor:pointer;letter-spacing:.04em;white-space:nowrap">Search</button>
+            </div>
+            <div id="rs-lookup-status" style="color:var(--muted);font-size:13px;min-height:20px;margin-bottom:12px"></div>
+            <div id="rs-lookup-result" style="display:none">
+                <div id="rs-lookup-profile"></div>
+                <div id="rs-lookup-positions" style="margin-top:20px"></div>
+                <div id="rs-lookup-activity" style="margin-top:20px"></div>
+            </div>
+        </div>
+
     </div>
     <!-- end #dashboard -->
 
