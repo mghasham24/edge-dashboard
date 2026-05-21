@@ -2563,24 +2563,39 @@
         if (!trackerCursor || !trackerUserId) return;
         var btn = document.getElementById('trk-load-more-btn');
         if (btn) { btn.textContent = 'Loading…'; btn.disabled = true; }
+        document.getElementById('trk-load-more-wrap').style.display = 'none';
+        autoLoadTrackerHistory().then(function() {
+            if (trackerHasMore) {
+                document.getElementById('trk-load-more-wrap').style.display = '';
+                if (btn) { btn.textContent = 'Load More'; btn.disabled = false; }
+            }
+        });
+    }
 
-        fetch('/api/real/public?userId=' + encodeURIComponent(trackerUserId) + '&before=' + encodeURIComponent(trackerCursor))
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                var items = (data.betHistory && data.betHistory.items) || [];
-                trackerHistoryAll = trackerHistoryAll.concat(items);
-                if (items.length > 0) {
-                    trackerCursor = items[items.length - 1].latestLedgerTimestamp || items[items.length - 1].transactedAt || null;
+    async function autoLoadTrackerHistory() {
+        var statusEl = document.getElementById('trk-load-status');
+        while (trackerHasMore && trackerCursor && trackerUserId) {
+            try {
+                var r = await fetch('/api/real/public?userId=' + encodeURIComponent(trackerUserId) + '&before=' + encodeURIComponent(trackerCursor));
+                var data = await r.json();
+                var newItems = (data.betHistory && data.betHistory.items) || [];
+                var seen = new Set(trackerHistoryAll.map(function(p) { return p.id; }));
+                trackerHistoryAll = trackerHistoryAll.concat(newItems.filter(function(p) { return !seen.has(p.id); }));
+                if (newItems.length > 0) {
+                    trackerCursor = newItems[newItems.length - 1].latestLedgerTimestamp || newItems[newItems.length - 1].transactedAt || null;
                 }
-                trackerHasMore = items.length >= 100;
-                applyTrackerFilters();
+                trackerHasMore = !!(data.betHistory && data.betHistory.hasMore);
+                if (statusEl) statusEl.textContent = 'Loading… ' + trackerHistoryAll.length + ' bets';
                 updateTrackerStats();
-                document.getElementById('trk-load-more-wrap').style.display = trackerHasMore ? '' : 'none';
-                if (btn) { btn.textContent = 'Load More'; btn.disabled = false; }
-            })
-            .catch(function() {
-                if (btn) { btn.textContent = 'Load More'; btn.disabled = false; }
-            });
+                applyTrackerFilters();
+                await new Promise(function(res) { setTimeout(res, 150); });
+            } catch(e) {
+                break;
+            }
+        }
+        if (statusEl) statusEl.textContent = '';
+        updateTrackerStats();
+        applyTrackerFilters();
     }
 
     function renderTracker(data) {
@@ -2605,7 +2620,7 @@
         if (items.length > 0) {
             trackerCursor = items[items.length - 1].latestLedgerTimestamp || items[items.length - 1].transactedAt || null;
         }
-        trackerHasMore = items.length >= 100;
+        trackerHasMore = !!(data.betHistory && data.betHistory.hasMore);
 
         // Open positions
         var mktMapT = { gamewinner: 'ML', pointspread: 'Spread', total: 'Total', moneyline: 'ML' };
@@ -2654,7 +2669,8 @@
         document.getElementById('tracker-content').style.display = '';
         updateTrackerStats();
         applyTrackerFilters();
-        document.getElementById('trk-load-more-wrap').style.display = trackerHasMore ? '' : 'none';
+        document.getElementById('trk-load-more-wrap').style.display = 'none';
+        if (trackerHasMore) autoLoadTrackerHistory();
     }
 
     function updateTrackerStats() {
