@@ -52,6 +52,16 @@ async function getSharedRsToken(env) {
 }
 
 export async function onRequestGet({ request, env }) {
+  try {
+    return await handleGet(request, env);
+  } catch (e) {
+    return new Response(JSON.stringify({ error: 'Internal error', message: e.message, stack: (e.stack || '').slice(0, 500) }), {
+      status: 500, headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+async function handleGet(request, env) {
   const session = await getSession(request, env.DB);
   if (!session) return fail(401, 'Not authenticated');
 
@@ -156,7 +166,7 @@ export async function onRequestGet({ request, env }) {
       publicHistItems:  publicHistOk ? (publicHistRes.body.items?.length ?? 'no items key') : null,
     }
   });
-}
+} // end handleGet
 
 function json(data) {
   return new Response(JSON.stringify(data), {
