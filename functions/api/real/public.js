@@ -61,12 +61,14 @@ export async function onRequestGet({ request, env }) {
   const before = url.searchParams.get('before') || null;
   const paramUserId = url.searchParams.get('userId') || null;
 
+  const PAGE = `limit=100&pageSize=100&size=100&count=100`;
+
   // Load-more mode: only fetch next page of history (no profile/activity re-fetch needed)
   if (before && paramUserId) {
     const sharedToken = await getSharedRsToken(env);
     if (!sharedToken) return fail(503, 'RS token unavailable — try again later');
     const hdrs = buildHeaders(sharedToken);
-    const r = await rsGet(`/predictions/historyrollup?userId=${paramUserId}&limit=50&before=${encodeURIComponent(before)}`, hdrs);
+    const r = await rsGet(`/predictions/historyrollup?userId=${paramUserId}&${PAGE}&before=${encodeURIComponent(before)}`, hdrs);
     return json({ ok: true, betHistory: r.status === 200 ? r.body : null });
   }
 
@@ -97,7 +99,7 @@ export async function onRequestGet({ request, env }) {
   // Step 2: parallel fetches — activity, settled history, open positions (if connected)
   const [activityRes, betHistoryRes, openPosRes] = await Promise.all([
     rsGet(`/activity?userId=${userId}`, hdrs),
-    rsGet(`/predictions/historyrollup?userId=${userId}&limit=50`, hdrs),
+    rsGet(`/predictions/historyrollup?userId=${userId}&${PAGE}`, hdrs),
     (async () => {
       try {
         const authRow = await env.DB.prepare(

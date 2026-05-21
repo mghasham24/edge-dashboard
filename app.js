@@ -2572,7 +2572,7 @@
                 if (items.length > 0) {
                     trackerCursor = items[items.length - 1].latestLedgerTimestamp || items[items.length - 1].transactedAt || null;
                 }
-                trackerHasMore = items.length >= 50;
+                trackerHasMore = items.length >= 100;
                 applyTrackerFilters();
                 updateTrackerStats();
                 document.getElementById('trk-load-more-wrap').style.display = trackerHasMore ? '' : 'none';
@@ -2605,7 +2605,7 @@
         if (items.length > 0) {
             trackerCursor = items[items.length - 1].latestLedgerTimestamp || items[items.length - 1].transactedAt || null;
         }
-        trackerHasMore = items.length >= 50;
+        trackerHasMore = items.length >= 100;
 
         // Open positions
         var mktMapT = { gamewinner: 'ML', pointspread: 'Spread', total: 'Total', moneyline: 'ML' };
