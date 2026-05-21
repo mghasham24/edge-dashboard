@@ -2539,16 +2539,24 @@
         document.getElementById('tracker-content').style.display = 'none';
 
         fetch('/api/real/public?username=' + encodeURIComponent(username))
-            .then(function(r) { return r.json(); })
+            .then(function(r) {
+                if (!r.ok && r.status !== 200) return r.text().then(function(t) { throw new Error('HTTP ' + r.status + ': ' + t.slice(0, 200)); });
+                return r.json();
+            })
             .then(function(data) {
                 if (!data.ok) {
-                    statusEl.textContent = data.message || 'User not found.';
+                    statusEl.textContent = data.message || data.error || 'User not found.';
                     return;
                 }
                 statusEl.textContent = '';
-                renderTracker(data);
+                try {
+                    renderTracker(data);
+                } catch(e) {
+                    statusEl.textContent = 'Render error: ' + e.message;
+                    console.error('renderTracker error:', e);
+                }
             })
-            .catch(function() { statusEl.textContent = 'Error — please try again.'; });
+            .catch(function(e) { statusEl.textContent = 'Error: ' + (e && e.message || 'Unknown'); console.error('tracker fetch error:', e); });
     }
 
     function loadTrackerMore() {
