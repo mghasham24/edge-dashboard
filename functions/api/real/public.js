@@ -3,7 +3,8 @@ import { checkRateLimit } from '../../_lib/rateLimit.js';
 import { hashidsEncode } from '../../_lib/hashids.js';
 // functions/api/real/public.js
 // GET /api/real/public?username=HANDLE
-// Returns RS profile + activity for any username using shared RS token.
+// Returns RS profile + bet history for any username using shared RS token.
+// Uses /predictions/history?userId= (public) for bet history — no user connection required.
 // Open positions returned additionally if that user has connected their RS account to RaxEdge.
 
 const BASE = 'https://web.realapp.com';
@@ -71,8 +72,15 @@ export async function onRequestGet({ request, env }) {
     const sharedToken = await getSharedRsToken(env);
     if (!sharedToken) return fail(503, 'RS token unavailable — try again later');
     const hdrs = buildHeaders(sharedToken);
-    const r = await rsGet(`/predictions/historyrollup?userId=${paramUserId}&${PAGE}&before=${encodeURIComponent(before)}`, hdrs);
-    return json({ ok: true, betHistory: r.status === 200 ? r.body : null });
+    // Try public history endpoint first; fall back to historyrollup (session-scoped, may not work)
+    const [histRes, rollupRes] = await Promise.all([
+      rsGet(`/predictions/history?userId=${paramUserId}&${PAGE}&before=${encodeURIComponent(before)}`, hdrs),
+      rsGet(`/predictions/historyrollup?userId=${paramUserId}&${PAGE}&before=${encodeURIComponent(before)}`, hdrs),
+    ]);
+    const betHistory = (histRes.status === 200 && histRes.body) ? histRes.body
+                     : (rollupRes.status === 200 && rollupRes.body) ? rollupRes.body
+                     : null;
+    return json({ ok: true, betHistory, _dbg: { histStatus: histRes.status, rollupStatus: rollupRes.status } });
   }
 
   const username = (url.searchParams.get('username') || '').trim().replace(/^@/, '');
@@ -99,43 +107,51 @@ export async function onRequestGet({ request, env }) {
     return json({ ok: false, username, message: 'Profile found but could not extract userId.', profile });
   }
 
-  // Step 2: parallel fetches — activity, settled history, open positions (if connected)
-  const [activityRes, betHistoryRes, openPosRes] = await Promise.all([
+  // Step 2: look up whether this RS user has connected their account to RaxEdge
+  let userRow = await env.DB.prepare(
+    `SELECT auth_token, device_uuid FROM real_auth
+     WHERE (LOWER(rs_username) = LOWER(?) OR rs_user_id = ?)
+       AND auth_token IS NOT NULL
+     LIMIT 1`
+  ).bind(username, userId).first();
+
+  // Fallback for existing token-connects where rs_user_id was never stored:
+  // check if the session user's own token prefix matches this RS userId
+  if (!userRow) {
+    const sessionRow = await env.DB.prepare(
+      `SELECT auth_token, device_uuid FROM real_auth
+       WHERE user_id = ? AND auth_token IS NOT NULL LIMIT 1`
+    ).bind(session.user_id).first();
+    if (sessionRow && sessionRow.auth_token.startsWith(userId + '!')) {
+      userRow = sessionRow;
+      // Self-heal: store rs_user_id for future lookups
+      await env.DB.prepare(
+        `UPDATE real_auth SET rs_user_id = ? WHERE user_id = ? AND rs_user_id IS NULL`
+      ).bind(userId, session.user_id).run().catch(() => {});
+    }
+  }
+
+  // Step 3: parallel fetches
+  // - activity + betHistory: public endpoints, use shared token, work for any userId
+  // - openPositions: session-scoped, requires the searched user's own stored token
+  const userHdrs = userRow ? buildHeaders(userRow.auth_token, userRow.device_uuid || undefined) : null;
+
+  const [activityRes, publicHistRes, rollupRes, openPosRes] = await Promise.all([
     rsGet(`/activity?userId=${userId}`, hdrs),
+    rsGet(`/predictions/history?userId=${userId}&${PAGE}`, hdrs),
     rsGet(`/predictions/historyrollup?userId=${userId}&${PAGE}`, hdrs),
-    (async () => {
-      try {
-        // Primary lookup: by rs_username or rs_user_id (covers username-connect and new token-connects)
-        let row = await env.DB.prepare(
-          `SELECT auth_token, device_uuid FROM real_auth
-           WHERE (LOWER(rs_username) = LOWER(?) OR rs_user_id = ?)
-             AND auth_token IS NOT NULL
-           LIMIT 1`
-        ).bind(username, userId).first();
-
-        // Fallback for existing token-connects where rs_user_id was never stored:
-        // check if the session user's own token prefix matches this RS userId
-        if (!row) {
-          const sessionRow = await env.DB.prepare(
-            `SELECT auth_token, device_uuid FROM real_auth
-             WHERE user_id = ? AND auth_token IS NOT NULL LIMIT 1`
-          ).bind(session.user_id).first();
-          if (sessionRow && sessionRow.auth_token.startsWith(userId + '!')) {
-            row = sessionRow;
-            // Self-heal: store rs_user_id so future lookups don't need this fallback
-            await env.DB.prepare(
-              `UPDATE real_auth SET rs_user_id = ? WHERE user_id = ? AND rs_user_id IS NULL`
-            ).bind(userId, session.user_id).run().catch(() => {});
-          }
-        }
-
-        if (!row) return null;
-        const userHdrs = buildHeaders(row.auth_token, row.device_uuid || undefined);
-        const r = await rsGet('/predictions/openpositions', userHdrs);
-        return r.status === 200 ? r.body : null;
-      } catch { return null; }
-    })()
+    userHdrs ? rsGet('/predictions/openpositions', userHdrs) : Promise.resolve(null),
   ]);
+
+  // Use /predictions/history (public, respects userId) if it returned items.
+  // Fall back to historyrollup only if the user has their own token stored (session-scoped).
+  const publicHistOk = publicHistRes?.status === 200 && publicHistRes.body &&
+                       typeof publicHistRes.body === 'object';
+  const rollupOk     = rollupRes?.status === 200 && rollupRes.body &&
+                       typeof rollupRes.body === 'object' && userHdrs;
+  const betHistory   = publicHistOk ? publicHistRes.body
+                     : rollupOk     ? rollupRes.body
+                     : null;
 
   return json({
     ok: true,
@@ -143,10 +159,16 @@ export async function onRequestGet({ request, env }) {
     userId,
     displayName,
     profile,
-    activity:      activityRes.status === 200 ? activityRes.body : null,
-    betHistory:    betHistoryRes.status === 200 ? betHistoryRes.body : null,
-    openPositions: openPosRes,
-    isConnected:   !!openPosRes
+    activity:      activityRes?.status === 200 ? activityRes.body : null,
+    betHistory,
+    openPositions: openPosRes?.status === 200 ? openPosRes.body : null,
+    isConnected:   !!userRow,
+    _dbg: {
+      publicHistStatus: publicHistRes?.status,
+      rollupStatus:     rollupRes?.status,
+      publicHistItems:  publicHistOk ? (publicHistRes.body.items?.length ?? 'no items key') : null,
+      rollupItems:      rollupOk     ? (rollupRes.body.items?.length ?? 'no items key')     : null,
+    }
   });
 }
 
