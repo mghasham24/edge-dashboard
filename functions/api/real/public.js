@@ -12,15 +12,15 @@ function buildHeaders(rsToken) {
   return {
     'Accept': 'application/json',
     'Content-Type': 'application/json',
-    'Authorization': `Bearer ${rsToken}`,
     'Origin': 'https://realsports.io',
     'Referer': 'https://realsports.io/',
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
+    'real-auth-info': rsToken,
     'real-device-type': 'desktop_web',
     'real-device-uuid': '2e0a38e2-0ee8-4f93-9a34-218ac1d10161',
     'real-device-name': '5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
     'real-request-token': hashidsEncode(Date.now()),
-    'real-version': '30'
+    'real-version': '31'
   };
 }
 
@@ -69,15 +69,20 @@ export async function onRequestGet({ request, env }) {
   const hdrs = buildHeaders(rsToken);
 
   // Step 1: resolve username → userId
-  // Try the most likely paths first (stay well under CF's 50 subrequest limit)
   const usernamePaths = [
     `/users/username/${username}`,
     `/user/username/${username}`,
+    `/users/${username}`,
+    `/user/${username}`,
     `/accounts/username/${username}`,
     `/profiles/username/${username}`,
+    `/users/search?q=${username}`,
+    `/user/search?q=${username}`,
     `/users?username=${username}`,
     `/users?handle=${username}`,
-    `/users?search=${username}`,
+    `/users?q=${username}`,
+    `/search/users?q=${username}`,
+    `/social/search?q=${username}`,
   ];
 
   const profileResults = await Promise.all(
