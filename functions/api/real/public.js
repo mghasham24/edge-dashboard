@@ -77,12 +77,15 @@ async function handleGet(request, env) {
 
   const PAGE = `limit=100&pageSize=100&size=100&count=100`;
 
-  // Load-more mode: only fetch next page of history (no profile/activity re-fetch needed)
+  // Load-more mode: fetch next page of historyrollup using the user's own stored token.
+  // historyrollup is session-scoped — must use their own token, not the shared one.
   if (before && paramUserId) {
-    const sharedToken = await getSharedRsToken(env);
-    if (!sharedToken) return fail(503, 'RS token unavailable — try again later');
-    const hdrs = buildHeaders(sharedToken);
-    const r = await rsGet(`/predictions/history?userId=${paramUserId}&${PAGE}&before=${encodeURIComponent(before)}`, hdrs);
+    const userRow2 = await env.DB.prepare(
+      `SELECT auth_token, device_uuid FROM real_auth WHERE rs_user_id = ? AND auth_token IS NOT NULL LIMIT 1`
+    ).bind(paramUserId).first();
+    if (!userRow2) return json({ ok: true, betHistory: null });
+    const uHdrs = buildHeaders(userRow2.auth_token, userRow2.device_uuid || undefined);
+    const r = await rsGet(`/predictions/historyrollup?${PAGE}&before=${encodeURIComponent(before)}`, uHdrs);
     return json({ ok: true, betHistory: r.status === 200 ? r.body : null });
   }
 
@@ -134,30 +137,16 @@ async function handleGet(request, env) {
     }
   }
 
-  // Step 3: probe multiple public endpoint candidates + session-scoped openPositions
+  // Step 3: parallel fetches — all RS history endpoints are session-scoped (userId param ignored).
+  // betHistory + openPositions require the searched user's OWN stored token from real_auth.
+  // activity is public but contains only social/comment events, not bet history.
   const userHdrs = userRow ? buildHeaders(userRow.auth_token, userRow.device_uuid || undefined) : null;
 
-  // No-auth headers: test if RS has fully public endpoints (no real-auth-info required)
-  const noAuthHdrs = {
-    'Accept': 'application/json',
-    'Content-Type': 'application/json',
-    'Origin': 'https://realsports.io',
-    'Referer': 'https://realsports.io/',
-    'real-device-type': 'desktop_web',
-    'real-version': '31'
-  };
-
-  const [activityRes, histNoAuthRes, histAuthRes, portfolioRes, openPosRes] = await Promise.all([
+  const [activityRes, betHistoryRes, openPosRes] = await Promise.all([
     rsGet(`/activity?userId=${userId}`, hdrs),
-    rsGet(`/predictions/history?userId=${userId}&${PAGE}`, noAuthHdrs),
-    rsGet(`/predictions/history?userId=${userId}&${PAGE}`, hdrs),
-    rsGet(`/predictions/portfolio?userId=${userId}`, hdrs),
+    userHdrs ? rsGet(`/predictions/historyrollup?${PAGE}`, userHdrs) : Promise.resolve(null),
     userHdrs ? rsGet('/predictions/openpositions', userHdrs) : Promise.resolve(null),
   ]);
-
-  const actSample = activityRes?.status === 200 && activityRes.body?.items?.length
-    ? activityRes.body.items.slice(0, 2)
-    : null;
 
   return json({
     ok: true,
@@ -166,20 +155,9 @@ async function handleGet(request, env) {
     displayName,
     profile,
     activity:      activityRes?.status === 200 ? activityRes.body : null,
-    betHistory:    null,
+    betHistory:    betHistoryRes?.status === 200 ? betHistoryRes.body : null,
     openPositions: openPosRes?.status === 200 ? openPosRes.body : null,
-    isConnected:   !!userRow,
-    _probe: {
-      activityStatus:    activityRes?.status,
-      activitySample:    actSample,
-      histNoAuthStatus:  histNoAuthRes?.status,
-      histNoAuthItems:   histNoAuthRes?.status === 200 ? (histNoAuthRes.body?.items?.length ?? 'no items key') : null,
-      histNoAuthUserId:  histNoAuthRes?.status === 200 && histNoAuthRes.body?.items?.[0]?.userId,
-      histAuthStatus:    histAuthRes?.status,
-      histAuthUserId:    histAuthRes?.status === 200 && histAuthRes.body?.items?.[0]?.userId,
-      portfolioStatus:   portfolioRes?.status,
-      portfolioSample:   portfolioRes?.status === 200 ? JSON.stringify(portfolioRes.body).slice(0, 300) : null,
-    }
+    isConnected:   !!userRow
   });
 } // end handleGet
 
