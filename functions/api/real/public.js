@@ -126,20 +126,22 @@ export async function onRequestGet({ request, env }) {
   // Step 2: fetch open positions for this userId
   // RS uses singular /user/ prefix (confirmed from profile lookup above)
   const posPaths = [
+    // Known working RS endpoints (used by portfolio.js) — test with shared token
+    `/predictions/openpositions`,
+    `/predictions/historyrollup`,
+    `/predictions/portfolioperformance?timeframe=1m`,
+    // User-scoped variants
+    `/user/${userId}/openpositions`,
     `/user/${userId}/predictions`,
     `/user/${userId}/positions`,
-    `/user/${userId}/open-positions`,
     `/user/${userId}/statlines`,
+    `/user/${username}/openpositions`,
     `/user/${username}/predictions`,
-    `/user/${username}/positions`,
     `/user/${username}/statlines`,
-    `/users/${userId}/positions`,
-    `/users/${userId}/predictions`,
-    `/predictions/open?userId=${userId}`,
+    `/predictions/openpositions?userId=${userId}`,
+    `/predictions/openpositions?username=${username}`,
+    `/predictions?userId=${userId}`,
     `/predictions?userId=${userId}&status=open`,
-    `/predictions?username=${username}&status=open`,
-    `/positions?userId=${userId}`,
-    `/portfolio/positions/open`,
   ];
 
   const posResults = await Promise.all(
