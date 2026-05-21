@@ -72,15 +72,8 @@ export async function onRequestGet({ request, env }) {
     const sharedToken = await getSharedRsToken(env);
     if (!sharedToken) return fail(503, 'RS token unavailable — try again later');
     const hdrs = buildHeaders(sharedToken);
-    // Try public history endpoint first; fall back to historyrollup (session-scoped, may not work)
-    const [histRes, rollupRes] = await Promise.all([
-      rsGet(`/predictions/history?userId=${paramUserId}&${PAGE}&before=${encodeURIComponent(before)}`, hdrs),
-      rsGet(`/predictions/historyrollup?userId=${paramUserId}&${PAGE}&before=${encodeURIComponent(before)}`, hdrs),
-    ]);
-    const betHistory = (histRes.status === 200 && histRes.body) ? histRes.body
-                     : (rollupRes.status === 200 && rollupRes.body) ? rollupRes.body
-                     : null;
-    return json({ ok: true, betHistory, _dbg: { histStatus: histRes.status, rollupStatus: rollupRes.status } });
+    const r = await rsGet(`/predictions/history?userId=${paramUserId}&${PAGE}&before=${encodeURIComponent(before)}`, hdrs);
+    return json({ ok: true, betHistory: r.status === 200 ? r.body : null, _dbg: { histStatus: r.status } });
   }
 
   const username = (url.searchParams.get('username') || '').trim().replace(/^@/, '');
@@ -131,27 +124,22 @@ export async function onRequestGet({ request, env }) {
     }
   }
 
-  // Step 3: parallel fetches
-  // - activity + betHistory: public endpoints, use shared token, work for any userId
-  // - openPositions: session-scoped, requires the searched user's own stored token
+  // Step 3: parallel fetches (3 calls max)
+  // - activity: public, works for any userId with shared token
+  // - publicHist: /predictions/history?userId= — testing if this is public (respects userId)
+  // - openPositions: session-scoped, needs the searched user's own stored token
   const userHdrs = userRow ? buildHeaders(userRow.auth_token, userRow.device_uuid || undefined) : null;
 
-  const [activityRes, publicHistRes, rollupRes, openPosRes] = await Promise.all([
+  const [activityRes, publicHistRes, openPosRes] = await Promise.all([
     rsGet(`/activity?userId=${userId}`, hdrs),
     rsGet(`/predictions/history?userId=${userId}&${PAGE}`, hdrs),
-    rsGet(`/predictions/historyrollup?userId=${userId}&${PAGE}`, hdrs),
     userHdrs ? rsGet('/predictions/openpositions', userHdrs) : Promise.resolve(null),
   ]);
 
-  // Use /predictions/history (public, respects userId) if it returned items.
-  // Fall back to historyrollup only if the user has their own token stored (session-scoped).
+  // /predictions/history with userId — if public, this returns that user's history regardless of token
   const publicHistOk = publicHistRes?.status === 200 && publicHistRes.body &&
                        typeof publicHistRes.body === 'object';
-  const rollupOk     = rollupRes?.status === 200 && rollupRes.body &&
-                       typeof rollupRes.body === 'object' && userHdrs;
-  const betHistory   = publicHistOk ? publicHistRes.body
-                     : rollupOk     ? rollupRes.body
-                     : null;
+  const betHistory = publicHistOk ? publicHistRes.body : null;
 
   return json({
     ok: true,
@@ -165,9 +153,7 @@ export async function onRequestGet({ request, env }) {
     isConnected:   !!userRow,
     _dbg: {
       publicHistStatus: publicHistRes?.status,
-      rollupStatus:     rollupRes?.status,
       publicHistItems:  publicHistOk ? (publicHistRes.body.items?.length ?? 'no items key') : null,
-      rollupItems:      rollupOk     ? (rollupRes.body.items?.length ?? 'no items key')     : null,
     }
   });
 }
