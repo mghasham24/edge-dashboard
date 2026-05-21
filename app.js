@@ -2495,6 +2495,9 @@
     var trackerUserId     = null;
     var trackerCursor     = null;
     var trackerHasMore    = false;
+    var trkCalYear        = new Date().getFullYear();
+    var trkCalMonth       = new Date().getMonth();
+    var trkTimeframe      = '1w';
 
     function showTrackerTab() {
         document.getElementById('sport-tabs').style.display = 'none';
@@ -2600,12 +2603,11 @@
         }
         trackerHasMore = items.length >= 50;
 
-        // Open positions (only if this user connected RS to RaxEdge)
-        var openSec = document.getElementById('trk-open-section');
+        // Open positions
+        var mktMapT = { gamewinner: 'ML', pointspread: 'Spread', total: 'Total', moneyline: 'ML' };
         var positions = data.openPositions && data.openPositions.positions;
+        var openTbody = document.getElementById('trk-open-tbody');
         if (positions && positions.length) {
-            openSec.style.display = '';
-            var mktMapT = { gamewinner: 'ML', pointspread: 'Spread', total: 'Total', moneyline: 'ML' };
             var openRows = positions.slice(0, 30).map(function(p) {
                 var matchup = (p.marketDisplay && p.marketDisplay.display) || '—';
                 var market  = p.marketLabel || mktMapT[p.marketType] || p.marketType || '—';
@@ -2629,10 +2631,21 @@
                     '<td style="color:var(--muted);font-size:11px">' + escHtml(status) + '</td>' +
                     '</tr>';
             }).join('');
-            document.getElementById('trk-open-tbody').innerHTML = openRows;
+            openTbody.innerHTML = openRows;
+            document.getElementById('trk-open-count').textContent = positions.length;
         } else {
-            openSec.style.display = 'none';
+            openTbody.innerHTML = '<tr><td colspan="8" style="color:var(--muted);padding:20px 12px">No open positions</td></tr>';
+            document.getElementById('trk-open-count').textContent = '0';
         }
+
+        // Init calendar to current month
+        trkCalYear  = new Date().getFullYear();
+        trkCalMonth = new Date().getMonth();
+        trkTimeframe = '1w';
+        ['1w','1m','3m'].forEach(function(t) {
+            var btn = document.getElementById('trk-tf-' + t);
+            if (btn) btn.classList.toggle('port-tf-active', t === '1w');
+        });
 
         document.getElementById('tracker-content').style.display = '';
         updateTrackerStats();
@@ -2654,8 +2667,135 @@
         });
         document.getElementById('trk-settled-count').textContent = trackerHistoryAll.length + (trackerHasMore ? '+' : '');
         var profitEl = document.getElementById('trk-profit');
-        profitEl.textContent = (totalProfit >= 0 ? '+' : '') + Math.round(totalProfit).toLocaleString() + ' Rax';
+        profitEl.innerHTML = RAX_ICON + (totalProfit >= 0 ? '+' : '') + fmtRax(totalProfit);
         profitEl.style.color = totalProfit > 0 ? 'var(--green)' : totalProfit < 0 ? 'var(--red)' : 'var(--fg)';
+        updateTrkPerfCards();
+        renderTrackerCalendar();
+    }
+
+    function calcTrkPerfForPeriod(days) {
+        var cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+        var totalCost = 0, totalPaid = 0;
+        trackerHistoryAll.forEach(function(p) {
+            if (!p.transactedAt || new Date(p.transactedAt).getTime() < cutoff) return;
+            var details = Array.isArray(p.details) ? p.details : [];
+            totalCost += parseRaxDisplay((details.find(function(d){ return d.label==='Cost'; }) || {}).display);
+            totalPaid += parseRaxDisplay((details.find(function(d){ return d.label==='Paid'; }) || {}).display);
+        });
+        var pnl = totalPaid - totalCost;
+        return { pnl: pnl, roi: totalCost > 0 ? pnl / totalCost * 100 : 0 };
+    }
+
+    function updateTrkPerfCards() {
+        var days = trkTimeframe === '1w' ? 7 : trkTimeframe === '3m' ? 90 : 30;
+        var calc = calcTrkPerfForPeriod(days);
+        var cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+        var wins = 0, total = 0;
+        trackerHistoryAll.forEach(function(p) {
+            if (!p.transactedAt || new Date(p.transactedAt).getTime() < cutoff) return;
+            total++;
+            if (getHistResult(p) === 'win') wins++;
+        });
+        var winRate = total > 0 ? wins / total * 100 : 0;
+        var pnlEl = document.getElementById('trk-pnl');
+        var roiEl = document.getElementById('trk-roi');
+        var wrEl  = document.getElementById('trk-winrate');
+        if (pnlEl) { pnlEl.innerHTML = RAX_ICON + (calc.pnl >= 0 ? '+' : '') + fmtRax(calc.pnl); pnlEl.style.color = calc.pnl >= 0 ? 'var(--green)' : 'var(--red)'; }
+        if (roiEl) { roiEl.textContent = (calc.roi >= 0 ? '+' : '') + calc.roi.toFixed(1) + '%'; roiEl.style.color = calc.roi >= 0 ? 'var(--green)' : 'var(--red)'; }
+        if (wrEl)  { wrEl.textContent = winRate.toFixed(1) + '%'; wrEl.style.color = winRate >= 50 ? 'var(--green)' : 'var(--red)'; }
+    }
+
+    function setTrackerTimeframe(tf) {
+        trkTimeframe = tf;
+        ['1w','1m','3m'].forEach(function(t) {
+            var btn = document.getElementById('trk-tf-' + t);
+            if (btn) btn.classList.toggle('port-tf-active', t === tf);
+        });
+        updateTrkPerfCards();
+    }
+
+    function renderTrackerCalendar() {
+        var calEl = document.getElementById('trk-calendar');
+        if (!calEl) return;
+        var label = document.getElementById('trk-cal-label');
+        var nextBtn = document.getElementById('trk-cal-next');
+        var today = new Date();
+        var monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        if (label) label.textContent = monthNames[trkCalMonth] + ' ' + trkCalYear;
+        if (nextBtn) nextBtn.disabled = (trkCalYear === today.getFullYear() && trkCalMonth === today.getMonth());
+
+        var dailyMap = buildDailyMap(trackerHistoryAll);
+        var mm = String(trkCalMonth + 1).padStart(2, '0');
+        var monthTotal = 0;
+        Object.keys(dailyMap).forEach(function(k) {
+            if (k.startsWith(trkCalYear + '-' + mm)) monthTotal += dailyMap[k].pnl;
+        });
+        var monthTotalEl = document.getElementById('trk-cal-monthly-total');
+        if (monthTotalEl) {
+            var mUnit = parseFloat(localStorage.getItem('raxedge_unit_size') || '300') || 300;
+            var mUnitStr = monthTotal / mUnit;
+            monthTotalEl.innerHTML = RAX_ICON + (monthTotal >= 0 ? '+' : '') + fmtRax(monthTotal) + ' (' + (mUnitStr >= 0 ? '+' : '') + mUnitStr.toFixed(2) + 'u)';
+            monthTotalEl.style.color = monthTotal > 0 ? 'var(--green)' : monthTotal < 0 ? 'var(--red)' : 'var(--muted)';
+        }
+
+        var daysInMonth = new Date(trkCalYear, trkCalMonth + 1, 0).getDate();
+        var firstDow    = new Date(trkCalYear, trkCalMonth, 1).getDay();
+        var maxAbsPnl   = 0;
+        for (var di = 1; di <= daysInMonth; di++) {
+            var dk = trkCalYear + '-' + mm + '-' + String(di).padStart(2, '0');
+            if (dailyMap[dk]) maxAbsPnl = Math.max(maxAbsPnl, Math.abs(dailyMap[dk].pnl));
+        }
+
+        var html = '<div class="port-cal">';
+        ['Su','Mo','Tu','We','Th','Fr','Sa'].forEach(function(d) { html += '<div class="port-cal-hdr">' + d + '</div>'; });
+        for (var i = 0; i < firstDow; i++) html += '<div class="port-cal-day empty"></div>';
+        for (var d = 1; d <= daysInMonth; d++) {
+            var dd  = String(d).padStart(2, '0');
+            var key = trkCalYear + '-' + mm + '-' + dd;
+            var dayData = dailyMap[key];
+            var isToday = (trkCalYear === today.getFullYear() && trkCalMonth === today.getMonth() && d === today.getDate());
+            var cls = 'port-cal-day' + (isToday ? ' today' : '') + (dayData ? ' has-data' : '');
+            var pnlHtml = '', dayStyle = '';
+            if (dayData) {
+                var pnl = dayData.pnl;
+                var pnlColor = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--muted)';
+                var calUnit = parseFloat(localStorage.getItem('raxedge_unit_size') || '300') || 300;
+                var calUStr = pnl / calUnit;
+                pnlHtml = '<span class="port-cal-pnl" style="color:' + pnlColor + '">' + (pnl > 0 ? '+' : '') + fmtRax(pnl) + '</span>'
+                        + '<span class="port-cal-unit" style="color:' + pnlColor + '">' + (calUStr >= 0 ? '+' : '') + calUStr.toFixed(1) + 'u</span>'
+                        + '<span class="port-cal-bets">' + dayData.bets + ' bet' + (dayData.bets !== 1 ? 's' : '') + '</span>';
+                if (maxAbsPnl > 0 && pnl !== 0) {
+                    var intensity = Math.min(Math.abs(pnl) / maxAbsPnl, 1);
+                    var alpha = (0.08 + intensity * 0.37).toFixed(3);
+                    dayStyle = pnl > 0
+                        ? 'background:rgba(45,204,126,' + alpha + ');border-color:rgba(45,204,126,' + (intensity * 0.5).toFixed(3) + ')'
+                        : 'background:rgba(240,82,82,' + alpha + ');border-color:rgba(240,82,82,' + (intensity * 0.5).toFixed(3) + ')';
+                }
+            }
+            var dayAttrs = dayData ? ' onclick="selectTrkCalDay(\'' + key + '\')" style="cursor:pointer' + (dayStyle ? ';' + dayStyle : '') + '"' : (dayStyle ? ' style="' + dayStyle + '"' : '');
+            html += '<div class="' + cls + '" title="' + key + '"' + dayAttrs + '><span class="port-cal-dn">' + d + '</span>' + pnlHtml + '</div>';
+        }
+        html += '</div>';
+        calEl.innerHTML = html;
+    }
+
+    function shiftTrackerCalMonth(delta) {
+        trkCalMonth += delta;
+        if (trkCalMonth > 11) { trkCalMonth = 0; trkCalYear++; }
+        if (trkCalMonth < 0)  { trkCalMonth = 11; trkCalYear--; }
+        renderTrackerCalendar();
+    }
+
+    function selectTrkCalDay(dateKey) {
+        var items = trackerHistoryAll.filter(function(p) {
+            return p.transactedAt && localDateKey(p.transactedAt) === dateKey;
+        });
+        var tbody = document.getElementById('trk-history-tbody');
+        if (!items.length) return;
+        tbody.innerHTML = items.map(function(p) { return histRowHtml(p); }).join('');
+        document.getElementById('trk-load-status').textContent = dateKey + ' · ' + items.length + ' bet' + (items.length !== 1 ? 's' : '');
+        var histEl = document.getElementById('trk-history-tbody');
+        if (histEl) histEl.closest('table').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
     function applyTrackerFilters() {
