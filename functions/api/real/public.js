@@ -3,19 +3,16 @@ import { checkRateLimit } from '../../_lib/rateLimit.js';
 import { hashidsEncode } from '../../_lib/hashids.js';
 // functions/api/real/public.js
 // GET /api/real/public?username=HANDLE
-// Probes Real Sports public API for a given username (no RS auth token needed).
-// Requires a valid RaxEdge session to prevent anonymous RS relay abuse.
+// Looks up any RS user's open positions by username using the shared RS auth token.
+// Requires a valid RaxEdge session — not callable anonymously.
 
-const RS_BASES = [
-  'https://web.realapp.com',
-  'https://api.realapp.tools',
-  'https://realapp.tools',
-];
+const BASE = 'https://web.realapp.com';
 
-function buildRsHeaders() {
+function buildHeaders(rsToken) {
   return {
     'Accept': 'application/json',
     'Content-Type': 'application/json',
+    'Authorization': `Bearer ${rsToken}`,
     'Origin': 'https://realsports.io',
     'Referer': 'https://realsports.io/',
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
@@ -27,37 +24,36 @@ function buildRsHeaders() {
   };
 }
 
-// Minimal headers — what a public endpoint would accept without auth
-function buildPublicHeaders() {
-  return {
-    'Accept': 'application/json',
-    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
-    'Origin': 'https://realsports.io',
-    'Referer': 'https://realsports.io/',
-  };
-}
-
-async function tryFetch(url, headers, timeoutMs = 5000) {
+async function rsGet(path, hdrs, timeoutMs = 6000) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const res = await fetch(url, { headers, signal: ctrl.signal });
+    const res = await fetch(`${BASE}${path}`, { headers: hdrs, signal: ctrl.signal });
     clearTimeout(timer);
     const text = await res.text();
     let body = null;
-    try { body = JSON.parse(text); } catch { body = text.slice(0, 500); }
+    try { body = JSON.parse(text); } catch { body = text.slice(0, 400); }
     return { status: res.status, body };
   } catch (e) {
     clearTimeout(timer);
-    return { status: e.name === 'AbortError' ? 'timeout' : 'err', body: e.message };
+    return { status: e.name === 'AbortError' ? 'timeout' : 'error', body: e.message };
   }
+}
+
+async function getRsToken(env) {
+  try {
+    const row = await env.DB.prepare(
+      "SELECT value FROM odds_cache WHERE key='meta:rs_auth_token' LIMIT 1"
+    ).first();
+    if (row?.value) return row.value;
+  } catch {}
+  return env.RS_AUTH_TOKEN || null;
 }
 
 export async function onRequestGet({ request, env }) {
   const session = await getSession(request, env.DB);
   if (!session) return fail(401, 'Not authenticated');
 
-  // 10 lookups per minute per IP — prevents use as anonymous RS relay
   const allowed = await checkRateLimit(env.DB, request, 'real_public', 10, 60);
   if (!allowed) return fail(429, 'Too many requests');
 
@@ -67,93 +63,85 @@ export async function onRequestGet({ request, env }) {
   if (!username) return fail(400, 'username required');
   if (!/^[a-zA-Z0-9_.-]{1,50}$/.test(username)) return fail(400, 'invalid username');
 
-  const rsHdrs = buildRsHeaders();
-  const pubHdrs = buildPublicHeaders();
+  const rsToken = await getRsToken(env);
+  if (!rsToken) return fail(503, 'RS token unavailable — try again later');
 
-  // Username-based profile paths to try across all bases
-  const profilePaths = [
+  const hdrs = buildHeaders(rsToken);
+
+  // Step 1: resolve username → userId
+  // Try the most likely paths first (stay well under CF's 50 subrequest limit)
+  const usernamePaths = [
     `/users/username/${username}`,
-    `/users/${username}`,
     `/user/username/${username}`,
-    `/user/${username}`,
-    `/profiles/username/${username}`,
-    `/profiles/${username}`,
-    `/profile/${username}`,
     `/accounts/username/${username}`,
-    `/accounts/${username}`,
-    `/v1/users/username/${username}`,
-    `/v2/users/username/${username}`,
+    `/profiles/username/${username}`,
+    `/users?username=${username}`,
+    `/users?handle=${username}`,
+    `/users?search=${username}`,
   ];
 
-  // Try all bases × all paths × both header sets in parallel
-  const probes = [];
-  for (const base of RS_BASES) {
-    for (const path of profilePaths) {
-      const fullUrl = `${base}${path}`;
-      // RS-authenticated headers
-      probes.push(tryFetch(fullUrl, rsHdrs, 4000).then(r => ({ url: fullUrl, base, path, hdrs: 'rs', ...r })));
-      // Public (no real-* headers)
-      probes.push(tryFetch(fullUrl, pubHdrs, 4000).then(r => ({ url: fullUrl, base, path, hdrs: 'pub', ...r })));
-    }
-  }
+  const profileResults = await Promise.all(
+    usernamePaths.map(p => rsGet(p, hdrs).then(r => ({ path: p, ...r })))
+  );
 
-  const results = await Promise.all(probes);
-  const hits = results.filter(r => r.status === 200 && r.body && typeof r.body === 'object');
+  const profileHit = profileResults.find(r => r.status === 200 && r.body && typeof r.body === 'object');
 
-  if (!hits.length) {
+  if (!profileHit) {
     return json({
       ok: false,
       username,
-      message: 'No public profile found for this username.',
-      probe: results.map(r => ({ url: r.url, hdrs: r.hdrs, status: r.status, bodySnippet: typeof r.body === 'string' ? r.body.slice(0, 80) : null }))
+      message: 'Could not resolve this username via RS API.',
+      probe: profileResults.map(r => ({
+        path: r.path,
+        status: r.status,
+        body: typeof r.body === 'string' ? r.body : JSON.stringify(r.body).slice(0, 200)
+      }))
     });
   }
 
-  const profile = hits[0];
-  const userId = profile.body?.id || profile.body?.userId || profile.body?.user?.id || null;
+  const userId =
+    profileHit.body?.id ||
+    profileHit.body?.userId ||
+    profileHit.body?.user?.id ||
+    profileHit.body?.data?.id ||
+    (Array.isArray(profileHit.body?.users) ? profileHit.body.users[0]?.id : null) ||
+    (Array.isArray(profileHit.body?.results) ? profileHit.body.results[0]?.id : null) ||
+    null;
 
-  let positions = null;
-  if (userId) {
-    const posPaths = [
-      `/users/${userId}/positions`,
-      `/users/${userId}/predictions`,
-      `/users/${userId}/open-positions`,
-      `/users/${userId}/active-positions`,
-      `/predictions/user/${userId}`,
-      `/positions/user/${userId}`,
-      `/users/${userId}/historyrollup`,
-      `/v1/users/${userId}/positions`,
-      `/v2/users/${userId}/positions`,
-    ];
-    // Also try username-based position paths (some APIs skip the userId lookup)
-    const usernamePosPaths = [
-      `/users/username/${username}/positions`,
-      `/users/username/${username}/predictions`,
-    ];
-
-    const posProbes = [];
-    for (const base of RS_BASES) {
-      for (const p of [...posPaths, ...usernamePosPaths]) {
-        posProbes.push(tryFetch(`${base}${p}`, rsHdrs, 4000).then(r => ({ url: `${base}${p}`, hdrs: 'rs', ...r })));
-        posProbes.push(tryFetch(`${base}${p}`, pubHdrs, 4000).then(r => ({ url: `${base}${p}`, hdrs: 'pub', ...r })));
-      }
-    }
-    const posResults = await Promise.all(posProbes);
-    const posHit = posResults.find(r => r.status === 200 && r.body && typeof r.body === 'object');
-    if (posHit) {
-      positions = { data: posHit.body, url: posHit.url, hdrs: posHit.hdrs };
-    }
+  if (!userId) {
+    return json({
+      ok: false,
+      username,
+      message: 'Profile found but could not extract userId.',
+      profilePath: profileHit.path,
+      profileBody: profileHit.body
+    });
   }
+
+  // Step 2: fetch open positions for this userId
+  const posPaths = [
+    `/users/${userId}/positions`,
+    `/users/${userId}/predictions`,
+    `/users/${userId}/open-positions`,
+    `/predictions/user/${userId}`,
+    `/positions/user/${userId}`,
+  ];
+
+  const posResults = await Promise.all(
+    posPaths.map(p => rsGet(p, hdrs).then(r => ({ path: p, ...r })))
+  );
+
+  const posHit = posResults.find(r => r.status === 200 && r.body);
 
   return json({
     ok: true,
     username,
     userId,
-    profile: profile.body,
-    profileUrl: profile.url,
-    profileHdrs: profile.hdrs,
-    positions,
-    allProfileHits: hits.map(h => ({ url: h.url, hdrs: h.hdrs }))
+    profile: profileHit.body,
+    profilePath: profileHit.path,
+    positions: posHit?.body || null,
+    positionsPath: posHit?.path || null,
+    positionsProbe: posResults.map(r => ({ path: r.path, status: r.status }))
   });
 }
 
