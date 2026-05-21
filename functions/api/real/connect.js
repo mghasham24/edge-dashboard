@@ -42,15 +42,20 @@ export async function onRequest({ request, env }) {
       return fail(400, 'Invalid auth_token format');
     }
 
+    // RS auth token format: userId!key!deviceUuid — extract userId from prefix
+    const rsUserIdFromToken = auth_token.split('!')[0] || null;
+
     const now = Math.floor(Date.now() / 1000);
+    await ensureUsernameColumns(env.DB);
     await env.DB.prepare(
-      `INSERT INTO real_auth (user_id, auth_token, device_uuid, updated_at)
-       VALUES (?, ?, ?, ?)
+      `INSERT INTO real_auth (user_id, auth_token, device_uuid, rs_user_id, updated_at)
+       VALUES (?, ?, ?, ?, ?)
        ON CONFLICT(user_id) DO UPDATE SET
          auth_token  = excluded.auth_token,
          device_uuid = excluded.device_uuid,
+         rs_user_id  = COALESCE(excluded.rs_user_id, real_auth.rs_user_id),
          updated_at  = excluded.updated_at`
-    ).bind(session.user_id, auth_token, device_uuid || null, now).run();
+    ).bind(session.user_id, auth_token, device_uuid || null, rsUserIdFromToken, now).run();
 
     return json({ ok: true, method: 'token' });
   }

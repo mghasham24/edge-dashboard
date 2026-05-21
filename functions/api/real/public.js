@@ -105,14 +105,32 @@ export async function onRequestGet({ request, env }) {
     rsGet(`/predictions/historyrollup?userId=${userId}&${PAGE}`, hdrs),
     (async () => {
       try {
-        const authRow = await env.DB.prepare(
+        // Primary lookup: by rs_username or rs_user_id (covers username-connect and new token-connects)
+        let row = await env.DB.prepare(
           `SELECT auth_token, device_uuid FROM real_auth
            WHERE (LOWER(rs_username) = LOWER(?) OR rs_user_id = ?)
              AND auth_token IS NOT NULL
            LIMIT 1`
         ).bind(username, userId).first();
-        if (!authRow) return null;
-        const userHdrs = buildHeaders(authRow.auth_token, authRow.device_uuid || undefined);
+
+        // Fallback for existing token-connects where rs_user_id was never stored:
+        // check if the session user's own token prefix matches this RS userId
+        if (!row) {
+          const sessionRow = await env.DB.prepare(
+            `SELECT auth_token, device_uuid FROM real_auth
+             WHERE user_id = ? AND auth_token IS NOT NULL LIMIT 1`
+          ).bind(session.user_id).first();
+          if (sessionRow && sessionRow.auth_token.startsWith(userId + '!')) {
+            row = sessionRow;
+            // Self-heal: store rs_user_id so future lookups don't need this fallback
+            await env.DB.prepare(
+              `UPDATE real_auth SET rs_user_id = ? WHERE user_id = ? AND rs_user_id IS NULL`
+            ).bind(userId, session.user_id).run().catch(() => {});
+          }
+        }
+
+        if (!row) return null;
+        const userHdrs = buildHeaders(row.auth_token, row.device_uuid || undefined);
         const r = await rsGet('/predictions/openpositions', userHdrs);
         return r.status === 200 ? r.body : null;
       } catch { return null; }
