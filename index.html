@@ -730,23 +730,112 @@
         </div>
 
         <!-- RS Lookup panel -->
-        <div class="admin-panel" id="rs-lookup-panel">
+        <div class="admin-panel" id="tracker-panel">
+            <!-- Header: back + search -->
             <div style="margin-bottom:20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-                <button onclick="document.getElementById('rs-lookup-tab-btn').click()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:7px 14px;border-radius:5px;cursor:pointer;letter-spacing:.04em">&larr; Back to Dashboard</button>
-                <div style="font-size:16px;font-weight:800;letter-spacing:.04em;color:var(--fg)">🔍 RS User Lookup</div>
+                <button onclick="document.getElementById('tracker-tab-btn').click()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:7px 14px;border-radius:5px;cursor:pointer;letter-spacing:.04em">&larr; Back to Dashboard</button>
+                <div style="display:flex;gap:8px;flex:1;max-width:380px;margin-left:auto">
+                    <input id="tracker-input" type="text" placeholder="RS username…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+                        style="flex:1;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--mono);font-size:13px;font-weight:600;padding:8px 12px;border-radius:6px;outline:none"
+                        onkeydown="if(event.key==='Enter')loadTracker()">
+                    <button id="tracker-search-btn" onclick="loadTracker()"
+                        style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:12px;font-weight:700;padding:8px 18px;border-radius:6px;cursor:pointer;letter-spacing:.04em;white-space:nowrap">Search</button>
+                </div>
             </div>
-            <div style="display:flex;gap:8px;max-width:420px;margin-bottom:24px">
-                <input id="rs-lookup-input" type="text" placeholder="RS username…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
-                    style="flex:1;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--mono);font-size:13px;font-weight:600;padding:8px 12px;border-radius:6px;outline:none"
-                    onkeydown="if(event.key==='Enter')lookupRsUser()">
-                <button id="rs-lookup-btn" onclick="lookupRsUser()"
-                    style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:12px;font-weight:700;padding:8px 18px;border-radius:6px;cursor:pointer;letter-spacing:.04em;white-space:nowrap">Search</button>
-            </div>
-            <div id="rs-lookup-status" style="color:var(--muted);font-size:13px;min-height:20px;margin-bottom:12px"></div>
-            <div id="rs-lookup-result" style="display:none">
-                <div id="rs-lookup-profile"></div>
-                <div id="rs-lookup-positions" style="margin-top:20px"></div>
-                <div id="rs-lookup-activity" style="margin-top:20px"></div>
+
+            <div id="tracker-status" style="color:var(--muted);font-size:13px;min-height:20px;margin-bottom:8px"></div>
+
+            <div id="tracker-content" style="display:none">
+                <!-- Username display -->
+                <div id="tracker-username-header" style="font-size:16px;font-weight:800;margin-bottom:16px"></div>
+
+                <!-- Stats row -->
+                <div class="admin-stats" style="margin-bottom:28px">
+                    <div class="admin-stat">
+                        <div class="admin-stat-val" id="trk-karma">-</div>
+                        <div class="admin-stat-lbl">Karma</div>
+                    </div>
+                    <div class="admin-stat">
+                        <div class="admin-stat-val" id="trk-record">-</div>
+                        <div class="admin-stat-lbl">W/L (RS)</div>
+                    </div>
+                    <div class="admin-stat">
+                        <div class="admin-stat-val" id="trk-winrate">-</div>
+                        <div class="admin-stat-lbl">Win Rate (RS)</div>
+                    </div>
+                    <div class="admin-stat">
+                        <div class="admin-stat-val" id="trk-settled-count">-</div>
+                        <div class="admin-stat-lbl">Settled · Loaded</div>
+                    </div>
+                    <div class="admin-stat">
+                        <div class="admin-stat-val" id="trk-profit" style="font-size:18px">-</div>
+                        <div class="admin-stat-lbl">Realised P&amp;L · Loaded</div>
+                    </div>
+                </div>
+
+                <!-- Open positions (only if user connected RS to RaxEdge) -->
+                <div id="trk-open-section" style="margin-bottom:28px;display:none">
+                    <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:10px">Open Positions</div>
+                    <div class="admin-table-wrap">
+                        <table class="port-table">
+                            <thead>
+                                <tr>
+                                    <th>Matchup</th>
+                                    <th>Sport</th>
+                                    <th>Market</th>
+                                    <th>Side</th>
+                                    <th class="r">Avg</th>
+                                    <th class="r">Cost</th>
+                                    <th class="r">Pays</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="trk-open-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Settled history -->
+                <div>
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+                        <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2)">Settled History</div>
+                        <span id="trk-load-status" style="font-size:11px;color:var(--muted2)"></span>
+                        <div style="margin-left:auto;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                            <select id="trk-filter-result" onchange="applyTrackerFilters()" class="port-filter-sel">
+                                <option value="">All Results</option>
+                                <option value="win">Wins</option>
+                                <option value="loss">Losses</option>
+                                <option value="cashout">Cashouts</option>
+                            </select>
+                            <select id="trk-sort-by" onchange="applyTrackerFilters()" class="port-filter-sel">
+                                <option value="chrono-desc">Newest first</option>
+                                <option value="chrono-asc">Oldest first</option>
+                                <option value="profit-desc">Profit ↓</option>
+                                <option value="profit-asc">Profit ↑</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="admin-table-wrap">
+                        <table class="port-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Matchup</th>
+                                    <th>Market</th>
+                                    <th>Side</th>
+                                    <th class="r" title="Price when bet was taken">Avg</th>
+                                    <th class="r" title="Rax spent">Cost</th>
+                                    <th class="r" title="Rax received">Paid</th>
+                                    <th>Result</th>
+                                </tr>
+                            </thead>
+                            <tbody id="trk-history-tbody"></tbody>
+                        </table>
+                    </div>
+                    <div id="trk-load-more-wrap" style="text-align:center;margin-top:16px;display:none">
+                        <button id="trk-load-more-btn" onclick="loadTrackerMore()" class="port-tf-btn" style="padding:8px 28px;font-size:12px">Load More</button>
+                    </div>
+                </div>
             </div>
         </div>
 

@@ -58,8 +58,19 @@ export async function onRequestGet({ request, env }) {
   if (!allowed) return fail(429, 'Too many requests');
 
   const url = new URL(request.url);
-  const username = (url.searchParams.get('username') || '').trim().replace(/^@/, '');
+  const before = url.searchParams.get('before') || null;
+  const paramUserId = url.searchParams.get('userId') || null;
 
+  // Load-more mode: only fetch next page of history (no profile/activity re-fetch needed)
+  if (before && paramUserId) {
+    const sharedToken = await getSharedRsToken(env);
+    if (!sharedToken) return fail(503, 'RS token unavailable — try again later');
+    const hdrs = buildHeaders(sharedToken);
+    const r = await rsGet(`/predictions/historyrollup?userId=${paramUserId}&limit=50&before=${encodeURIComponent(before)}`, hdrs);
+    return json({ ok: true, betHistory: r.status === 200 ? r.body : null });
+  }
+
+  const username = (url.searchParams.get('username') || '').trim().replace(/^@/, '');
   if (!username) return fail(400, 'username required');
   if (!/^[a-zA-Z0-9_.-]{1,50}$/.test(username)) return fail(400, 'invalid username');
 
@@ -83,12 +94,10 @@ export async function onRequestGet({ request, env }) {
     return json({ ok: false, username, message: 'Profile found but could not extract userId.', profile });
   }
 
-  // Step 2: parallel fetches
+  // Step 2: parallel fetches — activity, settled history, open positions (if connected)
   const [activityRes, betHistoryRes, openPosRes] = await Promise.all([
     rsGet(`/activity?userId=${userId}`, hdrs),
-    // historyrollup = settled bet history; userId param makes it public-accessible
     rsGet(`/predictions/historyrollup?userId=${userId}&limit=50`, hdrs),
-    // Step 3: check for connected RS account to fetch open positions
     (async () => {
       try {
         const authRow = await env.DB.prepare(
@@ -105,21 +114,16 @@ export async function onRequestGet({ request, env }) {
     })()
   ]);
 
-  const activity = activityRes.status === 200 ? activityRes.body : null;
-  const betHistory = betHistoryRes.status === 200 ? betHistoryRes.body : null;
-  const openPositions = openPosRes;
-
   return json({
     ok: true,
     username: rsUserName,
     userId,
     displayName,
     profile,
-    activity,        // notifications + auction activity
-    betHistory,      // settled prediction bets (historyrollup)
-    openPositions,   // current open bets — only if user connected RS to RaxEdge
-    isConnected: !!openPositions,
-    _debug: { betHistoryStatus: betHistoryRes.status }
+    activity:      activityRes.status === 200 ? activityRes.body : null,
+    betHistory:    betHistoryRes.status === 200 ? betHistoryRes.body : null,
+    openPositions: openPosRes,
+    isConnected:   !!openPosRes
   });
 }
 

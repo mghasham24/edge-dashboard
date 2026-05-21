@@ -2490,7 +2490,13 @@
         document.getElementById('portfolio-panel').classList.remove('visible');
     }
 
-    function showRsLookupTab() {
+    // Tracker tab state
+    var trackerHistoryAll = [];
+    var trackerUserId     = null;
+    var trackerCursor     = null;
+    var trackerHasMore    = false;
+
+    function showTrackerTab() {
         document.getElementById('sport-tabs').style.display = 'none';
         document.getElementById('feature-tabs').style.display = 'none';
         document.querySelector('.controls').style.display = 'none';
@@ -2499,11 +2505,11 @@
         document.getElementById('mobile-cards').style.display = 'none';
         document.getElementById('collapse-btn').style.display = 'none';
         document.getElementById('refresh-btn').style.display = 'none';
-        document.getElementById('rs-lookup-panel').classList.add('visible');
-        setTimeout(function() { var inp = document.getElementById('rs-lookup-input'); if (inp) inp.focus(); }, 100);
+        document.getElementById('tracker-panel').classList.add('visible');
+        setTimeout(function() { var inp = document.getElementById('tracker-input'); if (inp) inp.focus(); }, 100);
     }
 
-    function hideRsLookupTab() {
+    function hideTrackerTab() {
         document.getElementById('sport-tabs').style.display = '';
         document.getElementById('feature-tabs').style.display = '';
         document.querySelector('.controls').style.display = '';
@@ -2512,142 +2518,191 @@
         document.getElementById('mobile-cards').style.display = '';
         document.getElementById('collapse-btn').style.display = '';
         document.getElementById('refresh-btn').style.display = '';
-        document.getElementById('rs-lookup-panel').classList.remove('visible');
+        document.getElementById('tracker-panel').classList.remove('visible');
     }
 
-    function lookupRsUser() {
-        var inp = document.getElementById('rs-lookup-input');
+    function loadTracker() {
+        var inp = document.getElementById('tracker-input');
         var username = (inp ? inp.value : '').trim().replace(/^@/, '');
         if (!username) return;
-        var status = document.getElementById('rs-lookup-status');
-        var result = document.getElementById('rs-lookup-result');
-        status.textContent = 'Looking up @' + escHtml(username) + '…';
-        result.style.display = 'none';
-        document.getElementById('rs-lookup-profile').innerHTML = '';
-        document.getElementById('rs-lookup-activity').innerHTML = '';
-        document.getElementById('rs-lookup-positions').innerHTML = '';
+
+        trackerHistoryAll = [];
+        trackerUserId = null;
+        trackerCursor = null;
+        trackerHasMore = false;
+
+        var statusEl = document.getElementById('tracker-status');
+        statusEl.textContent = 'Loading @' + username + '…';
+        document.getElementById('tracker-content').style.display = 'none';
+
         fetch('/api/real/public?username=' + encodeURIComponent(username))
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 if (!data.ok) {
-                    status.textContent = data.message || 'User not found.';
+                    statusEl.textContent = data.message || 'User not found.';
                     return;
                 }
-                status.textContent = '';
-                result.style.display = '';
-                renderRsLookup(data);
+                statusEl.textContent = '';
+                renderTracker(data);
             })
-            .catch(function() { status.textContent = 'Error — please try again.'; });
+            .catch(function() { statusEl.textContent = 'Error — please try again.'; });
     }
 
-    function renderRsLookup(data) {
+    function loadTrackerMore() {
+        if (!trackerCursor || !trackerUserId) return;
+        var btn = document.getElementById('trk-load-more-btn');
+        if (btn) { btn.textContent = 'Loading…'; btn.disabled = true; }
+
+        fetch('/api/real/public?userId=' + encodeURIComponent(trackerUserId) + '&before=' + encodeURIComponent(trackerCursor))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var items = (data.betHistory && data.betHistory.items) || [];
+                trackerHistoryAll = trackerHistoryAll.concat(items);
+                if (items.length > 0) {
+                    trackerCursor = items[items.length - 1].latestLedgerTimestamp || items[items.length - 1].transactedAt || null;
+                }
+                trackerHasMore = items.length >= 50;
+                applyTrackerFilters();
+                updateTrackerStats();
+                document.getElementById('trk-load-more-wrap').style.display = trackerHasMore ? '' : 'none';
+                if (btn) { btn.textContent = 'Load More'; btn.disabled = false; }
+            })
+            .catch(function() {
+                if (btn) { btn.textContent = 'Load More'; btn.disabled = false; }
+            });
+    }
+
+    function renderTracker(data) {
         var u = (data.profile && data.profile.user) ? data.profile.user : {};
-        var karma = u.karma ? u.karma.toLocaleString() : '—';
-        var pollW = u.pollRecord ? u.pollRecord.wins : 0;
-        var pollL = u.pollRecord ? u.pollRecord.losses : 0;
+        trackerUserId = data.userId;
+
+        var karma  = u.karma ? u.karma.toLocaleString() : '—';
+        var pollW  = u.pollRecord ? (u.pollRecord.wins || 0) : 0;
+        var pollL  = u.pollRecord ? (u.pollRecord.losses || 0) : 0;
         var winPct = (pollW + pollL) > 0 ? Math.round(pollW / (pollW + pollL) * 100) : null;
+        var winColor = winPct !== null ? (winPct >= 55 ? 'var(--green)' : winPct < 45 ? 'var(--red)' : 'var(--fg)') : 'var(--fg)';
 
-        // Profile card
-        document.getElementById('rs-lookup-profile').innerHTML =
-            '<div style="background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:16px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">' +
-            '<div style="min-width:0;flex:1">' +
-            '<div style="font-size:16px;font-weight:800;color:var(--fg)">' + escHtml(u.name || data.username) + (u.isVerified ? ' <span style="color:var(--accent);font-size:12px">✓</span>' : '') + '</div>' +
-            '<div style="font-size:12px;color:var(--muted);margin-top:2px">@' + escHtml(u.userName || data.username) + '</div>' +
-            '</div>' +
-            '<div style="display:flex;gap:20px;flex-wrap:wrap">' +
-            '<div style="text-align:center"><div style="font-size:16px;font-weight:800;color:var(--fg)">' + karma + '</div><div style="font-size:10px;color:var(--muted2);letter-spacing:.06em;text-transform:uppercase">Karma</div></div>' +
-            '<div style="text-align:center"><div style="font-size:16px;font-weight:800;color:var(--fg)">' + pollW + '<span style="color:var(--muted);font-size:12px">/' + pollL + '</span></div><div style="font-size:10px;color:var(--muted2);letter-spacing:.06em;text-transform:uppercase">W/L</div></div>' +
-            (winPct !== null ? '<div style="text-align:center"><div style="font-size:16px;font-weight:800;color:' + (winPct >= 55 ? 'var(--green)' : winPct >= 45 ? 'var(--fg)' : 'var(--red)') + '">' + winPct + '%</div><div style="font-size:10px;color:var(--muted2);letter-spacing:.06em;text-transform:uppercase">Win%</div></div>' : '') +
-            '</div>' +
-            '</div>';
+        document.getElementById('tracker-username-header').innerHTML =
+            escHtml(u.name || data.username) +
+            (u.isVerified ? ' <span style="color:var(--accent);font-size:13px">✓</span>' : '') +
+            ' <span style="color:var(--muted);font-size:13px;font-weight:400">@' + escHtml(u.userName || data.username) + '</span>';
 
-        // Open positions (only if connected to RaxEdge)
-        var posEl = document.getElementById('rs-lookup-positions');
+        document.getElementById('trk-karma').textContent = karma;
+        document.getElementById('trk-record').innerHTML = pollW + '<span style="color:var(--muted);font-size:14px">/' + pollL + '</span>';
+        document.getElementById('trk-winrate').textContent = winPct !== null ? winPct + '%' : '—';
+        document.getElementById('trk-winrate').style.color = winColor;
+
+        // Load bet history
+        var items = (data.betHistory && data.betHistory.items) || [];
+        trackerHistoryAll = items;
+        if (items.length > 0) {
+            trackerCursor = items[items.length - 1].latestLedgerTimestamp || items[items.length - 1].transactedAt || null;
+        }
+        trackerHasMore = items.length >= 50;
+
+        // Open positions (only if this user connected RS to RaxEdge)
+        var openSec = document.getElementById('trk-open-section');
         var positions = data.openPositions && data.openPositions.positions;
         if (positions && positions.length) {
-            var rows = positions.slice(0, 20).map(function(p) {
-                var cost = (p.details || []).find(function(d) { return d.isRax && d.label === 'Cost'; });
-                var pays = (p.details || []).find(function(d) { return d.isRax && d.label === 'Pays'; });
+            openSec.style.display = '';
+            var mktMapT = { gamewinner: 'ML', pointspread: 'Spread', total: 'Total', moneyline: 'ML' };
+            var openRows = positions.slice(0, 30).map(function(p) {
+                var matchup = (p.marketDisplay && p.marketDisplay.display) || '—';
+                var market  = p.marketLabel || mktMapT[p.marketType] || p.marketType || '—';
+                var side    = (p.outcomeLabel || '').replace(/\s+\d+%$/, '') || '—';
+                var details = Array.isArray(p.details) ? p.details : [];
+                var avgDet  = details.find(function(d) { return d.label === 'Avg'; }) || {};
+                var costDet = details.find(function(d) { return d.label === 'Cost'; }) || {};
+                var paysDet = details.find(function(d) { return d.label === 'Pays'; }) || {};
+                var status  = p.leftFooterText || '—';
+                var sportLbl = p.sportId && REAL_SPORT_LABELS[p.sportId]
+                    ? REAL_SPORT_LABELS[p.sportId]
+                    : (p.sport ? (REAL_SPORT_LABELS[REAL_SPORT_IDS[(p.sport || '').toLowerCase()]] || p.sport.toUpperCase()) : (p.sportLabel || '—'));
                 return '<tr>' +
-                    '<td style="padding:8px 10px;color:var(--muted);font-size:11px;white-space:nowrap">' + escHtml(p.sportLabel || p.sport || '') + '</td>' +
-                    '<td style="padding:8px 10px;font-size:12px;font-weight:600">' + escHtml(p.marketDisplay && p.marketDisplay.display || '') + '</td>' +
-                    '<td style="padding:8px 10px;font-size:12px">' + escHtml(p.outcomeLabel || '') + '</td>' +
-                    '<td style="padding:8px 10px;font-size:12px;color:var(--muted);text-align:right">' + escHtml(cost ? cost.display + ' Rax' : '—') + '</td>' +
-                    '<td style="padding:8px 10px;font-size:12px;color:var(--green);text-align:right">' + escHtml(pays ? pays.display + ' Rax' : '—') + '</td>' +
+                    '<td>' + escHtml(matchup) + '</td>' +
+                    '<td style="color:var(--muted);font-size:11px">' + escHtml(sportLbl) + '</td>' +
+                    '<td><span class="mkt-badge">' + escHtml(market) + '</span></td>' +
+                    '<td>' + escHtml(side) + '</td>' +
+                    '<td class="r" style="font-family:var(--mono);color:var(--muted)">' + escHtml(avgDet.display || '—') + '</td>' +
+                    '<td class="r" style="font-family:var(--mono);color:var(--muted)">' + escHtml(costDet.display || '—') + '</td>' +
+                    '<td class="r" style="font-family:var(--mono);color:var(--green)">' + escHtml(paysDet.display || '—') + '</td>' +
+                    '<td style="color:var(--muted);font-size:11px">' + escHtml(status) + '</td>' +
                     '</tr>';
             }).join('');
-            posEl.innerHTML = '<div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:8px">Open Positions</div>' +
-                '<div class="admin-table-wrap"><table class="port-table" style="width:100%"><thead><tr>' +
-                '<th style="padding:6px 10px;text-align:left;font-size:10px;color:var(--muted2)">Sport</th>' +
-                '<th style="padding:6px 10px;text-align:left;font-size:10px;color:var(--muted2)">Game</th>' +
-                '<th style="padding:6px 10px;text-align:left;font-size:10px;color:var(--muted2)">Side</th>' +
-                '<th style="padding:6px 10px;text-align:right;font-size:10px;color:var(--muted2)">Cost</th>' +
-                '<th style="padding:6px 10px;text-align:right;font-size:10px;color:var(--muted2)">Pays</th>' +
-                '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+            document.getElementById('trk-open-tbody').innerHTML = openRows;
         } else {
-            posEl.innerHTML = '';
+            openSec.style.display = 'none';
         }
 
-        // Recent Bets (historyrollup)
-        var actEl = document.getElementById('rs-lookup-activity');
-        var betItems = data.betHistory && data.betHistory.items;
-        if (betItems && betItems.length) {
-            var betRows = betItems.slice(0, 30).map(function(p) {
-                var matchup = (p.marketDisplay && p.marketDisplay.display) || '—';
-                var market  = p.headerLabel || '—';
-                var side    = p.outcomeLabel || '—';
+        document.getElementById('tracker-content').style.display = '';
+        updateTrackerStats();
+        applyTrackerFilters();
+        document.getElementById('trk-load-more-wrap').style.display = trackerHasMore ? '' : 'none';
+    }
+
+    function updateTrackerStats() {
+        var totalProfit = 0;
+        trackerHistoryAll.forEach(function(p) {
+            var details = Array.isArray(p.details) ? p.details : [];
+            var paidDet = details.find(function(d) { return d.label === 'Paid'; }) || {};
+            var costDet = details.find(function(d) { return d.label === 'Cost'; }) || {};
+            var paidNum = parseRaxDisplay(paidDet.display);
+            var costNum = parseRaxDisplay(costDet.display);
+            var isWin   = paidDet.color === 'green' && paidNum > 0;
+            var isLoss  = paidDet.display === '0' || (!isWin && paidDet.color === 'default');
+            if (isWin || isLoss) totalProfit += paidNum - costNum;
+        });
+        document.getElementById('trk-settled-count').textContent = trackerHistoryAll.length + (trackerHasMore ? '+' : '');
+        var profitEl = document.getElementById('trk-profit');
+        profitEl.textContent = (totalProfit >= 0 ? '+' : '') + Math.round(totalProfit).toLocaleString() + ' Rax';
+        profitEl.style.color = totalProfit > 0 ? 'var(--green)' : totalProfit < 0 ? 'var(--red)' : 'var(--fg)';
+    }
+
+    function applyTrackerFilters() {
+        var resultFilter = (document.getElementById('trk-filter-result') || {}).value || '';
+        var sortBy       = (document.getElementById('trk-sort-by') || {}).value || 'chrono-desc';
+
+        var items = trackerHistoryAll.slice();
+
+        if (resultFilter) {
+            items = items.filter(function(p) {
                 var details = Array.isArray(p.details) ? p.details : [];
-                var costDet = details.find(function(d) { return d.label === 'Cost'; }) || {};
                 var paidDet = details.find(function(d) { return d.label === 'Paid'; }) || {};
-                var costDisp = costDet.display || '—';
-                var paidDisp = paidDet.display || '—';
-                var paidNum  = parseFloat(String(paidDet.display || '').replace(/,/g, '')) || 0;
-                var isWin  = paidDet.color === 'green' && paidNum > 0;
-                var isLoss = paidDet.display === '0' || (!isWin && paidDet.color === 'default');
-                var resLbl = isWin ? 'W' : isLoss ? 'L' : '—';
-                var resColor = isWin ? 'var(--green)' : isLoss ? 'var(--red)' : 'var(--muted)';
-                var ts = p.transactedAt ? new Date(p.transactedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
-                return '<tr>' +
-                    '<td style="padding:7px 10px;font-size:11px;color:var(--muted);white-space:nowrap">' + escHtml(ts) + '</td>' +
-                    '<td style="padding:7px 10px;font-size:12px">' + escHtml(matchup) + '</td>' +
-                    '<td style="padding:7px 10px;font-size:11px"><span class="mkt-badge" style="font-size:10px">' + escHtml(market) + '</span></td>' +
-                    '<td style="padding:7px 10px;font-size:12px;font-weight:600">' + escHtml(side) + '</td>' +
-                    '<td style="padding:7px 10px;font-size:12px;color:var(--muted);text-align:right;font-family:var(--mono)">' + escHtml(costDisp) + '</td>' +
-                    '<td style="padding:7px 10px;font-size:12px;text-align:right;font-family:var(--mono)">' + escHtml(paidDisp) + '</td>' +
-                    '<td style="padding:7px 10px;font-size:13px;font-weight:800;text-align:center;color:' + resColor + '">' + resLbl + '</td>' +
-                    '</tr>';
-            }).join('');
-            actEl.innerHTML = '<div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:8px">Recent Bets</div>' +
-                '<div class="admin-table-wrap"><table class="port-table" style="width:100%"><thead><tr>' +
-                '<th style="padding:6px 10px;text-align:left;font-size:10px;color:var(--muted2)">Date</th>' +
-                '<th style="padding:6px 10px;text-align:left;font-size:10px;color:var(--muted2)">Matchup</th>' +
-                '<th style="padding:6px 10px;text-align:left;font-size:10px;color:var(--muted2)">Market</th>' +
-                '<th style="padding:6px 10px;text-align:left;font-size:10px;color:var(--muted2)">Side</th>' +
-                '<th style="padding:6px 10px;text-align:right;font-size:10px;color:var(--muted2)">Cost</th>' +
-                '<th style="padding:6px 10px;text-align:right;font-size:10px;color:var(--muted2)">Paid</th>' +
-                '<th style="padding:6px 10px;text-align:center;font-size:10px;color:var(--muted2)">Result</th>' +
-                '</tr></thead><tbody>' + betRows + '</tbody></table></div>';
-        } else {
-            // Fallback: activity feed (auction/karma events) if no bet history returned
-            var acts = data.activity && data.activity.activities;
-            if (acts && acts.length) {
-                var predKeywords = ['prediction market payout', 'Rax earned for prediction'];
-                var feedItems = acts.slice(0, 20).map(function(a) {
-                    var display = (a.additionalInfo && a.additionalInfo.display) ? a.additionalInfo.display.trim() : '';
-                    if (!display) return '';
-                    var isPred = predKeywords.some(function(k) { return display.toLowerCase().indexOf(k.toLowerCase()) !== -1; });
-                    var ts = a.bumpedAt ? new Date(a.bumpedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
-                    return '<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">' +
-                        '<div style="flex:1;font-size:12px;color:' + (isPred ? 'var(--fg)' : 'var(--muted)') + ';font-weight:' + (isPred ? '600' : '400') + '">' + escHtml(display) + '</div>' +
-                        '<div style="font-size:11px;color:var(--muted2);white-space:nowrap;padding-top:1px">' + escHtml(ts) + '</div>' +
-                        '</div>';
-                }).filter(Boolean).join('');
-                actEl.innerHTML = '<div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:8px">Recent Activity</div>' +
-                    '<div>' + feedItems + '</div>';
-            } else {
-                actEl.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:16px 0">No bet history available.</div>';
-            }
+                var costDet = details.find(function(d) { return d.label === 'Cost'; }) || {};
+                var paidNum = parseRaxDisplay(paidDet.display);
+                var costNum = parseRaxDisplay(costDet.display);
+                var isWin     = paidDet.color === 'green' && paidNum > 0;
+                var isLoss    = paidDet.display === '0' || (!isWin && paidDet.color === 'default');
+                var isCashout = isWin && (paidNum - costNum) < 0;
+                if (resultFilter === 'win')     return isWin && !isCashout;
+                if (resultFilter === 'loss')    return isLoss;
+                if (resultFilter === 'cashout') return isCashout;
+                return true;
+            });
         }
+
+        items.sort(function(a, b) {
+            if (sortBy === 'chrono-asc') return new Date(a.transactedAt) - new Date(b.transactedAt);
+            if (sortBy === 'profit-desc' || sortBy === 'profit-asc') {
+                function prof(p) {
+                    var d = Array.isArray(p.details) ? p.details : [];
+                    return parseRaxDisplay((d.find(function(x){ return x.label==='Paid'; })||{}).display)
+                         - parseRaxDisplay((d.find(function(x){ return x.label==='Cost'; })||{}).display);
+                }
+                var diff = prof(b) - prof(a);
+                return sortBy === 'profit-desc' ? diff : -diff;
+            }
+            return new Date(b.transactedAt) - new Date(a.transactedAt);
+        });
+
+        var tbody = document.getElementById('trk-history-tbody');
+        if (!items.length) {
+            tbody.innerHTML = '<tr><td colspan="8" style="color:var(--muted);padding:20px 12px">No settled bets' + (resultFilter ? ' matching filter' : '') + '</td></tr>';
+            document.getElementById('trk-load-status').textContent = '';
+            return;
+        }
+        tbody.innerHTML = items.map(function(p) { return histRowHtml(p); }).join('');
+        document.getElementById('trk-load-status').textContent = items.length + (trackerHasMore ? '+' : '') + ' bets';
     }
 
     function showEvTab() {
@@ -4791,29 +4846,29 @@
 
 
 
-            // RS Lookup tab
-            if (!document.getElementById('rs-lookup-tab-btn')) {
-                var rsLookupTabBtn = document.createElement('button');
-                rsLookupTabBtn.className = 'feature-tab sport-tab';
-                rsLookupTabBtn.textContent = '🔍 RS Lookup';
-                rsLookupTabBtn.id = 'rs-lookup-tab-btn';
-                rsLookupTabBtn.onclick = function() {
+            // RS Tracker tab
+            if (!document.getElementById('tracker-tab-btn')) {
+                var trackerTabBtn = document.createElement('button');
+                trackerTabBtn.className = 'feature-tab sport-tab';
+                trackerTabBtn.textContent = '👤 Tracker';
+                trackerTabBtn.id = 'tracker-tab-btn';
+                trackerTabBtn.onclick = function() {
                     var isActive = this.classList.contains('active');
                     if (isActive) {
                         this.classList.remove('active');
-                        this.textContent = '🔍 RS Lookup';
-                        hideRsLookupTab();
+                        this.textContent = '👤 Tracker';
+                        hideTrackerTab();
                         loadOdds();
                     } else {
                         document.querySelectorAll('.sport-tab,.feature-tab').forEach(function(t) { t.classList.remove('active'); });
                         this.classList.add('active');
                         this.textContent = '<- Dashboard';
-                        showRsLookupTab();
+                        showTrackerTab();
                     }
                 };
-                ftBar.appendChild(rsLookupTabBtn);
+                ftBar.appendChild(trackerTabBtn);
             } else {
-                ftBar.appendChild(document.getElementById('rs-lookup-tab-btn'));
+                ftBar.appendChild(document.getElementById('tracker-tab-btn'));
             }
 
             // Pro ✦ button (manage subscription) — right of Refer, only for pro users
