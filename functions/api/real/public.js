@@ -124,12 +124,22 @@ export async function onRequestGet({ request, env }) {
   }
 
   // Step 2: fetch open positions for this userId
+  // RS uses singular /user/ prefix (confirmed from profile lookup above)
   const posPaths = [
+    `/user/${userId}/predictions`,
+    `/user/${userId}/positions`,
+    `/user/${userId}/open-positions`,
+    `/user/${userId}/statlines`,
+    `/user/${username}/predictions`,
+    `/user/${username}/positions`,
+    `/user/${username}/statlines`,
     `/users/${userId}/positions`,
     `/users/${userId}/predictions`,
-    `/users/${userId}/open-positions`,
-    `/predictions/user/${userId}`,
-    `/positions/user/${userId}`,
+    `/predictions/open?userId=${userId}`,
+    `/predictions?userId=${userId}&status=open`,
+    `/predictions?username=${username}&status=open`,
+    `/positions?userId=${userId}`,
+    `/portfolio/positions/open`,
   ];
 
   const posResults = await Promise.all(
