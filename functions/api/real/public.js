@@ -4,7 +4,7 @@ import { hashidsEncode } from '../../_lib/hashids.js';
 // functions/api/real/public.js
 // GET /api/real/public?username=HANDLE
 // Returns RS profile + bet history for any username using shared RS token.
-// Uses /predictions/history?userId= (public) for bet history — no user connection required.
+// Uses /predictions/history?userId= (public endpoint, shared token) — no user connection required.
 // Open positions returned additionally if that user has connected their RS account to RaxEdge.
 
 const BASE = 'https://web.realapp.com';
@@ -75,28 +75,21 @@ async function handleGet(request, env) {
   const allowed = await checkRateLimit(env.DB, request, rlKey, rlMax, 60);
   if (!allowed) return fail(429, 'Too many requests');
 
+  const sharedToken = await getSharedRsToken(env);
+  if (!sharedToken) return fail(503, 'RS token unavailable — try again later');
+
+  const hdrs = buildHeaders(sharedToken);
   const PAGE = `limit=100&pageSize=100&size=100&count=100`;
 
-  // Load-more mode: fetch next page of historyrollup using the user's own stored token.
-  // historyrollup is session-scoped — must use their own token, not the shared one.
+  // Load-more pagination: /predictions/history is public — use shared token, no personal token needed.
   if (before && paramUserId) {
-    const userRow2 = await env.DB.prepare(
-      `SELECT auth_token, device_uuid FROM real_auth WHERE rs_user_id = ? AND auth_token IS NOT NULL LIMIT 1`
-    ).bind(paramUserId).first();
-    if (!userRow2) return json({ ok: true, betHistory: null });
-    const uHdrs = buildHeaders(userRow2.auth_token, userRow2.device_uuid || undefined);
-    const r = await rsGet(`/predictions/historyrollup?${PAGE}&before=${encodeURIComponent(before)}`, uHdrs);
+    const r = await rsGet(`/predictions/history?userId=${encodeURIComponent(paramUserId)}&${PAGE}&before=${encodeURIComponent(before)}`, hdrs);
     return json({ ok: true, betHistory: r.status === 200 ? r.body : null });
   }
 
   const username = (url.searchParams.get('username') || '').trim().replace(/^@/, '');
   if (!username) return fail(400, 'username required');
   if (!/^[a-zA-Z0-9_.-]{1,50}$/.test(username)) return fail(400, 'invalid username');
-
-  const sharedToken = await getSharedRsToken(env);
-  if (!sharedToken) return fail(503, 'RS token unavailable — try again later');
-
-  const hdrs = buildHeaders(sharedToken);
 
   // Step 1: resolve username → profile + userId
   const profileRes = await rsGet(`/user/${encodeURIComponent(username)}`, hdrs);
@@ -113,7 +106,7 @@ async function handleGet(request, env) {
     return json({ ok: false, username, message: 'Profile found but could not extract userId.', profile });
   }
 
-  // Step 2: look up whether this RS user has connected their account to RaxEdge
+  // Step 2: check if this RS user has connected to RaxEdge (for open positions only)
   let userRow = await env.DB.prepare(
     `SELECT auth_token, device_uuid FROM real_auth
      WHERE (LOWER(rs_username) = LOWER(?) OR rs_user_id = ?)
@@ -121,8 +114,7 @@ async function handleGet(request, env) {
      LIMIT 1`
   ).bind(username, userId).first();
 
-  // Fallback for existing token-connects where rs_user_id was never stored:
-  // check if the session user's own token prefix matches this RS userId
+  // Fallback: session user's own token prefix matches this RS userId
   if (!userRow) {
     const sessionRow = await env.DB.prepare(
       `SELECT auth_token, device_uuid FROM real_auth
@@ -130,7 +122,6 @@ async function handleGet(request, env) {
     ).bind(session.user_id).first();
     if (sessionRow && sessionRow.auth_token.startsWith(userId + '!')) {
       userRow = sessionRow;
-      // Self-heal: store rs_user_id for future lookups
       await env.DB.prepare(
         `UPDATE real_auth SET rs_user_id = ? WHERE user_id = ? AND rs_user_id IS NULL`
       ).bind(userId, session.user_id).run().catch(() => {});
@@ -139,9 +130,11 @@ async function handleGet(request, env) {
 
   const userHdrs = userRow ? buildHeaders(userRow.auth_token, userRow.device_uuid || undefined) : null;
 
+  // Bet history uses public /predictions/history?userId= with shared token — no connection required.
+  // Open positions requires the user's own token (session-scoped).
   const [activityRes, betHistoryRes, openPosRes] = await Promise.all([
     rsGet(`/activity?userId=${userId}`, hdrs),
-    userHdrs ? rsGet(`/predictions/historyrollup?${PAGE}`, userHdrs) : Promise.resolve(null),
+    rsGet(`/predictions/history?userId=${userId}&${PAGE}`, hdrs),
     userHdrs ? rsGet('/predictions/openpositions', userHdrs) : Promise.resolve(null),
   ]);
 
@@ -156,7 +149,7 @@ async function handleGet(request, env) {
     openPositions: openPosRes?.status === 200 ? openPosRes.body : null,
     isConnected:   !!userRow
   });
-} // end handleGet
+}
 
 function json(data) {
   return new Response(JSON.stringify(data), {
