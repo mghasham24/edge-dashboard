@@ -1,6 +1,16 @@
 import { getSession } from '../../_lib/session.js';
 // functions/api/admin/users.js
-export async function onRequest({ request, env }) {
+export async function onRequest(ctx) {
+  try {
+    return await handleRequest(ctx);
+  } catch (e) {
+    return new Response(JSON.stringify({ ok: false, error: 'Internal error', message: e.message }), {
+      status: 500, headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+async function handleRequest({ request, env }) {
   // Auth + admin check
   const session = await getSession(request, env.DB);
   if (!session) return fail(401, 'Not authenticated');
@@ -17,10 +27,10 @@ export async function onRequest({ request, env }) {
     const limit  = Math.min(parseInt(url.searchParams.get('limit') || '50', 10), 200);
     const offset = parseInt(url.searchParams.get('offset') || '0', 10);
 
-    const orderBy = sort === 'signup_asc'  ? 'created_at ASC'
-                  : sort === 'pro_desc'    ? 'pro_expires_at DESC NULLS LAST'
-                  : sort === 'pro_asc'     ? 'pro_expires_at ASC NULLS LAST'
-                  : 'created_at DESC';
+    const orderBy = sort === 'signup_asc'  ? 'u.created_at ASC'
+                  : sort === 'pro_desc'    ? 'u.pro_expires_at DESC NULLS LAST'
+                  : sort === 'pro_asc'     ? 'u.pro_expires_at ASC NULLS LAST'
+                  : 'u.created_at DESC';
 
     const where = [];
     const binds = [];
@@ -54,7 +64,6 @@ export async function onRequest({ request, env }) {
     if (banned !== undefined) {
       await env.DB.prepare('UPDATE users SET banned=? WHERE id=?').bind(banned ? 1 : 0, id).run();
       if (banned) {
-        // Force logout banned user
         await env.DB.prepare('DELETE FROM sessions WHERE user_id=?').bind(id).run();
       }
     }
@@ -72,13 +81,12 @@ export async function onRequest({ request, env }) {
     for (const t of tables) {
       await env.DB.prepare(`DELETE FROM ${t} WHERE user_id=?`).bind(id).run().catch(() => {});
     }
-    // referrals has two foreign keys
     await env.DB.prepare('DELETE FROM referrals WHERE referrer_id=? OR referred_id=?').bind(id, id).run().catch(() => {});
     await env.DB.prepare('DELETE FROM users WHERE id=?').bind(id).run();
     return ok({ deleted: true });
   }
 
-  // POST /api/admin/users/logout?id=X — force logout (delete sessions)
+  // POST /api/admin/users?id=X — force logout (delete sessions)
   if (method === 'POST') {
     const id = url.searchParams.get('id');
     if (!id) return fail(400, 'Missing user id');
