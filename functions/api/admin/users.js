@@ -41,7 +41,7 @@ async function handleRequest({ request, env }) {
     const now = Math.floor(Date.now() / 1000);
     const [countRow, rows] = await Promise.all([
       env.DB.prepare(`SELECT COUNT(*) as total FROM users ${whereClause}`).bind(...binds).first(),
-      env.DB.prepare(`SELECT u.id, u.email, u.plan, u.is_admin, u.banned, u.created_at, u.pro_expires_at, COUNT(s.id) as sessions FROM users u LEFT JOIN sessions s ON s.user_id=u.id AND s.expires_at>? ${whereClause ? whereClause.replace('WHERE', 'AND') : ''} GROUP BY u.id ORDER BY ${orderBy} LIMIT ? OFFSET ?`).bind(now, ...binds, limit, offset).all(),
+      env.DB.prepare(`SELECT u.id, u.email, u.plan, u.is_admin, u.banned, u.created_at, u.pro_expires_at, COUNT(s.id) as sessions FROM users u LEFT JOIN sessions s ON s.user_id=u.id AND s.expires_at>? ${whereClause} GROUP BY u.id ORDER BY ${orderBy} LIMIT ? OFFSET ?`).bind(now, ...binds, limit, offset).all(),
     ]);
 
     const total = countRow?.total || 0;
