@@ -2727,18 +2727,10 @@
     }
 
     function updateTrackerStats() {
+        var settled = trackerHistoryAll.filter(trkIsSettled);
         var totalProfit = 0;
-        trackerHistoryAll.forEach(function(p) {
-            var details = Array.isArray(p.details) ? p.details : [];
-            var paidDet = details.find(function(d) { return d.label === 'Paid'; }) || {};
-            var costDet = details.find(function(d) { return d.label === 'Cost'; }) || {};
-            var paidNum = parseRaxDisplay(paidDet.display);
-            var costNum = parseRaxDisplay(costDet.display);
-            var isWin   = paidDet.color === 'green' && paidNum > 0;
-            var isLoss  = paidDet.display === '0' || (!isWin && paidDet.color === 'default');
-            if (isWin || isLoss) totalProfit += paidNum - costNum;
-        });
-        document.getElementById('trk-settled-count').textContent = trackerHistoryAll.length + (trackerHasMore ? '+' : '');
+        settled.forEach(function(p) { totalProfit += trkPnl(p); });
+        document.getElementById('trk-settled-count').textContent = settled.length + (trackerHasMore ? '+' : '');
         var profitEl = document.getElementById('trk-profit');
         profitEl.innerHTML = RAX_ICON + (totalProfit >= 0 ? '+' : '') + fmtRax(totalProfit);
         profitEl.style.color = totalProfit > 0 ? 'var(--green)' : totalProfit < 0 ? 'var(--red)' : 'var(--fg)';
@@ -2750,10 +2742,10 @@
         var cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
         var totalCost = 0, totalPaid = 0;
         trackerHistoryAll.forEach(function(p) {
+            if (!trkIsSettled(p)) return;
             if (!p.transactedAt || new Date(p.transactedAt).getTime() < cutoff) return;
-            var details = Array.isArray(p.details) ? p.details : [];
-            totalCost += parseRaxDisplay((details.find(function(d){ return d.label==='Cost'; }) || {}).display);
-            totalPaid += parseRaxDisplay((details.find(function(d){ return d.label==='Paid'; }) || {}).display);
+            totalCost += p.totalBuyAmount || 0;
+            totalPaid += p.totalPayout || 0;
         });
         var pnl = totalPaid - totalCost;
         return { pnl: pnl, roi: totalCost > 0 ? pnl / totalCost * 100 : 0 };
@@ -2765,9 +2757,10 @@
         var cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
         var wins = 0, total = 0;
         trackerHistoryAll.forEach(function(p) {
+            if (!trkIsSettled(p)) return;
             if (!p.transactedAt || new Date(p.transactedAt).getTime() < cutoff) return;
             total++;
-            if (getHistResult(p) === 'win') wins++;
+            if (trkResult(p) === 'win') wins++;
         });
         var winRate = total > 0 ? wins / total * 100 : 0;
         var pnlEl = document.getElementById('trk-pnl');
@@ -2797,7 +2790,7 @@
         if (label) label.textContent = monthNames[trkCalMonth] + ' ' + trkCalYear;
         if (nextBtn) nextBtn.disabled = (trkCalYear === today.getFullYear() && trkCalMonth === today.getMonth());
 
-        var dailyMap = buildDailyMap(trackerHistoryAll);
+        var dailyMap = buildTrkDailyMap(trackerHistoryAll);
         var mm = String(trkCalMonth + 1).padStart(2, '0');
         var monthTotal = 0;
         Object.keys(dailyMap).forEach(function(k) {
@@ -2861,11 +2854,11 @@
 
     function selectTrkCalDay(dateKey) {
         var items = trackerHistoryAll.filter(function(p) {
-            return p.transactedAt && localDateKey(p.transactedAt) === dateKey;
+            return trkIsSettled(p) && p.transactedAt && localDateKey(p.transactedAt) === dateKey;
         });
         var tbody = document.getElementById('trk-history-tbody');
         if (!items.length) return;
-        tbody.innerHTML = items.map(function(p) { return histRowHtml(p); }).join('');
+        tbody.innerHTML = items.map(function(p) { return trkHistRowHtml(p); }).join('');
         document.getElementById('trk-load-status').textContent = dateKey + ' · ' + items.length + ' bet' + (items.length !== 1 ? 's' : '');
         var histEl = document.getElementById('trk-history-tbody');
         if (histEl) histEl.closest('table').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -2875,21 +2868,14 @@
         var resultFilter = (document.getElementById('trk-filter-result') || {}).value || '';
         var sortBy       = (document.getElementById('trk-sort-by') || {}).value || 'chrono-desc';
 
-        var items = trackerHistoryAll.slice();
+        var items = trackerHistoryAll.filter(trkIsSettled);
 
         if (resultFilter) {
             items = items.filter(function(p) {
-                var details = Array.isArray(p.details) ? p.details : [];
-                var paidDet = details.find(function(d) { return d.label === 'Paid'; }) || {};
-                var costDet = details.find(function(d) { return d.label === 'Cost'; }) || {};
-                var paidNum = parseRaxDisplay(paidDet.display);
-                var costNum = parseRaxDisplay(costDet.display);
-                var isWin     = paidDet.color === 'green' && paidNum > 0;
-                var isLoss    = paidDet.display === '0' || (!isWin && paidDet.color === 'default');
-                var isCashout = isWin && (paidNum - costNum) < 0;
-                if (resultFilter === 'win')     return isWin && !isCashout;
-                if (resultFilter === 'loss')    return isLoss;
-                if (resultFilter === 'cashout') return isCashout;
+                var r = trkResult(p);
+                if (resultFilter === 'win')     return r === 'win';
+                if (resultFilter === 'loss')    return r === 'loss';
+                if (resultFilter === 'cashout') return r === 'cashout';
                 return true;
             });
         }
@@ -2897,12 +2883,7 @@
         items.sort(function(a, b) {
             if (sortBy === 'chrono-asc') return new Date(a.transactedAt) - new Date(b.transactedAt);
             if (sortBy === 'profit-desc' || sortBy === 'profit-asc') {
-                function prof(p) {
-                    var d = Array.isArray(p.details) ? p.details : [];
-                    return parseRaxDisplay((d.find(function(x){ return x.label==='Paid'; })||{}).display)
-                         - parseRaxDisplay((d.find(function(x){ return x.label==='Cost'; })||{}).display);
-                }
-                var diff = prof(b) - prof(a);
+                var diff = trkPnl(b) - trkPnl(a);
                 return sortBy === 'profit-desc' ? diff : -diff;
             }
             return new Date(b.transactedAt) - new Date(a.transactedAt);
@@ -2914,7 +2895,7 @@
             document.getElementById('trk-load-status').textContent = '';
             return;
         }
-        tbody.innerHTML = items.map(function(p) { return histRowHtml(p); }).join('');
+        tbody.innerHTML = items.map(function(p) { return trkHistRowHtml(p); }).join('');
         document.getElementById('trk-load-status').textContent = items.length + (trackerHasMore ? '+' : '') + ' bets';
     }
 
@@ -4106,6 +4087,18 @@
     }
 
     // Build a map of dateKey ("2026-04-06") → { pnl, bets }
+    function buildTrkDailyMap(items) {
+        var map = {};
+        items.forEach(function(p) {
+            if (!trkIsSettled(p) || !p.transactedAt) return;
+            var dateKey = localDateKey(p.transactedAt);
+            if (!map[dateKey]) map[dateKey] = { pnl: 0, bets: 0 };
+            map[dateKey].pnl  += trkPnl(p);
+            map[dateKey].bets += 1;
+        });
+        return map;
+    }
+
     function buildDailyMap(items) {
         var map = {};
         items.forEach(function(p) {
