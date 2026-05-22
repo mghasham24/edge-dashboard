@@ -5059,8 +5059,8 @@
 
 
 
-            // RS Tracker tab
-            if (!document.getElementById('tracker-tab-btn')) {
+            // RS Tracker tab — admin only for now
+            if (currentUser && currentUser.is_admin && !document.getElementById('tracker-tab-btn')) {
                 var trackerTabBtn = document.createElement('button');
                 trackerTabBtn.className = 'feature-tab sport-tab';
                 trackerTabBtn.textContent = '👤 Tracker';
@@ -5080,7 +5080,7 @@
                     }
                 };
                 ftBar.appendChild(trackerTabBtn);
-            } else {
+            } else if (currentUser && currentUser.is_admin) {
                 ftBar.appendChild(document.getElementById('tracker-tab-btn'));
             }
 
