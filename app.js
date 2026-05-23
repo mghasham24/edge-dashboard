@@ -4627,8 +4627,8 @@
                 ftBar.appendChild(document.getElementById('referral-tab-btn'));
             }
 
-            // Pro Notify tab — Pro users only (non-admin, since admin bypass the gate anyway)
-            if (isPro()) {
+            // Pro Notify tab — admin only until public release
+            if (currentUser && currentUser.is_admin) {
                 if (!document.getElementById('alerts-tab-btn')) {
                     var alertsTabBtn = document.createElement('button');
                     alertsTabBtn.className = 'feature-tab sport-tab';
