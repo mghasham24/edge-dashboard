@@ -113,33 +113,23 @@ async function handleGet(request, env) {
     activityRes,
     openPosRes,
     perfRes,
-    predictionsRes,
-    historyPublicRes,
-    leaderboardRes,
+    userProfileRes,
+    userPredictionsRes,
   ] = await Promise.all([
     rsGet(`/activity?userId=${userId}`, hdrs),
     rsGet(`/predictions/openpositions?userId=${userId}`, hdrs),
     rsGet(`/predictions/portfolioperformance?userId=${userId}`, hdrs),
-    // Alternative prediction endpoints the RS web app might use on a user profile page
-    rsGet(`/predictions?userId=${userId}`, hdrs),
-    rsGet(`/predictions/history?userId=${userId}&limit=5`, hdrs),
-    rsGet(`/predictions/leaderboard?userId=${userId}`, hdrs),
+    // Try /user/{userId} (numeric/hash id, not username) — profile by id
+    rsGet(`/user/${userId}`, hdrs),
+    // Try /user/{userId}/predictions — does a path-based user predictions endpoint exist?
+    rsGet(`/user/${userId}/predictions`, hdrs),
   ]);
 
-  // Snapshot first item from each to detect if userId param is respected
-  const snap = r => {
-    if (!r || r.status !== 200 || !r.body) return { status: r?.status };
-    const b = r.body;
-    // Extract first prediction/position to see whose it is
-    const items = b.items || b.positions || b.predictions || b.data || (Array.isArray(b) ? b : null);
-    const first = Array.isArray(items) ? items[0] : null;
-    return {
-      status: 200,
-      topLevelKeys: Object.keys(b).slice(0, 12),
-      firstItemUserId: first?.userId || first?.user?.id || 'n/a',
-      count: Array.isArray(items) ? items.length : 'non-array',
-    };
-  };
+  const act = activityRes?.body || {};
+  const actActivities = act.activities;
+  const firstActivity = Array.isArray(actActivities)
+    ? actActivities[0]
+    : (actActivities && typeof actActivities === 'object' ? Object.values(actActivities)[0] : null);
 
   return json({
     ok: true,
@@ -147,17 +137,24 @@ async function handleGet(request, env) {
     userId,
     displayName,
     profile,
-    activity:             activityRes?.status === 200 ? activityRes.body : null,
     openPositions:        openPosRes?.status === 200 ? openPosRes.body : null,
     portfolioPerformance: perfRes?.status === 200 ? perfRes.body : null,
     _probe: {
       targetUserId: userId,
-      activity:       snap(activityRes),
-      openPos:        snap(openPosRes),
-      perf:           snap(perfRes),
-      predictions:    snap(predictionsRes),
-      historyPublic:  snap(historyPublicRes),
-      leaderboard:    snap(leaderboardRes),
+      activity: {
+        status: activityRes?.status,
+        bodyUserId: act.userId,
+        userIdMatchesTarget: act.userId === userId,
+        activitiesType: Array.isArray(actActivities) ? 'array' : typeof actActivities,
+        activitiesKeys: actActivities && typeof actActivities === 'object' && !Array.isArray(actActivities)
+          ? Object.keys(actActivities).slice(0, 10)
+          : actActivities?.length,
+        firstActivityKeys: firstActivity ? Object.keys(firstActivity).slice(0, 15) : null,
+        announcementsCount: Array.isArray(act.announcements) ? act.announcements.length : typeof act.announcements,
+        notificationsCount: Array.isArray(act.notifications) ? act.notifications.length : typeof act.notifications,
+      },
+      userProfileById: { status: userProfileRes?.status, keys: userProfileRes?.status === 200 ? Object.keys(userProfileRes.body || {}).slice(0,8) : null },
+      userPredictions: { status: userPredictionsRes?.status, keys: userPredictionsRes?.status === 200 ? Object.keys(userPredictionsRes.body || {}).slice(0,8) : null },
     },
   });
 }
