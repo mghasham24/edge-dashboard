@@ -146,17 +146,19 @@ function formatPost(bet) {
     statsLine,
   ];
 
-  // RS sensitivity: EV at +1%, +2%, +3% RS price spike
+  // RS sensitivity: one full stats line per +1/+2/+3% RS spike
   if (bet.rsPct != null && bet.adjFairPct != null) {
     const fdFair = bet.adjFairPct / 100;
     const rsProb = bet.rsPct / 100;
-    const sensParts = [1, 2, 3].map(n => {
+    for (const n of [1, 2, 3]) {
       const spiked = Math.min(0.999, rsProb + n / 100);
       const ev = calcEV(fdFair, spiked);
-      if (ev == null) return null;
-      return `RS@${(spiked * 100).toFixed(1)}%: ${ev >= 0 ? '+' : ''}${ev.toFixed(1)}%`;
-    }).filter(Boolean);
-    if (sensParts.length) lines.push(sensParts.join(' · '));
+      if (ev == null) continue;
+      const evStr   = (ev >= 0 ? '+' : '') + ev.toFixed(1) + '% EV';
+      const rsPctStr = (spiked * 100).toFixed(1) + '% RS';
+      const fairStr  = bet.adjFairPct.toFixed(1) + '% Fair';
+      lines.push([rsPctStr, fairStr, evStr, bet.units + 'u · ' + raxStr + ' Rax'].join(' | '));
+    }
   }
 
   if (bet.gameUrl) lines.push(bet.gameUrl);
