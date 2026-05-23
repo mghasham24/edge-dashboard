@@ -641,10 +641,29 @@ export async function onRequestPost({ request, env }) {
   const cacheKey = 'real_sync_' + realSport + '_v12';
   const now = Math.floor(Date.now() / 1000);
   try {
-    // Only write if D1 is stale (> 10 min) — CF worker owns fresh data, TM bridge is emergency backup
-    const existing = await env.DB.prepare('SELECT fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
-    if (existing && (now - existing.fetched_at) < 600) {
-      return new Response(JSON.stringify({ ok: true, sport, skipped: true, age: now - existing.fetched_at }), {
+    const existing = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
+    const age = existing ? now - existing.fetched_at : Infinity;
+
+    if (age < 600 && existing) {
+      // Cache is fresh — merge market IDs from TM push into existing D1 data without overwriting probabilities
+      const cached = JSON.parse(existing.data);
+      let changed = false;
+      for (const [gameKey, mktMap] of Object.entries(markets)) {
+        if (gameKey.endsWith('__gid') || gameKey.endsWith('__sport') || gameKey.endsWith('__lines') || gameKey.endsWith('__startMs')) continue;
+        if (!cached[gameKey] || typeof cached[gameKey] !== 'object') continue;
+        for (const [label, mkt] of Object.entries(mktMap)) {
+          if (cached[gameKey][label] && mkt.id != null && cached[gameKey][label].id == null) {
+            cached[gameKey][label].id = mkt.id;
+            changed = true;
+          }
+        }
+      }
+      if (changed) {
+        await env.DB.prepare(
+          'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at'
+        ).bind(cacheKey, JSON.stringify(cached), existing.fetched_at).run();
+      }
+      return new Response(JSON.stringify({ ok: true, sport, merged: changed, age }), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
       });
     }

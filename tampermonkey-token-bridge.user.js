@@ -114,6 +114,7 @@
                  : volStr.endsWith('m') ? parseFloat(volStr) * 1000000
                  : parseFloat(volStr) || 0;
       markets[mk.label] = {
+        id: mk.id,
         volume: volNum, volumeDisplay: volStr,
         outcomes: (mk.outcomes || []).map(function(o) {
           var m = (o.label || '').match(/([+-]?\d+\.?\d*)\s*$/);
