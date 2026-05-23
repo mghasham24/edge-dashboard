@@ -375,4 +375,4 @@ loadState();
 console.log(`ev-poster: starting | group ${RS_GROUP_ID} | min EV ${MIN_EV}% | max ${MAX_POSTS}/run | cooldown ${REPOST_COOLDOWN_MS/3600000}h | urgent ≥${REPOST_URGENT_EV}%`);
 scheduleMidnightReset();
 run();
-setInterval(run, 60_000);
+setInterval(run, 15_000);
