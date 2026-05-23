@@ -27,7 +27,8 @@ const MIN_EV             = parseFloat(process.env.MIN_EV              || '5');
 const MAX_POSTS          = parseInt(process.env.MAX_POSTS              || '5');
 const POST_DELAY_MS      = parseInt(process.env.POST_DELAY_MS          || '5000');
 const REPOST_EV_JUMP     = parseFloat(process.env.REPOST_EV_JUMP       || '5');
-const REPOST_COOLDOWN_MS = parseInt(process.env.REPOST_COOLDOWN_MS     || String(4 * 3600 * 1000)); // 4h
+const REPOST_COOLDOWN_MS = parseInt(process.env.REPOST_COOLDOWN_MS     || String(2 * 3600 * 1000)); // 2h
+const REPOST_URGENT_EV   = parseFloat(process.env.REPOST_URGENT_EV      || '25'); // bypass cooldown
 const STATE_FILE         = process.env.STATE_FILE || '/opt/ev-group-poster/state.json';
 
 const RS_BASE     = 'https://web.realapp.com';
@@ -278,9 +279,11 @@ async function run() {
         if (b.ev < MIN_EV || b.isLive) return false;
         const last = postedEv.get(b.betKey);
         if (!last) return true;
-        const cooldownOk = (now2 - last.postedAt) >= REPOST_COOLDOWN_MS;
-        const evJumped   = b.ev - last.ev >= REPOST_EV_JUMP;
-        return cooldownOk && evJumped;
+        const evJumped  = b.ev - last.ev >= REPOST_EV_JUMP;
+        if (!evJumped) return false;
+        // Bypass cooldown if EV is outrageous (≥ REPOST_URGENT_EV)
+        if (b.ev >= REPOST_URGENT_EV) return true;
+        return (now2 - last.postedAt) >= REPOST_COOLDOWN_MS;
       })
       .sort((a, b) => b.ev - a.ev)
       .slice(0, MAX_POSTS);
@@ -369,7 +372,7 @@ if (!SITE_URL || !EV_POSTER_KEY || !RS_AUTH_INFO || !RS_GROUP_ID) {
 }
 
 loadState();
-console.log(`ev-poster: starting | group ${RS_GROUP_ID} | min EV ${MIN_EV}% | max ${MAX_POSTS}/run | cooldown ${REPOST_COOLDOWN_MS/3600000}h`);
+console.log(`ev-poster: starting | group ${RS_GROUP_ID} | min EV ${MIN_EV}% | max ${MAX_POSTS}/run | cooldown ${REPOST_COOLDOWN_MS/3600000}h | urgent ≥${REPOST_URGENT_EV}%`);
 scheduleMidnightReset();
 run();
 setInterval(run, 60_000);
