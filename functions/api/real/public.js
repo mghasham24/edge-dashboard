@@ -111,21 +111,36 @@ async function handleGet(request, env) {
 
   const [
     activityRes,
-    openPosRes,     perfRes,
-    pathOpenPos,    pathPerf,
-    noAuthOpenPos,
+    openPosRes,
+    perfRes,
+    predictionsRes,
+    historyPublicRes,
+    leaderboardRes,
   ] = await Promise.all([
     rsGet(`/activity?userId=${userId}`, hdrs),
     rsGet(`/predictions/openpositions?userId=${userId}`, hdrs),
     rsGet(`/predictions/portfolioperformance?userId=${userId}`, hdrs),
-    // Path-based variants — userId in URL path
-    rsGet(`/user/${userId}/openpositions`, hdrs),
-    rsGet(`/user/${userId}/portfolioperformance`, hdrs),
-    // No-auth call — does RS return public data without a token?
-    rsGet(`/predictions/openpositions?userId=${userId}`, noAuthHdrs),
+    // Alternative prediction endpoints the RS web app might use on a user profile page
+    rsGet(`/predictions?userId=${userId}`, hdrs),
+    rsGet(`/predictions/history?userId=${userId}&limit=5`, hdrs),
+    rsGet(`/predictions/leaderboard?userId=${userId}`, hdrs),
   ]);
 
-  // Diagnostic: expose raw statuses so we can see which endpoints respect userId
+  // Snapshot first item from each to detect if userId param is respected
+  const snap = r => {
+    if (!r || r.status !== 200 || !r.body) return { status: r?.status };
+    const b = r.body;
+    // Extract first prediction/position to see whose it is
+    const items = b.items || b.positions || b.predictions || b.data || (Array.isArray(b) ? b : null);
+    const first = Array.isArray(items) ? items[0] : null;
+    return {
+      status: 200,
+      topLevelKeys: Object.keys(b).slice(0, 12),
+      firstItemUserId: first?.userId || first?.user?.id || 'n/a',
+      count: Array.isArray(items) ? items.length : 'non-array',
+    };
+  };
+
   return json({
     ok: true,
     username: rsUserName,
@@ -136,10 +151,13 @@ async function handleGet(request, env) {
     openPositions:        openPosRes?.status === 200 ? openPosRes.body : null,
     portfolioPerformance: perfRes?.status === 200 ? perfRes.body : null,
     _probe: {
-      queryParam: { openPos: openPosRes?.status, perf: perfRes?.status },
-      pathBased:  { openPos: pathOpenPos?.status, openPosBody: pathOpenPos?.body, perf: pathPerf?.status, perfBody: pathPerf?.body },
-      noAuth:     { openPos: noAuthOpenPos?.status, body: noAuthOpenPos?.status === 200 ? (noAuthOpenPos?.body?.positions?.length ?? 'no positions field') : noAuthOpenPos?.body },
-      activity:   { status: activityRes?.status, itemCount: Array.isArray(activityRes?.body?.items) ? activityRes.body.items.length : 'n/a' },
+      targetUserId: userId,
+      activity:       snap(activityRes),
+      openPos:        snap(openPosRes),
+      perf:           snap(perfRes),
+      predictions:    snap(predictionsRes),
+      historyPublic:  snap(historyPublicRes),
+      leaderboard:    snap(leaderboardRes),
     },
   });
 }
