@@ -17,6 +17,8 @@ CREATE TABLE IF NOT EXISTS users (
   pro_expires_at    INTEGER,
   had_free_trial    INTEGER NOT NULL DEFAULT 0,
   referral_credits  INTEGER DEFAULT 0,
+  group_access      INTEGER DEFAULT 0,
+  rs_group_username TEXT,
   created_at        INTEGER NOT NULL DEFAULT (unixepoch())
 );
 

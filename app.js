@@ -4224,9 +4224,17 @@
                 + banBtn
                 + '<button class="admin-btn del-btn" data-uid="' + u.id + '" data-email="' + escHtml(u.email) + '" onclick="adminDeleteUser(+this.dataset.uid, this.dataset.email)">Delete</button>'
                 + '</div>';
+            var groupChecked = u.group_access ? ' checked' : '';
+            var groupRsVal   = escHtml(u.rs_group_username || '');
+            var groupCell    = '<div style="display:flex;flex-direction:column;gap:4px">'
+                + '<label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer">'
+                + '<input type="checkbox" data-uid="' + u.id + '"' + groupChecked + ' onchange="adminToggleGroup(this)"> Access</label>'
+                + '<input type="text" placeholder="RS username" value="' + groupRsVal + '" data-uid="' + u.id + '" style="font-size:11px;font-family:var(--mono);background:var(--bg3);border:1px solid var(--border2);color:var(--fg);padding:3px 6px;border-radius:4px;width:100px" onblur="adminSaveRsUsername(this)" onkeydown="if(event.key===\'Enter\')this.blur()">'
+                + '</div>';
             return '<tr>'
                 + '<td><span style="font-family:var(--mono);font-size:12px">' + escHtml(u.email) + '</span>' + adminBadge + bannedBadge + '</td>'
                 + '<td><select class="plan-sel" data-uid="' + u.id + '" onchange="adminChangePlan(this)"><option value="free"' + (u.plan === 'free' ? ' selected' : '') + '>Free</option><option value="pro"' + (u.plan === 'pro' ? ' selected' : '') + '>Pro</option></select></td>'
+                + '<td>' + groupCell + '</td>'
                 + '<td style="font-family:var(--mono);color:var(--muted)">' + u.sessions + '</td>'
                 + '<td style="font-family:var(--mono);font-size:12px;color:var(--muted)">' + date + '</td>'
                 + '<td style="font-family:var(--mono);font-size:12px;color:var(--muted)">' + proExpires + '</td>'
@@ -4269,6 +4277,21 @@
     async function adminSetBanned(id, banned) {
         await fetch('/api/admin/users', { method: 'PATCH', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, banned }) });
         loadAdminUsers(document.getElementById('admin-search').value.trim(), 0, false);
+    }
+
+    async function adminToggleGroup(cb) {
+        var id = parseInt(cb.getAttribute('data-uid'));
+        var res = await fetch('/api/admin/users', { method: 'PATCH', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, group_access: cb.checked }) });
+        var data = await res.json();
+        if (!data.ok) { showToast(data.error || 'Error updating group access'); cb.checked = !cb.checked; }
+    }
+
+    async function adminSaveRsUsername(input) {
+        var id  = parseInt(input.getAttribute('data-uid'));
+        var val = input.value.trim();
+        var res = await fetch('/api/admin/users', { method: 'PATCH', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, rs_group_username: val }) });
+        var data = await res.json();
+        if (!data.ok) { showToast(data.error || 'Error saving RS username'); }
     }
 
     async function adminDeleteUser(id, email) {

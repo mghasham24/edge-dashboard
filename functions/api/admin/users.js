@@ -34,14 +34,14 @@ async function handleRequest({ request, env }) {
 
     const where = [];
     const binds = [];
-    if (search) { where.push('email LIKE ?'); binds.push('%' + search + '%'); }
-    if (plan)   { where.push('plan=?');        binds.push(plan); }
+    if (search) { where.push('(u.email LIKE ? OR u.rs_group_username LIKE ?)'); binds.push('%' + search + '%', '%' + search + '%'); }
+    if (plan)   { where.push('u.plan=?'); binds.push(plan); }
     const whereClause = where.length ? 'WHERE ' + where.join(' AND ') : '';
 
     const now = Math.floor(Date.now() / 1000);
     const [countRow, rows] = await Promise.all([
-      env.DB.prepare(`SELECT COUNT(*) as total FROM users ${whereClause}`).bind(...binds).first(),
-      env.DB.prepare(`SELECT u.id, u.email, u.plan, u.is_admin, u.banned, u.created_at, u.pro_expires_at, COUNT(s.id) as sessions FROM users u LEFT JOIN sessions s ON s.user_id=u.id AND s.expires_at>? ${whereClause} GROUP BY u.id ORDER BY ${orderBy} LIMIT ? OFFSET ?`).bind(now, ...binds, limit, offset).all(),
+      env.DB.prepare(`SELECT COUNT(*) as total FROM users u ${whereClause}`).bind(...binds).first(),
+      env.DB.prepare(`SELECT u.id, u.email, u.plan, u.is_admin, u.banned, u.created_at, u.pro_expires_at, u.group_access, u.rs_group_username, COUNT(s.id) as sessions FROM users u LEFT JOIN sessions s ON s.user_id=u.id AND s.expires_at>? ${whereClause} GROUP BY u.id ORDER BY ${orderBy} LIMIT ? OFFSET ?`).bind(now, ...binds, limit, offset).all(),
     ]);
 
     const total = countRow?.total || 0;
@@ -54,7 +54,7 @@ async function handleRequest({ request, env }) {
   if (method === 'PATCH') {
     let body;
     try { body = await request.json(); } catch { return fail(400, 'Invalid JSON'); }
-    const { id, plan, banned } = body;
+    const { id, plan, banned, group_access, rs_group_username } = body;
     if (!id) return fail(400, 'Missing user id');
 
     if (plan !== undefined) {
@@ -65,6 +65,23 @@ async function handleRequest({ request, env }) {
       await env.DB.prepare('UPDATE users SET banned=? WHERE id=?').bind(banned ? 1 : 0, id).run();
       if (banned) {
         await env.DB.prepare('DELETE FROM sessions WHERE user_id=?').bind(id).run();
+      }
+    }
+    if (group_access !== undefined || rs_group_username !== undefined) {
+      // Prevent the same RS username from being used by two different accounts
+      if (rs_group_username) {
+        const conflict = await env.DB.prepare(
+          'SELECT id FROM users WHERE rs_group_username=? AND id!=?'
+        ).bind(rs_group_username, id).first();
+        if (conflict) return fail(409, 'RS username already used by another account');
+      }
+      if (group_access !== undefined && rs_group_username !== undefined) {
+        await env.DB.prepare('UPDATE users SET group_access=?, rs_group_username=? WHERE id=?')
+          .bind(group_access ? 1 : 0, rs_group_username || null, id).run();
+      } else if (group_access !== undefined) {
+        await env.DB.prepare('UPDATE users SET group_access=? WHERE id=?').bind(group_access ? 1 : 0, id).run();
+      } else {
+        await env.DB.prepare('UPDATE users SET rs_group_username=? WHERE id=?').bind(rs_group_username || null, id).run();
       }
     }
     return ok({ updated: true });
