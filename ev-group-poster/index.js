@@ -9,15 +9,19 @@
 //
 // Optional:
 //   RS_DEVICE_UUID — RS device UUID
+//   RS_PROXY_URL   — residential proxy e.g. http://user:pass@host:port (required on VPS)
 //   MIN_EV         — minimum EV% to post (default: 5)
 //   MAX_POSTS      — cap posts per run (default: 5)
 //   POST_DELAY_MS  — ms between consecutive posts (default: 5000)
+
+import { ProxyAgent } from 'undici';
 
 const SITE_URL      = process.env.SITE_URL;
 const EV_POSTER_KEY = process.env.EV_POSTER_KEY;
 const RS_AUTH_INFO  = process.env.RS_AUTH_INFO;
 const RS_GROUP_ID   = process.env.RS_GROUP_ID;
 const DEVICE_UUID   = process.env.RS_DEVICE_UUID || '2e0a38e2-0ee8-4f93-9a34-218ac1d10161';
+const RS_PROXY_URL  = process.env.RS_PROXY_URL || null;
 const MIN_EV           = parseFloat(process.env.MIN_EV            || '5');
 const MAX_POSTS        = parseInt(process.env.MAX_POSTS            || '5');
 const POST_DELAY_MS    = parseInt(process.env.POST_DELAY_MS        || '5000');
@@ -25,6 +29,9 @@ const REPOST_EV_JUMP   = parseFloat(process.env.REPOST_EV_JUMP     || '5');
 
 const RS_BASE     = 'https://web.realapp.com';
 const RS_WEB_BASE = 'https://realsports.io';
+
+// All RS API calls go through the proxy if configured (VPS has residential IP block)
+const rsDispatcher = RS_PROXY_URL ? new ProxyAgent(RS_PROXY_URL) : undefined;
 
 // In-memory dedup: betKey → EV% at time of posting
 // Re-posts when EV has risen by REPOST_EV_JUMP since last post — cleared at midnight ET
@@ -135,7 +142,7 @@ async function fetchLiveRSProb(bet) {
   try {
     const res = await fetch(
       `${RS_BASE}/predictions/game/${bet.rsSport}/${bet.rsGameId}/markets`,
-      { headers: rsHeaders(), signal: AbortSignal.timeout(6000) }
+      { headers: rsHeaders(), signal: AbortSignal.timeout(6000), dispatcher: rsDispatcher }
     );
     if (!res.ok) return null;
     const data = await res.json();
@@ -293,6 +300,7 @@ async function run() {
           headers: rsHeaders(),
           body:    JSON.stringify({ text, content: { nodes: [{ text }] } }),
           signal:  AbortSignal.timeout(10000),
+          dispatcher: rsDispatcher,
         });
 
         if (res.ok) {

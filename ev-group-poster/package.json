@@ -4,5 +4,8 @@
   "type": "module",
   "scripts": {
     "start": "node index.js"
+  },
+  "dependencies": {
+    "undici": "^7.0.0"
   }
 }
