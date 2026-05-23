@@ -3,7 +3,7 @@
 // Used by the Mac ev-group-poster script to know what to post.
 // Protected by cron key (same as alert-cron).
 
-import { getSessionOrCron } from '../../../_lib/auth.js';
+import { getSessionOrCron } from '../../_lib/auth.js';
 
 export async function onRequestGet({ request, env }) {
   // Accept cron key, admin session, or dedicated poster key
