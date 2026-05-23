@@ -109,45 +109,42 @@ async function handleGet(request, env) {
     'real-version': '31',
   };
 
-  // Get token holder's own open positions — we need their sharedPositionIds to test cross-user access
-  const myOpenPos = await rsGet(`/predictions/openpositions`, hdrs);
-  const myPositions = myOpenPos?.body?.positions || [];
-  const myPosId = myPositions[0]?.sharedPositionId || null;
-
-  // Cross-user test: pick an ID just below ours — global sequential, likely a different user
-  const crossId = myPosId ? String(parseInt(myPosId) - 3) : null;
+  // How does the RS app discover position IDs for a given user's profile page?
+  // Try every plausible "list positions for userId" endpoint.
+  const enc = encodeURIComponent(username);
 
   const [
-    openPosRes,
     perfRes,
-    myPosRes,
-    crossPosRes,
-    // Feed/group endpoints — how Justin discovers position IDs per user
-    feedRes,
+    // Candidate: sharedpositions list for a userId
+    sharedPosRes,
+    userPosRes,
+    userSharedRes,
+    // Candidate: historyrollup which returns settled positions with sharedPositionId
+    histRes,
+    // Group feed — each post embeds a sharedPositionId
     groupFeedRes,
-    trendingRes,
   ] = await Promise.all([
-    rsGet(`/predictions/openpositions?userId=${userId}`, hdrs),
     rsGet(`/predictions/portfolioperformance?userId=${userId}`, hdrs),
-    myPosId ? rsGet(`/predictions/position/${myPosId}`, hdrs) : Promise.resolve(null),
-    crossId  ? rsGet(`/predictions/position/${crossId}`,  hdrs) : Promise.resolve(null),
-    rsGet(`/feed`, hdrs),
-    rsGet(`/group/61979/posts?limit=3`, hdrs),
-    rsGet(`/predictions/trending`, hdrs),
+    rsGet(`/predictions/sharedpositions?userId=${userId}`, hdrs),
+    rsGet(`/user/${userId}/positions`, hdrs),
+    rsGet(`/user/${userId}/sharedpositions`, hdrs),
+    rsGet(`/predictions/historyrollup?userId=${userId}&limit=10`, hdrs),
+    rsGet(`/group/61979/posts?limit=5`, hdrs),
   ]);
 
-  const snapPos = r => {
-    if (!r) return null;
-    if (r.status !== 200) return { status: r?.status };
-    const uid = r.body?.position?.user?.id || r.body?.position?.userId || 'n/a';
-    return { status: 200, positionUserId: uid, topKeys: Object.keys(r.body || {}).slice(0,6) };
-  };
-  const snapFeed = r => {
+  const snap = r => {
     if (!r || r.status !== 200) return { status: r?.status };
     const b = r.body;
-    const items = b?.posts || b?.items || b?.data || (Array.isArray(b) ? b : null);
-    const first = Array.isArray(items) ? items[0] : null;
-    return { status: 200, topKeys: Object.keys(b||{}).slice(0,8), firstKeys: first ? Object.keys(first).slice(0,10) : null };
+    const arr = b?.positions || b?.sharedPositions || b?.items || b?.posts || (Array.isArray(b) ? b : null);
+    const first = Array.isArray(arr) ? arr[0] : null;
+    return {
+      status: 200,
+      topKeys: Object.keys(b||{}).slice(0, 8),
+      count: Array.isArray(arr) ? arr.length : 'n/a',
+      firstUserId: first?.userId || first?.user?.id || 'n/a',
+      firstSharedPosId: first?.sharedPositionId || first?.id || 'n/a',
+      firstKeys: first ? Object.keys(first).slice(0,12) : null,
+    };
   };
 
   return json({
@@ -156,16 +153,14 @@ async function handleGet(request, env) {
     userId,
     displayName,
     profile,
-    openPositions:        openPosRes?.status === 200 ? openPosRes.body : null,
     portfolioPerformance: perfRes?.status === 200 ? perfRes.body : null,
     _probe: {
-      myPosId,
-      crossId,
-      myPos:    snapPos(myPosRes),
-      crossPos: snapPos(crossPosRes),
-      feed:     snapFeed(feedRes),
-      groupFeed:    snapFeed(groupFeedRes),
-      trending:     snapFeed(trendingRes),
+      targetUserId: userId,
+      sharedPos:   snap(sharedPosRes),
+      userPos:     snap(userPosRes),
+      userShared:  snap(userSharedRes),
+      histRollup:  snap(histRes),
+      groupFeed:   snap(groupFeedRes),
     },
   });
 }
