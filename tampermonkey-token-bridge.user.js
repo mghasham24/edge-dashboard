@@ -236,6 +236,6 @@
   setInterval(pushToken, 30000);
 
   pushMarkets();
-  setInterval(pushMarkets, 4 * 60 * 1000);
+  setInterval(pushMarkets, 90 * 1000);
 
 })();

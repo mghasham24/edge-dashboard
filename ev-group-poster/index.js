@@ -123,6 +123,36 @@ function unitsEV(ev, realPct) {
   return 0;
 }
 
+// ── Live RS odds refresh ────────────────────────────────
+
+const RS_ML_LABELS    = ['Game Winner', 'Moneyline', 'To Win Match', 'Match Winner'];
+const RS_MARKET_MAP   = { ML: RS_ML_LABELS, Spread: ['Spread'], Total: ['Total', 'Total Goals'], RFI: ['Run in 1st inning?'] };
+
+function normName(s) { return (s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
+
+async function fetchLiveRSProb(bet) {
+  if (!bet.rsGameId || !bet.rsSport) return null;
+  try {
+    const res = await fetch(
+      `${RS_BASE}/predictions/game/${bet.rsSport}/${bet.rsGameId}/markets`,
+      { headers: rsHeaders(), signal: AbortSignal.timeout(6000) }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.statusCode === 429) return null;
+    const markets = data.markets || [];
+    const labels  = RS_MARKET_MAP[bet.market] || RS_ML_LABELS;
+    const mkt     = markets.find(m => labels.includes(m.label));
+    if (!mkt) return null;
+    const normSide = normName(bet.side);
+    const outcome  = (mkt.outcomes || []).find(o => normName(o.label).includes(normSide) || normSide.includes(normName(o.label)));
+    if (!outcome || !outcome.probability) return null;
+    return outcome.probability;
+  } catch(e) {
+    return null;
+  }
+}
+
 // ── Formatting ─────────────────────────────────────────
 
 function rsBaseTake(p) {
@@ -233,7 +263,29 @@ async function run() {
     console.log('ev-poster: posting', newBets.length, 'new bet(s)');
 
     for (let i = 0; i < newBets.length; i++) {
-      const bet  = newBets[i];
+      const bet = newBets[i];
+
+      // Refresh RS probability live before posting
+      const liveProb = await fetchLiveRSProb(bet);
+      if (liveProb !== null) {
+        const livePct = Math.round(liveProb * 1000) / 10;
+        const fdFair  = (bet.adjFairPct || 0) / 100;
+        const liveEv  = calcEV(fdFair, liveProb);
+        if (liveEv !== null && liveEv < MIN_EV) {
+          console.log('ev-poster: skip', bet.betKey, '— live RS prob', livePct + '% drops EV to', liveEv.toFixed(1) + '%');
+          continue;
+        }
+        if (liveEv !== null) {
+          const staleness = Math.abs(livePct - bet.rsPct);
+          if (staleness > 0.5) console.log('ev-poster: live RS update', bet.betKey, '| cached', bet.rsPct + '% → live', livePct + '%');
+          bet.rsPct  = livePct;
+          bet.ev     = Math.round(liveEv * 10) / 10;
+          bet.units  = unitsEV(liveEv, fdFair);
+        }
+      }
+
+      if (bet.units <= 0) { console.log('ev-poster: skip', bet.betKey, '— 0 units after live update'); continue; }
+
       const text = formatPost(bet);
       try {
         const res = await fetch(`${RS_BASE}/comments/groups/${RS_GROUP_ID}`, {
