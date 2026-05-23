@@ -15,6 +15,7 @@
 //   POST_DELAY_MS  — ms between consecutive posts (default: 5000)
 
 import { ProxyAgent } from 'undici';
+import { readFileSync, writeFileSync } from 'fs';
 
 const SITE_URL      = process.env.SITE_URL;
 const EV_POSTER_KEY = process.env.EV_POSTER_KEY;
@@ -22,21 +23,39 @@ const RS_AUTH_INFO  = process.env.RS_AUTH_INFO;
 const RS_GROUP_ID   = process.env.RS_GROUP_ID;
 const DEVICE_UUID   = process.env.RS_DEVICE_UUID || '2e0a38e2-0ee8-4f93-9a34-218ac1d10161';
 const RS_PROXY_URL  = process.env.RS_PROXY_URL || null;
-const MIN_EV           = parseFloat(process.env.MIN_EV            || '5');
-const MAX_POSTS        = parseInt(process.env.MAX_POSTS            || '5');
-const POST_DELAY_MS    = parseInt(process.env.POST_DELAY_MS        || '5000');
-const REPOST_EV_JUMP   = parseFloat(process.env.REPOST_EV_JUMP     || '5');
+const MIN_EV             = parseFloat(process.env.MIN_EV              || '5');
+const MAX_POSTS          = parseInt(process.env.MAX_POSTS              || '5');
+const POST_DELAY_MS      = parseInt(process.env.POST_DELAY_MS          || '5000');
+const REPOST_EV_JUMP     = parseFloat(process.env.REPOST_EV_JUMP       || '5');
+const REPOST_COOLDOWN_MS = parseInt(process.env.REPOST_COOLDOWN_MS     || String(4 * 3600 * 1000)); // 4h
+const STATE_FILE         = process.env.STATE_FILE || '/opt/ev-group-poster/state.json';
 
 const RS_BASE     = 'https://web.realapp.com';
 const RS_WEB_BASE = 'https://realsports.io';
 
-// All RS API calls go through the proxy if configured (VPS has residential IP block)
 const rsDispatcher = RS_PROXY_URL ? new ProxyAgent(RS_PROXY_URL) : undefined;
 
-// In-memory dedup: betKey → EV% at time of posting
-// Re-posts when EV has risen by REPOST_EV_JUMP since last post — cleared at midnight ET
+// Dedup state: betKey → { ev, postedAt }
+// Persisted to disk so restarts don't re-post.
+// Repost only if EV jumped ≥ REPOST_EV_JUMP AND cooldown has passed.
 const postedEv = new Map();
 let running = false;
+
+function loadState() {
+  try {
+    const data = JSON.parse(readFileSync(STATE_FILE, 'utf8'));
+    for (const [k, v] of Object.entries(data)) postedEv.set(k, v);
+    console.log('ev-poster: loaded', postedEv.size, 'dedup entries from disk');
+  } catch(e) {}
+}
+
+function saveState() {
+  try {
+    const obj = {};
+    for (const [k, v] of postedEv.entries()) obj[k] = v;
+    writeFileSync(STATE_FILE, JSON.stringify(obj));
+  } catch(e) { console.error('ev-poster: failed to save state:', e.message); }
+}
 
 // ── RS request token (hashids-encoded timestamp, 'realwebapp' salt) ──────────
 
@@ -252,12 +271,16 @@ async function run() {
       return;
     }
 
-    // Filter: MIN_EV threshold, skip live bets, skip unless new or EV jumped ≥ REPOST_EV_JUMP
+    // Filter: MIN_EV threshold, skip live, skip if posted recently unless EV jumped ≥ REPOST_EV_JUMP
+    const now2 = Date.now();
     const newBets = evData.bets
       .filter(b => {
         if (b.ev < MIN_EV || b.isLive) return false;
-        const lastEv = postedEv.get(b.betKey);
-        return lastEv == null || b.ev - lastEv >= REPOST_EV_JUMP;
+        const last = postedEv.get(b.betKey);
+        if (!last) return true;
+        const cooldownOk = (now2 - last.postedAt) >= REPOST_COOLDOWN_MS;
+        const evJumped   = b.ev - last.ev >= REPOST_EV_JUMP;
+        return cooldownOk && evJumped;
       })
       .sort((a, b) => b.ev - a.ev)
       .slice(0, MAX_POSTS);
@@ -305,7 +328,8 @@ async function run() {
 
         if (res.ok) {
           console.log('ev-poster: posted', bet.betKey, '| EV', bet.ev + '%');
-          postedEv.set(bet.betKey, bet.ev);
+          postedEv.set(bet.betKey, { ev: bet.ev, postedAt: Date.now() });
+          saveState();
         } else {
           const errText = await res.text();
           console.error('ev-poster: group post failed', res.status, errText.slice(0, 200));
@@ -332,6 +356,7 @@ function scheduleMidnightReset() {
   setTimeout(() => {
     console.log('ev-poster: midnight ET — clearing', postedEv.size, 'posted bets');
     postedEv.clear();
+    saveState();
     scheduleMidnightReset();
   }, Math.max(msUntil, 60_000));
 }
@@ -343,7 +368,8 @@ if (!SITE_URL || !EV_POSTER_KEY || !RS_AUTH_INFO || !RS_GROUP_ID) {
   process.exit(1);
 }
 
-console.log(`ev-poster: starting | group ${RS_GROUP_ID} | min EV ${MIN_EV}% | max ${MAX_POSTS}/run`);
+loadState();
+console.log(`ev-poster: starting | group ${RS_GROUP_ID} | min EV ${MIN_EV}% | max ${MAX_POSTS}/run | cooldown ${REPOST_COOLDOWN_MS/3600000}h`);
 scheduleMidnightReset();
 run();
 setInterval(run, 60_000);
