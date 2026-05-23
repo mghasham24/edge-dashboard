@@ -18,6 +18,29 @@ export async function onRequestGet({ request, env }) {
     }
   }
 
+  // Debug: show raw RS market object fields from D1 cache
+  if (url.searchParams.get('debug') === 'market_keys') {
+    try {
+      const rsRow = await env.DB.prepare(
+        "SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE 'real_sync_%' ORDER BY fetched_at DESC LIMIT 3"
+      ).all();
+      const result = {};
+      for (const row of (rsRow.results || [])) {
+        const d = JSON.parse(row.data);
+        const gameKey = Object.keys(d).find(k => !k.endsWith('__gid') && !k.endsWith('__sport') && !k.endsWith('__lines') && !k.endsWith('__startMs'));
+        if (gameKey) {
+          const markets = d[gameKey];
+          const firstMktLabel = Object.keys(markets)[0];
+          const firstMkt = markets[firstMktLabel];
+          result[row.cache_key] = { gameKey, firstMktLabel, marketKeys: firstMkt ? Object.keys(firstMkt) : [], firstMkt };
+        }
+      }
+      return new Response(JSON.stringify({ ok: true, result }), { headers: { 'Content-Type': 'application/json' } });
+    } catch(e) {
+      return new Response(JSON.stringify({ error: e.message }), { headers: { 'Content-Type': 'application/json' } });
+    }
+  }
+
   try {
     const row = await env.DB.prepare(
       "SELECT data, fetched_at FROM odds_cache WHERE cache_key='ev_bets_latest'"
