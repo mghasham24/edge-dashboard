@@ -4627,33 +4627,6 @@
                 ftBar.appendChild(document.getElementById('referral-tab-btn'));
             }
 
-            // Pro Notify tab — admin only until public release
-            if (currentUser && currentUser.is_admin) {
-                if (!document.getElementById('alerts-tab-btn')) {
-                    var alertsTabBtn = document.createElement('button');
-                    alertsTabBtn.className = 'feature-tab sport-tab';
-                    alertsTabBtn.textContent = '🔔 Notify';
-                    alertsTabBtn.id = 'alerts-tab-btn';
-                    alertsTabBtn.onclick = function() {
-                        var isActive = this.classList.contains('active');
-                        if (isActive) {
-                            this.classList.remove('active');
-                            this.textContent = '🔔 Notify';
-                            hideAlertsTab();
-                            loadOdds();
-                        } else {
-                            document.querySelectorAll('.sport-tab,.feature-tab').forEach(function(t) { t.classList.remove('active'); });
-                            this.classList.add('active');
-                            this.textContent = '<- Dashboard';
-                            showAlertsTab();
-                        }
-                    };
-                    ftBar.appendChild(alertsTabBtn);
-                } else {
-                    ftBar.appendChild(document.getElementById('alerts-tab-btn'));
-                }
-            }
-
             // Pro ✦ button (manage subscription) — right of Refer, only for pro users
             if (currentUser && currentUser.plan === 'pro' && !currentUser.is_admin) {
                 var existingProBtn = document.getElementById('manage-sub-btn');
