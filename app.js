@@ -2491,13 +2491,12 @@
     }
 
     // Tracker tab state
-    var trackerHistoryAll = [];
-    var trackerUserId     = null;
-    var trackerCursor     = null;
-    var trackerHasMore    = false;
-    var trkCalYear        = new Date().getFullYear();
-    var trkCalMonth       = new Date().getMonth();
-    var trkTimeframe      = '1w';
+    var trackerHistoryAll  = [];
+    var trackerUserId      = null;
+    var trackerPortfolioPerf = null;
+    var trkCalYear         = new Date().getFullYear();
+    var trkCalMonth        = new Date().getMonth();
+    var trkTimeframe       = '1w';
 
     // Helpers for /predictions/history format (raw ledger transactions)
     function trkIsSettled(p) {
@@ -2564,10 +2563,9 @@
         var username = (inp ? inp.value : '').trim().replace(/^@/, '');
         if (!username) return;
 
-        trackerHistoryAll = [];
-        trackerUserId = null;
-        trackerCursor = null;
-        trackerHasMore = false;
+        trackerHistoryAll    = [];
+        trackerUserId        = null;
+        trackerPortfolioPerf = null;
 
         var statusEl = document.getElementById('tracker-status');
         statusEl.textContent = 'Loading @' + username + '…';
@@ -2594,48 +2592,10 @@
             .catch(function(e) { statusEl.textContent = 'Error: ' + (e && e.message || 'Unknown'); console.error('tracker fetch error:', e); });
     }
 
-    function loadTrackerMore() {
-        if (!trackerCursor || !trackerUserId) return;
-        var btn = document.getElementById('trk-load-more-btn');
-        if (btn) { btn.textContent = 'Loading…'; btn.disabled = true; }
-        document.getElementById('trk-load-more-wrap').style.display = 'none';
-        autoLoadTrackerHistory().then(function() {
-            if (trackerHasMore) {
-                document.getElementById('trk-load-more-wrap').style.display = '';
-                if (btn) { btn.textContent = 'Load More'; btn.disabled = false; }
-            }
-        });
-    }
-
-    async function autoLoadTrackerHistory() {
-        var statusEl = document.getElementById('trk-load-status');
-        while (trackerHasMore && trackerCursor && trackerUserId) {
-            try {
-                var r = await fetch('/api/real/public?userId=' + encodeURIComponent(trackerUserId) + '&before=' + encodeURIComponent(trackerCursor));
-                var data = await r.json();
-                var newItems = (data.betHistory && data.betHistory.items) || [];
-                var seen = new Set(trackerHistoryAll.map(function(p) { return p.id; }));
-                trackerHistoryAll = trackerHistoryAll.concat(newItems.filter(function(p) { return !seen.has(p.id); }));
-                if (newItems.length > 0) {
-                    trackerCursor = newItems[newItems.length - 1].transactedAt || null;
-                }
-                trackerHasMore = !!(data.betHistory && data.betHistory.hasMore);
-                if (statusEl) statusEl.textContent = 'Loading… ' + trackerHistoryAll.length + ' bets';
-                updateTrackerStats();
-                applyTrackerFilters();
-                await new Promise(function(res) { setTimeout(res, 150); });
-            } catch(e) {
-                break;
-            }
-        }
-        if (statusEl) statusEl.textContent = '';
-        updateTrackerStats();
-        applyTrackerFilters();
-    }
-
     function renderTracker(data) {
         var u = (data.profile && data.profile.user) ? data.profile.user : {};
-        trackerUserId = data.userId;
+        trackerUserId        = data.userId;
+        trackerPortfolioPerf = data.portfolioPerformance || null;
 
         var karma  = u.karma ? u.karma.toLocaleString() : '—';
         var pollW  = u.pollRecord ? (u.pollRecord.wins || 0) : 0;
@@ -2649,31 +2609,7 @@
             ' <span style="color:var(--muted);font-size:13px;font-weight:400">@' + escHtml(u.userName || data.username) + '</span>' +
             '<span style="font-size:12px;font-weight:400;color:var(--muted2);margin-left:14px">' + escHtml(karma) + ' karma · ' + pollW + 'W/' + pollL + 'L' + (winPct !== null ? ' · <span style="color:' + winColor + '">' + winPct + '%</span>' : '') + '</span>';
 
-        // Load bet history — historyrollup format (session-scoped, requires user's own RS token)
-        if (!data.betHistory) {
-            document.getElementById('tracker-content').style.display = '';
-            document.getElementById('trk-history-tbody').innerHTML =
-                '<tr><td colspan="8" style="color:var(--muted);padding:20px 12px">' +
-                escHtml(data.username) + ' hasn\'t connected their RS account to RaxEdge — bet history unavailable.' +
-                '</td></tr>';
-            document.getElementById('trk-open-tbody').innerHTML =
-                '<tr><td colspan="8" style="color:var(--muted);padding:20px 12px">Not connected</td></tr>';
-            document.getElementById('trk-open-count').textContent = '—';
-            document.getElementById('trk-settled-count').textContent = '—';
-            document.getElementById('trk-profit').innerHTML = '—';
-            document.getElementById('trk-pnl').innerHTML = '—';
-            document.getElementById('trk-roi').textContent = '—';
-            document.getElementById('trk-winrate').textContent = '—';
-            return;
-        }
-        var items = (data.betHistory && data.betHistory.items) || [];
-        trackerHistoryAll = items;
-        if (items.length > 0) {
-            trackerCursor = items[items.length - 1].latestLedgerTimestamp || items[items.length - 1].transactedAt || null;
-        }
-        trackerHasMore = !!(data.betHistory && data.betHistory.hasMore);
-
-        // Open positions — session-scoped, only available when user has connected their RS token
+        // Open positions — fully public endpoint, no user connection required
         var mktMapT = { gamewinner: 'ML', pointspread: 'Spread', total: 'Total', moneyline: 'ML' };
         var positions = data.openPositions && data.openPositions.positions;
         var openTbody = document.getElementById('trk-open-tbody');
@@ -2704,13 +2640,15 @@
             openTbody.innerHTML = openRows;
             document.getElementById('trk-open-count').textContent = positions.length;
         } else {
-            openTbody.innerHTML = '<tr><td colspan="8" style="color:var(--muted);padding:20px 12px">' +
-                (data.isConnected ? 'No open positions' : 'Open positions require RS account connection') +
-                '</td></tr>';
+            openTbody.innerHTML = '<tr><td colspan="8" style="color:var(--muted);padding:20px 12px">No open positions</td></tr>';
             document.getElementById('trk-open-count').textContent = '—';
         }
 
-        // Init calendar to current month
+        // Bet history — not available via public RS API
+        document.getElementById('trk-history-tbody').innerHTML =
+            '<tr><td colspan="8" style="color:var(--muted);padding:20px 12px">Bet history is not available via public RS data</td></tr>';
+        document.getElementById('trk-load-status').textContent = '';
+
         trkCalYear  = new Date().getFullYear();
         trkCalMonth = new Date().getMonth();
         trkTimeframe = '1w';
@@ -2720,55 +2658,64 @@
         });
 
         document.getElementById('tracker-content').style.display = '';
-        updateTrackerStats();
-        applyTrackerFilters();
         document.getElementById('trk-load-more-wrap').style.display = 'none';
-        if (trackerHasMore) autoLoadTrackerHistory();
+        updateTrackerStats();
     }
 
     function updateTrackerStats() {
-        var settled = trackerHistoryAll.filter(trkIsSettled);
-        var totalProfit = 0;
-        settled.forEach(function(p) { totalProfit += trkPnl(p); });
-        document.getElementById('trk-settled-count').textContent = settled.length + (trackerHasMore ? '+' : '');
+        var perf    = trackerPortfolioPerf || {};
+        var summary = perf.summary || perf.portfolioSummary || {};
+
+        // Settled count
+        var settledCount = summary.totalSettled || summary.settledPositions || summary.totalBets || '—';
+        document.getElementById('trk-settled-count').textContent = settledCount;
+
+        // All-time PnL from portfolio performance
+        var totalProfit = typeof summary.pnl === 'number' ? summary.pnl
+            : typeof summary.totalPnl === 'number' ? summary.totalPnl
+            : null;
         var profitEl = document.getElementById('trk-profit');
-        profitEl.innerHTML = RAX_ICON + (totalProfit >= 0 ? '+' : '') + fmtRax(totalProfit);
-        profitEl.style.color = totalProfit > 0 ? 'var(--green)' : totalProfit < 0 ? 'var(--red)' : 'var(--fg)';
+        if (totalProfit !== null) {
+            profitEl.innerHTML = RAX_ICON + (totalProfit >= 0 ? '+' : '') + fmtRax(totalProfit);
+            profitEl.style.color = totalProfit > 0 ? 'var(--green)' : totalProfit < 0 ? 'var(--red)' : 'var(--fg)';
+        } else {
+            profitEl.innerHTML = '—';
+            profitEl.style.color = 'var(--muted)';
+        }
+
         updateTrkPerfCards();
         renderTrackerCalendar();
     }
 
-    function calcTrkPerfForPeriod(days) {
-        var cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
-        var totalCost = 0, totalPaid = 0;
-        trackerHistoryAll.forEach(function(p) {
-            if (!trkIsSettled(p)) return;
-            if (!p.transactedAt || new Date(p.transactedAt).getTime() < cutoff) return;
-            totalCost += p.totalBuyAmount || 0;
-            totalPaid += p.totalPayout || 0;
-        });
-        var pnl = totalPaid - totalCost;
-        return { pnl: pnl, roi: totalCost > 0 ? pnl / totalCost * 100 : 0 };
-    }
-
     function updateTrkPerfCards() {
-        var days = trkTimeframe === '1w' ? 7 : trkTimeframe === '3m' ? 90 : 30;
-        var calc = calcTrkPerfForPeriod(days);
-        var cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
-        var wins = 0, total = 0;
-        trackerHistoryAll.forEach(function(p) {
-            if (!trkIsSettled(p)) return;
-            if (!p.transactedAt || new Date(p.transactedAt).getTime() < cutoff) return;
-            total++;
-            if (trkResult(p) === 'win') wins++;
-        });
-        var winRate = total > 0 ? wins / total * 100 : 0;
+        var perf    = trackerPortfolioPerf || {};
+        var summary = perf.summary || perf.portfolioSummary || {};
+
+        // Portfolio perf has no per-period breakdown — show all-time stats for all timeframes
+        var pnl     = typeof summary.pnl === 'number' ? summary.pnl
+                    : typeof summary.totalPnl === 'number' ? summary.totalPnl : null;
+        var roi     = typeof summary.pnlPercent === 'number' ? summary.pnlPercent
+                    : typeof summary.roi === 'number' ? summary.roi : null;
+        var wins    = typeof summary.wins === 'number' ? summary.wins : null;
+        var losses  = typeof summary.losses === 'number' ? summary.losses : null;
+        var winRate = (wins !== null && losses !== null && wins + losses > 0)
+                    ? wins / (wins + losses) * 100 : null;
+
         var pnlEl = document.getElementById('trk-pnl');
         var roiEl = document.getElementById('trk-roi');
         var wrEl  = document.getElementById('trk-winrate');
-        if (pnlEl) { pnlEl.innerHTML = RAX_ICON + (calc.pnl >= 0 ? '+' : '') + fmtRax(calc.pnl); pnlEl.style.color = calc.pnl >= 0 ? 'var(--green)' : 'var(--red)'; }
-        if (roiEl) { roiEl.textContent = (calc.roi >= 0 ? '+' : '') + calc.roi.toFixed(1) + '%'; roiEl.style.color = calc.roi >= 0 ? 'var(--green)' : 'var(--red)'; }
-        if (wrEl)  { wrEl.textContent = winRate.toFixed(1) + '%'; wrEl.style.color = winRate >= 50 ? 'var(--green)' : 'var(--red)'; }
+        if (pnlEl) {
+            if (pnl !== null) { pnlEl.innerHTML = RAX_ICON + (pnl >= 0 ? '+' : '') + fmtRax(pnl); pnlEl.style.color = pnl >= 0 ? 'var(--green)' : 'var(--red)'; }
+            else { pnlEl.innerHTML = '—'; pnlEl.style.color = 'var(--muted)'; }
+        }
+        if (roiEl) {
+            if (roi !== null) { roiEl.textContent = (roi >= 0 ? '+' : '') + roi.toFixed(1) + '%'; roiEl.style.color = roi >= 0 ? 'var(--green)' : 'var(--red)'; }
+            else { roiEl.textContent = '—'; roiEl.style.color = 'var(--muted)'; }
+        }
+        if (wrEl) {
+            if (winRate !== null) { wrEl.textContent = winRate.toFixed(1) + '%'; wrEl.style.color = winRate >= 50 ? 'var(--green)' : 'var(--red)'; }
+            else { wrEl.textContent = '—'; wrEl.style.color = 'var(--muted)'; }
+        }
     }
 
     function setTrackerTimeframe(tf) {
@@ -2865,38 +2812,7 @@
     }
 
     function applyTrackerFilters() {
-        var resultFilter = (document.getElementById('trk-filter-result') || {}).value || '';
-        var sortBy       = (document.getElementById('trk-sort-by') || {}).value || 'chrono-desc';
-
-        var items = trackerHistoryAll.filter(trkIsSettled);
-
-        if (resultFilter) {
-            items = items.filter(function(p) {
-                var r = trkResult(p);
-                if (resultFilter === 'win')     return r === 'win';
-                if (resultFilter === 'loss')    return r === 'loss';
-                if (resultFilter === 'cashout') return r === 'cashout';
-                return true;
-            });
-        }
-
-        items.sort(function(a, b) {
-            if (sortBy === 'chrono-asc') return new Date(a.transactedAt) - new Date(b.transactedAt);
-            if (sortBy === 'profit-desc' || sortBy === 'profit-asc') {
-                var diff = trkPnl(b) - trkPnl(a);
-                return sortBy === 'profit-desc' ? diff : -diff;
-            }
-            return new Date(b.transactedAt) - new Date(a.transactedAt);
-        });
-
-        var tbody = document.getElementById('trk-history-tbody');
-        if (!items.length) {
-            tbody.innerHTML = '<tr><td colspan="8" style="color:var(--muted);padding:20px 12px">No settled bets' + (resultFilter ? ' matching filter' : '') + '</td></tr>';
-            document.getElementById('trk-load-status').textContent = '';
-            return;
-        }
-        tbody.innerHTML = items.map(function(p) { return trkHistRowHtml(p); }).join('');
-        document.getElementById('trk-load-status').textContent = items.length + (trackerHasMore ? '+' : '') + ' bets';
+        // Bet history is not available via public RS API — nothing to filter
     }
 
     function showEvTab() {
