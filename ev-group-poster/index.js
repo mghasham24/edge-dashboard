@@ -3,7 +3,7 @@
 //
 // Required env vars:
 //   SITE_URL      — RaxEdge URL, e.g. https://raxedge.com
-//   CRON_SECRET   — Cloudflare CRON_SECRET (for /api/ev/current?_cron_key=)
+//   EV_POSTER_KEY — set this to any value in Cloudflare env + match here
 //   RS_AUTH_INFO  — RS auth token: userId!deviceId!token
 //   RS_GROUP_ID   — RS group ID to post to (e.g. 61979)
 //
@@ -14,7 +14,7 @@
 //   POST_DELAY_MS  — ms between consecutive posts (default: 5000)
 
 const SITE_URL      = process.env.SITE_URL;
-const CRON_SECRET   = process.env.CRON_SECRET;
+const EV_POSTER_KEY = process.env.EV_POSTER_KEY;
 const RS_AUTH_INFO  = process.env.RS_AUTH_INFO;
 const RS_GROUP_ID   = process.env.RS_GROUP_ID;
 const DEVICE_UUID   = process.env.RS_DEVICE_UUID || '2e0a38e2-0ee8-4f93-9a34-218ac1d10161';
@@ -80,7 +80,7 @@ async function run() {
     // Fetch current +EV bets from RaxEdge
     let evData;
     try {
-      const res = await fetch(`${SITE_URL}/api/ev/current?_cron_key=${CRON_SECRET}`, {
+      const res = await fetch(`${SITE_URL}/api/ev/current?_poster_key=${EV_POSTER_KEY}`, {
         signal: AbortSignal.timeout(10000)
       });
       if (!res.ok) { console.error('ev-poster: /api/ev/current failed', res.status); return; }
@@ -163,8 +163,8 @@ function scheduleMidnightReset() {
 
 // ── Boot ───────────────────────────────────────────────
 
-if (!SITE_URL || !CRON_SECRET || !RS_AUTH_INFO || !RS_GROUP_ID) {
-  console.error('ev-poster: missing required env vars: SITE_URL, CRON_SECRET, RS_AUTH_INFO, RS_GROUP_ID');
+if (!SITE_URL || !EV_POSTER_KEY || !RS_AUTH_INFO || !RS_GROUP_ID) {
+  console.error('ev-poster: missing required env vars: SITE_URL, EV_POSTER_KEY, RS_AUTH_INFO, RS_GROUP_ID');
   process.exit(1);
 }
 

@@ -6,11 +6,16 @@
 import { getSessionOrCron } from '../../../_lib/auth.js';
 
 export async function onRequestGet({ request, env }) {
-  const auth = await getSessionOrCron(request, env);
-  if (!auth) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-      status: 401, headers: { 'Content-Type': 'application/json' }
-    });
+  // Accept cron key, admin session, or dedicated poster key
+  const url       = new URL(request.url);
+  const posterKey = url.searchParams.get('_poster_key');
+  if (!posterKey || posterKey !== env.EV_POSTER_KEY) {
+    const auth = await getSessionOrCron(request, env);
+    if (!auth) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401, headers: { 'Content-Type': 'application/json' }
+      });
+    }
   }
 
   try {
