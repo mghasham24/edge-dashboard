@@ -109,41 +109,32 @@ async function handleGet(request, env) {
     'real-version': '31',
   };
 
-  // How does the RS app discover position IDs for a given user's profile page?
-  // Try every plausible "list positions for userId" endpoint.
-  const enc = encodeURIComponent(username);
-
+  // Verify historyrollup is userId-scoped by comparing token-holder vs target user
   const [
     perfRes,
-    // Candidate: sharedpositions list for a userId
-    sharedPosRes,
-    userPosRes,
-    userSharedRes,
-    // Candidate: historyrollup which returns settled positions with sharedPositionId
-    histRes,
-    // Group feed — each post embeds a sharedPositionId
-    groupFeedRes,
+    histTarget,   // historyrollup for the searched user
+    histSelf,     // historyrollup with no userId — should return token holder's data
+    openPosRes,
   ] = await Promise.all([
     rsGet(`/predictions/portfolioperformance?userId=${userId}`, hdrs),
-    rsGet(`/predictions/sharedpositions?userId=${userId}`, hdrs),
-    rsGet(`/user/${userId}/positions`, hdrs),
-    rsGet(`/user/${userId}/sharedpositions`, hdrs),
-    rsGet(`/predictions/historyrollup?userId=${userId}&limit=10`, hdrs),
-    rsGet(`/group/61979/posts?limit=5`, hdrs),
+    rsGet(`/predictions/historyrollup?userId=${userId}&limit=5`, hdrs),
+    rsGet(`/predictions/historyrollup&limit=5`, hdrs),
+    rsGet(`/predictions/openpositions?userId=${userId}`, hdrs),
   ]);
 
-  const snap = r => {
+  // Fetch the first position from histTarget to confirm whose userId it belongs to
+  const targetItems = histTarget?.body?.items || [];
+  const firstPosId  = targetItems[0]?.sharedPositionId || null;
+  const posCheck = firstPosId ? await rsGet(`/predictions/position/${firstPosId}`, hdrs) : null;
+
+  const snapHist = r => {
     if (!r || r.status !== 200) return { status: r?.status };
-    const b = r.body;
-    const arr = b?.positions || b?.sharedPositions || b?.items || b?.posts || (Array.isArray(b) ? b : null);
-    const first = Array.isArray(arr) ? arr[0] : null;
+    const items = r.body?.items || [];
     return {
       status: 200,
-      topKeys: Object.keys(b||{}).slice(0, 8),
-      count: Array.isArray(arr) ? arr.length : 'n/a',
-      firstUserId: first?.userId || first?.user?.id || 'n/a',
-      firstSharedPosId: first?.sharedPositionId || first?.id || 'n/a',
-      firstKeys: first ? Object.keys(first).slice(0,12) : null,
+      count: items.length,
+      hasMore: r.body?.hasMore,
+      ids: items.slice(0,5).map(i => i.sharedPositionId),
     };
   };
 
@@ -156,11 +147,16 @@ async function handleGet(request, env) {
     portfolioPerformance: perfRes?.status === 200 ? perfRes.body : null,
     _probe: {
       targetUserId: userId,
-      sharedPos:   snap(sharedPosRes),
-      userPos:     snap(userPosRes),
-      userShared:  snap(userSharedRes),
-      histRollup:  snap(histRes),
-      groupFeed:   snap(groupFeedRes),
+      histTarget:  snapHist(histTarget),
+      histSelf:    snapHist(histSelf),
+      idsMatch:    JSON.stringify(snapHist(histTarget).ids) === JSON.stringify(snapHist(histSelf).ids),
+      posCheck: posCheck ? {
+        status: posCheck.status,
+        positionUserId: posCheck.body?.position?.user?.id || 'n/a',
+        isTargetUser: posCheck.body?.position?.user?.id === userId,
+        username: posCheck.body?.position?.user?.userName || 'n/a',
+      } : null,
+      openPos: { status: openPosRes?.status, count: openPosRes?.body?.positions?.length ?? 'n/a' },
     },
   });
 }
