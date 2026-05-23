@@ -386,7 +386,7 @@ function processNativeML(sport, fdGames, rsGames, rsGameIds, rsGameSports, globa
         ev: Math.round(ev * 10) / 10, units: u, fdOdds, pt: null,
         rsPct: Math.round(rsO.probability * 1000) / 10,
         adjFairPct: Math.round(fdFair * 1000) / 10,
-        gameUrl, commenceTime, isLive,
+        gameUrl, commenceTime, isLive, rsGameId: gameId, rsSport,
         betKey: `${sport.fdKey}|${gameKey}|ML|${name}|`,
       });
     }
@@ -443,7 +443,7 @@ function processNativeNBA(sport, fdGames, rsGames, rsGameIds, rsGameSports, glob
               ev: Math.round(ev * 10) / 10, units: u, fdOdds, pt: null,
               rsPct: Math.round(rsO.probability * 1000) / 10,
               adjFairPct: Math.round(fdFair * 1000) / 10,
-              gameUrl, commenceTime, isLive,
+              gameUrl, commenceTime, isLive, rsGameId: gameId, rsSport,
               betKey: `${sport.fdKey}|${gameKey}|ML|${name}|`,
             });
           }
@@ -484,7 +484,7 @@ function processNativeNBA(sport, fdGames, rsGames, rsGameIds, rsGameSports, glob
           ev: Math.round(ev * 10) / 10, units: u, fdOdds: fdPrice, pt,
           rsPct: Math.round(rsO.probability * 1000) / 10,
           adjFairPct: Math.round(fdFair * 1000) / 10,
-          gameUrl: spreadUrl, commenceTime, isLive,
+          gameUrl: spreadUrl, commenceTime, isLive, rsGameId: gameId, rsSport,
           betKey: `${sport.fdKey}|${gameKey}|Spread|${fdTeam}|${pt ?? ''}`,
         });
       }
@@ -516,7 +516,7 @@ function processNativeNBA(sport, fdGames, rsGames, rsGameIds, rsGameSports, glob
           ev: Math.round(ev * 10) / 10, units: u, fdOdds: fdPrice, pt,
           rsPct: Math.round(rsO.probability * 1000) / 10,
           adjFairPct: Math.round(fdFair * 1000) / 10,
-          gameUrl: totalUrl, commenceTime, isLive,
+          gameUrl: totalUrl, commenceTime, isLive, rsGameId: gameId, rsSport,
           betKey: `${sport.fdKey}|${gameKey}|Total|${side}|${pt ?? ''}`,
         });
       }
@@ -581,7 +581,7 @@ function processNativeFC(sport, fdGames, rsGames, rsGameIds, rsGameSports, globa
         ev: Math.round(ev * 10) / 10, units: u, fdOdds: fdPrice, pt,
         rsPct: Math.round(rsO.probability * 1000) / 10,
         adjFairPct: Math.round(fdFair * 1000) / 10,
-        gameUrl, commenceTime, isLive,
+        gameUrl, commenceTime, isLive, rsGameId: gameId, rsSport,
         betKey: `${sport.fdKey}|${gameKey}|Spread|${sideName}|${pt ?? ''}`,
       });
     }
@@ -881,7 +881,7 @@ export default {
               ev: Math.round(ev * 10) / 10, units: u, fdOdds: fdO.price, pt: null,
               rsPct: Math.round(rsO.probability * 1000) / 10,
               adjFairPct: Math.round(fdFair * 1000) / 10,
-              gameUrl, commenceTime,
+              gameUrl, commenceTime, rsGameId: gameId, rsSport,
               betKey: `${sport.fdKey}|${gameKey}|ML|${fdO.name}|`,
             });
           }
@@ -952,7 +952,7 @@ export default {
                 ev: Math.round(ev * 10) / 10, units: u, fdOdds, pt: null,
                 rsPct: Math.round(rsO.probability * 1000) / 10,
                 adjFairPct: Math.round(fdFair * 1000) / 10,
-                gameUrl, commenceTime: 0,
+                gameUrl, commenceTime: 0, rsGameId: gameId, rsSport,
                 betKey: `baseball_mlb|${rfiGameKey}|RFI|${side}|`,
               });
             }
@@ -980,6 +980,7 @@ export default {
           ev: b.ev, units: b.units, pt: b.pt, fdOdds: b.fdOdds,
           rsPct: b.rsPct, adjFairPct: b.adjFairPct,
           gameUrl: b.gameUrl, betKey: b.betKey, isLive: b.isLive || false,
+          rsGameId: b.rsGameId || null, rsSport: b.rsSport || null,
         }))
       }), now).run();
     } catch(e) {}
