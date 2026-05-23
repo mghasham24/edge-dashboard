@@ -109,27 +109,42 @@ async function handleGet(request, env) {
     'real-version': '31',
   };
 
+  // Try fetching a guest token from RS — unauthenticated visitors to realsports.io
+  // might get a limited token where ?userId= is actually respected
+  let guestToken = null;
+  try {
+    const guestR = await rsGet('/users/login/guest', {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+      'Origin': 'https://realsports.io',
+      'Referer': 'https://realsports.io/',
+      'User-Agent': hdrs['User-Agent'],
+      'real-device-type': 'desktop_web',
+      'real-device-uuid': hdrs['real-device-uuid'],
+      'real-version': '31',
+    });
+    if (guestR.status === 200 && guestR.body?.token) guestToken = guestR.body.token;
+    else if (guestR.status === 200 && guestR.body?.user?.token) guestToken = guestR.body.user.token;
+  } catch {}
+
   const [
-    activityRes,
     openPosRes,
     perfRes,
-    userProfileRes,
-    userPredictionsRes,
+    guestOpenPosRes,
   ] = await Promise.all([
-    rsGet(`/activity?userId=${userId}`, hdrs),
     rsGet(`/predictions/openpositions?userId=${userId}`, hdrs),
     rsGet(`/predictions/portfolioperformance?userId=${userId}`, hdrs),
-    // Try /user/{userId} (numeric/hash id, not username) — profile by id
-    rsGet(`/user/${userId}`, hdrs),
-    // Try /user/{userId}/predictions — does a path-based user predictions endpoint exist?
-    rsGet(`/user/${userId}/predictions`, hdrs),
+    guestToken
+      ? rsGet(`/predictions/openpositions?userId=${userId}`, buildHeaders(guestToken))
+      : Promise.resolve({ status: 'skipped', body: 'no guest token' }),
   ]);
 
-  const act = activityRes?.body || {};
-  const actActivities = act.activities;
-  const firstActivity = Array.isArray(actActivities)
-    ? actActivities[0]
-    : (actActivities && typeof actActivities === 'object' ? Object.values(actActivities)[0] : null);
+  const snapPos = r => {
+    if (!r || r.status !== 200) return { status: r?.status };
+    const positions = r.body?.positions;
+    const first = Array.isArray(positions) ? positions[0] : null;
+    return { status: 200, count: Array.isArray(positions) ? positions.length : 'n/a', firstUserId: first?.userId || 'n/a' };
+  };
 
   return json({
     ok: true,
@@ -141,20 +156,10 @@ async function handleGet(request, env) {
     portfolioPerformance: perfRes?.status === 200 ? perfRes.body : null,
     _probe: {
       targetUserId: userId,
-      activity: {
-        status: activityRes?.status,
-        bodyUserId: act.userId,
-        userIdMatchesTarget: act.userId === userId,
-        activitiesType: Array.isArray(actActivities) ? 'array' : typeof actActivities,
-        activitiesKeys: actActivities && typeof actActivities === 'object' && !Array.isArray(actActivities)
-          ? Object.keys(actActivities).slice(0, 10)
-          : actActivities?.length,
-        firstActivityKeys: firstActivity ? Object.keys(firstActivity).slice(0, 15) : null,
-        announcementsCount: Array.isArray(act.announcements) ? act.announcements.length : typeof act.announcements,
-        notificationsCount: Array.isArray(act.notifications) ? act.notifications.length : typeof act.notifications,
-      },
-      userProfileById: { status: userProfileRes?.status, keys: userProfileRes?.status === 200 ? Object.keys(userProfileRes.body || {}).slice(0,8) : null },
-      userPredictions: { status: userPredictionsRes?.status, keys: userPredictionsRes?.status === 200 ? Object.keys(userPredictionsRes.body || {}).slice(0,8) : null },
+      guestTokenObtained: !!guestToken,
+      guestTokenPrefix: guestToken ? guestToken.slice(0, 12) + '…' : null,
+      authedOpenPos:   snapPos(openPosRes),
+      guestOpenPos:    snapPos(guestOpenPosRes),
     },
   });
 }
