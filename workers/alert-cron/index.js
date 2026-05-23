@@ -20,11 +20,13 @@ import Hashids from 'hashids';
 const _hashids = new Hashids('routing', 11);
 const RS_SPORT_KEY_ID = { nba:1, nfl:2, cbb:3, mlb:4, nhl:7, ufc:10, wnba:12, soccer:14 };
 
-function buildRSUrl(gid, rsSportKey) {
+function buildRSUrl(gid, rsSportKey, marketId) {
+  if (marketId) {
+    return 'https://www.realapp.com/' + _hashids.encode([36, 0, 0, marketId]);
+  }
   if (!gid) return null;
   const sportId = RS_SPORT_KEY_ID[rsSportKey] ?? 0;
-  const hash = _hashids.encode([4, sportId, 0, gid]);
-  return 'https://www.realapp.com/' + hash;
+  return 'https://www.realapp.com/' + _hashids.encode([4, sportId, 0, gid]);
 }
 
 // ── EV Calculation ────────────────────────────────────
@@ -346,13 +348,13 @@ function processNativeML(sport, fdGames, rsGames, rsGameIds, rsGameSports, globa
     const rsMarkets = rsGames[rsKey];
     const gameId    = rsGameIds[rsKey] || null;
     const rsSport   = rsGameSports[rsKey] || sport.rsKey;
-    const gameUrl   = buildRSUrl(gameId, rsSport);
 
     // Find RS ML market (Moneyline or Game Winner)
     const rsMktLabel = RS_ML_LABELS.find(l => rsMarkets[l]);
     if (!rsMktLabel) continue;
 
     const rsMkt      = rsMarkets[rsMktLabel];
+    const gameUrl    = buildRSUrl(gameId, rsSport, rsMkt.id);
     const rsOutcomes = rsMkt.outcomes || [];
     const rsVolume   = rsMkt.volume ?? 0;
 
@@ -410,7 +412,6 @@ function processNativeNBA(sport, fdGames, rsGames, rsGameIds, rsGameSports, glob
     const rsMarkets = rsGames[rsKey];
     const gameId    = rsGameIds[rsKey] || null;
     const rsSport   = rsGameSports[rsKey] || sport.rsKey;
-    const gameUrl   = buildRSUrl(gameId, rsSport);
 
     // ── ML ──
     // Skip ML for live games where FD has suspended and frozen pre-game prices.
@@ -418,6 +419,7 @@ function processNativeNBA(sport, fdGames, rsGames, rsGameIds, rsGameSports, glob
     const rsMlLabel = (!isLive || !game.live) ? RS_ML_LABELS.find(l => rsMarkets[l]) : null;
     if (rsMlLabel) {
       const rsMkt      = rsMarkets[rsMlLabel];
+      const gameUrl    = buildRSUrl(gameId, rsSport, rsMkt.id);
       const rsOutcomes = rsMkt.outcomes || [];
       const rsVolume   = rsMkt.volume ?? 0;
       const mlPrices   = game.ml || {};
@@ -452,6 +454,7 @@ function processNativeNBA(sport, fdGames, rsGames, rsGameIds, rsGameSports, glob
     // ── Spread ──
     const rsSpreadMkt = rsMarkets['Spread'];
     if (rsSpreadMkt && game.spreads) {
+      const spreadUrl  = buildRSUrl(gameId, rsSport, rsSpreadMkt.id);
       const rsOutcomes = rsSpreadMkt.outcomes || [];
       const rsVolume   = rsSpreadMkt.volume ?? 0;
       for (const rsO of rsOutcomes) {
@@ -481,7 +484,7 @@ function processNativeNBA(sport, fdGames, rsGames, rsGameIds, rsGameSports, glob
           ev: Math.round(ev * 10) / 10, units: u, fdOdds: fdPrice, pt,
           rsPct: Math.round(rsO.probability * 1000) / 10,
           adjFairPct: Math.round(fdFair * 1000) / 10,
-          gameUrl, commenceTime, isLive,
+          gameUrl: spreadUrl, commenceTime, isLive,
           betKey: `${sport.fdKey}|${gameKey}|Spread|${fdTeam}|${pt ?? ''}`,
         });
       }
@@ -490,6 +493,7 @@ function processNativeNBA(sport, fdGames, rsGames, rsGameIds, rsGameSports, glob
     // ── Total ──
     const rsTotalMkt = rsMarkets['Total'] || rsMarkets['Total Goals'];
     if (rsTotalMkt && game.totals) {
+      const totalUrl   = buildRSUrl(gameId, rsSport, rsTotalMkt.id);
       const rsOutcomes = rsTotalMkt.outcomes || [];
       const rsVolume   = rsTotalMkt.volume ?? 0;
       for (const rsO of rsOutcomes) {
@@ -512,7 +516,7 @@ function processNativeNBA(sport, fdGames, rsGames, rsGameIds, rsGameSports, glob
           ev: Math.round(ev * 10) / 10, units: u, fdOdds: fdPrice, pt,
           rsPct: Math.round(rsO.probability * 1000) / 10,
           adjFairPct: Math.round(fdFair * 1000) / 10,
-          gameUrl, commenceTime, isLive,
+          gameUrl: totalUrl, commenceTime, isLive,
           betKey: `${sport.fdKey}|${gameKey}|Total|${side}|${pt ?? ''}`,
         });
       }
@@ -534,13 +538,12 @@ function processNativeFC(sport, fdGames, rsGames, rsGameIds, rsGameSports, globa
     const rsKey = findRSGameKey(game.away, game.home, rsGames, gameKey);
     if (!rsKey) continue;
 
-    const rsMarkets = rsGames[rsKey];
-    const gameId    = rsGameIds[rsKey] || null;
-    const rsSport   = rsGameSports[rsKey] || sport.rsKey;
-    const gameUrl   = buildRSUrl(gameId, rsSport);
-
+    const rsMarkets   = rsGames[rsKey];
+    const gameId      = rsGameIds[rsKey] || null;
+    const rsSport     = rsGameSports[rsKey] || sport.rsKey;
     const rsSpreadMkt = rsMarkets['Spread'];
     if (!rsSpreadMkt || !game.spreads) continue;
+    const gameUrl     = buildRSUrl(gameId, rsSport, rsSpreadMkt.id);
 
     const rsOutcomes = rsSpreadMkt.outcomes || [];
     const rsVolume   = rsSpreadMkt.volume ?? 0;
@@ -840,7 +843,6 @@ export default {
           const rsMarkets = rsGames[rsKey];
           const gameId    = rsGameIds[rsKey] || null;
           const rsSport   = rsGameSports[rsKey] || sport.rsKey;
-          const gameUrl   = buildRSUrl(gameId, rsSport);
 
           const bms = game.bookmakers || [];
           const fd  = bms.find(b => b.key === 'fanduel') || bms.find(b => b.key === 'draftkings');
@@ -854,6 +856,7 @@ export default {
           if (!rsMktLabel) continue;
 
           const rsMkt      = rsMarkets[rsMktLabel];
+          const gameUrl    = buildRSUrl(gameId, rsSport, rsMkt.id);
           const rsOutcomes = rsMkt.outcomes || [];
           const rsVolume   = rsMkt.volume ?? 0;
           const fdOutcomes = h2hMkt.outcomes || [];
@@ -917,7 +920,9 @@ export default {
           for (const [rfiGameKey, rfi] of Object.entries(rfiMap)) {
             const parts = rfiGameKey.split(' @ ');
             if (parts.length !== 2) continue;
-            const rsKey = findRSGameKey(parts[0], parts[1], rsGamesRfi);
+            // Strip "(Game X)" from home team so DH2 resolution works correctly
+            const rfiHome = parts[1].replace(/\s*\(Game \d+\)$/i, '');
+            const rsKey = findRSGameKey(parts[0], rfiHome, rsGamesRfi, rfiGameKey);
             if (!rsKey) continue;
             rfiDbg.rsMatchCount++;
 
@@ -931,7 +936,7 @@ export default {
             const rsNo  = rsOutcomes.find(o => /nrfi/i.test(o.label));
             const gameId  = rsGameIdsRfi[rsKey] || null;
             const rsSport = rsGameSportsRfi[rsKey] || 'mlb';
-            const gameUrl = buildRSUrl(gameId, rsSport);
+            const gameUrl = buildRSUrl(gameId, rsSport, rfiMkt.id);
 
             for (const { side, fdFair, fdOdds, rsO } of [
               { side: 'Yes (YRFI)', fdFair: rfi.yesFair, fdOdds: rfi.yesAm, rsO: rsYes },
