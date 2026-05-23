@@ -4117,12 +4117,39 @@
             }
             document.getElementById('ref-code-display').textContent = data.referralCode || '—';
         } catch(e) {}
+        if (isPro()) loadGroupCode();
+    }
+
+    async function loadGroupCode() {
+        try {
+            var res = await fetch('/api/group/code', { credentials: 'same-origin' });
+            var data = await res.json();
+            if (!data.ok || !data.code) return;
+            document.getElementById('rs-group-code-display').textContent = data.code;
+            document.getElementById('rs-group-section').style.display = '';
+        } catch(e) {}
     }
 
     function copyRefCode() {
         var code = document.getElementById('ref-code-display').textContent;
         navigator.clipboard.writeText(code).then(function() {
             var btn = document.getElementById('ref-copy-btn');
+            btn.textContent = 'Copied!';
+            setTimeout(function() { btn.textContent = 'Copy Code'; }, 2000);
+        }).catch(function() {
+            var el = document.createElement('textarea');
+            el.value = code;
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand('copy');
+            document.body.removeChild(el);
+        });
+    }
+
+    function copyGroupCode() {
+        var code = document.getElementById('rs-group-code-display').textContent;
+        navigator.clipboard.writeText(code).then(function() {
+            var btn = document.getElementById('rs-group-copy-btn');
             btn.textContent = 'Copied!';
             setTimeout(function() { btn.textContent = 'Copy Code'; }, 2000);
         }).catch(function() {
