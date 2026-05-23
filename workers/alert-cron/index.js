@@ -964,6 +964,21 @@ export default {
       rsPct: b.rsPct, adjFairPct: b.adjFairPct
     }));
 
+    // Write full bet list for Mac EV group poster
+    try {
+      await env.DB.prepare(
+        'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at'
+      ).bind('ev_bets_latest', JSON.stringify({
+        ts: now,
+        bets: allBets.slice(0, 100).map(b => ({
+          sport: b.sport.label, game: b.game, market: b.market, side: b.side,
+          ev: b.ev, units: b.units, pt: b.pt, fdOdds: b.fdOdds,
+          rsPct: b.rsPct, adjFairPct: b.adjFairPct,
+          gameUrl: b.gameUrl, betKey: b.betKey, isLive: b.isLive || false,
+        }))
+      }), now).run();
+    } catch(e) {}
+
     if (!allBets.length) {
       dbg.exit = 'no_bets';
       await writeDebug(env, dbg);
@@ -987,15 +1002,19 @@ export default {
       if (!dbg.userBets) dbg.userBets = {};
       dbg.userBets[user.user_id] = { minEv, betsAfterFilter: userBets.length };
 
-      // Skip markets taken today unless EV jumped to a higher bracket (5-9.9% / 10-14.9% / 15%+)
+      // Skip bets marked taken within the last 2 hours unless EV jumped to a higher bracket.
+      // After 2 hours, treat as normal (RESEND_AFTER_SECS handles re-alert frequency).
+      // Live games bypass this entirely — EV changes with game state and the user may want to add.
+      const TAKEN_SUPPRESS_SECS = 2 * 3600;
       try {
         const takenRows = await env.DB.prepare(
-          'SELECT game, market, MAX(ev) as taken_ev FROM alert_messages WHERE user_id=? AND taken=1 AND sent_at>=? GROUP BY game, market'
-        ).bind(user.user_id, midnightET).all();
+          'SELECT game, market, MAX(ev) as taken_ev, MAX(sent_at) as last_sent FROM alert_messages WHERE user_id=? AND taken=1 AND sent_at>=? GROUP BY game, market'
+        ).bind(user.user_id, now - TAKEN_SUPPRESS_SECS).all();
         if (takenRows.results?.length) {
           const evBracket = ev => ev >= 35 ? 3 : ev >= 20 ? 2 : ev >= 10 ? 1 : 0;
           const takenMap = new Map((takenRows.results || []).map(r => [r.game + '|' + r.market, r.taken_ev]));
           userBets = userBets.filter(b => {
+            if (b.isLive) return true; // live games always re-alert regardless of taken status
             const takenEv = takenMap.get(b.game + '|' + b.market);
             if (takenEv === undefined) return true;
             return evBracket(b.ev) > evBracket(takenEv);
