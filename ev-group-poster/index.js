@@ -108,6 +108,21 @@ function rsHeaders() {
   };
 }
 
+// ── Unit sizing (mirrors alert-cron unitsEV exactly) ──
+
+function unitsEV(ev, realPct) {
+  if (ev == null || !isFinite(ev)) return 0;
+  const maxU = (realPct != null && realPct < 0.075) ? 0.25
+             : (realPct != null && realPct < 0.15)  ? 0.5
+             : (realPct != null && realPct < 0.25)  ? 0.5
+             : 3;
+  if (ev >= 35) return Math.min(3, maxU);
+  if (ev >= 20) return Math.min(2, maxU);
+  if (ev >= 10) return Math.min(1, maxU);
+  if (ev >= 5)  return Math.min(0.5, maxU);
+  return 0;
+}
+
 // ── Formatting ─────────────────────────────────────────
 
 function rsBaseTake(p) {
@@ -151,13 +166,16 @@ function formatPost(bet) {
     const fdFair = bet.adjFairPct / 100;
     const rsProb = bet.rsPct / 100;
     for (const n of [1, 2, 3]) {
-      const spiked = Math.min(0.999, rsProb + n / 100);
-      const ev = calcEV(fdFair, spiked);
+      const spiked   = Math.min(0.999, rsProb + n / 100);
+      const ev       = calcEV(fdFair, spiked);
       if (ev == null) continue;
-      const evStr   = (ev >= 0 ? '+' : '') + ev.toFixed(1) + '% EV';
+      const u        = unitsEV(ev, fdFair);
+      const amt      = u * 1000;
+      const amtStr   = amt >= 1000 ? (amt / 1000).toFixed(amt % 1000 === 0 ? 0 : 1) + 'k' : amt;
+      const evStr    = (ev >= 0 ? '+' : '') + ev.toFixed(1) + '% EV';
       const rsPctStr = (spiked * 100).toFixed(1) + '% RS';
       const fairStr  = bet.adjFairPct.toFixed(1) + '% Fair';
-      lines.push([rsPctStr, fairStr, evStr, bet.units + 'u · ' + raxStr + ' Rax'].join(' | '));
+      lines.push([rsPctStr, fairStr, evStr, u + 'u · ' + amtStr + ' Rax'].join(' | '));
     }
   }
 
