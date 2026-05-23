@@ -151,9 +151,10 @@ function formatPost(bet) {
     const fdFair = bet.adjFairPct / 100;
     const rsProb = bet.rsPct / 100;
     const sensParts = [1, 2, 3].map(n => {
-      const ev = calcEV(fdFair, Math.min(0.999, rsProb + n / 100));
+      const spiked = Math.min(0.999, rsProb + n / 100);
+      const ev = calcEV(fdFair, spiked);
       if (ev == null) return null;
-      return `RS+${n}%: ${ev >= 0 ? '+' : ''}${ev.toFixed(1)}%`;
+      return `RS@${(spiked * 100).toFixed(1)}%: ${ev >= 0 ? '+' : ''}${ev.toFixed(1)}%`;
     }).filter(Boolean);
     if (sensParts.length) lines.push(sensParts.join(' · '));
   }
