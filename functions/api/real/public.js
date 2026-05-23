@@ -97,13 +97,35 @@ async function handleGet(request, env) {
     return json({ ok: false, username, message: 'Profile found but could not extract userId.', profile });
   }
 
-  // All three endpoints are public — shared token + userId param works for any user.
-  const [activityRes, openPosRes, perfRes] = await Promise.all([
+  // Build a no-auth header set to test truly public endpoints
+  const noAuthHdrs = {
+    'Accept': 'application/json',
+    'Content-Type': 'application/json',
+    'Origin': 'https://realsports.io',
+    'Referer': 'https://realsports.io/',
+    'User-Agent': hdrs['User-Agent'],
+    'real-device-type': 'desktop_web',
+    'real-device-uuid': hdrs['real-device-uuid'],
+    'real-version': '31',
+  };
+
+  const [
+    activityRes,
+    openPosRes,     perfRes,
+    pathOpenPos,    pathPerf,
+    noAuthOpenPos,
+  ] = await Promise.all([
     rsGet(`/activity?userId=${userId}`, hdrs),
     rsGet(`/predictions/openpositions?userId=${userId}`, hdrs),
     rsGet(`/predictions/portfolioperformance?userId=${userId}`, hdrs),
+    // Path-based variants — userId in URL path
+    rsGet(`/user/${userId}/openpositions`, hdrs),
+    rsGet(`/user/${userId}/portfolioperformance`, hdrs),
+    // No-auth call — does RS return public data without a token?
+    rsGet(`/predictions/openpositions?userId=${userId}`, noAuthHdrs),
   ]);
 
+  // Diagnostic: expose raw statuses so we can see which endpoints respect userId
   return json({
     ok: true,
     username: rsUserName,
@@ -113,6 +135,12 @@ async function handleGet(request, env) {
     activity:             activityRes?.status === 200 ? activityRes.body : null,
     openPositions:        openPosRes?.status === 200 ? openPosRes.body : null,
     portfolioPerformance: perfRes?.status === 200 ? perfRes.body : null,
+    _probe: {
+      queryParam: { openPos: openPosRes?.status, perf: perfRes?.status },
+      pathBased:  { openPos: pathOpenPos?.status, openPosBody: pathOpenPos?.body, perf: pathPerf?.status, perfBody: pathPerf?.body },
+      noAuth:     { openPos: noAuthOpenPos?.status, body: noAuthOpenPos?.status === 200 ? (noAuthOpenPos?.body?.positions?.length ?? 'no positions field') : noAuthOpenPos?.body },
+      activity:   { status: activityRes?.status, itemCount: Array.isArray(activityRes?.body?.items) ? activityRes.body.items.length : 'n/a' },
+    },
   });
 }
 
