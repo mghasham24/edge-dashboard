@@ -109,41 +109,34 @@ async function handleGet(request, env) {
     'real-version': '31',
   };
 
-  // Try fetching a guest token from RS — unauthenticated visitors to realsports.io
-  // might get a limited token where ?userId= is actually respected
-  let guestToken = null;
-  try {
-    const guestR = await rsGet('/users/login/guest', {
-      'Accept': 'application/json',
-      'Content-Type': 'application/json',
-      'Origin': 'https://realsports.io',
-      'Referer': 'https://realsports.io/',
-      'User-Agent': hdrs['User-Agent'],
-      'real-device-type': 'desktop_web',
-      'real-device-uuid': hdrs['real-device-uuid'],
-      'real-version': '31',
-    });
-    if (guestR.status === 200 && guestR.body?.token) guestToken = guestR.body.token;
-    else if (guestR.status === 200 && guestR.body?.user?.token) guestToken = guestR.body.user.token;
-  } catch {}
+  const enc = encodeURIComponent(username);
 
   const [
     openPosRes,
     perfRes,
-    guestOpenPosRes,
+    unOpenPos,
+    unPerf,
+    unHistory,
   ] = await Promise.all([
     rsGet(`/predictions/openpositions?userId=${userId}`, hdrs),
     rsGet(`/predictions/portfolioperformance?userId=${userId}`, hdrs),
-    guestToken
-      ? rsGet(`/predictions/openpositions?userId=${userId}`, buildHeaders(guestToken))
-      : Promise.resolve({ status: 'skipped', body: 'no guest token' }),
+    // Username-in-path variants — maybe RS uses /user/{handle}/... not ?userId=
+    rsGet(`/user/${enc}/openpositions`, hdrs),
+    rsGet(`/user/${enc}/portfolioperformance`, hdrs),
+    rsGet(`/user/${enc}/predictions/history`, hdrs),
   ]);
 
-  const snapPos = r => {
+  const snap = r => {
     if (!r || r.status !== 200) return { status: r?.status };
-    const positions = r.body?.positions;
+    const b = r.body;
+    const positions = b?.positions || b?.items;
     const first = Array.isArray(positions) ? positions[0] : null;
-    return { status: 200, count: Array.isArray(positions) ? positions.length : 'n/a', firstUserId: first?.userId || 'n/a' };
+    return {
+      status: 200,
+      topKeys: Object.keys(b || {}).slice(0, 8),
+      count: Array.isArray(positions) ? positions.length : 'n/a',
+      firstUserId: first?.userId || first?.user?.id || 'n/a',
+    };
   };
 
   return json({
@@ -156,10 +149,9 @@ async function handleGet(request, env) {
     portfolioPerformance: perfRes?.status === 200 ? perfRes.body : null,
     _probe: {
       targetUserId: userId,
-      guestTokenObtained: !!guestToken,
-      guestTokenPrefix: guestToken ? guestToken.slice(0, 12) + '…' : null,
-      authedOpenPos:   snapPos(openPosRes),
-      guestOpenPos:    snapPos(guestOpenPosRes),
+      targetUsername: username,
+      queryParam:   { openPos: snap(openPosRes), perf: snap(perfRes) },
+      usernamePath: { openPos: snap(unOpenPos), perf: snap(unPerf), history: snap(unHistory) },
     },
   });
 }
