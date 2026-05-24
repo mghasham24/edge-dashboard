@@ -4126,8 +4126,17 @@
             var data = await res.json();
             if (!data.ok || !data.code) return;
             document.getElementById('rs-group-code-display').textContent = data.code;
-            document.getElementById('rs-group-section').style.display = '';
+            document.getElementById('group-code-btn').style.display = '';
         } catch(e) {}
+    }
+
+    function openGroupCodeModal() {
+        var m = document.getElementById('group-code-modal');
+        m.style.display = 'flex';
+    }
+
+    function closeGroupCodeModal() {
+        document.getElementById('group-code-modal').style.display = 'none';
     }
 
     function copyRefCode() {
