@@ -37,7 +37,7 @@ const TARGETS        = ['guilavogui', 'ojeda', 'denkey', 'pec', 'grimaldo', 'ing
 const RAX_PER_RATING = 13;
 const POLL_MS        = 2 * 60 * 1000;
 
-const RS_API_URL = 'https://web.realapp.com/cardmarketplacelistings?sport=soccer&sort=new&offset=0';
+const RS_API_BASE = 'https://web.realapp.com/cardmarketplacelistings?sport=soccer&sort=new&pageSize=50&limit=50';
 
 const dispatcher = RS_PROXY_URL ? new ProxyAgent(RS_PROXY_URL) : undefined;
 
@@ -158,7 +158,7 @@ async function poll() {
 
   let listings;
   try {
-    const res = await uFetch(RS_API_URL, {
+    const res = await uFetch(RS_API_BASE + '&offset=0', {
       dispatcher,
       headers: {
         'Accept': 'application/json',
@@ -198,7 +198,7 @@ async function poll() {
     if (!name) continue;
     if (!TARGETS.some(t => name.toLowerCase().includes(t))) continue;
 
-    const rating   = cardRating(listing.card) ?? cardRating(listing.card?.card);
+    const rating   = cardRating(listing.card) ?? cardRating(listing.card?.card) ?? (listing.value != null ? listing.value : null);
     const price    = listingPrice(listing);
     const maxPrice = rating != null ? rating * RAX_PER_RATING : null;
 
