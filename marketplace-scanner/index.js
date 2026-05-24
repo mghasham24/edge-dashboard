@@ -33,11 +33,21 @@ const RS_PROXY_URL   = process.env.RS_PROXY_URL    || null;
 const TG_TOKEN       = process.env.TG_TOKEN        || '';
 const TG_CHAT        = process.env.TG_CHAT         || '';
 
-const TARGETS        = ['guilavogui', 'ojeda', 'denkey', 'pec', 'grimaldo', 'ingvartsen', 'arfsten'];
 const RAX_PER_RATING = 13;
 const POLL_MS        = 2 * 60 * 1000;
 
-const RS_API_BASE = 'https://web.realapp.com/cardmarketplacelistings?sport=soccer&sort=new&pageSize=50&limit=50';
+// Entity IDs sourced from pack scanner gc-entity-ids.json
+const TARGETS = [
+  { key: 'guilavogui', entityId: '2348926' },
+  { key: 'ojeda',      entityId: '2348851' },
+  { key: 'denkey',     entityId: '2348553' },
+  { key: 'pec',        entityId: '2348684' },
+  { key: 'grimaldo',   entityId: '732879'  },
+  { key: 'ingvartsen', entityId: '2338416' },
+  { key: 'arfsten',    entityId: '2338050' },
+];
+
+const RS_API_BASE = 'https://web.realapp.com/cardmarketplacelistings?sport=soccer&sort=new&filterEntityId=';
 
 const dispatcher = RS_PROXY_URL ? new ProxyAgent(RS_PROXY_URL) : undefined;
 
@@ -150,82 +160,83 @@ function formatEndsAt(endsAt) {
   return h > 0 ? ` | Ends: ${h}h ${m}m` : ` | Ends: ${m}m`;
 }
 
+// ── Fetch listings for one player ─────────────────────────────────────────────
+
+async function fetchListings(entityId, token) {
+  const res = await uFetch(RS_API_BASE + entityId, {
+    dispatcher,
+    headers: {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+      'Origin': RS_WEB_BASE,
+      'Referer': RS_WEB_BASE + '/',
+      'Sec-Fetch-Dest': 'empty',
+      'Sec-Fetch-Mode': 'cors',
+      'Sec-Fetch-Site': 'cross-site',
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
+      'real-device-uuid': DEVICE_UUID,
+      'real-device-name': DEVICE_NAME,
+      'real-device-type': 'desktop_web',
+      'real-version': '32',
+      'real-request-token': hashidsEncode(Date.now()),
+      'real-auth-info': token,
+    },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) { console.error('marketplace: RS API error', res.status, 'for entity', entityId); return []; }
+  const data = await res.json();
+  return data.listings || data.items || data.data || [];
+}
+
 // ── Poll ──────────────────────────────────────────────────────────────────────
 
 async function poll() {
   const token = getToken();
   if (!token) { console.error('marketplace: no RS token available'); return; }
 
-  let listings;
-  try {
-    const res = await uFetch(RS_API_BASE + '&offset=0', {
-      dispatcher,
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'Origin': RS_WEB_BASE,
-        'Referer': RS_WEB_BASE + '/',
-        'Sec-Fetch-Dest': 'empty',
-        'Sec-Fetch-Mode': 'cors',
-        'Sec-Fetch-Site': 'cross-site',
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
-        'real-device-uuid': DEVICE_UUID,
-        'real-device-name': DEVICE_NAME,
-        'real-device-type': 'desktop_web',
-        'real-version': '32',
-        'real-request-token': hashidsEncode(Date.now()),
-        'real-auth-info': token,
-      },
-      signal: AbortSignal.timeout(10000),
-    });
-    if (!res.ok) { console.error('marketplace: RS API error', res.status); return; }
-    const data = await res.json();
-    listings = data.listings || data.items || data.data || [];
-  } catch(e) {
-    console.error('marketplace: fetch error', e.message);
-    return;
-  }
+  console.log('marketplace: poll', new Date().toISOString());
 
-  console.log('marketplace: poll', new Date().toISOString(), '—', listings.length, 'listing(s)');
-
-  let found = 0;
-  for (const listing of listings) {
-    const id = String(listing.id ?? listing.listingId ?? '');
-    if (!id || seenIds.has(id)) continue;
-    seenIds.add(id);
-
-    const name = getPlayerName(listing);
-    if (!name) continue;
-    if (!TARGETS.some(t => name.toLowerCase().includes(t))) continue;
-
-    const rating   = cardRating(listing.card) ?? cardRating(listing.card?.card) ?? (listing.value != null ? listing.value : null);
-    const price    = listingPrice(listing);
-    const maxPrice = rating != null ? rating * RAX_PER_RATING : null;
-
-    if (price == null) continue;
-
-    if (maxPrice != null && price > maxPrice) {
-      console.log(`marketplace: ${name} | rating ${rating} | price ${price} > max ${maxPrice.toFixed(1)} — skip`);
+  for (const target of TARGETS) {
+    let listings;
+    try {
+      listings = await fetchListings(target.entityId, token);
+    } catch(e) {
+      console.error('marketplace: fetch error for', target.key, e.message);
       continue;
     }
 
-    found++;
+    for (const listing of listings) {
+      const id = String(listing.id ?? listing.listingId ?? '');
+      if (!id || seenIds.has(id)) continue;
+      seenIds.add(id);
 
-    const rarity   = listing.card?.rarityLabel || '';
-    const buyNow   = listing.buyNowPrice;
-    const endsStr  = formatEndsAt(listing.endsAt);
-    const ratingStr = rating != null ? ` | Rating: ${rating}` : '';
-    const maxStr   = maxPrice != null ? ` | Max: ${maxPrice.toFixed(0)} Rax` : '';
-    const buyStr   = buyNow && buyNow !== price ? ` | Buy Now: ${buyNow} Rax` : '';
-    const hash     = listing.card?.hash || listing.card?.shareHash || listing.shareHash || '';
-    const cardUrl  = hash ? `\nhttps://www.realapp.com/${hash}` : '';
+      const name     = getPlayerName(listing);
+      const rating   = cardRating(listing.card) ?? cardRating(listing.card?.card) ?? null;
+      const price    = listingPrice(listing);
+      const maxPrice = rating != null ? rating * RAX_PER_RATING : null;
 
-    const msg = `🛒 <b>Marketplace Alert</b>\n${name}${rarity ? ` (${rarity})` : ''}${ratingStr}${maxStr}\nPrice: <b>${price} Rax</b>${buyStr}${endsStr}${cardUrl}`;
-    console.log(`marketplace: ALERT ${name} | ${rarity} | rating ${rating} | price ${price} / max ${maxPrice?.toFixed(0)}`);
-    await sendTelegram(msg);
+      if (price == null) continue;
+
+      if (maxPrice != null && price > maxPrice) {
+        console.log(`marketplace: ${target.key} | rating ${rating} | price ${price} > max ${maxPrice.toFixed(1)} — skip`);
+        continue;
+      }
+
+      const rarity    = listing.card?.rarityLabel || '';
+      const buyNow    = listing.buyNowPrice;
+      const endsStr   = formatEndsAt(listing.endsAt);
+      const ratingStr = rating != null ? ` | Rating: ${rating}` : '';
+      const maxStr    = maxPrice != null ? ` | Max: ${maxPrice.toFixed(0)} Rax` : '';
+      const buyStr    = buyNow && buyNow !== price ? ` | Buy Now: ${buyNow} Rax` : '';
+      const hash      = listing.card?.hash || listing.card?.shareHash || listing.shareHash || '';
+      const cardUrl   = hash ? `\nhttps://www.realapp.com/${hash}` : '';
+
+      const msg = `🛒 <b>Marketplace Alert</b>\n${name ?? target.key}${rarity ? ` (${rarity})` : ''}${ratingStr}${maxStr}\nPrice: <b>${price} Rax</b>${buyStr}${endsStr}${cardUrl}`;
+      console.log(`marketplace: ALERT ${target.key} | ${rarity} | rating ${rating} | price ${price} / max ${maxPrice?.toFixed(0)}`);
+      await sendTelegram(msg);
+    }
   }
 
-  if (!found) console.log('marketplace: no matches');
   saveSeen();
 }
 
