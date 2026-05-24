@@ -894,6 +894,7 @@
                 document.getElementById('dashboard').style.display = 'block';
                 showTrialNudge(data);
                 buildTabs();
+                if (isPro()) loadGroupCode();
                 await loadBetsTaken();
                 // If redirected back from bookmarklet, open portfolio tab
                 if (sessionStorage.getItem('pending_rs_token')) {
@@ -936,6 +937,7 @@
                 document.getElementById('dashboard').style.display = 'block';
                 showTrialNudge(data);
                 buildTabs();
+                if (isPro()) loadGroupCode();
                 await loadBetsTaken();
                 // If redirected back from bookmarklet, open portfolio tab
                 if (sessionStorage.getItem('pending_rs_token')) {
