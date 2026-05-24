@@ -17,8 +17,9 @@
 import { ProxyAgent } from 'undici';
 import { readFileSync, writeFileSync } from 'fs';
 
-const SITE_URL      = process.env.SITE_URL;
-const EV_POSTER_KEY = process.env.EV_POSTER_KEY;
+const SITE_URL         = process.env.SITE_URL;
+const EV_POSTER_KEY    = process.env.EV_POSTER_KEY;
+const ALERT_CRON_URL   = process.env.ALERT_CRON_URL || 'https://raxedge-alert-cron.mghasham24.workers.dev';
 const RS_AUTH_INFO  = process.env.RS_AUTH_INFO;
 const RS_GROUP_ID   = process.env.RS_GROUP_ID;
 const DEVICE_UUID   = process.env.RS_DEVICE_UUID || '2e0a38e2-0ee8-4f93-9a34-218ac1d10161';
@@ -40,22 +41,38 @@ const rsDispatcher = RS_PROXY_URL ? new ProxyAgent(RS_PROXY_URL) : undefined;
 // Persisted to disk so restarts don't re-post.
 // Repost only if EV jumped ≥ REPOST_EV_JUMP AND cooldown has passed.
 const postedEv = new Map();
+let dailyPosts    = [];  // all posts today for end-of-day summary
+let weeklyRecord  = { w: 0, l: 0, weekStart: 0 };
 let running = false;
 
 function loadState() {
   try {
     const data = JSON.parse(readFileSync(STATE_FILE, 'utf8'));
-    for (const [k, v] of Object.entries(data)) postedEv.set(k, v);
-    console.log('ev-poster: loaded', postedEv.size, 'dedup entries from disk');
+    for (const [k, v] of Object.entries(data)) {
+      if (k === '_dailyPosts')   { dailyPosts   = v || []; continue; }
+      if (k === '_weeklyRecord') { weeklyRecord = v || { w: 0, l: 0, weekStart: 0 }; continue; }
+      postedEv.set(k, v);
+    }
+    console.log('ev-poster: loaded', postedEv.size, 'dedup entries,', dailyPosts.length, 'daily posts from disk');
   } catch(e) {}
 }
 
 function saveState() {
   try {
-    const obj = {};
+    const obj = { _dailyPosts: dailyPosts, _weeklyRecord: weeklyRecord };
     for (const [k, v] of postedEv.entries()) obj[k] = v;
     writeFileSync(STATE_FILE, JSON.stringify(obj));
   } catch(e) { console.error('ev-poster: failed to save state:', e.message); }
+}
+
+function currentWeekStart() {
+  const etStr = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
+  const et    = new Date(etStr);
+  const day   = et.getDay(); // 0=Sun
+  const monday = new Date(et);
+  monday.setDate(et.getDate() - (day === 0 ? 6 : day - 1));
+  monday.setHours(0, 0, 0, 0);
+  return monday.getTime();
 }
 
 // ── RS request token (hashids-encoded timestamp, 'realwebapp' salt) ──────────
@@ -207,11 +224,9 @@ function formatPost(bet) {
     : bet.side + ptStr;
 
   const evStr   = (bet.ev >= 0 ? '+' : '') + bet.ev.toFixed(1) + '% EV';
-  const rsPct   = bet.rsPct      != null ? bet.rsPct.toFixed(1)      + '% RS'   : null;
+  const rsPct   = bet.rsPct      != null ? Math.round(bet.rsPct)      + '% RS'   : null;
   const fairPct = bet.adjFairPct != null ? bet.adjFairPct.toFixed(1) + '% Fair' : null;
-  const raxAmt  = bet.units * 1000;
-  const raxStr  = raxAmt >= 1000 ? (raxAmt / 1000).toFixed(raxAmt % 1000 === 0 ? 0 : 1) + 'k' : raxAmt;
-  const statsLine = [rsPct, fairPct, evStr, bet.units + 'u · ' + raxStr + ' Rax'].filter(Boolean).join(' | ');
+  const statsLine = [rsPct, fairPct, evStr, bet.units + 'u'].filter(Boolean).join(' | ');
 
   const lines = [
     `+EV Pick: ${line} · ${bet.market} · ${bet.sport}`,
@@ -227,12 +242,11 @@ function formatPost(bet) {
       const ev       = calcEV(fdFair, spiked);
       if (ev == null) continue;
       const u        = unitsEV(ev, fdFair);
-      const amt      = u * 1000;
-      const amtStr   = amt >= 1000 ? (amt / 1000).toFixed(amt % 1000 === 0 ? 0 : 1) + 'k' : amt;
       const evStr    = (ev >= 0 ? '+' : '') + ev.toFixed(1) + '% EV';
-      const rsPctStr = (spiked * 100).toFixed(1) + '% RS';
+      const rsPctStr = Math.round(spiked * 100) + '% RS';
       const fairStr  = bet.adjFairPct.toFixed(1) + '% Fair';
-      lines.push([rsPctStr, fairStr, evStr, u + 'u · ' + amtStr + ' Rax'].join(' | '));
+      lines.push('-');
+      lines.push([rsPctStr, fairStr, evStr, u + 'u'].join(' | '));
     }
   }
 
@@ -265,18 +279,26 @@ async function run() {
       return;
     }
 
-    // Skip if alert-cron data is stale (> 5 min)
+    // Skip if alert-cron data is stale (> 5 min); nudge the Worker to restart if so
     const dataAge = Math.floor(Date.now() / 1000) - (evData.ts || 0);
     if (dataAge > 300) {
       console.log('ev-poster: data is', dataAge + 's old, skipping');
+      if (EV_POSTER_KEY) {
+        fetch(`${ALERT_CRON_URL}/trigger?_key=${EV_POSTER_KEY}`, { signal: AbortSignal.timeout(5000) })
+          .then(r => console.log('ev-poster: nudged alert-cron, status', r.status))
+          .catch(e => console.error('ev-poster: nudge failed', e.message));
+      }
       return;
     }
 
     // Filter: MIN_EV threshold, skip live, skip if posted recently unless EV jumped ≥ REPOST_EV_JUMP
     const now2 = Date.now();
+    const nowSec = Math.floor(Date.now() / 1000);
     const newBets = evData.bets
       .filter(b => {
-        if (b.ev < MIN_EV || b.isLive) return false;
+        if (b.ev < MIN_EV) return false;
+        if (b.isLive) return false;
+        if (b.commenceTime > 0 && b.commenceTime <= nowSec) return false;
         const last = postedEv.get(b.betKey);
         if (!last) return true;
         const evJumped  = b.ev - last.ev >= REPOST_EV_JUMP;
@@ -331,7 +353,15 @@ async function run() {
 
         if (res.ok) {
           console.log('ev-poster: posted', bet.betKey, '| EV', bet.ev + '%');
-          postedEv.set(bet.betKey, { ev: bet.ev, postedAt: Date.now() });
+          const now = Date.now();
+          postedEv.set(bet.betKey, { ev: bet.ev, postedAt: now });
+          dailyPosts.push({
+            betKey: bet.betKey, side: bet.side, market: bet.market,
+            sport: bet.sport,   game: bet.game,  pt: bet.pt ?? null,
+            ev: bet.ev,         rsPct: bet.rsPct,
+            rsGameId: bet.rsGameId || null, rsSport: bet.rsSport || null,
+            postedAt: now,
+          });
           saveState();
         } else {
           const errText = await res.text();
@@ -348,6 +378,96 @@ async function run() {
   }
 }
 
+// ── Result checking ────────────────────────────────────
+
+async function checkResult(post) {
+  if (!post.rsGameId || !post.rsSport) return null;
+  try {
+    const res = await fetch(
+      `${RS_BASE}/predictions/game/${post.rsSport}/${post.rsGameId}/markets`,
+      { headers: rsHeaders(), signal: AbortSignal.timeout(8000), dispatcher: rsDispatcher }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.statusCode === 429) return null;
+    const markets = data.markets || [];
+    const labels  = RS_MARKET_MAP[post.market] || RS_ML_LABELS;
+    const mkt     = markets.find(m => labels.includes(m.label));
+    if (!mkt) return null;
+    const outcomes = mkt.outcomes || [];
+    const maxProb  = Math.max(...outcomes.map(o => o.probability || 0));
+    if (maxProb < 0.95) return null; // not settled yet
+    const normSide = normName(post.side);
+    const outcome  = outcomes.find(o =>
+      normName(o.label).includes(normSide) || normSide.includes(normName(o.label))
+    );
+    if (!outcome) return null;
+    return outcome.probability >= 0.95 ? 'win' : 'loss';
+  } catch(e) { return null; }
+}
+
+// ── Daily summary ──────────────────────────────────────
+
+async function postDailySummary() {
+  if (!dailyPosts.length) { console.log('ev-poster: no posts today, skipping summary'); return; }
+
+  // Deduplicate by betKey — keep last post per key (highest EV repost)
+  const byKey = new Map();
+  for (const p of dailyPosts) byKey.set(p.betKey, p);
+  const posts = Array.from(byKey.values());
+
+  console.log('ev-poster: checking results for', posts.length, 'bets');
+  const results = [];
+  for (const post of posts) {
+    const result = await checkResult(post);
+    results.push({ ...post, result });
+  }
+
+  const wins    = results.filter(r => r.result === 'win').length;
+  const losses  = results.filter(r => r.result === 'loss').length;
+  const pending = results.filter(r => r.result === null).length;
+
+  // Update weekly record
+  const ws = currentWeekStart();
+  if (weeklyRecord.weekStart !== ws) weeklyRecord = { w: 0, l: 0, weekStart: ws };
+  weeklyRecord.w += wins;
+  weeklyRecord.l += losses;
+
+  const hitRate  = (wins + losses) > 0 ? Math.round(wins / (wins + losses) * 100) : 0;
+  const weekTot  = weeklyRecord.w + weeklyRecord.l;
+  const weekRate = weekTot > 0 ? Math.round(weeklyRecord.w / weekTot * 100) : 0;
+
+  const etDate  = new Date().toLocaleString('en-US', { timeZone: 'America/New_York', month: 'long', day: 'numeric' });
+
+  const lines = [
+    `📊 RaxEdge Daily Summary — ${etDate}`,
+    '-',
+    `${posts.length} pick${posts.length !== 1 ? 's' : ''} · ${wins}W ${losses}L${pending ? ` · ${pending} pending` : ''} · ${hitRate}% hit rate`,
+    `Week: ${weeklyRecord.w}W ${weeklyRecord.l}L · ${weekRate}%`,
+    '-',
+  ];
+
+  for (const r of results) {
+    const icon   = r.result === 'win' ? '✅' : r.result === 'loss' ? '❌' : '⏳';
+    const ptStr  = r.pt != null ? ' ' + (r.pt > 0 ? '+' : '') + r.pt : '';
+    const line   = (r.market === 'ML' || r.market === 'RFI') ? r.side : r.side + ptStr;
+    const mktTag = (r.market === 'ML' || r.market === 'RFI') ? r.market : '';
+    const suffix = r.result === null ? ' · in progress' : '';
+    lines.push(`${icon} ${line}${mktTag ? ' ' + mktTag : ''} · ${Math.round(r.rsPct)}% RS · +${r.ev.toFixed(1)}% EV${suffix}`);
+  }
+
+  const text = lines.join('\n');
+  try {
+    const res = await fetch(`${RS_BASE}/comments/groups/${RS_GROUP_ID}`, {
+      method: 'POST', headers: rsHeaders(),
+      body: JSON.stringify({ text, content: { nodes: [{ text }] } }),
+      signal: AbortSignal.timeout(10000), dispatcher: rsDispatcher,
+    });
+    if (res.ok) console.log('ev-poster: daily summary posted');
+    else console.error('ev-poster: summary post failed', res.status, await res.text().catch(() => ''));
+  } catch(e) { console.error('ev-poster: summary post error', e.message); }
+}
+
 // ── Midnight ET reset ──────────────────────────────────
 
 function scheduleMidnightReset() {
@@ -356,9 +476,11 @@ function scheduleMidnightReset() {
   const next  = new Date(et);
   next.setHours(24, 0, 30, 0);
   const msUntil = next - et;
-  setTimeout(() => {
-    console.log('ev-poster: midnight ET — clearing', postedEv.size, 'posted bets');
+  setTimeout(async () => {
+    console.log('ev-poster: midnight ET — posting summary then clearing', postedEv.size, 'posted bets');
+    await postDailySummary();
     postedEv.clear();
+    dailyPosts = [];
     saveState();
     scheduleMidnightReset();
   }, Math.max(msUntil, 60_000));

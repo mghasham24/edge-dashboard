@@ -414,9 +414,7 @@ function processNativeNBA(sport, fdGames, rsGames, rsGameIds, rsGameSports, glob
     const rsSport   = rsGameSports[rsKey] || sport.rsKey;
 
     // ── ML ──
-    // Skip ML for live games where FD has suspended and frozen pre-game prices.
-    // RS live probability moves with the game state but FD fair is stale → false EV.
-    const rsMlLabel = (!isLive || !game.live) ? RS_ML_LABELS.find(l => rsMarkets[l]) : null;
+    const rsMlLabel = RS_ML_LABELS.find(l => rsMarkets[l]);
     if (rsMlLabel) {
       const rsMkt      = rsMarkets[rsMlLabel];
       const gameUrl    = buildRSUrl(gameId, rsSport, rsMkt.id);
@@ -588,53 +586,10 @@ function processNativeFC(sport, fdGames, rsGames, rsGameIds, rsGameSports, globa
   }
 }
 
-// ── Main scheduled handler ─────────────────────────────
+// ── Main cron logic (called by scheduler and HTTP trigger) ────────────────
 
-export default {
-  async fetch(request, env, ctx) {
-    if (request.method !== 'POST') return new Response('ok');
-    const secret = request.headers.get('X-Telegram-Bot-Api-Secret-Token');
-    if (!env.TELEGRAM_WEBHOOK_SECRET || secret !== env.TELEGRAM_WEBHOOK_SECRET)
-      return new Response('Forbidden', { status: 403 });
-    const body = await request.json().catch(() => null);
-    if (!body?.callback_query) return new Response('ok');
-    const { id: queryId, data, message } = body.callback_query;
-    const chatId    = message?.chat?.id;
-    const messageId = message?.message_id;
-    let nowTaken = false;
-    if (data?.startsWith('t:')) {
-      const alertId = parseInt(data.slice(2));
-      if (alertId) {
-        try {
-          const row = await env.DB.prepare('SELECT taken FROM alert_messages WHERE id=?').bind(alertId).first();
-          nowTaken = !row?.taken; // toggle
-          await env.DB.prepare('UPDATE alert_messages SET taken=? WHERE id=?').bind(nowTaken ? 1 : 0, alertId).run();
-        } catch(e) {}
-      }
-    }
-    const base = `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}`;
-    await fetch(`${base}/answerCallbackQuery`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ callback_query_id: queryId, text: nowTaken ? '✅ Bet marked as taken' : 'Bet unmarked' }),
-    }).catch(() => {});
-    if (chatId && messageId) {
-      const buttonText = nowTaken ? '✅ Bet Taken' : 'Mark Bet Taken';
-      await fetch(`${base}/editMessageReplyMarkup`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: chatId,
-          message_id: messageId,
-          reply_markup: { inline_keyboard: [[{ text: buttonText, callback_data: data }]] },
-        }),
-      }).catch(() => {});
-    }
-    return new Response('ok');
-  },
-
-  async scheduled(event, env, ctx) {
-    if (!env.TELEGRAM_BOT_TOKEN) return;
+async function runCron(env, ctx) {
+  if (!env.TELEGRAM_BOT_TOKEN) return;
 
     const now = Math.floor(Date.now() / 1000);
     const FD_STALE_THRESHOLD = 30 * 60;
@@ -980,6 +935,7 @@ export default {
           ev: b.ev, units: b.units, pt: b.pt, fdOdds: b.fdOdds,
           rsPct: b.rsPct, adjFairPct: b.adjFairPct,
           gameUrl: b.gameUrl, betKey: b.betKey, isLive: b.isLive || false,
+          commenceTime: b.commenceTime || 0,
           rsGameId: b.rsGameId || null, rsSport: b.rsSport || null,
         }))
       }), now).run();
@@ -1003,7 +959,7 @@ export default {
       const unitSize = user.unit_size || 100;
 
       let userBets = allBets.filter(b =>
-        b.ev >= minEv && (!userSports || userSports.has(b.sport.fdKey))
+        b.ev >= minEv && !b.isLive && (!userSports || userSports.has(b.sport.fdKey))
       );
       if (!dbg.userBets) dbg.userBets = {};
       dbg.userBets[user.user_id] = { minEv, betsAfterFilter: userBets.length };
@@ -1125,7 +1081,67 @@ export default {
       await env.DB.prepare('DELETE FROM sessions WHERE expires_at < ?')
         .bind(now - 86400).run();
     } catch(e) {}
-  }
+}
+
+// ── Export: HTTP fetch (Telegram callback + /trigger) + scheduled ─────────
+
+export default {
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+
+    // Manual trigger — VPS watchdog calls this if CF scheduler goes silent
+    if (url.pathname === '/trigger') {
+      const key = url.searchParams.get('_key');
+      if (!env.EV_POSTER_KEY || key !== env.EV_POSTER_KEY)
+        return new Response(JSON.stringify({ ok: false, error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+      ctx.waitUntil(runCron(env, ctx));
+      return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json' } });
+    }
+
+    if (request.method !== 'POST') return new Response('ok');
+    const secret = request.headers.get('X-Telegram-Bot-Api-Secret-Token');
+    if (!env.TELEGRAM_WEBHOOK_SECRET || secret !== env.TELEGRAM_WEBHOOK_SECRET)
+      return new Response('Forbidden', { status: 403 });
+    const body = await request.json().catch(() => null);
+    if (!body?.callback_query) return new Response('ok');
+    const { id: queryId, data, message } = body.callback_query;
+    const chatId    = message?.chat?.id;
+    const messageId = message?.message_id;
+    let nowTaken = false;
+    if (data?.startsWith('t:')) {
+      const alertId = parseInt(data.slice(2));
+      if (alertId) {
+        try {
+          const row = await env.DB.prepare('SELECT taken FROM alert_messages WHERE id=?').bind(alertId).first();
+          nowTaken = !row?.taken;
+          await env.DB.prepare('UPDATE alert_messages SET taken=? WHERE id=?').bind(nowTaken ? 1 : 0, alertId).run();
+        } catch(e) {}
+      }
+    }
+    const base = `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}`;
+    await fetch(`${base}/answerCallbackQuery`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ callback_query_id: queryId, text: nowTaken ? '✅ Bet marked as taken' : 'Bet unmarked' }),
+    }).catch(() => {});
+    if (chatId && messageId) {
+      const buttonText = nowTaken ? '✅ Bet Taken' : 'Mark Bet Taken';
+      await fetch(`${base}/editMessageReplyMarkup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          message_id: messageId,
+          reply_markup: { inline_keyboard: [[{ text: buttonText, callback_data: data }]] },
+        }),
+      }).catch(() => {});
+    }
+    return new Response('ok');
+  },
+
+  async scheduled(event, env, ctx) {
+    return runCron(env, ctx);
+  },
 };
 
 async function writeDebug(env, dbg) {
