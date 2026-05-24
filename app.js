@@ -2880,7 +2880,7 @@
         // Re-verify plan in parallel with odds fetch — don't block start
         fetch('/api/auth/me', { credentials: 'same-origin' })
             .then(function(r) { if (r.ok) return r.json(); })
-            .then(function(u) { if (u) { currentUser = u; if (!isPro()) { renderEvTab(); } } })
+            .then(function(u) { if (u) { currentUser = u; if (!isPro()) { renderEvTab(); } if (isPro()) loadGroupCode(); } })
             .catch(function() {});
 
         // Re-fetch fresh odds for all sports in parallel — this evicts finished games from rawRowsBySport
