@@ -33,6 +33,9 @@
     var rsPredAdj = 0; // global RS% offset (+0/+1/+2) for sensitivity analysis
     var probsExact = {}; // full-precision RS probability per row id (from sync.js o.probability)
     var vols = {}; // volume display per row id
+    var rsMarketIds  = {}; // row id -> RS market id (for payout API)
+    var rsOutcomeIds = {}; // row id -> RS outcome id (for payout API)
+    var payoutRatios = {}; // row id -> expectedPayout/amount (exact WS payout ratio, includes slippage)
     var yourLines = {};
     var altOdds = {}; // gameId -> { spreads: {teamName: {point: price}}, totals: {side: {point: price}} }
     var nbaPoller  = null;
@@ -2755,7 +2758,10 @@
         var mhtml = '<div class="ev-mobile-grid">';
 
         all.forEach(function(r) {
-            var ev      = r._ev;
+            // Use exact WS payout EV if available, else fall back to rsBaseTake approximation
+            var ev = (payoutRatios[r.id] != null && r.af != null)
+                ? (r.af * payoutRatios[r.id] - 1) * 100
+                : r._ev;
             var evStr   = ev != null ? (ev >= 0 ? '+' : '') + ev.toFixed(1) + '%' : null;
             var evColor = ev != null ? (ev >= 10 ? 'var(--green)' : ev >= 5 ? '#7ddfab' : ev > 0 ? 'var(--yellow)' : 'var(--red)') : '';
             var u       = r.u != null ? r.u : 0;
@@ -4754,6 +4760,7 @@
 
     function loadOdds() {
         stopAllPollers();
+        payoutRatios = {};
         if (!isPro()) {
             currentSport = FREE_SPORTS.indexOf(currentSport) !== -1 ? currentSport : FREE_SPORTS[0];
             var mktEl = document.getElementById('mkt-filter');
@@ -4853,7 +4860,7 @@
             .then(function() {
                 resetRefreshBtn();
                 renderTable();
-                if (rawRows.length > 0) fetchRealMarkets(currentSport);
+                if (rawRows.length > 0) fetchRealMarkets(currentSport).then(function() { fetchExactEvForRows(currentSport); });
                 // Start auto-poll to keep NBA odds live
                 if (nbaPoller) clearInterval(nbaPoller);
                 nbaPoller = setInterval(function() {
@@ -4952,7 +4959,7 @@
             .then(function() {
                 resetRefreshBtn();
                 renderTable();
-                if (rawRows.length > 0) fetchRealMarkets(currentSport);
+                if (rawRows.length > 0) fetchRealMarkets(currentSport).then(function() { fetchExactEvForRows(currentSport); });
                 // Start auto-poll to keep WNBA odds live
                 if (wnbaPoller) clearInterval(wnbaPoller);
                 wnbaPoller = setInterval(function() {
@@ -5040,7 +5047,7 @@
             .then(function() {
                 resetRefreshBtn();
                 renderTable();
-                if (rawRows.length > 0) fetchRealMarkets(currentSport);
+                if (rawRows.length > 0) fetchRealMarkets(currentSport).then(function() { fetchExactEvForRows(currentSport); });
                 if (fcPoller) clearInterval(fcPoller);
                 fcPoller = setInterval(function() {
                     if (currentSport !== 'soccer_fc') { clearInterval(fcPoller); fcPoller = null; return; }
@@ -5153,6 +5160,7 @@
                             });
                         }
                         renderTable();
+                        fetchExactEvForRows('baseball_mlb');
                     });
                     if (mlbPoller) clearInterval(mlbPoller);
                     mlbPoller = setInterval(function() {
@@ -5245,7 +5253,7 @@
                 resetRefreshBtn();
                 renderTable();
                 if (rawRows.length > 0) {
-                    fetchRealMarkets(currentSport).then(function() { fetchDKAltLinesNHL(); });
+                    fetchRealMarkets(currentSport).then(function() { fetchDKAltLinesNHL(); fetchExactEvForRows(currentSport); });
                     if (nhlPoller) clearInterval(nhlPoller);
                     nhlPoller = setInterval(function() {
                         if (currentSport !== 'icehockey_nhl') { clearInterval(nhlPoller); nhlPoller = null; return; }
@@ -6146,10 +6154,18 @@
         var evH = '-';
         var predEV = preds[r.id];
         if (predEV && r.af != null) {
-            var realPctEV = Math.min(0.999, Math.max(0.001, (probsExact[r.id] != null ? probsExact[r.id] : parseFloat(predEV) / 100) + rsPredAdj / 100));
-            if (realPctEV > 0 && realPctEV < 1) {
-                var rakeEV = rsBaseTake(realPctEV);
-                var ev = (r.af * (1/realPctEV) * (1-rakeEV) - 1) * 100;
+            var ev = null;
+            if (payoutRatios[r.id] != null) {
+                // Exact EV from RS payout API — includes slippage at user's stake size
+                ev = (r.af * payoutRatios[r.id] - 1) * 100;
+            } else {
+                var realPctEV = Math.min(0.999, Math.max(0.001, (probsExact[r.id] != null ? probsExact[r.id] : parseFloat(predEV) / 100) + rsPredAdj / 100));
+                if (realPctEV > 0 && realPctEV < 1) {
+                    var rakeEV = rsBaseTake(realPctEV);
+                    ev = (r.af * (1/realPctEV) * (1-rakeEV) - 1) * 100;
+                }
+            }
+            if (ev != null) {
                 // >100% EV = post-game artifact (RS knows result, FD market still open)
                 // Exception: soccer FC live ±0.5 lines can legitimately produce >100% EV
                 if (ev > 100 && currentSport !== 'soccer_fc') { evH = '-'; } else {
@@ -6429,6 +6445,43 @@
         };
         var overrides = SPORT_OVERRIDES[currentSport] || {};
         return overrides[key] || ABBREV_MAP[key] || abbrevOrName;
+    }
+
+    // Fetch exact RS payout for each +EV row via the CF payout proxy.
+    // Updates payoutRatios[rowId] = expectedPayout/amount, then re-renders.
+    // Only runs for rows that have both a positive approx EV and known RS marketId/outcomeId.
+    function fetchExactEvForRows(sport) {
+        var amount = Math.round(parseFloat(document.getElementById('unit-size').value) || 300);
+        var rows = (rawRowsBySport[sport] || rawRows).filter(function(r) {
+            if (!rsMarketIds[r.id] || !rsOutcomeIds[r.id]) return false;
+            var pr = probsExact[r.id] != null ? probsExact[r.id] : (preds[r.id] ? parseFloat(preds[r.id]) / 100 : null);
+            if (!pr || pr <= 0 || pr >= 1) return false;
+            var pairs = {};
+            rawRows.forEach(function(x) { if (!pairs[x.pid]) pairs[x.pid] = {}; pairs[x.pid][x.ps] = x; });
+            var pair = pairs[r.pid] || {};
+            var nv = novig(pair.A ? imp(pair.A.am) : null, pair.B ? imp(pair.B.am) : null);
+            var fair = r.ps === 'A' ? nv.fa : nv.fb;
+            if (!fair) return false;
+            var approxEv = (fair * (1/pr) * (1-rsBaseTake(pr)) - 1) * 100;
+            return approxEv > 0;
+        });
+        if (!rows.length) return;
+
+        // Fetch up to 10 payouts in parallel (D1-cached after first call)
+        var batch = rows.slice(0, 10);
+        Promise.all(batch.map(function(r) {
+            var mid = rsMarketIds[r.id], oid = rsOutcomeIds[r.id];
+            return fetch('/api/real/payout?marketId=' + mid + '&outcomeId=' + oid + '&amount=' + amount, { credentials: 'same-origin' })
+                .then(function(res) { return res.json(); })
+                .then(function(data) {
+                    if (data.ok && data.expectedPayout > 0) {
+                        payoutRatios[r.id] = data.expectedPayout / amount;
+                    }
+                })
+                .catch(function() {});
+        })).then(function() {
+            renderTable();
+        });
     }
 
     function fetchKalshiRFI(skipRender) {
@@ -6823,6 +6876,8 @@
                 if (match && match.pct != null) {
                     preds[r.id] = String(match.pct);
                     if (match.probability != null) probsExact[r.id] = match.probability;
+                    if (mktData && mktData.id != null) rsMarketIds[r.id] = mktData.id;
+                    if (match.id != null) rsOutcomeIds[r.id] = match.id;
                     if (mktData && mktData.volumeDisplay) {
                         vols[r.id] = mktData.volumeDisplay;
                         // Also set for the paired side (same game/market, opposite team)
