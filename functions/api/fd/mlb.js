@@ -16,7 +16,7 @@ const FD_LIST_URLS  = [
 const FD_EVENT_URL  = (id) => `https://sbapi.nj.sportsbook.fanduel.com/api/event-page?_ak=${FD_AK}&eventId=${id}&tab=all&timezone=America/New_York`;
 const FD_PRICES_URL = 'https://smp.nj.sportsbook.fanduel.com/api/sports/fixedodds/readonly/v1/getMarketPrices?priceHistory=0';
 const ML_TYPE       = 'MONEY_LINE';
-const CACHE_TTL     = 5;
+const CACHE_TTL     = 30;
 
 function fail(status, msg) {
   return new Response(JSON.stringify({ error: msg }), {
@@ -60,21 +60,29 @@ export async function onRequestGet(context) {
   };
 
   try {
-    // Fetch event lists from all URLs and merge (dedup by eventId)
+    // Fetch event lists from all URLs in parallel with 8s timeout each, then merge (dedup by eventId)
     const nowMs = Date.now();
     const allEvents = {};
     const urlDebug = [];
-    for (const url of FD_LIST_URLS) {
+    const listResults = await Promise.all(FD_LIST_URLS.map(async (url) => {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 8000);
       try {
-        const listRes = await fetch(url, { headers });
-        if (!listRes.ok) { urlDebug.push({ url, status: listRes.status, count: 0 }); continue; }
+        const listRes = await fetch(url, { headers, signal: ctrl.signal });
+        clearTimeout(timer);
+        if (!listRes.ok) return { url, status: listRes.status, evts: {} };
         const listData = await listRes.json();
-        const evts = listData?.attachments?.events || {};
-        const before = Object.keys(allEvents).length;
-        Object.entries(evts).forEach(([id, e]) => { if (!allEvents[id]) allEvents[id] = e; });
-        urlDebug.push({ url, status: listRes.status, count: Object.keys(evts).length, added: Object.keys(allEvents).length - before });
-      } catch(e) { urlDebug.push({ url, err: e.message }); }
-    }
+        return { url, status: listRes.status, evts: listData?.attachments?.events || {} };
+      } catch(e) {
+        clearTimeout(timer);
+        return { url, err: e.message, evts: {} };
+      }
+    }));
+    listResults.forEach(({ url, status, evts, err }) => {
+      const before = Object.keys(allEvents).length;
+      Object.entries(evts).forEach(([id, e]) => { if (!allEvents[id]) allEvents[id] = e; });
+      urlDebug.push(err ? { url, err } : { url, status, count: Object.keys(evts).length, added: Object.keys(allEvents).length - before });
+    });
 
     if (debugMode === '1') {
       const nowMs2 = Date.now();

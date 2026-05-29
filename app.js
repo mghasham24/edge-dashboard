@@ -41,8 +41,10 @@
     var nhlPoller  = null;
     var dkPoller   = null;
     var fcPoller   = null;
+    var currentLoadAbort = null;
 
     function stopAllPollers() {
+        if (currentLoadAbort) { currentLoadAbort.abort(); currentLoadAbort = null; }
         if (nbaPoller)  { clearInterval(nbaPoller);  nbaPoller  = null; }
         if (wnbaPoller) { clearInterval(wnbaPoller); wnbaPoller = null; }
         if (mlbPoller)  { clearInterval(mlbPoller);  mlbPoller  = null; }
@@ -2493,6 +2495,7 @@
         // and would race with loadAllEvSports' sequential phase, causing cross-sport
         // contamination in evTabCache (e.g. FC rows written under 'baseball_mlb' key).
         // loadAllEvSports uses its own 15s refresh timer to keep EV data fresh.
+        if (currentLoadAbort) { currentLoadAbort.abort(); currentLoadAbort = null; }
         if (nbaPoller)  { clearInterval(nbaPoller);  nbaPoller  = null; }
         if (wnbaPoller) { clearInterval(wnbaPoller); wnbaPoller = null; }
         if (mlbPoller)  { clearInterval(mlbPoller);  mlbPoller  = null; }
@@ -5050,7 +5053,9 @@
         // MLB: use FD native API for ML — no Odds API credits
         if (currentSport === 'baseball_mlb') {
             altOdds = {};
-            fetch('/api/fd/mlb', { credentials: 'same-origin' })
+            currentLoadAbort = new AbortController();
+            var mlbSignal = currentLoadAbort.signal;
+            fetch('/api/fd/mlb', { credentials: 'same-origin', signal: mlbSignal })
             .then(function(r) {
                 if (r.status === 401) {
                     dot.className = 'sdot error';
@@ -5093,12 +5098,13 @@
                 }
             })
             .catch(function(e) {
-                if (e === 'unauth') return;
+                if (e === 'unauth' || e.name === 'AbortError') return;
                 rawRows = []; rsGameIds = {};
                 dot.className = 'sdot error';
                 stxt.textContent = 'Error fetching MLB data';
             })
             .then(function() {
+                if (mlbSignal.aborted) return;
                 resetRefreshBtn();
                 renderTable();
                 if (rawRows.length > 0) {
