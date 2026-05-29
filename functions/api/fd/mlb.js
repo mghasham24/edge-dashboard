@@ -16,7 +16,7 @@ const FD_LIST_URLS  = [
 const FD_EVENT_URL  = (id) => `https://sbapi.nj.sportsbook.fanduel.com/api/event-page?_ak=${FD_AK}&eventId=${id}&tab=all&timezone=America/New_York`;
 const FD_PRICES_URL = 'https://smp.nj.sportsbook.fanduel.com/api/sports/fixedodds/readonly/v1/getMarketPrices?priceHistory=0';
 const ML_TYPE       = 'MONEY_LINE';
-const CACHE_TTL     = 30;
+const CACHE_TTL     = 5;
 
 function fail(status, msg) {
   return new Response(JSON.stringify({ error: msg }), {
