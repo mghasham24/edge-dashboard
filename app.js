@@ -886,24 +886,12 @@
             if (!res.ok) {
                 showGateErr(data.error || ('Error ' + res.status + ' — please try again'));
             } else {
-                currentUser = data;
                 try { posthog.identify(data.email, { email: data.email, plan: data.plan, is_admin: !!data.is_admin }); } catch(e) {}
                 try { posthog.capture('login', { method: 'password', plan: data.plan }); } catch(e) {}
-                document.getElementById('gate').style.display = 'none';
-                document.getElementById('landing').classList.remove('visible');
-                document.getElementById('dashboard').style.display = 'block';
-                showTrialNudge(data);
-                buildTabs();
-                if (isPro()) loadGroupCode();
-                await loadBetsTaken();
-                // If redirected back from bookmarklet, open portfolio tab
-                if (sessionStorage.getItem('pending_rs_token')) {
-                    var portBtn = document.getElementById('portfolio-tab-btn');
-                    if (portBtn) { setTimeout(function(){ portBtn.click(); }, 100); }
-                } else {
-                    setTimeout(loadOdds, 50);
-                    setTimeout(preloadAllSports, 3000); // background preload after current sport loads
-                }
+                // Full reload so the session cookie is available in the browser's cookie jar
+                // before any API fetches fire. Chrome/Brave have a race condition where
+                // cookies from fetch() responses aren't synchronised before the next fetch().
+                location.reload();
             }
         } catch (e) {
             showGateErr('Network error -- please try again');
