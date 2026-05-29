@@ -16,6 +16,8 @@
 
 import { ProxyAgent } from 'undici';
 import { readFileSync, writeFileSync } from 'fs';
+import WebSocket from 'ws';
+import { HttpsProxyAgent } from 'https-proxy-agent';
 
 const SITE_URL         = process.env.SITE_URL;
 const EV_POSTER_KEY    = process.env.EV_POSTER_KEY;
@@ -31,6 +33,7 @@ const REPOST_EV_JUMP     = parseFloat(process.env.REPOST_EV_JUMP       || '5');
 const REPOST_COOLDOWN_MS = parseInt(process.env.REPOST_COOLDOWN_MS     || String(2 * 3600 * 1000)); // 2h
 const REPOST_URGENT_EV   = parseFloat(process.env.REPOST_URGENT_EV      || '25'); // bypass cooldown
 const STATE_FILE         = process.env.STATE_FILE || '/opt/ev-group-poster/state.json';
+const STAKE_RAX          = parseInt(process.env.STAKE_RAX || '700'); // Rax per 1 unit — group post uses avg stake for slippage-adjusted EV
 
 const RS_BASE     = 'https://web.realapp.com';
 const RS_WEB_BASE = 'https://realsports.io';
@@ -174,7 +177,8 @@ const RS_MARKET_MAP   = { ML: RS_ML_LABELS, Spread: ['Spread'], Total: ['Total',
 
 function normName(s) { return (s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
 
-async function fetchLiveRSProb(bet) {
+// Returns {prob, marketId, outcomeId} or null
+async function fetchLiveRSData(bet) {
   if (!bet.rsGameId || !bet.rsSport) return null;
   try {
     const res = await fetch(
@@ -184,17 +188,77 @@ async function fetchLiveRSProb(bet) {
     if (!res.ok) return null;
     const data = await res.json();
     if (data.statusCode === 429) return null;
-    const markets = data.markets || [];
-    const labels  = RS_MARKET_MAP[bet.market] || RS_ML_LABELS;
-    const mkt     = markets.find(m => labels.includes(m.label));
+    const markets  = data.markets || [];
+    const labels   = RS_MARKET_MAP[bet.market] || RS_ML_LABELS;
+    const mkt      = markets.find(m => labels.includes(m.label));
     if (!mkt) return null;
     const normSide = normName(bet.side);
-    const outcome  = (mkt.outcomes || []).find(o => normName(o.label).includes(normSide) || normSide.includes(normName(o.label)));
+    const outcome  = (mkt.outcomes || []).find(o => {
+      const norm = normName(o.label).replace(/\d/g, '');
+      return norm === normSide || normSide.includes(norm) || norm.includes(normSide) || isSubseq(norm, normSide);
+    });
     if (!outcome || !outcome.probability) return null;
-    return outcome.probability;
-  } catch(e) {
-    return null;
-  }
+    return { prob: outcome.probability, marketId: mkt.id, outcomeId: outcome.id };
+  } catch(e) { return null; }
+}
+
+function generateOrderId() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+  return Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * 64)]).join('');
+}
+
+// Fetch exact RS payout via Socket.IO WebSocket — returns expectedPayout Rax for `amount` staked, or null
+async function fetchExactPayout(marketId, outcomeId, amount = 10) {
+  const token = RS_AUTH_INFO;
+  if (!token || !marketId || !outcomeId) return null;
+  const params = new URLSearchParams({
+    socketType: 'predictionmarketorder',
+    realRequestToken: hashidsEncode(Date.now()),
+    realVersion: '32',
+    marketId: String(marketId),
+    orderInstanceId: generateOrderId(),
+    rooms: 'undefined',
+    deviceUuid: DEVICE_UUID,
+    deviceVersion: 'undefined',
+    deviceType: 'desktop_web',
+    auth: token,
+    EIO: '3',
+    transport: 'websocket',
+  });
+  const wsUrl = `wss://web.realsports.io/socket.io/?${params}`;
+  const agent = RS_PROXY_URL ? new HttpsProxyAgent(RS_PROXY_URL) : undefined;
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = (val) => { if (!settled) { settled = true; resolve(val); try { ws.terminate(); } catch(_) {} } };
+    const timer = setTimeout(() => done(null), 8000);
+    const ws = new WebSocket(wsUrl, {
+      agent,
+      headers: { 'Origin': 'https://realsports.io', 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15' },
+    });
+    ws.on('message', (data) => {
+      const msg = data.toString();
+      if (msg === '2') { ws.send('3'); return; }
+      if (msg === '40') {
+        ws.send(`420["PredictionMarketGetExpectedPayout",{"marketId":${marketId},"outcomeId":${outcomeId},"sharesPct":null,"amount":${amount}}]`);
+      }
+      if (msg.startsWith('430')) {
+        try {
+          const parsed = JSON.parse(msg.slice(3));
+          const result = Array.isArray(parsed) ? parsed[0] : parsed;
+          clearTimeout(timer);
+          done(result?.expectedPayout ?? null);
+        } catch(_) { clearTimeout(timer); done(null); }
+      }
+    });
+    ws.on('error', (e) => { console.error('ev-poster: payout WS error', e.message); clearTimeout(timer); done(null); });
+    ws.on('close', () => { clearTimeout(timer); done(null); });
+  });
+}
+
+function calcExactEV(fdFair, expectedPayout, amount) {
+  if (!fdFair || !expectedPayout || !amount) return null;
+  return (fdFair * expectedPayout / amount - 1) * 100;
 }
 
 // ── Formatting ─────────────────────────────────────────
@@ -229,7 +293,7 @@ function formatPost(bet) {
   const statsLine = [rsPct, fairPct, evStr, bet.units + 'u'].filter(Boolean).join(' | ');
 
   const lines = [
-    `+EV Pick: ${line} · ${bet.market} · ${bet.sport}`,
+    `${line} · ${bet.market} · ${bet.sport}`,
     statsLine,
   ];
 
@@ -319,23 +383,52 @@ async function run() {
 
     for (let i = 0; i < newBets.length; i++) {
       const bet = newBets[i];
+      // Capture backend EV before any live/exact-payout mutations.
+      // postedEv comparison uses backend EV so the evJumped check
+      // stays on the same scale across runs — exact-payout EV is
+      // lower (includes slippage) and would artificially inflate the jump.
+      const backendEv = bet.ev;
 
-      // Refresh RS probability live before posting
-      const liveProb = await fetchLiveRSProb(bet);
-      if (liveProb !== null) {
+      // Refresh RS probability + fetch exact payout via WebSocket
+      const fdFair   = (bet.adjFairPct || 0) / 100;
+      const liveData = await fetchLiveRSData(bet);
+      if (liveData !== null) {
+        const { prob: liveProb, marketId, outcomeId } = liveData;
         const livePct = Math.round(liveProb * 1000) / 10;
-        const fdFair  = (bet.adjFairPct || 0) / 100;
         const liveEv  = calcEV(fdFair, liveProb);
         if (liveEv !== null && liveEv < MIN_EV) {
           console.log('ev-poster: skip', bet.betKey, '— live RS prob', livePct + '% drops EV to', liveEv.toFixed(1) + '%');
+          // Store cached bet.ev (not live EV) so evJump stays ~0 and repost logic doesn't keep retriggering
+          postedEv.set(bet.betKey, { ev: bet.ev, postedAt: Date.now() });
+          saveState();
           continue;
         }
         if (liveEv !== null) {
           const staleness = Math.abs(livePct - bet.rsPct);
           if (staleness > 0.5) console.log('ev-poster: live RS update', bet.betKey, '| cached', bet.rsPct + '% → live', livePct + '%');
-          bet.rsPct  = livePct;
-          bet.ev     = Math.round(liveEv * 10) / 10;
-          bet.units  = unitsEV(liveEv, fdFair);
+          bet.rsPct = livePct;
+          bet.ev    = Math.round(liveEv * 10) / 10;
+          bet.units = unitsEV(liveEv, fdFair);
+        }
+        // Fetch exact payout via WebSocket — uses actual stake size so slippage is included
+        if (marketId && outcomeId) {
+          const stakeRax = Math.round(bet.units * STAKE_RAX);
+          const payout   = await fetchExactPayout(marketId, outcomeId, stakeRax);
+          if (payout != null) {
+            const exactEv = calcExactEV(fdFair, payout, stakeRax);
+            if (exactEv !== null) {
+              if (exactEv < MIN_EV) {
+                console.log('ev-poster: skip', bet.betKey, '— slippage-adjusted EV', exactEv.toFixed(1) + '% < min');
+                postedEv.set(bet.betKey, { ev: bet.ev, postedAt: Date.now() });
+                saveState();
+                continue;
+              }
+              console.log('ev-poster: exact payout', payout, 'Rax for', stakeRax, '(' + bet.units + 'u) | EV', exactEv.toFixed(1) + '% (was', bet.ev + '%)');
+              bet.ev    = Math.round(exactEv * 10) / 10;
+              bet.units = unitsEV(exactEv, fdFair);
+            }
+          }
+          // gameUrl already contains the correct RS market URL from the API response
         }
       }
 
@@ -354,11 +447,14 @@ async function run() {
         if (res.ok) {
           console.log('ev-poster: posted', bet.betKey, '| EV', bet.ev + '%');
           const now = Date.now();
-          postedEv.set(bet.betKey, { ev: bet.ev, postedAt: now });
+          // Store backendEv (pre-mutation) so next run's evJump comparison
+          // stays on the same scale. Storing exact-payout EV (lower due to
+          // slippage) would always produce a 5%+ jump on the next run.
+          postedEv.set(bet.betKey, { ev: backendEv, postedAt: now });
           dailyPosts.push({
             betKey: bet.betKey, side: bet.side, market: bet.market,
             sport: bet.sport,   game: bet.game,  pt: bet.pt ?? null,
-            ev: bet.ev,         rsPct: bet.rsPct,
+            ev: bet.ev,         rsPct: bet.rsPct, units: bet.units,
             rsGameId: bet.rsGameId || null, rsSport: bet.rsSport || null,
             postedAt: now,
           });
@@ -380,29 +476,40 @@ async function run() {
 
 // ── Result checking ────────────────────────────────────
 
-async function checkResult(post) {
-  if (!post.rsGameId || !post.rsSport) return null;
+function isSubseq(abbr, full) {
+  let i = 0;
+  for (const c of full) { if (c === abbr[i]) i++; if (i === abbr.length) return true; }
+  return false;
+}
+
+function resolveResult(post, markets) {
+  const labels  = RS_MARKET_MAP[post.market] || RS_ML_LABELS;
+  const mkt     = markets.find(m => labels.includes(m.label));
+  if (!mkt) return null;
+  const outcomes  = mkt.outcomes || [];
+  const normSide  = normName(post.side);
+  const outcome   = outcomes.find(o => {
+    const norm = normName(o.label).replace(/\d/g, ''); // strip digits — RS spread labels include spread value e.g. "OKC +3.5"
+    return norm === normSide || normSide.includes(norm) || norm.includes(normSide) || isSubseq(norm, normSide);
+  });
+  if (!outcome) return null;
+  if (outcome.isWinner === true)  return 'win';
+  if (outcome.isWinner === false) return 'loss';
+  const maxProb = Math.max(...outcomes.map(o => o.probability || 0));
+  if (maxProb < 0.90) return null;
+  return outcome.probability >= 0.90 ? 'win' : 'loss';
+}
+
+async function fetchGameMarkets(rsSport, rsGameId) {
   try {
     const res = await fetch(
-      `${RS_BASE}/predictions/game/${post.rsSport}/${post.rsGameId}/markets`,
+      `${RS_BASE}/predictions/game/${rsSport}/${rsGameId}/markets`,
       { headers: rsHeaders(), signal: AbortSignal.timeout(8000), dispatcher: rsDispatcher }
     );
     if (!res.ok) return null;
     const data = await res.json();
-    if (data.statusCode === 429) return null;
-    const markets = data.markets || [];
-    const labels  = RS_MARKET_MAP[post.market] || RS_ML_LABELS;
-    const mkt     = markets.find(m => labels.includes(m.label));
-    if (!mkt) return null;
-    const outcomes = mkt.outcomes || [];
-    const maxProb  = Math.max(...outcomes.map(o => o.probability || 0));
-    if (maxProb < 0.95) return null; // not settled yet
-    const normSide = normName(post.side);
-    const outcome  = outcomes.find(o =>
-      normName(o.label).includes(normSide) || normSide.includes(normName(o.label))
-    );
-    if (!outcome) return null;
-    return outcome.probability >= 0.95 ? 'win' : 'loss';
+    if (data.statusCode) return null;
+    return data.markets || [];
   } catch(e) { return null; }
 }
 
@@ -416,12 +523,20 @@ async function postDailySummary() {
   for (const p of dailyPosts) byKey.set(p.betKey, p);
   const posts = Array.from(byKey.values());
 
-  console.log('ev-poster: checking results for', posts.length, 'bets');
-  const results = [];
-  for (const post of posts) {
-    const result = await checkResult(post);
-    results.push({ ...post, result });
+  // Fetch markets per unique game (avoids 429 rate limit from 18+ sequential calls)
+  const gameCache = new Map();
+  const uniqueGames = [...new Set(posts.filter(p => p.rsGameId).map(p => `${p.rsSport}:${p.rsGameId}`))];
+  console.log('ev-poster: checking results —', posts.length, 'bets across', uniqueGames.length, 'games');
+  for (const key of uniqueGames) {
+    const [sport, id] = key.split(':');
+    const markets = await fetchGameMarkets(sport, id);
+    gameCache.set(key, markets || []);
+    if (uniqueGames.indexOf(key) < uniqueGames.length - 1) await new Promise(r => setTimeout(r, 800));
   }
+  const results = posts.map(post => ({
+    ...post,
+    result: post.rsGameId ? resolveResult(post, gameCache.get(`${post.rsSport}:${post.rsGameId}`) || []) : null,
+  }));
 
   const wins    = results.filter(r => r.result === 'win').length;
   const losses  = results.filter(r => r.result === 'loss').length;
@@ -437,23 +552,70 @@ async function postDailySummary() {
   const weekTot  = weeklyRecord.w + weeklyRecord.l;
   const weekRate = weekTot > 0 ? Math.round(weeklyRecord.w / weekTot * 100) : 0;
 
+  // Expected profit = sum of (EV% × units) across all picks
+  const expectedU = posts.reduce((sum, p) => {
+    const u = p.units ?? unitsEV(p.ev, p.rsPct != null ? p.rsPct / 100 : null);
+    return sum + (p.ev / 100) * (u || 0);
+  }, 0);
+  const expectedStr = (expectedU >= 0 ? '+' : '') + expectedU.toFixed(2) + 'u expected';
+
   const etDate  = new Date().toLocaleString('en-US', { timeZone: 'America/New_York', month: 'long', day: 'numeric' });
+
+  function teamNickname(name) {
+    const words = (name || '').split(' ');
+    const last = words[words.length - 1];
+    // Multi-word nicknames (Red Sox, White Sox, Blue Jays, etc.)
+    return (last === 'Sox' || last === 'Jays') ? words.slice(-2).join(' ') : last;
+  }
+  function abbrevGame(game) {
+    return (game || '').split(' @ ').map(teamNickname).join(' @ ');
+  }
+  function betLine(r) {
+    const isML     = r.market === 'ML';
+    const isRFI    = r.market === 'RFI';
+    const isTotal  = r.market === 'Total';
+    const isSpread = r.market === 'Spread';
+    // No + prefix for totals (219.5 not +219.5); + is correct for spreads
+    const ptStr    = r.pt != null ? ' ' + (r.pt > 0 && !isTotal ? '+' : '') + r.pt : '';
+    const display  = isML ? teamNickname(r.side)
+                   : isRFI ? r.side
+                   : teamNickname(r.side) + ptStr;
+    const mktTag   = isML ? ' ML' : (isRFI ? '' : ` · ${r.market}`);
+    const gameTag  = (isRFI || (isSpread && r.sport !== 'NBA') || isTotal) && r.game ? ` · ${abbrevGame(r.game)}` : '';
+    return `${display}${mktTag}${gameTag} · +${r.ev.toFixed(1)}%`;
+  }
+
+  const SPORT_ORDER  = ['NBA', 'NHL', 'MLB', 'WNBA', 'FC'];
+  const MARKET_ORDER = ['ML', 'Spread', 'Total', 'RFI'];
+  const sportSort = (a, b) => {
+    const is = SPORT_ORDER.indexOf(a.sport),  js = SPORT_ORDER.indexOf(b.sport);
+    const sd = (is === -1 ? 99 : is) - (js === -1 ? 99 : js);
+    if (sd !== 0) return sd;
+    const im = MARKET_ORDER.indexOf(a.market), jm = MARKET_ORDER.indexOf(b.market);
+    return (im === -1 ? 99 : im) - (jm === -1 ? 99 : jm);
+  };
+  const winList     = results.filter(r => r.result === 'win').sort(sportSort);
+  const lossList    = results.filter(r => r.result === 'loss').sort(sportSort);
+  const pendingList = results.filter(r => r.result === null).sort(sportSort);
 
   const lines = [
     `📊 RaxEdge Daily Summary — ${etDate}`,
     '-',
-    `${posts.length} pick${posts.length !== 1 ? 's' : ''} · ${wins}W ${losses}L${pending ? ` · ${pending} pending` : ''} · ${hitRate}% hit rate`,
+    `${posts.length} pick${posts.length !== 1 ? 's' : ''} · ${wins}W ${losses}L${pending ? ` · ${pending} pending` : ''} · ${hitRate}% hit rate · ${expectedStr}`,
     `Week: ${weeklyRecord.w}W ${weeklyRecord.l}L · ${weekRate}%`,
-    '-',
   ];
 
-  for (const r of results) {
-    const icon   = r.result === 'win' ? '✅' : r.result === 'loss' ? '❌' : '⏳';
-    const ptStr  = r.pt != null ? ' ' + (r.pt > 0 ? '+' : '') + r.pt : '';
-    const line   = (r.market === 'ML' || r.market === 'RFI') ? r.side : r.side + ptStr;
-    const mktTag = (r.market === 'ML' || r.market === 'RFI') ? r.market : '';
-    const suffix = r.result === null ? ' · in progress' : '';
-    lines.push(`${icon} ${line}${mktTag ? ' ' + mktTag : ''} · ${Math.round(r.rsPct)}% RS · +${r.ev.toFixed(1)}% EV${suffix}`);
+  if (winList.length) {
+    lines.push('-', `✅ Wins (${winList.length})`);
+    winList.forEach(r => lines.push(betLine(r)));
+  }
+  if (lossList.length) {
+    lines.push('-', `❌ Losses (${lossList.length})`);
+    lossList.forEach(r => lines.push(betLine(r)));
+  }
+  if (pendingList.length) {
+    lines.push('-', `⏳ Pending (${pendingList.length})`);
+    pendingList.forEach(r => lines.push(betLine(r)));
   }
 
   const text = lines.join('\n');
