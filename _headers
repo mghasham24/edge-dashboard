@@ -1,0 +1,3 @@
+/api/*
+  Cache-Control: no-store, no-cache
+  Pragma: no-cache
