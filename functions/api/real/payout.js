@@ -5,10 +5,26 @@
 // D1-cached per (marketId, outcomeKey, amount) for 30s.
 
 import { getSessionOrCron } from '../../_lib/auth.js';
+import { hashidsEncode } from '../../_lib/hashids.js';
 
-const CACHE_TTL  = 30;
-const RS_BASE    = 'https://web.realapp.com';
-const RS_HEADERS = { 'Accept': 'application/json', 'Content-Type': 'application/json' };
+const CACHE_TTL = 30;
+const RS_BASE   = 'https://web.realapp.com';
+
+function buildRsHeaders(token, deviceUuid) {
+  return {
+    'Accept': 'application/json',
+    'Content-Type': 'application/json',
+    'Origin': 'https://realsports.io',
+    'Referer': 'https://realsports.io/',
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
+    'real-auth-info': token,
+    'real-device-name': '5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
+    'real-device-type': 'desktop_web',
+    'real-device-uuid': deviceUuid,
+    'real-request-token': hashidsEncode(Date.now()),
+    'real-version': '31',
+  };
+}
 
 function fail(status, msg) {
   return new Response(JSON.stringify({ error: msg }), {
@@ -59,20 +75,15 @@ export async function onRequestGet(context) {
   if (!token) return fail(503, 'No RS auth token available');
 
   // Resolve numeric outcomeId from RS game markets API
-  const [rsUserId, rsDeviceId, rsSessionToken] = token.split('!');
-  const rsAuthHeaders = {
-    'Accept': 'application/json',
-    'Authorization': `Bearer ${rsSessionToken || token}`,
-    'x-device-id': rsDeviceId || '',
-    'x-rs-user-id': rsUserId || '',
-  };
+  const deviceUuid = token.split('!')[1] || '';
+  const rsHeaders  = buildRsHeaders(token, deviceUuid);
 
   let outcomeId = null;
   let debugInfo = {};
   try {
     const marketsRes = await fetch(
       `${RS_BASE}/predictions/game/${rsSport}/${rsGameId}/markets`,
-      { headers: rsAuthHeaders, signal: AbortSignal.timeout(6000) }
+      { headers: rsHeaders, signal: AbortSignal.timeout(6000) }
     );
     debugInfo.marketsStatus = marketsRes.status;
     if (marketsRes.ok) {
