@@ -657,6 +657,75 @@ function scheduleMidnightReset() {
   }, Math.max(msUntil, 60_000));
 }
 
+// ── Payout proxy HTTP server ───────────────────────────
+// CF Workers can't WebSocket to web.realsports.io (Cloudflare loopback block).
+// This endpoint lets the CF payout.js call the VPS instead, which uses the
+// residential proxy to reach RS WebSocket and return the exact expectedPayout.
+//
+// GET /payout?marketId=X&outcomeKey=SAS&rsGameId=Y&rsSport=nba&amount=Z&key=PAYOUT_PROXY_KEY
+
+import { createServer } from 'http';
+
+const PAYOUT_PROXY_PORT = parseInt(process.env.PAYOUT_PROXY_PORT || '3002');
+const PAYOUT_PROXY_KEY  = process.env.PAYOUT_PROXY_KEY || EV_POSTER_KEY;
+
+function normNameLocal(s) { return (s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
+
+const payoutServer = createServer(async (req, res) => {
+  const url    = new URL(req.url, `http://localhost:${PAYOUT_PROXY_PORT}`);
+  if (url.pathname !== '/payout') { res.writeHead(404); res.end('Not found'); return; }
+
+  const key = url.searchParams.get('key');
+  if (key !== PAYOUT_PROXY_KEY) { res.writeHead(401); res.end(JSON.stringify({ error: 'Unauthorized' })); return; }
+
+  const marketId   = parseInt(url.searchParams.get('marketId'));
+  const outcomeKey = (url.searchParams.get('outcomeKey') || '').trim();
+  const rsGameId   = url.searchParams.get('rsGameId');
+  const rsSport    = url.searchParams.get('rsSport');
+  const amount     = Math.min(Math.max(parseInt(url.searchParams.get('amount') || '700'), 1), 100000);
+
+  if (!marketId || !outcomeKey || !rsGameId || !rsSport) {
+    res.writeHead(400); res.end(JSON.stringify({ error: 'Missing params' })); return;
+  }
+
+  try {
+    // Resolve outcomeId from RS game markets API (via residential proxy)
+    const marketsRes = await fetch(
+      `${RS_BASE}/predictions/game/${rsSport}/${rsGameId}/markets`,
+      { headers: rsHeaders(), signal: AbortSignal.timeout(6000), dispatcher: rsDispatcher }
+    );
+    if (!marketsRes.ok) {
+      res.writeHead(502); res.end(JSON.stringify({ error: 'RS markets API ' + marketsRes.status })); return;
+    }
+    const data    = await marketsRes.json();
+    const markets = data.markets || [];
+    const mkt     = markets.find(m => m.id === marketId);
+    if (!mkt) {
+      res.writeHead(404); res.end(JSON.stringify({ error: 'Market ' + marketId + ' not found', marketIds: markets.map(m => m.id) })); return;
+    }
+    const normTarget = normNameLocal(outcomeKey);
+    const outcome = (mkt.outcomes || []).find(o => {
+      const normLabel = normNameLocal(o.label).replace(/\d/g, '');
+      const normOKey  = normNameLocal(o.key).replace(/\d/g, '');
+      return normLabel === normTarget || normOKey === normTarget
+          || normTarget.includes(normLabel) || normLabel.includes(normTarget);
+    });
+    if (!outcome) {
+      res.writeHead(404); res.end(JSON.stringify({ error: 'Outcome ' + outcomeKey + ' not found', outcomes: (mkt.outcomes||[]).map(o=>({key:o.key,label:o.label})) })); return;
+    }
+
+    const payout = await fetchExactPayout(mkt.id, outcome.id, amount);
+    if (payout == null) {
+      res.writeHead(502); res.end(JSON.stringify({ error: 'WS payout returned null' })); return;
+    }
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, expectedPayout: payout, marketId: mkt.id, outcomeId: outcome.id, amount }));
+  } catch(e) {
+    res.writeHead(500); res.end(JSON.stringify({ error: e.message }));
+  }
+});
+
 // ── Boot ───────────────────────────────────────────────
 
 if (!SITE_URL || !EV_POSTER_KEY || !RS_AUTH_INFO || !RS_GROUP_ID) {
@@ -666,6 +735,7 @@ if (!SITE_URL || !EV_POSTER_KEY || !RS_AUTH_INFO || !RS_GROUP_ID) {
 
 loadState();
 console.log(`ev-poster: starting | group ${RS_GROUP_ID} | min EV ${MIN_EV}% | max ${MAX_POSTS}/run | cooldown ${REPOST_COOLDOWN_MS/3600000}h | urgent ≥${REPOST_URGENT_EV}%`);
+payoutServer.listen(PAYOUT_PROXY_PORT, () => console.log(`ev-poster: payout proxy on port ${PAYOUT_PROXY_PORT}`));
 scheduleMidnightReset();
 run();
 setInterval(run, 15_000);
