@@ -73,6 +73,7 @@ export async function onRequestGet(context) {
   } catch(e) {}
   if (!token) token = env.RS_AUTH_TOKEN || env.REAL_AUTH_TOKEN;
   if (!token) return fail(503, 'No RS auth token available');
+  token = token.trim();
 
   // Resolve numeric outcomeId from RS game markets API
   const deviceUuid = token.split('!')[1] || '';
@@ -115,7 +116,7 @@ export async function onRequestGet(context) {
 
   // Open RS Socket.IO WebSocket and get exact payout
   const params = new URLSearchParams({ auth: token, EIO: '3', transport: 'websocket' });
-  const wsUrl  = `wss://web.realsports.io/socket.io/?${params}`;
+  const wsUrl  = `https://web.realsports.io/socket.io/?${params}`;
 
   try {
     const resp = await fetch(wsUrl, { headers: { Upgrade: 'websocket' } });
