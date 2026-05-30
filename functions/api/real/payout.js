@@ -48,7 +48,7 @@ export async function onRequestGet(context) {
 
   // VPS payout proxy — uses residential proxy to reach RS WebSocket
   const proxyKey  = env.EV_POSTER_KEY || env.PAYOUT_PROXY_KEY;
-  const proxyHost = env.PAYOUT_PROXY_HOST || 'http://178.156.194.254:3002';
+  const proxyHost = env.PAYOUT_PROXY_HOST || 'http://payout.raxedge.com:3002';
   if (!proxyKey) return fail(503, 'No payout proxy key configured');
 
   const proxyQs = new URLSearchParams({
