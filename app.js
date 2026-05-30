@@ -893,10 +893,9 @@
             } else {
                 try { posthog.identify(data.email, { email: data.email, plan: data.plan, is_admin: !!data.is_admin }); } catch(e) {}
                 try { posthog.capture('login', { method: 'password', plan: data.plan }); } catch(e) {}
-                // Full reload so the session cookie is available in the browser's cookie jar
-                // before any API fetches fire. Chrome/Brave have a race condition where
-                // cookies from fetch() responses aren't synchronised before the next fetch().
-                location.reload();
+                // Navigate to root instead of reload() — Chrome/Brave commit cookies
+                // to the jar before a fresh navigation but sometimes not before a reload().
+                window.location.href = '/';
             }
         } catch (e) {
             showGateErr('Network error -- please try again');
