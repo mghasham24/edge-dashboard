@@ -298,15 +298,24 @@ function formatPost(bet) {
   ];
 
   // RS sensitivity: one full stats line per +1/+2/+3% RS spike
+  // Apply the same slippage factor as the main line so all lines are on
+  // the same scale (WS-adjusted). Avoids non-monotonic display when the
+  // main line uses WS exact EV (lower, includes slippage) but sensitivity
+  // lines use rsBaseTake approximation (higher, no slippage).
   if (bet.rsPct != null && bet.adjFairPct != null) {
     const fdFair = bet.adjFairPct / 100;
     const rsProb = bet.rsPct / 100;
+    const approxEvMain = calcEV(fdFair, rsProb);
+    const slippageFactor = (approxEvMain != null && approxEvMain > 0 && bet.ev > 0)
+      ? bet.ev / approxEvMain   // < 1 when WS slippage reduced EV vs approximation
+      : 1;
     for (const n of [1, 2, 3]) {
       const spiked   = Math.min(0.999, rsProb + n / 100);
       const ev       = calcEV(fdFair, spiked);
       if (ev == null) continue;
-      const u        = unitsEV(ev, fdFair);
-      const evStr    = (ev >= 0 ? '+' : '') + ev.toFixed(1) + '% EV';
+      const adjEv    = ev * slippageFactor;
+      const u        = unitsEV(adjEv, fdFair);
+      const evStr    = (adjEv >= 0 ? '+' : '') + adjEv.toFixed(1) + '% EV';
       const rsPctStr = Math.round(spiked * 100) + '% RS';
       const fairStr  = bet.adjFairPct.toFixed(1) + '% Fair';
       lines.push('-');

@@ -110,11 +110,27 @@ export async function onRequestGet(context) {
       });
     }
 
-    // Parse clean team names for all events, then assign (Game N) by start time for doubleheaders
-    const parsedToday = todayEvents.map(e => {
+    // Parse clean team names for all events
+    const parsedAll = todayEvents.map(e => {
       const t = parseEventName(e.name);
       return t ? { event: e, away: t.away, home: t.home } : null;
     }).filter(Boolean);
+
+    // Deduplicate same-matchup events from different FD list URLs.
+    // FD sometimes returns the same physical game under two eventIds (competition
+    // feed vs custom page) with different/stale odds — keep only the newest event
+    // per (away, home, ET-date). For true doubleheaders, both games are on the
+    // same date but have openDates hours apart so both survive dedup.
+    const matchupBest = {};
+    parsedAll.forEach(p => {
+      const dateET = etFmt.format(new Date(p.event.openDate));
+      const key = p.away + '|' + p.home + '|' + dateET;
+      const existing = matchupBest[key];
+      if (!existing || new Date(p.event.openDate) > new Date(existing.event.openDate)) {
+        matchupBest[key] = p;
+      }
+    });
+    const parsedToday = Object.values(matchupBest);
 
     const matchupGroups = {};
     parsedToday.forEach(p => {
