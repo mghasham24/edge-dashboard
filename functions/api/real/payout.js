@@ -1,12 +1,14 @@
 // functions/api/real/payout.js
-// GET /api/real/payout?marketId=X&outcomeId=Y&amount=Z
-// Opens an RS Socket.IO WebSocket and returns the exact expected payout for a given stake.
-// Result includes market slippage at that stake size.
-// D1-cached per (marketId, outcomeId, amount) with 30s TTL.
+// GET /api/real/payout?marketId=X&outcomeKey=DET&rsGameId=Y&rsSport=mlb&amount=Z
+// Resolves the numeric outcomeId from the RS game markets API, then opens a
+// Socket.IO WebSocket to get the exact expectedPayout including slippage.
+// D1-cached per (marketId, outcomeKey, amount) for 30s.
 
 import { getSessionOrCron } from '../../_lib/auth.js';
 
-const CACHE_TTL = 30;
+const CACHE_TTL  = 30;
+const RS_BASE    = 'https://api.realsports.io';
+const RS_HEADERS = { 'Accept': 'application/json', 'Content-Type': 'application/json' };
 
 function fail(status, msg) {
   return new Response(JSON.stringify({ error: msg }), {
@@ -14,19 +16,25 @@ function fail(status, msg) {
   });
 }
 
+function normKey(s) { return (s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
+
 export async function onRequestGet(context) {
   const { request, env } = context;
   const session = await getSessionOrCron(request, env);
   if (!session) return fail(401, 'Not authenticated');
 
-  const url = new URL(request.url);
-  const marketId  = parseInt(url.searchParams.get('marketId'));
-  const outcomeId = parseInt(url.searchParams.get('outcomeId'));
-  const amount    = Math.min(Math.max(parseInt(url.searchParams.get('amount') || '700'), 1), 100000);
+  const url        = new URL(request.url);
+  const marketId   = parseInt(url.searchParams.get('marketId'));
+  const outcomeKey = (url.searchParams.get('outcomeKey') || '').trim();
+  const rsGameId   = url.searchParams.get('rsGameId');
+  const rsSport    = url.searchParams.get('rsSport');
+  const amount     = Math.min(Math.max(parseInt(url.searchParams.get('amount') || '700'), 1), 100000);
 
-  if (!marketId || !outcomeId) return fail(400, 'Missing marketId or outcomeId');
+  if (!marketId || !outcomeKey || !rsGameId || !rsSport) {
+    return fail(400, 'Missing marketId, outcomeKey, rsGameId, or rsSport');
+  }
 
-  const cacheKey = `payout:${marketId}:${outcomeId}:${amount}`;
+  const cacheKey = `payout:${marketId}:${normKey(outcomeKey)}:${amount}`;
   const now = Math.floor(Date.now() / 1000);
 
   // D1 cache check
@@ -39,7 +47,7 @@ export async function onRequestGet(context) {
     }
   } catch(e) {}
 
-  // Get RS auth token from D1 (from TM bridge), fallback to CF env var
+  // Get RS auth token
   let token = null;
   try {
     const row = await env.DB.prepare(
@@ -50,11 +58,38 @@ export async function onRequestGet(context) {
   if (!token) token = env.RS_AUTH_TOKEN;
   if (!token) return fail(503, 'No RS auth token available');
 
+  // Resolve numeric outcomeId from RS game markets API
+  let outcomeId = null;
+  try {
+    const marketsRes = await fetch(
+      `${RS_BASE}/predictions/game/${rsSport}/${rsGameId}/markets`,
+      { headers: { ...RS_HEADERS, Authorization: `Bearer ${token.split('!')[2] || token}` },
+        signal: AbortSignal.timeout(6000) }
+    );
+    if (marketsRes.ok) {
+      const data = await marketsRes.json();
+      const markets = data.markets || [];
+      const mkt = markets.find(m => m.id === marketId);
+      if (mkt) {
+        const normTarget = normKey(outcomeKey);
+        const outcome = (mkt.outcomes || []).find(o => {
+          const normLabel = normKey(o.label).replace(/\d/g, '');
+          const normOKey  = normKey(o.key).replace(/\d/g, '');
+          return normLabel === normTarget || normOKey === normTarget
+              || normTarget.includes(normLabel) || normLabel.includes(normTarget);
+        });
+        if (outcome) outcomeId = outcome.id;
+      }
+    }
+  } catch(e) {}
+
+  if (!outcomeId) return fail(404, 'Could not resolve outcomeId for ' + outcomeKey);
+
+  // Open RS Socket.IO WebSocket and get exact payout
   const params = new URLSearchParams({ auth: token, EIO: '3', transport: 'websocket' });
   const wsUrl  = `wss://web.realsports.io/socket.io/?${params}`;
 
   try {
-    // CF Workers outbound WebSocket via fetch with Upgrade header
     const resp = await fetch(wsUrl, { headers: { Upgrade: 'websocket' } });
     const ws = resp.webSocket;
     if (!ws) return fail(502, 'WebSocket upgrade failed');
@@ -70,7 +105,6 @@ export async function onRequestGet(context) {
 
       ws.addEventListener('message', (event) => {
         const data = typeof event.data === 'string' ? event.data : event.data.toString();
-
         if (!connected) {
           if (data.startsWith('0')) {
             connected = true;
@@ -78,7 +112,6 @@ export async function onRequestGet(context) {
           }
           return;
         }
-
         if (data.startsWith('430')) {
           clearTimeout(timer);
           try { ws.close(1000, 'done'); } catch(e) {}
@@ -91,19 +124,11 @@ export async function onRequestGet(context) {
         }
       });
 
-      ws.addEventListener('error', () => {
-        clearTimeout(timer);
-        reject(new Error('WebSocket error'));
-      });
-
-      ws.addEventListener('close', (event) => {
-        clearTimeout(timer);
-        if (!connected) reject(new Error('WebSocket closed before connect'));
-      });
+      ws.addEventListener('error', () => { clearTimeout(timer); reject(new Error('WebSocket error')); });
+      ws.addEventListener('close', () => { clearTimeout(timer); if (!connected) reject(new Error('closed before connect')); });
     });
 
     const body = JSON.stringify({ ok: true, expectedPayout, marketId, outcomeId, amount });
-
     try {
       await env.DB.prepare(
         'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at'

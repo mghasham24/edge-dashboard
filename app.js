@@ -33,8 +33,8 @@
     var rsPredAdj = 0; // global RS% offset (+0/+1/+2) for sensitivity analysis
     var probsExact = {}; // full-precision RS probability per row id (from sync.js o.probability)
     var vols = {}; // volume display per row id
-    var rsMarketIds  = {}; // row id -> RS market id (for payout API)
-    var rsOutcomeIds = {}; // row id -> RS outcome id (for payout API)
+    var rsMarketIds   = {}; // row id -> RS market id (numeric, for payout API)
+    var rsOutcomeKeys = {}; // row id -> RS outcome key (string e.g. "DET", for payout API)
     var payoutRatios = {}; // row id -> expectedPayout/amount (exact WS payout ratio, includes slippage)
     var yourLines = {};
     var altOdds = {}; // gameId -> { spreads: {teamName: {point: price}}, totals: {side: {point: price}} }
@@ -4760,7 +4760,7 @@
 
     function loadOdds() {
         stopAllPollers();
-        payoutRatios = {};
+        payoutRatios = {}; rsMarketIds = {}; rsOutcomeKeys = {};
         if (!isPro()) {
             currentSport = FREE_SPORTS.indexOf(currentSport) !== -1 ? currentSport : FREE_SPORTS[0];
             var mktEl = document.getElementById('mkt-filter');
@@ -6449,11 +6449,11 @@
 
     // Fetch exact RS payout for each +EV row via the CF payout proxy.
     // Updates payoutRatios[rowId] = expectedPayout/amount, then re-renders.
-    // Only runs for rows that have both a positive approx EV and known RS marketId/outcomeId.
     function fetchExactEvForRows(sport) {
         var amount = Math.round(parseFloat(document.getElementById('unit-size').value) || 300);
         var rows = (rawRowsBySport[sport] || rawRows).filter(function(r) {
-            if (!rsMarketIds[r.id] || !rsOutcomeIds[r.id]) return false;
+            if (!rsMarketIds[r.id] || !rsOutcomeKeys[r.id]) return false;
+            if (!rsGameIds[r.game]) return false;
             var pr = probsExact[r.id] != null ? probsExact[r.id] : (preds[r.id] ? parseFloat(preds[r.id]) / 100 : null);
             if (!pr || pr <= 0 || pr >= 1) return false;
             var pairs = {};
@@ -6462,16 +6462,20 @@
             var nv = novig(pair.A ? imp(pair.A.am) : null, pair.B ? imp(pair.B.am) : null);
             var fair = r.ps === 'A' ? nv.fa : nv.fb;
             if (!fair) return false;
-            var approxEv = (fair * (1/pr) * (1-rsBaseTake(pr)) - 1) * 100;
-            return approxEv > 0;
+            return (fair * (1/pr) * (1-rsBaseTake(pr)) - 1) * 100 > 0;
         });
         if (!rows.length) return;
 
-        // Fetch up to 10 payouts in parallel (D1-cached after first call)
+        // Fetch up to 10 payouts in parallel (D1-cached 30s after first call)
         var batch = rows.slice(0, 10);
         Promise.all(batch.map(function(r) {
-            var mid = rsMarketIds[r.id], oid = rsOutcomeIds[r.id];
-            return fetch('/api/real/payout?marketId=' + mid + '&outcomeId=' + oid + '&amount=' + amount, { credentials: 'same-origin' })
+            var mid  = rsMarketIds[r.id];
+            var okey = rsOutcomeKeys[r.id];
+            var gid  = rsGameIds[r.game];
+            var sp   = rsGameSports[r.game] || currentSport.split('_')[1] || 'mlb';
+            var qs   = 'marketId=' + mid + '&outcomeKey=' + encodeURIComponent(okey)
+                     + '&rsGameId=' + gid + '&rsSport=' + sp + '&amount=' + amount;
+            return fetch('/api/real/payout?' + qs, { credentials: 'same-origin' })
                 .then(function(res) { return res.json(); })
                 .then(function(data) {
                     if (data.ok && data.expectedPayout > 0) {
@@ -6877,7 +6881,7 @@
                     preds[r.id] = String(match.pct);
                     if (match.probability != null) probsExact[r.id] = match.probability;
                     if (mktData && mktData.id != null) rsMarketIds[r.id] = mktData.id;
-                    if (match.id != null) rsOutcomeIds[r.id] = match.id;
+                    if (match.key) rsOutcomeKeys[r.id] = match.key;
                     if (mktData && mktData.volumeDisplay) {
                         vols[r.id] = mktData.volumeDisplay;
                         // Also set for the paired side (same game/market, opposite team)
