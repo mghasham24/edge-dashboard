@@ -893,9 +893,11 @@
             } else {
                 try { posthog.identify(data.email, { email: data.email, plan: data.plan, is_admin: !!data.is_admin }); } catch(e) {}
                 try { posthog.capture('login', { method: 'password', plan: data.plan }); } catch(e) {}
-                // Navigate to root instead of reload() — Chrome/Brave commit cookies
-                // to the jar before a fresh navigation but sometimes not before a reload().
-                window.location.href = '/';
+                // Don't navigate — call checkSession() directly in the same page context.
+                // The session cookie is already set by the login response. Navigation-based
+                // approaches (reload, href) race against Brave's cookie commit timing.
+                // Calling checkSession() here avoids any cross-page cookie sync issue.
+                checkSession();
             }
         } catch (e) {
             showGateErr('Network error -- please try again');
