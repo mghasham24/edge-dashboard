@@ -115,14 +115,13 @@ export async function onRequestGet(context) {
   });
 
   // Open RS Socket.IO WebSocket and get exact payout
+  // CF Workers outbound WS: use new WebSocket(wss://) — NOT fetch()+accept()
+  // accept() is server-side only; client connections use the standard browser WS API
   const params = new URLSearchParams({ auth: token, EIO: '3', transport: 'websocket' });
-  const wsUrl  = `https://web.realsports.io/socket.io/?${params}`;
+  const wsUrl  = `wss://web.realsports.io/socket.io/?${params}`;
 
   try {
-    const resp = await fetch(wsUrl, { headers: { Upgrade: 'websocket' } });
-    const ws = resp.webSocket;
-    if (!ws) return fail(502, 'WebSocket upgrade failed');
-    ws.accept();
+    const ws = new WebSocket(wsUrl);
 
     const expectedPayout = await new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -153,8 +152,8 @@ export async function onRequestGet(context) {
         }
       });
 
-      ws.addEventListener('error', () => { clearTimeout(timer); reject(new Error('WebSocket error')); });
-      ws.addEventListener('close', () => { clearTimeout(timer); if (!connected) reject(new Error('closed before connect')); });
+      ws.addEventListener('error', (e) => { clearTimeout(timer); reject(new Error('WS error: ' + (e.message || ''))); });
+      ws.addEventListener('close', (e) => { clearTimeout(timer); if (!connected) reject(new Error('WS closed before connect code=' + (e.code||'?'))); });
     });
 
     const body = JSON.stringify({ ok: true, expectedPayout, marketId, outcomeId, amount });
