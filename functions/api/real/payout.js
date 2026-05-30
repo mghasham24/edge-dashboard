@@ -7,7 +7,7 @@
 import { getSessionOrCron } from '../../_lib/auth.js';
 
 const CACHE_TTL  = 30;
-const RS_BASE    = 'https://api.realsports.io';
+const RS_BASE    = 'https://web.realapp.com';
 const RS_HEADERS = { 'Accept': 'application/json', 'Content-Type': 'application/json' };
 
 function fail(status, msg) {
@@ -83,7 +83,7 @@ export async function onRequestGet(context) {
       const mkt = markets.find(m => m.id === marketId);
       debugInfo.mktFound = !!mkt;
       if (mkt) {
-        debugInfo.outcomes = (mkt.outcomes || []).map(o => ({ id: o.id, key: o.key, label: o.label }));
+        debugInfo.outcomes = (mkt.outcomes || []).map(o => ({ id: o.id, outcomeId: o.outcomeId, outcome_id: o.outcome_id, key: o.key, label: o.label }));
         const normTarget = normKey(outcomeKey);
         const outcome = (mkt.outcomes || []).find(o => {
           const normLabel = normKey(o.label).replace(/\d/g, '');
