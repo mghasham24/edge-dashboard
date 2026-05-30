@@ -893,11 +893,18 @@
             } else {
                 try { posthog.identify(data.email, { email: data.email, plan: data.plan, is_admin: !!data.is_admin }); } catch(e) {}
                 try { posthog.capture('login', { method: 'password', plan: data.plan }); } catch(e) {}
-                // Don't navigate — call checkSession() directly in the same page context.
-                // The session cookie is already set by the login response. Navigation-based
-                // approaches (reload, href) race against Brave's cookie commit timing.
-                // Calling checkSession() here avoids any cross-page cookie sync issue.
-                checkSession();
+                // Try same-page checkSession first (works for Chrome and most browsers).
+                // If the cookie wasn't committed by the fetch response (Brave Shields
+                // aggressive mode blocks XHR-set cookies), fall back to a navigation-based
+                // cookie set via /api/auth/finalize which Brave always allows.
+                var meCheck = await fetch('/api/auth/me', { credentials: 'same-origin' });
+                if (meCheck.ok) {
+                    checkSession();
+                } else if (data._t) {
+                    window.location.href = '/api/auth/finalize?t=' + encodeURIComponent(data._t);
+                } else {
+                    checkSession();
+                }
             }
         } catch (e) {
             showGateErr('Network error -- please try again');

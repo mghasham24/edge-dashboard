@@ -44,10 +44,14 @@ export async function onRequestPost({ request, env }) {
       'INSERT INTO sessions (user_id, token, expires_at) VALUES (?,?,?)'
     ).bind(user.id, token, exp).run();
 
+    // Return token in body so client can use /api/auth/finalize for
+    // navigation-based cookie setting (required for Brave Shields aggressive mode,
+    // which blocks cookies set via fetch/XHR responses).
     return ok({
       email: user.email,
       plan: user.plan,
-      is_admin: user.is_admin || 0
+      is_admin: user.is_admin || 0,
+      _t: token
     }, 200, cookie(token, exp));
   } catch(e) {
     return err('Login failed: ' + (e && e.message ? e.message : String(e)), 500);
