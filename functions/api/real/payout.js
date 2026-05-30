@@ -131,8 +131,15 @@ export async function onRequestGet(context) {
 
       let connected = false;
 
-      ws.addEventListener('message', (event) => {
-        const data = typeof event.data === 'string' ? event.data : event.data.toString();
+      ws.addEventListener('message', async (event) => {
+        let data;
+        if (typeof event.data === 'string') {
+          data = event.data;
+        } else if (event.data instanceof ArrayBuffer) {
+          data = new TextDecoder().decode(event.data);
+        } else {
+          try { data = new TextDecoder().decode(await event.data.arrayBuffer()); } catch(e) { data = String(event.data); }
+        }
         if (!connected) {
           if (data.startsWith('0')) {
             connected = true;
