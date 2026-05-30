@@ -59,12 +59,19 @@ export async function onRequestGet(context) {
   if (!token) return fail(503, 'No RS auth token available');
 
   // Resolve numeric outcomeId from RS game markets API
+  const [rsUserId, rsDeviceId, rsSessionToken] = token.split('!');
+  const rsAuthHeaders = {
+    'Accept': 'application/json',
+    'Authorization': `Bearer ${rsSessionToken || token}`,
+    'x-device-id': rsDeviceId || '',
+    'x-rs-user-id': rsUserId || '',
+  };
+
   let outcomeId = null;
   try {
     const marketsRes = await fetch(
       `${RS_BASE}/predictions/game/${rsSport}/${rsGameId}/markets`,
-      { headers: { ...RS_HEADERS, Authorization: `Bearer ${token.split('!')[2] || token}` },
-        signal: AbortSignal.timeout(6000) }
+      { headers: rsAuthHeaders, signal: AbortSignal.timeout(6000) }
     );
     if (marketsRes.ok) {
       const data = await marketsRes.json();
