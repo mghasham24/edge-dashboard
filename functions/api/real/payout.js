@@ -68,16 +68,22 @@ export async function onRequestGet(context) {
   };
 
   let outcomeId = null;
+  let debugInfo = {};
   try {
     const marketsRes = await fetch(
       `${RS_BASE}/predictions/game/${rsSport}/${rsGameId}/markets`,
       { headers: rsAuthHeaders, signal: AbortSignal.timeout(6000) }
     );
+    debugInfo.marketsStatus = marketsRes.status;
     if (marketsRes.ok) {
       const data = await marketsRes.json();
       const markets = data.markets || [];
+      debugInfo.marketCount = markets.length;
+      debugInfo.marketIds = markets.map(m => ({ id: m.id, label: m.label }));
       const mkt = markets.find(m => m.id === marketId);
+      debugInfo.mktFound = !!mkt;
       if (mkt) {
+        debugInfo.outcomes = (mkt.outcomes || []).map(o => ({ id: o.id, key: o.key, label: o.label }));
         const normTarget = normKey(outcomeKey);
         const outcome = (mkt.outcomes || []).find(o => {
           const normLabel = normKey(o.label).replace(/\d/g, '');
@@ -87,10 +93,14 @@ export async function onRequestGet(context) {
         });
         if (outcome) outcomeId = outcome.id;
       }
+    } else {
+      debugInfo.marketsBody = await marketsRes.text().catch(() => '');
     }
-  } catch(e) {}
+  } catch(e) { debugInfo.error = e.message; }
 
-  if (!outcomeId) return fail(404, 'Could not resolve outcomeId for ' + outcomeKey);
+  if (!outcomeId) return new Response(JSON.stringify({ error: 'Could not resolve outcomeId for ' + outcomeKey, debug: debugInfo }), {
+    status: 404, headers: { 'Content-Type': 'application/json' }
+  });
 
   // Open RS Socket.IO WebSocket and get exact payout
   const params = new URLSearchParams({ auth: token, EIO: '3', transport: 'websocket' });
