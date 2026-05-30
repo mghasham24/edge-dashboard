@@ -39,7 +39,6 @@ const POLL_MS        = 2 * 60 * 1000;
 // Entity IDs sourced from pack scanner gc-entity-ids.json
 const TARGETS = [
   { key: 'guilavogui', entityId: '2348926' },
-  { key: 'ojeda',      entityId: '2348851' },
   { key: 'denkey',     entityId: '2348553' },
   { key: 'pec',        entityId: '2348684' },
   { key: 'grimaldo',   entityId: '732879'  },
@@ -211,6 +210,8 @@ async function poll() {
       seenIds.add(id);
 
       const name     = getPlayerName(listing);
+      if (!name || !name.toLowerCase().includes(target.key)) continue;
+
       const rating   = cardRating(listing.card) ?? cardRating(listing.card?.card) ?? null;
       const price    = listingPrice(listing);
       const maxPrice = rating != null ? rating * RAX_PER_RATING : null;
