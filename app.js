@@ -893,10 +893,9 @@
             } else {
                 try { posthog.identify(data.email, { email: data.email, plan: data.plan, is_admin: !!data.is_admin }); } catch(e) {}
                 try { posthog.capture('login', { method: 'password', plan: data.plan }); } catch(e) {}
-                // Try same-page checkSession first (works for Chrome and most browsers).
-                // If the cookie wasn't committed by the fetch response (Brave Shields
-                // aggressive mode blocks XHR-set cookies), fall back to a navigation-based
-                // cookie set via /api/auth/finalize which Brave always allows.
+                // Brief pause — some browsers (Brave) need time to commit a cookie
+                // from a fetch() response before it appears in the next request.
+                await new Promise(function(r) { setTimeout(r, 300); });
                 var meCheck = await fetch('/api/auth/me', { credentials: 'same-origin' });
                 if (meCheck.ok) {
                     checkSession();

@@ -21,10 +21,11 @@ export async function onRequestGet({ request, env }) {
       return Response.redirect('/', 302);
     }
 
+    const origin = new URL(request.url).origin;
     return new Response(null, {
       status: 302,
       headers: {
-        Location: '/',
+        Location: origin + '/',
         'Set-Cookie': cookie(token, session.expires_at),
         'Cache-Control': 'no-store',
       },
