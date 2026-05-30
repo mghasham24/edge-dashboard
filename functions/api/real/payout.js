@@ -55,7 +55,7 @@ export async function onRequestGet(context) {
     ).first();
     if (row) token = row.data;
   } catch(e) {}
-  if (!token) token = env.RS_AUTH_TOKEN;
+  if (!token) token = env.RS_AUTH_TOKEN || env.REAL_AUTH_TOKEN;
   if (!token) return fail(503, 'No RS auth token available');
 
   // Resolve numeric outcomeId from RS game markets API
