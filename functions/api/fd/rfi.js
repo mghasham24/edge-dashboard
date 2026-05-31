@@ -128,7 +128,8 @@ export async function onRequestGet(context) {
         gameData[gameKey] = {
           marketId,
           overSelId:  over.selectionId,
-          underSelId: under.selectionId
+          underSelId: under.selectionId,
+          cm: event.openDate ? Math.floor(new Date(event.openDate).getTime() / 1000) : 0,
         };
       } catch(e) {}
 
@@ -171,7 +172,7 @@ export async function onRequestGet(context) {
       if (yesAm == null || noAm == null) return;
       const nv = novig(yesAm, noAm);
       if (!nv) return;
-      rfiMap[gameKey] = { yesFair: nv.fa, noFair: nv.fb, yesAm, noAm, volume: 0 };
+      rfiMap[gameKey] = { yesFair: nv.fa, noFair: nv.fb, yesAm, noAm, volume: 0, cm: d.cm || 0 };
     });
 
     const body = JSON.stringify({ ok: true, rfi: rfiMap });

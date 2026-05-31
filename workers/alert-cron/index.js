@@ -931,7 +931,7 @@ async function runCron(env, ctx) {
                 ev: Math.round(ev * 10) / 10, units: u, fdOdds, pt: null,
                 rsPct: Math.round(rsO.probability * 1000) / 10,
                 adjFairPct: Math.round(fdFair * 1000) / 10,
-                gameUrl, commenceTime: 0, rsGameId: gameId, rsSport,
+                gameUrl, commenceTime: rfi.cm || 0, rsGameId: gameId, rsSport,
                 betKey: `baseball_mlb|${rfiGameKey}|RFI|${side}|`,
               });
             }
