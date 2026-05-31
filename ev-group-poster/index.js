@@ -27,6 +27,7 @@ const RS_GROUP_ID   = process.env.RS_GROUP_ID;
 const DEVICE_UUID   = process.env.RS_DEVICE_UUID || '2e0a38e2-0ee8-4f93-9a34-218ac1d10161';
 const RS_PROXY_URL  = process.env.RS_PROXY_URL || null;
 const MIN_EV             = parseFloat(process.env.MIN_EV              || '5');  // WS payout EV gate
+const LIVE_MIN_EV        = parseFloat(process.env.LIVE_MIN_EV         || '10'); // floor for live RS + slippage checks
 const PRE_FILTER_EV      = parseFloat(process.env.PRE_FILTER_EV       || '5');  // traditional-formula pre-filter
 const MAX_POSTS          = parseInt(process.env.MAX_POSTS              || '5');
 const POST_DELAY_MS      = parseInt(process.env.POST_DELAY_MS          || '5000');
@@ -406,7 +407,7 @@ async function run() {
         const { prob: liveProb, marketId, outcomeId } = liveData;
         const livePct = Math.round(liveProb * 1000) / 10;
         const liveEv  = calcEV(fdFair, liveProb);
-        if (liveEv !== null && liveEv < MIN_EV) {
+        if (liveEv !== null && liveEv < LIVE_MIN_EV) {
           console.log('ev-poster: skip', bet.betKey, '— live RS prob', livePct + '% drops EV to', liveEv.toFixed(1) + '%');
           // Update EV reference so evJumped check doesn't keep retriggering on small fluctuations,
           // but preserve postedAt — a skip is NOT a post, so cooldown must not restart.
@@ -429,7 +430,7 @@ async function run() {
           if (payout != null) {
             const exactEv = calcExactEV(fdFair, payout, stakeRax);
             if (exactEv !== null) {
-              if (exactEv < MIN_EV) {
+              if (exactEv < LIVE_MIN_EV) {
                 console.log('ev-poster: skip', bet.betKey, '— slippage-adjusted EV', exactEv.toFixed(1) + '% < min');
                 const prev = postedEv.get(bet.betKey);
                 postedEv.set(bet.betKey, { ev: bet.ev, postedAt: prev ? prev.postedAt : 0 });
