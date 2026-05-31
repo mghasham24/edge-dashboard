@@ -22,14 +22,14 @@ export async function onRequestGet({ request, env }) {
     }
 
     const origin = new URL(request.url).origin;
-    return new Response(null, {
-      status: 302,
-      headers: {
-        Location: origin + '/',
-        'Set-Cookie': cookie(token, session.expires_at),
-        'Cache-Control': 'no-store',
-      },
+    const headers = new Headers({
+      Location: origin + '/',
+      'Cache-Control': 'no-store',
     });
+    headers.append('Set-Cookie', cookie(token, session.expires_at));
+    // Clear stale __Host-session cookie that shadows the valid session= token
+    headers.append('Set-Cookie', '__Host-session=; Path=/; Secure; SameSite=Lax; Max-Age=0');
+    return new Response(null, { status: 302, headers });
   } catch(e) {
     return Response.redirect('/', 302);
   }

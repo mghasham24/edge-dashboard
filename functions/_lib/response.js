@@ -8,8 +8,12 @@ export function cookie(token, exp) {
 }
 
 export function ok(data, status, setCookie) {
-  const h = { 'Content-Type': 'application/json' };
-  if (setCookie) h['Set-Cookie'] = setCookie;
+  const h = new Headers({ 'Content-Type': 'application/json' });
+  if (setCookie) {
+    h.append('Set-Cookie', setCookie);
+    // Clear stale __Host-session cookie that can shadow the valid session= token
+    h.append('Set-Cookie', '__Host-session=; Path=/; Secure; SameSite=Lax; Max-Age=0');
+  }
   return new Response(JSON.stringify({ ok: true, ...data }), { status, headers: h });
 }
 
