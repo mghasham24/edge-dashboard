@@ -408,8 +408,10 @@ async function run() {
         const liveEv  = calcEV(fdFair, liveProb);
         if (liveEv !== null && liveEv < MIN_EV) {
           console.log('ev-poster: skip', bet.betKey, '— live RS prob', livePct + '% drops EV to', liveEv.toFixed(1) + '%');
-          // Store cached bet.ev (not live EV) so evJump stays ~0 and repost logic doesn't keep retriggering
-          postedEv.set(bet.betKey, { ev: bet.ev, postedAt: Date.now() });
+          // Update EV reference so evJumped check doesn't keep retriggering on small fluctuations,
+          // but preserve postedAt — a skip is NOT a post, so cooldown must not restart.
+          const prev = postedEv.get(bet.betKey);
+          postedEv.set(bet.betKey, { ev: bet.ev, postedAt: prev ? prev.postedAt : 0 });
           saveState();
           continue;
         }
@@ -429,7 +431,8 @@ async function run() {
             if (exactEv !== null) {
               if (exactEv < MIN_EV) {
                 console.log('ev-poster: skip', bet.betKey, '— slippage-adjusted EV', exactEv.toFixed(1) + '% < min');
-                postedEv.set(bet.betKey, { ev: bet.ev, postedAt: Date.now() });
+                const prev = postedEv.get(bet.betKey);
+                postedEv.set(bet.betKey, { ev: bet.ev, postedAt: prev ? prev.postedAt : 0 });
                 saveState();
                 continue;
               }
