@@ -442,6 +442,12 @@ async function run() {
         }
       }
 
+      // If RS was unreachable (liveData null), fall back to traditional EV gate
+      if (liveData === null && bet.ev < MIN_EV) {
+        console.log('ev-poster: skip', bet.betKey, '— RS unreachable, traditional EV', bet.ev + '% < min');
+        continue;
+      }
+
       if (bet.units <= 0) { console.log('ev-poster: skip', bet.betKey, '— 0 units after live update'); continue; }
 
       const text = formatPost(bet);
