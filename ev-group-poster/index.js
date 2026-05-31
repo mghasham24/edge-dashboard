@@ -26,7 +26,8 @@ const RS_AUTH_INFO  = process.env.RS_AUTH_INFO;
 const RS_GROUP_ID   = process.env.RS_GROUP_ID;
 const DEVICE_UUID   = process.env.RS_DEVICE_UUID || '2e0a38e2-0ee8-4f93-9a34-218ac1d10161';
 const RS_PROXY_URL  = process.env.RS_PROXY_URL || null;
-const MIN_EV             = parseFloat(process.env.MIN_EV              || '5');
+const MIN_EV             = parseFloat(process.env.MIN_EV              || '5');  // WS payout EV gate
+const PRE_FILTER_EV      = parseFloat(process.env.PRE_FILTER_EV       || '5');  // traditional-formula pre-filter
 const MAX_POSTS          = parseInt(process.env.MAX_POSTS              || '5');
 const POST_DELAY_MS      = parseInt(process.env.POST_DELAY_MS          || '5000');
 const REPOST_EV_JUMP     = parseFloat(process.env.REPOST_EV_JUMP       || '5');
@@ -369,7 +370,7 @@ async function run() {
     const nowSec = Math.floor(Date.now() / 1000);
     const newBets = evData.bets
       .filter(b => {
-        if (b.ev < MIN_EV) return false;
+        if (b.ev < PRE_FILTER_EV) return false;
         if (b.isLive) return false;
         if (b.commenceTime > 0 && b.commenceTime <= nowSec) return false;
         const last = postedEv.get(b.betKey);

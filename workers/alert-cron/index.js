@@ -637,7 +637,11 @@ async function runCron(env, ctx) {
     }
 
     const globalMinEv = Math.min(...users.results.map(u => u.min_ev || 5));
+    // Use a lower threshold for ev_bets_latest so the VPS group poster can apply
+    // WS payout EV (which is often higher than the traditional formula) as the real gate.
+    const posterMinEv = Math.min(globalMinEv, 5);
     dbg.globalMinEv = globalMinEv;
+    dbg.posterMinEv = posterMinEv;
     dbg.users = users.results.length;
     const allBets = [];
 
@@ -737,11 +741,11 @@ async function runCron(env, ctx) {
 
       const beforeCount = allBets.length;
       if (sport.type === 'nba' || sport.type === 'nhl') {
-        processNativeNBA(sport, fdGames, rsGames, rsGameIds, rsGameSports, globalMinEv, allBets, now);
+        processNativeNBA(sport, fdGames, rsGames, rsGameIds, rsGameSports, posterMinEv, allBets, now);
       } else if (sport.type === 'ml_only') {
-        processNativeML(sport, fdGames, rsGames, rsGameIds, rsGameSports, globalMinEv, allBets, now);
+        processNativeML(sport, fdGames, rsGames, rsGameIds, rsGameSports, posterMinEv, allBets, now);
       } else if (sport.type === 'fc') {
-        processNativeFC(sport, fdGames, rsGames, rsGameIds, rsGameSports, globalMinEv, allBets, now);
+        processNativeFC(sport, fdGames, rsGames, rsGameIds, rsGameSports, posterMinEv, allBets, now);
       }
       dbg.sports[sport.label] = { fdGames: fdCount, fdAge, rsGames: rsCount, betsAdded: allBets.length - beforeCount };
     }
@@ -827,7 +831,7 @@ async function runCron(env, ctx) {
             if (!rsO || !rsO.probability) continue;
 
             const ev = calcEV(fdFair, rsO.probability);
-            if (ev == null || ev < globalMinEv || ev > 200) continue;
+            if (ev == null || ev < posterMinEv || ev > 200) continue;
             const u = unitsEV(ev, fdFair);
             if (u <= 0) continue;
 
@@ -899,7 +903,7 @@ async function runCron(env, ctx) {
             ]) {
               if (!rsO || !rsO.probability) continue;
               const ev = calcEV(fdFair, rsO.probability);
-              if (ev == null || ev < globalMinEv || ev > 200) continue;
+              if (ev == null || ev < posterMinEv || ev > 200) continue;
               const u = unitsEV(ev, fdFair);
               if (u <= 0) continue;
               allBets.push({
