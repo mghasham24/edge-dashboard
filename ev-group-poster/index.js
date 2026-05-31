@@ -572,10 +572,11 @@ async function postDailySummary() {
   const weekTot  = weeklyRecord.w + weeklyRecord.l;
   const weekRate = weekTot > 0 ? Math.round(weeklyRecord.w / weekTot * 100) : 0;
 
-  // Expected profit = sum of (EV% × units) across all picks
+  // Expected profit = sum of (EV% × units) across all picks; cap EV at 200% to exclude phantom bets
   const expectedU = posts.reduce((sum, p) => {
+    const ev = Math.min(p.ev, 200);
     const u = p.units ?? unitsEV(p.ev, p.rsPct != null ? p.rsPct / 100 : null);
-    return sum + (p.ev / 100) * (u || 0);
+    return sum + (ev / 100) * (u || 0);
   }, 0);
   const expectedStr = (expectedU >= 0 ? '+' : '') + expectedU.toFixed(2) + 'u expected';
 
