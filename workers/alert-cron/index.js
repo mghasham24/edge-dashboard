@@ -137,10 +137,12 @@ function parseRSCache(cacheData) {
   const games = {};
   const gameIds = {};
   const gameSports = {};
-  if (!cacheData || typeof cacheData !== 'object') return { games, gameIds, gameSports };
+  const gameStartMs = {};
+  if (!cacheData || typeof cacheData !== 'object') return { games, gameIds, gameSports, gameStartMs };
   for (const [key, val] of Object.entries(cacheData)) {
-    if (key.endsWith('__gid'))   { gameIds[key.slice(0, -5)] = val; continue; }
-    if (key.endsWith('__sport')) { gameSports[key.slice(0, -7)] = val; continue; }
+    if (key.endsWith('__gid'))     { gameIds[key.slice(0, -5)] = val; continue; }
+    if (key.endsWith('__sport'))   { gameSports[key.slice(0, -7)] = val; continue; }
+    if (key.endsWith('__startMs')) { gameStartMs[key.slice(0, -9)] = val; continue; }
     if (key.endsWith('__lines')) continue;
     if (val && typeof val === 'object' &&
         (val['Moneyline'] || val['Game Winner'] || val['Spread'] || val['Total'] ||
@@ -149,7 +151,7 @@ function parseRSCache(cacheData) {
       games[key] = val;
     }
   }
-  return { games, gameIds, gameSports };
+  return { games, gameIds, gameSports, gameStartMs };
 }
 
 const FDKEY_TO_RSKEY = {
@@ -202,7 +204,7 @@ async function loadRSCache(rsKey, env, now, staleThreshold) {
     if (cached && age < staleThreshold) {
       return { ...parseRSCache(JSON.parse(cached.data)), rsAge: age };
     }
-    if (cached) return { games: {}, gameIds: {}, gameSports: {}, rsAge: age, reason: 'rs_stale' };
+    if (cached) return { games: {}, gameIds: {}, gameSports: {}, gameStartMs: {}, rsAge: age, reason: 'rs_stale' };
   } catch(e) {}
   return { games: {}, gameIds: {}, gameSports: {}, rsAge: null, reason: 'rs_missing' };
 }
@@ -336,7 +338,7 @@ function formatAlert(sport, game, market, side, ev, units, dollarAmt, pt, rsPct,
 
 // ML-only sports: MLB (fd_mlb) and NHL (fd_nhl)
 // Cache: { ok, games: { "Away @ Home": { id, away, home, cm, ml: { TeamName: price } } } }
-function processNativeML(sport, fdGames, rsGames, rsGameIds, rsGameSports, globalMinEv, allBets, now) {
+function processNativeML(sport, fdGames, rsGames, rsGameIds, rsGameSports, globalMinEv, allBets, now, rsGameStartMs) {
   for (const [gameKey, game] of Object.entries(fdGames)) {
     const commenceTime = game.cm ? Math.floor(new Date(game.cm).getTime() / 1000) : 0;
     if (commenceTime && commenceTime < now - 4 * 3600) continue; // skip games ended >4h ago
@@ -344,6 +346,12 @@ function processNativeML(sport, fdGames, rsGames, rsGameIds, rsGameSports, globa
 
     const rsKey = findRSGameKey(game.away, game.home, rsGames, gameKey);
     if (!rsKey) continue;
+
+    // Guard: don't match a future FD game to an already-started RS game (e.g. late game past midnight)
+    if (commenceTime > 0 && !isLive && rsGameStartMs) {
+      const rsStart = rsGameStartMs[rsKey];
+      if (rsStart && rsStart < (now - 3600) * 1000) continue;
+    }
 
     const rsMarkets = rsGames[rsKey];
     const gameId    = rsGameIds[rsKey] || null;
@@ -400,7 +408,7 @@ function processNativeML(sport, fdGames, rsGames, rsGameIds, rsGameSports, globa
 //   spreads: { TeamName: { handicap: price } },
 //   totals: { Over: { line: price }, Under: { line: price } }
 // } } }
-function processNativeNBA(sport, fdGames, rsGames, rsGameIds, rsGameSports, globalMinEv, allBets, now) {
+function processNativeNBA(sport, fdGames, rsGames, rsGameIds, rsGameSports, globalMinEv, allBets, now, rsGameStartMs) {
   for (const [gameKey, game] of Object.entries(fdGames)) {
     const commenceTime = game.cm ? Math.floor(new Date(game.cm).getTime() / 1000) : 0;
     if (commenceTime && commenceTime < now - 4 * 3600) continue; // skip games ended >4h ago
@@ -408,6 +416,12 @@ function processNativeNBA(sport, fdGames, rsGames, rsGameIds, rsGameSports, glob
 
     const rsKey = findRSGameKey(game.away, game.home, rsGames, gameKey);
     if (!rsKey) continue;
+
+    // Guard: don't match a future FD game to an already-started RS game (e.g. late game past midnight)
+    if (commenceTime > 0 && !isLive && rsGameStartMs) {
+      const rsStart = rsGameStartMs[rsKey];
+      if (rsStart && rsStart < (now - 3600) * 1000) continue;
+    }
 
     const rsMarkets = rsGames[rsKey];
     const gameId    = rsGameIds[rsKey] || null;
@@ -527,7 +541,7 @@ function processNativeNBA(sport, fdGames, rsGames, rsGameIds, rsGameSports, glob
 //   id, away, home, cm, league,
 //   spreads: { Home: { "-0.5": price, ... }, Away: { "0.5": price, ... } }
 // } } }
-function processNativeFC(sport, fdGames, rsGames, rsGameIds, rsGameSports, globalMinEv, allBets, now) {
+function processNativeFC(sport, fdGames, rsGames, rsGameIds, rsGameSports, globalMinEv, allBets, now, rsGameStartMs) {
   for (const [gameKey, game] of Object.entries(fdGames)) {
     const commenceTime = game.cm ? Math.floor(new Date(game.cm).getTime() / 1000) : 0;
     if (commenceTime && commenceTime < now - 4 * 3600) continue; // skip games ended >4h ago
@@ -535,6 +549,12 @@ function processNativeFC(sport, fdGames, rsGames, rsGameIds, rsGameSports, globa
 
     const rsKey = findRSGameKey(game.away, game.home, rsGames, gameKey);
     if (!rsKey) continue;
+
+    // Guard: don't match a future FD game to an already-started RS game (e.g. late game past midnight)
+    if (commenceTime > 0 && !isLive && rsGameStartMs) {
+      const rsStart = rsGameStartMs[rsKey];
+      if (rsStart && rsStart < (now - 3600) * 1000) continue;
+    }
 
     const rsMarkets   = rsGames[rsKey];
     const gameId      = rsGameIds[rsKey] || null;
@@ -688,7 +708,7 @@ async function runCron(env, ctx) {
         continue;
       }
 
-      const { games: rsGames, gameIds: rsGameIds, gameSports: rsGameSports, rsAge, reason: rsReason } =
+      const { games: rsGames, gameIds: rsGameIds, gameSports: rsGameSports, gameStartMs: rsGameStartMs, rsAge, reason: rsReason } =
         await loadRSCache(sport.rsKey, env, now, RS_STALE_THRESHOLD);
 
       const rsCount = Object.keys(rsGames).length;
@@ -741,11 +761,11 @@ async function runCron(env, ctx) {
 
       const beforeCount = allBets.length;
       if (sport.type === 'nba' || sport.type === 'nhl') {
-        processNativeNBA(sport, fdGames, rsGames, rsGameIds, rsGameSports, posterMinEv, allBets, now);
+        processNativeNBA(sport, fdGames, rsGames, rsGameIds, rsGameSports, posterMinEv, allBets, now, rsGameStartMs);
       } else if (sport.type === 'ml_only') {
-        processNativeML(sport, fdGames, rsGames, rsGameIds, rsGameSports, posterMinEv, allBets, now);
+        processNativeML(sport, fdGames, rsGames, rsGameIds, rsGameSports, posterMinEv, allBets, now, rsGameStartMs);
       } else if (sport.type === 'fc') {
-        processNativeFC(sport, fdGames, rsGames, rsGameIds, rsGameSports, posterMinEv, allBets, now);
+        processNativeFC(sport, fdGames, rsGames, rsGameIds, rsGameSports, posterMinEv, allBets, now, rsGameStartMs);
       }
       dbg.sports[sport.label] = { fdGames: fdCount, fdAge, rsGames: rsCount, betsAdded: allBets.length - beforeCount };
     }
