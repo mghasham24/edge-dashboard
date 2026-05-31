@@ -174,7 +174,7 @@ function unitsEV(ev, realPct) {
 
 // ── Live RS odds refresh ────────────────────────────────
 
-const RS_ML_LABELS    = ['Game Winner', 'Moneyline', 'To Win Match', 'Match Winner'];
+const RS_ML_LABELS    = ['Game Winner', 'Moneyline', 'Fight Outcome', 'Fight Winner', 'To Win Match', 'Match Winner', 'Winner'];
 const RS_MARKET_MAP   = { ML: RS_ML_LABELS, Spread: ['Spread'], Total: ['Total', 'Total Goals'], RFI: ['Run in 1st inning?'] };
 
 function normName(s) { return (s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
