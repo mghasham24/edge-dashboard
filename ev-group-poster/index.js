@@ -533,6 +533,40 @@ async function fetchGameMarkets(rsSport, rsGameId) {
   } catch(e) { return null; }
 }
 
+// ── Background result caching ──────────────────────────
+// Checks RS markets for posted bets whose games started >2h ago and
+// caches results in dailyPosts.result so recap works even after RS
+// removes the market at midnight.
+
+async function cacheResultsInBackground() {
+  const nowSec = Math.floor(Date.now() / 1000);
+  // Deduplicate by betKey, only check unresolved bets from games that have started
+  const byKey = new Map();
+  for (const p of dailyPosts) byKey.set(p.betKey, p);
+  const unresolved = Array.from(byKey.values()).filter(p =>
+    p.rsGameId && p.result == null && p.commenceTime > 0 && p.commenceTime < nowSec - 7200
+  );
+  if (!unresolved.length) return;
+
+  const uniqueGames = [...new Set(unresolved.map(p => `${p.rsSport}:${p.rsGameId}`))];
+  for (const key of uniqueGames) {
+    const [sport, id] = key.split(':');
+    const markets = await fetchGameMarkets(sport, id);
+    if (!markets) continue;
+    // Write resolved result back into ALL dailyPosts entries for this game+bet
+    for (const p of dailyPosts) {
+      if (`${p.rsSport}:${p.rsGameId}` !== key || p.result != null) continue;
+      const res = resolveResult(p, markets);
+      if (res !== null) {
+        p.result = res;
+        console.log('ev-poster: cached result', res, 'for', p.betKey);
+      }
+    }
+    if (uniqueGames.indexOf(key) < uniqueGames.length - 1) await new Promise(r => setTimeout(r, 600));
+  }
+  if (unresolved.length) saveState();
+}
+
 // ── Daily summary ──────────────────────────────────────
 
 async function postDailySummary() {
@@ -543,10 +577,10 @@ async function postDailySummary() {
   for (const p of dailyPosts) byKey.set(p.betKey, p);
   const posts = Array.from(byKey.values());
 
-  // Fetch markets per unique game (avoids 429 rate limit from 18+ sequential calls)
+  // For unresolved bets, attempt one final RS market fetch
   const gameCache = new Map();
-  const uniqueGames = [...new Set(posts.filter(p => p.rsGameId).map(p => `${p.rsSport}:${p.rsGameId}`))];
-  console.log('ev-poster: checking results —', posts.length, 'bets across', uniqueGames.length, 'games');
+  const uniqueGames = [...new Set(posts.filter(p => p.rsGameId && p.result == null).map(p => `${p.rsSport}:${p.rsGameId}`))];
+  console.log('ev-poster: checking results —', posts.length, 'bets,', uniqueGames.length, 'games still unresolved');
   for (const key of uniqueGames) {
     const [sport, id] = key.split(':');
     const markets = await fetchGameMarkets(sport, id);
@@ -555,7 +589,9 @@ async function postDailySummary() {
   }
   const results = posts.map(post => ({
     ...post,
-    result: post.rsGameId ? resolveResult(post, gameCache.get(`${post.rsSport}:${post.rsGameId}`) || []) : null,
+    // Use cached result if available, otherwise try the fresh fetch
+    result: post.result != null ? post.result
+          : post.rsGameId ? resolveResult(post, gameCache.get(`${post.rsSport}:${post.rsGameId}`) || []) : null,
   }));
 
   const wins    = results.filter(r => r.result === 'win').length;
@@ -751,3 +787,5 @@ payoutServer.listen(PAYOUT_PROXY_PORT, () => console.log(`ev-poster: payout prox
 scheduleMidnightReset();
 run();
 setInterval(run, 15_000);
+// Cache game results every 10 minutes while RS still has the markets open
+setInterval(cacheResultsInBackground, 10 * 60 * 1000);
