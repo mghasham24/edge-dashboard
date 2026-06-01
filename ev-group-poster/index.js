@@ -376,8 +376,9 @@ async function run() {
         if (b.commenceTime > 0 && b.commenceTime <= nowSec) return false;
         const last = postedEv.get(b.betKey);
         if (!last) return true;
-        const evJumped  = b.ev - last.ev >= REPOST_EV_JUMP;
-        if (!evJumped) return false;
+        const evJumped   = b.ev - last.ev >= REPOST_EV_JUMP;
+        const staleSince = (now2 - last.postedAt) >= 2 * 3600 * 1000; // 2h time-based repost
+        if (!evJumped && !staleSince) return false;
         // Bypass cooldown if EV is outrageous (≥ REPOST_URGENT_EV)
         if (b.ev >= REPOST_URGENT_EV) return true;
         return (now2 - last.postedAt) >= REPOST_COOLDOWN_MS;
