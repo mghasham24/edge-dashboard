@@ -431,7 +431,7 @@ async function run() {
           if (payout != null) {
             const exactEv = calcExactEV(fdFair, payout, stakeRax);
             if (exactEv !== null) {
-              if (exactEv < LIVE_MIN_EV) {
+              if (exactEv < MIN_EV) {
                 console.log('ev-poster: skip', bet.betKey, '— slippage-adjusted EV', exactEv.toFixed(1) + '% < min');
                 const prev = postedEv.get(bet.betKey);
                 postedEv.set(bet.betKey, { ev: bet.ev, postedAt: prev ? prev.postedAt : 0 });
