@@ -616,8 +616,8 @@ async function runCron(env, ctx) {
     const FD_WARM_THRESHOLD  = 30;  // refresh FD if no recent site traffic (keeps live odds current)
     const RS_STALE_THRESHOLD = 4 * 60 * 60;
     const RS_WARM_THRESHOLD  = 0;   // always warm RS — sync endpoint returns in <1s if cache is fresh (15s TTL), so no wasted work
-    const RE_ALERT_EV_JUMP   = 4.0;
-    const RESEND_AFTER_SECS  = 1 * 3600; // re-alert on persistent +EV bets every hour
+    const RE_ALERT_EV_JUMP   = 6.0;
+    const RESEND_AFTER_SECS  = 2 * 3600; // re-alert on persistent +EV bets every 2 hours
     // Midnight ET — taken bet suppression resets each calendar day.
     // Compute by asking Intl how many seconds into the current ET day we are,
     // then subtracting that from now. Handles EDT/EST automatically.
