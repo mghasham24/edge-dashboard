@@ -503,22 +503,39 @@ function isSubseq(abbr, full) {
   return false;
 }
 
-function resolveResult(post, markets) {
+function findOutcome(post, markets) {
   const labels  = RS_MARKET_MAP[post.market] || RS_ML_LABELS;
   const mkt     = markets.find(m => labels.includes(m.label));
   if (!mkt) return null;
-  const outcomes  = mkt.outcomes || [];
-  const normSide  = normName(post.side);
-  const outcome   = outcomes.find(o => {
-    const norm = normName(o.label).replace(/\d/g, ''); // strip digits — RS spread labels include spread value e.g. "OKC +3.5"
+  const outcomes = mkt.outcomes || [];
+  const normSide = normName(post.side);
+  return outcomes.find(o => {
+    const norm = normName(o.label).replace(/\d/g, '');
     return norm === normSide || normSide.includes(norm) || norm.includes(normSide) || isSubseq(norm, normSide);
-  });
+  }) || null;
+}
+
+// Full resolution — uses isWinner flag first, falls back to probability heuristic.
+// Only safe to call when game is definitely over (recap time).
+function resolveResult(post, markets) {
+  const outcome = findOutcome(post, markets);
   if (!outcome) return null;
   if (outcome.isWinner === true)  return 'win';
   if (outcome.isWinner === false) return 'loss';
-  const maxProb = Math.max(...outcomes.map(o => o.probability || 0));
+  const allOutcomes = (markets.find(m => (RS_MARKET_MAP[post.market] || RS_ML_LABELS).includes(m.label))?.outcomes) || [];
+  const maxProb = Math.max(...allOutcomes.map(o => o.probability || 0));
   if (maxProb < 0.90) return null;
   return outcome.probability >= 0.90 ? 'win' : 'loss';
+}
+
+// Strict resolution — only uses explicit isWinner flag, never the probability heuristic.
+// Used during background caching while the game may still be live.
+function resolveResultStrict(post, markets) {
+  const outcome = findOutcome(post, markets);
+  if (!outcome) return null;
+  if (outcome.isWinner === true)  return 'win';
+  if (outcome.isWinner === false) return 'loss';
+  return null;
 }
 
 async function fetchGameMarkets(rsSport, rsGameId) {
@@ -557,7 +574,7 @@ async function cacheResultsInBackground() {
     // Write resolved result back into ALL dailyPosts entries for this game+bet
     for (const p of dailyPosts) {
       if (`${p.rsSport}:${p.rsGameId}` !== key || p.result != null) continue;
-      const res = resolveResult(p, markets);
+      const res = resolveResultStrict(p, markets);
       if (res !== null) {
         p.result = res;
         console.log('ev-poster: cached result', res, 'for', p.betKey);
