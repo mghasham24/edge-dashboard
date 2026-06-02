@@ -676,7 +676,7 @@ async function postDailySummary() {
   const lines = [
     `📊 RaxEdge Daily Summary — ${etDate}`,
     '-',
-    `${posts.length} pick${posts.length !== 1 ? 's' : ''} · ${wins}W ${losses}L${pending ? ` · ${pending} pending` : ''} · ${hitRate}% hit rate · ${expectedStr}`,
+    `${posts.length} pick${posts.length !== 1 ? 's' : ''} · ${wins}W ${losses}L${pending ? ` · ${pending} pending` : ''} · ${hitRate}% hit rate`,
     `Week: ${weeklyRecord.w}W ${weeklyRecord.l}L · ${weekRate}%`,
   ];
 
