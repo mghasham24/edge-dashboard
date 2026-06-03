@@ -680,7 +680,7 @@ async function postDailySummary() {
     `Week: ${weeklyRecord.w}W ${weeklyRecord.l}L · ${weekRate}%`,
   ];
 
-  const RS_MAX_CHARS = 1800;
+  const RS_MAX_CHARS = 750;
 
   function addSection(emoji, label, list) {
     if (!list.length) return;
