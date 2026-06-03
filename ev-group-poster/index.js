@@ -829,6 +829,34 @@ const payoutServer = createServer(async (req, res) => {
   }
 });
 
+// ── Dennis daily boost message ─────────────────────────
+
+const DENNIS_GROUP_ID = '51048';
+const DENNIS_BOOST_MSG = 'boost mlb pitchers | wnba - https://realapp.tools/user-boosts\nClaim OTD';
+
+function scheduleDennisBoost() {
+  const etStr = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
+  const et    = new Date(etStr);
+  const next  = new Date(et);
+  next.setHours(7, 30, 0, 0);
+  if (next <= et) next.setDate(next.getDate() + 1);
+  const msUntil = next - et;
+  setTimeout(async () => {
+    try {
+      const res = await fetch(`${RS_BASE}/comments/groups/${DENNIS_GROUP_ID}`, {
+        method: 'POST', headers: rsHeaders(),
+        body: JSON.stringify({ text: DENNIS_BOOST_MSG, content: { nodes: [{ text: DENNIS_BOOST_MSG }] } }),
+        signal: AbortSignal.timeout(10000), dispatcher: rsDispatcher,
+      });
+      if (res.ok) console.log('ev-poster: dennis boost posted');
+      else console.error('ev-poster: dennis boost failed', res.status, await res.text().catch(() => ''));
+    } catch(e) { console.error('ev-poster: dennis boost error', e.message); }
+    scheduleDennisBoost();
+  }, msUntil);
+  const h = Math.floor(msUntil / 3600000), m = Math.floor((msUntil % 3600000) / 60000);
+  console.log(`ev-poster: dennis boost scheduled in ${h}h ${m}m`);
+}
+
 // ── Boot ───────────────────────────────────────────────
 
 if (!SITE_URL || !EV_POSTER_KEY || !RS_AUTH_INFO || !RS_GROUP_ID) {
@@ -840,6 +868,7 @@ loadState();
 console.log(`ev-poster: starting | group ${RS_GROUP_ID} | min EV ${MIN_EV}% | max ${MAX_POSTS}/run | cooldown ${REPOST_COOLDOWN_MS/60000}min | urgent ≥${REPOST_URGENT_EV}%`);
 payoutServer.listen(PAYOUT_PROXY_PORT, () => console.log(`ev-poster: payout proxy on port ${PAYOUT_PROXY_PORT}`));
 scheduleMidnightReset();
+scheduleDennisBoost();
 run();
 setInterval(run, 15_000);
 // Cache game results every 10 minutes while RS still has the markets open
