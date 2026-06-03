@@ -462,7 +462,6 @@ async function run() {
           headers: rsHeaders(),
           body:    JSON.stringify({ text, content: { nodes: [{ text }] } }),
           signal:  AbortSignal.timeout(10000),
-          dispatcher: rsDispatcher,
         });
 
         if (res.ok) {
@@ -705,7 +704,7 @@ async function postDailySummary() {
     const res = await fetch(`${RS_BASE}/comments/groups/${RS_GROUP_ID}`, {
       method: 'POST', headers: rsHeaders(),
       body: JSON.stringify({ text, content: { nodes: [{ text }] } }),
-      signal: AbortSignal.timeout(10000), dispatcher: rsDispatcher,
+      signal: AbortSignal.timeout(10000),
     });
     if (res.ok) return true;
     console.error('ev-poster: summary post failed', res.status, await res.text().catch(() => ''));
@@ -846,7 +845,7 @@ function scheduleDennisBoost() {
       const res = await fetch(`${RS_BASE}/comments/groups/${DENNIS_GROUP_ID}`, {
         method: 'POST', headers: rsHeaders(),
         body: JSON.stringify({ text: DENNIS_BOOST_MSG, content: { nodes: [{ text: DENNIS_BOOST_MSG }] } }),
-        signal: AbortSignal.timeout(10000), dispatcher: rsDispatcher,
+        signal: AbortSignal.timeout(10000),
       });
       if (res.ok) console.log('ev-poster: dennis boost posted');
       else console.error('ev-poster: dennis boost failed', res.status, await res.text().catch(() => ''));
