@@ -701,16 +701,45 @@ async function postDailySummary() {
   addSection('❌', 'Losses', lossList);
   addSection('⏳', 'Pending', pendingList);
 
-  const text = lines.join('\n');
-  try {
+  async function postToGroup(text) {
     const res = await fetch(`${RS_BASE}/comments/groups/${RS_GROUP_ID}`, {
       method: 'POST', headers: rsHeaders(),
       body: JSON.stringify({ text, content: { nodes: [{ text }] } }),
       signal: AbortSignal.timeout(10000), dispatcher: rsDispatcher,
     });
-    if (res.ok) console.log('ev-poster: daily summary posted');
-    else console.error('ev-poster: summary post failed', res.status, await res.text().catch(() => ''));
-  } catch(e) { console.error('ev-poster: summary post error', e.message); }
+    if (res.ok) return true;
+    console.error('ev-poster: summary post failed', res.status, await res.text().catch(() => ''));
+    return false;
+  }
+
+  const fullText = lines.join('\n');
+  if (Buffer.byteLength(fullText) <= RS_MAX_CHARS) {
+    const ok = await postToGroup(fullText);
+    if (ok) console.log('ev-poster: daily summary posted');
+  } else {
+    // Split into two messages: header+wins in first, losses+pending in second
+    const headerLines = lines.slice(0, lines.indexOf('-', 4) + 1); // up to first section divider
+    const winIdx = lines.findIndex(l => l.startsWith('✅'));
+    const lossIdx = lines.findIndex(l => l.startsWith('❌'));
+    const pendIdx = lines.findIndex(l => l.startsWith('⏳'));
+
+    const msg1Lines = winIdx >= 0 ? lines.slice(0, lossIdx >= 0 ? lossIdx : undefined) : lines;
+    const msg2Start = lossIdx >= 0 ? lossIdx : (pendIdx >= 0 ? pendIdx : null);
+    const msg2Lines = msg2Start != null ? lines.slice(msg2Start) : [];
+
+    const msg1 = msg1Lines.join('\n');
+    const msg2 = msg2Lines.join('\n');
+
+    const ok1 = await postToGroup(msg1);
+    if (ok1) {
+      console.log('ev-poster: daily summary part 1 posted');
+      if (msg2) {
+        await new Promise(r => setTimeout(r, 1000));
+        const ok2 = await postToGroup(msg2);
+        if (ok2) console.log('ev-poster: daily summary part 2 posted');
+      }
+    }
+  }
 }
 
 // ── Midnight ET reset ──────────────────────────────────
