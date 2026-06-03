@@ -680,18 +680,26 @@ async function postDailySummary() {
     `Week: ${weeklyRecord.w}W ${weeklyRecord.l}L · ${weekRate}%`,
   ];
 
-  if (winList.length) {
-    lines.push('-', `✅ Wins (${winList.length})`);
-    winList.forEach(r => lines.push(betLine(r)));
+  const RS_MAX_CHARS = 1800;
+
+  function addSection(emoji, label, list) {
+    if (!list.length) return;
+    lines.push('-', `${emoji} ${label} (${list.length})`);
+    for (const r of list) {
+      const next = betLine(r);
+      const preview = lines.join('\n') + '\n' + next;
+      // Reserve ~60 chars for any remaining section headers
+      if (preview.length > RS_MAX_CHARS - 60) {
+        lines.push(`… +${list.length - list.indexOf(r)} more`);
+        break;
+      }
+      lines.push(next);
+    }
   }
-  if (lossList.length) {
-    lines.push('-', `❌ Losses (${lossList.length})`);
-    lossList.forEach(r => lines.push(betLine(r)));
-  }
-  if (pendingList.length) {
-    lines.push('-', `⏳ Pending (${pendingList.length})`);
-    pendingList.forEach(r => lines.push(betLine(r)));
-  }
+
+  addSection('✅', 'Wins', winList);
+  addSection('❌', 'Losses', lossList);
+  addSection('⏳', 'Pending', pendingList);
 
   const text = lines.join('\n');
   try {
