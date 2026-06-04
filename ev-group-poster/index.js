@@ -679,26 +679,12 @@ async function postDailySummary() {
     `Week: ${weeklyRecord.w}W ${weeklyRecord.l}L · ${weekRate}%`,
   ];
 
-  const RS_MAX_CHARS = 750;
+  const RS_MAX_BYTES = 750;
 
-  function addSection(emoji, label, list) {
-    if (!list.length) return;
-    lines.push('-', `${emoji} ${label} (${list.length})`);
-    for (const r of list) {
-      const next = betLine(r);
-      const preview = lines.join('\n') + '\n' + next;
-      // Reserve ~60 chars for any remaining section headers
-      if (preview.length > RS_MAX_CHARS - 60) {
-        lines.push(`… +${list.length - list.indexOf(r)} more`);
-        break;
-      }
-      lines.push(next);
-    }
-  }
-
-  addSection('✅', 'Wins', winList);
-  addSection('❌', 'Losses', lossList);
-  addSection('⏳', 'Pending', pendingList);
+  // Add all bets — no truncation
+  if (winList.length)     { lines.push('-', `✅ Wins (${winList.length})`);     winList.forEach(r => lines.push(betLine(r))); }
+  if (lossList.length)    { lines.push('-', `❌ Losses (${lossList.length})`);   lossList.forEach(r => lines.push(betLine(r))); }
+  if (pendingList.length) { lines.push('-', `⏳ Pending (${pendingList.length})`); pendingList.forEach(r => lines.push(betLine(r))); }
 
   async function postToGroup(text) {
     const res = await fetch(`${RS_BASE}/comments/groups/${RS_GROUP_ID}`, {
@@ -711,33 +697,24 @@ async function postDailySummary() {
     return false;
   }
 
-  const fullText = lines.join('\n');
-  if (Buffer.byteLength(fullText) <= RS_MAX_CHARS) {
-    const ok = await postToGroup(fullText);
-    if (ok) console.log('ev-poster: daily summary posted');
-  } else {
-    // Split into two messages: header+wins in first, losses+pending in second
-    const headerLines = lines.slice(0, lines.indexOf('-', 4) + 1); // up to first section divider
-    const winIdx = lines.findIndex(l => l.startsWith('✅'));
-    const lossIdx = lines.findIndex(l => l.startsWith('❌'));
-    const pendIdx = lines.findIndex(l => l.startsWith('⏳'));
-
-    const msg1Lines = winIdx >= 0 ? lines.slice(0, lossIdx >= 0 ? lossIdx : undefined) : lines;
-    const msg2Start = lossIdx >= 0 ? lossIdx : (pendIdx >= 0 ? pendIdx : null);
-    const msg2Lines = msg2Start != null ? lines.slice(msg2Start) : [];
-
-    const msg1 = msg1Lines.join('\n');
-    const msg2 = msg2Lines.join('\n');
-
-    const ok1 = await postToGroup(msg1);
-    if (ok1) {
-      console.log('ev-poster: daily summary part 1 posted');
-      if (msg2) {
-        await new Promise(r => setTimeout(r, 1000));
-        const ok2 = await postToGroup(msg2);
-        if (ok2) console.log('ev-poster: daily summary part 2 posted');
-      }
+  // Chunk lines into messages that fit within RS byte limit
+  const messages = [];
+  let chunk = [];
+  for (const line of lines) {
+    const test = [...chunk, line].join('\n');
+    if (chunk.length && Buffer.byteLength(test) > RS_MAX_BYTES) {
+      messages.push(chunk.join('\n'));
+      chunk = [line];
+    } else {
+      chunk.push(line);
     }
+  }
+  if (chunk.length) messages.push(chunk.join('\n'));
+
+  for (let i = 0; i < messages.length; i++) {
+    const ok = await postToGroup(messages[i]);
+    if (ok) console.log(`ev-poster: daily summary part ${i+1}/${messages.length} posted`);
+    if (i < messages.length - 1) await new Promise(r => setTimeout(r, 1000));
   }
 }
 
