@@ -679,7 +679,7 @@ async function postDailySummary() {
     `Week: ${weeklyRecord.w}W ${weeklyRecord.l}L · ${weekRate}%`,
   ];
 
-  const RS_MAX_BYTES = 750;
+  const RS_MAX_BYTES = 980; // RS limit is ~1000 bytes; 980 gives safe margin
 
   // Add all bets — no truncation
   if (winList.length)     { lines.push('-', `✅ Wins (${winList.length})`);     winList.forEach(r => lines.push(betLine(r))); }
