@@ -27,7 +27,8 @@ const SPORT_MAP = {
   'mma_mixed_martial_arts': 'ufc',
   'soccer_epl': 'epl',
   'soccer_uefa_champs_league': 'ucl',
-  'soccer_fc': 'soccer'
+  'soccer_fc': 'soccer',
+  'soccer_wc': 'soccer'
 };
 
 // Sports not supported by Real Sports API

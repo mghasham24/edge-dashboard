@@ -16,6 +16,9 @@
     }, {
         key: 'soccer_fc',
         label: 'FC'
+    }, {
+        key: 'soccer_wc',
+        label: 'WC'
     }];
     var FREE_SPORTS = ['basketball_nba', 'icehockey_nhl', 'baseball_mlb', 'basketball_wnba']; // free plan sports
     var MARKET_KEYS = {
@@ -44,6 +47,7 @@
     var nhlPoller  = null;
     var dkPoller   = null;
     var fcPoller   = null;
+    var wcPoller   = null;
     var currentLoadAbort = null;
 
     function stopAllPollers() {
@@ -54,6 +58,7 @@
         if (nhlPoller)  { clearInterval(nhlPoller);  nhlPoller  = null; }
         if (dkPoller)   { clearInterval(dkPoller);   dkPoller   = null; }
         if (fcPoller)   { clearInterval(fcPoller);   fcPoller   = null; }
+        if (wcPoller)   { clearInterval(wcPoller);   wcPoller   = null; }
         if (evAutoRefreshTimer) { clearInterval(evAutoRefreshTimer); evAutoRefreshTimer = null; }
     }
 
@@ -1041,6 +1046,12 @@
             fb: b / t
         };
     }
+    function novig3(a, b, c) {
+        if (a == null || b == null || c == null) return { fa: null, fb: null, fc: null };
+        var t = a + b + c;
+        if (!isFinite(t) || t <= 0) return { fa: null, fb: null, fc: null };
+        return { fa: a / t, fb: b / t, fc: c / t };
+    }
     function mktLbl(m) {
         return m === 'h2h' ? 'ML' : m === 'spreads' ? 'Spread' : m === 'totals' ? 'Total' : m;
     }
@@ -1095,6 +1106,7 @@
         'basketball_wnba':           0.005,
         'basketball_ncaab':          0.005,
         'soccer_fc':                 0.03,
+        'soccer_wc':                 0.03,
         'mma_mixed_martial_arts':    0.005
     };
 
@@ -1218,6 +1230,8 @@
         return { lbl: prefix + ' ' + timeStr, cls: '' };
     }
     function getFair(r) {
+        if (r._wcFair != null) return r._wcFair;
+        if (r.mkt === 'RFI' && r.rfiFair != null) return r.rfiFair;
         var pairs = {};
         rawRows.forEach(function(x) {
             if (!pairs[x.pid])
@@ -1333,7 +1347,8 @@
             icehockey_nhl: 'NHL',
             baseball_mlb: 'MLB',
             mma_mixed_martial_arts: 'UFC',
-            soccer_fc: 'FC'
+            soccer_fc: 'FC',
+            soccer_wc: 'WC'
         };
         var leagueColorMap = {
             basketball_nba: '#4f6ef7',
@@ -1341,7 +1356,8 @@
             icehockey_nhl: '#38bdf8',
             baseball_mlb: '#2dcc7e',
             mma_mixed_martial_arts: '#f05252',
-            soccer_fc: '#2dcc7e'
+            soccer_fc: '#2dcc7e',
+            soccer_wc: '#f5a623'
         };
         var leagueLbl = leagueBadgeMap[currentSport] || '';
         var leagueClr = leagueColorMap[currentSport] || 'var(--muted)';
@@ -1976,7 +1992,7 @@
 
         if (!_settingPredMobile && input.value !== '') {
             var r = rawRows.find(function(x) { return x.id === id; });
-            if (r && (r.mkt === 'ML' || r.mkt === 'RFI' || r.mkt === 'Spread')) {
+            if (r && !r._wcFair && (r.mkt === 'ML' || r.mkt === 'RFI' || r.mkt === 'Spread')) {
                 var v = parseFloat(input.value);
                 if (!isNaN(v) && v >= 1 && v <= 99) {
                     var otherId = r.ps === 'A' ? id.replace(/-A$/, '-B') : id.replace(/-B$/, '-A');
@@ -2008,17 +2024,26 @@
         var r = rawRows.find(function(x) { return x.id === id; });
         if (!r) return;
         var unit = parseFloat(document.getElementById('unit-size').value) || 300;
-        var pairs = {};
-        rawRows.forEach(function(x) {
-            if (!pairs[x.pid]) pairs[x.pid] = {};
-            pairs[x.pid][x.ps] = x;
-        });
-        var pair = pairs[r.pid] || {};
-        var nv = novig(pair.A ? imp(pair.A.am) : null, pair.B ? imp(pair.B.am) : null);
         var yl = yourLines[r.id] != null ? yourLines[r.id] : null;
-        var altNV = getAltFair(r, yl, pair.A, pair.B);
-        var fair = altNV ? (r.ps === 'A' ? altNV.fa : altNV.fb) : (r.ps === 'A' ? nv.fa : nv.fb);
-        var af = altNV ? fair : adjFair(fair, r.pt, yl, r.mkt, r.ps);
+        var fair, af;
+        if (r._wcFair != null) {
+            fair = r._wcFair;
+            af   = r._wcFair;
+        } else if (r.mkt === 'RFI' && r.rfiFair != null) {
+            fair = r.rfiFair;
+            af   = r.rfiFair;
+        } else {
+            var pairs = {};
+            rawRows.forEach(function(x) {
+                if (!pairs[x.pid]) pairs[x.pid] = {};
+                pairs[x.pid][x.ps] = x;
+            });
+            var pair = pairs[r.pid] || {};
+            var nv = novig(pair.A ? imp(pair.A.am) : null, pair.B ? imp(pair.B.am) : null);
+            var altNV = getAltFair(r, yl, pair.A, pair.B);
+            fair = altNV ? (r.ps === 'A' ? altNV.fa : altNV.fb) : (r.ps === 'A' ? nv.fa : nv.fb);
+            af = altNV ? fair : adjFair(fair, r.pt, yl, r.mkt, r.ps);
+        }
         var pr = preds[id];
         var pred = (pr !== undefined && pr !== '') ? Math.min(0.999, Math.max(0.001, (probsExact[id] != null ? probsExact[id] : parseFloat(pr) / 100) + rsPredAdj / 100)) : null;
         var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
@@ -2072,11 +2097,20 @@
             if (!pairs[x.pid]) pairs[x.pid] = {};
             pairs[x.pid][x.ps] = x;
         });
-        var pair = pairs[r.pid] || {};
-        var nv = novig(pair.A ? imp(pair.A.am) : null, pair.B ? imp(pair.B.am) : null);
-        var fair = r.ps === 'A' ? nv.fa : nv.fb;
+        var fair, af;
         var yl = yourLines[r.id] != null ? yourLines[r.id] : null;
-        var af = adjFair(fair, r.pt, yl, r.mkt, r.ps);
+        if (r._wcFair != null) {
+            fair = r._wcFair;
+            af   = r._wcFair;
+        } else if (r.mkt === 'RFI' && r.rfiFair != null) {
+            fair = r.rfiFair;
+            af   = r.rfiFair;
+        } else {
+            var pair = pairs[r.pid] || {};
+            var nv = novig(pair.A ? imp(pair.A.am) : null, pair.B ? imp(pair.B.am) : null);
+            fair = r.ps === 'A' ? nv.fa : nv.fb;
+            af = adjFair(fair, r.pt, yl, r.mkt, r.ps);
+        }
         var pr = preds[id];
         var pred = (pr !== undefined && pr !== '') ? parseFloat(pr) / 100 : null;
         var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
@@ -2100,11 +2134,20 @@
             pairs[r.pid][r.ps] = r;
         });
         var computed = rawRows.map(function(r) {
-            var pair = pairs[r.pid] || {};
-            var nv = novig(pair.A ? imp(pair.A.am) : null, pair.B ? imp(pair.B.am) : null);
-            var fair = r.ps === 'A' ? nv.fa : nv.fb;
+            var fair, af;
             var yl = yourLines[r.id] != null ? yourLines[r.id] : null;
-            var af = adjFair(fair, r.pt, yl, r.mkt, r.ps);
+            if (r._wcFair != null) {
+                fair = r._wcFair;
+                af   = r._wcFair;
+            } else if (r.mkt === 'RFI' && r.rfiFair != null) {
+                fair = r.rfiFair;
+                af   = r.rfiFair;
+            } else {
+                var pair = pairs[r.pid] || {};
+                var nv = novig(pair.A ? imp(pair.A.am) : null, pair.B ? imp(pair.B.am) : null);
+                fair = r.ps === 'A' ? nv.fa : nv.fb;
+                af = adjFair(fair, r.pt, yl, r.mkt, r.ps);
+            }
             var pr = preds[r.id];
             var pred = (pr !== undefined && pr !== '') ? parseFloat(pr) / 100 : null;
             var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
@@ -2228,6 +2271,7 @@
         { key: 'basketball_ncaab',       label: 'NCAAB' },
         { key: 'mma_mixed_martial_arts', label: 'UFC'   },
         { key: 'soccer_fc',              label: 'FC'    },
+        { key: 'soccer_wc',              label: 'WC'    },
     ];
 
     async function loadAlertsPanel() {
@@ -2562,8 +2606,8 @@
             var nv = novig(p.A ? imp(p.A.am) : null, p.B ? imp(p.B.am) : null);
             var yl = yourLines[r.id] != null ? yourLines[r.id] : null;
             var altNV = getAltFair(r, yl, p.A, p.B);
-            var fair = (r.mkt === 'RFI' && r.rfiFair != null) ? r.rfiFair : (altNV ? (r.ps === 'A' ? altNV.fa : altNV.fb) : (r.ps === 'A' ? nv.fa : nv.fb));
-            var af = (r.mkt === 'RFI' && r.rfiFair != null) ? r.rfiFair : (altNV ? fair : adjFair(fair, r.pt, yl, r.mkt, r.ps, sportKey));
+            var fair = r._wcFair != null ? r._wcFair : (r.mkt === 'RFI' && r.rfiFair != null) ? r.rfiFair : (altNV ? (r.ps === 'A' ? altNV.fa : altNV.fb) : (r.ps === 'A' ? nv.fa : nv.fb));
+            var af   = r._wcFair != null ? r._wcFair : (r.mkt === 'RFI' && r.rfiFair != null) ? r.rfiFair : (altNV ? fair : adjFair(fair, r.pt, yl, r.mkt, r.ps, sportKey));
             var pr = preds[r.id];
             var pred = (pr !== undefined && pr !== '') ? (probsExact[r.id] != null ? probsExact[r.id] : parseFloat(pr) / 100) : null;
             var evForUnits = null;
@@ -2572,7 +2616,7 @@
             }
             var u = unitsEV(evForUnits, pred);
             var edge = (af != null && pred != null) ? (af - pred) * 100 : null;
-            return { id: r.id, game: r.game, cm: r.cm, mkt: r.mkt, side: r.side, am: r.am, pt: r.pt, ps: r.ps, pid: r.pid, gid: r.gid, league: r.league, fair: fair, af: af, yl: yl, edge: edge, u: u, _sport_key: sportKey };
+            return { id: r.id, game: r.game, cm: r.cm, mkt: r.mkt, side: r.side, am: r.am, pt: r.pt, ps: r.ps, pid: r.pid, gid: r.gid, league: r.league, fair: fair, af: af, yl: yl, edge: edge, u: u, _sport_key: sportKey, _wcFair: r._wcFair };
         }).filter(function(r) {
             if ((sportKey === 'basketball_nba' || sportKey === 'icehockey_nhl') && r.gid && r.yl != null && r.pt != null && (r.mkt === 'Spread' || r.mkt === 'Total')) {
                 if (Math.abs(parseFloat(r.yl) - parseFloat(r.pt)) > 0.001) {
@@ -2594,6 +2638,8 @@
         rows.forEach(function(r) {
             // RFI rows store fair in rfiFair — normalise to af
             if (r.mkt === 'RFI' && r.rfiFair != null) r.af = r.rfiFair;
+            // WC rows store pre-computed 3-way novig fair in _wcFair
+            if (r._wcFair != null) r.af = r._wcFair;
             if (r.af == null) return;
             r._pred = null; r._rake = 0.034; r._ev = null;
             var pr = preds[r.id];
@@ -2605,7 +2651,7 @@
             r._ev   = (r.af * (1/pred) * (1-rake) - 1) * 100;
             // >100% EV is a post-game artifact (RS knows result, FD market not yet settled)
             // Exception: soccer_fc live ±0.5 lines can legitimately produce >100% EV
-            if (r._ev > 0 && (r._ev <= 100 || sport === 'soccer_fc')) {
+            if (r._ev > 0 && (r._ev <= 100 || sport === 'soccer_fc' || sport === 'soccer_wc')) {
                 // NBA/NHL: lines match → use FD odds. Lines differ → need DK alt at RS line, skip if missing.
                 if ((sport === 'basketball_nba' || sport === 'icehockey_nhl') && r.gid && r.yl != null && r.pt != null && (r.mkt === 'Spread' || r.mkt === 'Total')) {
                     if (Math.abs(parseFloat(r.yl) - parseFloat(r.pt)) > 0.001) {
@@ -2694,6 +2740,7 @@
             'basketball_ncaab': 3 * 3600000,
             'icehockey_nhl': 3 * 3600000,
             'soccer_fc': 2.5 * 3600000,
+            'soccer_wc': 2.5 * 3600000,
         };
         var all = [];
         Object.values(evTabCache).forEach(function(arr) {
@@ -2899,6 +2946,38 @@
         var freshSyncData = {}; // sport key -> RS sync response fetched in parallel with odds
         await Promise.all(sportsToLoad.map(async function(s) {
             try {
+                if (s.key === 'soccer_wc') {
+                    // WC uses FD native endpoint (3-way ML group stage, 2-way knockout)
+                    var wcEvRes = await fetch('/api/fd/wc', { credentials: 'same-origin' });
+                    var wcEvData = wcEvRes.ok ? await wcEvRes.json() : null;
+                    if (!wcEvData || !wcEvData.ok || !wcEvData.games) return;
+                    var wcEvRows = [];
+                    Object.entries(wcEvData.games).forEach(function([gameKey, game]) {
+                        var away = game.away, home = game.home;
+                        var cm = game.cm ? new Date(game.cm) : null;
+                        var gid = String(game.id);
+                        var hasDraw = game.ml && game.ml.hasOwnProperty('Draw');
+                        if (hasDraw) {
+                            var awayAm = game.ml[away], homeAm = game.ml[home], drawAm = game.ml['Draw'];
+                            if (awayAm != null && homeAm != null && drawAm != null) {
+                                var nv3 = novig3(imp(awayAm), imp(homeAm), imp(drawAm));
+                                wcEvRows.push({ id: gid+'-ml3-A', game: gameKey, cm: cm, mkt: 'ML', side: away, am: awayAm, pt: null, pid: gid+'-ml3', ps: 'A', gid: gid, _wcFair: nv3.fa, _sport_key: 'soccer_wc' });
+                                wcEvRows.push({ id: gid+'-ml3-B', game: gameKey, cm: cm, mkt: 'ML', side: home, am: homeAm, pt: null, pid: gid+'-ml3', ps: 'B', gid: gid, _wcFair: nv3.fb, _sport_key: 'soccer_wc' });
+                                wcEvRows.push({ id: gid+'-draw-A', game: gameKey, cm: cm, mkt: 'ML', side: 'Draw', am: drawAm, pt: null, pid: gid+'-draw', ps: 'A', gid: gid, _wcFair: nv3.fc, _sport_key: 'soccer_wc' });
+                            }
+                        } else if (game.ml) {
+                            var pid = gid + '-ml';
+                            [[away, 'A'], [home, 'B']].forEach(function(pair) {
+                                var teamName = pair[0], ps = pair[1];
+                                var price = game.ml[teamName];
+                                if (price == null) return;
+                                wcEvRows.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'ML', side: teamName, am: price, pt: null, pid: pid, ps: ps, gid: gid, _sport_key: 'soccer_wc' });
+                            });
+                        }
+                    });
+                    rawRowsBySport[s.key] = wcEvRows;
+                    return;
+                }
                 if (s.key === 'soccer_fc') {
                     // FC uses FD native DK AH endpoint — not Odds API
                     var fcRes = await fetch('/api/fd/fc', { credentials: 'same-origin' });
@@ -3125,16 +3204,16 @@
             } catch(e) {}
         }));
 
-        // All parallel fetches done — compute EV for all non-MLB/FC sports
-        // Keep evLoadingInProgress=true so there's no partial render before MLB/FC are ready
+        // All parallel fetches done — compute EV for all non-MLB/FC/WC sports
+        // Keep evLoadingInProgress=true so there's no partial render before MLB/FC/WC are ready
         sportsToLoad.forEach(function(s) {
-            if (s.key === 'baseball_mlb' || s.key === 'soccer_fc') return;
+            if (s.key === 'baseball_mlb' || s.key === 'soccer_fc' || s.key === 'soccer_wc') return;
             var rows = rawRowsBySport[s.key];
             if (rows && rows.length) computeAndCacheEv(rows, s.key, freshSyncData[s.key] || null);
             done++; updateStatus();
         });
 
-        // MLB and FC: fetch RS sync sequentially (needs global state), then render once for all sports
+        // MLB, FC, WC: fetch RS sync sequentially (needs global state), then render once for all sports
         try {
             if (rawRowsBySport['baseball_mlb'] && rawRowsBySport['baseball_mlb'].length) {
                 var savedSportEv = currentSport, savedRawRowsEv = rawRows;
@@ -3152,6 +3231,15 @@
                 rawRowsBySport['soccer_fc'] = rawRows;
                 rawRows = savedRawRowsEvFc; currentSport = savedSportEvFc;
                 computeAndCacheEv(rawRowsBySport['soccer_fc'], 'soccer_fc', null);
+            }
+            done++; updateStatus();
+            if (rawRowsBySport['soccer_wc'] && rawRowsBySport['soccer_wc'].length) {
+                var savedSportEvWc = currentSport, savedRawRowsEvWc = rawRows;
+                currentSport = 'soccer_wc'; rawRows = rawRowsBySport['soccer_wc'];
+                await fetchRealMarkets('soccer_wc', true);
+                rawRowsBySport['soccer_wc'] = rawRows;
+                rawRows = savedRawRowsEvWc; currentSport = savedSportEvWc;
+                computeAndCacheEv(rawRowsBySport['soccer_wc'], 'soccer_wc', null);
             }
             done++; updateStatus();
         } catch(e) {}
@@ -4333,6 +4421,10 @@
             sel.value = 'ML';
             return;
         }
+        if (currentSport === 'soccer_wc' && sel.value !== 'ML') {
+            sel.value = 'ML';
+            return;
+        }
         loadOdds();
     }
 
@@ -4755,7 +4847,7 @@
             var mktEl = document.getElementById('mkt-filter');
             if (mktEl.value !== 'ML') { mktEl.value = 'ML'; }
         }
-        if (currentSport === 'basketball_wnba') {
+        if (currentSport === 'basketball_wnba' || currentSport === 'soccer_wc') {
             var mktEl = document.getElementById('mkt-filter');
             if (mktEl && mktEl.value !== 'ML') { mktEl.value = 'ML'; }
         }
@@ -4948,7 +5040,84 @@
         if (nhlPoller)  { clearInterval(nhlPoller);  nhlPoller  = null; }
         if (dkPoller)  { clearInterval(dkPoller);  dkPoller  = null; }
         if (fcPoller)  { clearInterval(fcPoller);  fcPoller  = null; }
+        if (wcPoller)  { clearInterval(wcPoller);  wcPoller  = null; }
         dkAltOdds = {};
+
+        // WC: use FD native API for World Cup ML odds
+        if (currentSport === 'soccer_wc') {
+            altOdds = {};
+            rawRows = [];
+            fetch('/api/fd/wc?fresh=1', { credentials: 'same-origin' })
+            .then(function(r) {
+                if (r.status === 401) {
+                    dot.className = 'sdot error';
+                    stxt.textContent = 'Session expired — please log in again.';
+                    resetRefreshBtn();
+                    handleUnauthenticated();
+                    return Promise.reject('unauth');
+                }
+                return r.json();
+            })
+            .then(function(data) {
+                if (!data.ok || !data.games) {
+                    rawRows = []; rsGameIds = {};
+                    dot.className = 'sdot error';
+                    stxt.textContent = 'No WC games right now';
+                    return;
+                }
+                var rows = [];
+                Object.entries(data.games).forEach(function([gameKey, game]) {
+                    var away = game.away, home = game.home;
+                    var cm = game.cm ? new Date(game.cm) : null;
+                    var gid = String(game.id);
+                    var hasDraw = game.ml && game.ml.hasOwnProperty('Draw');
+                    if (hasDraw) {
+                        var awayAm = game.ml[away], homeAm = game.ml[home], drawAm = game.ml['Draw'];
+                        if (awayAm != null && homeAm != null && drawAm != null) {
+                            var nv3 = novig3(imp(awayAm), imp(homeAm), imp(drawAm));
+                            rows.push({ id: gid+'-ml3-A', game: gameKey, cm: cm, mkt: 'ML', side: away, am: awayAm, pt: null, pid: gid+'-ml3', ps: 'A', gid: gid, _wcFair: nv3.fa, _sport_key: 'soccer_wc' });
+                            rows.push({ id: gid+'-ml3-B', game: gameKey, cm: cm, mkt: 'ML', side: home, am: homeAm, pt: null, pid: gid+'-ml3', ps: 'B', gid: gid, _wcFair: nv3.fb, _sport_key: 'soccer_wc' });
+                            rows.push({ id: gid+'-draw-A', game: gameKey, cm: cm, mkt: 'ML', side: 'Draw', am: drawAm, pt: null, pid: gid+'-draw', ps: 'A', gid: gid, _wcFair: nv3.fc, _sport_key: 'soccer_wc' });
+                        }
+                    } else if (game.ml) {
+                        var pid = gid + '-ml';
+                        [[away, 'A'], [home, 'B']].forEach(function(pair) {
+                            var teamName = pair[0], ps = pair[1];
+                            var price = game.ml[teamName];
+                            if (price == null) return;
+                            rows.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'ML', side: teamName, am: price, pt: null, pid: pid, ps: ps, gid: gid, _sport_key: 'soccer_wc' });
+                        });
+                    }
+                });
+                rawRows = rows;
+                rawRowsBySport[currentSport] = rawRows;
+                var nowStr = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+                if (rawRows.length) {
+                    dot.className = 'sdot live';
+                    stxt.textContent = 'Updated ' + nowStr + ' - ' + Object.keys(data.games).length + ' games - FanDuel';
+                } else {
+                    dot.className = 'sdot error';
+                    stxt.textContent = 'No WC games right now';
+                }
+            })
+            .catch(function(e) {
+                if (e === 'unauth') return;
+                rawRows = []; rsGameIds = {};
+                dot.className = 'sdot error';
+                stxt.textContent = 'Error fetching WC data';
+            })
+            .then(function() {
+                resetRefreshBtn();
+                renderTable();
+                if (rawRows.length > 0) fetchRealMarkets(currentSport).then(function() { fetchExactEvForRows(currentSport); });
+                if (wcPoller) clearInterval(wcPoller);
+                wcPoller = setInterval(function() {
+                    if (currentSport !== 'soccer_wc') { clearInterval(wcPoller); wcPoller = null; return; }
+                    fetchWCNativeUpdate();
+                }, 5000);
+            });
+            return;
+        }
 
         // FC: use FD native API for soccer ML — no Odds API credits
         if (currentSport === 'soccer_fc') {
@@ -5440,6 +5609,11 @@
                        || gameMarkets['Match Winner'] || gameMarkets['Winner']
                        || Object.values(gameMarkets)[0];
             }
+            // WC: RS soccer may use 'Match Result' or '1X2' for 3-way group stage markets
+            if (!mktData && (r._sport_key === 'soccer_wc' || currentSport === 'soccer_wc') && r.mkt === 'ML') {
+                mktData = gameMarkets['Match Result'] || gameMarkets['1X2']
+                       || gameMarkets['Home/Draw/Away'] || gameMarkets['Game Winner'];
+            }
             var outcomes = mktData ? (mktData.outcomes || mktData) : null;
             if (!outcomes || !outcomes.length) return;
 
@@ -5536,6 +5710,49 @@
                 return;
             }
             try {
+                // WC: use FD native endpoint (3-way ML group stage, 2-way knockout)
+                if (s.key === 'soccer_wc') {
+                    var [wcResP, wcSyncResP] = await Promise.all([
+                        fetch('/api/fd/wc', { credentials: 'same-origin' }),
+                        fetch('/api/real/sync?sport=soccer_wc', { credentials: 'same-origin' })
+                    ]);
+                    var wcDataP = wcResP.ok ? await wcResP.json() : null;
+                    if (wcDataP && wcDataP.ok && wcDataP.games) {
+                        var wcRowsP = [];
+                        Object.entries(wcDataP.games).forEach(function([gameKey, game]) {
+                            var away = game.away, home = game.home;
+                            var cm = game.cm ? new Date(game.cm) : null;
+                            var gid = String(game.id);
+                            var hasDraw = game.ml && game.ml.hasOwnProperty('Draw');
+                            if (hasDraw) {
+                                var awayAm = game.ml[away], homeAm = game.ml[home], drawAm = game.ml['Draw'];
+                                if (awayAm != null && homeAm != null && drawAm != null) {
+                                    var nv3 = novig3(imp(awayAm), imp(homeAm), imp(drawAm));
+                                    wcRowsP.push({ id: gid+'-ml3-A', game: gameKey, cm: cm, mkt: 'ML', side: away, am: awayAm, pt: null, pid: gid+'-ml3', ps: 'A', gid: gid, _wcFair: nv3.fa, _sport_key: 'soccer_wc' });
+                                    wcRowsP.push({ id: gid+'-ml3-B', game: gameKey, cm: cm, mkt: 'ML', side: home, am: homeAm, pt: null, pid: gid+'-ml3', ps: 'B', gid: gid, _wcFair: nv3.fb, _sport_key: 'soccer_wc' });
+                                    wcRowsP.push({ id: gid+'-draw-A', game: gameKey, cm: cm, mkt: 'ML', side: 'Draw', am: drawAm, pt: null, pid: gid+'-draw', ps: 'A', gid: gid, _wcFair: nv3.fc, _sport_key: 'soccer_wc' });
+                                }
+                            } else if (game.ml) {
+                                var pid = gid + '-ml';
+                                [[away, 'A'], [home, 'B']].forEach(function(pair) {
+                                    var teamName = pair[0], ps = pair[1];
+                                    var price = game.ml[teamName];
+                                    if (price == null) return;
+                                    wcRowsP.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'ML', side: teamName, am: price, pt: null, pid: pid, ps: ps, gid: gid, _sport_key: 'soccer_wc' });
+                                });
+                            }
+                        });
+                        rawRowsBySport[s.key] = wcRowsP;
+                        if (wcSyncResP.ok) {
+                            var wcSyncDataP = await wcSyncResP.json();
+                            fillPredsFromSync(wcRowsP, wcSyncDataP);
+                            lastSyncData[s.key] = wcSyncDataP;
+                        }
+                    }
+                    done++;
+                    setBar(Math.round(done / total * 100));
+                    return;
+                }
                 // FC: use FD native DK AH endpoint — not Odds API
                 if (s.key === 'soccer_fc') {
                     var [fcRes, fcSyncResp] = await Promise.all([
@@ -5881,9 +6098,12 @@
             var nv = novig(p.A ? imp(p.A.am) : null, p.B ? imp(p.B.am) : null);
             var yl = yourLines[r.id] != null ? yourLines[r.id] : null;
             var altNV = getAltFair(r, yl, p.A, p.B);
-            // RFI uses Kalshi devigged fair value, not FD no-vig
+            // RFI uses Kalshi devigged fair value; WC uses pre-computed 3-way novig fair
             var fair, af;
-            if (r.mkt === 'RFI' && r.rfiFair != null) {
+            if (r._wcFair != null) {
+                fair = r._wcFair;
+                af = r._wcFair;
+            } else if (r.mkt === 'RFI' && r.rfiFair != null) {
                 fair = r.rfiFair;
                 af = r.rfiFair;
             } else {
@@ -5901,7 +6121,7 @@
                 evForUnits = (af * (1/pred) * (1-rsBaseTake(pred)) - 1) * 100;
                 // >100% EV is a post-game artifact — treat as no edge
                 // Exception: soccer FC live ±0.5 lines can legitimately produce >100% EV
-                if (evForUnits > 100 && currentSport !== 'soccer_fc') evForUnits = null;
+                if (evForUnits > 100 && currentSport !== 'soccer_fc' && currentSport !== 'soccer_wc') evForUnits = null;
             }
             var u = (isPro() || r.mkt === 'ML' || r.mkt === 'RFI') ? unitsEV(evForUnits, pred) : units(edge);
             // When RS line differs from FD base line and DK alt data is available,
@@ -6193,7 +6413,7 @@
 
         var r = rawRows.find(function(x) { return x.id === id; });
 
-        if (!_settingPred && r && (r.mkt === 'Total' || r.mkt === 'ML' || r.mkt === 'RFI' || r.mkt === 'Spread') && input.value !== '') {
+        if (!_settingPred && r && !r._wcFair && (r.mkt === 'Total' || r.mkt === 'ML' || r.mkt === 'RFI' || r.mkt === 'Spread') && input.value !== '') {
             var v = parseFloat(input.value);
             if (!isNaN(v) && v >= 1 && v <= 99) {
                 var otherId = r.ps === 'A' ? id.replace(/-A$/, '-B') : id.replace(/-B$/, '-A');
@@ -6215,13 +6435,22 @@
         if (!tr) return;
         if (!r) return;
         var yl = yourLines[id] != null ? yourLines[id] : null;
-        var _pairs = {};
-        rawRows.forEach(function(x) { if (!_pairs[x.pid]) _pairs[x.pid] = {}; _pairs[x.pid][x.ps] = x; });
-        var _p = _pairs[r.pid] || {};
-        var _nv = novig(_p.A ? imp(_p.A.am) : null, _p.B ? imp(_p.B.am) : null);
-        var _altNV = getAltFair(r, yl, _p.A, _p.B);
-        var fair = _altNV ? (r.ps === 'A' ? _altNV.fa : _altNV.fb) : (r.ps === 'A' ? _nv.fa : _nv.fb);
-        var af = _altNV ? fair : adjFair(fair, r.pt, yl, r.mkt, r.ps);
+        var fair, af;
+        if (r._wcFair != null) {
+            fair = r._wcFair;
+            af   = r._wcFair;
+        } else if (r.mkt === 'RFI' && r.rfiFair != null) {
+            fair = r.rfiFair;
+            af   = r.rfiFair;
+        } else {
+            var _pairs = {};
+            rawRows.forEach(function(x) { if (!_pairs[x.pid]) _pairs[x.pid] = {}; _pairs[x.pid][x.ps] = x; });
+            var _p = _pairs[r.pid] || {};
+            var _nv = novig(_p.A ? imp(_p.A.am) : null, _p.B ? imp(_p.B.am) : null);
+            var _altNV = getAltFair(r, yl, _p.A, _p.B);
+            fair = _altNV ? (r.ps === 'A' ? _altNV.fa : _altNV.fb) : (r.ps === 'A' ? _nv.fa : _nv.fb);
+            af = _altNV ? fair : adjFair(fair, r.pt, yl, r.mkt, r.ps);
+        }
         var pred = input.value !== '' ? Math.min(0.999, Math.max(0.001, (probsExact[id] != null ? probsExact[id] : parseFloat(input.value) / 100) + rsPredAdj / 100)) : null;
         var edge = (af != null && pred != null && isFinite(pred)) ? (af - pred) * 100 : null;
         var evForUnits = null, evH = '-';
@@ -6405,11 +6634,16 @@
             if (!rsGameIds[r.game]) return false;
             var pr = probsExact[r.id] != null ? probsExact[r.id] : (preds[r.id] ? parseFloat(preds[r.id]) / 100 : null);
             if (!pr || pr <= 0 || pr >= 1) return false;
-            var pairs = {};
-            rawRows.forEach(function(x) { if (!pairs[x.pid]) pairs[x.pid] = {}; pairs[x.pid][x.ps] = x; });
-            var pair = pairs[r.pid] || {};
-            var nv = novig(pair.A ? imp(pair.A.am) : null, pair.B ? imp(pair.B.am) : null);
-            var fair = r.ps === 'A' ? nv.fa : nv.fb;
+            var fair;
+            if (r._wcFair != null) {
+                fair = r._wcFair;
+            } else {
+                var pairs = {};
+                rawRows.forEach(function(x) { if (!pairs[x.pid]) pairs[x.pid] = {}; pairs[x.pid][x.ps] = x; });
+                var pair = pairs[r.pid] || {};
+                var nv = novig(pair.A ? imp(pair.A.am) : null, pair.B ? imp(pair.B.am) : null);
+                fair = r.ps === 'A' ? nv.fa : nv.fb;
+            }
             if (!fair) return false;
             return (fair * (1/pr) * (1-rsBaseTake(pr)) - 1) * 100 > 0;
         });
@@ -6707,6 +6941,11 @@
                            || gameMarkets['Match Winner'] || gameMarkets['Winner']
                            || Object.values(gameMarkets)[0]; // last resort: first available market
                 }
+                // WC: RS soccer uses 'Match Result' or '1X2' for 3-way group stage markets
+                if (!mktData && sport === 'soccer_wc' && r.mkt === 'ML') {
+                    mktData = gameMarkets['Match Result'] || gameMarkets['1X2']
+                           || gameMarkets['Home/Draw/Away'] || gameMarkets['Game Winner'];
+                }
                 var outcomes = mktData ? (mktData.outcomes || mktData) : null;
                 if (!outcomes || !outcomes.length) return;
 
@@ -6783,6 +7022,17 @@
                         // No ±0.5 labels — positional fallback
                         match = r.ps === 'A' ? outcomes[0] : outcomes[1];
                     }
+                }
+
+                // Pass 0e: WC Draw row — RS may use 'X', 'Draw', or 'Draw/Tie' for the draw outcome
+                if (!match && sport === 'soccer_wc' && r.side === 'Draw') {
+                    match = outcomes.find(function(o) {
+                        if (!o.label) return false;
+                        var ol = o.label.toLowerCase();
+                        return ol === 'x' || ol === 'draw' || ol.indexOf('draw') !== -1 || ol.indexOf('tie') !== -1;
+                    });
+                    // Positional fallback: RS 3-way outcomes are typically [Away, Draw, Home] or [Home, Draw, Away]
+                    if (!match && outcomes.length === 3) match = outcomes[1];
                 }
 
                 // Pass 1: exact word match or full label phrase in FD side
@@ -7216,6 +7466,77 @@
             var stxtEl = document.getElementById('status-txt');
             var dotEl = document.getElementById('sdot');
             if (stxtEl) stxtEl.textContent = 'Updated ' + nowStr + ' - ' + Object.keys(data.games).length + ' games - DraftKings';
+            if (dotEl) dotEl.className = 'sdot live';
+            renderTable();
+        } catch(e) {}
+    }
+
+    async function fetchWCNativeUpdate() {
+        var sport = currentSport;
+        if (sport !== 'soccer_wc') return;
+        try {
+            var res = await fetch('/api/fd/wc', { credentials: 'same-origin' });
+            if (!wcPoller) return;
+            var data = await res.json();
+            if (!data.ok || !data.games) return;
+            var existingGames = {};
+            rawRows.forEach(function(r) { existingGames[r.game] = true; });
+            var hasNewGames = Object.keys(data.games).some(function(g) { return !existingGames[g]; });
+            if (hasNewGames) {
+                var rows = [];
+                Object.entries(data.games).forEach(function([gameKey, game]) {
+                    var away = game.away, home = game.home;
+                    var cm = game.cm ? new Date(game.cm) : null;
+                    var gid = String(game.id);
+                    var hasDraw = game.ml && game.ml.hasOwnProperty('Draw');
+                    if (hasDraw) {
+                        var awayAm = game.ml[away], homeAm = game.ml[home], drawAm = game.ml['Draw'];
+                        if (awayAm != null && homeAm != null && drawAm != null) {
+                            var nv3 = novig3(imp(awayAm), imp(homeAm), imp(drawAm));
+                            rows.push({ id: gid+'-ml3-A', game: gameKey, cm: cm, mkt: 'ML', side: away, am: awayAm, pt: null, pid: gid+'-ml3', ps: 'A', gid: gid, _wcFair: nv3.fa, _sport_key: 'soccer_wc' });
+                            rows.push({ id: gid+'-ml3-B', game: gameKey, cm: cm, mkt: 'ML', side: home, am: homeAm, pt: null, pid: gid+'-ml3', ps: 'B', gid: gid, _wcFair: nv3.fb, _sport_key: 'soccer_wc' });
+                            rows.push({ id: gid+'-draw-A', game: gameKey, cm: cm, mkt: 'ML', side: 'Draw', am: drawAm, pt: null, pid: gid+'-draw', ps: 'A', gid: gid, _wcFair: nv3.fc, _sport_key: 'soccer_wc' });
+                        }
+                    } else if (game.ml) {
+                        var pid = gid + '-ml';
+                        [[away, 'A'], [home, 'B']].forEach(function(pair) {
+                            var teamName = pair[0], ps = pair[1];
+                            var price = game.ml[teamName];
+                            if (price == null) return;
+                            rows.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'ML', side: teamName, am: price, pt: null, pid: pid, ps: ps, gid: gid, _sport_key: 'soccer_wc' });
+                        });
+                    }
+                });
+                rawRows = rows;
+                rawRowsBySport[sport] = rawRows;
+                fetchRealMarkets(sport, true);
+            } else {
+                // Update prices in place for existing rows
+                rawRows.forEach(function(r) {
+                    if (r.mkt !== 'ML') return;
+                    var game = data.games[r.game];
+                    if (!game || !game.ml) return;
+                    var newAm = game.ml[r.side];
+                    if (newAm == null) return;
+                    r.am = newAm;
+                    // Recompute _wcFair if group stage
+                    var hasDraw = game.ml.hasOwnProperty('Draw');
+                    if (hasDraw && r._wcFair != null) {
+                        var awayAm = game.ml[game.away], homeAm = game.ml[game.home], drawAm = game.ml['Draw'];
+                        if (awayAm != null && homeAm != null && drawAm != null) {
+                            var nv3 = novig3(imp(awayAm), imp(homeAm), imp(drawAm));
+                            if (r.ps === 'A' && r.side !== 'Draw') r._wcFair = nv3.fa;
+                            else if (r.ps === 'B') r._wcFair = nv3.fb;
+                            else r._wcFair = nv3.fc; // Draw
+                        }
+                    }
+                });
+                rawRowsBySport[sport] = rawRows;
+            }
+            var nowStr = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+            var stxtEl = document.getElementById('status-txt');
+            var dotEl = document.getElementById('sdot');
+            if (stxtEl) stxtEl.textContent = 'Updated ' + nowStr + ' - ' + Object.keys(data.games).length + ' games - FanDuel';
             if (dotEl) dotEl.className = 'sdot live';
             renderTable();
         } catch(e) {}
