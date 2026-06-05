@@ -34,7 +34,7 @@ const SPORT_MAP = {
 const UNSUPPORTED_SPORTS = new Set([]);
 
 // Sports accessible to free-plan users (on their individual sport tabs)
-const FREE_PLAN_SPORTS = new Set(['basketball_nba', 'icehockey_nhl', 'baseball_mlb']);
+const FREE_PLAN_SPORTS = new Set(['basketball_nba', 'icehockey_nhl', 'baseball_mlb', 'basketball_wnba']);
 
 function extractGames(gamesData) {
   // Collect from ALL possible locations and deduplicate by game ID.
