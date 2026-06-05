@@ -521,13 +521,106 @@
         return 'hsla(' + teamColorHue(name) + ',65%,50%,' + (parseInt(hexOp, 16) / 255).toFixed(2) + ')';
     }
 
+    // Primary + secondary flag colors for WC nations — drives the gradient behind team name
+    var WC_FLAG_COLORS = {
+        'Albania':              { c1:'#E41E20', c2:'#000000' },
+        'Algeria':              { c1:'#006233', c2:'#EF3340' },
+        'Argentina':            { c1:'#74ACDF', c2:'#FFFFFF' },
+        'Australia':            { c1:'#00008B', c2:'#FF0000' },
+        'Austria':              { c1:'#ED2939', c2:'#FFFFFF' },
+        'Belgium':              { c1:'#000000', c2:'#FAE042' },
+        'Bolivia':              { c1:'#D52B1E', c2:'#F4E400' },
+        'Bosnia':               { c1:'#003DA5', c2:'#FCDD09' },
+        'Bosnia and Herzegovina': { c1:'#003DA5', c2:'#FCDD09' },
+        'Brazil':               { c1:'#009C3B', c2:'#FFDF00' },
+        'Burkina Faso':         { c1:'#EF2B2D', c2:'#009A00' },
+        'Cameroon':             { c1:'#007A3D', c2:'#CE1126' },
+        'Canada':               { c1:'#FF0000', c2:'#FFFFFF' },
+        'Chile':                { c1:'#D52B1E', c2:'#003DA5' },
+        'Colombia':             { c1:'#FCD116', c2:'#003087' },
+        'Comoros':              { c1:'#3A75C4', c2:'#3D9A00' },
+        'Costa Rica':           { c1:'#002B7F', c2:'#CE1126' },
+        'Croatia':              { c1:'#FF0000', c2:'#003087' },
+        'Cuba':                 { c1:'#002A8F', c2:'#CF142B' },
+        'Czech Republic':       { c1:'#D7141A', c2:'#11457E' },
+        'Denmark':              { c1:'#C60C30', c2:'#FFFFFF' },
+        'DR Congo':             { c1:'#007FFF', c2:'#F7D618' },
+        'Ecuador':              { c1:'#FFD100', c2:'#003580' },
+        'Egypt':                { c1:'#CE1126', c2:'#000000' },
+        'England':              { c1:'#CF091F', c2:'#FFFFFF' },
+        'Finland':              { c1:'#003580', c2:'#FFFFFF' },
+        'France':               { c1:'#002395', c2:'#ED2939' },
+        'Germany':              { c1:'#DD0000', c2:'#FFCE00' },
+        'Ghana':                { c1:'#006B3F', c2:'#FCD116' },
+        'Guatemala':            { c1:'#4997D0', c2:'#FFFFFF' },
+        'Honduras':             { c1:'#0073CF', c2:'#FFFFFF' },
+        'Hungary':              { c1:'#CE2939', c2:'#477050' },
+        'Iran':                 { c1:'#239F40', c2:'#DA0000' },
+        'Israel':               { c1:'#0038B8', c2:'#FFFFFF' },
+        'Ivory Coast':          { c1:'#F77F00', c2:'#009A44' },
+        "Cote d'Ivoire":        { c1:'#F77F00', c2:'#009A44' },
+        'Jamaica':              { c1:'#000000', c2:'#FED100' },
+        'Japan':                { c1:'#BC002D', c2:'#FFFFFF' },
+        'Jordan':               { c1:'#007A3D', c2:'#CE1126' },
+        'Mali':                 { c1:'#14B53A', c2:'#CE1126' },
+        'Mauritania':           { c1:'#006233', c2:'#FFD700' },
+        'Mexico':               { c1:'#006847', c2:'#CE1126' },
+        'Morocco':              { c1:'#C1272D', c2:'#006233' },
+        'Netherlands':          { c1:'#AE1C28', c2:'#21468B' },
+        'New Zealand':          { c1:'#00247D', c2:'#CC142B' },
+        'Nigeria':              { c1:'#008751', c2:'#FFFFFF' },
+        'Norway':               { c1:'#EF2B2D', c2:'#002868' },
+        'Panama':               { c1:'#DA121A', c2:'#1C4CA0' },
+        'Paraguay':             { c1:'#D52B1E', c2:'#0038A8' },
+        'Peru':                 { c1:'#D91023', c2:'#FFFFFF' },
+        'Poland':               { c1:'#DC143C', c2:'#FFFFFF' },
+        'Portugal':             { c1:'#FF0000', c2:'#006600' },
+        'Qatar':                { c1:'#8D1B3D', c2:'#FFFFFF' },
+        'Romania':              { c1:'#002B7F', c2:'#FCD116' },
+        'Saudi Arabia':         { c1:'#006C35', c2:'#FFFFFF' },
+        'Scotland':             { c1:'#003087', c2:'#FFFFFF' },
+        'Senegal':              { c1:'#00853F', c2:'#E31B23' },
+        'Serbia':               { c1:'#C6363C', c2:'#003DA5' },
+        'Slovakia':             { c1:'#0B4EA2', c2:'#EE1C25' },
+        'Slovenia':             { c1:'#003DA5', c2:'#EE1C25' },
+        'South Africa':         { c1:'#007A4D', c2:'#DE3831' },
+        'South Korea':          { c1:'#CD2E3A', c2:'#003478' },
+        'Spain':                { c1:'#C60B1E', c2:'#FFC400' },
+        'Switzerland':          { c1:'#FF0000', c2:'#FFFFFF' },
+        'Tanzania':             { c1:'#1EB53A', c2:'#00A3DD' },
+        'Togo':                 { c1:'#D21034', c2:'#006A4E' },
+        'Trinidad and Tobago':  { c1:'#CE1126', c2:'#000000' },
+        'Tunisia':              { c1:'#E70013', c2:'#FFFFFF' },
+        'Turkey':               { c1:'#E30A17', c2:'#FFFFFF' },
+        'Türkiye':              { c1:'#E30A17', c2:'#FFFFFF' },
+        'Ukraine':              { c1:'#005BBB', c2:'#FFD500' },
+        'Uruguay':              { c1:'#5BA4CF', c2:'#FFFFFF' },
+        'USA':                  { c1:'#3C3B6E', c2:'#B22234' },
+        'United States':        { c1:'#3C3B6E', c2:'#B22234' },
+        'Uzbekistan':           { c1:'#009FCA', c2:'#1EB53A' },
+        'Venezuela':            { c1:'#CF142B', c2:'#00247D' },
+        'Wales':                { c1:'#CF091F', c2:'#00B140' },
+        'Zimbabwe':             { c1:'#006400', c2:'#D21034' },
+    };
+
+    function hexRgba(hex, alpha) {
+        var r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+        return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+    }
+
     // Renders team name as stacked city/nickname with team-color gradient
     function teamNameHtml(name) {
         name = name || '';
         var lastSpace = name.lastIndexOf(' ');
         var city = lastSpace > 0 ? name.slice(0, lastSpace) : '';
         var nick = lastSpace > 0 ? name.slice(lastSpace + 1) : name;
-        var grad = 'background:linear-gradient(90deg,' + teamColorAt(name, '30') + ',transparent)';
+        var grad;
+        var wfc = WC_FLAG_COLORS[name];
+        if (wfc) {
+            grad = 'background:linear-gradient(90deg,' + hexRgba(wfc.c1, 0.4) + ',' + hexRgba(wfc.c2, 0.2) + ',transparent)';
+        } else {
+            grad = 'background:linear-gradient(90deg,' + teamColorAt(name, '30') + ',transparent)';
+        }
         var ln = 'display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
         if (city) {
             return '<span style="overflow:hidden;margin-left:2px;padding:2px 8px 2px 5px;' + grad + ';border-radius:3px">'
