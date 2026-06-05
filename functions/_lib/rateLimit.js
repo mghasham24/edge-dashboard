@@ -4,12 +4,15 @@
 // max    — max requests allowed in the window
 // window — window size in seconds
 // Returns true if the request is allowed, false if rate-limited.
-export async function checkRateLimit(db, request, key, max, windowSecs) {
-  const ip = request.headers.get('CF-Connecting-IP')
+// identifier — optional, defaults to client IP. Pass a user ID string to rate-limit per user
+//              regardless of IP (better for authenticated endpoints).
+export async function checkRateLimit(db, request, key, max, windowSecs, identifier) {
+  const id = identifier
+           || request.headers.get('CF-Connecting-IP')
            || request.headers.get('X-Forwarded-For')
            || 'unknown';
   const windowId = Math.floor(Date.now() / 1000 / windowSecs);
-  const rlKey    = key + '_' + ip + '_' + windowId;
+  const rlKey    = key + '_' + id + '_' + windowId;
   const now      = Math.floor(Date.now() / 1000);
 
   try {
