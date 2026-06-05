@@ -95,9 +95,6 @@ export async function onRequestGet(context) {
         if (debugMode === '1' && !d.events) events.push({ _warn: `league ${leagueId} no events key`, keys: Object.keys(d) });
 
         for (const ev of d.events || []) {
-          if (!isToday_ET(ev.startEventDate)) continue;
-          const t = new Date(ev.startEventDate).getTime();
-          if (t < nowMs - 4 * 60 * 60 * 1000) continue;
 
           let home, away;
           const parts_arr = ev.participants || [];
