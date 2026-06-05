@@ -4329,6 +4329,10 @@
             showUpgradeModal('Spread and Total markets are available on the Pro plan. Upgrade to access all betting markets.');
             return;
         }
+        if (currentSport === 'basketball_wnba' && sel.value !== 'ML') {
+            sel.value = 'ML';
+            return;
+        }
         loadOdds();
     }
 
@@ -4750,6 +4754,10 @@
             currentSport = FREE_SPORTS.indexOf(currentSport) !== -1 ? currentSport : FREE_SPORTS[0];
             var mktEl = document.getElementById('mkt-filter');
             if (mktEl.value !== 'ML') { mktEl.value = 'ML'; }
+        }
+        if (currentSport === 'basketball_wnba') {
+            var mktEl = document.getElementById('mkt-filter');
+            if (mktEl && mktEl.value !== 'ML') { mktEl.value = 'ML'; }
         }
         var btn = document.getElementById('refresh-btn'),
             dot = document.getElementById('sdot'),
@@ -5660,28 +5668,6 @@
                             var away = game.away, home = game.home;
                             var cm = game.cm ? new Date(game.cm) : null;
                             var gid = String(game.id);
-                            if (game.spreads) {
-                                var pid = gid + '-spreads';
-                                [[away,'A'],[home,'B']].forEach(function(pair) {
-                                    var teamName = pair[0], ps = pair[1];
-                                    var sideData = game.spreads[teamName];
-                                    if (!sideData) return;
-                                    var entry = Object.entries(sideData)[0];
-                                    if (!entry) return;
-                                    wnbaRowsP.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName, am: entry[1], pt: parseFloat(entry[0]), pid: pid, ps: ps, gid: gid, _sport_key: 'basketball_wnba' });
-                                });
-                            }
-                            if (game.totals) {
-                                var pid = gid + '-totals';
-                                [['Over','A'],['Under','B']].forEach(function(pair) {
-                                    var side = pair[0], ps = pair[1];
-                                    var sideData = game.totals[side];
-                                    if (!sideData) return;
-                                    var entry = Object.entries(sideData)[0];
-                                    if (!entry) return;
-                                    wnbaRowsP.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'Total', side: side, am: entry[1], pt: parseFloat(entry[0]), pid: pid, ps: ps, gid: gid, _sport_key: 'basketball_wnba' });
-                                });
-                            }
                             if (game.ml) {
                                 var pid = gid + '-h2h';
                                 [[away,'A'],[home,'B']].forEach(function(pair) {
