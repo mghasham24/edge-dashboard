@@ -1,44 +1,50 @@
 import { getSessionOrCron } from '../../_lib/auth.js';
 // functions/api/fd/wc.js
-// Fetches FanDuel World Cup ML odds (3-way group stage / 2-way knockout)
-// Step 1: Get WC events from content-managed-page
-// Step 2: Fetch event-page per game to collect market IDs and runner names
-// Step 3: Batch POST to getMarketPrices for real-time prices
+// Fetches DraftKings real-time FIFA World Cup Asian Handicap ±0.5 spread odds
+// Subcat 13170 = 2-way AH (Home -0.5 / Away +0.5), same as FC tab — no draw
+// Step 1: Get today's WC events from DK league endpoint
+// Step 2: For each event, fetch subcat 13170 to get actual ±0.5 prices
 
-const FD_AK         = 'FhMFpcPWXMeyZxOx';
-const FD_LIST_URLS  = [
-  `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=CUSTOM&customPageId=world_cup&_ak=${FD_AK}&timezone=America/New_York`,
-  `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=CUSTOM&customPageId=world-cup&_ak=${FD_AK}&timezone=America/New_York`,
-  `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=CUSTOM&customPageId=fifa-world-cup&_ak=${FD_AK}&timezone=America/New_York`,
-  `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=CUSTOM&customPageId=soccer&_ak=${FD_AK}&timezone=America/New_York`,
-];
-const FD_EVENT_URL  = (id) => `https://sbapi.nj.sportsbook.fanduel.com/api/event-page?_ak=${FD_AK}&eventId=${id}&tab=all&timezone=America/New_York`;
-const FD_PRICES_URL = 'https://smp.nj.sportsbook.fanduel.com/api/sports/fixedodds/readonly/v1/getMarketPrices?priceHistory=0';
-const CACHE_TTL     = 5;
+const DK_BASE   = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
+const DK_SUBCAT = '13170'; // Soccer Asian Handicap ±0.5 (2-way, no draw)
+const CACHE_TTL = 4; // 4s ensures 5s frontend poller always gets a fresh DK fetch
 
-const ML3_TYPE = 'MONEYLINE_(3-WAY)'; // group stage: home/draw/away
-const ML2_TYPE = 'MONEY_LINE';         // knockout: team to advance (no draw)
+const DK_WC_LEAGUES = {
+  '209533': 'WC', // FIFA World Cup 2026
+};
+
+function dkLeagueEventsUrl(leagueId) {
+  const eq = encodeURIComponent(`$filter=leagueId eq '${leagueId}'`);
+  const mq = encodeURIComponent(
+    `$filter=clientMetadata/subCategoryId eq '${DK_SUBCAT}' AND tags/all(t: t ne 'SportcastBetBuilder')`
+  );
+  return `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${leagueId}&eventsQuery=${eq}&marketsQuery=${mq}&include=Events&entity=events`;
+}
+
+function dkEventSubcatUrl(eventId) {
+  const mq = encodeURIComponent(
+    `$filter=eventId eq '${eventId}' AND clientMetadata/subCategoryId eq '${DK_SUBCAT}' AND tags/all(t: t ne 'SportcastBetBuilder')`
+  );
+  return `${DK_BASE}/controldata/event/eventSubcategory/v1/markets?isBatchable=false&templateVars=${eventId}%2C${DK_SUBCAT}&marketsQuery=${mq}&include=MarketSplits&entity=markets`;
+}
+
+function parseAmerican(str) {
+  if (!str) return null;
+  const s = String(str).replace(/−/g, '-').replace(/[^0-9+\-]/g, '');
+  const n = parseInt(s, 10);
+  return isFinite(n) ? n : null;
+}
+
+function isToday_ET(dateStr) {
+  if (!dateStr) return false;
+  const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
+  return fmt.format(new Date(dateStr)) === fmt.format(new Date());
+}
 
 function fail(status, msg) {
   return new Response(JSON.stringify({ error: msg }), {
     status, headers: { 'Content-Type': 'application/json' }
   });
-}
-
-function parseEventTeams(event) {
-  const parts = event.participants || [];
-  const homeP = parts.find(p => p.venueRole === 'Home');
-  const awayP = parts.find(p => p.venueRole === 'Away');
-  if (homeP && awayP) return { home: homeP.name, away: awayP.name };
-  const name = event.name || '';
-  const m = name.match(/^(.+?)\s+(?:@|v\.?)\s+(.+)$/i);
-  if (m) return { away: m[1].trim(), home: m[2].trim() };
-  return null;
-}
-
-function isWCEvent(event) {
-  const comp = (event.competitionId || '') + (event.competitionName || '') + (event.eventPath || '');
-  return /world.?cup|fifa|wc\b/i.test(comp) || (event.tags || []).some(t => /world.?cup|fifa/i.test(t));
 }
 
 export async function onRequestGet(context) {
@@ -50,8 +56,9 @@ export async function onRequestGet(context) {
   const reqUrl    = new URL(request.url);
   const debugMode = reqUrl.searchParams.get('debug');
   const freshMode = reqUrl.searchParams.get('fresh');
-  const now       = Math.floor(Date.now() / 1000);
-  const cacheKey  = 'fd_wc';
+
+  const now      = Math.floor(Date.now() / 1000);
+  const cacheKey = 'fd_wc';
 
   if (!debugMode && !freshMode) {
     try {
@@ -65,139 +72,66 @@ export async function onRequestGet(context) {
   }
 
   const headers = {
-    'Accept': 'application/json',
-    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15'
+    'Accept': '*/*',
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15',
+    'Origin': 'https://sportsbook.draftkings.com',
+    'Referer': 'https://sportsbook.draftkings.com/'
   };
 
+  const nowMs = Date.now();
+
   try {
-    // Step 1: Try each list URL until we find WC events
-    const nowMs     = Date.now();
-    const etFmt     = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
-    const todayET   = etFmt.format(new Date());
-    const yestET    = etFmt.format(new Date(nowMs - 24 * 60 * 60 * 1000));
-
-    let todayEvents = [];
-    let sourceUrl   = '';
-    let allEventsDebug = [];
-
-    for (const url of FD_LIST_URLS) {
+    // Step 1: Fetch WC league events
+    const leagueEntries = Object.entries(DK_WC_LEAGUES);
+    const leagueResults = await Promise.all(leagueEntries.map(async ([leagueId, leagueLabel]) => {
+      const events = [];
       try {
-        const r = await fetch(url, { headers, signal: AbortSignal.timeout(8000) });
-        if (!r.ok) continue;
-        const d = await r.json();
-        const events = d?.attachments?.events || {};
-        const vals = Object.values(events);
-
-        if (debugMode === '1') {
-          allEventsDebug.push({ url, count: vals.length, sample: vals.slice(0, 3).map(e => ({ id: e.eventId, name: e.name, comp: e.competitionId, compName: e.competitionName })) });
-          continue;
+        const r = await fetch(dkLeagueEventsUrl(leagueId), { headers });
+        if (!r.ok) {
+          if (debugMode === '1') events.push({ _error: `league ${leagueId} status ${r.status}` });
+          return events;
         }
+        const d = await r.json();
+        if (debugMode === '1' && !d.events) events.push({ _warn: `league ${leagueId} no events key`, keys: Object.keys(d) });
 
-        const wc = vals.filter(e => {
-          if (!e.openDate) return false;
-          const t = new Date(e.openDate).getTime();
-          if (t < nowMs - 4 * 60 * 60 * 1000) return false;
-          const dt = etFmt.format(new Date(e.openDate));
-          if (dt !== todayET && dt !== yestET) return false;
-          return isWCEvent(e) || /world.?cup|fifa/i.test(e.name || '');
-        });
+        for (const ev of d.events || []) {
+          if (!isToday_ET(ev.startEventDate)) continue;
+          const t = new Date(ev.startEventDate).getTime();
+          if (t < nowMs - 4 * 60 * 60 * 1000) continue;
 
-        if (wc.length) { todayEvents = wc; sourceUrl = url; break; }
+          let home, away;
+          const parts_arr = ev.participants || [];
+          const homeP = parts_arr.find(p => p.venueRole === 'Home');
+          const awayP = parts_arr.find(p => p.venueRole === 'Away');
+          if (homeP && awayP) {
+            home = homeP.name; away = awayP.name;
+          } else {
+            const parts = (ev.name || '').split(' vs ');
+            if (parts.length !== 2) continue;
+            home = parts[0].trim(); away = parts[1].trim();
+          }
 
-        // If no WC filter matched, try ALL events from this page (for soccer customPageId)
-        const all = vals.filter(e => {
-          if (!e.openDate) return false;
-          const t = new Date(e.openDate).getTime();
-          if (t < nowMs - 4 * 60 * 60 * 1000) return false;
-          const dt = etFmt.format(new Date(e.openDate));
-          return dt === todayET || dt === yestET;
-        });
-        if (all.length) { todayEvents = all; sourceUrl = url; break; }
+          events.push({ eventId: ev.id, home, away, league: leagueLabel, openDate: ev.startEventDate });
+        }
       } catch(e) {}
-    }
+      return events;
+    }));
+
+    const todayEvents = leagueResults.flat();
 
     if (debugMode === '1') {
-      return new Response(JSON.stringify({ allEventsDebug }), { headers: { 'Content-Type': 'application/json' } });
-    }
-
-    if (debugMode === '2') {
-      return new Response(JSON.stringify({ sourceUrl, todayEventsFound: todayEvents.length, events: todayEvents.map(e => ({ id: e.eventId, name: e.name, openDate: e.openDate, comp: e.competitionId, compName: e.competitionName })) }), {
+      return new Response(JSON.stringify({ todayEventsFound: todayEvents.length, events: todayEvents }), {
         headers: { 'Content-Type': 'application/json' }
       });
     }
 
     if (!todayEvents.length) {
-      return new Response(JSON.stringify({ ok: true, games: {} }), { headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ ok: true, games: {} }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
 
-    // Step 2: Fetch event-pages to collect market IDs and runner names
-    const gameData = {};
-    for (let i = 0; i < todayEvents.length; i++) {
-      const event = todayEvents[i];
-      const teams = parseEventTeams(event);
-      if (!teams) continue;
-
-      try {
-        const evRes = await fetch(FD_EVENT_URL(event.eventId), { headers, signal: AbortSignal.timeout(6000) });
-        if (!evRes.ok) continue;
-        const evData = await evRes.json();
-
-        const markets = evData?.attachments?.markets || {};
-        const gameKey = teams.away + ' @ ' + teams.home;
-        const entry   = { eventId: event.eventId, openDate: event.openDate, away: teams.away, home: teams.home, runnerNames: {} };
-
-        if (debugMode === '3') {
-          const mkts = Object.values(markets).map(m => ({ type: m.marketType, name: m.marketName, runners: (m.runners || []).map(r => r.runnerName) }));
-          gameData[gameKey] = { ...entry, allMarkets: mkts };
-          continue;
-        }
-
-        Object.entries(markets).forEach(([marketId, mkt]) => {
-          const t = mkt.marketType || '';
-          if (t === ML3_TYPE)      entry.ml3Id = marketId;
-          else if (t === ML2_TYPE) entry.ml2Id = marketId;
-          else return;
-          (mkt.runners || []).forEach(r => {
-            if (r.selectionId != null && r.runnerName) entry.runnerNames[r.selectionId] = r.runnerName;
-          });
-        });
-
-        if (entry.ml3Id || entry.ml2Id) gameData[gameKey] = entry;
-      } catch(e) {}
-
-      if (i < todayEvents.length - 1) await new Promise(r => setTimeout(r, 150));
-    }
-
-    if (debugMode === '3') {
-      return new Response(JSON.stringify({ ok: true, games: gameData }), { headers: { 'Content-Type': 'application/json' } });
-    }
-
-    if (!Object.keys(gameData).length) {
-      return new Response(JSON.stringify({ ok: true, games: {} }), { headers: { 'Content-Type': 'application/json' } });
-    }
-
-    // Step 3: Batch all market IDs → one getMarketPrices call
-    const allMarketIds  = [];
-    const marketToGame  = {};
-    Object.entries(gameData).forEach(([gameKey, entry]) => {
-      if (entry.ml3Id) { allMarketIds.push(entry.ml3Id); marketToGame[entry.ml3Id] = { gameKey, type: 'ml3' }; }
-      if (entry.ml2Id) { allMarketIds.push(entry.ml2Id); marketToGame[entry.ml2Id] = { gameKey, type: 'ml2' }; }
-    });
-
-    if (!allMarketIds.length) {
-      return new Response(JSON.stringify({ ok: true, games: {} }), { headers: { 'Content-Type': 'application/json' } });
-    }
-
-    const pricesRes = await fetch(FD_PRICES_URL, {
-      method: 'POST',
-      headers: { ...headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ marketIds: allMarketIds }),
-      signal: AbortSignal.timeout(8000)
-    });
-    if (!pricesRes.ok) return fail(pricesRes.status, 'getMarketPrices failed');
-    const pricesRaw = await pricesRes.json();
-    const marketPricesList = Array.isArray(pricesRaw) ? pricesRaw : (pricesRaw.marketPrices || []);
-
+    // Step 2: Fetch AH markets for all events in parallel
     let prevGames = {};
     try {
       const prev = await env.DB.prepare('SELECT data FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
@@ -206,37 +140,62 @@ export async function onRequestGet(context) {
 
     const gamesMap = {};
 
-    marketPricesList.forEach(mp => {
-      const mapping = marketToGame[mp.marketId];
-      if (!mapping) return;
-      const { gameKey, type } = mapping;
-      const entry = gameData[gameKey];
+    await Promise.all(todayEvents.map(async (ev) => {
+      const gameKey = ev.away + ' @ ' + ev.home;
+      try {
+        const r = await fetch(dkEventSubcatUrl(ev.eventId), { headers });
+        if (!r.ok) return;
+        const d = await r.json();
 
-      if (mp.marketStatus === 'SUSPENDED') {
-        if (!gamesMap[gameKey]) {
-          const frozen = prevGames[gameKey] || null;
-          if (frozen && Object.keys(frozen.ml || {}).length) {
-            gamesMap[gameKey] = { ...frozen, id: parseInt(entry.eventId), away: entry.away, home: entry.home, cm: entry.openDate, live: true };
-          }
+        const spreads = { Home: {}, Away: {} };
+        for (const sel of d.selections || []) {
+          const pts   = sel.points;
+          const ot    = sel.outcomeType;
+          const price = parseAmerican(sel.displayOdds && sel.displayOdds.american);
+          if (price == null || pts == null) continue;
+          if (ot !== 'Home' && ot !== 'Away') continue;
+          spreads[ot][String(pts)] = price;
         }
-        return;
-      }
-      if (mp.marketStatus !== 'OPEN') return;
-      if (!gamesMap[gameKey]) gamesMap[gameKey] = { id: parseInt(entry.eventId), away: entry.away, home: entry.home, cm: entry.openDate, ml: {} };
 
-      (mp.runnerDetails || []).forEach(rd => {
-        if (rd.runnerStatus !== 'ACTIVE') return;
-        const price = rd.winRunnerOdds?.americanDisplayOdds?.americanOddsInt;
-        if (price == null) return;
-        const name = entry.runnerNames[rd.selectionId] || entry.runnerNames[String(rd.selectionId)] || '';
-        if (!name) return;
-        gamesMap[gameKey].ml[name] = price;
+        const homeMinus = spreads.Home['-0.5'] || null;
+        const homePlus  = spreads.Home['0.5']  || null;
+        const awayMinus = spreads.Away['-0.5'] || null;
+        const awayPlus  = spreads.Away['0.5']  || null;
+
+        if (debugMode === '2') {
+          const allSels = (d.selections || []).map(s => ({ label: s.label, outcomeType: s.outcomeType, points: s.points, odds: s.displayOdds && s.displayOdds.american }));
+          gamesMap[gameKey] = { home: ev.home, away: ev.away, hm: homeMinus, hp: homePlus, awm: awayMinus, awp: awayPlus, spreads, allSels };
+          return;
+        }
+
+        if (!Object.keys(spreads.Home).length && !Object.keys(spreads.Away).length) {
+          // DK suspended AH market — freeze last known odds
+          const frozen = prevGames[gameKey] || prevGames[ev.away + ' @ ' + ev.home] || null;
+          if (frozen && (Object.keys(frozen.spreads?.Home || {}).length || Object.keys(frozen.spreads?.Away || {}).length)) {
+            gamesMap[gameKey] = { ...frozen, id: parseInt(ev.eventId), away: ev.away, home: ev.home, cm: ev.openDate, live: true };
+          }
+          return;
+        }
+
+        gamesMap[gameKey] = {
+          id: parseInt(ev.eventId),
+          away: ev.away,
+          home: ev.home,
+          cm: ev.openDate,
+          league: ev.league,
+          hm: homeMinus,
+          hp: homePlus,
+          awm: awayMinus,
+          awp: awayPlus,
+          spreads
+        };
+      } catch(e) {}
+    }));
+
+    if (debugMode === '2') {
+      return new Response(JSON.stringify({ ok: true, games: gamesMap }), {
+        headers: { 'Content-Type': 'application/json' }
       });
-    });
-
-    // Remove games with no prices
-    for (const k of Object.keys(gamesMap)) {
-      if (!Object.keys(gamesMap[k].ml || {}).length) delete gamesMap[k];
     }
 
     const body = JSON.stringify({ ok: true, games: gamesMap });
