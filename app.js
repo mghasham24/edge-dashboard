@@ -508,6 +508,36 @@
         'Golden State Valkyries':'#1d428a','Toronto Tempo':'#7b3f8c','Portland Fire':'#cc0000',
     };
 
+    // Secondary brand color — only for teams with two visually distinct colors.
+    // Used to build two-color gradients in headers and row spans.
+    var TEAM_COLORS_2 = {
+        // MLB
+        'Arizona Diamondbacks':'#000000',
+        'Baltimore Orioles':   '#000000',
+        'Boston Red Sox':      '#0C2340',
+        'Chicago Cubs':        '#CC3433',
+        'Cleveland Guardians': '#00385D',
+        'Detroit Tigers':      '#FA4616',
+        'Houston Astros':      '#EB6E1F',
+        'Kansas City Royals':  '#BD9B60',
+        'Los Angeles Angels':  '#003263',
+        'Milwaukee Brewers':   '#12284B',
+        'Minnesota Twins':     '#D31145',
+        'New York Mets':       '#FF5910',
+        'Oakland Athletics':   '#EFB21E',
+        'Athletics':           '#EFB21E',
+        'Philadelphia Phillies':'#284898',
+        'Pittsburgh Pirates':  '#FDB827',
+        'San Diego Padres':    '#FFC425',
+        'San Francisco Giants':'#27251F',
+        'Seattle Mariners':    '#005C5C',
+        'St. Louis Cardinals': '#0C2340',
+        'Tampa Bay Rays':      '#8FBCE6',
+        'Texas Rangers':       '#C0111F',
+        'Toronto Blue Jays':   '#E8291C',
+        'Washington Nationals':'#14225A',
+    };
+
     function teamColorHue(name) {
         var hash = 0;
         for (var ci = 0; ci < (name||'').length; ci++) hash = (name.charCodeAt(ci) + ((hash << 5) - hash)) | 0;
@@ -631,7 +661,12 @@
         if (wfc) {
             grad = 'background:linear-gradient(90deg,' + hexRgba(wfc.c1, 0.4) + ',' + hexRgba(wfc.c2, 0.2) + ',transparent)';
         } else {
-            grad = 'background:linear-gradient(90deg,' + teamColorAt(name, '30') + ',transparent)';
+            var _gc1 = TEAM_COLORS[name], _gc2 = TEAM_COLORS_2[name];
+            if (_gc1 && _gc2) {
+                grad = 'background:linear-gradient(90deg,' + hexRgba(_gc1, 0.4) + ',' + hexRgba(_gc2, 0.2) + ',transparent)';
+            } else {
+                grad = 'background:linear-gradient(90deg,' + teamColorAt(name, '30') + ',transparent)';
+            }
         }
         var ln = 'display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
         if (city) {
@@ -6547,8 +6582,12 @@
             ? teamColor(r.ps === 'A' ? _rawayT : _rhomeT)
             : r.mkt === 'RFI' ? 'transparent'
             : (_wcSideColor || teamColor(r.side));
+        var _rgc2 = (r.mkt !== 'Total' && r.mkt !== 'RFI') ? TEAM_COLORS_2[r.side] : null;
+        var _rgc1 = _rgc2 ? TEAM_COLORS[r.side] : null;
         var rowGrad = (r.mkt !== 'Total' && r.mkt !== 'RFI')
-            ? (_wcSideColor ? hexRgba(_wcSideColor, 0.18) : teamColorAt(r.side, '2e'))
+            ? (_wcSideColor ? hexRgba(_wcSideColor, 0.18)
+               : (_rgc1 && _rgc2 ? hexRgba(_rgc1, 0.18) + ',' + hexRgba(_rgc2, 0.1)
+               : teamColorAt(r.side, '2e')))
             : '';
         var rfiColor = r.mkt === 'RFI' ? (r.ps === 'A' ? '#3ddc84' : '#ff5f5f') : '';
         return '<tr class="' + (r.edge != null && r.edge > 0 ? 'has-edge' : '') + (isC ? ' collapsed-row' : '') + '" data-gk="' + gk + '" data-row-id="' + r.id + '" style="border-left:3px solid ' + rowColor + ';' + edgeBg(r.edge) + (betTaken[r.id] ? 'opacity:0.4' : '') + '">'
