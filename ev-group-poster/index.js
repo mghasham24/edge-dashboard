@@ -697,12 +697,13 @@ async function postDailySummary() {
     return false;
   }
 
-  // Chunk lines into messages that fit within RS byte limit
+  // Chunk lines into messages within RS byte + paragraph limits
+  const RS_MAX_LINES = 30;
   const messages = [];
   let chunk = [];
   for (const line of lines) {
     const test = [...chunk, line].join('\n');
-    if (chunk.length && Buffer.byteLength(test) > RS_MAX_BYTES) {
+    if (chunk.length && (Buffer.byteLength(test) > RS_MAX_BYTES || chunk.length >= RS_MAX_LINES)) {
       messages.push(chunk.join('\n'));
       chunk = [line];
     } else {
