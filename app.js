@@ -510,13 +510,13 @@
 
     // Returns brand color hex or fallback hsl
     function teamColor(name) {
-        return TEAM_COLORS[name] || ('hsl(' + teamColorHue(name) + ',65%,50%)');
+        return TEAM_COLORS[name] || (WC_FLAG_COLORS[name] && WC_FLAG_COLORS[name].c1) || ('hsl(' + teamColorHue(name) + ',65%,50%)');
     }
 
     // Returns brand color at given hex opacity suffix (e.g. '33' = 20%, '66' = 40%)
     // Works for both hex TEAM_COLORS and hsl fallback
     function teamColorAt(name, hexOp) {
-        var c = TEAM_COLORS[name];
+        var c = TEAM_COLORS[name] || (WC_FLAG_COLORS[name] && WC_FLAG_COLORS[name].c1);
         if (c && c[0] === '#') return c + hexOp;
         return 'hsla(' + teamColorHue(name) + ',65%,50%,' + (parseInt(hexOp, 16) / 255).toFixed(2) + ')';
     }
