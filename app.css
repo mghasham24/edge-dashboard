@@ -1,4 +1,4 @@
-    @import url('https://fonts.googleapis.com/css2?family=Exo+2:ital,wght@0,300;0,400;0,700;0,800;0,900;1,800&family=Fira+Code:wght@400;500&family=DM+Sans:wght@400;500&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Exo+2:ital,wght@0,700;0,800;0,900;1,800&display=swap');
 
     html {
         overflow-x: hidden;
@@ -12,38 +12,39 @@
     }
 
     :root {
-        --bg: #0a0a0c;
-        --bg2: #111116;
-        --bg3: #18181f;
-        --bg4: #1e1e28;
-        --border: rgba(255, 255, 255, 0.07);
-        --border2: rgba(255, 255, 255, 0.12);
-        --text: #f0eff5;
-        --fg: #f0eff5;
-        --muted: #7a7990;
-        --muted2: #4a4960;
-        --accent: #4f6ef7;
-        --green: #2dcc7e;
-        --yellow: #f5c842;
-        --red: #f05252;
-        --mono: 'IBM Plex Mono', monospace;
-        --sans: 'Barlow', system-ui, sans-serif;
-        --header-h: 60px;
+        --bg:  #07080e;
+        --bg2: #0c0f19;
+        --bg3: #111422;
+        --bg4: #171b2e;
+        --border:  rgba(255,255,255,0.06);
+        --border2: rgba(255,255,255,0.11);
+        --text: #dde6f5;
+        --fg:   #dde6f5;
+        --muted:  #68789f;
+        --muted2: #38426a;
+        --accent: #4f7cf7;
+        --accent-dim: rgba(79,124,247,0.14);
+        --green:  #0ed98a;
+        --yellow: #f5c43a;
+        --red:    #f04f60;
+        --mono: 'JetBrains Mono', monospace;
+        --sans: 'Inter', system-ui, sans-serif;
+        --header-h: 56px;
     }
 
     html.light {
-        --bg: #f0f0f5;
+        --bg:  #f0f2f8;
         --bg2: #ffffff;
-        --bg3: #e8e8f0;
-        --bg4: #dcdce8;
-        --border: rgba(0,0,0,0.08);
-        --border2: rgba(0,0,0,0.15);
-        --text: #1a1a2e;
-        --fg: #1a1a2e;
-        --muted: #60607a;
-        --muted2: #9898b0;
-        --green: #1aad66;
-        --red: #d43535;
+        --bg3: #e8eaf2;
+        --bg4: #dde0ee;
+        --border:  rgba(0,0,0,0.07);
+        --border2: rgba(0,0,0,0.13);
+        --text: #141828;
+        --fg:   #141828;
+        --muted:  #5a6480;
+        --muted2: #9098b8;
+        --green:  #0cba76;
+        --red:    #d43545;
         --yellow: #c49000;
     }
 
@@ -61,14 +62,15 @@
 
     .header {
         background: var(--bg2);
-        border-bottom: 1px solid var(--border);
-        padding: 0 24px;
+        border-bottom: 1px solid var(--border2);
+        padding: 0 20px;
         display: flex;
         align-items: center;
         justify-content: space-between;
         height: var(--header-h);
         overflow-x: auto;
-        gap: 12px
+        gap: 12px;
+        letter-spacing: -.01em
     }
     .header::-webkit-scrollbar { display: none }
     .header { scrollbar-width: none }
@@ -161,10 +163,12 @@
 
     .sport-tabs {
         background: var(--bg2);
-        border-bottom: 1px solid var(--border);
-        padding: 0 24px;
+        border-bottom: 1px solid var(--border2);
+        padding: 0 16px;
         display: flex;
-        overflow-x: auto
+        overflow-x: auto;
+        align-items: center;
+        gap: 2px
     }
 
     #feature-tabs {
@@ -175,36 +179,41 @@
 
     .sport-tab {
         font-family: var(--sans);
-        font-size: 12px;
+        font-size: 11px;
         font-weight: 600;
-        letter-spacing: .07em;
+        letter-spacing: .06em;
         text-transform: uppercase;
         color: var(--muted);
-        padding: 14px 18px;
+        padding: 8px 14px;
         cursor: pointer;
         border: none;
         border-bottom: 2px solid transparent;
         background: none;
-        white-space: nowrap
+        white-space: nowrap;
+        border-radius: 6px 6px 0 0;
+        transition: color .15s, background .15s
     }
 
     .sport-tab:hover {
-        color:var(--text)
+        color: var(--text);
+        background: rgba(255,255,255,0.04)
     }
 
     .sport-tab.active {
         color: var(--text);
+        background: var(--bg4);
         border-bottom-color: var(--accent)
     }
 
     .sport-tab.locked {
         color: var(--muted2);
         cursor: default;
-        opacity: .5
+        opacity: .45
     }
 
     .sport-tab.locked:hover {
-        color: var(--muted2)
+        color: var(--muted2);
+        background: none
     }
 
     #fc-league-nav {
@@ -374,11 +383,11 @@
     }
 
     th {
-        font-size: 10px;
-        font-weight: 600;
-        letter-spacing: .1em;
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: .12em;
         text-transform: uppercase;
-        color: var(--muted);
+        color: var(--muted2);
         padding: 10px 12px;
         text-align: left;
         white-space: nowrap;
@@ -399,7 +408,7 @@
     }
 
     tbody tr:hover {
-        background: var(--bg2)
+        background: var(--bg3)
     }
 
     tbody tr.has-edge {
@@ -427,10 +436,12 @@
     .mkt-badge {
         display: inline-block;
         font-family: var(--mono);
-        font-size: 10px;
-        font-weight: 600;
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: .06em;
+        text-transform: uppercase;
         padding: 2px 7px;
-        border-radius: 3px;
+        border-radius: 2px;
         background: var(--bg4);
         border: 1px solid var(--border2);
         color: var(--muted)
@@ -1950,11 +1961,11 @@
         }
 
         .sport-tabs {
-            padding: 0 10px
+            padding: 0 8px
         }
 
         .sport-tab {
-            padding: 11px 12px;
+            padding: 10px 11px;
             font-size: 11px
         }
 
@@ -1981,13 +1992,13 @@
 
         .mobile-cards {
             display: block;
-            padding: 0 14px
+            padding: 0 10px
         }
 
         .game-card {
             background: var(--bg2);
-            border-radius: 10px;
-            margin-bottom: 12px;
+            border-radius: 3px;
+            margin-bottom: 8px;
             overflow: hidden;
             border: 1px solid var(--border2)
         }
@@ -1996,10 +2007,10 @@
             display: flex;
             align-items: center;
             gap: 8px;
-            padding: 10px 14px;
+            padding: 10px 12px;
             background: var(--bg3);
             cursor: pointer;
-            border-bottom: 1px solid var(--border)
+            border-bottom: 1px solid var(--border2)
         }
 
         .game-card-header:active {
@@ -2035,8 +2046,9 @@
         .gc-time {
             font-family: var(--mono);
             font-size: 10px;
+            font-weight: 500;
             padding: 2px 7px;
-            border-radius: 3px;
+            border-radius: 2px;
             background: var(--bg4);
             border: 1px solid var(--border2)
         }
@@ -2073,7 +2085,7 @@
 
         .mc-section {
             border-bottom: 1px solid var(--border);
-            padding: 10px 14px
+            padding: 10px 12px
         }
 
         .mc-section:last-child {
@@ -2081,19 +2093,19 @@
         }
 
         .mc-label {
-            font-size: 10px;
-            font-weight: 600;
-            letter-spacing: .1em;
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: .12em;
             text-transform: uppercase;
-            color: var(--muted);
-            margin-bottom: 8px
+            color: var(--muted2);
+            margin-bottom: 9px
         }
 
         .mc-row {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-bottom: 6px
+            margin-bottom: 7px
         }
 
         .mc-row:last-child {
@@ -2118,6 +2130,7 @@
         .mc-fair {
             font-family: var(--mono);
             font-size: 12px;
+            font-weight: 500;
             color: var(--muted);
             min-width: 48px;
             text-align: right
@@ -2248,41 +2261,140 @@
     /* Best EV mobile card grid */
     .ev-mobile-grid {
         display: none;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 5px;
-        padding: 0 8px 16px;
+        grid-template-columns: 1fr;
+        gap: 6px;
+        padding: 10px 12px 20px;
         box-sizing: border-box;
         width: 100%;
     }
     .ev-mobile-card {
         background: var(--bg2);
         border: 1px solid var(--border2);
-        border-radius: 9px;
-        padding: 8px 7px 6px;
+        border-left: 3px solid var(--muted2);
+        border-radius: 3px;
+        padding: 11px 13px 9px;
         display: flex;
         flex-direction: column;
-        gap: 3px;
+        gap: 5px;
         min-width: 0;
         width: 100%;
         box-sizing: border-box;
         position: relative;
         overflow: hidden;
     }
-    .ev-mobile-card.ev-card-win { border-color: rgba(45,204,126,.4); background: linear-gradient(145deg,rgba(45,204,126,.13) 0%,var(--bg2) 100%); }
-    .ev-mobile-card.ev-card-taken { opacity: 0.4; }
-    .ev-mobile-card .evm-sport { font-size: 8px; font-weight: 800; letter-spacing: .07em; color: var(--muted2); text-transform: uppercase; }
-    .ev-mobile-card .evm-ev { font-size: 12px; font-weight: 800; font-family: var(--mono); }
-    .ev-mobile-card .evm-team { font-size: 9.5px; font-weight: 400; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.25; }
-    .ev-mobile-card .evm-home { color: var(--muted); }
-    .ev-mobile-card .evm-mkt { font-size: 8px; font-weight: 700; background: var(--bg3); border: 1px solid var(--border2); border-radius: 3px; padding: 1px 4px; color: var(--muted); display: inline-block; white-space: nowrap; }
-    .ev-mobile-card .evm-side { font-size: 9px; font-weight: 700; color: var(--fg); }
-    .ev-mobile-card .evm-odds { font-size: 9px; font-family: var(--mono); color: var(--muted); }
-    .ev-mobile-card .evm-real-input { width: 100%; box-sizing: border-box; background: var(--bg3); border: 1px solid var(--border2); color: var(--fg); font-family: var(--mono); font-size: 11px; font-weight: 600; padding: 3px 5px; border-radius: 4px; text-align: right; }
-    .ev-mobile-card .evm-units { font-size: 9px; font-family: var(--mono); font-weight: 700; }
-    .ev-mobile-card .evm-bet { font-size: 9px; font-family: var(--mono); font-weight: 600; color: var(--muted); }
-    .ev-mobile-card .evm-redirect-btn { display: block; width: 100%; box-sizing: border-box; margin-top: 4px; padding: 4px 0; font-size: 9px; font-weight: 700; font-family: var(--sans); text-align: center; background: var(--bg3); border: 1px solid var(--accent); color: var(--accent); border-radius: 5px; cursor: pointer; text-decoration: none; letter-spacing: .02em; }
-    .ev-mobile-card .evm-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; }
-    .ev-mobile-card .evm-cb { width: 15px; height: 15px; cursor: pointer; accent-color: var(--green); }
+    .ev-mobile-card.ev-card-win {
+        border-left-color: var(--green);
+        border-color: rgba(14,217,138,.25);
+        border-left-color: var(--green);
+        background: linear-gradient(135deg, rgba(14,217,138,.07) 0%, var(--bg2) 50%);
+    }
+    .ev-mobile-card.ev-card-taken { opacity: 0.35; }
+
+    .ev-mobile-card .evm-sport {
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: .1em;
+        color: var(--muted);
+        text-transform: uppercase;
+    }
+    .ev-mobile-card .evm-ev {
+        font-size: 17px;
+        font-weight: 700;
+        font-family: var(--mono);
+        letter-spacing: -.02em;
+    }
+    .ev-mobile-card .evm-team {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        line-height: 1.3;
+    }
+    .ev-mobile-card .evm-home {
+        font-size: 12px;
+        font-weight: 400;
+        color: var(--muted);
+    }
+    .ev-mobile-card .evm-mkt {
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+        background: var(--bg4);
+        border: 1px solid var(--border2);
+        border-radius: 2px;
+        padding: 2px 6px;
+        color: var(--muted);
+        display: inline-block;
+        white-space: nowrap;
+    }
+    .ev-mobile-card .evm-side {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text);
+    }
+    .ev-mobile-card .evm-odds {
+        font-size: 13px;
+        font-family: var(--mono);
+        font-weight: 500;
+        color: var(--muted);
+    }
+    .ev-mobile-card .evm-real-input {
+        width: 100%;
+        box-sizing: border-box;
+        background: var(--bg3);
+        border: 1px solid var(--border2);
+        color: var(--fg);
+        font-family: var(--mono);
+        font-size: 13px;
+        font-weight: 600;
+        padding: 6px 8px;
+        border-radius: 3px;
+        text-align: right;
+        outline: none;
+    }
+    .ev-mobile-card .evm-real-input:focus { border-color: var(--accent); }
+    .ev-mobile-card .evm-units {
+        font-size: 13px;
+        font-family: var(--mono);
+        font-weight: 700;
+    }
+    .ev-mobile-card .evm-bet {
+        font-size: 12px;
+        font-family: var(--mono);
+        font-weight: 500;
+        color: var(--muted);
+    }
+    .ev-mobile-card .evm-redirect-btn {
+        display: block;
+        width: 100%;
+        box-sizing: border-box;
+        margin-top: 2px;
+        padding: 7px 0;
+        font-size: 10px;
+        font-weight: 700;
+        font-family: var(--sans);
+        text-align: center;
+        background: var(--accent-dim);
+        border: 1px solid rgba(79,124,247,.3);
+        color: var(--accent);
+        border-radius: 3px;
+        cursor: pointer;
+        text-decoration: none;
+        letter-spacing: .06em;
+        text-transform: uppercase;
+        transition: background .15s;
+    }
+    .ev-mobile-card .evm-redirect-btn:active { background: rgba(79,124,247,.22); }
+    .ev-mobile-card .evm-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 2px;
+    }
+    .ev-mobile-card .evm-cb { width: 16px; height: 16px; cursor: pointer; accent-color: var(--green); }
 
 
     @media (max-width: 768px) {
