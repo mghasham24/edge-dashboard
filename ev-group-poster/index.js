@@ -672,19 +672,70 @@ async function postDailySummary() {
   const lossList    = results.filter(r => r.result === 'loss').sort(sportSort);
   const pendingList = results.filter(r => r.result === null).sort(sportSort);
 
-  const lines = [
+  const RS_MAX_BYTES = 980;
+  const RS_MAX_LINES = 30;
+
+  // Pre-chunk a section into labeled blocks.
+  // Single chunk  → ['-', '❌ Losses (24)', bet1, bet2, ...]
+  // Multi-chunk   → ['-', '❌ Losses (8/24)', b1..b8], ['❌ Losses (16/24)', b9..b16], ...
+  // The leading '-' is on the first block only (acts as section separator); subsequent
+  // blocks start a fresh message so no separator is needed there.
+  function buildSectionBlocks(icon, label, items) {
+    if (!items.length) return [];
+    const total = items.length;
+    const itemChunks = [];
+    let cur = [], curBytes = 0;
+    for (const r of items) {
+      const line = betLine(r);
+      const lb = Buffer.byteLength(line + '\n');
+      if (cur.length && (curBytes + lb > RS_MAX_BYTES - 80 || cur.length >= RS_MAX_LINES - 2)) {
+        itemChunks.push(cur);
+        cur = [line]; curBytes = lb;
+      } else {
+        cur.push(line); curBytes += lb;
+      }
+    }
+    if (cur.length) itemChunks.push(cur);
+
+    let cumulative = 0;
+    return itemChunks.map((chunk, i) => {
+      cumulative += chunk.length;
+      const hdr = itemChunks.length === 1
+        ? `${icon} ${label} (${total})`
+        : `${icon} ${label} (${cumulative}/${total})`;
+      return i === 0 ? ['-', hdr, ...chunk] : [hdr, ...chunk];
+    });
+  }
+
+  const headerLines = [
     `📊 RaxEdge Daily Summary — ${etDate}`,
     '-',
     `${posts.length} pick${posts.length !== 1 ? 's' : ''} · ${wins}W ${losses}L${pending ? ` · ${pending} pending` : ''} · ${hitRate}% hit rate`,
     `Week: ${weeklyRecord.w}W ${weeklyRecord.l}L · ${weekRate}%`,
   ];
 
-  const RS_MAX_BYTES = 980; // RS limit is ~1000 bytes; 980 gives safe margin
+  const sectionBlocks = [
+    ...buildSectionBlocks('✅', 'Wins',    winList),
+    ...buildSectionBlocks('❌', 'Losses',  lossList),
+    ...buildSectionBlocks('⏳', 'Pending', pendingList),
+  ];
 
-  // Add all bets — no truncation
-  if (winList.length)     { lines.push('-', `✅ Wins (${winList.length})`);     winList.forEach(r => lines.push(betLine(r))); }
-  if (lossList.length)    { lines.push('-', `❌ Losses (${lossList.length})`);   lossList.forEach(r => lines.push(betLine(r))); }
-  if (pendingList.length) { lines.push('-', `⏳ Pending (${pendingList.length})`); pendingList.forEach(r => lines.push(betLine(r))); }
+  // Pack blocks into messages greedily, starting with the header.
+  // When a block doesn't fit, flush the current message and start fresh.
+  // Drop the leading '-' if a block begins a new message (separator looks odd at top).
+  const messages = [];
+  let current = [...headerLines];
+
+  for (const block of sectionBlocks) {
+    const combined = [...current, ...block];
+    if (Buffer.byteLength(combined.join('\n')) > RS_MAX_BYTES || combined.length > RS_MAX_LINES) {
+      messages.push(current.join('\n'));
+      current = block[0] === '-' ? block.slice(1) : [...block];
+    } else {
+      current = combined;
+    }
+  }
+  if (current.length) messages.push(current.join('\n'));
 
   async function postToGroup(text) {
     const res = await fetch(`${RS_BASE}/comments/groups/${RS_GROUP_ID}`, {
@@ -696,21 +747,6 @@ async function postDailySummary() {
     console.error('ev-poster: summary post failed', res.status, await res.text().catch(() => ''));
     return false;
   }
-
-  // Chunk lines into messages within RS byte + paragraph limits
-  const RS_MAX_LINES = 30;
-  const messages = [];
-  let chunk = [];
-  for (const line of lines) {
-    const test = [...chunk, line].join('\n');
-    if (chunk.length && (Buffer.byteLength(test) > RS_MAX_BYTES || chunk.length >= RS_MAX_LINES)) {
-      messages.push(chunk.join('\n'));
-      chunk = [line];
-    } else {
-      chunk.push(line);
-    }
-  }
-  if (chunk.length) messages.push(chunk.join('\n'));
 
   for (let i = 0; i < messages.length; i++) {
     const ok = await postToGroup(messages[i]);
