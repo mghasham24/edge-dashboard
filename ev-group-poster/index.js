@@ -478,6 +478,7 @@ async function run() {
             sport: bet.sport,   game: bet.game,  pt: bet.pt ?? null,
             ev: bet.ev,         rsPct: bet.rsPct, units: bet.units,
             rsGameId: bet.rsGameId || null, rsSport: bet.rsSport || null,
+            commenceTime: bet.commenceTime || 0,
             postedAt: now,
           });
           saveState();
