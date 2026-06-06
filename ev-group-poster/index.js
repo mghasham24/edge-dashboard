@@ -516,22 +516,14 @@ function findOutcome(post, markets) {
   }) || null;
 }
 
-// Full resolution — uses isWinner flag first, falls back to probability heuristic.
-// nowSec is required: heuristic only fires if game started 4+ hours ago (game over).
-// Passing nowSec prevents mid-game probability spikes from being called as results.
-function resolveResult(post, markets, nowSec) {
-  const outcome = findOutcome(post, markets);
-  if (!outcome) return null;
-  if (outcome.isWinner === true)  return 'win';
-  if (outcome.isWinner === false) return 'loss';
-  // Probability heuristic: only safe once the game has had time to finish.
-  // A team trailing 90% in the 7th inning is not a settled result.
-  const gameAge = nowSec && post.commenceTime ? nowSec - post.commenceTime : 0;
-  if (gameAge < 4 * 3600) return null;
-  const allOutcomes = (markets.find(m => (RS_MARKET_MAP[post.market] || RS_ML_LABELS).includes(m.label))?.outcomes) || [];
-  const maxProb = Math.max(...allOutcomes.map(o => o.probability || 0));
-  if (maxProb < 0.90) return null;
-  return outcome.probability >= 0.90 ? 'win' : 'loss';
+// Full resolution — uses isWinner flag only. No probability heuristic.
+// RS updates probabilities before setting isWinner, so a game-ending play can
+// briefly show opponent at ~100% while isWinner is still unset. Using probability
+// as a fallback would call the result prematurely (false 'loss' for walk-off games).
+// Background caching (resolveResultStrict every 60s) reliably catches isWinner.
+// If a market disappears before isWinner is set, showing "pending" is correct.
+function resolveResult(post, markets) {
+  return resolveResultStrict(post, markets);
 }
 
 // Strict resolution — only uses explicit isWinner flag, never the probability heuristic.
@@ -611,12 +603,11 @@ async function postDailySummary() {
     gameCache.set(key, markets || []);
     if (uniqueGames.indexOf(key) < uniqueGames.length - 1) await new Promise(r => setTimeout(r, 800));
   }
-  const nowSec = Math.floor(Date.now() / 1000);
   const results = posts.map(post => ({
     ...post,
     // Use cached result if available, otherwise try the fresh fetch
     result: post.result != null ? post.result
-          : post.rsGameId ? resolveResult(post, gameCache.get(`${post.rsSport}:${post.rsGameId}`) || [], nowSec) : null,
+          : post.rsGameId ? resolveResult(post, gameCache.get(`${post.rsSport}:${post.rsGameId}`) || []) : null,
   }));
 
   const wins    = results.filter(r => r.result === 'win').length;
