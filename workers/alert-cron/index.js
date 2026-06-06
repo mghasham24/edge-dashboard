@@ -206,7 +206,7 @@ async function loadRSCache(rsKey, env, now, staleThreshold) {
     }
     if (cached) return { games: {}, gameIds: {}, gameSports: {}, gameStartMs: {}, rsAge: age, reason: 'rs_stale' };
   } catch(e) {}
-  return { games: {}, gameIds: {}, gameSports: {}, rsAge: null, reason: 'rs_missing' };
+  return { games: {}, gameIds: {}, gameSports: {}, gameStartMs: {}, rsAge: null, reason: 'rs_missing' };
 }
 
 // ── Game key normalization ─────────────────────────────
