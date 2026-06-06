@@ -895,6 +895,7 @@ async function runCron(env, ctx) {
             await loadRSCache('mlb', env, now, RS_STALE_THRESHOLD);
 
           const mlbSport = NATIVE_SPORTS.find(s => s.fdKey === 'baseball_mlb');
+          const usedRsKeys = new Set(); // dedup: one FD event per RS game (blocks phantom DH entries)
 
           for (const [rfiGameKey, rfi] of Object.entries(rfiMap)) {
             const parts = rfiGameKey.split(' @ ');
@@ -903,6 +904,10 @@ async function runCron(env, ctx) {
             const rfiHome = parts[1].replace(/\s*\(Game \d+\)$/i, '');
             const rsKey = findRSGameKey(parts[0], rfiHome, rsGamesRfi, rfiGameKey);
             if (!rsKey) continue;
+            // If multiple FD events map to the same RS game (phantom/cancelled DH),
+            // only use the first match — later entries are stale duplicates.
+            if (usedRsKeys.has(rsKey)) continue;
+            usedRsKeys.add(rsKey);
             rfiDbg.rsMatchCount++;
 
             const rfiMkt = rsGamesRfi[rsKey]?.['Run in 1st inning?'];
@@ -913,6 +918,10 @@ async function runCron(env, ctx) {
             const rsVolume   = rfiMkt.volume ?? 0;
             const rsYes = rsOutcomes.find(o => /yrfi/i.test(o.label));
             const rsNo  = rsOutcomes.find(o => /nrfi/i.test(o.label));
+
+            // Skip if market is already settled — isWinner being set means the 1st inning is done
+            if (rsYes?.isWinner != null || rsNo?.isWinner != null) continue;
+
             const gameId  = rsGameIdsRfi[rsKey] || null;
             const rsSport = rsGameSportsRfi[rsKey] || 'mlb';
             const gameUrl = buildRSUrl(gameId, rsSport, rfiMkt.id);
