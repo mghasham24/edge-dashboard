@@ -891,7 +891,7 @@ async function runCron(env, ctx) {
         if (rfiCached && (now - rfiCached.fetched_at) < FD_STALE_THRESHOLD) {
           const rfiMap = JSON.parse(rfiCached.data).rfi || {};
           rfiDbg.rfiMapSize = Object.keys(rfiMap).length;
-          const { games: rsGamesRfi, gameIds: rsGameIdsRfi, gameSports: rsGameSportsRfi } =
+          const { games: rsGamesRfi, gameIds: rsGameIdsRfi, gameSports: rsGameSportsRfi, gameStartMs: rsRfiStartMs } =
             await loadRSCache('mlb', env, now, RS_STALE_THRESHOLD);
 
           const mlbSport = NATIVE_SPORTS.find(s => s.fdKey === 'baseball_mlb');
@@ -928,8 +928,12 @@ async function runCron(env, ctx) {
 
             const rfiCommence = rfi.cm || 0;
             const rfiIsLive   = rfiCommence > 0 && rfiCommence <= now;
-            // RFI is a pre-game market — skip entirely once game has started
+            // RFI is a pre-game market — skip if game has started per FD commence time
             if (rfiIsLive) continue;
+            // Secondary guard: skip if RS reports the game has already started
+            // (catches phantom DH events with future FD openDate that match a live RS game)
+            const rsStartMs = rsRfiStartMs[rsKey];
+            if (rsStartMs && rsStartMs <= now * 1000) continue;
 
             for (const { side, fdFair, fdOdds, rsO } of [
               { side: 'Yes (YRFI)', fdFair: rfi.yesFair, fdOdds: rfi.yesAm, rsO: rsYes },

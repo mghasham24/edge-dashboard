@@ -84,33 +84,19 @@ export async function onRequestGet(context) {
       return new Response(JSON.stringify({ ok: true, rfi: {} }), { headers: { 'Content-Type': 'application/json' } });
     }
 
-    // Detect doubleheaders: assign "(Game N)" suffix by openDate order
+    // Step 2: Fetch each event-page to collect RFI market ID + selection IDs.
+    // Don't assign (Game N) suffixes yet — we only know if it's a real doubleheader
+    // after seeing which events have OPEN markets in Step 3.
     const parsedToday = todayEvents.map(e => {
       const t = parseEventName(e.name);
       return t ? { event: e, away: t.away, home: t.home } : null;
     }).filter(Boolean);
 
-    const matchupGroups = {};
-    parsedToday.forEach(p => {
-      const base = p.away + ' @ ' + p.home;
-      if (!matchupGroups[base]) matchupGroups[base] = [];
-      matchupGroups[base].push(p);
-    });
-    const eventSuffix = {};
-    Object.values(matchupGroups).forEach(group => {
-      if (group.length < 2) return;
-      group.sort((a, b) => new Date(a.event.openDate) - new Date(b.event.openDate));
-      group.forEach((p, i) => { eventSuffix[p.event.eventId] = ' (Game ' + (i + 1) + ')'; });
-    });
-
-    // Step 2: Fetch each event-page to collect RFI market ID + selection IDs
-    const gameData = {}; // gameKey → { marketId, overSelId, underSelId }
+    // rawCandidates: one entry per event that has an RFI market on FD
+    const rawCandidates = []; // { baseKey, cm, marketId, overSelId, underSelId }
 
     for (let i = 0; i < parsedToday.length; i++) {
       const { event, away, home } = parsedToday[i];
-      const suffix  = eventSuffix[event.eventId] || '';
-      const gameKey = away + ' @ ' + home + suffix;
-
       try {
         const evRes = await fetch(FD_EVENT_URL(event.eventId), { headers });
         if (!evRes.ok) continue;
@@ -126,23 +112,24 @@ export async function onRequestGet(context) {
         const under = runners.find(r => r.runnerName === 'Under');
         if (!over || !under) continue;
 
-        gameData[gameKey] = {
+        rawCandidates.push({
+          baseKey:    away + ' @ ' + home,
+          cm:         event.openDate ? Math.floor(new Date(event.openDate).getTime() / 1000) : 0,
           marketId,
           overSelId:  over.selectionId,
           underSelId: under.selectionId,
-          cm: event.openDate ? Math.floor(new Date(event.openDate).getTime() / 1000) : 0,
-        };
+        });
       } catch(e) {}
 
       if (i < parsedToday.length - 1) await new Promise(r => setTimeout(r, 150));
     }
 
-    if (!Object.keys(gameData).length) {
+    if (!rawCandidates.length) {
       return new Response(JSON.stringify({ ok: true, rfi: {} }), { headers: { 'Content-Type': 'application/json' } });
     }
 
     // Step 3: Batch getMarketPrices for real-time odds
-    const allMarketIds = Object.values(gameData).map(d => d.marketId);
+    const allMarketIds = rawCandidates.map(d => d.marketId);
     const pricesRes = await fetch(FD_PRICES_URL, {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
@@ -151,30 +138,48 @@ export async function onRequestGet(context) {
     if (!pricesRes.ok) return fail(pricesRes.status, 'getMarketPrices failed');
     const marketPricesList = await pricesRes.json();
 
-    // Build reverse map: marketId → gameKey
-    const marketToGame = {};
-    Object.entries(gameData).forEach(([gameKey, d]) => { marketToGame[d.marketId] = gameKey; });
+    // Index prices by marketId — only keep OPEN markets
+    const priceMap = {};
+    (Array.isArray(marketPricesList) ? marketPricesList : []).forEach(mp => {
+      if (mp.marketStatus === 'OPEN') priceMap[mp.marketId] = mp;
+    });
+
+    // Keep only candidates with an OPEN market, then group by base matchup.
+    // (Game N) suffix is assigned HERE, after filtering — so a phantom cancelled-DH
+    // event whose market is SUSPENDED gets excluded before we decide on suffixes.
+    // Result: a single genuine game never gets a spurious "(Game 2)" label.
+    const openCandidates = rawCandidates.filter(d => priceMap[d.marketId]);
+    const byMatchup = {};
+    openCandidates.forEach(d => {
+      if (!byMatchup[d.baseKey]) byMatchup[d.baseKey] = [];
+      byMatchup[d.baseKey].push(d);
+    });
 
     const rfiMap = {};
-    (Array.isArray(marketPricesList) ? marketPricesList : []).forEach(mp => {
-      const gameKey = marketToGame[mp.marketId];
-      if (!gameKey || mp.marketStatus !== 'OPEN') return;
-      const d = gameData[gameKey];
+    for (const [baseKey, group] of Object.entries(byMatchup)) {
+      const isDH = group.length >= 2;
+      if (isDH) group.sort((a, b) => (a.cm || 0) - (b.cm || 0)); // earliest = Game 1
 
-      let yesAm = null, noAm = null;
-      (mp.runnerDetails || []).forEach(rd => {
-        if (rd.runnerStatus !== 'ACTIVE') return;
-        const price = rd.winRunnerOdds?.americanDisplayOdds?.americanOddsInt;
-        if (price == null) return;
-        if (rd.selectionId === d.overSelId  || rd.selectionId === String(d.overSelId))  yesAm = price;
-        if (rd.selectionId === d.underSelId || rd.selectionId === String(d.underSelId)) noAm  = price;
-      });
+      for (let i = 0; i < group.length; i++) {
+        const d       = group[i];
+        const gameKey = isDH ? baseKey + ' (Game ' + (i + 1) + ')' : baseKey;
+        const mp      = priceMap[d.marketId];
 
-      if (yesAm == null || noAm == null) return;
-      const nv = novig(yesAm, noAm);
-      if (!nv) return;
-      rfiMap[gameKey] = { yesFair: nv.fa, noFair: nv.fb, yesAm, noAm, volume: 0, cm: d.cm || 0 };
-    });
+        let yesAm = null, noAm = null;
+        (mp.runnerDetails || []).forEach(rd => {
+          if (rd.runnerStatus !== 'ACTIVE') return;
+          const price = rd.winRunnerOdds?.americanDisplayOdds?.americanOddsInt;
+          if (price == null) return;
+          if (rd.selectionId === d.overSelId  || rd.selectionId === String(d.overSelId))  yesAm = price;
+          if (rd.selectionId === d.underSelId || rd.selectionId === String(d.underSelId)) noAm  = price;
+        });
+
+        if (yesAm == null || noAm == null) continue;
+        const nv = novig(yesAm, noAm);
+        if (!nv) continue;
+        rfiMap[gameKey] = { yesFair: nv.fa, noFair: nv.fb, yesAm, noAm, volume: 0, cm: d.cm || 0 };
+      }
+    }
 
     const body = JSON.stringify({ ok: true, rfi: rfiMap });
     try {
