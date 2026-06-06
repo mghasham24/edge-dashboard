@@ -517,12 +517,17 @@ function findOutcome(post, markets) {
 }
 
 // Full resolution — uses isWinner flag first, falls back to probability heuristic.
-// Only safe to call when game is definitely over (recap time).
-function resolveResult(post, markets) {
+// nowSec is required: heuristic only fires if game started 4+ hours ago (game over).
+// Passing nowSec prevents mid-game probability spikes from being called as results.
+function resolveResult(post, markets, nowSec) {
   const outcome = findOutcome(post, markets);
   if (!outcome) return null;
   if (outcome.isWinner === true)  return 'win';
   if (outcome.isWinner === false) return 'loss';
+  // Probability heuristic: only safe once the game has had time to finish.
+  // A team trailing 90% in the 7th inning is not a settled result.
+  const gameAge = nowSec && post.commenceTime ? nowSec - post.commenceTime : 0;
+  if (gameAge < 4 * 3600) return null;
   const allOutcomes = (markets.find(m => (RS_MARKET_MAP[post.market] || RS_ML_LABELS).includes(m.label))?.outcomes) || [];
   const maxProb = Math.max(...allOutcomes.map(o => o.probability || 0));
   if (maxProb < 0.90) return null;
@@ -606,11 +611,12 @@ async function postDailySummary() {
     gameCache.set(key, markets || []);
     if (uniqueGames.indexOf(key) < uniqueGames.length - 1) await new Promise(r => setTimeout(r, 800));
   }
+  const nowSec = Math.floor(Date.now() / 1000);
   const results = posts.map(post => ({
     ...post,
     // Use cached result if available, otherwise try the fresh fetch
     result: post.result != null ? post.result
-          : post.rsGameId ? resolveResult(post, gameCache.get(`${post.rsSport}:${post.rsGameId}`) || []) : null,
+          : post.rsGameId ? resolveResult(post, gameCache.get(`${post.rsSport}:${post.rsGameId}`) || [], nowSec) : null,
   }));
 
   const wins    = results.filter(r => r.result === 'win').length;
