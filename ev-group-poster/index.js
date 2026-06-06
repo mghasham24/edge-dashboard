@@ -636,9 +636,11 @@ async function postDailySummary() {
   const etDate  = new Date().toLocaleString('en-US', { timeZone: 'America/New_York', month: 'long', day: 'numeric' });
 
   function teamNickname(name) {
-    const words = (name || '').split(' ');
+    const n = name || '';
+    const gmMatch = n.match(/^(.+?)\s+\(Game\s+(\d+)\)$/);
+    if (gmMatch) return teamNickname(gmMatch[1]) + ' G' + gmMatch[2];
+    const words = n.split(' ');
     const last = words[words.length - 1];
-    // Multi-word nicknames (Red Sox, White Sox, Blue Jays, etc.)
     return (last === 'Sox' || last === 'Jays') ? words.slice(-2).join(' ') : last;
   }
   function abbrevGame(game) {
