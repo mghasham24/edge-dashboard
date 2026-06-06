@@ -374,6 +374,8 @@ async function run() {
         if (b.ev < PRE_FILTER_EV) return false;
         if (b.isLive) return false;
         if (b.commenceTime > 0 && b.commenceTime <= nowSec) return false;
+        // RFI is pre-game only — never post if commence time is missing or game started
+        if (b.market === 'RFI' && (b.commenceTime === 0 || b.commenceTime <= nowSec)) return false;
         const last = postedEv.get(b.betKey);
         if (!last) return true;
         const evJumped   = b.ev - last.ev >= REPOST_EV_JUMP;

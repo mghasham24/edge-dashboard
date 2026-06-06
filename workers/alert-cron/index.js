@@ -917,6 +917,11 @@ async function runCron(env, ctx) {
             const rsSport = rsGameSportsRfi[rsKey] || 'mlb';
             const gameUrl = buildRSUrl(gameId, rsSport, rfiMkt.id);
 
+            const rfiCommence = rfi.cm || 0;
+            const rfiIsLive   = rfiCommence > 0 && rfiCommence <= now;
+            // RFI is a pre-game market — skip entirely once game has started
+            if (rfiIsLive) continue;
+
             for (const { side, fdFair, fdOdds, rsO } of [
               { side: 'Yes (YRFI)', fdFair: rfi.yesFair, fdOdds: rfi.yesAm, rsO: rsYes },
               { side: 'No (NRFI)',  fdFair: rfi.noFair,  fdOdds: rfi.noAm,  rsO: rsNo  },
@@ -931,7 +936,7 @@ async function runCron(env, ctx) {
                 ev: Math.round(ev * 10) / 10, units: u, fdOdds, pt: null,
                 rsPct: Math.round(rsO.probability * 1000) / 10,
                 adjFairPct: Math.round(fdFair * 1000) / 10,
-                gameUrl, commenceTime: rfi.cm || 0, rsGameId: gameId, rsSport,
+                gameUrl, commenceTime: rfiCommence, isLive: false, rsGameId: gameId, rsSport,
                 betKey: `baseball_mlb|${rfiGameKey}|RFI|${side}|`,
               });
             }

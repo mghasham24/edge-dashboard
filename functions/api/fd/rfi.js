@@ -76,7 +76,8 @@ export async function onRequestGet(context) {
     const todayEvents = Object.values(allEvents).filter(e => {
       if (!e.openDate) return false;
       const t = new Date(e.openDate).getTime();
-      return t >= nowMs - 5 * 60 * 60 * 1000 && t <= nowMs + 16 * 60 * 60 * 1000;
+      // RFI is a pre-game market — exclude games that started more than 10 min ago
+      return t >= nowMs - 10 * 60 * 1000 && t <= nowMs + 16 * 60 * 60 * 1000;
     });
 
     if (!todayEvents.length) {
