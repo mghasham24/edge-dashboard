@@ -881,6 +881,14 @@ if (!SITE_URL || !EV_POSTER_KEY || !RS_AUTH_INFO || !RS_GROUP_ID) {
 
 loadState();
 console.log(`ev-poster: starting | group ${RS_GROUP_ID} | min EV ${MIN_EV}% | max ${MAX_POSTS}/run | cooldown ${REPOST_COOLDOWN_MS/60000}min | urgent ≥${REPOST_URGENT_EV}%`);
+// Payout proxy is optional — a port conflict must not take down the whole bot.
+payoutServer.on('error', err => {
+  if (err.code === 'EADDRINUSE') {
+    console.warn(`ev-poster: port ${PAYOUT_PROXY_PORT} already in use — payout proxy disabled, bot continues`);
+  } else {
+    console.error('ev-poster: payout server error:', err.message);
+  }
+});
 payoutServer.listen(PAYOUT_PROXY_PORT, () => console.log(`ev-poster: payout proxy on port ${PAYOUT_PROXY_PORT}`));
 scheduleMidnightReset();
 scheduleDennisBoost();
