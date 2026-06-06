@@ -138,11 +138,14 @@ export async function onRequestGet(context) {
       if (!matchupGroups[base]) matchupGroups[base] = [];
       matchupGroups[base].push(p);
     });
+    // Only the second game in a true doubleheader gets a suffix.
+    // Assigning (Game 1) to every first-listed game causes phantom DH labels
+    // when FD has a stale duplicate event for the same matchup.
     const eventSuffix = {};
     Object.values(matchupGroups).forEach(group => {
       if (group.length < 2) return;
       group.sort((a, b) => new Date(a.event.openDate) - new Date(b.event.openDate));
-      group.forEach((p, i) => { eventSuffix[p.event.eventId] = '(Game ' + (i + 1) + ')'; });
+      group.forEach((p, i) => { if (i > 0) eventSuffix[p.event.eventId] = '(Game 2)'; });
     });
 
     // Load previous cache so we can freeze odds for live games with suspended markets
@@ -245,10 +248,14 @@ export async function onRequestGet(context) {
       }
     });
 
-    // Safety net: rescue live games FD removed from its event list
+    // Safety net: rescue live games whose FD ML market is suspended mid-game.
+    // Only rescue events still present in FD's event list — if FD dropped the event
+    // entirely (game over), don't resurface it from stale cache.
+    const activeEventIds = new Set(parsedToday.map(p => p.event.eventId));
     const nowMsSafe = Date.now();
     for (const [gameKey, prev] of Object.entries(prevGames)) {
       if (gamesMap[gameKey] || !prev.cm) continue;
+      if (!activeEventIds.has(prev.id)) continue;
       const cmMs = new Date(prev.cm).getTime();
       if (cmMs > nowMsSafe || cmMs < nowMsSafe - 5 * 60 * 60 * 1000) continue;
       if (Object.keys(prev.ml || {}).length) {
