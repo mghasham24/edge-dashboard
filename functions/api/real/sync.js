@@ -99,7 +99,7 @@ async function getRSAuth(env) {
     return { token: _rsAuthToken, deviceUuid: _rsDeviceUuid };
   }
   // Env var takes priority — allows updating token from Cloudflare dashboard without touching D1
-  let token = env.REAL_AUTH_TOKEN || '';
+  let token = env.RS_AUTH_TOKEN || env.REAL_AUTH_TOKEN || '';
   let deviceUuid = env.REAL_DEVICE_UUID || _rsDeviceUuid;
   if (!token) {
     try {
@@ -147,7 +147,7 @@ export async function onRequestGet(context) {
   if (!rsAuthToken) return fail(500, 'RS auth token not available');
 
   if (debugMode === '1') {
-    return new Response(JSON.stringify({ fdKey, realSport, hasToken: !!env.REAL_AUTH_TOKEN }), {
+    return new Response(JSON.stringify({ fdKey, realSport, hasToken: !!(env.RS_AUTH_TOKEN || env.REAL_AUTH_TOKEN) }), {
       headers: { 'Content-Type': 'application/json' }
     });
   }
