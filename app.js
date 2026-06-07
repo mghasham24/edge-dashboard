@@ -2416,7 +2416,7 @@
         document.querySelector('.status-bar').style.display = '';
         document.querySelector('.table-wrap').style.display = '';
         document.getElementById('mobile-cards').style.display = '';
-        document.getElementById('collapse-btn').style.display = '';
+        document.getElementById('collapse-btn').style.display = 'none';
         document.getElementById('refresh-btn').style.display = '';
         document.getElementById('admin-panel').classList.remove('visible');
     }
@@ -2441,7 +2441,7 @@
         document.querySelector('.status-bar').style.display = '';
         document.querySelector('.table-wrap').style.display = '';
         document.getElementById('mobile-cards').style.display = '';
-        document.getElementById('collapse-btn').style.display = '';
+        document.getElementById('collapse-btn').style.display = 'none';
         document.getElementById('refresh-btn').style.display = '';
         document.getElementById('alerts-panel').classList.remove('visible');
         var btn = document.getElementById('alerts-tab-btn');
@@ -2468,7 +2468,7 @@
         document.querySelector('.status-bar').style.display = '';
         document.querySelector('.table-wrap').style.display = '';
         document.getElementById('mobile-cards').style.display = '';
-        document.getElementById('collapse-btn').style.display = '';
+        document.getElementById('collapse-btn').style.display = 'none';
         document.getElementById('refresh-btn').style.display = '';
         document.getElementById('referral-panel').classList.remove('visible');
     }
@@ -2744,7 +2744,7 @@
         document.querySelector('.status-bar').style.display = '';
         document.querySelector('.table-wrap').style.display = '';
         document.getElementById('mobile-cards').style.display = '';
-        document.getElementById('collapse-btn').style.display = '';
+        document.getElementById('collapse-btn').style.display = 'none';
         document.getElementById('refresh-btn').style.display = '';
         document.getElementById('portfolio-panel').classList.remove('visible');
     }
@@ -2759,6 +2759,7 @@
         document.getElementById('collapse-btn').style.display = 'none';
         document.getElementById('refresh-btn').style.display = 'none';
         document.getElementById('ev-panel').classList.add('visible');
+        // collapse-btn is now in the hamburger dropdown — no display toggle needed here
         // Stop all native sport pollers — they share the rawRows/currentSport globals
         // and would race with loadAllEvSports' sequential phase, causing cross-sport
         // contamination in evTabCache (e.g. FC rows written under 'baseball_mlb' key).
@@ -2798,7 +2799,7 @@
         document.querySelector('.status-bar').style.display = '';
         document.querySelector('.table-wrap').style.display = '';
         document.getElementById('mobile-cards').style.display = '';
-        document.getElementById('collapse-btn').style.display = '';
+        document.getElementById('collapse-btn').style.display = 'none';
         document.getElementById('refresh-btn').style.display = '';
         document.getElementById('ev-panel').classList.remove('visible');
         evTabVisible = false;
@@ -4743,15 +4744,29 @@
     }
 
     function saveSportOrder() {
-        if (_pendingSportOrder) {
-            localStorage.setItem('rax_sport_order', JSON.stringify(_pendingSportOrder));
-        }
+        var order = _pendingSportOrder ? _pendingSportOrder.slice() : getSportOrder();
+        localStorage.setItem('rax_sport_order', JSON.stringify(order));
         closeSportOrderModal();
+        // Exit any active feature tab so sport tabs are visible before clicking
+        var evBtn = document.getElementById('ev-tab-btn');
+        if (evBtn && evBtn.classList.contains('active')) {
+            evBtn.classList.remove('active');
+            evBtn.textContent = '⚡ Best EV';
+            hideEvTab();
+        }
+        var portBtn = document.getElementById('portfolio-tab-btn');
+        if (portBtn && portBtn.classList.contains('active')) portBtn.click();
+        var refBtn = document.getElementById('refer-tab-btn');
+        if (refBtn && refBtn.classList.contains('active')) refBtn.click();
         buildTabs();
-        // Click the first non-locked tab so currentSport + loadOdds fire normally
-        var tabs = document.querySelectorAll('#sport-tabs .sport-tab');
-        var first = Array.from(tabs).find(function(t) { return !t.classList.contains('locked'); });
-        if (first) first.click(); else loadOdds();
+        var firstKey = order[0];
+        var target = document.querySelector('#sport-tabs [data-key="' + firstKey + '"]');
+        if (target && !target.classList.contains('locked')) {
+            target.click();
+        } else {
+            var unlocked = document.querySelector('#sport-tabs .sport-tab:not(.locked):not(#admin-tab-btn)');
+            if (unlocked) unlocked.click(); else loadOdds();
+        }
     }
 
     function renderSortList() {
