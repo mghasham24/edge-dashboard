@@ -325,13 +325,9 @@
                 <div class="api-remaining" id="api-remaining" style="display:none">-- requests left</div>
                 <button id="collapse-btn" onclick="toggleAll()" style="display:none">Collapse All</button>
                 <button class="refresh-btn" id="refresh-btn" onclick="loadOdds()">Refresh</button>
-                <button id="group-code-btn" onclick="openGroupCodeModal()" title="RS Group Code" style="display:none;background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:13px;font-weight:600;padding:6px 10px;border-radius:5px;cursor:pointer;line-height:1;letter-spacing:.03em">🔑</button>
                 <div class="menu-wrap" id="menu-wrap">
-                    <button id="menu-btn" onclick="toggleMenu()" title="Menu" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:16px;padding:6px 10px;border-radius:5px;cursor:pointer;line-height:1">☰</button>
+                    <button id="menu-btn" onclick="toggleMenu()" title="Menu" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:system-ui,sans-serif;font-size:16px;padding:6px 10px;border-radius:5px;cursor:pointer;line-height:1">☰</button>
                     <div class="menu-dropdown" id="menu-dropdown">
-                        <div class="menu-dd-item" id="dd-collapse-item" onclick="toggleAll();closeMenu()">
-                            <span class="dd-icon">⊟</span><span id="dd-collapse-label">Collapse All</span>
-                        </div>
                         <div class="menu-dd-item" id="dd-sticky-item" onclick="toggleStickyHeader()">
                             <span class="dd-icon">📌</span><span>Pin header</span><span class="dd-check" id="dd-sticky-check">✓</span>
                         </div>

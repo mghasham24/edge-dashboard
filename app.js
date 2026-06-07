@@ -4692,12 +4692,9 @@
         var icon  = document.getElementById('dd-theme-icon');
         var label = document.getElementById('dd-theme-label');
         var si    = document.getElementById('dd-sticky-item');
-        var cl    = document.getElementById('dd-collapse-label');
-        var cb    = document.getElementById('collapse-btn');
         if (icon)  icon.textContent  = isLight ? '☀️' : '🌙';
         if (label) label.textContent = isLight ? 'Light mode' : 'Dark mode';
         if (si)    si.classList.toggle('dd-active', !isOff);
-        if (cl && cb) cl.textContent = cb.textContent || 'Collapse All';
     }
 
     // ── Hamburger menu ──
