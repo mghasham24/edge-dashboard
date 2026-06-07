@@ -4682,11 +4682,15 @@
     // ── Hamburger menu ──
     function toggleMenu() {
         var dd = document.getElementById('menu-dropdown');
-        if (!dd) return;
+        var btn = document.getElementById('menu-btn');
+        if (!dd || !btn) return;
         if (dd.classList.contains('open')) {
             dd.classList.remove('open');
         } else {
             syncMenuDropdown();
+            var r = btn.getBoundingClientRect();
+            dd.style.top  = (r.bottom + 6) + 'px';
+            dd.style.right = (window.innerWidth - r.right) + 'px';
             dd.classList.add('open');
         }
     }

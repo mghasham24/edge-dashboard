@@ -165,15 +165,13 @@
     .menu-wrap { position: relative; }
     .menu-dropdown {
         display: none;
-        position: absolute;
-        top: calc(100% + 6px);
-        right: 0;
+        position: fixed;
         background: var(--bg2);
         border: 1px solid var(--border2);
         border-radius: 8px;
         padding: 5px;
         min-width: 180px;
-        z-index: 2000;
+        z-index: 9999;
         box-shadow: 0 8px 28px rgba(0,0,0,.4);
     }
     .menu-dropdown.open { display: block; }
