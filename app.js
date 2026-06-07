@@ -1479,15 +1479,10 @@
         var isCollapsed = allCollapsed && allMobileCollapsed;
 
         if (isCollapsed) {
-            Object.keys(collapsed).forEach(function(k) {
-                collapsed[k] = false;
-            });
-            document.querySelectorAll('tr[data-gk]:not(.ghrow)').forEach(function(tr) {
-                tr.classList.remove('collapsed-row');
-            });
-            document.querySelectorAll('.gh-arrow').forEach(function(el) {
-                el.classList.add('up');
-            });
+            Object.keys(collapsed).forEach(function(k) { collapsed[k] = false; });
+            document.querySelectorAll('.sb-markets').forEach(function(el) { el.classList.remove('sb-collapsed'); });
+            document.querySelectorAll('tr[data-gk]:not(.ghrow):not(.sb-game-row)').forEach(function(tr) { tr.classList.remove('collapsed-row'); });
+            document.querySelectorAll('.gh-arrow').forEach(function(el) { el.classList.add('up'); });
             Object.keys(mobileCollapsed).forEach(function(k) {
                 mobileCollapsed[k] = false;
             });
@@ -1504,20 +1499,14 @@
                 mbtn.textContent = 'Collapse All';
         } else {
             var gOrder = [];
-            document.querySelectorAll('tr.ghrow').forEach(function(tr) {
+            document.querySelectorAll('tr.sb-game-row, tr.ghrow').forEach(function(tr) {
                 var gk = tr.getAttribute('data-gk');
-                if (gk && gOrder.indexOf(gk) === -1)
-                    gOrder.push(gk);
+                if (gk && gOrder.indexOf(gk) === -1) gOrder.push(gk);
             });
-            gOrder.forEach(function(k) {
-                collapsed[k] = true;
-            });
-            document.querySelectorAll('tr[data-gk]:not(.ghrow)').forEach(function(tr) {
-                tr.classList.add('collapsed-row');
-            });
-            document.querySelectorAll('.gh-arrow').forEach(function(el) {
-                el.classList.remove('up');
-            });
+            gOrder.forEach(function(k) { collapsed[k] = true; });
+            document.querySelectorAll('.sb-markets').forEach(function(el) { el.classList.add('sb-collapsed'); });
+            document.querySelectorAll('tr[data-gk]:not(.ghrow):not(.sb-game-row)').forEach(function(tr) { tr.classList.add('collapsed-row'); });
+            document.querySelectorAll('.gh-arrow').forEach(function(el) { el.classList.remove('up'); });
             document.querySelectorAll('.game-card-body').forEach(function(el) {
                 var game = el.getAttribute('data-game');
                 if (game)
@@ -6263,13 +6252,21 @@
     function toggleGame(gk) {
         collapsed[gk] = !collapsed[gk];
         var isC = collapsed[gk];
-        document.querySelectorAll('tr[data-gk]').forEach(function(tr) {
+        // Sportsbook panel: toggle .sb-markets within the matching game row
+        document.querySelectorAll('tr.sb-game-row').forEach(function(tr) {
+            if (tr.getAttribute('data-gk') === gk) {
+                var mkts = tr.querySelector('.sb-markets');
+                if (mkts) mkts.classList.toggle('sb-collapsed', isC);
+            }
+        });
+        // Legacy table fallback
+        document.querySelectorAll('tr[data-gk]:not(.sb-game-row)').forEach(function(tr) {
             if (tr.getAttribute('data-gk') === gk && !tr.classList.contains('ghrow')) {
                 tr.classList.toggle('collapsed-row', isC);
             }
         });
-        document.querySelectorAll('.gh-arrow[data-gk="' + gk + '"]').forEach(function(el) {
-            el.classList.toggle('up', !isC);
+        document.querySelectorAll('.gh-arrow').forEach(function(el) {
+            if (el.getAttribute('data-gk') === gk) el.classList.toggle('up', !isC);
         });
     }
 
@@ -6455,38 +6452,21 @@
             var row = filtered.find(function(r) { return r.game === g; });
             gCm[g] = row ? row.cm : null;
         });
-        var html = '', lastG = null, lastLeague = null;
-        filtered.forEach(function(r) {
-            var color = gColor[r.game];
-            var isC = !!collapsed[r.game];
-            // FC: insert league sub-header when league changes (only in ALL view)
-            if (currentSport === 'soccer_fc' && currentFcLeague === 'ALL' && r.league && r.league !== lastLeague) {
-                lastLeague = r.league;
+        var html = '', lastLeague = null;
+        gOrder.forEach(function(game) {
+            var gameFiltered = filtered.filter(function(r) { return r.game === game; });
+            if (!gameFiltered.length) return;
+            var isC = !!collapsed[game];
+            var r0 = gameFiltered[0];
+            var rsUrl = rsGameIds[game] ? (getRealSportsUrl(rsGameIds[game], currentSport, r0.league, game) || '') : '';
+            var ti = timeInfo(gCm[game]);
+            if (currentSport === 'soccer_fc' && currentFcLeague === 'ALL' && r0.league && r0.league !== lastLeague) {
+                lastLeague = r0.league;
                 html += '<tr style="background:var(--bg2);border-bottom:1px solid var(--border2)">'
-                + '<td colspan="13" style="padding:6px 12px;font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--accent)">'
-                + escHtml(r.league) + '</td></tr>';
+                + '<td colspan="14" style="padding:6px 12px;font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--accent)">'
+                + escHtml(r0.league) + '</td></tr>';
             }
-            if (r.game !== lastG) {
-                lastG = r.game;
-                var ti = timeInfo(gCm[r.game]);
-                var teams = r.game.split(' @ ');
-                var _dhMatch = (teams[1] || '').match(/^(.*?)\s*(\(Game (\d+)\))\s*$/);
-                var _homeTeam = _dhMatch ? _dhMatch[1].trim() : (teams[1] || '');
-                var _gameNum  = _dhMatch ? _dhMatch[3] : null;
-                var gk = r.game.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-                html += '<tr class="ghrow" data-gk="' + r.game.replace(/"/g, '&quot;') + '" onclick="toggleGame(\'' + gk + '\')">'
-                + '<td colspan="13"><div class="gh-inner">'
-                + sportLogoHtml(currentSport, r.league, 20)
-                + '<div style="display:grid;grid-template-columns:auto minmax(0,1fr) auto auto minmax(0,1fr);align-items:center;gap:4px;flex:1;min-width:0">' + teamLogoHtml(teams[0], 20) + teamNameHtml(teams[0]) + '<span style="color:var(--muted2);text-align:center;padding:0 2px">@</span>' + teamLogoHtml(_homeTeam, 20) + teamNameHtml(_homeTeam) + '</div>'
-                + (_gameNum ? '<span class="gh-badge" style="flex-shrink:0;margin-left:6px;background:rgba(255,255,255,0.1);color:var(--muted2);font-size:10px;letter-spacing:.06em">GAME ' + _gameNum + '</span>' : '')
-                + (ti.lbl ? '<span class="gh-badge ' + ti.cls + '" style="flex-shrink:0;margin-left:6px">' + ti.lbl + '</span>' : '')
-                + (rsGameIds[r.game] ? (function(){ var u = getRealSportsUrl(rsGameIds[r.game], currentSport, r.league, r.game); return u ? '<a href="' + u + '" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" style="margin-left:6px;color:var(--accent);font-size:11px;text-decoration:none;opacity:0.9;flex-shrink:0" title="View on Real Sports">&#8599;</a>' : ''; })() : '')
-                + '<span class="gh-score-badge gh-badge" data-game="' + r.game.replace(/"/g, '&quot;') + '" data-cm="' + (r.cm ? r.cm.getTime() : '') + '" style="display:none"></span>'
-                + '<span class="live-score-badge gh-badge" style="display:none"></span>'
-                + '<span class="gh-arrow' + (isC ? '' : ' up') + '" data-gk="' + r.game.replace(/"/g, '&quot;') + '">&#9660;</span>'
-                + '</div></td></tr>';
-            }
-            html += buildRow(r, color, isC);
+            html += buildSBGame(game, gameFiltered, isC, rsUrl, ti, r0.league || '');
         });
         document.getElementById('tbody').innerHTML = html;
         renderMobileCards(filtered);
@@ -6608,20 +6588,148 @@
         + '</tr>';
     }
 
+    function buildSBSide(r, unit) {
+        var am = fmtAm(r.am);
+        var aCls = Number(r.am) >= 0 ? 'odds-pos' : 'odds-neg';
+        var lineStr = r.pt != null
+            ? (r.mkt === 'Total' ? (r.ps === 'A' ? 'O ' : 'U ') + Math.abs(r.pt) : (r.pt >= 0 ? '+' + r.pt : '' + r.pt))
+            : '';
+        var afStr = r.af != null ? (r.af * 100).toFixed(1) + '%' : '—';
+        var afChanged = r.yl != null && r.pt != null && parseFloat(r.yl) !== parseFloat(r.pt);
+        var es = '—', ec = 'e-none', bw = 0, bc = 'var(--muted2)';
+        if (r.edge != null) {
+            es = (r.edge > 0 ? '+' : '') + r.edge.toFixed(1) + '%';
+            if (r.edge >= 8)      { ec = 'e-strong'; bc = 'var(--green)'; }
+            else if (r.edge >= 5) { ec = 'e-med';    bc = '#7ddfab'; }
+            else if (r.edge > 0)  { ec = 'e-weak';   bc = 'var(--yellow)'; }
+            else                  { ec = 'e-neg';    bc = 'var(--red)'; }
+            bw = Math.min(Math.abs(r.edge) * 5, 50);
+        }
+        var evH = '';
+        var predEV = preds[r.id];
+        if (predEV && r.af != null) {
+            var ev = null;
+            if (payoutRatios[r.id] != null) {
+                ev = (r.af * payoutRatios[r.id] - 1) * 100;
+            } else {
+                var realPctEV = Math.min(0.999, Math.max(0.001, (probsExact[r.id] != null ? probsExact[r.id] : parseFloat(predEV) / 100) + rsPredAdj / 100));
+                if (realPctEV > 0 && realPctEV < 1) {
+                    ev = (r.af * (1 / realPctEV) * (1 - rsBaseTake(realPctEV)) - 1) * 100;
+                }
+            }
+            if (ev != null && !(ev > 100 && currentSport !== 'soccer_fc' && currentSport !== 'soccer_wc')) {
+                var evGated = isPro() || r.mkt === 'ML' || r.mkt === 'RFI';
+                if (evGated) {
+                    var evColor = ev >= 5 ? 'var(--green)' : ev > 0 ? 'var(--yellow)' : 'var(--red)';
+                    evH = '<span style="font-family:var(--mono);font-size:12px;font-weight:600;color:' + evColor + '">' + (ev > 0 ? '+' : '') + ev.toFixed(1) + '%</span>';
+                } else {
+                    evH = '<span style="filter:blur(4px);font-family:var(--mono);font-size:12px;font-weight:600;color:var(--green);user-select:none">+8.4%</span><span style="font-size:9px;font-weight:700;background:var(--accent);color:#fff;border-radius:2px;padding:1px 4px;margin-left:3px">PRO</span>';
+                }
+            }
+        }
+        var uH = r.u === 0 ? '<span class="u-pass">PASS</span>' : '<span class="u-val">' + r.u + 'u</span>';
+        var bH = r.u === 0 ? '<span class="u-pass">—</span>' : '<span class="bet-val">' + RAX_ICON + r.bet.toFixed(0) + '</span>';
+        var _rawPv = parseFloat(preds[r.id]);
+        var pv = isFinite(_rawPv) ? (rsPredAdj ? String(Math.min(99, Math.max(1, Math.round(_rawPv + rsPredAdj)))) : preds[r.id]) : '';
+        var ylv = r.yl != null ? r.yl : '';
+        var ph = r.pt != null ? r.pt : '';
+        var taken = !!betTaken[r.id];
+        var rowColor = r.mkt === 'Total'
+            ? teamColor(r.ps === 'A' ? r.game.split(' @ ')[0].trim() : (r.game.split(' @ ')[1] || '').trim())
+            : r.mkt === 'RFI' ? 'transparent'
+            : teamColor(r.side);
+        var edgeBgStyle = r.edge != null && r.edge > 0 ? 'background:rgba(14,217,138,' + (Math.min(r.edge / 10, 1) * 0.07).toFixed(3) + ')' : '';
+        return '<div class="sb-side' + (r.edge != null && r.edge > 0 ? ' has-edge' : '') + (taken ? ' sb-taken' : '') + '" data-row-id="' + escHtml(r.id) + '" style="border-left-color:' + rowColor + ';' + edgeBgStyle + '">'
+            + '<div class="sb-side-top">'
+            +   '<span class="sb-side-name">' + (r.mkt !== 'Total' && r.mkt !== 'RFI' ? teamLogoHtml(r.side, 14) : '') + '<span class="sb-side-name-txt">' + escHtml(r.side) + '</span>' + (lineStr ? '<span class="sb-side-line-lbl">' + lineStr + '</span>' : '') + '</span>'
+            +   '<span class="' + aCls + '" style="font-family:var(--mono);font-weight:600;font-size:13px;flex-shrink:0">' + am + '</span>'
+            + '</div>'
+            + '<div class="sb-side-fair">Fair: <span class="sb-adj-fair" style="color:' + (afChanged ? 'var(--yellow)' : 'var(--muted)') + '">' + afStr + '</span>' + (vols[r.id] ? ' <span style="font-size:9px;color:var(--muted2);font-family:var(--mono)">' + vols[r.id] + ' vol</span>' : '') + '</div>'
+            + (r.mkt !== 'ML' && r.mkt !== 'RFI' ? '<div class="sb-side-row"><input class="cell-inp' + (afChanged ? ' line-changed' : '') + '" type="number" step="0.5" placeholder="' + ph + '" value="' + ylv + '" data-id="' + escHtml(r.id) + '" onblur="setLine(this)" onkeydown="if(event.key===\'Enter\')this.blur()"><span style="font-size:10px;color:var(--muted);margin-left:2px">line</span></div>' : '')
+            + '<div class="sb-side-row"><input class="cell-inp sb-real-inp' + (pv ? ' filled' : '') + '" type="number" min="1" max="99" step="1" inputmode="numeric" placeholder="RS%" value="' + pv + '" data-id="' + escHtml(r.id) + '" oninput="setPred(this)" onblur="setPred(this)" onkeydown="if(event.key===\'Enter\')this.blur()"></div>'
+            + '<div class="sb-side-results"><div class="sb-edge-display edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:' + bw + 'px;background:' + bc + '"></div></div><span class="edge-val ' + ec + '">' + es + '</span></div><span class="sb-ev-display">' + evH + '</span></div>'
+            + '<div class="sb-side-bottom"><div class="sb-size-display"><span class="sb-units-display">' + uH + '</span><span class="sb-bet-display">' + bH + '</span></div><input type="checkbox" class="sb-cb" data-id="' + escHtml(r.id) + '" ' + (taken ? 'checked' : '') + ' onchange="toggleBet(\'' + escHtml(r.id) + '\')" style="width:15px;height:15px;cursor:pointer;accent-color:var(--green)"></div>'
+            + '</div>';
+    }
+
+    function buildSBGame(game, computedRows, isC, rsUrl, ti, league) {
+        var gk  = game.replace(/"/g, '&quot;');
+        var gkJ = game.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        var teams = game.split(' @ ');
+        var _dhM = (teams[1] || '').match(/^(.*?)\s*\(Game (\d+)\)\s*$/);
+        var _home = _dhM ? _dhM[1].trim() : (teams[1] || '');
+        var _gnum = _dhM ? _dhM[2] : null;
+        var unit  = parseFloat(document.getElementById('unit-size').value) || 300;
+
+        var hdr = '<div class="sb-panel-hdr" onclick="toggleGame(\'' + gkJ + '\')">'
+            + '<div class="sb-hdr-left">'
+            + sportLogoHtml(currentSport, league, 18)
+            + '<div class="sb-matchup">'
+            + teamLogoHtml(teams[0], 18) + '<span class="sb-matchup-team">' + escHtml(teams[0]) + '</span>'
+            + '<span class="sb-at">@</span>'
+            + teamLogoHtml(_home, 18) + '<span class="sb-matchup-team">' + escHtml(_home) + '</span>'
+            + '</div>'
+            + (_gnum ? '<span class="gh-badge" style="background:rgba(255,255,255,0.08);color:var(--muted2);font-size:9px;flex-shrink:0">GAME ' + _gnum + '</span>' : '')
+            + (ti && ti.lbl ? '<span class="gh-badge ' + ti.cls + '" style="flex-shrink:0">' + ti.lbl + '</span>' : '')
+            + (rsUrl ? '<a href="' + rsUrl + '" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--accent);font-size:11px;text-decoration:none;flex-shrink:0">&#8599;</a>' : '')
+            + '</div>'
+            + '<span class="gh-arrow' + (isC ? '' : ' up') + '" data-gk="' + gk + '">&#9660;</span>'
+            + '</div>';
+
+        var mkts = currentSport === 'baseball_mlb' ? ['ML', 'RFI'] : ['ML', 'Spread', 'Total'];
+        var colClass = mkts.length === 2 ? 'sb-markets sb-markets-2col' : 'sb-markets';
+        var mktsHtml = '<div class="' + colClass + (isC ? ' sb-collapsed' : '') + '">';
+        mkts.forEach(function(mkt) {
+            var rowA = computedRows.find(function(r) { return r.mkt === mkt && r.ps === 'A'; });
+            var rowB = computedRows.find(function(r) { return r.mkt === mkt && r.ps === 'B'; });
+            if (!rowA && !rowB) {
+                mktsHtml += '<div class="sb-mkt-col sb-mkt-empty"><div class="sb-mkt-hdr">' + mkt + '</div><div class="sb-mkt-body">—</div></div>';
+                return;
+            }
+            if (!isPro() && mkt !== 'ML' && mkt !== 'RFI') {
+                var blurRow = rowA || rowB;
+                var blurAm = fmtAm(blurRow.am);
+                mktsHtml += '<div class="sb-mkt-col sb-locked" onclick="showUpgradeModal(\'Spread and Total markets are available on the Pro plan. Upgrade to unlock.\')"><div class="sb-mkt-hdr">' + mkt + '</div>'
+                    + '<div style="padding:12px 14px;filter:blur(3px);pointer-events:none;user-select:none;opacity:.4"><div style="font-size:13px;font-weight:600;color:var(--text)">???</div><div style="font-family:var(--mono);font-size:13px;margin-top:4px">+???.? / -???.?</div></div>'
+                    + '<div class="sb-locked-overlay"><span style="font-size:9px;font-weight:700;background:var(--accent);color:#fff;padding:2px 8px;border-radius:2px;letter-spacing:.06em">PRO</span><span style="font-size:10px;color:var(--muted)">Click to unlock</span></div>'
+                    + '</div>';
+                return;
+            }
+            mktsHtml += '<div class="sb-mkt-col"><div class="sb-mkt-hdr">' + mkt + '</div>'
+                + (rowA ? buildSBSide(rowA, unit) : '')
+                + (rowB ? buildSBSide(rowB, unit) : '')
+                + '</div>';
+        });
+        mktsHtml += '</div>';
+
+        return '<tr class="sb-game-row" data-gk="' + gk + '"><td colspan="14" class="sb-game-cell">'
+            + '<div class="sb-panel">' + hdr + mktsHtml + '</div>'
+            + '</td></tr>';
+    }
+
     function setLine(input) {
         var id = input.getAttribute('data-id');
         yourLines[id] = input.value !== '' ? parseFloat(input.value) : null;
         input.classList.toggle('line-changed', yourLines[id] != null);
-        var tr = input.closest('tr');
-        if (!tr) return;
         var r = rawRows.find(function(x) { return x.id === id; });
         if (!r) return;
         var fair = getFair(r);
         var af = adjFair(fair, r.pt, yourLines[id], r.mkt, r.ps);
         var changed = (yourLines[id] != null && r.pt != null && parseFloat(yourLines[id]) !== parseFloat(r.pt));
+        // Sportsbook panel layout: update .sb-adj-fair within the side div
+        var sideEl = input.closest('.sb-side');
+        if (sideEl) {
+            var adjFairEl = sideEl.querySelector('.sb-adj-fair');
+            if (adjFairEl) { adjFairEl.textContent = af != null ? (af * 100).toFixed(1) + '%' : '—'; adjFairEl.style.color = changed ? 'var(--yellow)' : 'var(--muted)'; }
+            var realInp = sideEl.querySelector('.sb-real-inp');
+            if (realInp) setPred(realInp);
+            return;
+        }
+        // Fallback: legacy table layout
+        var tr = input.closest('tr');
+        if (!tr) return;
         var tds = tr.querySelectorAll('td');
-        tds[7].textContent = af != null ? (af * 100).toFixed(1) + '%' : '-';
-        tds[7].style.cssText = 'text-align:right;font-family:var(--mono);color:' + (changed ? 'var(--yellow)' : 'var(--muted)');
+        if (tds[7]) { tds[7].textContent = af != null ? (af * 100).toFixed(1) + '%' : '-'; tds[7].style.cssText = 'text-align:right;font-family:var(--mono);color:' + (changed ? 'var(--yellow)' : 'var(--muted)'); }
         var inputs = tr.querySelectorAll('input[data-id="' + id + '"]');
         if (inputs.length > 1) setPred(inputs[inputs.length - 1]);
     }
@@ -6642,7 +6750,9 @@
                 var otherId = r.ps === 'A' ? id.replace(/-A$/, '-B') : id.replace(/-B$/, '-A');
                 var other = (100 - v).toFixed(1);
                 preds[otherId] = other;
-                var allOther = document.querySelectorAll('td[data-label="Real %"] input[data-id="' + otherId + '"]');
+                // Try sportsbook panel inputs first, fall back to legacy td selector
+                var allOther = document.querySelectorAll('input.sb-real-inp[data-id="' + otherId + '"]');
+                if (!allOther.length) allOther = document.querySelectorAll('td[data-label="Real %"] input[data-id="' + otherId + '"]');
                 var otherInp = allOther.length ? allOther[0] : null;
                 if (otherInp && otherInp !== input) {
                     otherInp.value = other;
@@ -6697,14 +6807,35 @@
             else { ec = 'e-neg'; bc = 'var(--red)'; }
             bw = Math.min(Math.abs(edge) * 5, 50);
         }
+        var edgeHtml = '<div class="edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:' + bw + 'px;background:' + bc + '"></div></div><span class="edge-val ' + ec + '">' + es + '</span></div>';
+        var unitsHtml = u === 0 ? '<span class="u-pass">PASS</span>' : '<span class="u-val">' + u + 'u</span>';
+        var betHtml   = u === 0 ? '<span class="u-pass">-</span>' : '<span class="bet-val">' + RAX_ICON + (u * unit).toFixed(0) + '</span>';
+        var hasEdge = edge != null && edge > 0;
+        // Sportsbook panel layout
+        var sideEl = input.closest('.sb-side');
+        if (sideEl) {
+            var edgeEl = sideEl.querySelector('.sb-edge-display');
+            var evEl2  = sideEl.querySelector('.sb-ev-display');
+            var uEl    = sideEl.querySelector('.sb-units-display');
+            var bEl    = sideEl.querySelector('.sb-bet-display');
+            if (edgeEl) edgeEl.innerHTML = edgeHtml;
+            if (evEl2)  evEl2.innerHTML  = evH;
+            if (uEl)    uEl.innerHTML    = unitsHtml;
+            if (bEl)    bEl.innerHTML    = betHtml;
+            sideEl.classList.toggle('has-edge', hasEdge);
+            sideEl.style.background = hasEdge ? 'rgba(14,217,138,' + (Math.min(edge / 10, 1) * 0.07).toFixed(3) + ')' : '';
+            document.getElementById('stat-edges').textContent = document.querySelectorAll('.sb-side.has-edge').length;
+            return;
+        }
+        // Fallback: legacy table layout
         var tds = tr.querySelectorAll('td');
-        tds[9].innerHTML = '<div class="edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:' + bw + 'px;background:' + bc + '"></div></div><span class="edge-val ' + ec + '">' + es + '</span></div>';
-        tds[10].innerHTML = evH;
-        tds[11].innerHTML = u === 0 ? '<span class="u-pass">PASS</span>' : '<span class="u-val">' + u + 'u</span>';
-        tds[12].innerHTML = u === 0 ? '<span class="u-pass">-</span>' : '<span class="bet-val">' + RAX_ICON + (u * unit).toFixed(0) + '</span>';
-        tr.classList.toggle('has-edge', edge != null && edge > 0);
-        tr.style.background = edge != null && edge > 0 ? 'rgba(45,204,126,' + (Math.min(edge / 10, 1) * 0.08).toFixed(3) + ')' : '';
-        document.getElementById('stat-edges').textContent = document.querySelectorAll('tr.has-edge').length;
+        if (tds[9])  tds[9].innerHTML  = edgeHtml;
+        if (tds[10]) tds[10].innerHTML = evH;
+        if (tds[11]) tds[11].innerHTML = unitsHtml;
+        if (tds[12]) tds[12].innerHTML = betHtml;
+        tr.classList.toggle('has-edge', hasEdge);
+        tr.style.background = hasEdge ? 'rgba(45,204,126,' + (Math.min(edge / 10, 1) * 0.08).toFixed(3) + ')' : '';
+        document.getElementById('stat-edges').textContent = document.querySelectorAll('tr.has-edge,.sb-side.has-edge').length;
     }
 
     // ── REAL SPORTS AUTO-FILL ──
