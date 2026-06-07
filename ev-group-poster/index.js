@@ -547,12 +547,23 @@ function resolveResult(post, markets) {
 }
 
 // Strict resolution — only uses explicit isWinner flag, never the probability heuristic.
-// Used during background caching while the game may still be live.
+// A 'loss' is only recorded when ANOTHER outcome in the same market is confirmed as the
+// winner (isWinner: true). This prevents false losses mid-game where RS temporarily sets
+// isWinner: false on a trailing team before the game is over.
 function resolveResultStrict(post, markets) {
   const outcome = findOutcome(post, markets);
   if (!outcome) return null;
-  if (outcome.isWinner === true)  return 'win';
-  if (outcome.isWinner === false) return 'loss';
+  if (outcome.isWinner === true) return 'win';
+  if (outcome.isWinner === false) {
+    // Require a confirmed winner elsewhere in the market before recording a loss.
+    // Without it the market may still be live — isWinner: false is not final.
+    const labels = RS_MARKET_MAP[post.market] || RS_ML_LABELS;
+    let mkt = null;
+    for (const label of labels) { mkt = markets.find(m => m.label === label); if (mkt) break; }
+    const marketSettled = mkt && (mkt.outcomes || []).some(o => o !== outcome && o.isWinner === true);
+    if (!marketSettled) return null;
+    return 'loss';
+  }
   return null;
 }
 
