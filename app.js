@@ -5356,7 +5356,7 @@
             .then(function() {
                 resetRefreshBtn();
                 renderTable();
-                if (rawRows.length > 0) fetchRealMarkets(currentSport).then(function() { });
+                if (rawRows.length > 0) fetchRealMarkets(currentSport).then(function() { fetchExactEvForRows(currentSport); });
                 // Start auto-poll to keep NBA odds live
                 if (nbaPoller) clearInterval(nbaPoller);
                 nbaPoller = setInterval(function() {
@@ -5433,7 +5433,7 @@
             .then(function() {
                 resetRefreshBtn();
                 renderTable();
-                if (rawRows.length > 0) fetchRealMarkets(currentSport).then(function() { });
+                if (rawRows.length > 0) fetchRealMarkets(currentSport).then(function() { fetchExactEvForRows(currentSport); });
                 // Start auto-poll to keep WNBA odds live
                 if (wnbaPoller) clearInterval(wnbaPoller);
                 wnbaPoller = setInterval(function() {
@@ -5518,7 +5518,7 @@
             .then(function() {
                 resetRefreshBtn();
                 renderTable();
-                if (rawRows.length > 0) fetchRealMarkets(currentSport).then(function() { });
+                if (rawRows.length > 0) fetchRealMarkets(currentSport).then(function() { fetchExactEvForRows(currentSport); });
                 if (wcPoller) clearInterval(wcPoller);
                 wcPoller = setInterval(function() {
                     if (currentSport !== 'soccer_wc') { clearInterval(wcPoller); wcPoller = null; return; }
@@ -5596,7 +5596,7 @@
             .then(function() {
                 resetRefreshBtn();
                 renderTable();
-                if (rawRows.length > 0) fetchRealMarkets(currentSport).then(function() { });
+                if (rawRows.length > 0) fetchRealMarkets(currentSport).then(function() { fetchExactEvForRows(currentSport); });
                 if (fcPoller) clearInterval(fcPoller);
                 fcPoller = setInterval(function() {
                     if (currentSport !== 'soccer_fc') { clearInterval(fcPoller); fcPoller = null; return; }
@@ -5709,6 +5709,7 @@
                             });
                         }
                         renderTable();
+                        fetchExactEvForRows('baseball_mlb');
                     });
                     if (mlbPoller) clearInterval(mlbPoller);
                     mlbPoller = setInterval(function() {
@@ -5801,7 +5802,7 @@
                 resetRefreshBtn();
                 renderTable();
                 if (rawRows.length > 0) {
-                    fetchRealMarkets(currentSport).then(function() { fetchDKAltLinesNHL(); });
+                    fetchRealMarkets(currentSport).then(function() { fetchDKAltLinesNHL(); fetchExactEvForRows(currentSport); });
                     if (nhlPoller) clearInterval(nhlPoller);
                     nhlPoller = setInterval(function() {
                         if (currentSport !== 'icehockey_nhl') { clearInterval(nhlPoller); nhlPoller = null; return; }
