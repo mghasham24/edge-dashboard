@@ -24,18 +24,21 @@ async function handleRequest({ request, env }) {
     const search = url.searchParams.get('q') || '';
     const plan   = url.searchParams.get('plan') || '';
     const sort   = url.searchParams.get('sort') || 'signup_desc';
+    const group  = url.searchParams.get('group');
     const limit  = Math.min(parseInt(url.searchParams.get('limit') || '50', 10), 200);
     const offset = parseInt(url.searchParams.get('offset') || '0', 10);
 
     const orderBy = sort === 'signup_asc'  ? 'u.created_at ASC'
                   : sort === 'pro_desc'    ? 'u.pro_expires_at DESC NULLS LAST'
                   : sort === 'pro_asc'     ? 'u.pro_expires_at ASC NULLS LAST'
+                  : sort === 'group_desc'  ? 'u.group_access DESC, u.created_at DESC'
                   : 'u.created_at DESC';
 
     const where = [];
     const binds = [];
-    if (search) { where.push('(u.email LIKE ? OR u.rs_group_username LIKE ?)'); binds.push('%' + search + '%', '%' + search + '%'); }
-    if (plan)   { where.push('u.plan=?'); binds.push(plan); }
+    if (search)          { where.push('(u.email LIKE ? OR u.rs_group_username LIKE ?)'); binds.push('%' + search + '%', '%' + search + '%'); }
+    if (plan)            { where.push('u.plan=?'); binds.push(plan); }
+    if (group !== null && group !== '') { where.push('u.group_access=?'); binds.push(parseInt(group)); }
     const whereClause = where.length ? 'WHERE ' + where.join(' AND ') : '';
 
     const now = Math.floor(Date.now() / 1000);

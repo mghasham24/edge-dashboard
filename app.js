@@ -4470,12 +4470,14 @@
 
     async function loadAdminUsers(q, offset, append) {
         if (offset === undefined) offset = 0;
-        var plan = document.getElementById('admin-plan-filter') ? document.getElementById('admin-plan-filter').value : '';
-        var sort = document.getElementById('admin-sort') ? document.getElementById('admin-sort').value : '';
+        var plan  = document.getElementById('admin-plan-filter')  ? document.getElementById('admin-plan-filter').value  : '';
+        var sort  = document.getElementById('admin-sort')          ? document.getElementById('admin-sort').value          : '';
+        var group = document.getElementById('admin-group-filter') ? document.getElementById('admin-group-filter').value : '';
         var params = ['limit=50', 'offset=' + offset];
-        if (q) params.push('q=' + encodeURIComponent(q));
-        if (plan) params.push('plan=' + encodeURIComponent(plan));
-        if (sort) params.push('sort=' + encodeURIComponent(sort));
+        if (q)     params.push('q='     + encodeURIComponent(q));
+        if (plan)  params.push('plan='  + encodeURIComponent(plan));
+        if (sort)  params.push('sort='  + encodeURIComponent(sort));
+        if (group !== '') params.push('group=' + encodeURIComponent(group));
         var url = '/api/admin/users?' + params.join('&');
         try {
             var res = await fetch(url, { credentials: 'same-origin' });

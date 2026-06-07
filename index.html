@@ -442,7 +442,7 @@
                 </div>
             </div>
             <!-- Search -->
-            <input class="admin-search" id="admin-search" type="text" placeholder="Search by email..." oninput="adminSearch()">
+            <input class="admin-search" id="admin-search" type="text" placeholder="Search by email or RS username..." oninput="adminSearch()">
             <!-- Filters -->
             <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
                 <select id="admin-plan-filter" onchange="adminSearch()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;padding:6px 10px;border-radius:5px;cursor:pointer">
@@ -450,11 +450,17 @@
                     <option value="free">Free</option>
                     <option value="pro">Pro</option>
                 </select>
+                <select id="admin-group-filter" onchange="adminSearch()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;padding:6px 10px;border-radius:5px;cursor:pointer">
+                    <option value="">All Group</option>
+                    <option value="1">In Group</option>
+                    <option value="0">Not In Group</option>
+                </select>
                 <select id="admin-sort" onchange="adminSearch()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;padding:6px 10px;border-radius:5px;cursor:pointer">
                     <option value="signup_desc">Newest Signup</option>
                     <option value="signup_asc">Oldest Signup</option>
                     <option value="pro_desc">Pro Expires Soonest</option>
                     <option value="pro_asc">Pro Expires Latest</option>
+                    <option value="group_desc">Group Access First</option>
                 </select>
                 <button id="sync-stripe-btn" onclick="adminSyncStripe()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:5px;cursor:pointer;letter-spacing:.04em">Sync Stripe</button>
             </div>
