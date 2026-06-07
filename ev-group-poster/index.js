@@ -23,7 +23,8 @@ const SITE_URL         = process.env.SITE_URL;
 const EV_POSTER_KEY    = process.env.EV_POSTER_KEY;
 const ALERT_CRON_URL   = process.env.ALERT_CRON_URL || 'https://raxedge-alert-cron.mghasham24.workers.dev';
 const RS_AUTH_INFO  = process.env.RS_AUTH_INFO;
-const RS_GROUP_ID   = process.env.RS_GROUP_ID;
+const RS_GROUP_ID        = process.env.RS_GROUP_ID;
+const RS_RECAP_GROUP_ID  = process.env.RS_RECAP_GROUP_ID || RS_GROUP_ID;
 const DEVICE_UUID   = process.env.RS_DEVICE_UUID || '2e0a38e2-0ee8-4f93-9a34-218ac1d10161';
 const RS_PROXY_URL  = process.env.RS_PROXY_URL || null;
 const MIN_EV             = parseFloat(process.env.MIN_EV              || '5');  // WS payout EV gate
@@ -770,7 +771,7 @@ async function postDailySummary() {
   if (current.length) messages.push(current.join('\n'));
 
   async function postToGroup(text) {
-    const res = await fetch(`${RS_BASE}/comments/groups/${RS_GROUP_ID}`, {
+    const res = await fetch(`${RS_BASE}/comments/groups/${RS_RECAP_GROUP_ID}`, {
       method: 'POST', headers: rsHeaders(),
       body: JSON.stringify({ text, content: { nodes: [{ text }] } }),
       signal: AbortSignal.timeout(10000),

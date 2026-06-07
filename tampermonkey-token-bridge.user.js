@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RS Token Bridge
 // @namespace    raxedge
-// @version      2.1
+// @version      2.2
 // @description  Pushes RS auth token every 30s + full market data every 4min to RaxEdge
 // @match        https://realsports.io/*
 // @match        https://www.realsports.io/*
@@ -55,7 +55,7 @@
       'real-device-type': 'desktop_web',
       'real-device-uuid': '2e0a38e2-0ee8-4f93-9a34-218ac1d10161',
       'real-request-token': String(Date.now()),
-      'real-version': '31',
+      'real-version': '32',
     };
   }
 
