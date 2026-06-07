@@ -210,9 +210,11 @@
         color: var(--fg);
         user-select: none;
     }
-    .sort-drag-item:active { cursor: grabbing; opacity: .6; }
+    .sort-drag-item { will-change: transform; }
+    .sort-drag-item:active { cursor: grabbing; }
     .sort-drag-item.drag-over { border-color: var(--accent); }
-    .sort-drag-handle { color: var(--muted2); font-size: 15px; flex-shrink: 0; }
+    .sort-drag-handle { color: var(--muted2); font-size: 15px; flex-shrink: 0; cursor: grab; touch-action: none; padding: 4px 2px; }
+    .sort-drag-handle:active { cursor: grabbing; }
     .sort-locked { opacity: .4; }
     .sort-arrow-btn {
         background: none;

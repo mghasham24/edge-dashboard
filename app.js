@@ -4759,6 +4759,7 @@
         ghost.innerHTML = item.innerHTML;
         document.body.appendChild(ghost);
         item.style.opacity = '0';
+        document.body.style.overflow = 'hidden';
         _sortDragState = { startIdx: startIdx, currentIdx: startIdx, startY: e.clientY, ghostTop: rect.top, itemH: itemH, items: items, ghost: ghost, dragItem: item };
     }
 
@@ -4784,6 +4785,7 @@
 
     function onSortPointerUp() {
         document.removeEventListener('pointermove', onSortPointerMove);
+        document.body.style.overflow = '';
         var s = _sortDragState;
         _sortDragState = null;
         if (!s) return;
