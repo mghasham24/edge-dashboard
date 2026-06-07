@@ -518,7 +518,15 @@ function isSubseq(abbr, full) {
 
 function findOutcome(post, markets) {
   const labels  = RS_MARKET_MAP[post.market] || RS_ML_LABELS;
-  const mkt     = markets.find(m => labels.includes(m.label));
+  // Iterate labels in priority order so "Game Winner" is preferred over "Moneyline".
+  // RS sometimes has both: "Moneyline" settles at regulation end while
+  // "Game Winner" (includes OT/shootout) is still open — picking Moneyline
+  // first would falsely mark OT games as a loss mid-game.
+  let mkt = null;
+  for (const label of labels) {
+    mkt = markets.find(m => m.label === label);
+    if (mkt) break;
+  }
   if (!mkt) return null;
   const outcomes = mkt.outcomes || [];
   const normSide = normName(post.side);
@@ -572,7 +580,7 @@ async function cacheResultsInBackground() {
   const byKey = new Map();
   for (const p of dailyPosts) byKey.set(p.betKey, p);
   const unresolved = Array.from(byKey.values()).filter(p =>
-    p.rsGameId && p.result == null && p.commenceTime > 0 && p.commenceTime < nowSec - 7200
+    p.rsGameId && p.result == null && p.commenceTime > 0 && p.commenceTime < nowSec - 14400
   );
   if (!unresolved.length) return;
 
