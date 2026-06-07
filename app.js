@@ -4745,16 +4745,13 @@
     function saveSportOrder() {
         if (_pendingSportOrder) {
             localStorage.setItem('rax_sport_order', JSON.stringify(_pendingSportOrder));
-            var first = _pendingSportOrder[0];
-            var sport = SPORTS.find(function(s) { return s.key === first; });
-            var pro = isPro();
-            if (sport && (pro || FREE_SPORTS.indexOf(first) !== -1)) {
-                currentSport = first;
-            }
         }
         closeSportOrderModal();
         buildTabs();
-        loadOdds();
+        // Click the first non-locked tab so currentSport + loadOdds fire normally
+        var tabs = document.querySelectorAll('#sport-tabs .sport-tab');
+        var first = Array.from(tabs).find(function(t) { return !t.classList.contains('locked'); });
+        if (first) first.click(); else loadOdds();
     }
 
     function renderSortList() {
