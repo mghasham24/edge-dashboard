@@ -4647,32 +4647,155 @@
     function toggleTheme() {
         var isLight = document.documentElement.classList.toggle('light');
         localStorage.setItem('raxedge_theme', isLight ? 'light' : 'dark');
-        var btn = document.getElementById('theme-btn');
-        if (btn) btn.textContent = isLight ? '☀️' : '🌙';
+        syncMenuDropdown();
     }
 
     function toggleStickyHeader() {
         var el = document.querySelector('.subheader-sticky');
-        var btn = document.getElementById('sticky-btn');
         var isOff = el.classList.toggle('sticky-off');
         localStorage.setItem('raxedge_sticky_off', isOff ? '1' : '0');
-        if (btn) btn.style.opacity = isOff ? '0.4' : '1';
+        syncMenuDropdown();
     }
 
     function initStickyHeader() {
         var isOff = localStorage.getItem('raxedge_sticky_off') === '1';
         var el = document.querySelector('.subheader-sticky');
-        var btn = document.getElementById('sticky-btn');
         if (isOff && el) el.classList.add('sticky-off');
-        if (btn) btn.style.opacity = isOff ? '0.4' : '1';
     }
 
     function initTheme() {
         var saved = localStorage.getItem('raxedge_theme');
-        var isLight = saved === 'light';
-        document.documentElement.classList.toggle('light', isLight);
-        var btn = document.getElementById('theme-btn');
-        if (btn) btn.textContent = isLight ? '☀️' : '🌙';
+        document.documentElement.classList.toggle('light', saved === 'light');
+    }
+
+    function syncMenuDropdown() {
+        var isLight = document.documentElement.classList.contains('light');
+        var isOff   = !!(document.querySelector('.subheader-sticky') && document.querySelector('.subheader-sticky').classList.contains('sticky-off'));
+        var icon  = document.getElementById('dd-theme-icon');
+        var label = document.getElementById('dd-theme-label');
+        var si    = document.getElementById('dd-sticky-item');
+        if (icon)  icon.textContent  = isLight ? '☀️' : '🌙';
+        if (label) label.textContent = isLight ? 'Light mode' : 'Dark mode';
+        if (si)    si.classList.toggle('dd-active', !isOff);
+    }
+
+    // ── Hamburger menu ──
+    function toggleMenu() {
+        var dd = document.getElementById('menu-dropdown');
+        if (!dd) return;
+        if (dd.classList.contains('open')) {
+            dd.classList.remove('open');
+        } else {
+            syncMenuDropdown();
+            dd.classList.add('open');
+        }
+    }
+
+    function closeMenu() {
+        var dd = document.getElementById('menu-dropdown');
+        if (dd) dd.classList.remove('open');
+    }
+
+    document.addEventListener('click', function(e) {
+        var wrap = document.getElementById('menu-wrap');
+        if (wrap && !wrap.contains(e.target)) closeMenu();
+    });
+
+    // ── Sport order ──
+    function getSportOrder() {
+        try {
+            var saved = JSON.parse(localStorage.getItem('rax_sport_order') || 'null');
+            if (Array.isArray(saved)) {
+                var result = saved.filter(function(k) { return SPORTS.some(function(s) { return s.key === k; }); });
+                SPORTS.forEach(function(s) { if (result.indexOf(s.key) === -1) result.push(s.key); });
+                return result;
+            }
+        } catch(e) {}
+        return SPORTS.map(function(s) { return s.key; });
+    }
+
+    function orderedSports() {
+        return getSportOrder().map(function(k) { return SPORTS.find(function(s) { return s.key === k; }); }).filter(Boolean);
+    }
+
+    var _pendingSportOrder = null;
+    var _sortDragSrc = null;
+
+    function openSportOrderModal() {
+        closeMenu();
+        _pendingSportOrder = getSportOrder();
+        renderSortList();
+        var bg = document.getElementById('sort-modal-bg');
+        if (bg) { bg.style.display = 'flex'; }
+    }
+
+    function closeSportOrderModal() {
+        var bg = document.getElementById('sort-modal-bg');
+        if (bg) bg.style.display = 'none';
+        _pendingSportOrder = null;
+    }
+
+    function saveSportOrder() {
+        if (_pendingSportOrder) localStorage.setItem('rax_sport_order', JSON.stringify(_pendingSportOrder));
+        closeSportOrderModal();
+        buildTabs();
+    }
+
+    function renderSortList() {
+        var pro = isPro();
+        var list = document.getElementById('sort-list');
+        if (!list || !_pendingSportOrder) return;
+        var n = _pendingSportOrder.length;
+        list.innerHTML = _pendingSportOrder.map(function(key, idx) {
+            var sport = SPORTS.find(function(s) { return s.key === key; });
+            if (!sport) return '';
+            var locked = !pro && FREE_SPORTS.indexOf(key) === -1;
+            return '<div class="sort-drag-item' + (locked ? ' sort-locked' : '') + '" draggable="true" data-idx="' + idx + '"'
+                + ' ondragstart="sortDragStart(event,' + idx + ')"'
+                + ' ondragover="sortDragOver(event,' + idx + ')"'
+                + ' ondrop="sortDrop(event,' + idx + ')"'
+                + ' ondragleave="sortDragLeave(event)">'
+                + '<span class="sort-drag-handle">⠿</span>'
+                + '<span style="flex:1">' + escHtml(sport.label) + (locked ? ' 🔒' : '') + '</span>'
+                + '<button class="sort-arrow-btn" onclick="sortMove(' + idx + ',-1)" ' + (idx === 0 ? 'disabled' : '') + '>↑</button>'
+                + '<button class="sort-arrow-btn" onclick="sortMove(' + idx + ',1)" ' + (idx === n - 1 ? 'disabled' : '') + '>↓</button>'
+                + '</div>';
+        }).join('');
+    }
+
+    function sortMove(idx, dir) {
+        var n = idx + dir;
+        if (!_pendingSportOrder || n < 0 || n >= _pendingSportOrder.length) return;
+        var a = _pendingSportOrder.slice();
+        var t = a[idx]; a[idx] = a[n]; a[n] = t;
+        _pendingSportOrder = a;
+        renderSortList();
+    }
+
+    function sortDragStart(e, idx) {
+        _sortDragSrc = idx;
+        e.dataTransfer.effectAllowed = 'move';
+    }
+
+    function sortDragOver(e, idx) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        document.querySelectorAll('.sort-drag-item').forEach(function(el) { el.classList.remove('drag-over'); });
+        e.currentTarget.classList.add('drag-over');
+    }
+
+    function sortDragLeave(e) { e.currentTarget.classList.remove('drag-over'); }
+
+    function sortDrop(e, idx) {
+        e.preventDefault();
+        e.currentTarget.classList.remove('drag-over');
+        if (_sortDragSrc === null || _sortDragSrc === idx) { _sortDragSrc = null; return; }
+        var a = _pendingSportOrder.slice();
+        var moved = a.splice(_sortDragSrc, 1)[0];
+        a.splice(idx, 0, moved);
+        _pendingSportOrder = a;
+        _sortDragSrc = null;
+        renderSortList();
     }
 
     var _upgradeBilling = 'monthly';
@@ -4855,7 +4978,7 @@
             }
         }
 
-        SPORTS.forEach(function(s) {
+        orderedSports().forEach(function(s) {
             var locked = !pro && FREE_SPORTS.indexOf(s.key) === -1;
             var b = document.createElement('button');
             b.className = 'sport-tab' + (s.key === currentSport && !locked ? ' active' : '') + (locked ? ' locked' : '');

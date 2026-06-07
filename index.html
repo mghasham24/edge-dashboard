@@ -325,14 +325,39 @@
                 <div class="api-remaining" id="api-remaining" style="display:none">-- requests left</div>
                 <button class="refresh-btn" id="collapse-btn" onclick="toggleAll()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted)" class="desktop-only">Collapse All</button>
                 <button class="refresh-btn" id="refresh-btn" onclick="loadOdds()">Refresh</button>
-                <button id="sticky-btn" onclick="toggleStickyHeader()" title="Toggle sticky header" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:14px;padding:6px 10px;border-radius:5px;cursor:pointer;line-height:1">📌</button>
-                <button id="theme-btn" onclick="toggleTheme()" title="Toggle light/dark mode" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:14px;padding:6px 10px;border-radius:5px;cursor:pointer;line-height:1">🌙</button>
                 <button id="group-code-btn" onclick="openGroupCodeModal()" title="RS Group Code" style="display:none;background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:13px;font-weight:600;padding:6px 10px;border-radius:5px;cursor:pointer;line-height:1;letter-spacing:.03em">🔑</button>
+                <div class="menu-wrap" id="menu-wrap">
+                    <button id="menu-btn" onclick="toggleMenu()" title="Menu" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:16px;padding:6px 10px;border-radius:5px;cursor:pointer;line-height:1">☰</button>
+                    <div class="menu-dropdown" id="menu-dropdown">
+                        <div class="menu-dd-item" id="dd-sticky-item" onclick="toggleStickyHeader()">
+                            <span class="dd-icon">📌</span><span>Pin header</span><span class="dd-check" id="dd-sticky-check">✓</span>
+                        </div>
+                        <div class="menu-dd-item" id="dd-theme-item" onclick="toggleTheme()">
+                            <span class="dd-icon" id="dd-theme-icon">🌙</span><span id="dd-theme-label">Dark mode</span>
+                        </div>
+                        <div class="menu-dd-sep"></div>
+                        <div class="menu-dd-item" onclick="openSportOrderModal()">
+                            <span class="dd-icon">✏️</span><span>Reorder sports</span>
+                        </div>
+                    </div>
+                </div>
                 <button class="refresh-btn" onclick="logOut()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted)" title="Log out">⏻</button>
             </div>
         </header>
 
         <!-- Group Code Modal -->
+        <!-- Sport reorder modal -->
+        <div id="sort-modal-bg" onclick="if(event.target===this)closeSportOrderModal()" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);align-items:center;justify-content:center">
+            <div style="background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:24px;width:300px;max-width:92vw">
+                <div style="font-size:14px;font-weight:700;letter-spacing:.04em;color:var(--fg);margin-bottom:14px">Reorder Sports</div>
+                <div id="sort-list"></div>
+                <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+                    <button onclick="closeSportOrderModal()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:7px 16px;border-radius:5px;cursor:pointer">Cancel</button>
+                    <button onclick="saveSportOrder()" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:12px;font-weight:600;padding:7px 16px;border-radius:5px;cursor:pointer">Save</button>
+                </div>
+            </div>
+        </div>
+
         <div id="group-code-modal" onclick="if(event.target===this)closeGroupCodeModal()" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);align-items:center;justify-content:center">
             <div style="background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:28px 28px 24px;width:340px;max-width:90vw;position:relative">
                 <button onclick="closeGroupCodeModal()" style="position:absolute;top:12px;right:14px;background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;line-height:1">&times;</button>
