@@ -4733,7 +4733,60 @@
     }
 
     var _pendingSportOrder = null;
-    var _sortDragSrc = null;
+    var _sortDragState = null;
+
+    function startSortDrag(e, startIdx) {
+        if (!_pendingSportOrder) return;
+        var list = document.getElementById('sort-list');
+        var items = Array.from(list.querySelectorAll('.sort-drag-item'));
+        var item = items[startIdx];
+        if (!item) return;
+        var rect = item.getBoundingClientRect();
+        var itemH = rect.height + 6; // height + margin-bottom
+        var ghost = item.cloneNode(true);
+        ghost.style.cssText = 'position:fixed;left:' + rect.left + 'px;top:' + rect.top + 'px;width:' + rect.width + 'px;z-index:99999;pointer-events:none;border:1px solid var(--accent);border-radius:6px;box-shadow:0 12px 32px rgba(0,0,0,.5);opacity:.96;transform:scale(1.03);background:var(--bg3);display:flex;align-items:center;gap:8px;padding:9px 10px;font-size:13px;font-family:var(--sans);font-weight:600;color:var(--fg)';
+        ghost.innerHTML = item.innerHTML;
+        document.body.appendChild(ghost);
+        item.style.opacity = '0';
+        _sortDragState = { startIdx: startIdx, currentIdx: startIdx, startY: e.clientY, ghostTop: rect.top, itemH: itemH, items: items, ghost: ghost, dragItem: item };
+    }
+
+    function onSortPointerMove(e) {
+        var s = _sortDragState;
+        if (!s) return;
+        e.preventDefault();
+        var dy = e.clientY - s.startY;
+        s.ghost.style.top = (s.ghostTop + dy) + 'px';
+        var newIdx = Math.round(s.startIdx + dy / s.itemH);
+        newIdx = Math.max(0, Math.min(s.items.length - 1, newIdx));
+        if (newIdx === s.currentIdx) return;
+        s.currentIdx = newIdx;
+        s.items.forEach(function(el, i) {
+            if (i === s.startIdx) return;
+            var shift = 0;
+            if (s.startIdx < newIdx && i > s.startIdx && i <= newIdx) shift = -s.itemH;
+            if (s.startIdx > newIdx && i >= newIdx && i < s.startIdx) shift = s.itemH;
+            el.style.transition = 'transform 0.15s ease';
+            el.style.transform = shift ? 'translateY(' + shift + 'px)' : '';
+        });
+    }
+
+    function onSortPointerUp() {
+        document.removeEventListener('pointermove', onSortPointerMove);
+        var s = _sortDragState;
+        _sortDragState = null;
+        if (!s) return;
+        if (s.currentIdx !== s.startIdx) {
+            var arr = _pendingSportOrder.slice();
+            var moved = arr.splice(s.startIdx, 1)[0];
+            arr.splice(s.currentIdx, 0, moved);
+            _pendingSportOrder = arr;
+        }
+        s.ghost.remove();
+        s.dragItem.style.opacity = '';
+        s.items.forEach(function(el) { el.style.transition = 'none'; el.style.transform = ''; });
+        renderSortList();
+    }
 
     function openSportOrderModal() {
         closeMenu();
@@ -4787,17 +4840,21 @@
             var sport = SPORTS.find(function(s) { return s.key === key; });
             if (!sport) return '';
             var locked = !pro && FREE_SPORTS.indexOf(key) === -1;
-            return '<div class="sort-drag-item' + (locked ? ' sort-locked' : '') + '" draggable="true" data-idx="' + idx + '"'
-                + ' ondragstart="sortDragStart(event,' + idx + ')"'
-                + ' ondragover="sortDragOver(event,' + idx + ')"'
-                + ' ondrop="sortDrop(event,' + idx + ')"'
-                + ' ondragleave="sortDragLeave(event)">'
+            return '<div class="sort-drag-item' + (locked ? ' sort-locked' : '') + '" data-idx="' + idx + '">'
                 + '<span class="sort-drag-handle">⠿</span>'
                 + '<span style="flex:1">' + escHtml(sport.label) + (locked ? ' 🔒' : '') + '</span>'
                 + '<button class="sort-arrow-btn" onclick="sortMove(' + idx + ',-1)" ' + (idx === 0 ? 'disabled' : '') + '>↑</button>'
                 + '<button class="sort-arrow-btn" onclick="sortMove(' + idx + ',1)" ' + (idx === n - 1 ? 'disabled' : '') + '>↓</button>'
                 + '</div>';
         }).join('');
+        Array.from(list.querySelectorAll('.sort-drag-handle')).forEach(function(handle, idx) {
+            handle.addEventListener('pointerdown', function(e) {
+                e.preventDefault();
+                startSortDrag(e, idx);
+                document.addEventListener('pointermove', onSortPointerMove, { passive: false });
+                document.addEventListener('pointerup', onSortPointerUp, { once: true });
+            });
+        });
     }
 
     function sortMove(idx, dir) {
@@ -4806,32 +4863,6 @@
         var a = _pendingSportOrder.slice();
         var t = a[idx]; a[idx] = a[n]; a[n] = t;
         _pendingSportOrder = a;
-        renderSortList();
-    }
-
-    function sortDragStart(e, idx) {
-        _sortDragSrc = idx;
-        e.dataTransfer.effectAllowed = 'move';
-    }
-
-    function sortDragOver(e, idx) {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        document.querySelectorAll('.sort-drag-item').forEach(function(el) { el.classList.remove('drag-over'); });
-        e.currentTarget.classList.add('drag-over');
-    }
-
-    function sortDragLeave(e) { e.currentTarget.classList.remove('drag-over'); }
-
-    function sortDrop(e, idx) {
-        e.preventDefault();
-        e.currentTarget.classList.remove('drag-over');
-        if (_sortDragSrc === null || _sortDragSrc === idx) { _sortDragSrc = null; return; }
-        var a = _pendingSportOrder.slice();
-        var moved = a.splice(_sortDragSrc, 1)[0];
-        a.splice(idx, 0, moved);
-        _pendingSportOrder = a;
-        _sortDragSrc = null;
         renderSortList();
     }
 
