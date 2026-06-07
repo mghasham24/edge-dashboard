@@ -15,7 +15,7 @@ function buildHeaders(authToken, deviceUuid) {
     'real-device-uuid': deviceUuid || '2e0a38e2-0ee8-4f93-9a34-218ac1d10161',
     'real-device-name': '5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
     'real-request-token': hashidsEncode(Date.now()),
-    'real-version': '30'
+    'real-version': '32'
   };
 }
 

@@ -14,7 +14,7 @@ function buildHeaders(token, deviceUuid) {
     'real-device-type': 'desktop_web',
     'real-device-uuid': deviceUuid,
     'real-request-token': hashidsEncode(Date.now()),
-    'real-version': '31'
+    'real-version': '32'
   };
 }
 

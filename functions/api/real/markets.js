@@ -31,7 +31,7 @@ export async function onRequestGet({ request, env }) {
         'real-device-type': 'desktop_web',
         'real-device-uuid': '2e0a38e2-0ee8-4f93-9a34-218ac1d10161',
         'real-request-token': hashidsEncode(Date.now()),
-        'real-version': '28'
+        'real-version': '32'
       }
     });
 
