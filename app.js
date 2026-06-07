@@ -4743,9 +4743,18 @@
     }
 
     function saveSportOrder() {
-        if (_pendingSportOrder) localStorage.setItem('rax_sport_order', JSON.stringify(_pendingSportOrder));
+        if (_pendingSportOrder) {
+            localStorage.setItem('rax_sport_order', JSON.stringify(_pendingSportOrder));
+            var first = _pendingSportOrder[0];
+            var sport = SPORTS.find(function(s) { return s.key === first; });
+            var pro = isPro();
+            if (sport && (pro || FREE_SPORTS.indexOf(first) !== -1)) {
+                currentSport = first;
+            }
+        }
         closeSportOrderModal();
         buildTabs();
+        loadOdds();
     }
 
     function renderSortList() {
