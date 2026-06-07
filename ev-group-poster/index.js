@@ -15,7 +15,7 @@
 //   POST_DELAY_MS  — ms between consecutive posts (default: 5000)
 
 import { ProxyAgent } from 'undici';
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'fs';
 import WebSocket from 'ws';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 
@@ -35,6 +35,7 @@ const REPOST_EV_JUMP     = parseFloat(process.env.REPOST_EV_JUMP       || '3');
 const REPOST_COOLDOWN_MS = parseInt(process.env.REPOST_COOLDOWN_MS     || String(60 * 60 * 1000)); // 1h
 const REPOST_URGENT_EV   = parseFloat(process.env.REPOST_URGENT_EV      || '25'); // bypass cooldown
 const STATE_FILE         = process.env.STATE_FILE || '/opt/ev-group-poster/state.json';
+const LOCK_FILE          = process.env.LOCK_FILE  || '/opt/ev-group-poster/ev-poster.lock';
 const STAKE_RAX          = parseInt(process.env.STAKE_RAX || '700'); // Rax per 1 unit — group post uses avg stake for slippage-adjusted EV
 
 const RS_BASE     = 'https://web.realapp.com';
@@ -425,6 +426,16 @@ async function run() {
           bet.rsPct = livePct;
           bet.ev    = Math.round(liveEv * 10) / 10;
           bet.units = unitsEV(liveEv, fdFair);
+          // Guard: if backend EV jumped (triggering a repost) but the live-adjusted EV
+          // looks nearly identical to what was posted before, skip — prevents duplicate-
+          // looking posts caused by RS cache fluctuations where displayed EV barely changes.
+          const prevEntry = postedEv.get(bet.betKey);
+          if (prevEntry && prevEntry.liveEv != null && Math.abs(bet.ev - prevEntry.liveEv) < 1.5) {
+            console.log('ev-poster: skip', bet.betKey, '— live EV', bet.ev + '% ≈ previous post', prevEntry.liveEv + '% (no meaningful change)');
+            postedEv.set(bet.betKey, { ev: backendEv, liveEv: bet.ev, postedAt: prevEntry.postedAt });
+            saveState();
+            continue;
+          }
         }
         // Fetch exact payout via WebSocket — uses actual stake size so slippage is included
         if (marketId && outcomeId) {
@@ -472,7 +483,7 @@ async function run() {
           // Store backendEv (pre-mutation) so next run's evJump comparison
           // stays on the same scale. Storing exact-payout EV (lower due to
           // slippage) would always produce a 5%+ jump on the next run.
-          postedEv.set(bet.betKey, { ev: backendEv, postedAt: now });
+          postedEv.set(bet.betKey, { ev: backendEv, liveEv: bet.ev, postedAt: now });
           dailyPosts.push({
             betKey: bet.betKey, side: bet.side, market: bet.market,
             sport: bet.sport,   game: bet.game,  pt: bet.pt ?? null,
@@ -871,6 +882,41 @@ function scheduleDennisBoost() {
   const h = Math.floor(msUntil / 3600000), m = Math.floor((msUntil % 3600000) / 60000);
   console.log(`ev-poster: dennis boost scheduled in ${h}h ${m}m`);
 }
+
+// ── Single-instance lockfile guard ──────────────────────
+// Prevents two concurrent processes from double-posting the same bets.
+if (existsSync(LOCK_FILE)) {
+  try {
+    const pid = parseInt(readFileSync(LOCK_FILE, 'utf8').trim());
+    if (pid && pid !== process.pid) {
+      try { process.kill(pid, 0); } catch(e) {
+        // Stale lock — old process is gone, remove and continue
+        unlinkSync(LOCK_FILE);
+        console.log('ev-poster: removed stale lock from pid', pid);
+        writeFileSync(LOCK_FILE, String(process.pid));
+      }
+      if (existsSync(LOCK_FILE) && parseInt(readFileSync(LOCK_FILE, 'utf8').trim()) !== process.pid) {
+        console.error('ev-poster: another instance is running (pid', pid + '), exiting.');
+        process.exit(0);
+      }
+    }
+  } catch(e) {
+    unlinkSync(LOCK_FILE);
+    writeFileSync(LOCK_FILE, String(process.pid));
+  }
+} else {
+  writeFileSync(LOCK_FILE, String(process.pid));
+}
+function releaseLock() {
+  try {
+    if (existsSync(LOCK_FILE) && parseInt(readFileSync(LOCK_FILE, 'utf8').trim()) === process.pid) {
+      unlinkSync(LOCK_FILE);
+    }
+  } catch(e) {}
+}
+process.on('exit', releaseLock);
+process.on('SIGTERM', () => { releaseLock(); process.exit(0); });
+process.on('SIGINT',  () => { releaseLock(); process.exit(0); });
 
 // ── Boot ───────────────────────────────────────────────
 
