@@ -27,7 +27,13 @@
         Total: 'totals'
     };
     var COLORS = ['#4f6ef7', '#2dcc7e', '#f5c842', '#f05252', '#a78bfa', '#38bdf8', '#fb923c', '#e879f9', '#34d399', '#f87171', '#60a5fa', '#fbbf24', '#a3e635', '#c084fc', '#fb7185', '#22d3ee'];
-    var currentSport = 'basketball_nba';
+    var currentSport = (function() {
+        try {
+            var saved = JSON.parse(localStorage.getItem('rax_sport_order') || 'null');
+            if (Array.isArray(saved) && saved.length) return saved[0];
+        } catch(e) {}
+        return 'basketball_nba';
+    })();
     var currentFcLeague = 'ALL';
     var rawRows = [];
     var rawRowsBySport = {}; // sport key -> parsed rows (same IDs as preds)
@@ -4747,26 +4753,29 @@
         var order = _pendingSportOrder ? _pendingSportOrder.slice() : getSportOrder();
         localStorage.setItem('rax_sport_order', JSON.stringify(order));
         closeSportOrderModal();
-        // Exit any active feature tab so sport tabs are visible before clicking
+        // Exit Best EV if active
         var evBtn = document.getElementById('ev-tab-btn');
         if (evBtn && evBtn.classList.contains('active')) {
             evBtn.classList.remove('active');
             evBtn.textContent = '⚡ Best EV';
             hideEvTab();
         }
-        var portBtn = document.getElementById('portfolio-tab-btn');
-        if (portBtn && portBtn.classList.contains('active')) portBtn.click();
-        var refBtn = document.getElementById('refer-tab-btn');
-        if (refBtn && refBtn.classList.contains('active')) refBtn.click();
-        buildTabs();
+        // Pick first unlocked sport in the new order
+        var pro = isPro();
         var firstKey = order[0];
-        var target = document.querySelector('#sport-tabs [data-key="' + firstKey + '"]');
-        if (target && !target.classList.contains('locked')) {
-            target.click();
-        } else {
-            var unlocked = document.querySelector('#sport-tabs .sport-tab:not(.locked):not(#admin-tab-btn)');
-            if (unlocked) unlocked.click(); else loadOdds();
+        for (var i = 0; i < order.length; i++) {
+            if (pro || FREE_SPORTS.indexOf(order[i]) !== -1) { firstKey = order[i]; break; }
         }
+        currentSport = firstKey;
+        buildTabs();
+        if (firstKey === 'soccer_fc') {
+            currentFcLeague = 'ALL';
+            buildFcLeagueNav();
+            document.getElementById('fc-league-nav').style.display = 'flex';
+        } else {
+            document.getElementById('fc-league-nav').style.display = 'none';
+        }
+        loadOdds();
     }
 
     function renderSortList() {
