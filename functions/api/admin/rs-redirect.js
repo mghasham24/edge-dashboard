@@ -61,7 +61,14 @@ export async function onRequestGet({ request, env }) {
       try {
         const r2 = await fetch(ep, { headers: hdrs, signal: AbortSignal.timeout(4000) });
         const d2 = await r2.json();
-        debug[ep.replace('https://web.realapp.com', '')] = Array.isArray(d2) ? ['array[' + d2.length + ']', d2[0] ? Object.keys(d2[0]) : []] : Object.keys(d2);
+        const topKeys = Array.isArray(d2) ? Object.keys(d2[0] || {}) : Object.keys(d2);
+        const nested = {};
+        for (const k of topKeys) {
+          const v = Array.isArray(d2) ? d2[0]?.[k] : d2[k];
+          if (v && typeof v === 'object' && !Array.isArray(v)) nested[k] = Object.keys(v);
+          else if (Array.isArray(v) && v[0] && typeof v[0] === 'object') nested[k] = ['array', Object.keys(v[0])];
+        }
+        debug[ep.replace('https://web.realapp.com', '')] = { topKeys, nested };
       } catch(e) { debug[ep] = e.message; }
     }
     return new Response(JSON.stringify(debug), { status: 404, headers: { 'Content-Type': 'application/json' } });
