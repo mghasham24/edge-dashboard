@@ -5356,6 +5356,7 @@
             .then(function() {
                 resetRefreshBtn();
                 renderTable();
+                if (rawRows.length > 0) fetchRealMarkets(currentSport);
 
                 // Start auto-poll to keep NBA odds live
                 if (nbaPoller) clearInterval(nbaPoller);
@@ -5433,6 +5434,7 @@
             .then(function() {
                 resetRefreshBtn();
                 renderTable();
+                if (rawRows.length > 0) fetchRealMarkets(currentSport);
 
                 // Start auto-poll to keep WNBA odds live
                 if (wnbaPoller) clearInterval(wnbaPoller);
@@ -5518,6 +5520,7 @@
             .then(function() {
                 resetRefreshBtn();
                 renderTable();
+                if (rawRows.length > 0) fetchRealMarkets(currentSport);
 
                 if (wcPoller) clearInterval(wcPoller);
                 wcPoller = setInterval(function() {
@@ -5596,6 +5599,7 @@
             .then(function() {
                 resetRefreshBtn();
                 renderTable();
+                if (rawRows.length > 0) fetchRealMarkets(currentSport);
 
                 if (fcPoller) clearInterval(fcPoller);
                 fcPoller = setInterval(function() {
