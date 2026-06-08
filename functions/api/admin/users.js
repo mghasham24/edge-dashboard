@@ -72,6 +72,7 @@ async function handleRequest({ request, env }) {
         await env.DB.prepare('DELETE FROM sessions WHERE user_id=?').bind(id).run();
       }
     }
+    let rsHashid = null;
     if (group_access !== undefined || rs_group_username !== undefined) {
       // Prevent the same RS username from being used by two different accounts
       if (rs_group_username) {
@@ -81,8 +82,6 @@ async function handleRequest({ request, env }) {
         if (conflict) return fail(409, 'RS username already used by another account');
       }
       await ensureRsHashidColumn(env.DB);
-      // When a username is set/changed, fetch their permanent RS hashid in background
-      let rsHashid = null;
       if (rs_group_username) {
         rsHashid = await fetchRsHashid(rs_group_username, env).catch(() => null);
       }
