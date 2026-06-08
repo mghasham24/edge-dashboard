@@ -7079,7 +7079,7 @@
                     var nv = novig(p.A ? imp(p.A.am) : null, p.B ? imp(p.B.am) : null);
                     var af = r.ps === 'A' ? nv.fa : nv.fb;
                     if (!af) return;
-                    if ((af * data.expectedPayout / amount - 1) * 100 < -20) return;
+                    if ((af * data.expectedPayout / amount - 1) * 100 < 0) return;
                     payoutRatios[r.id] = data.expectedPayout / amount;
                 })
                 .catch(function() {});
