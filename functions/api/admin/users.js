@@ -1,4 +1,5 @@
 import { getSession } from '../../_lib/session.js';
+import { hashidsEncode } from '../../_lib/hashids.js';
 // functions/api/admin/users.js
 export async function onRequest(ctx) {
   try {
@@ -44,7 +45,7 @@ async function handleRequest({ request, env }) {
     const now = Math.floor(Date.now() / 1000);
     const [countRow, rows] = await Promise.all([
       env.DB.prepare(`SELECT COUNT(*) as total FROM users u ${whereClause}`).bind(...binds).first(),
-      env.DB.prepare(`SELECT u.id, u.email, u.plan, u.is_admin, u.banned, u.created_at, u.pro_expires_at, u.group_access, u.rs_group_username, ra.rs_user_id, ra.rs_username, COUNT(s.id) as sessions FROM users u LEFT JOIN sessions s ON s.user_id=u.id AND s.expires_at>? LEFT JOIN real_auth ra ON ra.user_id=u.id ${whereClause} GROUP BY u.id ORDER BY ${orderBy} LIMIT ? OFFSET ?`).bind(now, ...binds, limit, offset).all(),
+      env.DB.prepare(`SELECT u.id, u.email, u.plan, u.is_admin, u.banned, u.created_at, u.pro_expires_at, u.group_access, u.rs_group_username, u.rs_hashid, ra.rs_user_id, ra.rs_username, COUNT(s.id) as sessions FROM users u LEFT JOIN sessions s ON s.user_id=u.id AND s.expires_at>? LEFT JOIN real_auth ra ON ra.user_id=u.id ${whereClause} GROUP BY u.id ORDER BY ${orderBy} LIMIT ? OFFSET ?`).bind(now, ...binds, limit, offset).all(),
     ]);
 
     const total = countRow?.total || 0;
@@ -78,13 +79,30 @@ async function handleRequest({ request, env }) {
         ).bind(rs_group_username, id).first();
         if (conflict) return fail(409, 'RS username already used by another account');
       }
+      await ensureRsHashidColumn(env.DB);
+      // When a username is set/changed, fetch their permanent RS hashid in background
+      let rsHashid = null;
+      if (rs_group_username) {
+        rsHashid = await fetchRsHashid(rs_group_username, env).catch(() => null);
+      }
       if (group_access !== undefined && rs_group_username !== undefined) {
-        await env.DB.prepare('UPDATE users SET group_access=?, rs_group_username=? WHERE id=?')
-          .bind(group_access ? 1 : 0, rs_group_username || null, id).run();
+        const q = rsHashid
+          ? 'UPDATE users SET group_access=?, rs_group_username=?, rs_hashid=? WHERE id=?'
+          : 'UPDATE users SET group_access=?, rs_group_username=? WHERE id=?';
+        const args = rsHashid
+          ? [group_access ? 1 : 0, rs_group_username || null, rsHashid, id]
+          : [group_access ? 1 : 0, rs_group_username || null, id];
+        await env.DB.prepare(q).bind(...args).run();
       } else if (group_access !== undefined) {
         await env.DB.prepare('UPDATE users SET group_access=? WHERE id=?').bind(group_access ? 1 : 0, id).run();
       } else {
-        await env.DB.prepare('UPDATE users SET rs_group_username=? WHERE id=?').bind(rs_group_username || null, id).run();
+        const q = rsHashid
+          ? 'UPDATE users SET rs_group_username=?, rs_hashid=? WHERE id=?'
+          : 'UPDATE users SET rs_group_username=? WHERE id=?';
+        const args = rsHashid
+          ? [rs_group_username || null, rsHashid, id]
+          : [rs_group_username || null, id];
+        await env.DB.prepare(q).bind(...args).run();
       }
     }
     return ok({ updated: true });
@@ -118,6 +136,41 @@ async function handleRequest({ request, env }) {
 }
 
 // ── Helpers ───────────────────────────────────────────
+
+async function ensureRsHashidColumn(db) {
+  await db.prepare('ALTER TABLE users ADD COLUMN rs_hashid TEXT').run().catch(() => {});
+}
+
+async function fetchRsHashid(username, env) {
+  // Get shared RS auth token (same source as sync.js)
+  let token = env.RS_AUTH_TOKEN || env.REAL_AUTH_TOKEN || '';
+  const deviceUuid = env.REAL_DEVICE_UUID || '2e0a38e2-0ee8-4f93-9a34-218ac1d10161';
+  if (!token) {
+    try {
+      const row = await env.DB.prepare("SELECT data FROM odds_cache WHERE cache_key='meta:rs_auth_token'").first();
+      if (row) token = JSON.parse(row.data).token || '';
+    } catch(e) {}
+  }
+  if (!token) return null;
+  const res = await fetch(`https://web.realapp.com/user/${encodeURIComponent(username)}`, {
+    headers: {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+      'Origin': 'https://realsports.io',
+      'Referer': 'https://realsports.io/',
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
+      'real-auth-info': token,
+      'real-device-uuid': deviceUuid,
+      'real-device-type': 'desktop_web',
+      'real-version': '33',
+      'real-request-token': hashidsEncode(Date.now()),
+    },
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data.id || data.hashId || data.userId || null;
+}
 
 function ok(data) {
   return new Response(JSON.stringify({ ok: true, ...data }), {
