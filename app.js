@@ -5355,7 +5355,7 @@
             .then(function() {
                 resetRefreshBtn();
                 if (rawRows.length > 0) {
-                    fetchRealMarkets(currentSport).catch(function() { renderTable(); });
+                    fetchRealMarkets(currentSport).then(function() { fetchExactEvForRows(currentSport); }).catch(function() { renderTable(); });
                 } else { renderTable(); }
 
                 // Start auto-poll to keep NBA odds live
@@ -5434,7 +5434,7 @@
             .then(function() {
                 resetRefreshBtn();
                 if (rawRows.length > 0) {
-                    fetchRealMarkets(currentSport).catch(function() { renderTable(); });
+                    fetchRealMarkets(currentSport).then(function() { fetchExactEvForRows(currentSport); }).catch(function() { renderTable(); });
                 } else { renderTable(); }
 
                 // Start auto-poll to keep WNBA odds live
@@ -5521,7 +5521,7 @@
             .then(function() {
                 resetRefreshBtn();
                 if (rawRows.length > 0) {
-                    fetchRealMarkets(currentSport).catch(function() { renderTable(); });
+                    fetchRealMarkets(currentSport).then(function() { fetchExactEvForRows(currentSport); }).catch(function() { renderTable(); });
                 } else { renderTable(); }
 
                 if (wcPoller) clearInterval(wcPoller);
@@ -5601,7 +5601,7 @@
             .then(function() {
                 resetRefreshBtn();
                 if (rawRows.length > 0) {
-                    fetchRealMarkets(currentSport).catch(function() { renderTable(); });
+                    fetchRealMarkets(currentSport).then(function() { fetchExactEvForRows(currentSport); }).catch(function() { renderTable(); });
                 } else { renderTable(); }
 
                 if (fcPoller) clearInterval(fcPoller);
@@ -5715,6 +5715,7 @@
                             });
                         }
                         renderTable();
+                        fetchExactEvForRows(currentSport);
                     });
                     if (mlbPoller) clearInterval(mlbPoller);
                     mlbPoller = setInterval(function() {
@@ -5808,7 +5809,7 @@
             .then(function() {
                 resetRefreshBtn();
                 if (rawRows.length > 0) {
-                    fetchRealMarkets(currentSport).then(function() { fetchDKAltLinesNHL(); }).catch(function() { renderTable(); });
+                    fetchRealMarkets(currentSport).then(function() { fetchDKAltLinesNHL(); fetchExactEvForRows(currentSport); }).catch(function() { renderTable(); });
                     if (nhlPoller) clearInterval(nhlPoller);
                     nhlPoller = setInterval(function() {
                         if (currentSport !== 'icehockey_nhl') { clearInterval(nhlPoller); nhlPoller = null; return; }
@@ -5909,7 +5910,7 @@
         .then(function() {
             resetRefreshBtn();
             renderTable();
-            if (rawRows.length > 0) fetchRealMarkets(currentSport).then(function() { fetchAltLinesForNBA(); });
+            if (rawRows.length > 0) fetchRealMarkets(currentSport).then(function() { fetchAltLinesForNBA(); fetchExactEvForRows(currentSport); });
             if (currentSport === 'baseball_mlb') fetchKalshiRFI();
         });
     }
@@ -7043,6 +7044,47 @@
         };
         var overrides = SPORT_OVERRIDES[currentSport] || {};
         return overrides[key] || ABBREV_MAP[key] || abbrevOrName;
+    }
+
+    // Fetch actual RS expected payout for ML rows via the CF payout proxy (D1-cached 30s).
+    // Only runs after fetchRealMarkets has set rsMarketIds/rsOutcomeKeys. ML rows only —
+    // non-ML payout values were unreliable. Sanity-checks result: discards if EV < -20%.
+    function fetchExactEvForRows(sport) {
+        var amount = Math.round(parseFloat(document.getElementById('unit-size').value) || 300);
+        var sportRows = rawRowsBySport[sport] || rawRows;
+        var pairs = {};
+        sportRows.forEach(function(x) { if (!pairs[x.pid]) pairs[x.pid] = {}; pairs[x.pid][x.ps] = x; });
+        var batch = sportRows.filter(function(r) {
+            if (r.mkt !== 'ML') return false;
+            if (!rsMarketIds[r.id] || !rsOutcomeKeys[r.id] || !rsGameIds[r.game]) return false;
+            var pr = preds[r.id]; if (!pr) return false;
+            var pred = parseFloat(pr) / 100; if (pred <= 0 || pred >= 1) return false;
+            var p = pairs[r.pid] || {};
+            var nv = novig(p.A ? imp(p.A.am) : null, p.B ? imp(p.B.am) : null);
+            var af = r.ps === 'A' ? nv.fa : nv.fb;
+            return af != null && (af * (1/pred) * (1 - rsBaseTake(pred)) - 1) > 0;
+        }).slice(0, 10);
+        if (!batch.length) return;
+        Promise.all(batch.map(function(r) {
+            var sp = rsGameSports[r.game] || sport.split('_')[1] || 'mlb';
+            var qs = 'marketId=' + rsMarketIds[r.id]
+                   + '&outcomeKey=' + encodeURIComponent(rsOutcomeKeys[r.id])
+                   + '&rsGameId='   + rsGameIds[r.game]
+                   + '&rsSport='    + sp
+                   + '&amount='     + amount;
+            return fetch('/api/real/payout?' + qs, { credentials: 'same-origin', signal: AbortSignal.timeout(8000) })
+                .then(function(res) { return res.json(); })
+                .then(function(data) {
+                    if (!data.ok || data.expectedPayout <= 0) return;
+                    var p = pairs[r.pid] || {};
+                    var nv = novig(p.A ? imp(p.A.am) : null, p.B ? imp(p.B.am) : null);
+                    var af = r.ps === 'A' ? nv.fa : nv.fb;
+                    if (!af) return;
+                    if ((af * data.expectedPayout / amount - 1) * 100 < -20) return;
+                    payoutRatios[r.id] = data.expectedPayout / amount;
+                })
+                .catch(function() {});
+        })).then(function() { renderTable(); });
     }
 
     function fetchKalshiRFI(skipRender) {
