@@ -2882,7 +2882,6 @@
             var rake = rsBaseTake(pred);
             r._pred = pred; r._rake = rake;
             r._ev   = (r.af * (1/pred) * (1-rake) - 1) * 100;
-            if (_hasExact) console.log('[cacheEvRows] id=' + r.id + ' exact=' + probsExact[r.id].toFixed(4) + ' ev=' + r._ev.toFixed(1));
             // >100% EV is a post-game artifact (RS knows result, FD market not yet settled)
             // Exception: soccer_fc live ±0.5 lines can legitimately produce >100% EV
             if (r._ev > 0 && (r._ev <= 100 || sport === 'soccer_fc' || sport === 'soccer_wc')) {
@@ -5671,11 +5670,10 @@
             .then(function() {
                 if (mlbSignal.aborted) return;
                 resetRefreshBtn();
-                renderTable();
                 if (rawRows.length > 0) {
-                    // Fetch RS and RFI in parallel — RFI renders immediately, RS preds applied after both finish
+                    // Defer render until RS preds + RFI both resolve — avoids preds→probsExact EV flicker
                     var rsPromise = fetchRealMarkets(currentSport, true);
-                    var rfiPromise = fetchKalshiRFI(false); // false = render as soon as RFI rows land
+                    var rfiPromise = fetchKalshiRFI(true); // skipRender — Promise.all handles the single render
                     Promise.all([rsPromise, rfiPromise]).then(function() {
                         // Now lastSyncData is populated — apply Real% to RFI rows
                         var syncD = lastSyncData[currentSport];
@@ -5724,6 +5722,8 @@
                         if (currentSport !== 'baseball_mlb') { clearInterval(mlbPoller); mlbPoller = null; return; }
                         fetchMLBNativeUpdate();
                     }, 5000);
+                } else {
+                    renderTable();
                 }
             });
             return;
@@ -7046,53 +7046,6 @@
         return overrides[key] || ABBREV_MAP[key] || abbrevOrName;
     }
 
-    // Fetch exact RS payout for each +EV row via the CF payout proxy.
-    // Updates payoutRatios[rowId] = expectedPayout/amount, then re-renders.
-    function fetchExactEvForRows(sport) {
-        var amount = Math.round(parseFloat(document.getElementById('unit-size').value) || 300);
-        var rows = (rawRowsBySport[sport] || rawRows).filter(function(r) {
-            if (!rsMarketIds[r.id] || !rsOutcomeKeys[r.id]) return false;
-            if (!rsGameIds[r.game]) return false;
-            var pr = probsExact[r.id] != null ? probsExact[r.id] : (preds[r.id] ? parseFloat(preds[r.id]) / 100 : null);
-            if (!pr || pr <= 0 || pr >= 1) return false;
-            var fair;
-            if (r._wcFair != null) {
-                fair = r._wcFair;
-            } else {
-                var pairs = {};
-                rawRows.forEach(function(x) { if (!pairs[x.pid]) pairs[x.pid] = {}; pairs[x.pid][x.ps] = x; });
-                var pair = pairs[r.pid] || {};
-                var nv = novig(pair.A ? imp(pair.A.am) : null, pair.B ? imp(pair.B.am) : null);
-                fair = r.ps === 'A' ? nv.fa : nv.fb;
-            }
-            if (!fair) return false;
-            return (fair * (1/pr) * (1-rsBaseTake(pr)) - 1) * 100 > 0;
-        });
-        if (!rows.length) return;
-
-        // Fetch up to 10 payouts in parallel (D1-cached 30s after first call)
-        var batch = rows.slice(0, 10);
-        Promise.all(batch.map(function(r) {
-            var mid  = rsMarketIds[r.id];
-            var okey = rsOutcomeKeys[r.id];
-            var gid  = rsGameIds[r.game];
-            var sp   = rsGameSports[r.game] || currentSport.split('_')[1] || 'mlb';
-            var qs   = 'marketId=' + mid + '&outcomeKey=' + encodeURIComponent(okey)
-                     + '&rsGameId=' + gid + '&rsSport=' + sp + '&amount=' + amount;
-            return fetch('/api/real/payout?' + qs, { credentials: 'same-origin' })
-                .then(function(res) { return res.json(); })
-                .then(function(data) {
-                    console.log('[payout debug] amount=' + amount + ' expectedPayout=' + data.expectedPayout + ' ratio=' + (data.expectedPayout / amount) + ' af=' + r.af + ' calcEV=' + ((r.af * data.expectedPayout / amount - 1) * 100).toFixed(1) + '% ok=' + data.ok);
-                    if (data.ok && data.expectedPayout > 0) {
-                        payoutRatios[r.id] = data.expectedPayout / amount;
-                    }
-                })
-                .catch(function(e) { console.log('[payout debug] fetch error:', e.message); });
-        })).then(function() {
-            renderTable();
-        });
-    }
-
     function fetchKalshiRFI(skipRender) {
         return fetch('/api/fd/rfi', { credentials: 'same-origin' })
         .then(function(r) { return r.json(); })
@@ -7190,11 +7143,9 @@
                 });
             }
 
-            var _exactKeys = Object.keys(probsExact);
-            console.log('[fetchRealMarkets] done count=' + _exactKeys.length + ' sample_p=' + (_exactKeys.length ? probsExact[_exactKeys[0]] : 'none'));
             if (!skipRender) renderTable();
         })
-        .catch(function(e) { console.log('[fetchRealMarkets] error:', e && e.message); });
+        .catch(function() {});
     }
 
     function fetchRealMarkets(sport, skipRender) {
