@@ -73,6 +73,7 @@ async function handleRequest({ request, env }) {
       }
     }
     let rsHashid = null;
+    let rsHashidError = null;
     if (group_access !== undefined || rs_group_username !== undefined) {
       // Prevent the same RS username from being used by two different accounts
       if (rs_group_username) {
@@ -82,7 +83,6 @@ async function handleRequest({ request, env }) {
         if (conflict) return fail(409, 'RS username already used by another account');
       }
       await ensureRsHashidColumn(env.DB);
-      let rsHashidError = null;
       if (rs_group_username) {
         rsHashid = await fetchRsHashid(rs_group_username, env).catch((e) => { rsHashidError = e.message; return null; });
       }
