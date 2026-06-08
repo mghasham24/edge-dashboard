@@ -4543,8 +4543,11 @@
                 + '<input type="checkbox" data-uid="' + u.id + '"' + groupChecked + ' onchange="adminToggleGroup(this)"> Access</label>'
                 + '<input type="text" placeholder="RS username" value="' + groupRsVal + '" data-uid="' + u.id + '" style="font-size:11px;font-family:var(--mono);background:var(--bg3);border:1px solid var(--border2);color:var(--fg);padding:3px 6px;border-radius:4px;width:100px" onblur="adminSaveRsUsername(this)" onkeydown="if(event.key===\'Enter\')this.blur()">'
                 + '</div>';
+            var rsIdCell = u.rs_user_id
+                ? '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px">RS&nbsp;ID:&nbsp;' + escHtml(String(u.rs_user_id)) + (u.rs_username ? '&nbsp;(' + escHtml(u.rs_username) + ')' : '') + '</div>'
+                : '';
             return '<tr>'
-                + '<td><span style="font-family:var(--mono);font-size:12px">' + escHtml(u.email) + '</span>' + adminBadge + bannedBadge + '</td>'
+                + '<td><span style="font-family:var(--mono);font-size:12px">' + escHtml(u.email) + '</span>' + adminBadge + bannedBadge + rsIdCell + '</td>'
                 + '<td><select class="plan-sel" data-uid="' + u.id + '" onchange="adminChangePlan(this)"><option value="free"' + (u.plan === 'free' ? ' selected' : '') + '>Free</option><option value="pro"' + (u.plan === 'pro' ? ' selected' : '') + '>Pro</option></select></td>'
                 + '<td>' + groupCell + '</td>'
                 + '<td style="font-family:var(--mono);color:var(--muted)">' + u.sessions + '</td>'
