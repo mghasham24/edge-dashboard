@@ -7055,7 +7055,6 @@
         var pairs = {};
         sportRows.forEach(function(x) { if (!pairs[x.pid]) pairs[x.pid] = {}; pairs[x.pid][x.ps] = x; });
         var batch = sportRows.filter(function(r) {
-            if (r.mkt !== 'ML') return false;
             if (!rsMarketIds[r.id] || !rsOutcomeKeys[r.id] || !rsGameIds[r.game]) return false;
             var pr = preds[r.id]; if (!pr) return false;
             var pred = parseFloat(pr) / 100; if (pred <= 0 || pred >= 1) return false;
