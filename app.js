@@ -7188,11 +7188,11 @@
                 });
             }
 
-            var exactCount = Object.keys(probsExact).length;
-            console.log('[fetchRealMarkets] done sport=' + sport + ' probsExact keys=' + exactCount + ' sample=' + JSON.stringify(Object.entries(probsExact).slice(0,2).map(function(e){return {id:e[0],p:e[1]};})));
+            var _exactKeys = Object.keys(probsExact);
+            console.log('[fetchRealMarkets] done count=' + _exactKeys.length + ' sample_p=' + (_exactKeys.length ? probsExact[_exactKeys[0]] : 'none'));
             if (!skipRender) renderTable();
         })
-        .catch(function(e) { console.log('[fetchRealMarkets] error', e && e.message); });
+        .catch(function(e) { console.log('[fetchRealMarkets] error:', e && e.message); });
     }
 
     function fetchRealMarkets(sport, skipRender) {
