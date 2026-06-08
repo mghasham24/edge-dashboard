@@ -4625,7 +4625,7 @@
                 input.parentNode.insertBefore(link, input);
                 showToast('Saved — RS profile linked', 'success');
             } else {
-                showToast('Saved (RS profile not found)', 'info');
+                showToast('Saved (RS profile not found' + (data.rs_hashid_error ? ': ' + data.rs_hashid_error : '') + ')', 'info');
             }
         }
     }

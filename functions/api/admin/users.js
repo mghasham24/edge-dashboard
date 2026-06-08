@@ -82,8 +82,9 @@ async function handleRequest({ request, env }) {
         if (conflict) return fail(409, 'RS username already used by another account');
       }
       await ensureRsHashidColumn(env.DB);
+      let rsHashidError = null;
       if (rs_group_username) {
-        rsHashid = await fetchRsHashid(rs_group_username, env).catch(() => null);
+        rsHashid = await fetchRsHashid(rs_group_username, env).catch((e) => { rsHashidError = e.message; return null; });
       }
       if (group_access !== undefined && rs_group_username !== undefined) {
         const q = rsHashid
@@ -105,7 +106,7 @@ async function handleRequest({ request, env }) {
         await env.DB.prepare(q).bind(...args).run();
       }
     }
-    return ok({ updated: true, rs_hashid: rsHashid || null });
+    return ok({ updated: true, rs_hashid: rsHashid || null, rs_hashid_error: rsHashidError || undefined });
   }
 
   // DELETE /api/admin/users?id=X — fully delete user and all dependent rows
@@ -148,10 +149,13 @@ async function fetchRsHashid(username, env) {
   if (!token) {
     try {
       const row = await env.DB.prepare("SELECT data FROM odds_cache WHERE cache_key='meta:rs_auth_token'").first();
-      if (row) token = JSON.parse(row.data).token || '';
+      if (row) {
+        const parsed = JSON.parse(row.data);
+        token = parsed.token || '';
+      }
     } catch(e) {}
   }
-  if (!token) return null;
+  if (!token) throw new Error('no_token');
   const res = await fetch(`https://web.realapp.com/user/${encodeURIComponent(username)}`, {
     headers: {
       'Accept': 'application/json',
@@ -167,9 +171,12 @@ async function fetchRsHashid(username, env) {
     },
     signal: AbortSignal.timeout(5000),
   });
-  if (!res.ok) return null;
   const data = await res.json();
-  return data.id || data.hashId || data.userId || null;
+  if (!res.ok) throw new Error('rs_' + res.status + ':' + (data.message || data.error || ''));
+  // Try all known field names for the RS user hashid
+  const hashid = data.id || data.hashId || data.userId || data.user?.id || null;
+  if (!hashid) throw new Error('no_id_field:' + JSON.stringify(Object.keys(data)).slice(0, 100));
+  return hashid;
 }
 
 function ok(data) {
