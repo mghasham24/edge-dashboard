@@ -42,13 +42,29 @@ export async function onRequestGet({ request, env }) {
       signal: AbortSignal.timeout(5000),
     });
     const data = await res.json();
-    const username = data.username || data.userName || data.user?.username || null;
-    if (!username) {
-      return new Response(JSON.stringify({ error: 'Username not found', keys: Object.keys(data), userKeys: data.user ? Object.keys(data.user) : null }), {
-        status: 404, headers: { 'Content-Type': 'application/json' }
-      });
+
+    // Try other endpoints that accept hashid and may return user info
+    const endpoints = [
+      `https://web.realapp.com/userfeaturedcardrows/${encodeURIComponent(hashid)}`,
+      `https://web.realapp.com/userbrawltrophies/${encodeURIComponent(hashid)}?limit=1`,
+    ];
+    const hdrs = {
+      'Accept': 'application/json', 'Content-Type': 'application/json',
+      'Origin': 'https://realsports.io', 'Referer': 'https://realsports.io/',
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
+      'real-auth-info': token, 'real-device-uuid': deviceUuid,
+      'real-device-type': 'desktop_web', 'real-version': '33',
+      'real-request-token': hashidsEncode(Date.now()),
+    };
+    const debug = { '/user/{hashid}': Object.keys(data) };
+    for (const ep of endpoints) {
+      try {
+        const r2 = await fetch(ep, { headers: hdrs, signal: AbortSignal.timeout(4000) });
+        const d2 = await r2.json();
+        debug[ep.replace('https://web.realapp.com', '')] = Array.isArray(d2) ? ['array[' + d2.length + ']', d2[0] ? Object.keys(d2[0]) : []] : Object.keys(d2);
+      } catch(e) { debug[ep] = e.message; }
     }
-    return Response.redirect(`https://realsports.io/u/${encodeURIComponent(username)}`, 302);
+    return new Response(JSON.stringify(debug), { status: 404, headers: { 'Content-Type': 'application/json' } });
   } catch(e) {
     return new Response('Lookup failed: ' + e.message, { status: 502 });
   }
