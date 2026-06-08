@@ -2882,6 +2882,7 @@
             var rake = rsBaseTake(pred);
             r._pred = pred; r._rake = rake;
             r._ev   = (r.af * (1/pred) * (1-rake) - 1) * 100;
+            if (r._ev > 5) console.log('[EV] id=' + r.id + ' exact=' + _hasExact + ' pred=' + pred.toFixed(4) + ' af=' + (r.af||0).toFixed(4) + ' ev=' + r._ev.toFixed(1));
             // >100% EV is a post-game artifact (RS knows result, FD market not yet settled)
             // Exception: soccer_fc live ±0.5 lines can legitimately produce >100% EV
             if (r._ev > 0 && (r._ev <= 100 || sport === 'soccer_fc' || sport === 'soccer_wc')) {
@@ -7496,6 +7497,7 @@
                 }
             });
             lastSyncData[sport] = d;
+            var _dbgExact = Object.keys(probsExact); console.log('[RS sync] probsExact count=' + _dbgExact.length + ' sample=' + (_dbgExact.length ? (_dbgExact[0] + '=' + probsExact[_dbgExact[0]].toFixed(4)) : 'none'));
             if (!skipRender) renderTable();
             // On mobile, fire input events on all auto-filled inputs to trigger edge display
             if (window.innerWidth <= 768) {
