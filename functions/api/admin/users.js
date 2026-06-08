@@ -178,9 +178,9 @@ async function fetchRsHashid(username, env) {
   if (!res.ok) throw new Error('rs_' + res.status + ':' + (data.message || data.error || ''));
   const user = data.user || data;
   const hashid = user.id || user.hashId || user.userId || null;
-  const username = user.username || user.userName || user.handle || null;
+  const rsName = user.username || user.userName || user.handle || null;
   if (!hashid) throw new Error('no_id_field:' + JSON.stringify(Object.keys(data)).slice(0, 100));
-  return { hashid, username };
+  return { hashid, username: rsName };
 }
 
 function ok(data) {
