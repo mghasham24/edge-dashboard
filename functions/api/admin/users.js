@@ -46,7 +46,7 @@ async function handleRequest({ request, env }) {
     const now = Math.floor(Date.now() / 1000);
     const [countRow, rows] = await Promise.all([
       env.DB.prepare(`SELECT COUNT(*) as total FROM users u ${whereClause}`).bind(...binds).first(),
-      env.DB.prepare(`SELECT u.id, u.email, u.plan, u.is_admin, u.banned, u.created_at, u.pro_expires_at, u.group_access, u.rs_group_username, u.rs_hashid, ra.rs_user_id, ra.rs_username, COUNT(s.id) as sessions FROM users u LEFT JOIN sessions s ON s.user_id=u.id AND s.expires_at>? LEFT JOIN real_auth ra ON ra.user_id=u.id ${whereClause} GROUP BY u.id ORDER BY ${orderBy} LIMIT ? OFFSET ?`).bind(now, ...binds, limit, offset).all(),
+      env.DB.prepare(`SELECT u.id, u.email, u.plan, u.is_admin, u.banned, u.created_at, u.pro_expires_at, u.group_access, u.rs_group_username, u.rs_hashid, u.rs_username, ra.rs_user_id, ra.rs_username as ra_rs_username, COUNT(s.id) as sessions FROM users u LEFT JOIN sessions s ON s.user_id=u.id AND s.expires_at>? LEFT JOIN real_auth ra ON ra.user_id=u.id ${whereClause} GROUP BY u.id ORDER BY ${orderBy} LIMIT ? OFFSET ?`).bind(now, ...binds, limit, offset).all(),
     ]);
 
     const total = countRow?.total || 0;
@@ -83,30 +83,32 @@ async function handleRequest({ request, env }) {
         if (conflict) return fail(409, 'RS username already used by another account');
       }
       await ensureRsHashidColumn(env.DB);
+      let rsUsername = null;
       if (rs_group_username) {
-        rsHashid = await fetchRsHashid(rs_group_username, env).catch((e) => { rsHashidError = e.message; return null; });
+        const result = await fetchRsHashid(rs_group_username, env).catch((e) => { rsHashidError = e.message; return null; });
+        if (result) { rsHashid = result.hashid; rsUsername = result.username; }
       }
       if (group_access !== undefined && rs_group_username !== undefined) {
         const q = rsHashid
-          ? 'UPDATE users SET group_access=?, rs_group_username=?, rs_hashid=? WHERE id=?'
+          ? 'UPDATE users SET group_access=?, rs_group_username=?, rs_hashid=?, rs_username=? WHERE id=?'
           : 'UPDATE users SET group_access=?, rs_group_username=? WHERE id=?';
         const args = rsHashid
-          ? [group_access ? 1 : 0, rs_group_username || null, rsHashid, id]
+          ? [group_access ? 1 : 0, rs_group_username || null, rsHashid, rsUsername || null, id]
           : [group_access ? 1 : 0, rs_group_username || null, id];
         await env.DB.prepare(q).bind(...args).run();
       } else if (group_access !== undefined) {
         await env.DB.prepare('UPDATE users SET group_access=? WHERE id=?').bind(group_access ? 1 : 0, id).run();
       } else {
         const q = rsHashid
-          ? 'UPDATE users SET rs_group_username=?, rs_hashid=? WHERE id=?'
+          ? 'UPDATE users SET rs_group_username=?, rs_hashid=?, rs_username=? WHERE id=?'
           : 'UPDATE users SET rs_group_username=? WHERE id=?';
         const args = rsHashid
-          ? [rs_group_username || null, rsHashid, id]
+          ? [rs_group_username || null, rsHashid, rsUsername || null, id]
           : [rs_group_username || null, id];
         await env.DB.prepare(q).bind(...args).run();
       }
     }
-    return ok({ updated: true, rs_hashid: rsHashid || null, rs_hashid_error: rsHashidError || undefined });
+    return ok({ updated: true, rs_hashid: rsHashid || null, rs_username: rsUsername || null, rs_hashid_error: rsHashidError || undefined });
   }
 
   // DELETE /api/admin/users?id=X — fully delete user and all dependent rows
@@ -140,6 +142,7 @@ async function handleRequest({ request, env }) {
 
 async function ensureRsHashidColumn(db) {
   await db.prepare('ALTER TABLE users ADD COLUMN rs_hashid TEXT').run().catch(() => {});
+  await db.prepare('ALTER TABLE users ADD COLUMN rs_username TEXT').run().catch(() => {});
 }
 
 async function fetchRsHashid(username, env) {
@@ -173,10 +176,11 @@ async function fetchRsHashid(username, env) {
   });
   const data = await res.json();
   if (!res.ok) throw new Error('rs_' + res.status + ':' + (data.message || data.error || ''));
-  // Try all known field names for the RS user hashid
-  const hashid = data.id || data.hashId || data.userId || data.user?.id || null;
+  const user = data.user || data;
+  const hashid = user.id || user.hashId || user.userId || null;
+  const username = user.username || user.userName || user.handle || null;
   if (!hashid) throw new Error('no_id_field:' + JSON.stringify(Object.keys(data)).slice(0, 100));
-  return hashid;
+  return { hashid, username };
 }
 
 function ok(data) {
