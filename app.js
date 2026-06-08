@@ -2876,11 +2876,13 @@
             r._pred = null; r._rake = 0.034; r._ev = null;
             var pr = preds[r.id];
             if (!pr || pr === '') return;
-            var pred = probsExact[r.id] != null ? probsExact[r.id] : parseFloat(pr) / 100;
+            var _hasExact = probsExact[r.id] != null;
+            var pred = _hasExact ? probsExact[r.id] : parseFloat(pr) / 100;
             if (pred <= 0 || pred >= 1) return;
             var rake = rsBaseTake(pred);
             r._pred = pred; r._rake = rake;
             r._ev   = (r.af * (1/pred) * (1-rake) - 1) * 100;
+            if (_hasExact) console.log('[cacheEvRows] id=' + r.id + ' exact=' + probsExact[r.id].toFixed(4) + ' ev=' + r._ev.toFixed(1));
             // >100% EV is a post-game artifact (RS knows result, FD market not yet settled)
             // Exception: soccer_fc live ±0.5 lines can legitimately produce >100% EV
             if (r._ev > 0 && (r._ev <= 100 || sport === 'soccer_fc' || sport === 'soccer_wc')) {
