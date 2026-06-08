@@ -7076,11 +7076,12 @@
             return fetch('/api/real/payout?' + qs, { credentials: 'same-origin' })
                 .then(function(res) { return res.json(); })
                 .then(function(data) {
+                    console.log('[payout debug] amount=' + amount + ' expectedPayout=' + data.expectedPayout + ' ratio=' + (data.expectedPayout / amount) + ' af=' + r.af + ' calcEV=' + ((r.af * data.expectedPayout / amount - 1) * 100).toFixed(1) + '% ok=' + data.ok);
                     if (data.ok && data.expectedPayout > 0) {
                         payoutRatios[r.id] = data.expectedPayout / amount;
                     }
                 })
-                .catch(function() {});
+                .catch(function(e) { console.log('[payout debug] fetch error:', e.message); });
         })).then(function() {
             renderTable();
         });
