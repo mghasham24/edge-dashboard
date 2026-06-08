@@ -106,7 +106,7 @@ async function handleRequest({ request, env }) {
         await env.DB.prepare(q).bind(...args).run();
       }
     }
-    return ok({ updated: true });
+    return ok({ updated: true, rs_hashid: rsHashid || null });
   }
 
   // DELETE /api/admin/users?id=X — fully delete user and all dependent rows
