@@ -4544,7 +4544,7 @@
                 + '<input type="text" placeholder="RS username" value="' + groupRsVal + '" data-uid="' + u.id + '" style="font-size:11px;font-family:var(--mono);background:var(--bg3);border:1px solid var(--border2);color:var(--fg);padding:3px 6px;border-radius:4px;width:100px" onblur="adminSaveRsUsername(this)" onkeydown="if(event.key===\'Enter\')this.blur()">'
                 + '</div>';
             var rsProfileLink = u.rs_hashid
-                ? '<div class="rs-profile-link" style="margin-top:3px"><a href="https://realsports.io/u/' + escHtml(u.rs_hashid) + '" target="_blank" rel="noopener" style="font-size:10px;color:var(--accent);font-family:var(--mono)">RS&nbsp;↗</a></div>'
+                ? '<div class="rs-profile-link" style="margin-top:3px"><a href="/api/admin/rs-redirect?id=' + escHtml(u.rs_hashid) + '" target="_blank" rel="noopener" style="font-size:10px;color:var(--accent);font-family:var(--mono)">RS&nbsp;↗</a></div>'
                 : (u.rs_group_username ? '<div style="font-size:10px;color:var(--muted);margin-top:2px;font-family:var(--mono)">@' + escHtml(u.rs_group_username) + '</div>' : '');
             var rsIdCell = u.rs_user_id
                 ? '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px">RS&nbsp;ID:&nbsp;' + escHtml(String(u.rs_user_id)) + (u.rs_username ? '&nbsp;(' + escHtml(u.rs_username) + ')' : '') + '</div>'
@@ -4621,7 +4621,7 @@
                 var link = document.createElement('div');
                 link.className = 'rs-profile-link';
                 link.style.cssText = 'margin-top:3px';
-                link.innerHTML = '<a href="https://realsports.io/u/' + escHtml(data.rs_hashid) + '" target="_blank" rel="noopener" style="font-size:10px;color:var(--accent);font-family:var(--mono)">RS&nbsp;↗</a>';
+                link.innerHTML = '<a href="/api/admin/rs-redirect?id=' + escHtml(data.rs_hashid) + '" target="_blank" rel="noopener" style="font-size:10px;color:var(--accent);font-family:var(--mono)">RS&nbsp;↗</a>';
                 input.parentNode.insertBefore(link, input);
                 showToast('Saved — RS profile linked', 'success');
             } else {
