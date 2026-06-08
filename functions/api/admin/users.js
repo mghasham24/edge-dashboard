@@ -22,6 +22,7 @@ async function handleRequest({ request, env }) {
 
   // GET /api/admin/users — list users (paginated)
   if (method === 'GET') {
+    await ensureRsHashidColumn(env.DB);
     const search = url.searchParams.get('q') || '';
     const plan   = url.searchParams.get('plan') || '';
     const sort   = url.searchParams.get('sort') || 'signup_desc';
