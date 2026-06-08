@@ -44,7 +44,7 @@ export async function onRequestGet({ request, env }) {
     const data = await res.json();
     const username = data.username || data.userName || data.user?.username || null;
     if (!username) {
-      return new Response(JSON.stringify({ error: 'Username not found', keys: Object.keys(data) }), {
+      return new Response(JSON.stringify({ error: 'Username not found', keys: Object.keys(data), userKeys: data.user ? Object.keys(data.user) : null }), {
         status: 404, headers: { 'Content-Type': 'application/json' }
       });
     }
