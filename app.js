@@ -2841,7 +2841,10 @@
             var fair = r._wcFair != null ? r._wcFair : (r.mkt === 'RFI' && r.rfiFair != null) ? r.rfiFair : (altNV ? (r.ps === 'A' ? altNV.fa : altNV.fb) : (r.ps === 'A' ? nv.fa : nv.fb));
             var af   = r._wcFair != null ? r._wcFair : (r.mkt === 'RFI' && r.rfiFair != null) ? r.rfiFair : (altNV ? fair : adjFair(fair, r.pt, yl, r.mkt, r.ps, sportKey));
             var pr = preds[r.id];
-            var pred = (pr !== undefined && pr !== '') ? (probsExact[r.id] != null ? probsExact[r.id] : parseFloat(pr) / 100) : null;
+            var _mapPredsVal = (pr !== undefined && pr !== '') ? parseFloat(pr) / 100 : null;
+            var _mapExact = probsExact[r.id];
+            var _mapUseExact = _mapExact != null && _mapPredsVal != null && Math.abs(_mapExact - _mapPredsVal) <= 0.03;
+            var pred = _mapPredsVal != null ? (_mapUseExact ? _mapExact : _mapPredsVal) : null;
             var evForUnits = null;
             if (af != null && pred != null && pred > 0 && pred < 1) {
                 evForUnits = (af * (1/pred) * (1-rsBaseTake(pred)) - 1) * 100;
@@ -2876,8 +2879,10 @@
             r._pred = null; r._rake = 0.034; r._ev = null;
             var pr = preds[r.id];
             if (!pr || pr === '') return;
-            var _hasExact = probsExact[r.id] != null;
-            var pred = _hasExact ? probsExact[r.id] : parseFloat(pr) / 100;
+            var _predsVal = parseFloat(pr) / 100;
+            var _exactRaw = probsExact[r.id];
+            var _hasExact = _exactRaw != null && Math.abs(_exactRaw - _predsVal) <= 0.03;
+            var pred = _hasExact ? _exactRaw : _predsVal;
             if (pred <= 0 || pred >= 1) return;
             var rake = rsBaseTake(pred);
             r._pred = pred; r._rake = rake;
@@ -6526,7 +6531,10 @@
                 af = altNV ? fair : adjFair(fair, r.pt, yl, r.mkt, r.ps);
             }
             var pr = preds[r.id];
-            var pred = (pr !== undefined && pr !== '') ? Math.min(0.999, Math.max(0.001, (probsExact[r.id] != null ? probsExact[r.id] : parseFloat(pr) / 100) + rsPredAdj / 100)) : null;
+            var _rtPredsVal = (pr !== undefined && pr !== '') ? parseFloat(pr) / 100 : null;
+            var _rtExact = probsExact[r.id];
+            var _rtUseExact = _rtExact != null && _rtPredsVal != null && Math.abs(_rtExact - _rtPredsVal) <= 0.03;
+            var pred = _rtPredsVal != null ? Math.min(0.999, Math.max(0.001, (_rtUseExact ? _rtExact : _rtPredsVal) + rsPredAdj / 100)) : null;
             // All sports: users bet at RS, sharp book (FD/DK) is reference (af)
             // Value = sharp novig > RS probability = RS offering longer odds than sharp fair
             // edge = (af - pred), EV = (af/pred) * (1-rake) - 1
@@ -6742,7 +6750,10 @@
             if (payoutRatios[r.id] != null) {
                 ev = (r.af * payoutRatios[r.id] - 1) * 100;
             } else {
-                var realPctEV = Math.min(0.999, Math.max(0.001, (probsExact[r.id] != null ? probsExact[r.id] : parseFloat(predEV) / 100) + rsPredAdj / 100));
+                var _evPredsVal = parseFloat(predEV) / 100;
+                var _evExact = probsExact[r.id];
+                var _evUseExact = _evExact != null && Math.abs(_evExact - _evPredsVal) <= 0.03;
+                var realPctEV = Math.min(0.999, Math.max(0.001, (_evUseExact ? _evExact : _evPredsVal) + rsPredAdj / 100));
                 if (realPctEV > 0 && realPctEV < 1) {
                     var rakeEV = rsBaseTake(realPctEV);
                     ev = (r.af * (1/realPctEV) * (1-rakeEV) - 1) * 100;
