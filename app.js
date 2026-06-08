@@ -4607,13 +4607,15 @@
     async function adminSaveRsUsername(input) {
         var id  = parseInt(input.getAttribute('data-uid'));
         var val = input.value.trim();
+        var cell = input.closest('td');
+        var cb = cell ? cell.querySelector('input[type="checkbox"]') : null;
+        var newAccess = val ? 1 : 0;
         input.disabled = true;
-        var res = await fetch('/api/admin/users', { method: 'PATCH', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, rs_group_username: val }) });
+        var res = await fetch('/api/admin/users', { method: 'PATCH', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, rs_group_username: val, group_access: newAccess }) });
         var data = await res.json();
         input.disabled = false;
         if (!data.ok) { showToast(data.error || 'Error saving RS username'); return; }
-        // Update the RS profile link in the same cell without full reload
-        var cell = input.closest('td');
+        if (cb) cb.checked = !!val;
         if (cell) {
             var existing = cell.querySelector('.rs-profile-link');
             if (existing) existing.remove();
