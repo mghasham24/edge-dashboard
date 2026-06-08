@@ -3044,7 +3044,6 @@
         var mhtml = '<div class="ev-mobile-grid">';
 
         all.forEach(function(r) {
-            // Use exact WS payout EV if available, else fall back to rsBaseTake approximation
             var ev = (payoutRatios[r.id] != null && r.af != null)
                 ? (r.af * payoutRatios[r.id] - 1) * 100
                 : r._ev;
@@ -5355,8 +5354,9 @@
             })
             .then(function() {
                 resetRefreshBtn();
-                renderTable();
-                if (rawRows.length > 0) fetchRealMarkets(currentSport);
+                if (rawRows.length > 0) {
+                    fetchRealMarkets(currentSport).catch(function() { renderTable(); });
+                } else { renderTable(); }
 
                 // Start auto-poll to keep NBA odds live
                 if (nbaPoller) clearInterval(nbaPoller);
@@ -5433,8 +5433,9 @@
             })
             .then(function() {
                 resetRefreshBtn();
-                renderTable();
-                if (rawRows.length > 0) fetchRealMarkets(currentSport);
+                if (rawRows.length > 0) {
+                    fetchRealMarkets(currentSport).catch(function() { renderTable(); });
+                } else { renderTable(); }
 
                 // Start auto-poll to keep WNBA odds live
                 if (wnbaPoller) clearInterval(wnbaPoller);
@@ -5519,8 +5520,9 @@
             })
             .then(function() {
                 resetRefreshBtn();
-                renderTable();
-                if (rawRows.length > 0) fetchRealMarkets(currentSport);
+                if (rawRows.length > 0) {
+                    fetchRealMarkets(currentSport).catch(function() { renderTable(); });
+                } else { renderTable(); }
 
                 if (wcPoller) clearInterval(wcPoller);
                 wcPoller = setInterval(function() {
@@ -5598,8 +5600,9 @@
             })
             .then(function() {
                 resetRefreshBtn();
-                renderTable();
-                if (rawRows.length > 0) fetchRealMarkets(currentSport);
+                if (rawRows.length > 0) {
+                    fetchRealMarkets(currentSport).catch(function() { renderTable(); });
+                } else { renderTable(); }
 
                 if (fcPoller) clearInterval(fcPoller);
                 fcPoller = setInterval(function() {
@@ -5803,9 +5806,8 @@
             })
             .then(function() {
                 resetRefreshBtn();
-                renderTable();
                 if (rawRows.length > 0) {
-                    fetchRealMarkets(currentSport).then(function() { fetchDKAltLinesNHL(); });
+                    fetchRealMarkets(currentSport).then(function() { fetchDKAltLinesNHL(); }).catch(function() { renderTable(); });
                     if (nhlPoller) clearInterval(nhlPoller);
                     nhlPoller = setInterval(function() {
                         if (currentSport !== 'icehockey_nhl') { clearInterval(nhlPoller); nhlPoller = null; return; }
@@ -5816,7 +5818,7 @@
                         if (currentSport !== 'icehockey_nhl') { clearInterval(dkPoller); dkPoller = null; return; }
                         fetchDKAltLinesNHL();
                     }, 5000);
-                }
+                } else { renderTable(); }
             });
             return;
         }
@@ -6735,7 +6737,6 @@
         if (predEV && r.af != null) {
             var ev = null;
             if (payoutRatios[r.id] != null) {
-                // Exact EV from RS payout API — includes slippage at user's stake size
                 ev = (r.af * payoutRatios[r.id] - 1) * 100;
             } else {
                 var realPctEV = Math.min(0.999, Math.max(0.001, (probsExact[r.id] != null ? probsExact[r.id] : parseFloat(predEV) / 100) + rsPredAdj / 100));
