@@ -6612,8 +6612,8 @@
         var q = document.getElementById('search').value.trim().toLowerCase();
         if (!rawRows.length) {
             document.getElementById('tbody').innerHTML = '<tr class="state-row"><td colspan="13">No odds - hit Refresh</td></tr>';
-            document.getElementById('stat-lines').textContent = '0';
-            document.getElementById('stat-edges').textContent = '0';
+            var _sl = document.getElementById('stat-lines'); if (_sl) _sl.textContent = '0';
+            var _se = document.getElementById('stat-edges'); if (_se) _se.textContent = '0';
             return;
         }
         var pairs = {};
@@ -6750,8 +6750,8 @@
             return 0;
         });
         var ec = filtered.filter(function(r) { return r.edge != null && r.edge > 0; }).length;
-        document.getElementById('stat-lines').textContent = filtered.length;
-        document.getElementById('stat-edges').textContent = ec;
+        var _sl = document.getElementById('stat-lines'); if (_sl) _sl.textContent = filtered.length;
+        var _se = document.getElementById('stat-edges'); if (_se) _se.textContent = ec;
         if (!filtered.length) {
             document.getElementById('tbody').innerHTML = '<tr class="state-row"><td colspan="13">No results</td></tr>';
             return;
@@ -7016,7 +7016,7 @@
         tds[12].innerHTML = u === 0 ? '<span class="u-pass">-</span>' : '<span class="bet-val">' + RAX_ICON + (u * unit).toFixed(0) + '</span>';
         tr.classList.toggle('has-edge', edge != null && edge > 0);
         tr.style.background = edge != null && edge > 0 ? 'rgba(45,204,126,' + (Math.min(edge / 10, 1) * 0.08).toFixed(3) + ')' : '';
-        document.getElementById('stat-edges').textContent = document.querySelectorAll('tr.has-edge').length;
+        var _se = document.getElementById('stat-edges'); if (_se) _se.textContent = document.querySelectorAll('tr.has-edge').length;
     }
 
     // ── REAL SPORTS AUTO-FILL ──
