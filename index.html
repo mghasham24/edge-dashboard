@@ -497,6 +497,24 @@
                     <option value="group_desc">Group Access First</option>
                 </select>
                 <button id="sync-stripe-btn" onclick="adminSyncStripe()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:5px;cursor:pointer;letter-spacing:.04em">Sync Stripe</button>
+                <button id="group-sync-btn" onclick="adminGroupSync()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:5px;cursor:pointer;letter-spacing:.04em">Group Sync</button>
+            </div>
+            <!-- Group sync results -->
+            <div id="group-sync-results" style="display:none;margin-bottom:16px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:16px">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                    <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2)">Group Sync</div>
+                    <button onclick="document.getElementById('group-sync-results').style.display='none'" style="background:none;border:none;color:var(--muted);font-size:16px;cursor:pointer;line-height:1">&times;</button>
+                </div>
+                <div id="group-sync-stats" style="display:flex;gap:16px;margin-bottom:12px;font-size:12px;color:var(--muted)"></div>
+                <div id="group-sync-rs-only" style="display:none;margin-bottom:12px">
+                    <div style="font-size:11px;font-weight:700;color:var(--red);margin-bottom:6px;letter-spacing:.04em">IN RS GROUP — NOT IN ADMIN</div>
+                    <div id="group-sync-rs-only-list" style="font-size:12px;font-family:var(--mono);line-height:1.8"></div>
+                </div>
+                <div id="group-sync-admin-only" style="display:none">
+                    <div style="font-size:11px;font-weight:700;color:var(--orange,#f59e0b);margin-bottom:6px;letter-spacing:.04em">GROUP ACCESS IN ADMIN — NOT IN RS GROUP</div>
+                    <div id="group-sync-admin-only-list" style="font-size:12px;font-family:var(--mono);line-height:1.8"></div>
+                </div>
+                <div id="group-sync-ok" style="display:none;font-size:12px;color:var(--green)">All matched — no discrepancies.</div>
             </div>
             <!-- User table -->
             <div class="admin-table-wrap">

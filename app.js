@@ -4755,6 +4755,50 @@
         setTimeout(function() { btn.textContent = 'Sync Stripe'; btn.disabled = false; }, 4000);
     }
 
+    async function adminGroupSync() {
+        var btn = document.getElementById('group-sync-btn');
+        btn.textContent = 'Syncing...';
+        btn.disabled = true;
+        try {
+            var res = await fetch('/api/admin/group-sync', { credentials: 'same-origin' });
+            var data = await res.json();
+            if (!data.ok) { showToast(data.error || 'Sync failed'); btn.textContent = 'Group Sync'; btn.disabled = false; return; }
+
+            var wrap = document.getElementById('group-sync-results');
+            var stats = document.getElementById('group-sync-stats');
+            stats.textContent = data.rsTotal + ' in RS group · ' + data.adminGroupTotal + ' with access in admin · ' + data.matched.length + ' matched';
+            wrap.style.display = '';
+
+            var rsOnly = document.getElementById('group-sync-rs-only');
+            var rsOnlyList = document.getElementById('group-sync-rs-only-list');
+            if (data.inRsOnly.length) {
+                rsOnlyList.innerHTML = data.inRsOnly.map(function(m) {
+                    return '<div>' + escHtml(m.rsUsername) + ' <span style="color:var(--muted2);font-size:11px">(' + escHtml(m.rsId) + ')</span></div>';
+                }).join('');
+                rsOnly.style.display = '';
+            } else {
+                rsOnly.style.display = 'none';
+            }
+
+            var adminOnly = document.getElementById('group-sync-admin-only');
+            var adminOnlyList = document.getElementById('group-sync-admin-only-list');
+            if (data.inAdminOnly.length) {
+                adminOnlyList.innerHTML = data.inAdminOnly.map(function(u) {
+                    return '<div>' + escHtml(u.email) + (u.rs_group_username ? ' → RS: ' + escHtml(u.rs_group_username) : ' <span style="color:var(--red)">(no RS username set)</span>') + '</div>';
+                }).join('');
+                adminOnly.style.display = '';
+            } else {
+                adminOnly.style.display = 'none';
+            }
+
+            document.getElementById('group-sync-ok').style.display = (!data.inRsOnly.length && !data.inAdminOnly.length) ? '' : 'none';
+        } catch(e) {
+            showToast('Network error');
+        }
+        btn.textContent = 'Group Sync';
+        btn.disabled = false;
+    }
+
     function onMktChange() {
         var sel = document.getElementById('mkt-filter');
         if (!isPro() && sel.value !== 'ML') {
