@@ -4433,20 +4433,31 @@
                 window._groupJoined = true;
                 window._groupUsername = data.rs_username;
                 window._groupLink = data.link || 'https://www.realapp.com/ZdWcrFgFN6p';
+                window._groupCode = data.code || null;
             }
         } catch(e) {}
+    }
+
+    function showGroupJoinedView() {
+        document.getElementById('group-join-form').style.display = 'none';
+        document.getElementById('group-joined-view').style.display = '';
+        var lbl = document.getElementById('group-member-label');
+        if (lbl) lbl.textContent = 'Joined as ' + (window._groupUsername || '');
+        var link = document.getElementById('group-open-link');
+        if (link && window._groupLink) link.href = window._groupLink;
+        var codeWrap = document.getElementById('group-code-wrap');
+        var codeDisplay = document.getElementById('group-code-display');
+        if (codeWrap && codeDisplay && window._groupCode) {
+            codeDisplay.textContent = window._groupCode;
+            codeWrap.style.display = '';
+        }
     }
 
     function openGroupCodeModal() {
         var m = document.getElementById('group-code-modal');
         closeMenu();
         if (window._groupJoined && window._groupUsername) {
-            document.getElementById('group-join-form').style.display = 'none';
-            document.getElementById('group-joined-view').style.display = '';
-            var lbl = document.getElementById('group-member-label');
-            if (lbl) lbl.textContent = 'Joined as ' + (window._groupUsername || '');
-            var link = document.getElementById('group-open-link');
-            if (link && window._groupLink) link.href = window._groupLink;
+            showGroupJoinedView();
         } else {
             document.getElementById('group-join-form').style.display = '';
             document.getElementById('group-joined-view').style.display = 'none';
@@ -4491,12 +4502,8 @@
             window._groupJoined = true;
             window._groupUsername = data.rs_username || username;
             window._groupLink = data.link || 'https://www.realapp.com/ZdWcrFgFN6p';
-            document.getElementById('group-join-form').style.display = 'none';
-            document.getElementById('group-joined-view').style.display = '';
-            var lbl = document.getElementById('group-member-label');
-            if (lbl) lbl.textContent = 'Joined as ' + (window._groupUsername || '');
-            var link = document.getElementById('group-open-link');
-            if (link && window._groupLink) link.href = window._groupLink;
+            window._groupCode = data.code || null;
+            showGroupJoinedView();
         } catch(e) {
             err.textContent = 'Network error — try again';
             err.style.display = '';
@@ -4531,6 +4538,23 @@
         }).catch(function() {
             var el = document.createElement('textarea');
             el.value = link;
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand('copy');
+            document.body.removeChild(el);
+        });
+    }
+
+    function copyGroupCode() {
+        var code = window._groupCode || '';
+        if (!code) return;
+        navigator.clipboard.writeText(code).then(function() {
+            var btn = document.getElementById('group-code-copy-btn');
+            btn.textContent = 'Copied!';
+            setTimeout(function() { btn.textContent = 'Copy'; }, 2000);
+        }).catch(function() {
+            var el = document.createElement('textarea');
+            el.value = code;
             document.body.appendChild(el);
             el.select();
             document.execCommand('copy');

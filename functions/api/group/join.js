@@ -22,6 +22,7 @@ async function handle({ request, env }) {
   if (!user || (user.plan !== 'pro' && !user.is_admin)) return fail(403, 'Pro required');
 
   const groupLink = env.RS_GROUP_LINK || GROUP_LINK_FALLBACK;
+  const groupCode = env.RS_GROUP_CODE || null;
 
   if (request.method === 'GET') {
     const joined = !!(user.group_access && user.rs_group_username);
@@ -29,6 +30,7 @@ async function handle({ request, env }) {
       joined,
       rs_username: user.rs_group_username || null,
       link: joined ? groupLink : null,
+      code: joined ? groupCode : null,
     });
   }
 
@@ -59,7 +61,7 @@ async function handle({ request, env }) {
       'UPDATE users SET group_access=1, rs_group_username=? WHERE id=?'
     ).bind(rs_username, session.user_id).run();
 
-    return ok({ link: groupLink, rs_username });
+    return ok({ link: groupLink, code: groupCode, rs_username });
   }
 
   return fail(405, 'Method not allowed');
