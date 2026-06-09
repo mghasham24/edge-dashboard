@@ -338,6 +338,10 @@
                         <div class="menu-dd-item" onclick="openSportOrderModal()">
                             <span class="dd-icon">✏️</span><span>Reorder sports</span>
                         </div>
+                        <div class="menu-dd-sep"></div>
+                        <div class="menu-dd-item" id="dd-group-item" onclick="openGroupCodeModal()" style="display:none">
+                            <span class="dd-icon">👥</span><span>Predicts Group</span>
+                        </div>
                     </div>
                 </div>
                 <button class="refresh-btn" onclick="logOut()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted)" title="Log out">⏻</button>
@@ -358,16 +362,25 @@
         </div>
 
         <div id="group-code-modal" onclick="if(event.target===this)closeGroupCodeModal()" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);align-items:center;justify-content:center">
-            <div style="background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:28px 28px 24px;width:340px;max-width:90vw;position:relative">
+            <div style="background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:28px 28px 24px;width:360px;max-width:90vw;position:relative">
                 <button onclick="closeGroupCodeModal()" style="position:absolute;top:12px;right:14px;background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;line-height:1">&times;</button>
-                <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:6px">RS Community Group</div>
-                <div style="font-size:13px;color:var(--muted);margin-bottom:20px">+EV picks are posted automatically as they appear.</div>
-                <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted2);margin-bottom:6px">Join Code</div>
-                <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px">
-                    <div id="rs-group-code-display" style="flex:1;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--mono);font-size:22px;font-weight:700;padding:12px 16px;border-radius:6px;letter-spacing:.1em;text-align:center">—</div>
-                    <button onclick="copyGroupCode()" id="rs-group-copy-btn" style="background:var(--accent);color:#fff;border:none;font-family:var(--sans);font-size:12px;font-weight:600;padding:12px 16px;border-radius:6px;cursor:pointer;white-space:nowrap">Copy</button>
+                <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:6px">RS Predicts Group</div>
+                <div style="font-size:13px;color:var(--muted);margin-bottom:20px">+EV picks posted automatically as they appear.</div>
+                <!-- Join form -->
+                <div id="group-join-form">
+                    <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted2);margin-bottom:6px">Your RealSports Username</div>
+                    <input id="group-rs-username" type="text" placeholder="e.g. dennis" maxlength="50" autocomplete="off" style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--mono);font-size:14px;font-weight:600;padding:11px 14px;border-radius:6px;outline:none;margin-bottom:10px" onkeydown="if(event.key==='Enter')submitGroupJoin()">
+                    <div id="group-join-error" style="display:none;font-size:12px;color:var(--red);margin-bottom:10px"></div>
+                    <button id="group-join-btn" onclick="submitGroupJoin()" style="width:100%;background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:13px;font-weight:600;padding:11px;border-radius:6px;cursor:pointer">Join Predicts Group</button>
                 </div>
-                <a href="https://www.realapp.com/ZdWcrFgFN6p" target="_blank" rel="noopener" style="display:block;text-align:center;color:var(--accent);font-size:13px;font-weight:600">Open Group on Real Sports ↗</a>
+                <!-- Joined view -->
+                <div id="group-joined-view" style="display:none;text-align:center">
+                    <div style="font-size:36px;margin-bottom:6px">✓</div>
+                    <div style="font-size:15px;font-weight:700;color:var(--green);margin-bottom:4px">You're in!</div>
+                    <div id="group-member-label" style="font-size:12px;color:var(--muted);margin-bottom:20px"></div>
+                    <a id="group-open-link" href="#" target="_blank" rel="noopener" style="display:block;background:var(--accent);color:#fff;font-family:var(--sans);font-size:13px;font-weight:600;padding:11px;border-radius:6px;text-decoration:none;margin-bottom:8px">Open Group on Real Sports ↗</a>
+                    <button onclick="copyGroupLink()" id="rs-group-copy-btn" style="width:100%;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;font-weight:600;padding:9px;border-radius:6px;cursor:pointer">Copy Group Link</button>
+                </div>
             </div>
         </div>
         <div id="feature-tabs" style="display:flex;gap:6px;padding:6px 12px 0;border-bottom:1px solid var(--border)"></div>

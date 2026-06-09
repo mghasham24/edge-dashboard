@@ -4423,21 +4423,87 @@
 
     async function loadGroupCode() {
         try {
-            var res = await fetch('/api/group/code', { credentials: 'same-origin' });
+            var res = await fetch('/api/group/join', { credentials: 'same-origin' });
+            if (!res.ok) return;
             var data = await res.json();
-            if (!data.ok || !data.code) return;
-            document.getElementById('rs-group-code-display').textContent = data.code;
-            document.getElementById('group-code-btn').style.display = '';
+            if (!data.ok) return;
+            var ddItem = document.getElementById('dd-group-item');
+            if (ddItem) ddItem.style.display = '';
+            if (data.joined && data.rs_username) {
+                window._groupJoined = true;
+                window._groupUsername = data.rs_username;
+                window._groupLink = data.link || 'https://www.realapp.com/ZdWcrFgFN6p';
+            }
         } catch(e) {}
     }
 
     function openGroupCodeModal() {
         var m = document.getElementById('group-code-modal');
+        closeMenu();
+        if (window._groupJoined && window._groupUsername) {
+            document.getElementById('group-join-form').style.display = 'none';
+            document.getElementById('group-joined-view').style.display = '';
+            var lbl = document.getElementById('group-member-label');
+            if (lbl) lbl.textContent = 'Joined as ' + (window._groupUsername || '');
+            var link = document.getElementById('group-open-link');
+            if (link && window._groupLink) link.href = window._groupLink;
+        } else {
+            document.getElementById('group-join-form').style.display = '';
+            document.getElementById('group-joined-view').style.display = 'none';
+            var inp = document.getElementById('group-rs-username');
+            if (inp) { inp.value = ''; inp.disabled = false; }
+            var btn = document.getElementById('group-join-btn');
+            if (btn) { btn.textContent = 'Join Predicts Group'; btn.disabled = false; }
+            document.getElementById('group-join-error').style.display = 'none';
+        }
         m.style.display = 'flex';
     }
 
     function closeGroupCodeModal() {
         document.getElementById('group-code-modal').style.display = 'none';
+    }
+
+    async function submitGroupJoin() {
+        var inp = document.getElementById('group-rs-username');
+        var btn = document.getElementById('group-join-btn');
+        var err = document.getElementById('group-join-error');
+        var username = (inp.value || '').trim();
+        if (!username) { err.textContent = 'Enter your RealSports username'; err.style.display = ''; return; }
+        err.style.display = 'none';
+        btn.textContent = 'Verifying...';
+        btn.disabled = true;
+        inp.disabled = true;
+        try {
+            var res = await fetch('/api/group/join', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rs_username: username })
+            });
+            var data = await res.json();
+            if (!data.ok) {
+                err.textContent = data.error || 'Failed to join — try again';
+                err.style.display = '';
+                btn.textContent = 'Join Predicts Group';
+                btn.disabled = false;
+                inp.disabled = false;
+                return;
+            }
+            window._groupJoined = true;
+            window._groupUsername = data.rs_username || username;
+            window._groupLink = data.link || 'https://www.realapp.com/ZdWcrFgFN6p';
+            document.getElementById('group-join-form').style.display = 'none';
+            document.getElementById('group-joined-view').style.display = '';
+            var lbl = document.getElementById('group-member-label');
+            if (lbl) lbl.textContent = 'Joined as ' + (window._groupUsername || '');
+            var link = document.getElementById('group-open-link');
+            if (link && window._groupLink) link.href = window._groupLink;
+        } catch(e) {
+            err.textContent = 'Network error — try again';
+            err.style.display = '';
+            btn.textContent = 'Join Predicts Group';
+            btn.disabled = false;
+            inp.disabled = false;
+        }
     }
 
     function copyRefCode() {
@@ -4456,15 +4522,15 @@
         });
     }
 
-    function copyGroupCode() {
-        var code = document.getElementById('rs-group-code-display').textContent;
-        navigator.clipboard.writeText(code).then(function() {
+    function copyGroupLink() {
+        var link = window._groupLink || 'https://www.realapp.com/ZdWcrFgFN6p';
+        navigator.clipboard.writeText(link).then(function() {
             var btn = document.getElementById('rs-group-copy-btn');
             btn.textContent = 'Copied!';
-            setTimeout(function() { btn.textContent = 'Copy Code'; }, 2000);
+            setTimeout(function() { btn.textContent = 'Copy Group Link'; }, 2000);
         }).catch(function() {
             var el = document.createElement('textarea');
-            el.value = code;
+            el.value = link;
             document.body.appendChild(el);
             el.select();
             document.execCommand('copy');
