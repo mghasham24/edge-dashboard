@@ -280,10 +280,10 @@ export async function onRequestGet(context) {
         probe('dk_league_info',    `${DK_BASE}/dkng/v1/leagues/${DK_LEAGUE_ID}`, dkHeaders),
         probe('dk_single_tv_markets', `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${DK_LEAGUE_ID}&marketsQuery=${mq}&include=Markets&entity=markets`, dkHeaders),
         probe('dk_single_tv_events',  `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${DK_LEAGUE_ID}&marketsQuery=${mq}&include=Events&entity=events`, dkHeaders),
-        probe('rs_soccer_next',    RS_BASE + '/home/soccer/next?cohort=0', rsHeaders || {}),
-        probe('rs_soccer_wc_next', RS_BASE + '/home/soccer_wc/next?cohort=0', rsHeaders || {}),
-        probe('rs_worldcup_next',  RS_BASE + '/home/worldcup/next?cohort=0', rsHeaders || {}),
-        probe('rs_home_soccer',    RS_BASE + '/home/soccer', rsHeaders || {}),
+        probe('rs_soccer_day_0611', RS_BASE + '/home/soccer/day/2026-06-11?cohort=0', rsHeaders || {}),
+        probe('rs_soccer_day_0610', RS_BASE + '/home/soccer/day/2026-06-10?cohort=0', rsHeaders || {}),
+        probe('rs_soccer_idx217',   RS_BASE + '/home/soccer/217?cohort=0', rsHeaders || {}),
+        probe('rs_soccer_next_full',RS_BASE + '/home/soccer/next?cohort=0', rsHeaders || {}),
       ]);
       return new Response(JSON.stringify({ results }), { headers: { 'Content-Type': 'application/json' } });
     }
@@ -330,8 +330,21 @@ export async function onRequestGet(context) {
     }
 
     if (debugMode === '6') {
-      const rsText = JSON.stringify(rsSoccerRaw).slice(0, 4000);
-      return new Response(JSON.stringify({ rsSoccerStatus, rsPreview: rsText }),
+      // Fetch soccer/next full and show all top-level keys + sample of first item in each array key
+      let soccerNextRaw = null;
+      try {
+        const r = await fetch(RS_BASE + '/home/soccer/next?cohort=0', { headers: rsHeaders || {} });
+        soccerNextRaw = await r.json();
+      } catch(e) {}
+      const summary = {};
+      if (soccerNextRaw) {
+        for (const k of Object.keys(soccerNextRaw)) {
+          const v = soccerNextRaw[k];
+          if (Array.isArray(v)) { summary[k] = { length: v.length, first: v[0] || null, last: v[v.length-1] || null }; }
+          else summary[k] = v;
+        }
+      }
+      return new Response(JSON.stringify({ summary }),
         { headers: { 'Content-Type': 'application/json' } });
     }
 
