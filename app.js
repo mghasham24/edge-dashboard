@@ -6754,7 +6754,7 @@
         tbody.innerHTML = teams.map(function(t) {
             var cc = WC_FLAG_CC[t.team] || '';
             var flagHtml = cc
-                ? '<img src="https://flagcdn.com/w20/' + cc + '.png" width="20" height="14" style="vertical-align:middle;margin-right:6px;border-radius:2px;object-fit:cover;flex-shrink:0" loading="lazy" onerror="this.style.display=\'none\'">'
+                ? '<img src="https://flagcdn.com/' + cc + '.svg" width="24" height="16" style="vertical-align:middle;margin-right:6px;border-radius:2px;object-fit:cover" onerror="this.style.display=\'none\'">'
                 : '';
             var rsLink = '';
             if (t.marketId) {
