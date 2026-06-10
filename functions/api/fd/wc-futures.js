@@ -173,6 +173,16 @@ function fail(status, msg) {
 }
 
 export async function onRequestGet(context) {
+  try {
+    return await _handler(context);
+  } catch(e) {
+    return new Response(JSON.stringify({ ok: false, caught: true, error: String(e), stack: e && e.stack ? String(e.stack) : null }), {
+      status: 500, headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+async function _handler(context) {
   const { request, env } = context;
   const session = await getSessionOrCron(request, env);
   if (!session) return fail(401, 'Not authenticated');
