@@ -6725,14 +6725,14 @@
         var statusEl = document.getElementById('wc-futures-status');
         var tbody    = document.getElementById('wc-futures-tbody');
         if (statusEl) statusEl.textContent = 'Loading futures...';
-        if (tbody) tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:20px">Loading...</td></tr>';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">Loading...</td></tr>';
 
         fetch('/api/fd/wc-futures', { credentials: 'same-origin' })
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (!data.ok || !data.teams || !data.teams.length) {
                 if (statusEl) statusEl.textContent = data.error || 'No futures data available';
-                if (tbody) tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:20px">' + escHtml(data.error || 'No futures available') + '</td></tr>';
+                if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">' + escHtml(data.error || 'No futures available') + '</td></tr>';
                 return;
             }
             renderWcFutures(data.teams, data.hasRS);
@@ -6743,7 +6743,7 @@
         })
         .catch(function(e) {
             if (statusEl) statusEl.textContent = 'Error loading futures';
-            if (tbody) tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:20px">Error loading futures</td></tr>';
+            if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">Error loading futures</td></tr>';
         });
     }
 
@@ -6751,20 +6751,22 @@
         var tbody = document.getElementById('wc-futures-tbody');
         if (!tbody) return;
         var unitSize = parseFloat(localStorage.getItem('raxedge_unit_size') || '300') || 300;
-        tbody.innerHTML = teams.map(function(t) {
-            var cc = WC_FLAG_CC[t.team] || '';
-            var flagHtml = cc
-                ? '<img src="https://flagcdn.com/' + cc + '.svg" width="24" height="16" style="vertical-align:middle;margin-right:6px;border-radius:2px;object-fit:cover" onerror="this.style.display=\'none\'">'
-                : '';
-            var rsLink = '';
-            if (t.marketId) {
-                if (!window._hashids) window._hashids = new Hashids('routing', 11);
-                var mktHash = window._hashids.encode([4, 14, 0, t.marketId]);
-                if (mktHash) rsLink = ' <a href="https://www.realapp.com/' + mktHash + '" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--accent);font-size:10px;text-decoration:none;vertical-align:middle" title="View on Real Sports">&#8599;</a>';
+
+        // Group rows by team, preserve server sort order for section ordering
+        var sections = [];
+        var sectionMap = {};
+        teams.forEach(function(t) {
+            if (!sectionMap[t.team]) {
+                sectionMap[t.team] = { team: t.team, am: t.am, marketId: t.marketId, rows: [] };
+                sections.push(sectionMap[t.team]);
             }
-            var rspNum = t.rsp  != null ? t.rsp  : null;
-            var dkfNum = t.dkFair != null ? t.dkFair : null;
-            var edgeNum = t.edge != null ? t.edge : null;
+            sectionMap[t.team].rows.push(t);
+        });
+
+        function renderSideRow(t) {
+            var rspNum  = t.rsp    != null ? t.rsp    : null;
+            var dkfNum  = t.dkFair != null ? t.dkFair : null;
+            var edgeNum = t.edge   != null ? t.edge   : null;
             var rspPct  = rspNum  != null ? (rspNum  * 100).toFixed(1) + '%' : '—';
             var dkfPct  = dkfNum  != null ? (dkfNum  * 100).toFixed(1) + '%' : '—';
             var edgeStr = edgeNum != null ? (edgeNum >= 0 ? '+' : '') + (edgeNum * 100).toFixed(1) + '%' : '—';
@@ -6774,27 +6776,52 @@
                 var rake = rsBaseTake(rspNum);
                 ev = (dkfNum / rspNum * (1 - rake) - 1) * 100;
             }
-            var evStr   = ev != null ? (ev >= 0 ? '+' : '') + ev.toFixed(1) + '%' : '—';
+            var evStr  = ev != null ? (ev >= 0 ? '+' : '') + ev.toFixed(1) + '%' : '—';
             var evColor = ev == null ? '' : ev > 0 ? 'color:var(--green)' : 'color:var(--red)';
-            var amStr = t.am > 0 ? '+' + t.am : '' + t.am;
             var u = (ev != null && rspNum != null) ? unitsEV(ev, rspNum) : 0;
-            var uStr    = u > 0 ? u + 'u' : '—';
-            var uColor  = u >= 2 ? 'color:var(--green)' : u > 0 ? 'color:var(--green)' : 'color:var(--muted)';
-            var betAmt  = u > 0 ? '$' + Math.round(u * unitSize) : '—';
-            var sideColor = t.side === 'YES' ? 'var(--green)' : 'var(--red)';
-            var sideBadge = '<span style="font-family:var(--mono);font-size:10px;font-weight:800;color:' + sideColor + ';background:' + sideColor + '22;padding:2px 5px;border-radius:3px">' + escHtml(t.side || 'YES') + '</span>';
-            return '<tr>' +
-                '<td style="white-space:nowrap">' + flagHtml + '<span style="font-size:13px;font-weight:700">' + escHtml(t.team) + '</span>' + rsLink + '</td>' +
-                '<td class="r">' + sideBadge + '</td>' +
+            var uStr   = u > 0 ? u + 'u' : '—';
+            var uColor = u > 0 ? 'color:var(--green)' : 'color:var(--muted)';
+            var betAmt = u > 0 ? '$' + Math.round(u * unitSize) : '—';
+            var isYes  = t.side === 'YES';
+            var sideColor = isYes ? 'var(--green)' : '#e05c5c';
+            var sideBadge = '<span style="font-family:var(--mono);font-size:10px;font-weight:800;color:' + sideColor + ';background:' + sideColor + '22;padding:2px 6px;border-radius:3px">' + escHtml(t.side || 'YES') + '</span>';
+            return '<tr style="background:var(--bg2)">' +
+                '<td style="padding-left:36px;font-size:11px;color:var(--muted)">' + sideBadge + '</td>' +
                 '<td class="r" style="font-family:var(--mono);font-weight:700">' + rspPct + '</td>' +
-                '<td class="r" style="font-family:var(--mono)">' + escHtml(amStr) + '</td>' +
                 '<td class="r" style="font-family:var(--mono);opacity:0.6;font-size:11px">' + dkfPct + '</td>' +
                 '<td class="r" style="font-family:var(--mono);' + edgeColor + '">' + edgeStr + '</td>' +
                 '<td class="r" style="font-family:var(--mono);font-weight:800;' + evColor + '">' + evStr + '</td>' +
                 '<td class="r" style="font-family:var(--mono);font-weight:700;' + uColor + '">' + uStr + '</td>' +
                 '<td class="r" style="font-family:var(--mono);' + uColor + '">' + betAmt + '</td>' +
             '</tr>';
-        }).join('');
+        }
+
+        var html = '';
+        sections.forEach(function(sec) {
+            var cc = WC_FLAG_CC[sec.team] || '';
+            var flagHtml = cc
+                ? '<img src="https://flagcdn.com/' + cc + '.svg" width="22" height="15" style="vertical-align:middle;margin-right:7px;border-radius:2px;object-fit:cover" onerror="this.style.display=\'none\'">'
+                : '';
+            var rsLink = '';
+            if (sec.marketId) {
+                if (!window._hashids) window._hashids = new Hashids('routing', 11);
+                var mktHash = window._hashids.encode([4, 14, 0, sec.marketId]);
+                if (mktHash) rsLink = ' <a href="https://www.realapp.com/' + mktHash + '" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--accent);font-size:10px;text-decoration:none" title="View on Real Sports">&#8599;</a>';
+            }
+            var amStr = sec.am > 0 ? '+' + sec.am : '' + sec.am;
+            // Section header row
+            html += '<tr style="border-top:2px solid var(--border);background:var(--bg)">' +
+                '<td colspan="7" style="padding:10px 12px 6px">' +
+                    flagHtml +
+                    '<span style="font-size:14px;font-weight:800">' + escHtml(sec.team) + '</span>' +
+                    rsLink +
+                    '<span style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-left:10px">DK ' + escHtml(amStr) + '</span>' +
+                '</td>' +
+            '</tr>';
+            // YES / NO sub-rows
+            sec.rows.forEach(function(r) { html += renderSideRow(r); });
+        });
+        tbody.innerHTML = html;
     }
 
     function buildFcLeagueNav() {
