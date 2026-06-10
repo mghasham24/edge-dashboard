@@ -11,7 +11,61 @@ function buildDKUrl() {
   const mq = encodeURIComponent(
     `$filter=clientMetadata/subCategoryId eq '${DK_SUBCAT_ID}' AND tags/all(t: t ne 'SportcastBetBuilder')`
   );
-  return `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${DK_LEAGUE_ID}%2C${DK_SUBCAT_ID}&marketsQuery=${mq}&include=Markets&entity=markets`;
+  // include=Events&entity=events is required even for futures — DK rejects include=Markets
+  // templateVars is leagueId alone (not leagueId,subcatId)
+  return `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${DK_LEAGUE_ID}&marketsQuery=${mq}&include=Events&entity=events`;
+}
+
+// Inlined from functions/_lib/hashids.js — required for real-request-token RS header
+function hashidsEncode(number) {
+  const saltChars = Array.from('realwebapp');
+  const minLen = 16;
+  const keepUnique = c => [...new Set(c)];
+  const without = (c, x) => c.filter(ch => !x.includes(ch));
+  const only = (c, k) => c.filter(ch => k.includes(ch));
+  function shuffle(alpha, salt) {
+    if (!salt.length) return alpha;
+    let int, t = [...alpha];
+    for (let i = t.length-1, v=0, p=0; i>0; i--, v++) {
+      v %= salt.length; p += int = salt[v].codePointAt(0);
+      const j = (int+v+p) % i; [t[i],t[j]] = [t[j],t[i]];
+    }
+    return t;
+  }
+  function toAlpha(n, alpha) {
+    const id=[]; let v=n;
+    do { id.unshift(alpha[v%alpha.length]); v=Math.floor(v/alpha.length); } while(v>0);
+    return id;
+  }
+  let alpha = Array.from('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890');
+  let seps  = Array.from('cfhistuCFHISTU');
+  const uniq = keepUnique(alpha);
+  alpha = without(uniq, seps);
+  seps  = shuffle(only(seps, uniq), saltChars);
+  if (!seps.length || alpha.length/seps.length > 3.5) {
+    const sl = Math.ceil(alpha.length/3.5);
+    if (sl > seps.length) { seps.push(...alpha.slice(0,sl-seps.length)); alpha=alpha.slice(sl-seps.length); }
+  }
+  alpha = shuffle(alpha, saltChars);
+  const gc = Math.ceil(alpha.length/12);
+  let guards;
+  if (alpha.length < 3) { guards=seps.slice(0,gc); seps=seps.slice(gc); }
+  else { guards=alpha.slice(0,gc); alpha=alpha.slice(gc); }
+  const numId = number % 100;
+  let ret = [alpha[numId % alpha.length]];
+  const lottery = [...ret];
+  alpha = shuffle(alpha, lottery.concat(saltChars, alpha));
+  ret.push(...toAlpha(number, alpha));
+  if (ret.length < minLen) ret.unshift(guards[(numId+ret[0].codePointAt(0)) % guards.length]);
+  if (ret.length < minLen) ret.push(guards[(numId+ret[2].codePointAt(0)) % guards.length]);
+  const half = Math.floor(alpha.length/2);
+  while (ret.length < minLen) {
+    alpha = shuffle(alpha, alpha);
+    ret.unshift(...alpha.slice(half)); ret.push(...alpha.slice(0,half));
+    const ex = ret.length-minLen;
+    if (ex>0) ret=ret.slice(ex/2, ex/2+minLen);
+  }
+  return ret.join('');
 }
 const CACHE_TTL = 30;
 
@@ -89,7 +143,7 @@ function buildRSHeaders(token, deviceUuid) {
     'real-auth-info': token,
     'real-device-type': 'desktop_web',
     'real-device-uuid': deviceUuid,
-    'real-request-token': String(Date.now()),
+    'real-request-token': hashidsEncode(Date.now()),
     'real-version': '33',
   };
 }
@@ -238,7 +292,7 @@ export async function onRequestGet(context) {
 
     const [dkRes, rsFuturesRes, rsSpecialsRes] = await Promise.all([
       fetch(DK_FUTURES_URL, { headers: dkHeaders }).catch(function(e) { return { ok: false, _err: e.message }; }),
-      rsHeaders ? fetch(RS_BASE + '/home/soccer/futures', { headers: rsHeaders }).catch(function(e) { return { ok: false, _err: e.message }; }) : Promise.resolve(null),
+      rsHeaders ? fetch(RS_BASE + '/home/soccer', { headers: rsHeaders }).catch(function(e) { return { ok: false, _err: e.message }; }) : Promise.resolve(null),
       rsHeaders ? fetch(RS_BASE + '/home/soccer/specials', { headers: rsHeaders }).catch(function(e) { return { ok: false, _err: e.message }; }) : Promise.resolve(null),
     ]);
 
@@ -246,17 +300,17 @@ export async function onRequestGet(context) {
     const dkStatus = dkRes.ok ? 200 : (dkRes.status || 0);
     try { if (dkRes.ok) dkRaw = await dkRes.json(); else dkErrText = await dkRes.text(); } catch(e) {}
 
-    let rsFuturesRaw = null, rsSpecialsRaw = null;
-    let rsFuturesStatus = 0, rsSpecialsStatus = 0;
-    let rsFuturesErrText = null, rsSpecialsErrText = null;
-    try { if (rsFuturesRes && rsFuturesRes.ok) { rsFuturesRaw = await rsFuturesRes.json(); rsFuturesStatus = 200; } else if (rsFuturesRes) { rsFuturesStatus = rsFuturesRes.status || 0; rsFuturesErrText = await rsFuturesRes.text(); } } catch(e) {}
+    let rsSoccerRaw = null, rsSpecialsRaw = null;
+    let rsSoccerStatus = 0, rsSpecialsStatus = 0;
+    let rsSoccerErrText = null, rsSpecialsErrText = null;
+    try { if (rsFuturesRes && rsFuturesRes.ok) { rsSoccerRaw = await rsFuturesRes.json(); rsSoccerStatus = 200; } else if (rsFuturesRes) { rsSoccerStatus = rsFuturesRes.status || 0; rsSoccerErrText = await rsFuturesRes.text(); } } catch(e) {}
     try { if (rsSpecialsRes && rsSpecialsRes.ok) { rsSpecialsRaw = await rsSpecialsRes.json(); rsSpecialsStatus = 200; } else if (rsSpecialsRes) { rsSpecialsStatus = rsSpecialsRes.status || 0; rsSpecialsErrText = await rsSpecialsRes.text(); } } catch(e) {}
 
     if (debugMode === '4') {
       return new Response(JSON.stringify({
         dkUrl: DK_FUTURES_URL,
         dkStatus, dkErrText,
-        rsFuturesStatus, rsFuturesErrText,
+        rsSoccerStatus, rsSoccerErrText,
         rsSpecialsStatus, rsSpecialsErrText,
       }), { headers: { 'Content-Type': 'application/json' } });
     }
@@ -264,14 +318,14 @@ export async function onRequestGet(context) {
     if (debugMode === '1') {
       return new Response(JSON.stringify({
         dkStatus, dkKeys: dkRaw ? Object.keys(dkRaw) : null,
-        rsFuturesStatus, rsFuturesKeys: rsFuturesRaw ? Object.keys(rsFuturesRaw) : null,
+        rsSoccerStatus, rsSoccerKeys: rsSoccerRaw ? Object.keys(rsSoccerRaw) : null,
         rsSpecialsStatus, rsSpecialsKeys: rsSpecialsRaw ? Object.keys(rsSpecialsRaw) : null,
         rsToken: rsToken ? rsToken.slice(0, 20) + '...' : null,
       }), { headers: { 'Content-Type': 'application/json' } });
     }
 
     if (debugMode === '2') {
-      return new Response(JSON.stringify({ dk: dkRaw, rsFutures: rsFuturesRaw, rsSpecials: rsSpecialsRaw }),
+      return new Response(JSON.stringify({ dk: dkRaw, rsSoccer: rsSoccerRaw, rsSpecials: rsSpecialsRaw }),
         { headers: { 'Content-Type': 'application/json' } });
     }
 
@@ -313,7 +367,7 @@ export async function onRequestGet(context) {
     }
 
     let rsTeams = {};
-    if (rsFuturesRaw) rsTeams = extractRSFutures(rsFuturesRaw);
+    if (rsSoccerRaw) rsTeams = extractRSFutures(rsSoccerRaw);
     if (Object.keys(rsTeams).length === 0 && rsSpecialsRaw) rsTeams = extractRSFutures(rsSpecialsRaw);
 
     if (debugMode === '3') {
