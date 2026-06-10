@@ -6800,7 +6800,7 @@
             var sideColor = isYes ? 'var(--green)' : '#e05c5c';
             var sideBadge = '<span style="font-family:var(--mono);font-size:10px;font-weight:800;color:' + sideColor + ';background:' + sideColor + '22;padding:2px 6px;border-radius:3px">' + escHtml(t.side || 'YES') + '</span>';
             return '<tr>' +
-                '<td style="padding-left:36px;font-size:11px;color:var(--muted)">' + sideBadge + '</td>' +
+                '<td style="padding-left:16px;font-size:11px;color:var(--muted)">' + sideBadge + '</td>' +
                 '<td class="r" style="font-family:var(--mono);font-weight:700">' + rspPct + '</td>' +
                 '<td class="r" style="font-family:var(--mono);opacity:0.6;font-size:11px">' + dkfPct + '</td>' +
                 '<td class="r" style="font-family:var(--mono);' + edgeColor + '">' + edgeStr + '</td>' +

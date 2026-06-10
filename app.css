@@ -2011,6 +2011,9 @@
 
     #wc-futures-mobile { display: none; }
 
+    #wc-futures-table { min-width: 0 !important; table-layout: fixed; width: 100%; }
+    #wc-futures-table th, #wc-futures-table td { padding: 6px 8px; }
+
     .wc-fut-card { background: var(--bg2); border-radius: 4px; margin-bottom: 10px; overflow: hidden; border: 1px solid var(--border); }
     .wc-fut-card-hdr { padding: 9px 12px; display: flex; align-items: center; gap: 8px; }
     .wc-fut-card-hdr strong { font-size: 14px; font-weight: 800; flex: 1; }
