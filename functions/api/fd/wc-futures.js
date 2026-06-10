@@ -292,7 +292,6 @@ export async function onRequestGet(context) {
 const DK_FUTURES_URL = buildDKUrl();
 
     // RS: scan sequential market IDs around 5940 for futuresGroupId=5
-    // France = 5940; 48 WC teams span roughly 5880–5970
     const RS_FUTURES_GROUP = 5;
     const scanIds = [];
     for (let i = 5880; i <= 5970; i++) scanIds.push(i);
@@ -310,23 +309,24 @@ const DK_FUTURES_URL = buildDKUrl();
       } catch(e) { return null; }
     }
 
-    function delay(ms, val) { return new Promise(function(r) { setTimeout(function() { r(val); }, ms); }); }
-
-    const [dkRes, rsScanResults] = await Promise.all([
-      Promise.race([
-        fetch(DK_FUTURES_URL, { headers: dkHeaders }).catch(function(e) { return { ok: false, _err: e.message }; }),
-        delay(8000, { ok: false, _err: 'dk_timeout' }),
-      ]),
-      Promise.race([
-        rsHeaders ? Promise.all(scanIds.map(fetchRSMarket)) : Promise.resolve([]),
-        delay(6000, []),
-      ]),
-    ]);
+    // Fetch DK alone first — avoids CF connection limit conflict with RS batch
+    const dkRes = await fetch(DK_FUTURES_URL, { headers: dkHeaders }).catch(function(e) { return { ok: false, _err: e.message }; });
 
     let dkRaw = null, dkErrText = null, dkJsonErr = null;
-    const dkStatus = dkRes.ok ? 200 : (dkRes.status || 0);
-    try { if (dkRes.ok) dkRaw = await dkRes.json(); else dkErrText = (await dkRes.text()).slice(0, 200); }
+    const dkStatus = dkRes.ok ? dkRes.status : (dkRes.status || 0);
+    try { if (dkRes.ok) dkRaw = await dkRes.json(); else if (dkRes.text) dkErrText = (await dkRes.text()).slice(0, 200); }
     catch(e) { dkJsonErr = String(e); }
+
+    // Scan RS in batches of 5 to stay under CF's concurrent subrequest limit
+    const rsScanResults = [];
+    if (rsHeaders) {
+      const BATCH = 5;
+      for (let i = 0; i < scanIds.length; i += BATCH) {
+        const batch = scanIds.slice(i, i + BATCH);
+        const res = await Promise.all(batch.map(fetchRSMarket));
+        for (let j = 0; j < res.length; j++) rsScanResults.push(res[j]);
+      }
+    }
 
     if (debugMode === '1') {
       const rsFound = rsScanResults.filter(Boolean);
