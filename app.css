@@ -2007,7 +2007,22 @@
         .admin-stat {
             padding: 12px 14px
         }
-    }/* ── MOBILE CARD LAYOUT ── */
+    }
+
+    #wc-futures-mobile { display: none; }
+
+    .wc-fut-card { background: var(--bg2); border-radius: 4px; margin-bottom: 10px; overflow: hidden; border: 1px solid var(--border); }
+    .wc-fut-card-hdr { padding: 9px 12px; display: flex; align-items: center; gap: 8px; }
+    .wc-fut-card-hdr strong { font-size: 14px; font-weight: 800; flex: 1; }
+    .wc-fut-card-hdr .wfc-dk { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+    .wc-fut-card-hdr .wfc-rslink { color: var(--accent); font-size: 11px; text-decoration: none; }
+    .wc-fut-side { padding: 8px 12px; display: flex; flex-direction: column; gap: 4px; border-top: 1px solid var(--border); }
+    .wc-fut-side-head { display: flex; align-items: center; gap: 8px; }
+    .wc-fut-stats-row { display: flex; flex-wrap: wrap; gap: 6px 16px; padding-left: 2px; }
+    .wfc-stat { font-family: var(--mono); font-size: 12px; }
+    .wfc-stat-lbl { font-size: 10px; color: var(--muted); }
+
+/* ── MOBILE CARD LAYOUT ── */
     @media (max-width: 768px) {
         .header {
             padding: 0 14px;
@@ -2057,9 +2072,8 @@
             display: none
         }/* Show mobile cards */
 
-        #wc-futures-panel .table-wrap {
+        #wc-futures-mobile {
             display: block;
-            overflow-x: auto;
         }
 
         .mobile-cards {

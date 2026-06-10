@@ -6796,7 +6796,30 @@
             '</tr>';
         }
 
+        function buildSideStats(t) {
+            var rspNum  = t.rsp    != null ? t.rsp    : null;
+            var dkfNum  = t.dkFair != null ? t.dkFair : null;
+            var edgeNum = t.edge   != null ? t.edge   : null;
+            var rspPct  = rspNum  != null ? (rspNum  * 100).toFixed(1) + '%' : '—';
+            var dkfPct  = dkfNum  != null ? (dkfNum  * 100).toFixed(1) + '%' : '—';
+            var edgeStr = edgeNum != null ? (edgeNum >= 0 ? '+' : '') + (edgeNum * 100).toFixed(1) + '%' : '—';
+            var edgeColor = edgeNum == null ? '' : edgeNum > 0 ? 'color:var(--green)' : 'color:var(--red)';
+            var ev = null;
+            if (rspNum > 0 && dkfNum != null) {
+                var rake = rsBaseTake(rspNum);
+                ev = (dkfNum / rspNum * (1 - rake) - 1) * 100;
+            }
+            var evStr  = ev != null ? (ev >= 0 ? '+' : '') + ev.toFixed(1) + '%' : '—';
+            var evColor = ev == null ? '' : ev > 0 ? 'color:var(--green)' : 'color:var(--red)';
+            var u = (ev != null && rspNum != null) ? unitsEV(ev, rspNum) : 0;
+            var uStr   = u > 0 ? u + 'u' : '—';
+            var uColor = u > 0 ? 'color:var(--green)' : 'color:var(--muted)';
+            var betAmt = u > 0 ? '$' + Math.round(u * unitSize) : '—';
+            return { rspPct: rspPct, dkfPct: dkfPct, edgeStr: edgeStr, edgeColor: edgeColor, evStr: evStr, evColor: evColor, uStr: uStr, uColor: uColor, betAmt: betAmt };
+        }
+
         var html = '';
+        var mhtml = '';
         sections.forEach(function(sec, si) {
             // YES first within each section
             sec.rows.sort(function(a, b) {
@@ -6809,13 +6832,17 @@
             var flagHtml = cc
                 ? '<img src="https://cdn.jsdelivr.net/npm/flag-icons@7.2.3/flags/4x3/' + cc + '.svg" width="22" height="15" style="vertical-align:middle;margin-right:7px;border-radius:2px;object-fit:cover" onerror="this.style.display=\'none\'">'
                 : '';
+            var flagHtmlCard = cc
+                ? '<img src="https://cdn.jsdelivr.net/npm/flag-icons@7.2.3/flags/4x3/' + cc + '.svg" width="28" height="19" style="vertical-align:middle;border-radius:2px;object-fit:cover;flex-shrink:0" onerror="this.style.display=\'none\'">'
+                : '';
             var rsLink = ' <a href="https://www.realapp.com/pXjdilF6Fbz" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--accent);font-size:10px;text-decoration:none" title="View on Real Sports">&#8599;</a>';
             var amStr = sec.am > 0 ? '+' + sec.am : '' + sec.am;
-            // Section header row with country-color gradient
             var wfc = WC_FLAG_COLORS[sec.team];
             var hdrGrad = wfc
                 ? 'background:linear-gradient(90deg,' + hexRgba(wfc.c1, 0.35) + ',' + hexRgba(wfc.c2, 0.15) + ',transparent)'
                 : 'background:var(--bg)';
+
+            // Desktop table: section header row
             html += '<tr style="border-top:2px solid var(--border);' + hdrGrad + '">' +
                 '<td colspan="7" style="padding:10px 12px 6px">' +
                     flagHtml +
@@ -6824,10 +6851,40 @@
                     '<span style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-left:10px">DK ' + escHtml(amStr) + '</span>' +
                 '</td>' +
             '</tr>';
-            // YES / NO sub-rows
             sec.rows.forEach(function(r) { html += renderSideRow(r, grad); });
+
+            // Mobile card
+            mhtml += '<div class="wc-fut-card">';
+            mhtml += '<div class="wc-fut-card-hdr" style="' + hdrGrad + '">' +
+                flagHtmlCard +
+                '<strong>' + escHtml(sec.team) + '</strong>' +
+                '<span class="wfc-dk">DK ' + escHtml(amStr) + '</span>' +
+                '<a href="https://www.realapp.com/pXjdilF6Fbz" target="_blank" rel="noopener" class="wfc-rslink" title="View on Real Sports">&#8599; RS</a>' +
+            '</div>';
+            sec.rows.forEach(function(r) {
+                var s = buildSideStats(r);
+                var isYes = r.side === 'YES';
+                var sideColor = isYes ? 'var(--green)' : '#e05c5c';
+                var sideBadge = '<span style="font-family:var(--mono);font-size:10px;font-weight:800;color:' + sideColor + ';background:' + sideColor + '22;padding:2px 6px;border-radius:3px;flex-shrink:0">' + escHtml(r.side || 'YES') + '</span>';
+                mhtml += '<div class="wc-fut-side">';
+                mhtml += '<div class="wc-fut-side-head">' + sideBadge;
+                if (s.uStr !== '—') {
+                    mhtml += '<span style="font-family:var(--mono);font-size:12px;font-weight:700;' + s.uColor + ';margin-left:auto">' + s.uStr + ' · ' + s.betAmt + '</span>';
+                }
+                mhtml += '</div>';
+                mhtml += '<div class="wc-fut-stats-row">' +
+                    '<span class="wfc-stat"><span class="wfc-stat-lbl">RS </span>' + s.rspPct + '</span>' +
+                    '<span class="wfc-stat"><span class="wfc-stat-lbl">DK Fair </span>' + s.dkfPct + '</span>' +
+                    '<span class="wfc-stat" style="' + s.edgeColor + '"><span class="wfc-stat-lbl">Edge </span>' + s.edgeStr + '</span>' +
+                    '<span class="wfc-stat" style="' + s.evColor + '"><span class="wfc-stat-lbl">EV </span>' + s.evStr + '</span>' +
+                '</div>';
+                mhtml += '</div>';
+            });
+            mhtml += '</div>';
         });
         tbody.innerHTML = html;
+        var mobileEl = document.getElementById('wc-futures-mobile');
+        if (mobileEl) mobileEl.innerHTML = mhtml;
     }
 
     function buildFcLeagueNav() {
