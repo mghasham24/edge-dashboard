@@ -330,21 +330,21 @@ export async function onRequestGet(context) {
     }
 
     if (debugMode === '6') {
-      // Fetch soccer/next full and show all top-level keys + sample of first item in each array key
-      let soccerNextRaw = null;
-      try {
-        const r = await fetch(RS_BASE + '/home/soccer/next?cohort=0', { headers: rsHeaders || {} });
-        soccerNextRaw = await r.json();
-      } catch(e) {}
-      const summary = {};
-      if (soccerNextRaw) {
-        for (const k of Object.keys(soccerNextRaw)) {
-          const v = soccerNextRaw[k];
-          if (Array.isArray(v)) { summary[k] = { length: v.length, first: v[0] || null, last: v[v.length-1] || null }; }
-          else summary[k] = v;
-        }
-      }
-      return new Response(JSON.stringify({ summary }),
+      const probeShort = async function(url) {
+        try {
+          const r = await fetch(url, { headers: rsHeaders || {} });
+          const txt = await r.text();
+          return { status: r.status, body: txt.slice(0, 1500) };
+        } catch(e) { return { status: 0, err: e.message }; }
+      };
+      const [poll, preds, picks, options, stats] = await Promise.all([
+        probeShort(RS_BASE + '/polls/356009'),
+        probeShort(RS_BASE + '/polls/356009/predictions'),
+        probeShort(RS_BASE + '/polls/356009/picks'),
+        probeShort(RS_BASE + '/polls/356009/options'),
+        probeShort(RS_BASE + '/polls/356009/stats'),
+      ]);
+      return new Response(JSON.stringify({ poll, preds, picks, options, stats }),
         { headers: { 'Content-Type': 'application/json' } });
     }
 
