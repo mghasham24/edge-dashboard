@@ -87,6 +87,7 @@
     var lastSyncData = {}; // sport -> last Real Sports sync response (d.markets object)
     var exclusiveBets = localStorage.getItem('raxedge_exclusive_bets') === '1';
     var betTaken = JSON.parse(localStorage.getItem('raxedge_bets_taken') || '{}');
+    var wcFuturesCache = null;
     var portfolioConnected = false;
     var portHistoryAll    = [];   // accumulated all settled history items
     var portHistoryCursor = null; // last item id for next page
@@ -6735,6 +6736,12 @@
                 if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">' + escHtml(data.error || 'No futures available') + '</td></tr>';
                 return;
             }
+            wcFuturesCache = data;
+            var wcUnitEl = document.getElementById('wc-unit-size');
+            if (wcUnitEl && !wcUnitEl._restored) {
+                wcUnitEl.value = parseFloat(localStorage.getItem('raxedge_unit_size') || '300') || 300;
+                wcUnitEl._restored = true;
+            }
             renderWcFutures(data.teams, data.hasRS);
             if (statusEl) {
                 var t = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -6747,10 +6754,17 @@
         });
     }
 
+    function onWcUnitChange(val) {
+        var n = parseFloat(val) || 300;
+        localStorage.setItem('raxedge_unit_size', n);
+        if (wcFuturesCache) renderWcFutures(wcFuturesCache.teams, wcFuturesCache.hasRS);
+    }
+
     function renderWcFutures(teams, hasRS) {
         var tbody = document.getElementById('wc-futures-tbody');
         if (!tbody) return;
-        var unitSize = parseFloat(localStorage.getItem('raxedge_unit_size') || '300') || 300;
+        var wcUnitEl = document.getElementById('wc-unit-size');
+        var unitSize = wcUnitEl ? (parseFloat(wcUnitEl.value) || 300) : (parseFloat(localStorage.getItem('raxedge_unit_size') || '300') || 300);
 
         // Group rows by team, preserve server sort order for section ordering
         var sections = [];
