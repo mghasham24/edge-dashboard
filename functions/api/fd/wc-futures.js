@@ -280,10 +280,10 @@ export async function onRequestGet(context) {
         probe('dk_league_info',    `${DK_BASE}/dkng/v1/leagues/${DK_LEAGUE_ID}`, dkHeaders),
         probe('dk_single_tv_markets', `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${DK_LEAGUE_ID}&marketsQuery=${mq}&include=Markets&entity=markets`, dkHeaders),
         probe('dk_single_tv_events',  `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${DK_LEAGUE_ID}&marketsQuery=${mq}&include=Events&entity=events`, dkHeaders),
-        probe('rs_soccer_home',    RS_BASE + '/home/soccer', rsHeaders || {}),
-        probe('rs_competitions',   RS_BASE + '/competitions?sport=soccer', rsHeaders || {}),
-        probe('rs_wc_markets',     RS_BASE + '/competitions/soccer_worldcup_2026/markets', rsHeaders || {}),
-        probe('rs_home_soccer2',   RS_BASE + '/home/soccer/outrights', rsHeaders || {}),
+        probe('rs_soccer_next',    RS_BASE + '/home/soccer/next?cohort=0', rsHeaders || {}),
+        probe('rs_soccer_wc_next', RS_BASE + '/home/soccer_wc/next?cohort=0', rsHeaders || {}),
+        probe('rs_worldcup_next',  RS_BASE + '/home/worldcup/next?cohort=0', rsHeaders || {}),
+        probe('rs_home_soccer',    RS_BASE + '/home/soccer', rsHeaders || {}),
       ]);
       return new Response(JSON.stringify({ results }), { headers: { 'Content-Type': 'application/json' } });
     }
