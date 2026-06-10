@@ -330,11 +330,16 @@ const DK_FUTURES_URL = buildDKUrl();
 
     if (debugMode === '1') {
       const rsFound = rsScanResults.filter(Boolean);
-      const mkt5940inScan = rsScanResults[5940 - 5880]; // index of 5940 in scan
+      let rsProbe = null;
+      try {
+        const rp = await fetch(RS_BASE + '/predictions/marketorder/5940/mode/buy', { headers: rsHeaders });
+        rsProbe = { status: rp.status };
+        if (rp.ok) { const d = await rp.json(); rsProbe.group = d.market && d.market.futuresGroupId; rsProbe.name = d.market && d.market.marketName; }
+        else { rsProbe.body = (await rp.text()).slice(0, 100); }
+      } catch(e) { rsProbe = { err: String(e) }; }
       return new Response(JSON.stringify({
-        dkStatus, dkKeys: dkRaw ? Object.keys(dkRaw) : null, dkJsonErr, dkErrText,
-        rsFound: rsFound.length, rsSample: rsFound.slice(0, 3),
-        mkt5940inScan: mkt5940inScan || null,
+        dkStatus, dkKeys: dkRaw ? Object.keys(dkRaw) : null, dkJsonErr,
+        rsFound: rsFound.length, rsProbe,
         rsToken: rsToken ? rsToken.slice(0, 20) + '...' : null,
       }), { headers: { 'Content-Type': 'application/json' } });
     }
