@@ -183,6 +183,8 @@ export async function onRequestGet(context) {
 }
 
 async function _handler(context) {
+  return new Response(JSON.stringify({ ok: true, probe: 'handler_reached' }), { headers: { 'Content-Type': 'application/json' } });
+  // eslint-disable-next-line no-unreachable
   const { request, env } = context;
   const session = await getSessionOrCron(request, env);
   if (!session) return fail(401, 'Not authenticated');
