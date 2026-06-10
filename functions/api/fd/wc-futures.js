@@ -329,41 +329,35 @@ export async function onRequestGet(context) {
         { headers: { 'Content-Type': 'application/json' } });
     }
 
-    if (!dkRaw) return fail(502, 'DK fetch failed (status ' + dkStatus + ')');
-
-    const dkTeams = {};
-    const selections = dkRaw.selections || [];
-    const markets    = dkRaw.markets    || [];
-    const winnerMarket = markets.find(function(m) {
-      const n = (m.name || m.marketName || '').toLowerCase();
-      return n.indexOf('winner') >= 0 || n.indexOf('outright') >= 0 || n.indexOf('to win') >= 0;
-    }) || markets[0];
-
-    for (let si = 0; si < selections.length; si++) {
-      const sel = selections[si];
-      const marketId = sel.marketId || sel.providerMarketId;
-      if (winnerMarket && marketId && markets.length > 1) {
-        const wmId = winnerMarket.marketId || winnerMarket.providerMarketId || winnerMarket.id;
-        if (marketId !== wmId) continue;
-      }
-      const label = sel.label || sel.participantName || sel.displayName || '';
-      const odds  = (sel.displayOdds && sel.displayOdds.american) || (sel.trueOdds && sel.trueOdds.american) || null;
-      const am    = parseAmerican(odds);
-      if (label && am != null) dkTeams[normTeam(label)] = { name: label, am };
+    if (debugMode === '6') {
+      const rsText = JSON.stringify(rsSoccerRaw).slice(0, 4000);
+      return new Response(JSON.stringify({ rsSoccerStatus, rsPreview: rsText }),
+        { headers: { 'Content-Type': 'application/json' } });
     }
 
-    if (Object.keys(dkTeams).length === 0) {
-      for (let mi = 0; mi < markets.length; mi++) {
-        const m = markets[mi];
-        const opts = m.outcomes || m.selections || [];
-        for (let oi = 0; oi < opts.length; oi++) {
-          const o = opts[oi];
-          const label = o.label || o.participantName || '';
-          const odds  = (o.displayOdds && o.displayOdds.american) || (o.trueOdds && o.trueOdds.american) || o.oddsAmerican || null;
-          const am    = parseAmerican(odds);
-          if (label && am != null) dkTeams[normTeam(label)] = { name: label, am };
-        }
-      }
+    if (!dkRaw) return fail(502, 'DK fetch failed (status ' + dkStatus + ')');
+
+    // Find the WC 2026 market (leagueId 209533) in the mixed-league response
+    const markets = dkRaw.markets || [];
+    const wcMarket = markets.find(function(m) { return String(m.leagueId) === DK_LEAGUE_ID; });
+    if (!wcMarket) return fail(404, 'WC futures market not in DK response');
+    const wcMarketId = String(wcMarket.id);
+
+    // Filter WC selections only
+    const wcSels = (dkRaw.selections || []).filter(function(s) { return String(s.marketId) === wcMarketId && s.trueOdds > 1; });
+
+    // No-vig fair: sum of implied probs (1/decimal) then normalize
+    let totalIp = 0;
+    for (let i = 0; i < wcSels.length; i++) totalIp += 1 / wcSels[i].trueOdds;
+
+    const dkTeams = {};
+    for (let i = 0; i < wcSels.length; i++) {
+      const sel = wcSels[i];
+      const label = sel.label || '';
+      if (!label) continue;
+      const am     = parseAmerican(sel.displayOdds && sel.displayOdds.american);
+      const dkFair = (1 / sel.trueOdds) / totalIp;
+      dkTeams[normTeam(label)] = { name: label, am, dkFair };
     }
 
     let rsTeams = {};
@@ -383,15 +377,15 @@ export async function onRequestGet(context) {
       const dk       = dkEntries[di][1];
       const rs = rsTeams[normName] || null;
       if (hasRS && !rs) continue;
-      const dkFair = americanToProb(dk.am);
-      const rsp    = rs ? rs.prob : null;
+      const rsp = rs ? rs.prob : null;
+      // edge = dkFair - rsYes: positive means DK fair > RS cost → RS underprices → bet YES at RS
       result.push({
         team:   dk.name,
         rsName: rs ? rs.name : null,
         am:     dk.am,
-        dkFair: dkFair != null ? Math.round(dkFair * 1000) / 1000 : null,
-        rsp:    rsp    != null ? Math.round(rsp    * 1000) / 1000 : null,
-        edge:   (rsp != null && dkFair != null) ? Math.round((rsp - dkFair) * 1000) / 1000 : null,
+        dkFair: Math.round(dk.dkFair * 1000) / 1000,
+        rsp:    rsp != null ? Math.round(rsp    * 1000) / 1000 : null,
+        edge:   rsp != null ? Math.round((dk.dkFair - rsp) * 1000) / 1000 : null,
       });
     }
 
