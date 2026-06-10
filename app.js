@@ -6809,12 +6809,7 @@
             var flagHtml = cc
                 ? '<img src="https://cdn.jsdelivr.net/npm/flag-icons@7.2.3/flags/4x3/' + cc + '.svg" width="22" height="15" style="vertical-align:middle;margin-right:7px;border-radius:2px;object-fit:cover" onerror="this.style.display=\'none\'">'
                 : '';
-            var rsLink = '';
-            if (sec.marketId) {
-                if (!window._hashids) window._hashids = new Hashids('routing', 11);
-                var mktHash = window._hashids.encode([4, 14, 0, sec.marketId]);
-                if (mktHash) rsLink = ' <a href="https://www.realapp.com/' + mktHash + '" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--accent);font-size:10px;text-decoration:none" title="View on Real Sports">&#8599;</a>';
-            }
+            var rsLink = ' <a href="https://www.realapp.com/pXjdilF6Fbz" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--accent);font-size:10px;text-decoration:none" title="View on Real Sports">&#8599;</a>';
             var amStr = sec.am > 0 ? '+' + sec.am : '' + sec.am;
             // Section header row with country-color gradient
             var wfc = WC_FLAG_COLORS[sec.team];
