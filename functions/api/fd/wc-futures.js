@@ -212,6 +212,28 @@ export async function onRequestGet(context) {
     const { token: rsToken, deviceUuid: rsDevice } = await getRSAuth(env);
     const rsHeaders = rsToken ? buildRSHeaders(rsToken, rsDevice) : null;
 
+    // debug=5: probe multiple DK URL variants + RS endpoints to discover correct paths
+    if (debugMode === '5') {
+      const mq = encodeURIComponent(`$filter=clientMetadata/subCategoryId eq '${DK_SUBCAT_ID}' AND tags/all(t: t ne 'SportcastBetBuilder')`);
+      const probe = async function(label, url, hdrs) {
+        try {
+          const r = await fetch(url, { headers: hdrs });
+          const txt = await r.text();
+          return { label, status: r.status, body: txt.slice(0, 300) };
+        } catch(e) { return { label, status: 0, err: e.message }; }
+      };
+      const results = await Promise.all([
+        probe('dk_league_info',    `${DK_BASE}/dkng/v1/leagues/${DK_LEAGUE_ID}`, dkHeaders),
+        probe('dk_single_tv_markets', `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${DK_LEAGUE_ID}&marketsQuery=${mq}&include=Markets&entity=markets`, dkHeaders),
+        probe('dk_single_tv_events',  `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${DK_LEAGUE_ID}&marketsQuery=${mq}&include=Events&entity=events`, dkHeaders),
+        probe('rs_soccer_home',    RS_BASE + '/home/soccer', rsHeaders || {}),
+        probe('rs_competitions',   RS_BASE + '/competitions?sport=soccer', rsHeaders || {}),
+        probe('rs_wc_markets',     RS_BASE + '/competitions/soccer_worldcup_2026/markets', rsHeaders || {}),
+        probe('rs_home_soccer2',   RS_BASE + '/home/soccer/outrights', rsHeaders || {}),
+      ]);
+      return new Response(JSON.stringify({ results }), { headers: { 'Content-Type': 'application/json' } });
+    }
+
     const DK_FUTURES_URL = buildDKUrl();
 
     const [dkRes, rsFuturesRes, rsSpecialsRes] = await Promise.all([
