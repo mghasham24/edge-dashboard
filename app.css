@@ -2057,6 +2057,11 @@
             display: none
         }/* Show mobile cards */
 
+        #wc-futures-panel .table-wrap {
+            display: block;
+            overflow-x: auto;
+        }
+
         .mobile-cards {
             display: block;
             padding: 0 10px
