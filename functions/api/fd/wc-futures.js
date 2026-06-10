@@ -234,19 +234,6 @@ function fail(status, msg) {
   return new Response(JSON.stringify({ ok: false, error: msg }), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
-async function timedFetch(url, opts, ms) {
-  let timer;
-  const controller = new AbortController();
-  timer = setTimeout(function() { controller.abort(); }, ms);
-  try {
-    const r = await fetch(url, Object.assign({}, opts, { signal: controller.signal }));
-    clearTimeout(timer);
-    return r;
-  } catch(e) {
-    clearTimeout(timer);
-    return { ok: false, _err: e.message };
-  }
-}
 
 export async function onRequestGet(context) {
   const { request, env } = context;
@@ -311,9 +298,9 @@ const DK_FUTURES_URL = buildDKUrl();
     for (let i = 5880; i <= 5970; i++) scanIds.push(i);
 
     async function fetchRSMarket(id) {
-      const r = await timedFetch(RS_BASE + '/predictions/marketorder/' + id + '/mode/buy', { headers: rsHeaders }, 2500);
-      if (!r.ok) return null;
       try {
+        const r = await fetch(RS_BASE + '/predictions/marketorder/' + id + '/mode/buy', { headers: rsHeaders });
+        if (!r.ok) return null;
         const d = await r.json();
         const m = d && d.market;
         if (!m || m.futuresGroupId !== RS_FUTURES_GROUP) return null;
@@ -324,7 +311,7 @@ const DK_FUTURES_URL = buildDKUrl();
     }
 
     const [dkRes, rsScanResults] = await Promise.all([
-      timedFetch(DK_FUTURES_URL, { headers: dkHeaders }, 8000),
+      fetch(DK_FUTURES_URL, { headers: dkHeaders }).catch(function(e) { return { ok: false, _err: e.message }; }),
       rsHeaders ? Promise.all(scanIds.map(fetchRSMarket)) : Promise.resolve([]),
     ]);
 
