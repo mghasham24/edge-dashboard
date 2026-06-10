@@ -3,8 +3,16 @@
 // Zero imports — auth inlined to eliminate bundling as a variable.
 
 const DK_BASE = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
-const DK_FUTURES_URL = DK_BASE + '/controldata/home/leagueSubcategory/v1/markets?isBatchable=false&templateVars=209533%2C4529&marketsQuery=%24filter%3DclientMetadata%2FsubCategoryId%20eq%20%274529%27%20AND%20tags%2Fall%28t%3A%20t%20ne%20%27SportcastBetBuilder%27%29&include=Markets&entity=markets';
+const DK_LEAGUE_ID = '209533'; // FIFA World Cup 2026
+const DK_SUBCAT_ID = '4529';   // Outright Winner
 const RS_BASE   = 'https://web.realapp.com';
+
+function buildDKUrl() {
+  const mq = encodeURIComponent(
+    `$filter=clientMetadata/subCategoryId eq '${DK_SUBCAT_ID}' AND tags/all(t: t ne 'SportcastBetBuilder')`
+  );
+  return `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${DK_LEAGUE_ID}%2C${DK_SUBCAT_ID}&marketsQuery=${mq}&include=Markets&entity=markets`;
+}
 const CACHE_TTL = 30;
 
 function parseAmerican(str) {
@@ -204,20 +212,32 @@ export async function onRequestGet(context) {
     const { token: rsToken, deviceUuid: rsDevice } = await getRSAuth(env);
     const rsHeaders = rsToken ? buildRSHeaders(rsToken, rsDevice) : null;
 
+    const DK_FUTURES_URL = buildDKUrl();
+
     const [dkRes, rsFuturesRes, rsSpecialsRes] = await Promise.all([
       fetch(DK_FUTURES_URL, { headers: dkHeaders }).catch(function(e) { return { ok: false, _err: e.message }; }),
       rsHeaders ? fetch(RS_BASE + '/home/soccer/futures', { headers: rsHeaders }).catch(function(e) { return { ok: false, _err: e.message }; }) : Promise.resolve(null),
       rsHeaders ? fetch(RS_BASE + '/home/soccer/specials', { headers: rsHeaders }).catch(function(e) { return { ok: false, _err: e.message }; }) : Promise.resolve(null),
     ]);
 
-    let dkRaw = null;
+    let dkRaw = null, dkErrText = null;
     const dkStatus = dkRes.ok ? 200 : (dkRes.status || 0);
-    try { if (dkRes.ok) dkRaw = await dkRes.json(); } catch(e) {}
+    try { if (dkRes.ok) dkRaw = await dkRes.json(); else dkErrText = await dkRes.text(); } catch(e) {}
 
     let rsFuturesRaw = null, rsSpecialsRaw = null;
     let rsFuturesStatus = 0, rsSpecialsStatus = 0;
-    try { if (rsFuturesRes && rsFuturesRes.ok) { rsFuturesRaw = await rsFuturesRes.json(); rsFuturesStatus = 200; } else if (rsFuturesRes) rsFuturesStatus = rsFuturesRes.status || 0; } catch(e) {}
-    try { if (rsSpecialsRes && rsSpecialsRes.ok) { rsSpecialsRaw = await rsSpecialsRes.json(); rsSpecialsStatus = 200; } else if (rsSpecialsRes) rsSpecialsStatus = rsSpecialsRes.status || 0; } catch(e) {}
+    let rsFuturesErrText = null, rsSpecialsErrText = null;
+    try { if (rsFuturesRes && rsFuturesRes.ok) { rsFuturesRaw = await rsFuturesRes.json(); rsFuturesStatus = 200; } else if (rsFuturesRes) { rsFuturesStatus = rsFuturesRes.status || 0; rsFuturesErrText = await rsFuturesRes.text(); } } catch(e) {}
+    try { if (rsSpecialsRes && rsSpecialsRes.ok) { rsSpecialsRaw = await rsSpecialsRes.json(); rsSpecialsStatus = 200; } else if (rsSpecialsRes) { rsSpecialsStatus = rsSpecialsRes.status || 0; rsSpecialsErrText = await rsSpecialsRes.text(); } } catch(e) {}
+
+    if (debugMode === '4') {
+      return new Response(JSON.stringify({
+        dkUrl: DK_FUTURES_URL,
+        dkStatus, dkErrText,
+        rsFuturesStatus, rsFuturesErrText,
+        rsSpecialsStatus, rsSpecialsErrText,
+      }), { headers: { 'Content-Type': 'application/json' } });
+    }
 
     if (debugMode === '1') {
       return new Response(JSON.stringify({
