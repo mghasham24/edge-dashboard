@@ -6795,7 +6795,7 @@
             var u = (ev != null && rspNum != null) ? unitsEV(ev, rspNum) : 0;
             var uStr   = u > 0 ? u + 'u' : '—';
             var uColor = u > 0 ? 'color:var(--green)' : 'color:var(--muted)';
-            var betAmt = u > 0 ? '$' + Math.round(u * unitSize) : '—';
+            var betAmt = u > 0 ? RAX_ICON + Math.round(u * unitSize) : '—';
             var isYes  = t.side === 'YES';
             var sideColor = isYes ? 'var(--green)' : '#e05c5c';
             var sideBadge = '<span style="font-family:var(--mono);font-size:10px;font-weight:800;color:' + sideColor + ';background:' + sideColor + '22;padding:2px 6px;border-radius:3px">' + escHtml(t.side || 'YES') + '</span>';
@@ -6828,7 +6828,7 @@
             var u = (ev != null && rspNum != null) ? unitsEV(ev, rspNum) : 0;
             var uStr   = u > 0 ? u + 'u' : '—';
             var uColor = u > 0 ? 'color:var(--green)' : 'color:var(--muted)';
-            var betAmt = u > 0 ? '$' + Math.round(u * unitSize) : '—';
+            var betAmt = u > 0 ? RAX_ICON + Math.round(u * unitSize) : '—';
             return { rspPct: rspPct, dkfPct: dkfPct, edgeStr: edgeStr, edgeColor: edgeColor, evStr: evStr, evColor: evColor, uStr: uStr, uColor: uColor, betAmt: betAmt };
         }
 
