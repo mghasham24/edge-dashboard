@@ -5,16 +5,10 @@ import { hashidsEncode } from '../../_lib/hashids.js';
 // DK: leagueId=209533, subcat=4529 (World Cup Winner)
 // RS: /home/soccer/futures or /home/soccer/specials
 
-const DK_BASE    = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
-const DK_LEAGUE_ID = '209533';
-const DK_SUBCAT    = '4529';
-// OData-style URL matching the pattern used by other DK endpoints in this codebase
-const DK_FUTURES_URL = (() => {
-  const mq = encodeURIComponent(
-    `$filter=clientMetadata/subCategoryId eq '${DK_SUBCAT}' AND tags/all(t: t ne 'SportcastBetBuilder')`
-  );
-  return `${DK_BASE}/controldata/home/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${DK_LEAGUE_ID}%2C${DK_SUBCAT}&marketsQuery=${mq}&include=Markets&entity=markets`;
-})();
+const DK_BASE = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
+// OData-style URL matching the pattern used by other DK endpoints — pre-encoded
+// templateVars=209533,4529 (leagueId,subcatId); marketsQuery filters to subcat 4529 winner markets
+const DK_FUTURES_URL = DK_BASE + '/controldata/home/leagueSubcategory/v1/markets?isBatchable=false&templateVars=209533%2C4529&marketsQuery=%24filter%3DclientMetadata%2FsubCategoryId%20eq%20%274529%27%20AND%20tags%2Fall%28t%3A%20t%20ne%20%27SportcastBetBuilder%27%29&include=Markets&entity=markets';
 const RS_BASE    = 'https://web.realapp.com';
 const CACHE_TTL  = 30; // 30s — futures don't change rapidly
 
