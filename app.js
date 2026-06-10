@@ -6816,8 +6816,12 @@
                 if (mktHash) rsLink = ' <a href="https://www.realapp.com/' + mktHash + '" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--accent);font-size:10px;text-decoration:none" title="View on Real Sports">&#8599;</a>';
             }
             var amStr = sec.am > 0 ? '+' + sec.am : '' + sec.am;
-            // Section header row
-            html += '<tr style="border-top:2px solid var(--border)">' +
+            // Section header row with country-color gradient
+            var wfc = WC_FLAG_COLORS[sec.team];
+            var hdrGrad = wfc
+                ? 'background:linear-gradient(90deg,' + hexRgba(wfc.c1, 0.35) + ',' + hexRgba(wfc.c2, 0.15) + ',transparent)'
+                : 'background:var(--bg)';
+            html += '<tr style="border-top:2px solid var(--border);' + hdrGrad + '">' +
                 '<td colspan="7" style="padding:10px 12px 6px">' +
                     flagHtml +
                     '<span style="font-size:14px;font-weight:800">' + escHtml(sec.team) + '</span>' +
