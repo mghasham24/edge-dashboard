@@ -280,10 +280,10 @@ export async function onRequestGet(context) {
         probe('dk_league_info',    `${DK_BASE}/dkng/v1/leagues/${DK_LEAGUE_ID}`, dkHeaders),
         probe('dk_single_tv_markets', `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${DK_LEAGUE_ID}&marketsQuery=${mq}&include=Markets&entity=markets`, dkHeaders),
         probe('dk_single_tv_events',  `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${DK_LEAGUE_ID}&marketsQuery=${mq}&include=Events&entity=events`, dkHeaders),
-        probe('rs_soccer_day_0611', RS_BASE + '/home/soccer/day/2026-06-11?cohort=0', rsHeaders || {}),
-        probe('rs_soccer_day_0610', RS_BASE + '/home/soccer/day/2026-06-10?cohort=0', rsHeaders || {}),
-        probe('rs_soccer_idx217',   RS_BASE + '/home/soccer/217?cohort=0', rsHeaders || {}),
-        probe('rs_soccer_next_full',RS_BASE + '/home/soccer/next?cohort=0', rsHeaders || {}),
+        probe('rs_post_849138',      RS_BASE + '/posts/849138', rsHeaders || {}),
+        probe('rs_post_v2_849138',   RS_BASE + '/v2/posts/849138', rsHeaders || {}),
+        probe('rs_picks_849138',     RS_BASE + '/picks/849138', rsHeaders || {}),
+        probe('rs_pool_849138',      RS_BASE + '/pools/849138', rsHeaders || {}),
       ]);
       return new Response(JSON.stringify({ results }), { headers: { 'Content-Type': 'application/json' } });
     }
