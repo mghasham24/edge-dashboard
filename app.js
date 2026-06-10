@@ -6887,8 +6887,8 @@
                 }
                 mhtml += '</div>';
                 mhtml += '<div class="wc-fut-stats-row">' +
-                    '<span class="wfc-stat"><span class="wfc-stat-lbl">RS </span>' + s.rspPct + '</span>' +
-                    '<span class="wfc-stat"><span class="wfc-stat-lbl">DK Fair </span>' + s.dkfPct + '</span>' +
+                    '<span class="wfc-stat"><span class="wfc-stat-lbl">Real </span>' + s.rspPct + '</span>' +
+                    '<span class="wfc-stat"><span class="wfc-stat-lbl">FD Fair </span>' + s.dkfPct + '</span>' +
                     '<span class="wfc-stat" style="' + s.edgeColor + '"><span class="wfc-stat-lbl">Edge </span>' + s.edgeStr + '</span>' +
                     '<span class="wfc-stat" style="' + s.evColor + '"><span class="wfc-stat-lbl">EV </span>' + s.evStr + '</span>' +
                 '</div>';
