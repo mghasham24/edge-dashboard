@@ -1,3 +1,9 @@
 /api/*
   Cache-Control: no-store, no-cache
   Pragma: no-cache
+
+/app.js
+  Cache-Control: no-cache, must-revalidate
+
+/app.css
+  Cache-Control: no-cache, must-revalidate
