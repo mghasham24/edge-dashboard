@@ -6763,7 +6763,7 @@
             sectionMap[t.team].rows.push(t);
         });
 
-        function renderSideRow(t) {
+        function renderSideRow(t, grad) {
             var rspNum  = t.rsp    != null ? t.rsp    : null;
             var dkfNum  = t.dkFair != null ? t.dkFair : null;
             var edgeNum = t.edge   != null ? t.edge   : null;
@@ -6785,7 +6785,8 @@
             var isYes  = t.side === 'YES';
             var sideColor = isYes ? 'var(--green)' : '#e05c5c';
             var sideBadge = '<span style="font-family:var(--mono);font-size:10px;font-weight:800;color:' + sideColor + ';background:' + sideColor + '22;padding:2px 6px;border-radius:3px">' + escHtml(t.side || 'YES') + '</span>';
-            return '<tr style="background:var(--bg2)">' +
+            var rowBg = grad ? 'background:' + grad + ';background-color:var(--bg2)' : 'background:var(--bg2)';
+            return '<tr style="' + rowBg + '">' +
                 '<td style="padding-left:36px;font-size:11px;color:var(--muted)">' + sideBadge + '</td>' +
                 '<td class="r" style="font-family:var(--mono);font-weight:700">' + rspPct + '</td>' +
                 '<td class="r" style="font-family:var(--mono);opacity:0.6;font-size:11px">' + dkfPct + '</td>' +
@@ -6797,10 +6798,28 @@
         }
 
         var html = '';
-        sections.forEach(function(sec) {
+        var gradients = [
+            'linear-gradient(90deg,#1a2a3a 0%,transparent 60%)',
+            'linear-gradient(90deg,#1a1a2e 0%,transparent 60%)',
+            'linear-gradient(90deg,#1e2a1a 0%,transparent 60%)',
+            'linear-gradient(90deg,#2a1a2a 0%,transparent 60%)',
+            'linear-gradient(90deg,#2a2218 0%,transparent 60%)',
+            'linear-gradient(90deg,#1a2828 0%,transparent 60%)',
+            'linear-gradient(90deg,#28181e 0%,transparent 60%)',
+            'linear-gradient(90deg,#181e28 0%,transparent 60%)',
+            'linear-gradient(90deg,#221a18 0%,transparent 60%)',
+        ];
+        sections.forEach(function(sec, si) {
+            // YES first within each section
+            sec.rows.sort(function(a, b) {
+                if (a.side === 'YES' && b.side !== 'YES') return -1;
+                if (b.side === 'YES' && a.side !== 'YES') return 1;
+                return 0;
+            });
+            var grad = gradients[si % gradients.length];
             var cc = WC_FLAG_CC[sec.team] || '';
             var flagHtml = cc
-                ? '<img src="https://flagcdn.com/' + cc + '.svg" width="22" height="15" style="vertical-align:middle;margin-right:7px;border-radius:2px;object-fit:cover" onerror="this.style.display=\'none\'">'
+                ? '<img src="https://cdn.jsdelivr.net/npm/flag-icons@7.2.3/flags/4x3/' + cc + '.svg" width="22" height="15" style="vertical-align:middle;margin-right:7px;border-radius:2px;object-fit:cover" onerror="this.style.display=\'none\'">'
                 : '';
             var rsLink = '';
             if (sec.marketId) {
@@ -6810,7 +6829,7 @@
             }
             var amStr = sec.am > 0 ? '+' + sec.am : '' + sec.am;
             // Section header row
-            html += '<tr style="border-top:2px solid var(--border);background:var(--bg)">' +
+            html += '<tr style="border-top:2px solid var(--border);background:' + grad + '">' +
                 '<td colspan="7" style="padding:10px 12px 6px">' +
                     flagHtml +
                     '<span style="font-size:14px;font-weight:800">' + escHtml(sec.team) + '</span>' +
@@ -6819,7 +6838,7 @@
                 '</td>' +
             '</tr>';
             // YES / NO sub-rows
-            sec.rows.forEach(function(r) { html += renderSideRow(r); });
+            sec.rows.forEach(function(r) { html += renderSideRow(r, grad); });
         });
         tbody.innerHTML = html;
     }
