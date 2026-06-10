@@ -396,7 +396,7 @@ const DK_FUTURES_URL = buildDKUrl();
     for (let i = 0; i < rsScanResults.length; i++) {
       const r = rsScanResults[i];
       if (!r || !r.name) continue;
-      rsTeams[normTeam(r.name)] = { name: r.name, prob: r.prob };
+      rsTeams[normTeam(r.name)] = { name: r.name, prob: r.prob, marketId: r.marketId };
     }
 
     if (debugMode === '3') {
@@ -413,14 +413,14 @@ const DK_FUTURES_URL = buildDKUrl();
       const rs = rsTeams[normName] || null;
       if (hasRS && !rs) continue;
       const rsp = rs ? rs.prob : null;
-      // edge = dkFair - rsYes: positive means DK fair > RS cost → RS underprices → bet YES at RS
       result.push({
-        team:   dk.name,
-        rsName: rs ? rs.name : null,
-        am:     dk.am,
-        dkFair: Math.round(dk.dkFair * 1000) / 1000,
-        rsp:    rsp != null ? Math.round(rsp    * 1000) / 1000 : null,
-        edge:   rsp != null ? Math.round((dk.dkFair - rsp) * 1000) / 1000 : null,
+        team:     dk.name,
+        rsName:   rs ? rs.name : null,
+        marketId: rs ? rs.marketId : null,
+        am:       dk.am,
+        dkFair:   Math.round(dk.dkFair * 1000) / 1000,
+        rsp:      rsp != null ? Math.round(rsp * 1000) / 1000 : null,
+        edge:     rsp != null ? Math.round((dk.dkFair - rsp) * 1000) / 1000 : null,
       });
     }
 

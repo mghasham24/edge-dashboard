@@ -408,6 +408,28 @@
         'Zimbabwe':'🇿🇼',
     };
 
+    // ISO 3166-1 alpha-2 codes for flagcdn.com flag images (WC futures tab)
+    var WC_FLAG_CC = {
+        'Albania':'al','Algeria':'dz','Argentina':'ar','Australia':'au','Austria':'at',
+        'Belgium':'be','Bolivia':'bo','Bosnia':'ba','Bosnia and Herzegovina':'ba',
+        'Brazil':'br','Burkina Faso':'bf','Cameroon':'cm','Canada':'ca','Chile':'cl',
+        'Colombia':'co','Cape Verde':'cv','Costa Rica':'cr','Croatia':'hr','Cuba':'cu',
+        'Curacao':'cw','Curaçao':'cw','Czech Republic':'cz','Denmark':'dk',
+        'DR Congo':'cd','Ecuador':'ec','Egypt':'eg','England':'gb-eng','Finland':'fi',
+        'France':'fr','Germany':'de','Ghana':'gh','Guatemala':'gt','Haiti':'ht',
+        'Honduras':'hn','Hungary':'hu','Iraq':'iq','Iran':'ir','Ivory Coast':'ci',
+        "Cote d'Ivoire":'ci','Jamaica':'jm','Japan':'jp','Jordan':'jo','Mali':'ml',
+        'Mauritania':'mr','Mexico':'mx','Morocco':'ma','Netherlands':'nl',
+        'New Zealand':'nz','Nigeria':'ng','Norway':'no','Panama':'pa','Paraguay':'py',
+        'Peru':'pe','Poland':'pl','Portugal':'pt','Qatar':'qa','Romania':'ro',
+        'Saudi Arabia':'sa','Scotland':'gb-sct','Senegal':'sn','Serbia':'rs',
+        'Slovakia':'sk','Slovenia':'si','South Africa':'za','South Korea':'kr',
+        'Spain':'es','Sweden':'se','Switzerland':'ch','Tanzania':'tz','Tunisia':'tn',
+        'Turkey':'tr','Türkiye':'tr','Ukraine':'ua','Uruguay':'uy','USA':'us',
+        'United States':'us','Uzbekistan':'uz','Venezuela':'ve','Wales':'gb-wls',
+        'Zimbabwe':'zw',
+    };
+
     // Actual brand hex colors — keyed by DraftKings team name
     var TEAM_COLORS = {
         // NBA
@@ -6703,14 +6725,14 @@
         var statusEl = document.getElementById('wc-futures-status');
         var tbody    = document.getElementById('wc-futures-tbody');
         if (statusEl) statusEl.textContent = 'Loading futures...';
-        if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">Loading...</td></tr>';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:20px">Loading...</td></tr>';
 
         fetch('/api/fd/wc-futures', { credentials: 'same-origin' })
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (!data.ok || !data.teams || !data.teams.length) {
                 if (statusEl) statusEl.textContent = data.error || 'No futures data available';
-                if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">' + escHtml(data.error || 'No futures available') + '</td></tr>';
+                if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:20px">' + escHtml(data.error || 'No futures available') + '</td></tr>';
                 return;
             }
             renderWcFutures(data.teams, data.hasRS);
@@ -6721,26 +6743,53 @@
         })
         .catch(function(e) {
             if (statusEl) statusEl.textContent = 'Error loading futures';
-            if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">Error loading futures</td></tr>';
+            if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:20px">Error loading futures</td></tr>';
         });
     }
 
     function renderWcFutures(teams, hasRS) {
         var tbody = document.getElementById('wc-futures-tbody');
         if (!tbody) return;
+        var unitSize = parseFloat(localStorage.getItem('raxedge_unit_size') || '300') || 300;
         tbody.innerHTML = teams.map(function(t) {
-            var flag = WC_FLAG_EMOJI[t.team] || '';
-            var edgePct = t.edge != null ? Math.round(t.edge * 100) : null;
-            var rspPct  = t.rsp  != null ? Math.round(t.rsp  * 100) : null;
-            var dkfPct  = t.dkFair != null ? Math.round(t.dkFair * 100) : null;
-            var edgeColor = edgePct == null ? '' : edgePct > 0 ? 'color:var(--green)' : edgePct < 0 ? 'color:var(--red)' : '';
+            var cc = WC_FLAG_CC[t.team] || '';
+            var flagHtml = cc
+                ? '<img src="https://flagcdn.com/w20/' + cc + '.png" width="20" height="14" style="vertical-align:middle;margin-right:6px;border-radius:2px;object-fit:cover;flex-shrink:0" loading="lazy" onerror="this.style.display=\'none\'">'
+                : '';
+            var rsLink = '';
+            if (t.marketId) {
+                if (!window._hashids) window._hashids = new Hashids('routing', 11);
+                var mktHash = window._hashids.encode([4, 14, 0, t.marketId]);
+                if (mktHash) rsLink = ' <a href="https://www.realapp.com/' + mktHash + '" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--accent);font-size:10px;text-decoration:none;vertical-align:middle" title="View on Real Sports">&#8599;</a>';
+            }
+            var rspNum = t.rsp  != null ? t.rsp  : null;
+            var dkfNum = t.dkFair != null ? t.dkFair : null;
+            var edgeNum = t.edge != null ? t.edge : null;
+            var rspPct  = rspNum  != null ? (rspNum  * 100).toFixed(1) + '%' : '—';
+            var dkfPct  = dkfNum  != null ? (dkfNum  * 100).toFixed(1) + '%' : '—';
+            var edgeStr = edgeNum != null ? (edgeNum >= 0 ? '+' : '') + (edgeNum * 100).toFixed(1) + '%' : '—';
+            var edgeColor = edgeNum == null ? '' : edgeNum > 0 ? 'color:var(--green)' : 'color:var(--red)';
+            var ev = null;
+            if (rspNum > 0 && dkfNum != null) {
+                var rake = rsBaseTake(rspNum);
+                ev = (dkfNum / rspNum * (1 - rake) - 1) * 100;
+            }
+            var evStr   = ev != null ? (ev >= 0 ? '+' : '') + ev.toFixed(1) + '%' : '—';
+            var evColor = ev == null ? '' : ev > 0 ? 'color:var(--green)' : 'color:var(--red)';
             var amStr = t.am > 0 ? '+' + t.am : '' + t.am;
+            var u = (ev != null && rspNum != null) ? unitsEV(ev, rspNum) : 0;
+            var uStr    = u > 0 ? u + 'u' : '—';
+            var uColor  = u >= 2 ? 'color:var(--green)' : u > 0 ? 'color:var(--green)' : 'color:var(--muted)';
+            var betAmt  = u > 0 ? '$' + Math.round(u * unitSize) : '—';
             return '<tr>' +
-                '<td><span style="font-size:16px;margin-right:4px">' + (flag || '') + '</span>' + escHtml(t.team) + '</td>' +
-                '<td class="r">' + (rspPct != null ? '<b>' + rspPct + '%</b>' : '<span style="color:var(--muted)">—</span>') + '</td>' +
-                '<td class="r">' + escHtml(amStr) + '</td>' +
-                '<td class="r" style="opacity:0.6;font-size:11px">' + (dkfPct != null ? dkfPct + '%' : '—') + '</td>' +
-                '<td class="r" style="' + edgeColor + '">' + (edgePct != null ? (edgePct > 0 ? '+' : '') + edgePct + '%' : '—') + '</td>' +
+                '<td style="white-space:nowrap;display:flex;align-items:center;gap:2px">' + flagHtml + '<span style="font-size:13px;font-weight:700">' + escHtml(t.team) + '</span>' + rsLink + '</td>' +
+                '<td class="r" style="font-family:var(--mono);font-weight:700">' + rspPct + '</td>' +
+                '<td class="r" style="font-family:var(--mono)">' + escHtml(amStr) + '</td>' +
+                '<td class="r" style="font-family:var(--mono);opacity:0.6;font-size:11px">' + dkfPct + '</td>' +
+                '<td class="r" style="font-family:var(--mono);' + edgeColor + '">' + edgeStr + '</td>' +
+                '<td class="r" style="font-family:var(--mono);font-weight:800;' + evColor + '">' + evStr + '</td>' +
+                '<td class="r" style="font-family:var(--mono);font-weight:700;' + uColor + '">' + uStr + '</td>' +
+                '<td class="r" style="font-family:var(--mono);' + uColor + '">' + betAmt + '</td>' +
             '</tr>';
         }).join('');
     }
