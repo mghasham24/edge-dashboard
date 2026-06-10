@@ -314,15 +314,24 @@ const DK_FUTURES_URL = buildDKUrl();
       rsHeaders ? Promise.all(scanIds.map(fetchRSMarket)) : Promise.resolve([]),
     ]);
 
-    let dkRaw = null, dkErrText = null;
+    let dkRaw = null, dkErrText = null, dkJsonErr = null;
     const dkStatus = dkRes.ok ? 200 : (dkRes.status || 0);
-    try { if (dkRes.ok) dkRaw = await dkRes.json(); else dkErrText = await dkRes.text(); } catch(e) {}
+    try { if (dkRes.ok) dkRaw = await dkRes.json(); else dkErrText = (await dkRes.text()).slice(0, 200); }
+    catch(e) { dkJsonErr = String(e); }
 
     if (debugMode === '1') {
       const rsFound = rsScanResults.filter(Boolean);
+      // Also test single known market 5940 directly
+      let mkt5940 = null;
+      try {
+        const r = await fetch(RS_BASE + '/predictions/marketorder/5940/mode/buy', { headers: rsHeaders });
+        mkt5940 = { status: r.status, ok: r.ok };
+        if (r.ok) { const d = await r.json(); mkt5940.name = d.market && d.market.marketName; mkt5940.group = d.market && d.market.futuresGroupId; }
+      } catch(e) { mkt5940 = { err: String(e) }; }
       return new Response(JSON.stringify({
-        dkStatus, dkKeys: dkRaw ? Object.keys(dkRaw) : null,
+        dkStatus, dkKeys: dkRaw ? Object.keys(dkRaw) : null, dkJsonErr, dkErrText,
         rsFound: rsFound.length, rsSample: rsFound.slice(0, 3),
+        mkt5940,
         rsToken: rsToken ? rsToken.slice(0, 20) + '...' : null,
       }), { headers: { 'Content-Type': 'application/json' } });
     }
