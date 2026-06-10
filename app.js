@@ -6798,17 +6798,6 @@
         }
 
         var html = '';
-        var gradients = [
-            'linear-gradient(90deg,#1a2a3a 0%,transparent 60%)',
-            'linear-gradient(90deg,#1a1a2e 0%,transparent 60%)',
-            'linear-gradient(90deg,#1e2a1a 0%,transparent 60%)',
-            'linear-gradient(90deg,#2a1a2a 0%,transparent 60%)',
-            'linear-gradient(90deg,#2a2218 0%,transparent 60%)',
-            'linear-gradient(90deg,#1a2828 0%,transparent 60%)',
-            'linear-gradient(90deg,#28181e 0%,transparent 60%)',
-            'linear-gradient(90deg,#181e28 0%,transparent 60%)',
-            'linear-gradient(90deg,#221a18 0%,transparent 60%)',
-        ];
         sections.forEach(function(sec, si) {
             // YES first within each section
             sec.rows.sort(function(a, b) {
@@ -6816,7 +6805,7 @@
                 if (b.side === 'YES' && a.side !== 'YES') return 1;
                 return 0;
             });
-            var grad = gradients[si % gradients.length];
+            var grad = null;
             var cc = WC_FLAG_CC[sec.team] || '';
             var flagHtml = cc
                 ? '<img src="https://cdn.jsdelivr.net/npm/flag-icons@7.2.3/flags/4x3/' + cc + '.svg" width="22" height="15" style="vertical-align:middle;margin-right:7px;border-radius:2px;object-fit:cover" onerror="this.style.display=\'none\'">'
