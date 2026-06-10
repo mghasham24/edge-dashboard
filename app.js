@@ -6785,8 +6785,7 @@
             var isYes  = t.side === 'YES';
             var sideColor = isYes ? 'var(--green)' : '#e05c5c';
             var sideBadge = '<span style="font-family:var(--mono);font-size:10px;font-weight:800;color:' + sideColor + ';background:' + sideColor + '22;padding:2px 6px;border-radius:3px">' + escHtml(t.side || 'YES') + '</span>';
-            var rowBg = grad ? 'background:' + grad + ';background-color:var(--bg2)' : 'background:var(--bg2)';
-            return '<tr style="' + rowBg + '">' +
+            return '<tr>' +
                 '<td style="padding-left:36px;font-size:11px;color:var(--muted)">' + sideBadge + '</td>' +
                 '<td class="r" style="font-family:var(--mono);font-weight:700">' + rspPct + '</td>' +
                 '<td class="r" style="font-family:var(--mono);opacity:0.6;font-size:11px">' + dkfPct + '</td>' +
@@ -6818,7 +6817,7 @@
             }
             var amStr = sec.am > 0 ? '+' + sec.am : '' + sec.am;
             // Section header row
-            html += '<tr style="border-top:2px solid var(--border);background:' + grad + '">' +
+            html += '<tr style="border-top:2px solid var(--border)">' +
                 '<td colspan="7" style="padding:10px 12px 6px">' +
                     flagHtml +
                     '<span style="font-size:14px;font-weight:800">' + escHtml(sec.team) + '</span>' +
