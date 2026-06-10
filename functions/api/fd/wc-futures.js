@@ -310,9 +310,17 @@ const DK_FUTURES_URL = buildDKUrl();
       } catch(e) { return null; }
     }
 
+    function delay(ms, val) { return new Promise(function(r) { setTimeout(function() { r(val); }, ms); }); }
+
     const [dkRes, rsScanResults] = await Promise.all([
-      fetch(DK_FUTURES_URL, { headers: dkHeaders }).catch(function(e) { return { ok: false, _err: e.message }; }),
-      rsHeaders ? Promise.all(scanIds.map(fetchRSMarket)) : Promise.resolve([]),
+      Promise.race([
+        fetch(DK_FUTURES_URL, { headers: dkHeaders }).catch(function(e) { return { ok: false, _err: e.message }; }),
+        delay(8000, { ok: false, _err: 'dk_timeout' }),
+      ]),
+      Promise.race([
+        rsHeaders ? Promise.all(scanIds.map(fetchRSMarket)) : Promise.resolve([]),
+        delay(6000, []),
+      ]),
     ]);
 
     let dkRaw = null, dkErrText = null, dkJsonErr = null;
