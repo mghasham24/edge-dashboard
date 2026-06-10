@@ -234,13 +234,18 @@ function fail(status, msg) {
   return new Response(JSON.stringify({ ok: false, error: msg }), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
-function timedFetch(url, opts, ms) {
-  return Promise.race([
-    fetch(url, opts).catch(function(e) { return { ok: false, _err: e.message }; }),
-    new Promise(function(resolve) {
-      setTimeout(function() { resolve({ ok: false, _err: 'timeout' }); }, ms);
-    }),
-  ]);
+async function timedFetch(url, opts, ms) {
+  let timer;
+  const controller = new AbortController();
+  timer = setTimeout(function() { controller.abort(); }, ms);
+  try {
+    const r = await fetch(url, Object.assign({}, opts, { signal: controller.signal }));
+    clearTimeout(timer);
+    return r;
+  } catch(e) {
+    clearTimeout(timer);
+    return { ok: false, _err: e.message };
+  }
 }
 
 export async function onRequestGet(context) {
