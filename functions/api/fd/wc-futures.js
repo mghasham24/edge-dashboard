@@ -330,21 +330,20 @@ export async function onRequestGet(context) {
     }
 
     if (debugMode === '6') {
-      const probeShort = async function(url) {
-        try {
-          const r = await fetch(url, { headers: rsHeaders || {} });
-          const txt = await r.text();
-          return { status: r.status, body: txt.slice(0, 1500) };
-        } catch(e) { return { status: 0, err: e.message }; }
-      };
-      const [poll, preds, picks, options, stats] = await Promise.all([
-        probeShort(RS_BASE + '/polls/356009'),
-        probeShort(RS_BASE + '/polls/356009/predictions'),
-        probeShort(RS_BASE + '/polls/356009/picks'),
-        probeShort(RS_BASE + '/polls/356009/options'),
-        probeShort(RS_BASE + '/polls/356009/stats'),
-      ]);
-      return new Response(JSON.stringify({ poll, preds, picks, options, stats }),
+      // Get full futuresgroup/5/mode/buy response to understand team structure
+      let raw = null, status = 0;
+      try {
+        const r = await fetch(RS_BASE + '/predictions/futuresgroup/5/mode/buy', { headers: rsHeaders || {} });
+        status = r.status;
+        if (r.ok) raw = await r.json(); else raw = await r.text();
+      } catch(e) { raw = String(e); }
+      // Also try mktorder/5940 full response
+      let mkt = null;
+      try {
+        const r = await fetch(RS_BASE + '/predictions/marketorder/5940/mode/buy', { headers: rsHeaders || {} });
+        if (r.ok) { const d = await r.json(); mkt = { keys: Object.keys(d), market_keys: d.market ? Object.keys(d.market) : null, outcomes_count: d.market && d.market.outcomes ? d.market.outcomes.length : null, first_outcome: d.market && d.market.outcomes ? d.market.outcomes[0] : null, label: d.market && d.market.label, full: JSON.stringify(d).slice(0, 2000) }; }
+      } catch(e) {}
+      return new Response(JSON.stringify({ futuresgroup: { status, keys: raw && typeof raw === 'object' ? Object.keys(raw) : null, raw: typeof raw === 'string' ? raw.slice(0, 500) : JSON.stringify(raw).slice(0, 2000) }, mkt }),
         { headers: { 'Content-Type': 'application/json' } });
     }
 
