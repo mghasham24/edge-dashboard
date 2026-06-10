@@ -5392,6 +5392,18 @@
                 }
             }
         }
+
+        // Init WC sub-nav visibility on page load (click handlers cover tab switches,
+        // but buildTabs() is also called on initial load when currentSport may already be soccer_wc)
+        var wcNav = document.getElementById('wc-sub-nav');
+        if (wcNav) {
+            if (currentSport === 'soccer_wc') {
+                buildWcSubNav();
+                wcNav.style.display = 'flex';
+            } else {
+                wcNav.style.display = 'none';
+            }
+        }
     }
 
     function parseGames(games) {
