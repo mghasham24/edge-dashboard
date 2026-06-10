@@ -234,6 +234,15 @@ function fail(status, msg) {
   return new Response(JSON.stringify({ ok: false, error: msg }), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
+function timedFetch(url, opts, ms) {
+  return Promise.race([
+    fetch(url, opts).catch(function(e) { return { ok: false, _err: e.message }; }),
+    new Promise(function(resolve) {
+      setTimeout(function() { resolve({ ok: false, _err: 'timeout' }); }, ms);
+    }),
+  ]);
+}
+
 export async function onRequestGet(context) {
   const { request, env } = context;
   try {
@@ -297,9 +306,9 @@ const DK_FUTURES_URL = buildDKUrl();
     for (let i = 5880; i <= 5970; i++) scanIds.push(i);
 
     async function fetchRSMarket(id) {
+      const r = await timedFetch(RS_BASE + '/predictions/marketorder/' + id + '/mode/buy', { headers: rsHeaders }, 2500);
+      if (!r.ok) return null;
       try {
-        const r = await fetch(RS_BASE + '/predictions/marketorder/' + id + '/mode/buy', { headers: rsHeaders });
-        if (!r.ok) return null;
         const d = await r.json();
         const m = d && d.market;
         if (!m || m.futuresGroupId !== RS_FUTURES_GROUP) return null;
@@ -310,7 +319,7 @@ const DK_FUTURES_URL = buildDKUrl();
     }
 
     const [dkRes, rsScanResults] = await Promise.all([
-      fetch(DK_FUTURES_URL, { headers: dkHeaders }).catch(function(e) { return { ok: false, _err: e.message }; }),
+      timedFetch(DK_FUTURES_URL, { headers: dkHeaders }, 8000),
       rsHeaders ? Promise.all(scanIds.map(fetchRSMarket)) : Promise.resolve([]),
     ]);
 
@@ -321,17 +330,11 @@ const DK_FUTURES_URL = buildDKUrl();
 
     if (debugMode === '1') {
       const rsFound = rsScanResults.filter(Boolean);
-      // Also test single known market 5940 directly
-      let mkt5940 = null;
-      try {
-        const r = await fetch(RS_BASE + '/predictions/marketorder/5940/mode/buy', { headers: rsHeaders });
-        mkt5940 = { status: r.status, ok: r.ok };
-        if (r.ok) { const d = await r.json(); mkt5940.name = d.market && d.market.marketName; mkt5940.group = d.market && d.market.futuresGroupId; }
-      } catch(e) { mkt5940 = { err: String(e) }; }
+      const mkt5940inScan = rsScanResults[5940 - 5880]; // index of 5940 in scan
       return new Response(JSON.stringify({
         dkStatus, dkKeys: dkRaw ? Object.keys(dkRaw) : null, dkJsonErr, dkErrText,
         rsFound: rsFound.length, rsSample: rsFound.slice(0, 3),
-        mkt5940,
+        mkt5940inScan: mkt5940inScan || null,
         rsToken: rsToken ? rsToken.slice(0, 20) + '...' : null,
       }), { headers: { 'Content-Type': 'application/json' } });
     }
