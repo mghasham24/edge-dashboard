@@ -6,16 +6,21 @@ import { hashidsEncode } from '../../_lib/hashids.js';
 // RS: /home/soccer/futures or /home/soccer/specials
 
 const DK_BASE = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
-// OData-style URL matching the pattern used by other DK endpoints — pre-encoded
-// templateVars=209533,4529 (leagueId,subcatId); marketsQuery filters to subcat 4529 winner markets
 const DK_FUTURES_URL = DK_BASE + '/controldata/home/leagueSubcategory/v1/markets?isBatchable=false&templateVars=209533%2C4529&marketsQuery=%24filter%3DclientMetadata%2FsubCategoryId%20eq%20%274529%27%20AND%20tags%2Fall%28t%3A%20t%20ne%20%27SportcastBetBuilder%27%29&include=Markets&entity=markets';
-const RS_BASE    = 'https://web.realapp.com';
-const CACHE_TTL  = 30; // 30s — futures don't change rapidly
+const RS_BASE   = 'https://web.realapp.com';
+const CACHE_TTL = 30;
 
 function parseAmerican(str) {
   if (!str) return null;
-  const s = String(str).replace(/−/g, '-').replace(/[^0-9+\-]/g, '');
-  const n = parseInt(s, 10);
+  // Replace unicode minus (U+2212) and strip non-numeric chars
+  let s = String(str);
+  s = s.split('\u2212').join('-');
+  let out = '';
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if ((c >= '0' && c <= '9') || c === '+' || c === '-') out += c;
+  }
+  const n = parseInt(out, 10);
   return isFinite(n) ? n : null;
 }
 
@@ -41,7 +46,6 @@ function buildRSHeaders(token, deviceUuid) {
   };
 }
 
-// Module-level RS auth cache
 let _rsToken = '';
 let _rsDevice = '2e0a38e2-0ee8-4f93-9a34-218ac1d10161';
 let _rsTokenAt = 0;
@@ -55,7 +59,7 @@ async function getRSAuth(env) {
   if (!token) {
     try {
       const row = await env.DB.prepare("SELECT data FROM odds_cache WHERE cache_key='meta:rs_auth_token'").first();
-      if (row?.data) {
+      if (row && row.data) {
         const p = JSON.parse(row.data);
         if (p.token) { token = p.token; deviceUuid = p.deviceUuid || deviceUuid; }
       }
@@ -65,48 +69,60 @@ async function getRSAuth(env) {
   return { token, deviceUuid };
 }
 
-// Normalize team names to match between DK and RS
 function normTeam(name) {
-  return (name || '')
-    .toLowerCase()
-    .replace(/^(the |fc |cf |sc |rc |ac |afc |bfc )/i, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  if (!name) return '';
+  let s = name.toLowerCase().trim();
+  const prefixes = ['the ', 'fc ', 'cf ', 'sc ', 'rc ', 'ac ', 'afc ', 'bfc '];
+  for (let i = 0; i < prefixes.length; i++) {
+    if (s.startsWith(prefixes[i])) { s = s.slice(prefixes[i].length); break; }
+  }
+  return s.replace(/\s+/g, ' ').trim();
 }
 
-// Try to extract RS futures markets from a response body
+function extractTeamFromLabel(label) {
+  let s = label;
+  const idx = s.toLowerCase().indexOf(' win');
+  if (idx > 0) s = s.slice(0, idx);
+  const idx2 = s.toLowerCase().indexOf(' to ');
+  if (idx2 > 0) s = s.slice(0, idx2);
+  const wIdx = s.toLowerCase().indexOf('will ');
+  if (wIdx >= 0) s = s.slice(wIdx + 5);
+  return s.trim();
+}
+
 function extractRSFutures(data) {
-  // Handle /home/soccer/futures or similar — look for binary Yes/No markets
   const teams = {};
 
   function tryMarkets(markets) {
     if (!Array.isArray(markets)) return;
-    for (const m of markets) {
-      // Market label might be "Will France win the World Cup?" or "France to win"
-      const label = (m.label || m.name || m.title || '').toLowerCase();
-      if (!label.includes('world cup') && !label.includes('wc') && !label.includes('winner') && !label.includes('win the') && !label.includes('outright')) continue;
+    for (let mi = 0; mi < markets.length; mi++) {
+      const m = markets[mi];
+      const labelLc = (m.label || m.name || m.title || '').toLowerCase();
+      const isWCMkt = labelLc.indexOf('world cup') >= 0 || labelLc.indexOf(' wc') >= 0
+        || labelLc.indexOf('winner') >= 0 || labelLc.indexOf('win the') >= 0
+        || labelLc.indexOf('outright') >= 0;
+      if (!isWCMkt) continue;
+
       const outcomes = m.outcomes || m.options || [];
-      // Find the YES outcome probability
-      for (const o of outcomes) {
-        const oLabel = (o.label || o.key || '').toLowerCase();
-        if (oLabel === 'yes' || oLabel === 'win') {
-          const prob = o.probability ?? o.prob ?? null;
+
+      // Binary YES market -- find YES outcome
+      for (let oi = 0; oi < outcomes.length; oi++) {
+        const o = outcomes[oi];
+        const oLabelLc = (o.label || o.key || '').toLowerCase();
+        if (oLabelLc === 'yes' || oLabelLc === 'win') {
+          const prob = o.probability != null ? o.probability : o.prob;
           if (prob != null) {
-            // Extract team name from market label
-            let team = (m.label || m.name || '')
-              .replace(/will\s+/i, '')
-              .replace(/\s+win\s+the\s+world\s+cup.*$/i, '')
-              .replace(/\s+to\s+win.*$/i, '')
-              .replace(/\s+outright.*$/i, '')
-              .trim();
+            const team = extractTeamFromLabel(m.label || m.name || '');
             if (team) teams[normTeam(team)] = { name: team, prob: parseFloat(prob) };
           }
         }
       }
-      // Also handle if each outcome IS a team (multi-outcome market)
+
+      // Multi-outcome market -- each outcome is a team
       if (outcomes.length > 2) {
-        for (const o of outcomes) {
-          const prob = o.probability ?? o.prob ?? null;
+        for (let oi = 0; oi < outcomes.length; oi++) {
+          const o = outcomes[oi];
+          const prob = o.probability != null ? o.probability : o.prob;
           if (prob != null) {
             const team = o.label || o.name || '';
             if (team) teams[normTeam(team)] = { name: team, prob: parseFloat(prob) };
@@ -116,21 +132,20 @@ function extractRSFutures(data) {
     }
   }
 
-  // Try various shapes of RS response
   tryMarkets(data.markets);
-  tryMarkets(data.data?.markets);
-  tryMarkets(data.content?.markets);
+  if (data.data) tryMarkets(data.data.markets);
+  if (data.content) tryMarkets(data.content.markets);
 
-  // Also check predictions array
-  const predictions = data.predictions || data.data?.predictions || [];
+  const predictions = data.predictions || (data.data && data.data.predictions) || [];
   if (Array.isArray(predictions)) {
-    for (const p of predictions) {
+    for (let pi = 0; pi < predictions.length; pi++) {
+      const p = predictions[pi];
       tryMarkets(p.markets || []);
-      // Some RS responses embed markets in game objects
       if (p.market) {
         const outcomes = p.market.outcomes || [];
-        for (const o of outcomes) {
-          const prob = o.probability ?? null;
+        for (let oi = 0; oi < outcomes.length; oi++) {
+          const o = outcomes[oi];
+          const prob = o.probability != null ? o.probability : null;
           const teamName = o.label || p.teamName || p.name || '';
           if (prob != null && teamName) {
             teams[normTeam(teamName)] = { name: teamName, prob: parseFloat(prob) };
@@ -177,23 +192,26 @@ export async function onRequestGet(context) {
   const { token: rsToken, deviceUuid: rsDevice } = await getRSAuth(env);
   const rsHeaders = rsToken ? buildRSHeaders(rsToken, rsDevice) : null;
 
-  // Fetch DK futures + RS futures in parallel
   const [dkRes, rsFuturesRes, rsSpecialsRes] = await Promise.all([
-    fetch(DK_FUTURES_URL, { headers: dkHeaders }).catch(e => ({ ok: false, _err: e.message })),
-    rsHeaders ? fetch(`${RS_BASE}/home/soccer/futures`, { headers: rsHeaders }).catch(e => ({ ok: false, _err: e.message })) : Promise.resolve(null),
-    rsHeaders ? fetch(`${RS_BASE}/home/soccer/specials`, { headers: rsHeaders }).catch(e => ({ ok: false, _err: e.message })) : Promise.resolve(null),
+    fetch(DK_FUTURES_URL, { headers: dkHeaders }).catch(function(e) { return { ok: false, _err: e.message }; }),
+    rsHeaders ? fetch(RS_BASE + '/home/soccer/futures', { headers: rsHeaders }).catch(function(e) { return { ok: false, _err: e.message }; }) : Promise.resolve(null),
+    rsHeaders ? fetch(RS_BASE + '/home/soccer/specials', { headers: rsHeaders }).catch(function(e) { return { ok: false, _err: e.message }; }) : Promise.resolve(null),
   ]);
 
-  // Parse DK
   let dkRaw = null;
-  let dkStatus = dkRes.ok ? 200 : (dkRes.status || 0);
+  const dkStatus = dkRes.ok ? 200 : (dkRes.status || 0);
   try { if (dkRes.ok) dkRaw = await dkRes.json(); } catch(e) {}
 
-  // Parse RS candidates
   let rsFuturesRaw = null, rsSpecialsRaw = null;
   let rsFuturesStatus = 0, rsSpecialsStatus = 0;
-  try { if (rsFuturesRes?.ok) { rsFuturesRaw = await rsFuturesRes.json(); rsFuturesStatus = 200; } else if (rsFuturesRes) { rsFuturesStatus = rsFuturesRes.status || 0; } } catch(e) {}
-  try { if (rsSpecialsRes?.ok) { rsSpecialsRaw = await rsSpecialsRes.json(); rsSpecialsStatus = 200; } else if (rsSpecialsRes) { rsSpecialsStatus = rsSpecialsRes.status || 0; } } catch(e) {}
+  try {
+    if (rsFuturesRes && rsFuturesRes.ok) { rsFuturesRaw = await rsFuturesRes.json(); rsFuturesStatus = 200; }
+    else if (rsFuturesRes) { rsFuturesStatus = rsFuturesRes.status || 0; }
+  } catch(e) {}
+  try {
+    if (rsSpecialsRes && rsSpecialsRes.ok) { rsSpecialsRaw = await rsSpecialsRes.json(); rsSpecialsStatus = 200; }
+    else if (rsSpecialsRes) { rsSpecialsStatus = rsSpecialsRes.status || 0; }
+  } catch(e) {}
 
   if (debugMode === '1') {
     return new Response(JSON.stringify({
@@ -205,77 +223,69 @@ export async function onRequestGet(context) {
   }
 
   if (debugMode === '2') {
-    return new Response(JSON.stringify({
-      dk: dkRaw,
-      rsFutures: rsFuturesRaw,
-      rsSpecials: rsSpecialsRaw,
-    }), { headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ dk: dkRaw, rsFutures: rsFuturesRaw, rsSpecials: rsSpecialsRaw }),
+      { headers: { 'Content-Type': 'application/json' } });
   }
 
-  if (!dkRaw) {
-    return fail(502, `DK fetch failed (status ${dkStatus})`);
-  }
+  if (!dkRaw) return fail(502, 'DK fetch failed (status ' + dkStatus + ')');
 
   // Parse DK selections
-  // DK leagueSubcategory response has markets[] + selections[] at top level
   const dkTeams = {};
   const selections = dkRaw.selections || [];
   const markets    = dkRaw.markets    || [];
 
-  // Find the "World Cup Winner" market
-  const winnerMarket = markets.find(m => {
+  const winnerMarket = markets.find(function(m) {
     const n = (m.name || m.marketName || '').toLowerCase();
-    return n.includes('winner') || n.includes('outright') || n.includes('to win');
+    return n.indexOf('winner') >= 0 || n.indexOf('outright') >= 0 || n.indexOf('to win') >= 0;
   }) || markets[0];
 
-  for (const sel of selections) {
+  for (let si = 0; si < selections.length; si++) {
+    const sel = selections[si];
     const marketId = sel.marketId || sel.providerMarketId;
-    // Filter to winner market only (if we found it)
-    if (winnerMarket && marketId && marketId !== (winnerMarket.marketId || winnerMarket.providerMarketId || winnerMarket.id)) {
-      // Some DK responses have single market — skip filter if only 1 market
-      if (markets.length > 1) continue;
+    if (winnerMarket && marketId && markets.length > 1) {
+      const wmId = winnerMarket.marketId || winnerMarket.providerMarketId || winnerMarket.id;
+      if (marketId !== wmId) continue;
     }
     const label = sel.label || sel.participantName || sel.displayName || '';
-    const am    = parseAmerican(sel.displayOdds?.american || sel.trueOdds?.american);
-    if (label && am != null) {
-      dkTeams[normTeam(label)] = { name: label, am };
-    }
+    const odds  = (sel.displayOdds && sel.displayOdds.american) || (sel.trueOdds && sel.trueOdds.american) || null;
+    const am    = parseAmerican(odds);
+    if (label && am != null) dkTeams[normTeam(label)] = { name: label, am };
   }
 
-  // If no selections, try outcomes in markets
-  if (!Object.keys(dkTeams).length) {
-    for (const m of markets) {
-      for (const o of (m.outcomes || m.selections || [])) {
+  if (Object.keys(dkTeams).length === 0) {
+    for (let mi = 0; mi < markets.length; mi++) {
+      const m = markets[mi];
+      const opts = m.outcomes || m.selections || [];
+      for (let oi = 0; oi < opts.length; oi++) {
+        const o = opts[oi];
         const label = o.label || o.participantName || '';
-        const am    = parseAmerican(o.displayOdds?.american || o.trueOdds?.american || o.oddsAmerican);
-        if (label && am != null) {
-          dkTeams[normTeam(label)] = { name: label, am };
-        }
+        const odds  = (o.displayOdds && o.displayOdds.american) || (o.trueOdds && o.trueOdds.american) || o.oddsAmerican || null;
+        const am    = parseAmerican(odds);
+        if (label && am != null) dkTeams[normTeam(label)] = { name: label, am };
       }
     }
   }
 
-  // Parse RS teams from whichever endpoint worked
   let rsTeams = {};
   if (rsFuturesRaw) rsTeams = extractRSFutures(rsFuturesRaw);
-  if (!Object.keys(rsTeams).length && rsSpecialsRaw) rsTeams = extractRSFutures(rsSpecialsRaw);
+  if (Object.keys(rsTeams).length === 0 && rsSpecialsRaw) rsTeams = extractRSFutures(rsSpecialsRaw);
 
   if (debugMode === '3') {
-    return new Response(JSON.stringify({ dkTeams, rsTeams, dkCount: Object.keys(dkTeams).length, rsCount: Object.keys(rsTeams).length }), {
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return new Response(JSON.stringify({ dkTeams, rsTeams, dkCount: Object.keys(dkTeams).length, rsCount: Object.keys(rsTeams).length }),
+      { headers: { 'Content-Type': 'application/json' } });
   }
 
-  // Build result — only include teams present in BOTH DK and RS
-  // (or all DK teams if RS returned nothing, with null RS prob)
   const result = [];
   const hasRS  = Object.keys(rsTeams).length > 0;
 
-  for (const [normName, dk] of Object.entries(dkTeams)) {
+  const dkEntries = Object.entries(dkTeams);
+  for (let di = 0; di < dkEntries.length; di++) {
+    const normName = dkEntries[di][0];
+    const dk       = dkEntries[di][1];
     const rs = rsTeams[normName] || null;
-    if (hasRS && !rs) continue; // only show teams in RS markets
-    const dkFair  = americanToProb(dk.am);
-    const rsp     = rs ? rs.prob : null;
+    if (hasRS && !rs) continue;
+    const dkFair = americanToProb(dk.am);
+    const rsp    = rs ? rs.prob : null;
     result.push({
       team:   dk.name,
       rsName: rs ? rs.name : null,
@@ -286,8 +296,11 @@ export async function onRequestGet(context) {
     });
   }
 
-  // Sort by RS prob descending (best RS markets first)
-  result.sort((a, b) => (b.rsp ?? b.dkFair ?? 0) - (a.rsp ?? a.dkFair ?? 0));
+  result.sort(function(a, b) {
+    const bv = b.rsp != null ? b.rsp : (b.dkFair != null ? b.dkFair : 0);
+    const av = a.rsp != null ? a.rsp : (a.dkFair != null ? a.dkFair : 0);
+    return bv - av;
+  });
 
   const body = JSON.stringify({ ok: true, teams: result, hasRS, updatedAt: now });
   try {
