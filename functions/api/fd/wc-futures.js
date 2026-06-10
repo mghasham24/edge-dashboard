@@ -280,10 +280,10 @@ export async function onRequestGet(context) {
         probe('dk_league_info',    `${DK_BASE}/dkng/v1/leagues/${DK_LEAGUE_ID}`, dkHeaders),
         probe('dk_single_tv_markets', `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${DK_LEAGUE_ID}&marketsQuery=${mq}&include=Markets&entity=markets`, dkHeaders),
         probe('dk_single_tv_events',  `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${DK_LEAGUE_ID}&marketsQuery=${mq}&include=Events&entity=events`, dkHeaders),
-        probe('rs_post_849138',      RS_BASE + '/posts/849138', rsHeaders || {}),
-        probe('rs_post_v2_849138',   RS_BASE + '/v2/posts/849138', rsHeaders || {}),
-        probe('rs_picks_849138',     RS_BASE + '/picks/849138', rsHeaders || {}),
-        probe('rs_pool_849138',      RS_BASE + '/pools/849138', rsHeaders || {}),
+        probe('rs_poll_356009',      RS_BASE + '/polls/356009', rsHeaders || {}),
+        probe('rs_poll_v2_356009',   RS_BASE + '/v2/polls/356009', rsHeaders || {}),
+        probe('rs_pollresults',      RS_BASE + '/polls/356009/results', rsHeaders || {}),
+        probe('rs_pollentries',      RS_BASE + '/polls/356009/entries', rsHeaders || {}),
       ]);
       return new Response(JSON.stringify({ results }), { headers: { 'Content-Type': 'application/json' } });
     }
