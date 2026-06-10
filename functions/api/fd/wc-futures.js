@@ -306,8 +306,9 @@ const DK_FUTURES_URL = buildDKUrl();
         const m = d && d.market;
         if (!m || m.futuresGroupId !== RS_FUTURES_GROUP) return null;
         const yes = m.outcomes && m.outcomes.find(function(o) { return o.key === 'Yes'; });
+        const no  = m.outcomes && m.outcomes.find(function(o) { return o.key === 'No'; });
         if (!yes) return null;
-        return { name: m.marketName || '', prob: yes.probability, marketId: id };
+        return { name: m.marketName || '', probYes: yes.probability, probNo: no ? no.probability : null, marketId: id };
       } catch(e) { return null; }
     }
 
@@ -396,7 +397,7 @@ const DK_FUTURES_URL = buildDKUrl();
     for (let i = 0; i < rsScanResults.length; i++) {
       const r = rsScanResults[i];
       if (!r || !r.name) continue;
-      rsTeams[normTeam(r.name)] = { name: r.name, prob: r.prob, marketId: r.marketId };
+      rsTeams[normTeam(r.name)] = { name: r.name, probYes: r.probYes, probNo: r.probNo, marketId: r.marketId };
     }
 
     if (debugMode === '3') {
@@ -412,22 +413,33 @@ const DK_FUTURES_URL = buildDKUrl();
       const dk       = dkEntries[di][1];
       const rs = rsTeams[normName] || null;
       if (hasRS && !rs) continue;
-      const rsp = rs ? rs.prob : null;
+      const rspYes = rs ? rs.probYes : null;
+      const rspNo  = rs ? rs.probNo  : null;
+      const dkf    = dk.dkFair;
+      // YES row
       result.push({
-        team:     dk.name,
-        rsName:   rs ? rs.name : null,
-        marketId: rs ? rs.marketId : null,
-        am:       dk.am,
-        dkFair:   Math.round(dk.dkFair * 1000) / 1000,
-        rsp:      rsp != null ? Math.round(rsp * 1000) / 1000 : null,
-        edge:     rsp != null ? Math.round((dk.dkFair - rsp) * 1000) / 1000 : null,
+        team: dk.name, side: 'YES', marketId: rs ? rs.marketId : null, am: dk.am,
+        dkFair: Math.round(dkf * 1000) / 1000,
+        rsp:    rspYes != null ? Math.round(rspYes * 1000) / 1000 : null,
+        edge:   rspYes != null ? Math.round((dkf - rspYes) * 1000) / 1000 : null,
       });
+      // NO row — dkFair for NO = 1 - dkFair for YES
+      if (rspNo != null) {
+        const dkfNo = 1 - dkf;
+        result.push({
+          team: dk.name, side: 'NO', marketId: rs ? rs.marketId : null, am: dk.am,
+          dkFair: Math.round(dkfNo * 1000) / 1000,
+          rsp:    Math.round(rspNo * 1000) / 1000,
+          edge:   Math.round((dkfNo - rspNo) * 1000) / 1000,
+        });
+      }
     }
 
+    // Sort by edge descending — positive EV (NO bets on overpriced favorites) float to top
     result.sort(function(a, b) {
-      const bv = b.rsp != null ? b.rsp : (b.dkFair != null ? b.dkFair : 0);
-      const av = a.rsp != null ? a.rsp : (a.dkFair != null ? a.dkFair : 0);
-      return bv - av;
+      const be = b.edge != null ? b.edge : -99;
+      const ae = a.edge != null ? a.edge : -99;
+      return be - ae;
     });
 
     const body = JSON.stringify({ ok: true, teams: result, hasRS, updatedAt: now });

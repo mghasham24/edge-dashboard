@@ -6725,14 +6725,14 @@
         var statusEl = document.getElementById('wc-futures-status');
         var tbody    = document.getElementById('wc-futures-tbody');
         if (statusEl) statusEl.textContent = 'Loading futures...';
-        if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:20px">Loading...</td></tr>';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:20px">Loading...</td></tr>';
 
         fetch('/api/fd/wc-futures', { credentials: 'same-origin' })
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (!data.ok || !data.teams || !data.teams.length) {
                 if (statusEl) statusEl.textContent = data.error || 'No futures data available';
-                if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:20px">' + escHtml(data.error || 'No futures available') + '</td></tr>';
+                if (tbody) tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:20px">' + escHtml(data.error || 'No futures available') + '</td></tr>';
                 return;
             }
             renderWcFutures(data.teams, data.hasRS);
@@ -6743,7 +6743,7 @@
         })
         .catch(function(e) {
             if (statusEl) statusEl.textContent = 'Error loading futures';
-            if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:20px">Error loading futures</td></tr>';
+            if (tbody) tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:20px">Error loading futures</td></tr>';
         });
     }
 
@@ -6781,8 +6781,11 @@
             var uStr    = u > 0 ? u + 'u' : '—';
             var uColor  = u >= 2 ? 'color:var(--green)' : u > 0 ? 'color:var(--green)' : 'color:var(--muted)';
             var betAmt  = u > 0 ? '$' + Math.round(u * unitSize) : '—';
+            var sideColor = t.side === 'YES' ? 'var(--green)' : 'var(--red)';
+            var sideBadge = '<span style="font-family:var(--mono);font-size:10px;font-weight:800;color:' + sideColor + ';background:' + sideColor + '22;padding:2px 5px;border-radius:3px">' + escHtml(t.side || 'YES') + '</span>';
             return '<tr>' +
-                '<td style="white-space:nowrap;display:flex;align-items:center;gap:2px">' + flagHtml + '<span style="font-size:13px;font-weight:700">' + escHtml(t.team) + '</span>' + rsLink + '</td>' +
+                '<td style="white-space:nowrap">' + flagHtml + '<span style="font-size:13px;font-weight:700">' + escHtml(t.team) + '</span>' + rsLink + '</td>' +
+                '<td class="r">' + sideBadge + '</td>' +
                 '<td class="r" style="font-family:var(--mono);font-weight:700">' + rspPct + '</td>' +
                 '<td class="r" style="font-family:var(--mono)">' + escHtml(amStr) + '</td>' +
                 '<td class="r" style="font-family:var(--mono);opacity:0.6;font-size:11px">' + dkfPct + '</td>' +
