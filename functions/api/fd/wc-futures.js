@@ -298,10 +298,7 @@ const DK_FUTURES_URL = buildDKUrl();
 
     async function fetchRSMarket(id) {
       try {
-        const r = await fetch(RS_BASE + '/predictions/marketorder/' + id + '/mode/buy', {
-          headers: rsHeaders,
-          signal: AbortSignal.timeout(3000),
-        });
+        const r = await fetch(RS_BASE + '/predictions/marketorder/' + id + '/mode/buy', { headers: rsHeaders });
         if (!r.ok) return null;
         const d = await r.json();
         const m = d && d.market;
@@ -313,7 +310,7 @@ const DK_FUTURES_URL = buildDKUrl();
     }
 
     const [dkRes, rsScanResults] = await Promise.all([
-      fetch(DK_FUTURES_URL, { headers: dkHeaders, signal: AbortSignal.timeout(8000) }).catch(function(e) { return { ok: false, _err: e.message }; }),
+      fetch(DK_FUTURES_URL, { headers: dkHeaders }).catch(function(e) { return { ok: false, _err: e.message }; }),
       rsHeaders ? Promise.all(scanIds.map(fetchRSMarket)) : Promise.resolve([]),
     ]);
 
@@ -327,7 +324,7 @@ const DK_FUTURES_URL = buildDKUrl();
       // Also test single known market 5940 directly
       let mkt5940 = null;
       try {
-        const r = await fetch(RS_BASE + '/predictions/marketorder/5940/mode/buy', { headers: rsHeaders, signal: AbortSignal.timeout(5000) });
+        const r = await fetch(RS_BASE + '/predictions/marketorder/5940/mode/buy', { headers: rsHeaders });
         mkt5940 = { status: r.status, ok: r.ok };
         if (r.ok) { const d = await r.json(); mkt5940.name = d.market && d.market.marketName; mkt5940.group = d.market && d.market.futuresGroupId; }
       } catch(e) { mkt5940 = { err: String(e) }; }
