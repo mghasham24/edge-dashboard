@@ -6,7 +6,15 @@ import { hashidsEncode } from '../../_lib/hashids.js';
 // RS: /home/soccer/futures or /home/soccer/specials
 
 const DK_BASE    = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
-const DK_FUTURES_URL = `${DK_BASE}/controldata/home/leagueSubcategory/v1/markets?leagueId=209533&subcategoryId=4529`;
+const DK_LEAGUE_ID = '209533';
+const DK_SUBCAT    = '4529';
+// OData-style URL matching the pattern used by other DK endpoints in this codebase
+const DK_FUTURES_URL = (() => {
+  const mq = encodeURIComponent(
+    `$filter=clientMetadata/subCategoryId eq '${DK_SUBCAT}' AND tags/all(t: t ne 'SportcastBetBuilder')`
+  );
+  return `${DK_BASE}/controldata/home/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${DK_LEAGUE_ID}%2C${DK_SUBCAT}&marketsQuery=${mq}&include=Markets&entity=markets`;
+})();
 const RS_BASE    = 'https://web.realapp.com';
 const CACHE_TTL  = 30; // 30s — futures don't change rapidly
 
