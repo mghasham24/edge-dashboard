@@ -69,6 +69,16 @@ async function getRSAuth(env) {
   return { token, deviceUuid };
 }
 
+function collapseSpaces(s) {
+  let out = '', prev = false;
+  for (let i = 0; i < s.length; i++) {
+    const ws = s[i] === ' ' || s[i] === '\t';
+    if (ws) { if (!prev) out += ' '; } else out += s[i];
+    prev = ws;
+  }
+  return out.trim();
+}
+
 function normTeam(name) {
   if (!name) return '';
   let s = name.toLowerCase().trim();
@@ -76,7 +86,7 @@ function normTeam(name) {
   for (let i = 0; i < prefixes.length; i++) {
     if (s.startsWith(prefixes[i])) { s = s.slice(prefixes[i].length); break; }
   }
-  return s.replace(/\s+/g, ' ').trim();
+  return collapseSpaces(s);
 }
 
 function extractTeamFromLabel(label) {
