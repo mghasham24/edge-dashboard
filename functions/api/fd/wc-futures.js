@@ -288,44 +288,52 @@ export async function onRequestGet(context) {
       return new Response(JSON.stringify({ results }), { headers: { 'Content-Type': 'application/json' } });
     }
 
-    const DK_FUTURES_URL = buildDKUrl();
+const DK_FUTURES_URL = buildDKUrl();
 
-    const [dkRes, rsFuturesRes, rsSpecialsRes] = await Promise.all([
+    // RS: scan sequential market IDs around 5940 for futuresGroupId=5
+    // France = 5940; 48 WC teams span roughly 5880–5970
+    const RS_FUTURES_GROUP = 5;
+    const scanIds = [];
+    for (let i = 5880; i <= 5970; i++) scanIds.push(i);
+
+    async function fetchRSMarket(id) {
+      try {
+        const r = await fetch(RS_BASE + '/predictions/marketorder/' + id + '/mode/buy', { headers: rsHeaders });
+        if (!r.ok) return null;
+        const d = await r.json();
+        const m = d && d.market;
+        if (!m || m.futuresGroupId !== RS_FUTURES_GROUP) return null;
+        const yes = m.outcomes && m.outcomes.find(function(o) { return o.key === 'Yes'; });
+        if (!yes) return null;
+        return { name: m.marketName || '', prob: yes.probability, marketId: id };
+      } catch(e) { return null; }
+    }
+
+    const [dkRes, rsScanResults] = await Promise.all([
       fetch(DK_FUTURES_URL, { headers: dkHeaders }).catch(function(e) { return { ok: false, _err: e.message }; }),
-      rsHeaders ? fetch(RS_BASE + '/home/soccer', { headers: rsHeaders }).catch(function(e) { return { ok: false, _err: e.message }; }) : Promise.resolve(null),
-      rsHeaders ? fetch(RS_BASE + '/home/soccer/specials', { headers: rsHeaders }).catch(function(e) { return { ok: false, _err: e.message }; }) : Promise.resolve(null),
+      rsHeaders ? Promise.all(scanIds.map(fetchRSMarket)) : Promise.resolve([]),
     ]);
 
     let dkRaw = null, dkErrText = null;
     const dkStatus = dkRes.ok ? 200 : (dkRes.status || 0);
     try { if (dkRes.ok) dkRaw = await dkRes.json(); else dkErrText = await dkRes.text(); } catch(e) {}
 
-    let rsSoccerRaw = null, rsSpecialsRaw = null;
-    let rsSoccerStatus = 0, rsSpecialsStatus = 0;
-    let rsSoccerErrText = null, rsSpecialsErrText = null;
-    try { if (rsFuturesRes && rsFuturesRes.ok) { rsSoccerRaw = await rsFuturesRes.json(); rsSoccerStatus = 200; } else if (rsFuturesRes) { rsSoccerStatus = rsFuturesRes.status || 0; rsSoccerErrText = await rsFuturesRes.text(); } } catch(e) {}
-    try { if (rsSpecialsRes && rsSpecialsRes.ok) { rsSpecialsRaw = await rsSpecialsRes.json(); rsSpecialsStatus = 200; } else if (rsSpecialsRes) { rsSpecialsStatus = rsSpecialsRes.status || 0; rsSpecialsErrText = await rsSpecialsRes.text(); } } catch(e) {}
-
-    if (debugMode === '4') {
-      return new Response(JSON.stringify({
-        dkUrl: DK_FUTURES_URL,
-        dkStatus, dkErrText,
-        rsSoccerStatus, rsSoccerErrText,
-        rsSpecialsStatus, rsSpecialsErrText,
-      }), { headers: { 'Content-Type': 'application/json' } });
-    }
-
     if (debugMode === '1') {
+      const rsFound = rsScanResults.filter(Boolean);
       return new Response(JSON.stringify({
         dkStatus, dkKeys: dkRaw ? Object.keys(dkRaw) : null,
-        rsSoccerStatus, rsSoccerKeys: rsSoccerRaw ? Object.keys(rsSoccerRaw) : null,
-        rsSpecialsStatus, rsSpecialsKeys: rsSpecialsRaw ? Object.keys(rsSpecialsRaw) : null,
+        rsFound: rsFound.length, rsSample: rsFound.slice(0, 3),
         rsToken: rsToken ? rsToken.slice(0, 20) + '...' : null,
       }), { headers: { 'Content-Type': 'application/json' } });
     }
 
     if (debugMode === '2') {
-      return new Response(JSON.stringify({ dk: dkRaw, rsSoccer: rsSoccerRaw, rsSpecials: rsSpecialsRaw }),
+      return new Response(JSON.stringify({ dk: dkRaw, rsScan: rsScanResults.filter(Boolean) }),
+        { headers: { 'Content-Type': 'application/json' } });
+    }
+
+    if (debugMode === '4') {
+      return new Response(JSON.stringify({ dkUrl: DK_FUTURES_URL, dkStatus, dkErrText }),
         { headers: { 'Content-Type': 'application/json' } });
     }
 
@@ -372,9 +380,12 @@ export async function onRequestGet(context) {
       dkTeams[normTeam(label)] = { name: label, am, dkFair };
     }
 
-    let rsTeams = {};
-    if (rsSoccerRaw) rsTeams = extractRSFutures(rsSoccerRaw);
-    if (Object.keys(rsTeams).length === 0 && rsSpecialsRaw) rsTeams = extractRSFutures(rsSpecialsRaw);
+    const rsTeams = {};
+    for (let i = 0; i < rsScanResults.length; i++) {
+      const r = rsScanResults[i];
+      if (!r || !r.name) continue;
+      rsTeams[normTeam(r.name)] = { name: r.name, prob: r.prob };
+    }
 
     if (debugMode === '3') {
       return new Response(JSON.stringify({ dkTeams, rsTeams, dkCount: Object.keys(dkTeams).length, rsCount: Object.keys(rsTeams).length }),
