@@ -280,10 +280,10 @@ export async function onRequestGet(context) {
         probe('dk_league_info',    `${DK_BASE}/dkng/v1/leagues/${DK_LEAGUE_ID}`, dkHeaders),
         probe('dk_single_tv_markets', `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${DK_LEAGUE_ID}&marketsQuery=${mq}&include=Markets&entity=markets`, dkHeaders),
         probe('dk_single_tv_events',  `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${DK_LEAGUE_ID}&marketsQuery=${mq}&include=Events&entity=events`, dkHeaders),
-        probe('rs_poll_356009',      RS_BASE + '/polls/356009', rsHeaders || {}),
-        probe('rs_poll_v2_356009',   RS_BASE + '/v2/polls/356009', rsHeaders || {}),
-        probe('rs_pollresults',      RS_BASE + '/polls/356009/results', rsHeaders || {}),
-        probe('rs_pollentries',      RS_BASE + '/polls/356009/entries', rsHeaders || {}),
+        probe('rs_mktorder_5940_buy', RS_BASE + '/predictions/marketorder/5940/mode/buy', rsHeaders || {}),
+        probe('rs_mktorder_5940',    RS_BASE + '/predictions/marketorder/5940', rsHeaders || {}),
+        probe('rs_soccer_futures',   RS_BASE + '/predictions/soccer/futures', rsHeaders || {}),
+        probe('rs_soccer_outrights', RS_BASE + '/predictions/soccer/outrights', rsHeaders || {}),
       ]);
       return new Response(JSON.stringify({ results }), { headers: { 'Content-Type': 'application/json' } });
     }
