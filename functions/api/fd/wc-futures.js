@@ -280,10 +280,10 @@ export async function onRequestGet(context) {
         probe('dk_league_info',    `${DK_BASE}/dkng/v1/leagues/${DK_LEAGUE_ID}`, dkHeaders),
         probe('dk_single_tv_markets', `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${DK_LEAGUE_ID}&marketsQuery=${mq}&include=Markets&entity=markets`, dkHeaders),
         probe('dk_single_tv_events',  `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${DK_LEAGUE_ID}&marketsQuery=${mq}&include=Events&entity=events`, dkHeaders),
-        probe('rs_futuresgroup_5_buy',  RS_BASE + '/predictions/futuresgroup/5/mode/buy', rsHeaders || {}),
-        probe('rs_futuresgroup_5',      RS_BASE + '/predictions/futuresgroup/5', rsHeaders || {}),
-        probe('rs_futures_soccer',      RS_BASE + '/predictions/futures/soccer', rsHeaders || {}),
-        probe('rs_mktorder_5940_buy',   RS_BASE + '/predictions/marketorder/5940/mode/buy', rsHeaders || {}),
+        probe('rs_mktorder_grp_5_buy',   RS_BASE + '/predictions/marketorder/group/5/mode/buy', rsHeaders || {}),
+        probe('rs_mktordergroup_5_buy',  RS_BASE + '/predictions/marketordergroup/5/mode/buy', rsHeaders || {}),
+        probe('rs_soccer_futures_grp',   RS_BASE + '/predictions/soccer/futuresgroup/5/mode/buy', rsHeaders || {}),
+        probe('rs_mktorder_5940_buy',    RS_BASE + '/predictions/marketorder/5940/mode/buy', rsHeaders || {}),
       ]);
       return new Response(JSON.stringify({ results }), { headers: { 'Content-Type': 'application/json' } });
     }
