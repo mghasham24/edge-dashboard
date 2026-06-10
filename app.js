@@ -54,6 +54,7 @@
     var dkPoller   = null;
     var fcPoller   = null;
     var wcPoller   = null;
+    var wcSubTab   = 'games'; // 'games' | 'futures'
     var currentLoadAbort = null;
 
     function stopAllPollers() {
@@ -4992,8 +4993,15 @@
             currentFcLeague = 'ALL';
             buildFcLeagueNav();
             document.getElementById('fc-league-nav').style.display = 'flex';
+            document.getElementById('wc-sub-nav').style.display = 'none';
+        } else if (firstKey === 'soccer_wc') {
+            document.getElementById('fc-league-nav').style.display = 'none';
+            wcSubTab = 'games';
+            buildWcSubNav();
+            document.getElementById('wc-sub-nav').style.display = 'flex';
         } else {
             document.getElementById('fc-league-nav').style.display = 'none';
+            document.getElementById('wc-sub-nav').style.display = 'none';
         }
         loadOdds();
     }
@@ -5233,8 +5241,18 @@
                     currentFcLeague = 'ALL';
                     buildFcLeagueNav();
                     document.getElementById('fc-league-nav').style.display = 'flex';
+                    document.getElementById('wc-sub-nav').style.display = 'none';
+                    showWcFuturesPanel(false);
+                } else if (s.key === 'soccer_wc') {
+                    document.getElementById('fc-league-nav').style.display = 'none';
+                    wcSubTab = 'games';
+                    buildWcSubNav();
+                    document.getElementById('wc-sub-nav').style.display = 'flex';
+                    showWcFuturesPanel(false);
                 } else {
                     document.getElementById('fc-league-nav').style.display = 'none';
+                    document.getElementById('wc-sub-nav').style.display = 'none';
+                    showWcFuturesPanel(false);
                 }
                 loadOdds();
             };
@@ -5615,8 +5633,17 @@
         if (wcPoller)  { clearInterval(wcPoller);  wcPoller  = null; }
         dkAltOdds = {};
 
+        // WC Futures sub-tab
+        if (currentSport === 'soccer_wc' && wcSubTab === 'futures') {
+            showWcFuturesPanel(true);
+            loadWcFutures();
+            resetRefreshBtn();
+            return;
+        }
+
         // WC: DK AH ±0.5 spread — identical structure to soccer_fc
         if (currentSport === 'soccer_wc') {
+            showWcFuturesPanel(false);
             altOdds = {};
             rawRows = [];
             fetch('/api/fd/wc?fresh=1', { credentials: 'same-origin' })
@@ -5684,7 +5711,7 @@
 
                 if (wcPoller) clearInterval(wcPoller);
                 wcPoller = setInterval(function() {
-                    if (currentSport !== 'soccer_wc') { clearInterval(wcPoller); wcPoller = null; return; }
+                    if (currentSport !== 'soccer_wc' || wcSubTab !== 'games') { clearInterval(wcPoller); wcPoller = null; return; }
                     fetchWCNativeUpdate();
                 }, 5000);
             });
@@ -6631,6 +6658,92 @@
     }
 
     var FC_LEAGUES = ['ALL', 'UCL', 'EPL', 'La Liga', 'Serie A', 'Bundesliga', 'Ligue 1', 'MLS'];
+
+    function buildWcSubNav() {
+        var nav = document.getElementById('wc-sub-nav');
+        if (!nav) return;
+        nav.innerHTML = '';
+        ['Games', 'Futures'].forEach(function(label) {
+            var key = label.toLowerCase();
+            var btn = document.createElement('button');
+            btn.className = 'fc-league-tab' + (key === wcSubTab ? ' active' : '');
+            btn.textContent = label;
+            btn.setAttribute('data-wc-sub', key);
+            btn.onclick = function() {
+                wcSubTab = key;
+                nav.querySelectorAll('[data-wc-sub]').forEach(function(b) {
+                    b.classList.toggle('active', b.getAttribute('data-wc-sub') === key);
+                });
+                if (key === 'futures') {
+                    showWcFuturesPanel(true);
+                    loadWcFutures();
+                } else {
+                    showWcFuturesPanel(false);
+                    loadOdds();
+                }
+            };
+            nav.appendChild(btn);
+        });
+    }
+
+    function showWcFuturesPanel(show) {
+        var fp = document.getElementById('wc-futures-panel');
+        var tw = document.querySelector('.table-wrap');
+        var mc = document.getElementById('mobile-cards');
+        var ctrl = document.querySelector('.controls');
+        var sb = document.querySelector('.status-bar');
+        if (fp) fp.style.display = show ? 'block' : 'none';
+        if (tw) tw.style.display = show ? 'none' : '';
+        if (mc) mc.style.display = show ? 'none' : '';
+        if (ctrl) ctrl.style.display = show ? 'none' : '';
+        if (sb)  sb.style.display  = show ? 'none' : '';
+    }
+
+    function loadWcFutures() {
+        var statusEl = document.getElementById('wc-futures-status');
+        var tbody    = document.getElementById('wc-futures-tbody');
+        if (statusEl) statusEl.textContent = 'Loading futures...';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">Loading...</td></tr>';
+
+        fetch('/api/fd/wc-futures', { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (!data.ok || !data.teams || !data.teams.length) {
+                if (statusEl) statusEl.textContent = data.error || 'No futures data available';
+                if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">' + escHtml(data.error || 'No futures available') + '</td></tr>';
+                return;
+            }
+            renderWcFutures(data.teams, data.hasRS);
+            if (statusEl) {
+                var t = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+                statusEl.textContent = 'Updated ' + t + ' · ' + data.teams.length + ' teams · ' + (data.hasRS ? 'RS + DK' : 'DK only');
+            }
+        })
+        .catch(function(e) {
+            if (statusEl) statusEl.textContent = 'Error loading futures';
+            if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">Error loading futures</td></tr>';
+        });
+    }
+
+    function renderWcFutures(teams, hasRS) {
+        var tbody = document.getElementById('wc-futures-tbody');
+        if (!tbody) return;
+        tbody.innerHTML = teams.map(function(t) {
+            var flag = WC_FLAG_EMOJI[t.team] || '';
+            var edgePct = t.edge != null ? Math.round(t.edge * 100) : null;
+            var rspPct  = t.rsp  != null ? Math.round(t.rsp  * 100) : null;
+            var dkfPct  = t.dkFair != null ? Math.round(t.dkFair * 100) : null;
+            var edgeColor = edgePct == null ? '' : edgePct > 0 ? 'color:var(--green)' : edgePct < 0 ? 'color:var(--red)' : '';
+            var amStr = t.am > 0 ? '+' + t.am : '' + t.am;
+            return '<tr>' +
+                '<td><span style="font-size:16px;margin-right:4px">' + (flag || '') + '</span>' + escHtml(t.team) + '</td>' +
+                '<td class="r">' + (rspPct != null ? '<b>' + rspPct + '%</b>' : '<span style="color:var(--muted)">—</span>') + '</td>' +
+                '<td class="r">' + escHtml(amStr) + '</td>' +
+                '<td class="r" style="opacity:0.6;font-size:11px">' + (dkfPct != null ? dkfPct + '%' : '—') + '</td>' +
+                '<td class="r" style="' + edgeColor + '">' + (edgePct != null ? (edgePct > 0 ? '+' : '') + edgePct + '%' : '—') + '</td>' +
+            '</tr>';
+        }).join('');
+    }
 
     function buildFcLeagueNav() {
         var nav = document.getElementById('fc-league-nav');

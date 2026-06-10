@@ -394,6 +394,7 @@
 
         <nav class="sport-tabs" id="sport-tabs"></nav>
         <div id="fc-league-nav" style="display:flex"></div>
+        <div id="wc-sub-nav" style="display:none;gap:0;border-bottom:1px solid var(--border)"></div>
         <div id="ev-loading-bar-wrap" style="display:none;height:3px;background:var(--bg3);overflow:hidden"><div id="ev-loading-bar" style="height:100%;width:0%;background:linear-gradient(90deg,var(--accent),#7ddfab);transition:width .4s ease"></div></div>
 
         <div class="controls">
@@ -451,6 +452,25 @@
         </div>
 
         <div class="mobile-cards" id="mobile-cards"></div>
+
+        <div id="wc-futures-panel" style="display:none;padding:12px 16px">
+            <div id="wc-futures-status" style="font-size:12px;color:var(--muted);margin-bottom:10px"></div>
+            <div class="table-wrap" style="margin:0">
+                <table id="wc-futures-table" style="width:100%">
+                    <thead>
+                        <tr>
+                            <th>Team</th>
+                            <th class="r">RS Yes%</th>
+                            <th class="r">DK Odds</th>
+                            <th class="r" style="opacity:0.55;font-size:9px">DK Fair%</th>
+                            <th class="r">Edge</th>
+                        </tr>
+                    </thead>
+                    <tbody id="wc-futures-tbody"></tbody>
+                </table>
+            </div>
+            <div style="font-size:10px;color:var(--muted);margin-top:10px">Edge = RS Yes% − DK Fair%. Green = RS gives better odds than DK implies. Bet YES on RS.</div>
+        </div>
 
         <div class="admin-panel" id="admin-panel">
             <!-- Back button -->
