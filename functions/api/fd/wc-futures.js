@@ -278,13 +278,15 @@ export async function onRequestGet(context) {
         } catch(e) { return { label, status: 0, err: e.message }; }
       };
       const results = await Promise.all([
-        probe('dk_league_info',    `${DK_BASE}/dkng/v1/leagues/${DK_LEAGUE_ID}`, dkHeaders),
-        probe('dk_single_tv_markets', `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${DK_LEAGUE_ID}&marketsQuery=${mq}&include=Markets&entity=markets`, dkHeaders),
-        probe('dk_single_tv_events',  `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${DK_LEAGUE_ID}&marketsQuery=${mq}&include=Events&entity=events`, dkHeaders),
-        probe('rs_mktorder_grp_5_buy',   RS_BASE + '/predictions/marketorder/group/5/mode/buy', rsHeaders || {}),
-        probe('rs_mktordergroup_5_buy',  RS_BASE + '/predictions/marketordergroup/5/mode/buy', rsHeaders || {}),
-        probe('rs_soccer_futures_grp',   RS_BASE + '/predictions/soccer/futuresgroup/5/mode/buy', rsHeaders || {}),
-        probe('rs_mktorder_5940_buy',    RS_BASE + '/predictions/marketorder/5940/mode/buy', rsHeaders || {}),
+        probe('rs_mktorder_5940_buy',        RS_BASE + '/predictions/marketorder/5940/mode/buy', rsHeaders || {}),
+        probe('rs_futures_group5',           RS_BASE + '/predictions/futures/group/5', rsHeaders || {}),
+        probe('rs_futures_soccer',           RS_BASE + '/predictions/futures/soccer', rsHeaders || {}),
+        probe('rs_futures_soccer_wc',        RS_BASE + '/predictions/futures/soccer_wc', rsHeaders || {}),
+        probe('rs_home_soccer_wc',           RS_BASE + '/home/soccer_wc', rsHeaders || {}),
+        probe('rs_home_soccer_wc_futures',   RS_BASE + '/home/soccer_wc/futures', rsHeaders || {}),
+        probe('rs_futuresgroup5_markets',    RS_BASE + '/predictions/futuresgroup/5/markets', rsHeaders || {}),
+        probe('rs_markets_futures_grp5',     RS_BASE + '/predictions/markets?futuresGroupId=5', rsHeaders || {}),
+        probe('rs_futuresgroup5_buy',        RS_BASE + '/predictions/futuresgroup/5/mode/buy', rsHeaders || {}),
       ]);
       return new Response(JSON.stringify({ results }), { headers: { 'Content-Type': 'application/json' } });
     }
@@ -294,7 +296,7 @@ const DK_FUTURES_URL = buildDKUrl();
     // RS: scan sequential market IDs around 5940 for futuresGroupId=5
     const RS_FUTURES_GROUP = 5;
     const scanIds = [];
-    for (let i = 5880; i <= 5970; i++) scanIds.push(i);
+    for (let i = 5920; i <= 5960; i++) scanIds.push(i);
 
     async function fetchRSMarket(id) {
       try {
