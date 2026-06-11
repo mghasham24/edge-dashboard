@@ -113,12 +113,14 @@ export async function onRequestPost({ request, env }) {
       if (obj.trial_end && obj.trial_end > now) {
         // Cancelled during active trial — keep pro until trial_end, just detach sub
         await env.DB.prepare(
-          'UPDATE users SET stripe_sub_id=NULL, pro_expires_at=? WHERE stripe_customer_id=?'
-        ).bind(obj.trial_end, obj.customer).run();
+          'UPDATE users SET stripe_sub_id=NULL, pro_expires_at=? WHERE stripe_customer_id=? AND stripe_sub_id=?'
+        ).bind(obj.trial_end, obj.customer, obj.id).run();
       } else {
+        // Only downgrade if this is the subscription we have on record — prevents
+        // a duplicate/stale sub being cancelled from wiping out a still-active sub.
         await env.DB.prepare(
-          'UPDATE users SET plan=\'free\', stripe_sub_id=NULL, pro_expires_at=NULL WHERE stripe_customer_id=?'
-        ).bind(obj.customer).run();
+          'UPDATE users SET plan=\'free\', stripe_sub_id=NULL, pro_expires_at=NULL WHERE stripe_customer_id=? AND stripe_sub_id=?'
+        ).bind(obj.customer, obj.id).run();
       }
       break;
     }
