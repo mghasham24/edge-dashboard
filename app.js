@@ -2109,10 +2109,11 @@
                     });
 
                 } else {
+                    var isWcSpread = (currentSport === 'soccer_wc');
                     var colHdr = document.createElement('div');
                     colHdr.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:5px;padding:0 2px';
-                    colHdr.innerHTML = '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);min-width:44px;text-align:center;flex-shrink:0">FD Line</span>'
-                    + '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);width:64px;text-align:center;flex-shrink:0">Real Line</span>'
+                    colHdr.innerHTML = (isWcSpread ? '' : '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);min-width:44px;text-align:center;flex-shrink:0">FD Line</span>'
+                    + '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);width:64px;text-align:center;flex-shrink:0">Real Line</span>')
                     + '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);width:58px;text-align:center;flex-shrink:0">Real %</span>'
                     + '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-left:auto;text-align:right">Edge</span>';
                     inputRow.appendChild(colHdr);
@@ -2122,23 +2123,25 @@
                         var pval = preds[r.id] || '';
                         var sideRow = document.createElement('div');
                         sideRow.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:4px';
-                        var fdLbl = document.createElement('span');
-                        fdLbl.style.cssText = 'font-family:var(--mono);font-size:12px;color:var(--muted);min-width:44px;text-align:center;flex-shrink:0';
-                        fdLbl.textContent = r.pt != null ? (r.pt > 0 ? '+' + r.pt : r.pt) : '-';
-                        sideRow.appendChild(fdLbl);
-                        var lineInp = document.createElement('input');
-                        lineInp.className = 'mc-inp' + (ylv ? ' line-changed' : '');
-                        lineInp.type = 'number';
-                        lineInp.step = '0.5';
-                        lineInp.placeholder = ph;
-                        lineInp.value = ylv;
-                        lineInp.dataset.id = r.id;
-                        lineInp.dataset.type = 'line';
-                        lineInp.style.cssText = 'width:64px;flex-shrink:0';
-                        lineInp.addEventListener('blur', function() { setLineMobile(this); });
-                        lineInp.addEventListener('input', function() { setLineMobile(this); });
-                        lineInp.addEventListener('keydown', function(e) { if (e.key === 'Enter') this.blur(); });
-                        sideRow.appendChild(lineInp);
+                        if (!isWcSpread) {
+                            var fdLbl = document.createElement('span');
+                            fdLbl.style.cssText = 'font-family:var(--mono);font-size:12px;color:var(--muted);min-width:44px;text-align:center;flex-shrink:0';
+                            fdLbl.textContent = r.pt != null ? (r.pt > 0 ? '+' + r.pt : r.pt) : '-';
+                            sideRow.appendChild(fdLbl);
+                            var lineInp = document.createElement('input');
+                            lineInp.className = 'mc-inp' + (ylv ? ' line-changed' : '');
+                            lineInp.type = 'number';
+                            lineInp.step = '0.5';
+                            lineInp.placeholder = ph;
+                            lineInp.value = ylv;
+                            lineInp.dataset.id = r.id;
+                            lineInp.dataset.type = 'line';
+                            lineInp.style.cssText = 'width:64px;flex-shrink:0';
+                            lineInp.addEventListener('blur', function() { setLineMobile(this); });
+                            lineInp.addEventListener('input', function() { setLineMobile(this); });
+                            lineInp.addEventListener('keydown', function(e) { if (e.key === 'Enter') this.blur(); });
+                            sideRow.appendChild(lineInp);
+                        }
                         var predInp = document.createElement('input');
                         predInp.className = 'mc-inp' + (pval ? ' filled' : '');
                         predInp.type = 'number';
@@ -7796,7 +7799,7 @@
                            || Object.values(gameMarkets)[0]; // last resort: first available market
                 }
                 // WC: RS soccer uses 'Match Result' or '1X2' for 3-way group stage markets
-                if (!mktData && sport === 'soccer_wc' && r.mkt === 'ML') {
+                if (!mktData && sport === 'soccer_wc' && (r.mkt === 'ML' || r.mkt === 'Spread')) {
                     mktData = gameMarkets['Match Result'] || gameMarkets['1X2']
                            || gameMarkets['Home/Draw/Away'] || gameMarkets['Game Winner'];
                 }
