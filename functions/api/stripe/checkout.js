@@ -67,7 +67,7 @@ export async function onRequestPost({ request, env }) {
       .bind(customerId, session.user_id).run();
   }
 
-  // Block if customer already has an active or trialing subscription
+  // Block if customer already has an active, trialing, or past_due subscription
   if (customerId) {
     const subList = await stripeGet(
       'subscriptions?customer=' + customerId + '&status=active&limit=1',
@@ -82,6 +82,13 @@ export async function onRequestPost({ request, env }) {
     );
     if (trialList.data && trialList.data.length > 0) {
       return fail(400, 'Already has an active trial');
+    }
+    const pastDueList = await stripeGet(
+      'subscriptions?customer=' + customerId + '&status=past_due&limit=1',
+      env.STRIPE_SECRET_KEY
+    );
+    if (pastDueList.data && pastDueList.data.length > 0) {
+      return fail(400, 'Already has a subscription pending payment');
     }
   }
 
