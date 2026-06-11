@@ -6204,13 +6204,16 @@
                     var raNick = nickname(ra);
                     var rhNick = nickname(rh);
                     // Nickname match first, then any-word match (for soccer short names like "Atletico" vs "Atletico Madrid")
+                    // Exclude geographic direction words — "south" in "South Korea" must not match "South Africa"
+                    var _geoStop = { south: 1, north: 1, east: 1, west: 1, central: 1, new: 1 };
+                    function notGeo(w) { return !_geoStop[w]; }
                     function matchSide(r1, r1Nick, r1Raw, fd, fdNick) {
                         return r1Nick === fdNick || r1.indexOf(fdNick) !== -1 || fd.indexOf(r1Nick) !== -1
-                            || r1.split(' ').some(function(w) { return w.length > 2 && fd.indexOf(w) !== -1; })
-                            || fd.split(' ').some(function(w) { return w.length > 2 && r1.indexOf(w) !== -1; })
+                            || r1.split(' ').some(function(w) { return w.length > 2 && notGeo(w) && fd.indexOf(w) !== -1; })
+                            || fd.split(' ').some(function(w) { return w.length > 2 && notGeo(w) && r1.indexOf(w) !== -1; })
                             || r1Raw.indexOf(fdNick) !== -1 || fd.indexOf(nickname(r1Raw)) !== -1
-                            || r1Raw.split(' ').some(function(w) { return w.length > 2 && fd.indexOf(w) !== -1; })
-                            || fd.split(' ').some(function(w) { return w.length > 2 && r1Raw.indexOf(w) !== -1; });
+                            || r1Raw.split(' ').some(function(w) { return w.length > 2 && notGeo(w) && fd.indexOf(w) !== -1; })
+                            || fd.split(' ').some(function(w) { return w.length > 2 && notGeo(w) && r1Raw.indexOf(w) !== -1; });
                     }
                     return matchSide(ra, raNick, raRaw, fdAway, fdAwayNick) && matchSide(rh, rhNick, rhRaw, fdHome, fdHomeNick);
                 });
@@ -7746,11 +7749,13 @@
                             return normalMatch || flippedMatch;
                         }
                         // Soccer: RS uses short names ("Atlético") vs DK full names ("Atletico Madrid")
-                        // Any word from RS name appearing in DK name (or vice versa) is a match
-                        var awayMatch = rAway.split(' ').some(function(w) { return w.length > 2 && fdAway.indexOf(w) !== -1; })
-                                     || fdAway.split(' ').some(function(w) { return w.length > 2 && rAway.indexOf(w) !== -1; });
-                        var homeMatch = rHome.split(' ').some(function(w) { return w.length > 2 && fdHome.indexOf(w) !== -1; })
-                                     || fdHome.split(' ').some(function(w) { return w.length > 2 && rHome.indexOf(w) !== -1; });
+                        // Any word from RS name appearing in DK name (or vice versa) is a match.
+                        // Exclude geographic direction words — "south" must not match across "South Korea" / "South Africa".
+                        var _gs = { south: 1, north: 1, east: 1, west: 1, central: 1, new: 1 };
+                        var awayMatch = rAway.split(' ').some(function(w) { return w.length > 2 && !_gs[w] && fdAway.indexOf(w) !== -1; })
+                                     || fdAway.split(' ').some(function(w) { return w.length > 2 && !_gs[w] && rAway.indexOf(w) !== -1; });
+                        var homeMatch = rHome.split(' ').some(function(w) { return w.length > 2 && !_gs[w] && fdHome.indexOf(w) !== -1; })
+                                     || fdHome.split(' ').some(function(w) { return w.length > 2 && !_gs[w] && rHome.indexOf(w) !== -1; });
                         return awayMatch && homeMatch;
                     });
                     if (matched) realKey = matched;
