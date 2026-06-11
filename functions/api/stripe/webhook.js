@@ -61,7 +61,7 @@ export async function onRequestPost({ request, env }) {
   switch (event.type) {
     case 'customer.subscription.created': {
       const status = obj.status;
-      const plan   = (status === 'active' || status === 'trialing') ? 'pro' : 'free';
+      const plan   = (status === 'active' || status === 'trialing' || status === 'past_due') ? 'pro' : 'free';
       const proExpiresAt = (plan === 'pro' && obj.current_period_end) ? obj.current_period_end : null;
 
       if (status === 'trialing') {
@@ -94,7 +94,8 @@ export async function onRequestPost({ request, env }) {
 
     case 'customer.subscription.updated': {
       const status = obj.status;
-      const plan   = (status === 'active' || status === 'trialing') ? 'pro' : 'free';
+      // past_due = Stripe is still retrying (dunning). Only downgrade on subscription.deleted.
+      const plan   = (status === 'active' || status === 'trialing' || status === 'past_due') ? 'pro' : 'free';
       const proExpiresAt = (plan === 'pro' && obj.current_period_end) ? obj.current_period_end : null;
       await env.DB.prepare(
         'UPDATE users SET plan=?, stripe_sub_id=?, pro_expires_at=? WHERE stripe_customer_id=?'
