@@ -3071,9 +3071,9 @@
         var mhtml = '<div class="ev-mobile-grid">';
 
         all.forEach(function(r) {
-            var ev = (payoutRatios[r.id] != null && r.af != null)
-                ? (r.af * payoutRatios[r.id] - 1) * 100
-                : r._ev;
+            // Always use _ev for display — payoutRatios uses a stale af snapshot that
+            // diverges from current r.af as live FD odds move, producing wrong sign.
+            var ev = r._ev;
             var evStr   = ev != null ? (ev >= 0 ? '+' : '') + ev.toFixed(1) + '%' : null;
             var evColor = ev != null ? (ev >= 10 ? 'var(--green)' : ev >= 5 ? '#7ddfab' : ev > 0 ? 'var(--yellow)' : 'var(--red)') : '';
             var u       = r.u != null ? r.u : 0;
