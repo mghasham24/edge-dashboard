@@ -117,7 +117,8 @@ async function handleRequest({ request, env }) {
     if (!id) return fail(400, 'Missing user id');
     const tables = [
       'sessions', 'bets_taken', 'notification_settings', 'telegram_verify_tokens',
-      'real_auth', 'password_resets', 'trial_fingerprints', 'alert_messages', 'alert_sent_log'
+      'real_auth', 'password_resets', 'trial_fingerprints', 'alert_messages', 'alert_sent_log',
+      'bet_log', 'rate_limits'
     ];
     for (const t of tables) {
       await env.DB.prepare(`DELETE FROM ${t} WHERE user_id=?`).bind(id).run().catch(() => {});
