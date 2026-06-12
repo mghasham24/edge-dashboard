@@ -32,18 +32,30 @@ export async function onRequestGet({ request, env }) {
   const annualPriceId = env.STRIPE_ANNUAL_PRICE_ID;
   if (!annualPriceId) return fail(500, 'Annual price not configured');
 
+  // Trialing users haven't been charged yet — no proration possible.
+  // They pay the full annual price immediately when upgrading.
+  if (sub.status === 'trialing') {
+    return new Response(JSON.stringify({
+      ok: true,
+      amountDue: 3900,
+      amountDueStr: '$39.00',
+      itemId: item.id,
+    }), { headers: { 'Content-Type': 'application/json' } });
+  }
+
+  // Brackets must be percent-encoded — stripeGet passes the URL as-is.
   const preview = await stripeGet(
     'invoices/upcoming' +
     '?customer=' + sub.customer +
     '&subscription=' + row.stripe_sub_id +
-    '&subscription_items[0][id]=' + item.id +
-    '&subscription_items[0][price]=' + annualPriceId +
+    '&subscription_items%5B0%5D%5Bid%5D=' + item.id +
+    '&subscription_items%5B0%5D%5Bprice%5D=' + annualPriceId +
     '&subscription_billing_cycle_anchor=now' +
     '&subscription_proration_behavior=always_invoice',
     env.STRIPE_SECRET_KEY
   );
 
-  if (preview.error) return fail(500, 'Failed to preview upgrade');
+  if (preview.error) return fail(500, preview.error.message || 'Failed to preview upgrade');
 
   const amountDue = Math.max(0, preview.amount_due || 0);
   return new Response(JSON.stringify({

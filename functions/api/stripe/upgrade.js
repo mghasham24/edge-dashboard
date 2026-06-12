@@ -32,13 +32,17 @@ export async function onRequestPost({ request, env }) {
   const annualPriceId = env.STRIPE_ANNUAL_PRICE_ID;
   if (!annualPriceId) return fail(500, 'Annual price not configured');
 
+  const upgradeParams = {
+    items: [{ id: item.id, price: annualPriceId }],
+    proration_behavior: 'always_invoice',
+    billing_cycle_anchor: 'now',
+  };
+  // Trialing users need trial ended explicitly so the $39 invoice fires immediately.
+  if (sub.status === 'trialing') upgradeParams.trial_end = 'now';
+
   const updated = await stripePost(
     'subscriptions/' + row.stripe_sub_id,
-    {
-      items: [{ id: item.id, price: annualPriceId }],
-      proration_behavior: 'always_invoice',
-      billing_cycle_anchor: 'now',
-    },
+    upgradeParams,
     env.STRIPE_SECRET_KEY
   );
 
