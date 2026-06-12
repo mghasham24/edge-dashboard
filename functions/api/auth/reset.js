@@ -1,14 +1,19 @@
 import { hashPassword } from '../../_lib/password.js';
 import { genToken, err } from '../../_lib/response.js';
+import { checkRateLimit } from '../../_lib/rateLimit.js';
 // functions/api/auth/reset.js
 const SESSION_DAYS = 30;
 
 export async function onRequestPost({ request, env }) {
+  const allowed = await checkRateLimit(env.DB, request, 'reset', 5, 3600);
+  if (!allowed) return err('Too many attempts. Please try again later.', 429);
+
   let body;
-  try { body = await request.json(); } catch { return fail('Invalid request'); }
+  try { body = await request.json(); } catch { return err('Invalid request'); }
 
   const { token, password } = body;
   if (!token || !password) return err('Missing fields');
+  if (!/^[0-9a-f]{64}$/.test(token)) return err('Invalid reset token');
   if (password.length < 8) return err('Password must be at least 8 characters');
 
   const now = Math.floor(Date.now() / 1000);

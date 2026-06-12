@@ -1,15 +1,16 @@
 // functions/api/bets/taken.js
+import { getSession } from '../../_lib/session.js';
 
 export async function onRequest({ request, env }) {
-  const token = getToken(request);
-  const session = await getSession(env.DB, token);
+  const session = await getSession(request, env.DB);
   if (!session) return fail(401, 'Authentication required');
 
   if (request.method === 'GET') {
     const row = await env.DB.prepare(
       'SELECT bet_ids FROM bets_taken WHERE user_id = ?'
     ).bind(session.user_id).first();
-    const ids = row ? JSON.parse(row.bet_ids) : [];
+    let ids = [];
+    try { ids = row ? JSON.parse(row.bet_ids) : []; } catch { ids = []; }
     return json({ bet_ids: ids });
   }
 
@@ -21,7 +22,8 @@ export async function onRequest({ request, env }) {
     const row = await env.DB.prepare(
       'SELECT bet_ids FROM bets_taken WHERE user_id = ?'
     ).bind(session.user_id).first();
-    let ids = row ? JSON.parse(row.bet_ids) : [];
+    let ids = [];
+    try { ids = row ? JSON.parse(row.bet_ids) : []; } catch { ids = []; }
 
     if (taken) {
       if (!ids.includes(id)) ids.push(id);
@@ -42,19 +44,6 @@ export async function onRequest({ request, env }) {
   return fail(405, 'Method not allowed');
 }
 
-function getToken(req) {
-  const c = req.headers.get('Cookie') || '';
-  const m = c.match(/(?:^|;\s*)session=([^;]+)/);
-  return m ? m[1] : null;
-}
-
-async function getSession(db, token) {
-  if (!token) return null;
-  const now = Math.floor(Date.now() / 1000);
-  return db.prepare(
-    'SELECT u.id as user_id FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires_at>?'
-  ).bind(token, now).first();
-}
 
 function json(data) {
   return new Response(JSON.stringify(data), {

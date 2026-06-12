@@ -35,10 +35,12 @@ export async function onRequestGet({ request, env }) {
   // Trialing users haven't been charged yet — no proration possible.
   // They pay the full annual price immediately when upgrading.
   if (sub.status === 'trialing') {
+    const annualPrice = await stripeGet('prices/' + annualPriceId, env.STRIPE_SECRET_KEY);
+    const amountDue = (annualPrice && annualPrice.unit_amount) ? annualPrice.unit_amount : 3900;
     return new Response(JSON.stringify({
       ok: true,
-      amountDue: 3900,
-      amountDueStr: '$39.00',
+      amountDue,
+      amountDueStr: '$' + (amountDue / 100).toFixed(2),
       itemId: item.id,
     }), { headers: { 'Content-Type': 'application/json' } });
   }

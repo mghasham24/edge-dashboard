@@ -69,6 +69,7 @@ export async function onRequestPost({ request, env }) {
   if (env.RESEND_API_KEY) {
     fetch('https://api.resend.com/emails', {
       method: 'POST',
+      signal: AbortSignal.timeout(10000),
       headers: { 'Authorization': 'Bearer ' + env.RESEND_API_KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         from: 'RaxEdge <noreply@raxedge.com>',

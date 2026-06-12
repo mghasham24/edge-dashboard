@@ -54,7 +54,7 @@ export async function onRequestPost({ request, env }) {
       _t: token
     }, 200, cookie(token, exp));
   } catch(e) {
-    return err('Login failed: ' + (e && e.message ? e.message : String(e)), 500);
+    return err('Login failed', 500);
   }
 }
 
