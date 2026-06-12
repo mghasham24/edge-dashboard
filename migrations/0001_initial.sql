@@ -135,6 +135,7 @@ CREATE TABLE IF NOT EXISTS referrals (
   referrer_id INTEGER NOT NULL,
   referred_id INTEGER NOT NULL,
   created_at  INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+  rewarded_at INTEGER,
   UNIQUE(referrer_id, referred_id)
 );
 

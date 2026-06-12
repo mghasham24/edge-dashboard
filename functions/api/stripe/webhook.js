@@ -338,5 +338,11 @@ async function rewardReferrerForCustomer(stripeCustomerId, metadata, db) {
         'UPDATE users SET plan=\'pro\', pro_expires_at=? WHERE id=?'
       ).bind(newExpiry, referrer.id).run();
     }
+
+    // Stamp the referral row so stats only count confirmed paid conversions.
+    const rewardedAt = Math.floor(Date.now() / 1000);
+    await db.prepare(
+      'UPDATE referrals SET rewarded_at=? WHERE referrer_id=? AND referred_id=?'
+    ).bind(rewardedAt, referrerId, newPro.id).run();
   } catch(e) {}
 }
