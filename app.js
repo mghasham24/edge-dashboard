@@ -6207,13 +6207,17 @@
                     // Exclude geographic direction words — "south" in "South Korea" must not match "South Africa"
                     var _geoStop = { south: 1, north: 1, east: 1, west: 1, central: 1, new: 1 };
                     function notGeo(w) { return !_geoStop[w]; }
+                    var _wcNameAliases = { 'usa': 'united states', 'united states': 'usa' };
                     function matchSide(r1, r1Nick, r1Raw, fd, fdNick) {
-                        return r1Nick === fdNick || r1.indexOf(fdNick) !== -1 || fd.indexOf(r1Nick) !== -1
+                        if (r1Nick === fdNick || r1.indexOf(fdNick) !== -1 || fd.indexOf(r1Nick) !== -1
                             || r1.split(' ').some(function(w) { return w.length > 2 && notGeo(w) && fd.indexOf(w) !== -1; })
                             || fd.split(' ').some(function(w) { return w.length > 2 && notGeo(w) && r1.indexOf(w) !== -1; })
                             || r1Raw.indexOf(fdNick) !== -1 || fd.indexOf(nickname(r1Raw)) !== -1
                             || r1Raw.split(' ').some(function(w) { return w.length > 2 && notGeo(w) && fd.indexOf(w) !== -1; })
-                            || fd.split(' ').some(function(w) { return w.length > 2 && notGeo(w) && r1Raw.indexOf(w) !== -1; });
+                            || fd.split(' ').some(function(w) { return w.length > 2 && notGeo(w) && r1Raw.indexOf(w) !== -1; })) return true;
+                        var r1Exp = _wcNameAliases[r1] || ''; var fdExp = _wcNameAliases[fd] || '';
+                        return (!!r1Exp && (fd === r1Exp || fd.indexOf(r1Exp) !== -1 || r1Exp.indexOf(fd) !== -1))
+                            || (!!fdExp && (r1 === fdExp || r1.indexOf(fdExp) !== -1 || fdExp.indexOf(r1) !== -1));
                     }
                     return matchSide(ra, raNick, raRaw, fdAway, fdAwayNick) && matchSide(rh, rhNick, rhRaw, fdHome, fdHomeNick);
                 });
@@ -7752,10 +7756,15 @@
                         // Any word from RS name appearing in DK name (or vice versa) is a match.
                         // Exclude geographic direction words — "south" must not match across "South Korea" / "South Africa".
                         var _gs = { south: 1, north: 1, east: 1, west: 1, central: 1, new: 1 };
+                        var _wcA = { 'usa': 'united states', 'united states': 'usa' };
                         var awayMatch = rAway.split(' ').some(function(w) { return w.length > 2 && !_gs[w] && fdAway.indexOf(w) !== -1; })
-                                     || fdAway.split(' ').some(function(w) { return w.length > 2 && !_gs[w] && rAway.indexOf(w) !== -1; });
+                                     || fdAway.split(' ').some(function(w) { return w.length > 2 && !_gs[w] && rAway.indexOf(w) !== -1; })
+                                     || (!!_wcA[rAway] && (fdAway === _wcA[rAway] || fdAway.indexOf(_wcA[rAway]) !== -1))
+                                     || (!!_wcA[fdAway] && (rAway === _wcA[fdAway] || rAway.indexOf(_wcA[fdAway]) !== -1));
                         var homeMatch = rHome.split(' ').some(function(w) { return w.length > 2 && !_gs[w] && fdHome.indexOf(w) !== -1; })
-                                     || fdHome.split(' ').some(function(w) { return w.length > 2 && !_gs[w] && rHome.indexOf(w) !== -1; });
+                                     || fdHome.split(' ').some(function(w) { return w.length > 2 && !_gs[w] && rHome.indexOf(w) !== -1; })
+                                     || (!!_wcA[rHome] && (fdHome === _wcA[rHome] || fdHome.indexOf(_wcA[rHome]) !== -1))
+                                     || (!!_wcA[fdHome] && (rHome === _wcA[fdHome] || rHome.indexOf(_wcA[fdHome]) !== -1));
                         return awayMatch && homeMatch;
                     });
                     if (matched) realKey = matched;
@@ -7859,7 +7868,9 @@
                     var fcPlusO  = outcomes.find(function(o) { return o.line === 0.5  || (o.label && o.label.indexOf('+0.5') !== -1); });
                     if (fcMinusO || fcPlusO) {
                         var fcTeamLow = r.side.toLowerCase();
+                        var _wcLblAliases = { 'usa': 'united states', 'united states': 'usa' };
                         var fcTeamWords = fcTeamLow.split(' ').filter(function(w) { return w.length > 2; });
+                        if (_wcLblAliases[fcTeamLow]) fcTeamWords = fcTeamWords.concat(_wcLblAliases[fcTeamLow].split(' ').filter(function(w) { return w.length > 2; }));
                         function fcLabelMatch(o) {
                             if (!o || !o.label) return false;
                             var lbl = o.label.toLowerCase().replace(/[+-]?\d+\.?\d*\s*$/, '').trim();
