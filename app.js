@@ -8069,7 +8069,17 @@
                         var rsLine = match.line; // e.g. -1.5, -0.5, 0.5, 1.5
                         var dkSpr = (r._dkSpreads && r._dkSpreads[fcOutType]) || {};
                         var dkPrice2 = rsLine != null ? dkSpr[String(rsLine)] : null;
-                        if (dkPrice2 != null) { r.am = dkPrice2; r.pt = rsLine; }
+                        if (dkPrice2 != null) {
+                            r.am = dkPrice2; r.pt = rsLine;
+                        } else if (sport === 'soccer_wc' && rsLine != null && rsLine !== r.pt) {
+                            // DK shifted the line mid-game (live flip) but RS still shows the
+                            // pre-game line direction. Lock display to RS line and clear EV —
+                            // comparing RS +0.5 prob vs DK -0.5 no-vig is a mismatch that
+                            // produces false edges.
+                            r.pt = rsLine;
+                            delete preds[r.id];
+                            delete probsExact[r.id];
+                        }
                         if (rsLine != null) yourLines[r.id] = rsLine;
                     }
                 }
