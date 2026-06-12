@@ -403,6 +403,7 @@ export async function onRequestGet(context) {
                 volumeDisplay: volStr,
                 outcomes: (mk.outcomes || []).map(o => ({
                   id: o.id, key: o.key, label: keyToName[o.label] || keyToName[o.key] || o.label,
+                  rawLabel: o.label, rawKey: o.key,
                   probability: o.probability, pct: Math.round(o.probability * 100),
                   line: (() => {
                     const m = (o.label || '').match(/([+-]?\d+\.?\d*)\s*$/);

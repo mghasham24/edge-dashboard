@@ -7959,7 +7959,7 @@
                 // Pass 0d: Soccer FC spread — find -0.5 and +0.5 outcomes by label, then match this
                 // team's name against both to determine which side RS assigned to this team.
                 // This avoids positional fallback errors when RS returns outcomes in home-first order.
-                if (sport === 'soccer_wc' && r.mkt === 'Spread') { console.log('[WC-DBG]', r.side, r.ps, 'mktLabel:', mktLabel, 'outcomes:', outcomes && outcomes.map(function(o){return o.label+'('+o.line+')';}), 'mktKeys:', Object.keys(gameMarkets)); }
+                if (sport === 'soccer_wc' && r.mkt === 'Spread') { console.log('[WC-DBG]', r.side, r.ps, 'mktLabel:', mktLabel, 'outcomes:', outcomes && outcomes.map(function(o){return o.label+'|raw:'+o.rawLabel+'|key:'+o.rawKey+'(line:'+o.line+')';}), 'mktKeys:', Object.keys(gameMarkets)); }
                 if (!match && r.mkt === 'Spread' && (sport === 'soccer_fc' || sport === 'soccer_wc')) {
                     // Also check o.line — RS outcome label is sometimes stripped of ±0.5 by team-key substitution,
                     // but the line field is extracted from the raw label before substitution and preserves it.
