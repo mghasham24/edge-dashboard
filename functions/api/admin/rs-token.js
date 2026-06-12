@@ -19,7 +19,7 @@ export async function onRequestGet({ request, env }) {
 
 export async function onRequestPost({ request, env }) {
   const secret = new URL(request.url).searchParams.get('key');
-  const tmKey = env.TM_PUSH_KEY || 'rax-bridge-9w2k5j7n';
+  const tmKey = env.TM_PUSH_KEY;
   if (!secret || (secret !== env.RS_TOKEN_SECRET && secret !== tmKey)) {
     return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
   }

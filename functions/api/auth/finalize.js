@@ -27,8 +27,8 @@ export async function onRequestGet({ request, env }) {
       'Cache-Control': 'no-store',
     });
     headers.append('Set-Cookie', cookie(token, session.expires_at));
-    // Clear stale __Host-session cookie that shadows the valid session= token
-    headers.append('Set-Cookie', '__Host-session=; Path=/; Secure; SameSite=Lax; Max-Age=0');
+    // Clear legacy session= cookie that may still exist from before __Host- migration
+    headers.append('Set-Cookie', 'session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0');
     return new Response(null, { status: 302, headers });
   } catch(e) {
     return Response.redirect('/', 302);

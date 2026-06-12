@@ -4,15 +4,15 @@ export function genToken() {
 }
 
 export function cookie(token, exp) {
-  return `session=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Expires=${new Date(exp * 1000).toUTCString()}`;
+  return `__Host-session=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Expires=${new Date(exp * 1000).toUTCString()}`;
 }
 
 export function ok(data, status, setCookie) {
   const h = new Headers({ 'Content-Type': 'application/json' });
   if (setCookie) {
     h.append('Set-Cookie', setCookie);
-    // Clear stale __Host-session cookie that can shadow the valid session= token
-    h.append('Set-Cookie', '__Host-session=; Path=/; Secure; SameSite=Lax; Max-Age=0');
+    // Clear legacy session= cookie that may still exist from before __Host- migration
+    h.append('Set-Cookie', 'session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0');
   }
   return new Response(JSON.stringify({ ok: true, ...data }), { status, headers: h });
 }
