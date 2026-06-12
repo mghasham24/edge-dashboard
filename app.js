@@ -7989,6 +7989,28 @@
                         } else {
                             match = fcMinusO || fcPlusO;
                         }
+                    } else if (sport === 'soccer_wc' && outcomes.length === 2) {
+                        // WC: RS may use "X Win or Draw" / "Y Win" format with no ±0.5 labels.
+                        // "Win or Draw" = the +0.5 side (team doesn't need to win outright).
+                        // "Win" (only) = the -0.5 side (team must win outright).
+                        var _wodO = outcomes.find(function(o) { return o.label && /draw/i.test(o.label); });
+                        var _wonO = _wodO ? outcomes.find(function(o) { return o !== _wodO; }) : null;
+                        if (_wodO && _wonO) {
+                            var _rTeamLow = r.side.toLowerCase();
+                            var _rWords2  = _rTeamLow.split(' ').filter(function(w) { return w.length > 2; });
+                            var _wcAlias2 = ({'usa':'united states','united states':'usa','bih':'bosnia','bosnia':'bih','can':'canada','canada':'can'})[_rTeamLow] || '';
+                            if (_wcAlias2) _rWords2 = _rWords2.concat(_wcAlias2.split(' ').filter(function(w) { return w.length > 2; }));
+                            function _wcLblHit(o) {
+                                if (!o || !o.label) return false;
+                                var lbl = o.label.toLowerCase();
+                                return _rWords2.some(function(w) { return lbl.indexOf(w) !== -1; });
+                            }
+                            if (_wcLblHit(_wodO)) { match = _wodO; }
+                            else if (_wcLblHit(_wonO)) { match = _wonO; }
+                            else { match = r.ps === 'A' ? outcomes[0] : outcomes[1]; }
+                        } else {
+                            match = r.ps === 'A' ? outcomes[0] : outcomes[1];
+                        }
                     } else {
                         // No ±0.5 labels — positional fallback
                         match = r.ps === 'A' ? outcomes[0] : outcomes[1];
@@ -8067,6 +8089,11 @@
                         // before any team-key substitution, so it's always correct.
                         var fcOutType = r.ps === 'B' ? 'Home' : 'Away';
                         var rsLine = match.line; // e.g. -1.5, -0.5, 0.5, 1.5
+                        // WC uses "X Win or Draw" / "Y Win" labels (no ±0.5 literals).
+                        // Infer line from label: "draw" in label = +0.5, "win" only = -0.5.
+                        if (rsLine == null && sport === 'soccer_wc' && match.label) {
+                            rsLine = /draw/i.test(match.label) ? 0.5 : (/win/i.test(match.label) ? -0.5 : null);
+                        }
                         var dkSpr = (r._dkSpreads && r._dkSpreads[fcOutType]) || {};
                         var dkPrice2 = rsLine != null ? dkSpr[String(rsLine)] : null;
                         if (dkPrice2 != null) {
