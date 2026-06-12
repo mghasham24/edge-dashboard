@@ -149,7 +149,8 @@ function parseRSCache(cacheData) {
     if (val && typeof val === 'object' &&
         (val['Moneyline'] || val['Game Winner'] || val['Spread'] || val['Total'] ||
          val['Total Runs'] || val['Total Goals'] || val['Run in 1st inning?'] ||
-         val['Fight Outcome'] || val['Fight Winner'] || val['Match Winner'] || val['Winner'])) {
+         val['Fight Outcome'] || val['Fight Winner'] || val['Match Winner'] || val['Winner'] ||
+         val['Match Result'])) {
       games[key] = val;
     }
   }
