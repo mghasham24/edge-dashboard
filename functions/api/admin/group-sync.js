@@ -42,6 +42,34 @@ export async function onRequestGet({ request, env }) {
   const rsData = await rsRes.json();
   const rsMembers = rsData.users || [];
 
+  // Paginate — RS returns a cursor when there are more members
+  let cursor = rsData.cursor || rsData.nextCursor || null;
+  let pageLimit = 20; // safety cap
+  while (cursor && pageLimit-- > 0) {
+    const pageRes = await fetch(
+      `https://web.realapp.com/groups/${groupId}/searchmembers?permissionsFilter=all&cursor=${encodeURIComponent(cursor)}`,
+      {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Origin': 'https://realsports.io',
+          'Referer': 'https://realsports.io/',
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
+          'real-auth-info': token,
+          'real-device-uuid': deviceUuid,
+          'real-device-type': 'desktop_web',
+          'real-version': '33',
+          'real-request-token': hashidsEncode(Date.now()),
+        },
+        signal: AbortSignal.timeout(8000),
+      }
+    ).catch(() => null);
+    if (!pageRes || !pageRes.ok) break;
+    const pageData = await pageRes.json();
+    rsMembers.push(...(pageData.users || []));
+    cursor = pageData.cursor || pageData.nextCursor || null;
+  }
+
   // All RaxEdge users with group_access=1 or rs_group_username set
   const { results: adminUsers } = await env.DB.prepare(
     'SELECT id, email, plan, group_access, rs_group_username, rs_hashid FROM users WHERE group_access=1 OR rs_group_username IS NOT NULL'
