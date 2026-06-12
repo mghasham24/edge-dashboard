@@ -119,7 +119,7 @@ export async function onRequestPost({ request, env }) {
         // Only downgrade if this is the subscription we have on record — prevents
         // a duplicate/stale sub being cancelled from wiping out a still-active sub.
         await env.DB.prepare(
-          'UPDATE users SET plan=\'free\', stripe_sub_id=NULL, pro_expires_at=NULL WHERE stripe_customer_id=? AND stripe_sub_id=?'
+          'UPDATE users SET plan=\'free\', stripe_sub_id=NULL, pro_expires_at=NULL, billing_interval=\'monthly\' WHERE stripe_customer_id=? AND stripe_sub_id=?'
         ).bind(obj.customer, obj.id).run();
       }
       break;
@@ -140,6 +140,8 @@ export async function onRequestPost({ request, env }) {
         const isTrial = subStatus === 'trialing';
         const isPaid  = subStatus === 'active';
 
+        const billingInterval = (subData?.items?.data?.[0]?.price?.recurring?.interval === 'year') ? 'annual' : 'monthly';
+
         if (isTrial) {
           const pmId = subData.default_payment_method;
           const abused = await checkFingerprintByPmId(pmId, obj.customer, env.DB, env.STRIPE_SECRET_KEY);
@@ -151,14 +153,14 @@ export async function onRequestPost({ request, env }) {
               });
             } catch(e) {}
             await env.DB.prepare(
-              'UPDATE users SET plan=\'free\', stripe_sub_id=NULL, pro_expires_at=NULL, had_free_trial=0 WHERE stripe_customer_id=?'
+              'UPDATE users SET plan=\'free\', stripe_sub_id=NULL, pro_expires_at=NULL, had_free_trial=0, billing_interval=\'monthly\' WHERE stripe_customer_id=?'
             ).bind(obj.customer).run();
           } else {
             // Activate pro immediately — don't rely on subscription.created webhook firing successfully
             const proExpiresAt = subData.trial_end || subData.current_period_end || null;
             await env.DB.prepare(
-              'UPDATE users SET plan=\'pro\', stripe_sub_id=?, pro_expires_at=?, had_free_trial=1 WHERE stripe_customer_id=?'
-            ).bind(obj.subscription, proExpiresAt, obj.customer).run();
+              'UPDATE users SET plan=\'pro\', stripe_sub_id=?, pro_expires_at=?, had_free_trial=1, billing_interval=? WHERE stripe_customer_id=?'
+            ).bind(obj.subscription, proExpiresAt, billingInterval, obj.customer).run();
           }
         }
 
@@ -166,8 +168,8 @@ export async function onRequestPost({ request, env }) {
           // Immediate paid subscription — set pro and reward referrer
           const proExpiresAt = subData && subData.current_period_end ? subData.current_period_end : null;
           await env.DB.prepare(
-            'UPDATE users SET plan=\'pro\', stripe_sub_id=?, pro_expires_at=? WHERE stripe_customer_id=?'
-          ).bind(obj.subscription, proExpiresAt, obj.customer).run();
+            'UPDATE users SET plan=\'pro\', stripe_sub_id=?, pro_expires_at=?, billing_interval=? WHERE stripe_customer_id=?'
+          ).bind(obj.subscription, proExpiresAt, billingInterval, obj.customer).run();
           await rewardReferrerForCustomer(obj.customer, obj.metadata, env.DB);
         }
       }

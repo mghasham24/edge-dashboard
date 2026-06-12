@@ -5170,7 +5170,7 @@
         if (modal) modal.style.display = 'none';
     }
 
-    function showUpgradeModal(msg) {
+    function showUpgradeModal(msg, billing) {
         try { posthog.capture('upgrade_modal_shown', { trigger: msg, sport: currentSport }); } catch(e) {}
         document.getElementById('upgrade-msg').textContent = msg;
         document.getElementById('upgrade-modal').style.display = 'flex';
@@ -5182,12 +5182,92 @@
         if (wrap) wrap.style.display = 'none';
         if (inp)  inp.value = '';
         if (codeBtn) codeBtn.textContent = 'Have a code?';
-        // Always open on monthly tab
-        setUpgradeBilling('monthly');
+        setUpgradeBilling(billing || 'monthly');
     }
     function closeUpgradeModal() {
         document.getElementById('upgrade-modal').style.display = 'none';
     }
+
+    // Annual upsell entry point — free users go to checkout (annual pre-selected),
+    // monthly pro users see the proration confirmation modal.
+    function openAnnualUpsell() {
+        if (!currentUser) return;
+        if (currentUser.plan !== 'pro') {
+            showUpgradeModal('Get full access to all sports, markets, and EV tools.', 'annual');
+            return;
+        }
+        // Monthly pro — show proration modal
+        showAnnualUpgradeModal();
+    }
+
+    async function showAnnualUpgradeModal() {
+        var modal    = document.getElementById('annual-upgrade-modal');
+        var loading  = document.getElementById('annual-upgrade-loading');
+        var details  = document.getElementById('annual-upgrade-details');
+        var errEl    = document.getElementById('annual-upgrade-error');
+        var amountEl = document.getElementById('annual-amount-due');
+        var btn      = document.getElementById('annual-upgrade-btn');
+        if (!modal) return;
+        // Reset state
+        loading.style.display = 'block';
+        details.style.display = 'none';
+        errEl.style.display = 'none';
+        btn.disabled = false;
+        btn.textContent = 'Confirm Upgrade →';
+        modal.style.display = 'flex';
+        try {
+            var res  = await fetch('/api/stripe/upgrade-preview', { credentials: 'same-origin' });
+            var data = await res.json();
+            loading.style.display = 'none';
+            if (!data.ok) {
+                errEl.textContent = data.error === 'already_annual' ? 'You are already on the annual plan.' : (data.error || 'Could not load preview.');
+                errEl.style.display = 'block';
+                btn.disabled = true;
+                return;
+            }
+            amountEl.textContent = data.amountDueStr;
+            details.style.display = 'block';
+        } catch(e) {
+            loading.style.display = 'none';
+            errEl.textContent = 'Network error — please try again.';
+            errEl.style.display = 'block';
+            btn.disabled = true;
+        }
+    }
+
+    function closeAnnualUpgradeModal() {
+        var modal = document.getElementById('annual-upgrade-modal');
+        if (modal) modal.style.display = 'none';
+    }
+
+    async function confirmAnnualUpgrade() {
+        var btn   = document.getElementById('annual-upgrade-btn');
+        var errEl = document.getElementById('annual-upgrade-error');
+        btn.disabled = true;
+        btn.textContent = 'Upgrading...';
+        errEl.style.display = 'none';
+        try {
+            var res  = await fetch('/api/stripe/upgrade', { method: 'POST', credentials: 'same-origin' });
+            var data = await res.json();
+            if (data.ok) {
+                try { posthog.capture('annual_upgrade_completed'); } catch(e) {}
+                closeAnnualUpgradeModal();
+                await checkSession();
+                showToast('Upgraded to Annual plan! You save $20.88/yr.', 'success');
+            } else {
+                errEl.textContent = data.error || 'Upgrade failed — please try again.';
+                errEl.style.display = 'block';
+                btn.disabled = false;
+                btn.textContent = 'Confirm Upgrade →';
+            }
+        } catch(e) {
+            errEl.textContent = 'Network error — please try again.';
+            errEl.style.display = 'block';
+            btn.disabled = false;
+            btn.textContent = 'Confirm Upgrade →';
+        }
+    }
+
     function showTrialNudge(user) {
         var banner = document.getElementById('trial-nudge-banner');
         var msg    = document.getElementById('trial-nudge-msg');
@@ -5381,18 +5461,44 @@
             // Pro ✦ button (manage subscription) — right of Refer, only for pro users
             if (currentUser && currentUser.plan === 'pro' && !currentUser.is_admin) {
                 var existingProBtn = document.getElementById('manage-sub-btn');
+                var isAnnualUser = currentUser.billing_interval === 'annual';
                 if (!existingProBtn) {
                     var proBtn = document.createElement('button');
                     proBtn.id = 'manage-sub-btn';
                     proBtn.className = 'sport-tab';
-                    proBtn.textContent = 'Pro ✦';
+                    proBtn.textContent = isAnnualUser ? 'Pro ✦ Annual' : 'Pro ✦';
                     proBtn.style.cssText = 'color:var(--accent);border-bottom-color:transparent;margin-left:auto';
                     proBtn.onclick = openBillingPortal;
                     ftBar.appendChild(proBtn);
                 } else {
+                    existingProBtn.textContent = isAnnualUser ? 'Pro ✦ Annual' : 'Pro ✦';
                     existingProBtn.style.marginLeft = 'auto';
                     ftBar.appendChild(existingProBtn);
                 }
+            }
+
+            // Annual upsell button — free users and monthly pro users
+            var showAnnualBtn = currentUser && !currentUser.is_admin && (
+                currentUser.plan !== 'pro' || currentUser.billing_interval === 'monthly'
+            );
+            if (showAnnualBtn) {
+                var existingAnnBtn = document.getElementById('annual-upsell-btn');
+                if (!existingAnnBtn) {
+                    var annBtn = document.createElement('button');
+                    annBtn.id = 'annual-upsell-btn';
+                    annBtn.className = 'sport-tab';
+                    annBtn.style.cssText = 'color:var(--green);border-bottom-color:transparent;font-size:11px;' +
+                        (currentUser.plan !== 'pro' ? 'margin-left:auto' : 'margin-left:6px');
+                    annBtn.textContent = 'Annual · $39/yr · Save $21';
+                    annBtn.onclick = function() { openAnnualUpsell(); };
+                    ftBar.appendChild(annBtn);
+                } else {
+                    existingAnnBtn.style.marginLeft = currentUser.plan !== 'pro' ? 'auto' : '6px';
+                    ftBar.appendChild(existingAnnBtn);
+                }
+            } else {
+                var staleAnnBtn = document.getElementById('annual-upsell-btn');
+                if (staleAnnBtn) staleAnnBtn.remove();
             }
         }
 
