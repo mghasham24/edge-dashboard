@@ -7210,7 +7210,7 @@
         var ylv = (r.yl != null && r.yl !== '') ? r.yl : '';
         var ph = r.pt != null ? r.pt : '';
         var lc = afChanged ? ' line-changed' : '';
-        var ylCell = r.mkt === 'ML' || r.mkt === 'RFI'
+        var ylCell = r.mkt === 'ML' || r.mkt === 'RFI' || currentSport === 'soccer_wc'
             ? '<td class="c" data-label="Real Line"></td>'
             : '<td class="c" data-label="Real Line"><input class="cell-inp' + lc + '" type="number" step="0.5" placeholder="' + ph + '" value="' + ylv + '" data-id="' + r.id + '" onblur="setLine(this)" onkeydown="if(event.key===\'Enter\')this.blur()"></td>';
         // RFI: FD Line col shows Kalshi label, No-Vig shows Kalshi fair, Adj Fair same
