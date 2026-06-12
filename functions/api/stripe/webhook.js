@@ -332,7 +332,7 @@ async function rewardReferrerForCustomer(stripeCustomerId, metadata, db, billing
     ).bind(referrerId).first();
     if (!referrer) return;
 
-    const months = (billingInterval === 'year') ? 2 : 1;
+    const months = (billingInterval === 'year') ? 3 : 1;
 
     if (referrer.stripe_sub_id) {
       // Referrer is a paying Stripe subscriber — bank credit months so the
