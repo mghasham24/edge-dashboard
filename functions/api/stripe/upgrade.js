@@ -48,7 +48,12 @@ export async function onRequestPost({ request, env }) {
 
   if (updated.error) return fail(500, updated.error.message || 'Upgrade failed');
 
-  const proExpiresAt = updated.current_period_end || null;
+  // POST response may not include current_period_end immediately — fetch fresh if missing.
+  let proExpiresAt = updated.current_period_end || null;
+  if (!proExpiresAt) {
+    const fresh = await stripeGet('subscriptions/' + row.stripe_sub_id, env.STRIPE_SECRET_KEY);
+    proExpiresAt = fresh.current_period_end || null;
+  }
   await env.DB.prepare(
     "UPDATE users SET pro_expires_at=?, billing_interval='annual' WHERE id=?"
   ).bind(proExpiresAt, auth.user_id).run();
