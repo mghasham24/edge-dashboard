@@ -7959,8 +7959,7 @@
                 // Pass 0d: Soccer FC spread — find -0.5 and +0.5 outcomes by label, then match this
                 // team's name against both to determine which side RS assigned to this team.
                 // This avoids positional fallback errors when RS returns outcomes in home-first order.
-                if (sport === 'soccer_wc' && r.mkt === 'Spread') { console.log('[WC-DBG]', r.side, r.ps, 'mktLabel:', mktLabel, 'outcomes:', outcomes && outcomes.map(function(o){return o.label+'|raw:'+o.rawLabel+'|key:'+o.rawKey+'(line:'+o.line+')';}), 'mktKeys:', Object.keys(gameMarkets)); }
-                if (!match && r.mkt === 'Spread' && (sport === 'soccer_fc' || sport === 'soccer_wc')) {
+if (!match && r.mkt === 'Spread' && (sport === 'soccer_fc' || sport === 'soccer_wc')) {
                     // Also check o.line — RS outcome label is sometimes stripped of ±0.5 by team-key substitution,
                     // but the line field is extracted from the raw label before substitution and preserves it.
                     var fcMinusO = outcomes.find(function(o) { return o.line === -0.5 || (o.label && o.label.indexOf('-0.5') !== -1); });
@@ -7994,7 +7993,7 @@
                         // WC: RS may use "X Win or Draw" / "Y Win" format with no ±0.5 labels.
                         // "Win or Draw" = the +0.5 side (team doesn't need to win outright).
                         // "Win" (only) = the -0.5 side (team must win outright).
-                        var _wodO = outcomes.find(function(o) { return o.label && /draw/i.test(o.label); });
+                        var _wodO = outcomes.find(function(o) { return /draw/i.test(o.rawLabel || o.label || ''); });
                         var _wonO = _wodO ? outcomes.find(function(o) { return o !== _wodO; }) : null;
                         if (_wodO && _wonO) {
                             var _rTeamLow = r.side.toLowerCase();
@@ -8092,8 +8091,9 @@
                         var rsLine = match.line; // e.g. -1.5, -0.5, 0.5, 1.5
                         // WC uses "X Win or Draw" / "Y Win" labels (no ±0.5 literals).
                         // Infer line from label: "draw" in label = +0.5, "win" only = -0.5.
-                        if (rsLine == null && sport === 'soccer_wc' && match.label) {
-                            rsLine = /draw/i.test(match.label) ? 0.5 : (/win/i.test(match.label) ? -0.5 : null);
+                        if (rsLine == null && sport === 'soccer_wc') {
+                            var _wcRaw = match.rawLabel || match.label || '';
+                            rsLine = /draw/i.test(_wcRaw) ? 0.5 : (/win/i.test(_wcRaw) ? -0.5 : null);
                         }
                         var dkSpr = (r._dkSpreads && r._dkSpreads[fcOutType]) || {};
                         var dkPrice2 = rsLine != null ? dkSpr[String(rsLine)] : null;
