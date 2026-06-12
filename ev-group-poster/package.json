@@ -6,6 +6,8 @@
     "start": "node index.js"
   },
   "dependencies": {
-    "undici": "^7.0.0"
+    "https-proxy-agent": "^9.1.0",
+    "undici": "^7.0.0",
+    "ws": "^8.21.0"
   }
 }
