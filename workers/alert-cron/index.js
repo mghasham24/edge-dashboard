@@ -569,50 +569,103 @@ function processNativeFC(sport, fdGames, rsGames, rsGameIds, rsGameSports, globa
     const rsMarkets   = rsGames[rsKey];
     const gameId      = rsGameIds[rsKey] || null;
     const rsSport     = rsGameSports[rsKey] || sport.rsKey;
+    if (!game.spreads) continue;
+
     const rsSpreadMkt = rsMarkets['Spread'];
-    if (!rsSpreadMkt || !game.spreads) continue;
-    const gameUrl     = buildRSUrl(gameId, rsSport, rsSpreadMkt.id);
+    const rsMRMkt     = rsMarkets['Match Result'];
 
-    const rsOutcomes = rsSpreadMkt.outcomes || [];
-    const rsVolume   = rsSpreadMkt.volume ?? 0;
+    if (rsSpreadMkt) {
+      // Normal FC path — RS has AH spread markets with explicit lines.
+      const gameUrl    = buildRSUrl(gameId, rsSport, rsSpreadMkt.id);
+      const rsOutcomes = rsSpreadMkt.outcomes || [];
 
-    for (const rsO of rsOutcomes) {
-      if (!rsO.probability || rsO.line == null) continue;
+      for (const rsO of rsOutcomes) {
+        if (!rsO.probability || rsO.line == null) continue;
 
-      // Determine if this outcome is Home or Away by team name match
-      const nRsLabel = normName(rsO.label);
+        const nRsLabel = normName(rsO.label);
+        const nHome    = normName(game.home);
+        const nAway    = normName(game.away);
+        const _nRsAlt  = WC_NORM_ALIAS[nRsLabel] || '';
+        let dkSide;
+        if (nHome.includes(nRsLabel) || nRsLabel.includes(nHome) || (_nRsAlt && (nHome.includes(_nRsAlt) || _nRsAlt === nHome))) dkSide = 'Home';
+        else if (nAway.includes(nRsLabel) || nRsLabel.includes(nAway) || (_nRsAlt && (nAway.includes(_nRsAlt) || _nRsAlt === nAway))) dkSide = 'Away';
+        else continue;
+
+        const otherSide    = dkSide === 'Home' ? 'Away' : 'Home';
+        const fdPrice      = lookupByLine(game.spreads[dkSide], rsO.line);
+        const fdOtherPrice = lookupByLine(game.spreads[otherSide], -rsO.line);
+        if (fdPrice == null || fdOtherPrice == null) continue;
+
+        const noVig = noVigFair(fdPrice, fdOtherPrice);
+        if (!noVig) continue;
+        const fdFair = noVig.fa;
+
+        const ev = calcEV(fdFair, rsO.probability);
+        if (ev == null || ev < globalMinEv || ev > 200) continue;
+        const u = unitsEV(ev, fdFair);
+        if (u <= 0) continue;
+
+        const sideName = dkSide === 'Home' ? game.home : game.away;
+        const pt = rsO.line;
+        allBets.push({
+          sport, game: gameKey, market: 'Spread', side: sideName,
+          ev: Math.round(ev * 10) / 10, units: u, fdOdds: fdPrice, pt,
+          rsPct: Math.round(rsO.probability * 1000) / 10,
+          adjFairPct: Math.round(fdFair * 1000) / 10,
+          gameUrl, commenceTime, isLive, rsGameId: gameId, rsSport,
+          betKey: `${sport.fdKey}|${gameKey}|Spread|${sideName}|${pt ?? ''}`,
+        });
+      }
+
+    } else if (rsMRMkt) {
+      // WC fallback — RS only has Match Result (3-way). Convert to AH ±0.5:
+      //   Home -0.5 = P(Home win outright)
+      //   Away +0.5 = P(Away win) + P(Draw) = 1 - P(Home win)
+      const gameUrl  = buildRSUrl(gameId, rsSport, rsMRMkt.id);
       const nHome    = normName(game.home);
       const nAway    = normName(game.away);
-      const _nRsAlt  = WC_NORM_ALIAS[nRsLabel] || '';
-      let dkSide;
-      if (nHome.includes(nRsLabel) || nRsLabel.includes(nHome) || (_nRsAlt && (nHome.includes(_nRsAlt) || _nRsAlt === nHome))) dkSide = 'Home';
-      else if (nAway.includes(nRsLabel) || nRsLabel.includes(nAway) || (_nRsAlt && (nAway.includes(_nRsAlt) || _nRsAlt === nAway))) dkSide = 'Away';
-      else continue;
+      let pHome = null, pAway = null, pDraw = null;
 
-      const otherSide    = dkSide === 'Home' ? 'Away' : 'Home';
-      const fdPrice      = lookupByLine(game.spreads[dkSide], rsO.line);
-      const fdOtherPrice = lookupByLine(game.spreads[otherSide], -rsO.line);
-      if (fdPrice == null || fdOtherPrice == null) continue;
+      for (const o of (rsMRMkt.outcomes || [])) {
+        if (!o.probability) continue;
+        const nL  = normName(o.label);
+        const alt = WC_NORM_ALIAS[nL] || '';
+        if (nL === 'draw' || nL === 'tie') { pDraw = o.probability; continue; }
+        if (nHome.includes(nL) || nL.includes(nHome) || (alt && (nHome.includes(alt) || alt === nHome))) pHome = o.probability;
+        else if (nAway.includes(nL) || nL.includes(nAway) || (alt && (nAway.includes(alt) || alt === nAway))) pAway = o.probability;
+      }
+      if (pHome == null || pAway == null) continue;
 
-      const noVig = noVigFair(fdPrice, fdOtherPrice);
-      if (!noVig) continue;
-      const fdFair = noVig.fa;
+      const pHomeAH = pHome;
+      const pAwayAH = pAway + (pDraw || 0);
 
-      const ev = calcEV(fdFair, rsO.probability);
-      if (ev == null || ev < globalMinEv || ev > 200) continue;
-      const u = unitsEV(ev, fdFair);
-      if (u <= 0) continue;
+      const ahSides = [
+        { side: 'Home', rsPct: pHomeAH, otherSide: 'Away', line: -0.5, otherLine: 0.5, sideName: game.home },
+        { side: 'Away', rsPct: pAwayAH, otherSide: 'Home', line:  0.5, otherLine: -0.5, sideName: game.away },
+      ];
+      for (const { side, rsPct, otherSide, line, otherLine, sideName } of ahSides) {
+        const fdPrice      = lookupByLine(game.spreads[side], line);
+        const fdOtherPrice = lookupByLine(game.spreads[otherSide], otherLine);
+        if (fdPrice == null || fdOtherPrice == null) continue;
 
-      const sideName = dkSide === 'Home' ? game.home : game.away;
-      const pt = rsO.line;
-      allBets.push({
-        sport, game: gameKey, market: 'Spread', side: sideName,
-        ev: Math.round(ev * 10) / 10, units: u, fdOdds: fdPrice, pt,
-        rsPct: Math.round(rsO.probability * 1000) / 10,
-        adjFairPct: Math.round(fdFair * 1000) / 10,
-        gameUrl, commenceTime, isLive, rsGameId: gameId, rsSport,
-        betKey: `${sport.fdKey}|${gameKey}|Spread|${sideName}|${pt ?? ''}`,
-      });
+        const noVig = noVigFair(fdPrice, fdOtherPrice);
+        if (!noVig) continue;
+        const fdFair = noVig.fa;
+
+        const ev = calcEV(fdFair, rsPct);
+        if (ev == null || ev < globalMinEv || ev > 200) continue;
+        const u = unitsEV(ev, fdFair);
+        if (u <= 0) continue;
+
+        allBets.push({
+          sport, game: gameKey, market: 'Spread', side: sideName,
+          ev: Math.round(ev * 10) / 10, units: u, fdOdds: fdPrice, pt: line,
+          rsPct: Math.round(rsPct * 1000) / 10,
+          adjFairPct: Math.round(fdFair * 1000) / 10,
+          gameUrl, commenceTime, isLive, rsGameId: gameId, rsSport,
+          betKey: `${sport.fdKey}|${gameKey}|Spread|${sideName}|${line}`,
+        });
+      }
     }
   }
 }
