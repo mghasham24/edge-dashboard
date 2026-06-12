@@ -70,20 +70,19 @@ export async function onRequestGet({ request, env }) {
   const matched = [];
   const usersToCheck = adminUsers.filter(u => u.group_access && u.rs_group_username);
 
-  await Promise.all(usersToCheck.map(async u => {
+  // Sequential — parallel bursts get rate-limited by RS
+  for (const u of usersToCheck) {
     try {
       const r = await fetch(
         `https://web.realapp.com/groups/${groupId}/searchmembers?permissionsFilter=all&query=${encodeURIComponent(u.rs_group_username)}`,
         {
-          // Unique token per request — RS deduplicates by this header
           headers: { ...rsHeaders, 'real-request-token': hashidsEncode(Date.now() + Math.floor(Math.random() * 1e6)) },
           signal: AbortSignal.timeout(8000),
         }
       );
       if (!r.ok) {
-        // Fail safe: flag as not found rather than silently dropping
-        inAdminOnly.push({ id: u.id, email: u.email, plan: u.plan, rs_group_username: u.rs_group_username });
-        return;
+        inAdminOnly.push({ id: u.id, email: u.email, plan: u.plan, rs_group_username: u.rs_group_username, _err: r.status });
+        continue;
       }
       const d = await r.json();
       const members = d.users || [];
@@ -94,10 +93,9 @@ export async function onRequestGet({ request, env }) {
         inAdminOnly.push({ id: u.id, email: u.email, plan: u.plan, rs_group_username: u.rs_group_username });
       }
     } catch(e) {
-      // Timeout or network error — flag as not found (fail safe)
-      inAdminOnly.push({ id: u.id, email: u.email, plan: u.plan, rs_group_username: u.rs_group_username });
+      inAdminOnly.push({ id: u.id, email: u.email, plan: u.plan, rs_group_username: u.rs_group_username, _err: 'timeout' });
     }
-  }));
+  }
 
   // Users with group_access=1 but no RS username set
   for (const u of adminUsers) {
