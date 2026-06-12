@@ -15,11 +15,11 @@ export async function onRequest(context) {
   const session = await getSession(request, env.DB);
   if (!session) return fail(401, 'Not authenticated');
 
-  // UFC only runs on Saturdays — block on all other days to save Odds API credits.
-  // Allow Saturday (6) and Sunday (0) UTC to cover late-night fights past midnight.
+  // UFC only runs on Saturdays/Sundays — block on all other days to save Odds API credits.
+  // Allow Sat (6), Sun (0), Mon (1) UTC to cover late-night fights running past midnight.
   if (sport === 'mma_mixed_martial_arts' && !session.is_admin) {
     const day = new Date().getUTCDay();
-    if (day !== 6 && day !== 0) {
+    if (day !== 6 && day !== 0 && day !== 1) {
       return new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
   }
