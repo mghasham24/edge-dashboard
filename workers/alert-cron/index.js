@@ -92,6 +92,7 @@ const NATIVE_SPORTS = [
   { fdKey: 'baseball_mlb',          rsKey: 'mlb',    label: 'MLB',   cacheKey: 'fd_mlb',       type: 'ml_only' },
   { fdKey: 'icehockey_nhl',         rsKey: 'nhl',    label: 'NHL',   cacheKey: 'fd_nhl',       type: 'nhl'     },
   { fdKey: 'soccer_fc',             rsKey: 'soccer', label: 'FC',    cacheKey: 'fd_fc',        type: 'fc'      },
+  { fdKey: 'soccer_wc',             rsKey: 'soccer', label: 'WC',    cacheKey: 'fd_wc',        type: 'fc'      },
 ];
 
 // FD/DK site endpoints — cron calls these to keep odds fresh during live games
@@ -101,6 +102,7 @@ const FD_ENDPOINT_MAP = {
   'baseball_mlb':    '/api/fd/mlb',
   'icehockey_nhl':   '/api/fd/nhl',
   'soccer_fc':       '/api/fd/fc',
+  'soccer_wc':       '/api/fd/wc',
 };
 
 // DK alt lines endpoints — NBA and NHL only; alt spreads/totals stay open longer during live games
@@ -156,8 +158,8 @@ function parseRSCache(cacheData) {
 
 const FDKEY_TO_RSKEY = {
   'basketball_nba': 'nba', 'basketball_wnba': 'wnba', 'baseball_mlb': 'mlb',
-  'icehockey_nhl': 'nhl', 'soccer_fc': 'soccer', 'basketball_ncaab': 'cbb',
-  'mma_mixed_martial_arts': 'ufc'
+  'icehockey_nhl': 'nhl', 'soccer_fc': 'soccer', 'soccer_wc': 'soccer',
+  'basketball_ncaab': 'cbb', 'mma_mixed_martial_arts': 'ufc'
 };
 
 async function warmRSCache(fdKey, env, now, staleThreshold) {
@@ -211,6 +213,10 @@ async function loadRSCache(rsKey, env, now, staleThreshold) {
 
 // ── Game key normalization ─────────────────────────────
 
+// normName strips "united", so "United States" becomes "states" and "USA" becomes "usa".
+// This alias map lets them still match each other for WC team name lookups.
+const WC_NORM_ALIAS = { 'usa': 'states', 'states': 'usa' };
+
 function normName(name) {
   return (name || '')
     .toLowerCase()
@@ -237,6 +243,8 @@ function findRSGameKey(fdAway, fdHome, rsGames, fdGameKey) {
 
   const nAway = normName(fdAway);
   const nHome = normName(fdHome);
+  const _nAwayAlt = WC_NORM_ALIAS[nAway] || '';
+  const _nHomeAlt = WC_NORM_ALIAS[nHome] || '';
   let fallback = null;
   for (const rsKey of Object.keys(rsGames)) {
     const isVariant = rsKey.endsWith(' (2)');
@@ -246,9 +254,11 @@ function findRSGameKey(fdAway, fdHome, rsGames, fdGameKey) {
     if (parts.length !== 2) continue;
     const nRA = normName(parts[0]);
     const nRH = normName(parts[1]);
+    const _nRAAlt = WC_NORM_ALIAS[nRA] || '';
+    const _nRHAlt = WC_NORM_ALIAS[nRH] || '';
     if (
-      (nRA.includes(nAway) || nAway.includes(nRA)) &&
-      (nRH.includes(nHome) || nHome.includes(nRH))
+      (nRA.includes(nAway) || nAway.includes(nRA) || (_nAwayAlt && nRA.includes(_nAwayAlt)) || (_nRAAlt && _nRAAlt.includes(nAway))) &&
+      (nRH.includes(nHome) || nHome.includes(nRH) || (_nHomeAlt && nRH.includes(_nHomeAlt)) || (_nRHAlt && _nRHAlt.includes(nHome)))
     ) {
       if (isDH2 && isVariant) return rsKey;
       fallback = rsKey;
@@ -573,9 +583,10 @@ function processNativeFC(sport, fdGames, rsGames, rsGameIds, rsGameSports, globa
       const nRsLabel = normName(rsO.label);
       const nHome    = normName(game.home);
       const nAway    = normName(game.away);
+      const _nRsAlt  = WC_NORM_ALIAS[nRsLabel] || '';
       let dkSide;
-      if (nHome.includes(nRsLabel) || nRsLabel.includes(nHome)) dkSide = 'Home';
-      else if (nAway.includes(nRsLabel) || nRsLabel.includes(nAway)) dkSide = 'Away';
+      if (nHome.includes(nRsLabel) || nRsLabel.includes(nHome) || (_nRsAlt && (nHome.includes(_nRsAlt) || _nRsAlt === nHome))) dkSide = 'Home';
+      else if (nAway.includes(nRsLabel) || nRsLabel.includes(nAway) || (_nRsAlt && (nAway.includes(_nRsAlt) || _nRsAlt === nAway))) dkSide = 'Away';
       else continue;
 
       const otherSide    = dkSide === 'Home' ? 'Away' : 'Home';

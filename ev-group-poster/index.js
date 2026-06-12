@@ -692,7 +692,7 @@ async function postDailySummary() {
     return `${display}${mktTag}${gameTag} · +${r.ev.toFixed(1)}%`;
   }
 
-  const SPORT_ORDER  = ['NBA', 'NHL', 'MLB', 'WNBA', 'FC'];
+  const SPORT_ORDER  = ['NBA', 'NHL', 'MLB', 'WNBA', 'FC', 'WC'];
   const MARKET_ORDER = ['ML', 'Spread', 'Total', 'RFI'];
   const sportSort = (a, b) => {
     const is = SPORT_ORDER.indexOf(a.sport),  js = SPORT_ORDER.indexOf(b.sport);
