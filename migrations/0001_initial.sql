@@ -157,6 +157,11 @@ CREATE TABLE IF NOT EXISTS rs_posted_positions (
 );
 
 -- Indexes
-CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
-CREATE INDEX IF NOT EXISTS idx_sessions_user  ON sessions(user_id);
-CREATE INDEX IF NOT EXISTS idx_bet_log_user   ON bet_log(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_sessions_token      ON sessions(token);
+CREATE INDEX IF NOT EXISTS idx_sessions_user       ON sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_bet_log_user        ON bet_log(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_users_email         ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_stripe_cust   ON users(stripe_customer_id);
+CREATE INDEX IF NOT EXISTS idx_notif_user          ON notification_settings(user_id);
+CREATE INDEX IF NOT EXISTS idx_tg_verify_token     ON telegram_verify_tokens(token);
+CREATE INDEX IF NOT EXISTS idx_alert_sent_user_key ON alert_sent_log(user_id, bet_key);

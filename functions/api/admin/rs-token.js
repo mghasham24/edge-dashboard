@@ -37,9 +37,9 @@ export async function onRequestPost({ request, env }) {
     "INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES ('meta:rs_auth_token',?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at"
   ).bind(data, now).run();
 
-  return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+  return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': 'https://realsports.io' } });
 }
 
 export async function onRequestOptions() {
-  return new Response(null, { headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST', 'Access-Control-Allow-Headers': 'Content-Type' } });
+  return new Response(null, { headers: { 'Access-Control-Allow-Origin': 'https://realsports.io', 'Access-Control-Allow-Methods': 'POST', 'Access-Control-Allow-Headers': 'Content-Type' } });
 }

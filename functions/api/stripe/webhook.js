@@ -356,5 +356,5 @@ async function rewardReferrerForCustomer(stripeCustomerId, metadata, db, billing
     await db.prepare(
       'UPDATE referrals SET rewarded_at=?, months_earned=? WHERE referrer_id=? AND referred_id=?'
     ).bind(rewardedAt, months, referrerId, newPro.id).run();
-  } catch(e) {}
+  } catch(e) { console.error('rewardReferrer failed:', e && e.message); }
 }

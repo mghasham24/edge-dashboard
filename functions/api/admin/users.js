@@ -113,8 +113,8 @@ async function handleRequest({ request, env }) {
 
   // DELETE /api/admin/users?id=X — fully delete user and all dependent rows
   if (method === 'DELETE') {
-    const id = url.searchParams.get('id');
-    if (!id) return fail(400, 'Missing user id');
+    const id = parseInt(url.searchParams.get('id'), 10);
+    if (!id || id <= 0) return fail(400, 'Missing user id');
     const tables = [
       'sessions', 'bets_taken', 'notification_settings', 'telegram_verify_tokens',
       'real_auth', 'password_resets', 'trial_fingerprints', 'alert_messages', 'alert_sent_log',
