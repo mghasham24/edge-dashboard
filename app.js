@@ -1016,7 +1016,6 @@
         document.getElementById('tab-login').classList.toggle('active', tab === 'login');
         document.getElementById('tab-signup').classList.toggle('active', tab === 'signup');
         document.getElementById('gate-pass2').style.display = tab === 'signup' ? '' : 'none';
-        document.getElementById('gate-refcode').style.display = tab === 'signup' ? '' : 'none';
         document.getElementById('gate-btn').textContent = tab === 'login' ? 'Log In' : 'Create Account';
         var fl = document.getElementById('forgot-link');
         if (fl) fl.style.display = tab === 'login' ? '' : 'none';
@@ -1127,13 +1126,6 @@
             var endpoint = currentTab === 'login' ? '/api/auth/login' : '/api/auth/register';
             var regBody = { email, password: pass };
             if (currentTab === 'signup') {
-                var refInput = document.getElementById('gate-refcode');
-                var refVal = refInput ? refInput.value.trim().toUpperCase() : '';
-                if (!refVal) {
-                    // Fallback to URL param
-                    refVal = new URLSearchParams(window.location.search).get('ref') || '';
-                }
-                if (refVal) regBody.refCode = refVal;
                 // reCAPTCHA v3 token
                 try {
                     var rcToken = await grecaptcha.execute('6Let4qMsAAAAAFhvh6wy6Ai_Ruzq2j4MIlMhqRnl', { action: 'register' });
@@ -1226,7 +1218,7 @@
 
     // Enter key support on gate inputs
     document.addEventListener('DOMContentLoaded', function() {
-        ['gate-email', 'gate-pass', 'gate-pass2', 'gate-refcode'].forEach(function(id) {
+        ['gate-email', 'gate-pass', 'gate-pass2'].forEach(function(id) {
             document.getElementById(id).addEventListener('keydown', function(e) {
                 if (e.key === 'Enter')
                     submitAuth();

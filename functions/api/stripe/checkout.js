@@ -23,6 +23,17 @@ export async function onRequestPost({ request, env }) {
       if (referrer) referrerId = referrer.id;
     }
     isAnnual = body.billing === 'annual';
+
+    // Record referral at checkout — this is the only entry point now.
+    // Overwrites any stale referred_by and ensures stats reflect the rewarded referrer.
+    if (referrerId) {
+      await env.DB.prepare(
+        'INSERT OR REPLACE INTO referrals (referrer_id, referred_id) VALUES (?,?)'
+      ).bind(referrerId, session.user_id).run();
+      await env.DB.prepare(
+        'UPDATE users SET referred_by=? WHERE id=?'
+      ).bind(referrerId, session.user_id).run();
+    }
   } catch {}
 
   // Create or retrieve Stripe customer

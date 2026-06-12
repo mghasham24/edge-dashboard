@@ -16,7 +16,6 @@ export async function onRequestPost({ request, env }) {
 
   const email    = (body.email    || '').trim().toLowerCase();
   const password = (body.password || '').trim();
-  const refCode  = (body.refCode  || '').trim().toUpperCase();
   const rcToken  = (body.rcToken  || '').trim();
 
   // reCAPTCHA v3 verification — fail open to avoid blocking real users
@@ -51,16 +50,6 @@ export async function onRequestPost({ request, env }) {
   const existing = await env.DB.prepare('SELECT id FROM users WHERE email=?').bind(email).first();
   if (existing) return err('An account with that email already exists', 409);
 
-  // Validate referral code if provided
-  let referrerId = null;
-  if (refCode) {
-    const referrer = await env.DB.prepare(
-      'SELECT id FROM users WHERE referral_code=?'
-    ).bind(refCode).first();
-    if (referrer) referrerId = referrer.id;
-  }
-
-  // Generate referral code for new user
   const newRefCode = await generateUniqueCode(env.DB);
 
   const hash = await hashPassword(password);
@@ -69,17 +58,6 @@ export async function onRequestPost({ request, env }) {
   ).bind(email, hash, 'free', newRefCode).run();
 
   const newUserId = meta.last_row_id;
-
-  // Track referral — reward is granted when referred user upgrades to Pro (via Stripe webhook)
-  if (referrerId) {
-    await env.DB.prepare(
-      'INSERT OR IGNORE INTO referrals (referrer_id, referred_id) VALUES (?,?)'
-    ).bind(referrerId, newUserId).run();
-    // Also store referred_by on the new user for webhook lookup
-    await env.DB.prepare(
-      'UPDATE users SET referred_by=? WHERE id=?'
-    ).bind(referrerId, newUserId).run();
-  }
 
   const token = genToken();
   const exp   = Math.floor(Date.now()/1000) + SESSION_DAYS * 86400;
