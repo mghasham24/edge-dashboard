@@ -1,6 +1,9 @@
 // functions/api/admin/group-sync.js
 // GET /api/admin/group-sync
 // Fetches RS group members and cross-references with RaxEdge D1 users.
+// NOTE: RS searchmembers caps unfiltered listings at ~50. Members beyond the
+// first 50 cannot be enumerated via the API, so "not in RS group" results only
+// cover users absent from that first page.
 
 import { getSession } from '../../_lib/session.js';
 import { hashidsEncode } from '../../_lib/hashids.js';
@@ -40,82 +43,49 @@ export async function onRequestGet({ request, env }) {
 
   if (!rsRes.ok) return fail(502, 'RS API returned ' + rsRes.status);
   const rsData = await rsRes.json();
-  // First 50 RS members — used for "in RS but not in RaxEdge" report only.
-  // RS caps searchmembers at ~50 with no full-list API, so we can't enumerate
-  // all 1500+ members. Instead we individually verify each RaxEdge group user below.
-  const rsFirstPage = rsData.users || [];
+  const rsMembers = rsData.users || [];
 
   // All RaxEdge users with group_access=1 or rs_group_username set
   const { results: adminUsers } = await env.DB.prepare(
     'SELECT id, email, plan, group_access, rs_group_username, rs_hashid FROM users WHERE group_access=1 OR rs_group_username IS NOT NULL'
   ).all();
 
-  const rsHeaders = {
-    'Accept': 'application/json',
-    'Content-Type': 'application/json',
-    'Origin': 'https://realsports.io',
-    'Referer': 'https://realsports.io/',
-    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
-    'real-auth-info': token,
-    'real-device-uuid': deviceUuid,
-    'real-device-type': 'desktop_web',
-    'real-version': '33',
-    'real-request-token': hashidsEncode(Date.now()),
-  };
-
-  // For each RaxEdge group user, search for their exact username in the RS group.
-  // This is the only reliable way to check membership in a 1500+ member group
-  // where the RS API caps unfiltered listings at ~50.
-  const inAdminOnly = [];
-  const matched = [];
-  const usersToCheck = adminUsers.filter(u => u.group_access && u.rs_group_username);
-
-  // Sequential — parallel bursts get rate-limited by RS
-  for (const u of usersToCheck) {
-    try {
-      const r = await fetch(
-        `https://web.realapp.com/groups/${groupId}/searchmembers?permissionsFilter=all&query=${encodeURIComponent(u.rs_group_username)}`,
-        {
-          headers: { ...rsHeaders, 'real-request-token': hashidsEncode(Date.now() + Math.floor(Math.random() * 1e6)) },
-          signal: AbortSignal.timeout(8000),
-        }
-      );
-      if (!r.ok) {
-        inAdminOnly.push({ id: u.id, email: u.email, plan: u.plan, rs_group_username: u.rs_group_username, _err: r.status });
-        continue;
-      }
-      const d = await r.json();
-      const members = d.users || [];
-      const found = members.find(m => m.userName.toLowerCase() === u.rs_group_username.toLowerCase());
-      if (found) {
-        matched.push({ rsId: found.id, rsUsername: found.userName, adminId: u.id, adminEmail: u.email });
-      } else {
-        inAdminOnly.push({ id: u.id, email: u.email, plan: u.plan, rs_group_username: u.rs_group_username });
-      }
-    } catch(e) {
-      inAdminOnly.push({ id: u.id, email: u.email, plan: u.plan, rs_group_username: u.rs_group_username, _err: 'timeout' });
-    }
-  }
-
-  // Users with group_access=1 but no RS username set
-  for (const u of adminUsers) {
-    if (u.group_access && !u.rs_group_username) {
-      inAdminOnly.push({ id: u.id, email: u.email, plan: u.plan, rs_group_username: null });
-    }
-  }
-
-  // Build lookup for first-page RS members to find those not in RaxEdge at all
+  // Build lookup maps (case-insensitive username, exact hashid)
   const adminByUsername = new Map();
   const adminByHashid   = new Map();
   for (const u of adminUsers) {
     if (u.rs_group_username) adminByUsername.set(u.rs_group_username.toLowerCase(), u);
     if (u.rs_hashid)         adminByHashid.set(u.rs_hashid, u);
   }
-  const inRsOnly = rsFirstPage
+
+  const rsMemberNames = new Set(rsMembers.map(m => m.userName.toLowerCase()));
+
+  // In RS group (first page) but no matching RaxEdge account
+  const inRsOnly = rsMembers
     .filter(m => !adminByUsername.has(m.userName.toLowerCase()) && !adminByHashid.has(m.id))
     .map(m => ({ rsId: m.id, rsUsername: m.userName, addedAt: m.addedAt || null }));
 
-  return ok({ rsTotal: rsData.total || rsFirstPage.length, adminGroupTotal: adminUsers.filter(u => u.group_access).length, matched, inRsOnly, inAdminOnly });
+  // In admin with group_access=1 but username not found in the first 50 RS members
+  const inAdminOnly = adminUsers
+    .filter(u => u.group_access && (!u.rs_group_username || !rsMemberNames.has(u.rs_group_username.toLowerCase())))
+    .map(u => ({ id: u.id, email: u.email, plan: u.plan, rs_group_username: u.rs_group_username || null }));
+
+  // Matched
+  const matched = rsMembers
+    .filter(m => adminByUsername.has(m.userName.toLowerCase()) || adminByHashid.has(m.id))
+    .map(m => {
+      const u = adminByUsername.get(m.userName.toLowerCase()) || adminByHashid.get(m.id);
+      return { rsId: m.id, rsUsername: m.userName, adminId: u.id, adminEmail: u.email };
+    });
+
+  return ok({
+    rsTotal: rsData.total || rsMembers.length,
+    rsPageSize: rsMembers.length,
+    adminGroupTotal: adminUsers.filter(u => u.group_access).length,
+    matched,
+    inRsOnly,
+    inAdminOnly,
+  });
 }
 
 function ok(d)           { return new Response(JSON.stringify({ ok: true,  ...d }), { headers: { 'Content-Type': 'application/json' } }); }
