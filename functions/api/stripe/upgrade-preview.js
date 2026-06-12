@@ -19,7 +19,7 @@ export async function onRequestGet({ request, env }) {
     'subscriptions/' + row.stripe_sub_id + '?expand[]=items.data.price',
     env.STRIPE_SECRET_KEY
   );
-  if (sub.error || !sub.id) return fail(400, sub.error?.message || sub.error?.code || JSON.stringify(sub).slice(0,200));
+  if (sub.error || !sub.id) return fail(400, 'Subscription not found');
   if (sub.status === 'canceled') return fail(400, 'Subscription is cancelled');
 
   const item = (sub.items?.data || [])[0];
