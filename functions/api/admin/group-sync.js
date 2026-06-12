@@ -74,9 +74,17 @@ export async function onRequestGet({ request, env }) {
     try {
       const r = await fetch(
         `https://web.realapp.com/groups/${groupId}/searchmembers?permissionsFilter=all&query=${encodeURIComponent(u.rs_group_username)}`,
-        { headers: rsHeaders, signal: AbortSignal.timeout(8000) }
+        {
+          // Unique token per request — RS deduplicates by this header
+          headers: { ...rsHeaders, 'real-request-token': hashidsEncode(Date.now() + Math.floor(Math.random() * 1e6)) },
+          signal: AbortSignal.timeout(8000),
+        }
       );
-      if (!r.ok) return;
+      if (!r.ok) {
+        // Fail safe: flag as not found rather than silently dropping
+        inAdminOnly.push({ id: u.id, email: u.email, plan: u.plan, rs_group_username: u.rs_group_username });
+        return;
+      }
       const d = await r.json();
       const members = d.users || [];
       const found = members.find(m => m.userName.toLowerCase() === u.rs_group_username.toLowerCase());
@@ -85,7 +93,10 @@ export async function onRequestGet({ request, env }) {
       } else {
         inAdminOnly.push({ id: u.id, email: u.email, plan: u.plan, rs_group_username: u.rs_group_username });
       }
-    } catch(e) {}
+    } catch(e) {
+      // Timeout or network error — flag as not found (fail safe)
+      inAdminOnly.push({ id: u.id, email: u.email, plan: u.plan, rs_group_username: u.rs_group_username });
+    }
   }));
 
   // Users with group_access=1 but no RS username set
