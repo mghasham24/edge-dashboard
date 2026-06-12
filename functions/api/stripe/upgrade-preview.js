@@ -2,7 +2,7 @@
 // Returns the exact prorated charge if a monthly pro user upgrades to annual right now.
 // Used by the frontend confirmation modal before committing the upgrade.
 import { getSessionOrCron } from '../../_lib/auth.js';
-import { stripeGet } from '../../_lib/stripe.js';
+import { stripeGet, stripePost } from '../../_lib/stripe.js';
 
 export async function onRequestGet({ request, env }) {
   const auth = await getSessionOrCron(request, env);
@@ -43,15 +43,17 @@ export async function onRequestGet({ request, env }) {
     }), { headers: { 'Content-Type': 'application/json' } });
   }
 
-  // Brackets must be percent-encoded — stripeGet passes the URL as-is.
-  const preview = await stripeGet(
-    'invoices/upcoming' +
-    '?customer=' + sub.customer +
-    '&subscription=' + row.stripe_sub_id +
-    '&subscription_items%5B0%5D%5Bid%5D=' + item.id +
-    '&subscription_items%5B0%5D%5Bprice%5D=' + annualPriceId +
-    '&subscription_billing_cycle_anchor=now' +
-    '&subscription_proration_behavior=always_invoice',
+  const preview = await stripePost(
+    'invoices/create_preview',
+    {
+      customer: sub.customer,
+      subscription: row.stripe_sub_id,
+      subscription_details: {
+        items: [{ id: item.id, price: annualPriceId }],
+        billing_cycle_anchor: 'now',
+        proration_behavior: 'always_invoice',
+      },
+    },
     env.STRIPE_SECRET_KEY
   );
 
