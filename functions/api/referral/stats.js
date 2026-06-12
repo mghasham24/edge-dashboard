@@ -25,20 +25,22 @@ export async function onRequestGet({ request, env }) {
     user = { ...user, referral_code: code };
   }
 
-  // Count paid referrals — only rows where the reward has actually fired (rewarded_at set).
+  // Only count rows where the reward has actually fired (rewarded_at set).
   // Trialing users have plan='pro' immediately, so counting by plan would show false positives.
   const paidRow = await env.DB.prepare(
-    'SELECT COUNT(*) as c FROM referrals WHERE referrer_id=? AND rewarded_at IS NOT NULL'
+    'SELECT COUNT(*) as c, COALESCE(SUM(months_earned), 0) as m FROM referrals WHERE referrer_id=? AND rewarded_at IS NOT NULL'
   ).bind(user.id).first();
 
   const paidReferrals = paidRow ? paidRow.c : 0;
+  const monthsEarned  = paidRow ? paidRow.m : 0;
 
   return new Response(JSON.stringify({
     ok: true,
     referralCode: user.referral_code,
     plan: user.plan,
     proExpiresAt: user.pro_expires_at || null,
-    paidReferrals
+    paidReferrals,
+    monthsEarned,
   }), { headers: { 'Content-Type': 'application/json' } });
 }
 

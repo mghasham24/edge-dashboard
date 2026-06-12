@@ -103,7 +103,8 @@ export async function onRequestPost({ request, env }) {
       // Trial converted to paid — reward referrer now (not at trial start)
       const prevAttrs = event.data.previous_attributes || {};
       if (prevAttrs.status === 'trialing' && status === 'active') {
-        await rewardReferrerForCustomer(obj.customer, obj.metadata, env.DB);
+        const interval = obj.items?.data?.[0]?.price?.recurring?.interval || 'month';
+        await rewardReferrerForCustomer(obj.customer, obj.metadata, env.DB, interval);
       }
       break;
     }
@@ -170,7 +171,8 @@ export async function onRequestPost({ request, env }) {
           await env.DB.prepare(
             'UPDATE users SET plan=\'pro\', stripe_sub_id=?, pro_expires_at=?, billing_interval=? WHERE stripe_customer_id=?'
           ).bind(obj.subscription, proExpiresAt, billingInterval, obj.customer).run();
-          await rewardReferrerForCustomer(obj.customer, obj.metadata, env.DB);
+          const subInterval = subData?.items?.data?.[0]?.price?.recurring?.interval || 'month';
+          await rewardReferrerForCustomer(obj.customer, subData?.metadata || {}, env.DB, subInterval);
         }
       }
       break;
@@ -305,7 +307,9 @@ async function resolveFingerprint(pmId, stripeCustomerId, secretKey) {
 }
 
 // ── Reward referrer helper ────────────────────────────
-async function rewardReferrerForCustomer(stripeCustomerId, metadata, db) {
+// billingInterval: Stripe interval string — 'year' for annual, 'month' for monthly.
+// Annual referrals earn 2 months; monthly earns 1.
+async function rewardReferrerForCustomer(stripeCustomerId, metadata, db, billingInterval) {
   try {
     const newPro = await db.prepare(
       'SELECT id, referred_by FROM users WHERE stripe_customer_id=?'
@@ -317,32 +321,40 @@ async function rewardReferrerForCustomer(stripeCustomerId, metadata, db) {
     const referrerId = referrerIdFromMeta || newPro.referred_by || null;
     if (!referrerId) return;
 
+    // Idempotency guard — skip if this referral was already rewarded.
+    const existing = await db.prepare(
+      'SELECT rewarded_at FROM referrals WHERE referrer_id=? AND referred_id=?'
+    ).bind(referrerId, newPro.id).first();
+    if (existing && existing.rewarded_at) return;
+
     const referrer = await db.prepare(
       'SELECT id, plan, stripe_sub_id, pro_expires_at FROM users WHERE id=?'
     ).bind(referrerId).first();
     if (!referrer) return;
 
+    const months = (billingInterval === 'year') ? 2 : 1;
+
     if (referrer.stripe_sub_id) {
-      // Referrer is a paying Stripe subscriber — bank a credit month so the
-      // invoice.created handler can apply it against their next renewal charge.
+      // Referrer is a paying Stripe subscriber — bank credit months so the
+      // invoice.created handler can apply them against their next renewal charge.
       await db.prepare(
-        'UPDATE users SET referral_credits = referral_credits + 1 WHERE id=?'
-      ).bind(referrer.id).run();
+        'UPDATE users SET referral_credits = referral_credits + ? WHERE id=?'
+      ).bind(months, referrer.id).run();
     } else {
       // Referrer is on a free/manual pro plan — extend pro_expires_at directly.
       const now = Math.floor(Date.now() / 1000);
       const base = (referrer.pro_expires_at && referrer.pro_expires_at > now)
         ? referrer.pro_expires_at : now;
-      const newExpiry = base + 2592000; // +30 days
+      const newExpiry = base + (months * 2592000); // 30 days per month
       await db.prepare(
         'UPDATE users SET plan=\'pro\', pro_expires_at=? WHERE id=?'
       ).bind(newExpiry, referrer.id).run();
     }
 
-    // Stamp the referral row so stats only count confirmed paid conversions.
+    // Stamp the referral row — marks confirmed paid conversion and prevents double-reward.
     const rewardedAt = Math.floor(Date.now() / 1000);
     await db.prepare(
-      'UPDATE referrals SET rewarded_at=? WHERE referrer_id=? AND referred_id=?'
-    ).bind(rewardedAt, referrerId, newPro.id).run();
+      'UPDATE referrals SET rewarded_at=?, months_earned=? WHERE referrer_id=? AND referred_id=?'
+    ).bind(rewardedAt, months, referrerId, newPro.id).run();
   } catch(e) {}
 }

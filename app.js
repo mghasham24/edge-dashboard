@@ -4427,7 +4427,7 @@
             var data = await res.json();
             if (!data.ok) return;
             document.getElementById('ref-count').textContent = data.paidReferrals || 0;
-            document.getElementById('ref-months').textContent = data.paidReferrals || 0;
+            document.getElementById('ref-months').textContent = data.monthsEarned || 0;
             var expiry = data.proExpiresAt;
             if (expiry) {
                 var d = new Date(expiry * 1000);
