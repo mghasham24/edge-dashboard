@@ -38,7 +38,7 @@ async function handleRequest({ request, env }) {
 
     const where = [];
     const binds = [];
-    if (search)          { where.push('(u.email LIKE ? OR u.rs_group_username LIKE ?)'); binds.push('%' + search + '%', '%' + search + '%'); }
+    if (search)          { where.push('(LOWER(u.email) LIKE LOWER(?) OR LOWER(u.rs_group_username) LIKE LOWER(?))'); binds.push('%' + search + '%', '%' + search + '%'); }
     if (plan)            { where.push('u.plan=?'); binds.push(plan); }
     if (group !== null && group !== '') { where.push('u.group_access=?'); binds.push(parseInt(group)); }
     const whereClause = where.length ? 'WHERE ' + where.join(' AND ') : '';
