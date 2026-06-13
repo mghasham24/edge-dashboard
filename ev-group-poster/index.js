@@ -177,7 +177,7 @@ function unitsEV(ev, realPct) {
 // ── Live RS odds refresh ────────────────────────────────
 
 const RS_ML_LABELS    = ['Game Winner', 'Moneyline', 'Fight Outcome', 'Fight Winner', 'To Win Match', 'Match Winner', 'Winner'];
-const RS_MARKET_MAP   = { ML: RS_ML_LABELS, Spread: ['Spread'], Total: ['Total', 'Total Goals'], RFI: ['Run in 1st inning?'] };
+const RS_MARKET_MAP   = { ML: RS_ML_LABELS, Spread: ['Spread', 'Match Result'], Total: ['Total', 'Total Goals'], RFI: ['Run in 1st inning?'] };
 
 function normName(s) { return (s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
 
@@ -530,6 +530,15 @@ function findOutcome(post, markets) {
   }
   if (!mkt) return null;
   const outcomes = mkt.outcomes || [];
+
+  // WC "Match Result" is a 2-way market: one outcome is "X Win or Draw", the other is "Y Win".
+  // The bet's pt tells us which side: +0.5 = Win or Draw, -0.5 = Win outright.
+  // Use pt direction instead of team name matching (RS abbreviates country names: "PAR" not "Paraguay").
+  if (mkt.label === 'Match Result' && post.pt != null) {
+    const wantWinOrDraw = post.pt > 0;
+    return outcomes.find(o => /win or draw/i.test(o.label) === wantWinOrDraw) || null;
+  }
+
   const normSide = normName(post.side);
   return outcomes.find(o => {
     const norm = normName(o.label).replace(/\d/g, '');
@@ -705,9 +714,7 @@ async function postDailySummary() {
   };
   const winList     = results.filter(r => r.result === 'win').sort(sportSort);
   const lossList    = results.filter(r => r.result === 'loss').sort(sportSort);
-  // Exclude games that started >3.5h ago from pending — they're over but unresolvable
-  // (e.g. WC uses a 3-way RS market that doesn't map cleanly to our spread outcome lookup)
-  const pendingList = results.filter(r => r.result === null && !(r.commenceTime > 0 && r.commenceTime < nowSec - 3.5 * 3600)).sort(sportSort);
+  const pendingList = results.filter(r => r.result === null).sort(sportSort);
 
   const RS_MAX_BYTES = 980;
   const RS_MAX_LINES = 30;
