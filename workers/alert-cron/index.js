@@ -626,23 +626,38 @@ function processNativeFC(sport, fdGames, rsGames, rsGameIds, rsGameSports, globa
       const nHome    = normName(game.home);
       const nAway    = normName(game.away);
       let pHome = null, pAway = null, pDraw = null;
+      let homeIsWod = false, awayIsWod = false;
 
       for (const o of (rsMRMkt.outcomes || [])) {
         if (!o.probability) continue;
         const nL  = normName(o.label);
         const alt = WC_NORM_ALIAS[nL] || '';
+        const wod = /win or draw/i.test(o.label);
         if (nL === 'draw' || nL === 'tie') { pDraw = o.probability; continue; }
-        if (nHome.includes(nL) || nL.includes(nHome) || (alt && (nHome.includes(alt) || alt === nHome))) pHome = o.probability;
-        else if (nAway.includes(nL) || nL.includes(nAway) || (alt && (nAway.includes(alt) || alt === nAway))) pAway = o.probability;
+        if (nHome.includes(nL) || nL.includes(nHome) || (alt && (nHome.includes(alt) || alt === nHome))) { pHome = o.probability; homeIsWod = wod; }
+        else if (nAway.includes(nL) || nL.includes(nAway) || (alt && (nAway.includes(alt) || alt === nAway))) { pAway = o.probability; awayIsWod = wod; }
       }
       if (pHome == null || pAway == null) continue;
 
-      const pHomeAH = pHome;
-      const pAwayAH = pAway + (pDraw || 0);
+      // 2-way "Match Result" market: one outcome is "X Win" (-0.5), the other is "Y Win or Draw" (+0.5).
+      // The team whose label is "Win or Draw" is the +0.5 side regardless of home/away.
+      // Without this check the code inverts lines whenever the home team is the underdog.
+      let homeAHLine, awayAHLine, pHomeAH, pAwayAH;
+      if (homeIsWod && !awayIsWod) {
+        homeAHLine =  0.5; awayAHLine = -0.5;
+        pHomeAH = pHome; pAwayAH = pAway; // home Win or Draw = +0.5; away Win = -0.5
+      } else if (awayIsWod && !homeIsWod) {
+        homeAHLine = -0.5; awayAHLine =  0.5;
+        pHomeAH = pHome; pAwayAH = pAway; // home Win = -0.5; away Win or Draw = +0.5
+      } else {
+        // Standard 3-way (separate Draw outcome) — original logic
+        homeAHLine = -0.5; awayAHLine = 0.5;
+        pHomeAH = pHome; pAwayAH = pAway + (pDraw || 0);
+      }
 
       const ahSides = [
-        { side: 'Home', rsPct: pHomeAH, otherSide: 'Away', line: -0.5, otherLine: 0.5, sideName: game.home },
-        { side: 'Away', rsPct: pAwayAH, otherSide: 'Home', line:  0.5, otherLine: -0.5, sideName: game.away },
+        { side: 'Home', rsPct: pHomeAH, otherSide: 'Away', line: homeAHLine, otherLine: awayAHLine, sideName: game.home },
+        { side: 'Away', rsPct: pAwayAH, otherSide: 'Home', line: awayAHLine, otherLine: homeAHLine, sideName: game.away },
       ];
       for (const { side, rsPct, otherSide, line, otherLine, sideName } of ahSides) {
         const fdPrice      = lookupByLine(game.spreads[side], line);
