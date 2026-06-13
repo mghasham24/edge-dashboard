@@ -633,19 +633,15 @@ function processNativeFC(sport, fdGames, rsGames, rsGameIds, rsGameSports, globa
         if (!o.probability) continue;
         const nL  = normName(o.label);
         const alt = WC_NORM_ALIAS[nL] || '';
-        const wod = /win or draw/i.test(o.label);
+        const wod = /win or draw/i.test(o.rawLabel || o.label);
         if (nL === 'draw' || nL === 'tie') { pDraw = o.probability; continue; }
         if (nHome.includes(nL) || nL.includes(nHome) || (alt && (nHome.includes(alt) || alt === nHome))) { pHome = o.probability; homeIsWod = wod; }
         else if (nAway.includes(nL) || nL.includes(nAway) || (alt && (nAway.includes(alt) || alt === nAway))) { pAway = o.probability; awayIsWod = wod; }
       }
       if (pHome == null || pAway == null) continue;
 
-      // Determine ±0.5 line assignment.
-      // Priority 1: explicit "Win or Draw" label — the WoD team is +0.5 underdog.
-      // Priority 2: 2-way market (pDraw==null, labels stripped to team names by keyToName) —
-      //   higher probability = Win outright = -0.5 side. Lower = Win or Draw = +0.5 side.
-      //   This handles away-team favorites correctly (e.g. Turkey @ Australia).
-      // Priority 3: standard 3-way — home -0.5, away +0.5 with draw added to away.
+      // WoD detection uses rawLabel (original RS label before keyToName strips " Win or Draw").
+      // The team whose rawLabel contains "Win or Draw" is the +0.5 underdog side.
       let homeAHLine, awayAHLine, pHomeAH, pAwayAH;
       if (homeIsWod && !awayIsWod) {
         homeAHLine =  0.5; awayAHLine = -0.5;
@@ -653,17 +649,10 @@ function processNativeFC(sport, fdGames, rsGames, rsGameIds, rsGameSports, globa
       } else if (awayIsWod && !homeIsWod) {
         homeAHLine = -0.5; awayAHLine =  0.5;
         pHomeAH = pHome; pAwayAH = pAway;
-      } else if (pDraw == null) {
-        // 2-way market — higher prob team wins outright → gets -0.5
-        if (pHome >= pAway) {
-          homeAHLine = -0.5; awayAHLine =  0.5;
-        } else {
-          homeAHLine =  0.5; awayAHLine = -0.5;
-        }
-        pHomeAH = pHome; pAwayAH = pAway;
       } else {
+        // Standard 3-way (separate Draw outcome)
         homeAHLine = -0.5; awayAHLine =  0.5;
-        pHomeAH = pHome; pAwayAH = pAway + pDraw;
+        pHomeAH = pHome; pAwayAH = pAway + (pDraw || 0);
       }
 
       const ahSides = [
