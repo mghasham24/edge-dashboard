@@ -620,6 +620,8 @@ async function cacheResultsInBackground() {
 async function postDailySummary() {
   if (!dailyPosts.length) { console.log('ev-poster: no posts today, skipping summary'); return; }
 
+  const nowSec = Math.floor(Date.now() / 1000);
+
   // Deduplicate by betKey — keep last post per key (highest EV repost)
   const byKey = new Map();
   for (const p of dailyPosts) byKey.set(p.betKey, p);
@@ -688,7 +690,7 @@ async function postDailySummary() {
                    : isRFI ? r.side
                    : teamNickname(r.side) + ptStr;
     const mktTag   = isML ? ' ML' : (isRFI ? '' : ` · ${r.market}`);
-    const gameTag  = (isRFI || (isSpread && r.sport !== 'NBA') || isTotal) && r.game ? ` · ${abbrevGame(r.game)}` : '';
+    const gameTag  = (isRFI || (isSpread && r.sport !== 'NBA' && r.sport !== 'WC') || isTotal) && r.game ? ` · ${abbrevGame(r.game)}` : '';
     return `${display}${mktTag}${gameTag} · +${r.ev.toFixed(1)}%`;
   }
 
@@ -703,7 +705,9 @@ async function postDailySummary() {
   };
   const winList     = results.filter(r => r.result === 'win').sort(sportSort);
   const lossList    = results.filter(r => r.result === 'loss').sort(sportSort);
-  const pendingList = results.filter(r => r.result === null).sort(sportSort);
+  // Exclude games that started >3.5h ago from pending — they're over but unresolvable
+  // (e.g. WC uses a 3-way RS market that doesn't map cleanly to our spread outcome lookup)
+  const pendingList = results.filter(r => r.result === null && !(r.commenceTime > 0 && r.commenceTime < nowSec - 3.5 * 3600)).sort(sportSort);
 
   const RS_MAX_BYTES = 980;
   const RS_MAX_LINES = 30;
