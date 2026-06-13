@@ -69,15 +69,14 @@ function extractGames(gamesData) {
     addGames(lcd.games || lcd.predictions || lcd.items || lcd.events);
   }
 
-  // Any other day-content keys whose date is today or tomorrow UTC
-  const today    = new Date().toISOString().slice(0, 10);
-  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  // Any other day-content keys whose date is within the next 2 days UTC
+  const dayStrings = new Set([0, 1, 2].map(d => new Date(Date.now() + d * 86400000).toISOString().slice(0, 10)));
   for (const key of Object.keys(gamesData)) {
     if (key === 'latestDayContent') continue;
     const val = gamesData[key];
     if (val && typeof val === 'object' && !Array.isArray(val)) {
       const dayDate = val.day || val.date;
-      if (dayDate === today || dayDate === tomorrow) {
+      if (dayStrings.has(dayDate)) {
         addGames(val.games || val.predictions || val.items || val.events);
       }
     }

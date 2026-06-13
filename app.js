@@ -7870,7 +7870,7 @@
                         // Any word from RS name appearing in DK name (or vice versa) is a match.
                         // Exclude geographic direction words — "south" must not match across "South Korea" / "South Africa".
                         var _gs = { south: 1, north: 1, east: 1, west: 1, central: 1, new: 1 };
-                        var _wcA = { 'usa': 'united states', 'united states': 'usa' };
+                        var _wcA = { 'usa': 'united states', 'united states': 'usa', 'turkiye': 'turkey', 'turkey': 'turkiye' };
                         var awayMatch = rAway.split(' ').some(function(w) { return w.length > 2 && !_gs[w] && fdAway.indexOf(w) !== -1; })
                                      || fdAway.split(' ').some(function(w) { return w.length > 2 && !_gs[w] && rAway.indexOf(w) !== -1; })
                                      || (!!_wcA[rAway] && (fdAway === _wcA[rAway] || fdAway.indexOf(_wcA[rAway]) !== -1))

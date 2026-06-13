@@ -216,10 +216,11 @@ async function loadRSCache(rsKey, env, now, staleThreshold) {
 
 // normName strips "united", so "United States" becomes "states" and "USA" becomes "usa".
 // This alias map lets them still match each other for WC team name lookups.
-const WC_NORM_ALIAS = { 'usa': 'states', 'states': 'usa' };
+const WC_NORM_ALIAS = { 'usa': 'states', 'states': 'usa', 'turkiye': 'turkey', 'turkey': 'turkiye' };
 
 function normName(name) {
   return (name || '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '') // ü→u, é→e, etc.
     .toLowerCase()
     .replace(/\bfc\b/g, '')
     .replace(/\bunited\b/g, '')
