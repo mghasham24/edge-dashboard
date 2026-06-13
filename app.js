@@ -7301,14 +7301,10 @@
         var predEV = preds[r.id];
         if (predEV && r.af != null) {
             var ev = null;
-            if (payoutRatios[r.id] != null) {
-                ev = (r.af * payoutRatios[r.id] - 1) * 100;
-            } else {
-                var realPctEV = Math.min(0.999, Math.max(0.001, parseFloat(predEV) / 100 + rsPredAdj / 100));
-                if (realPctEV > 0 && realPctEV < 1) {
-                    var rakeEV = rsBaseTake(realPctEV);
-                    ev = (r.af * (1/realPctEV) * (1-rakeEV) - 1) * 100;
-                }
+            var realPctEV = Math.min(0.999, Math.max(0.001, parseFloat(predEV) / 100 + rsPredAdj / 100));
+            if (realPctEV > 0 && realPctEV < 1) {
+                var rakeEV = rsBaseTake(realPctEV);
+                ev = (r.af * (1/realPctEV) * (1-rakeEV) - 1) * 100;
             }
             if (ev != null) {
                 // >100% EV = post-game artifact (RS knows result, FD market still open)
