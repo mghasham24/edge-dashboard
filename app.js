@@ -7116,14 +7116,12 @@
         var filtered = rows.filter(function(r) {
             // MLB: backend already limits to -5h/+16h window; just hide games that have ended
             if (currentSport === 'baseball_mlb' && r.cm && (now - r.cm) > 5 * 60 * 60 * 1000) return false;
-            // WC: only show today's games (local time); keep games that started before midnight
-            // and are still live (within 4h of kickoff, covers 90min + extra time + penalties)
+            // WC: rolling window — games that kicked off within the last 4h or start within next 24h.
+            // Avoids local-midnight boundary issues for users in UTC/UTC+ timezones.
             if (currentSport === 'soccer_wc' && r.cm) {
-                var todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
-                var todayEnd   = new Date(todayStart); todayEnd.setDate(todayEnd.getDate() + 1);
-                var isToday    = r.cm >= todayStart && r.cm < todayEnd;
-                var isRecent   = r.cm <= now && (now - r.cm) < 4 * 60 * 60 * 1000;
-                if (!isToday && !isRecent) return false;
+                var wcPast   = new Date(now.getTime() - 4 * 60 * 60 * 1000);
+                var wcFuture = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+                if (r.cm < wcPast || r.cm > wcFuture) return false;
             }
             // RFI: hide once game has started — market resolves in 1st inning
             if (r.mkt === 'RFI' && r.cm && r.cm <= now) return false;
