@@ -640,20 +640,30 @@ function processNativeFC(sport, fdGames, rsGames, rsGameIds, rsGameSports, globa
       }
       if (pHome == null || pAway == null) continue;
 
-      // 2-way "Match Result" market: one outcome is "X Win" (-0.5), the other is "Y Win or Draw" (+0.5).
-      // The team whose label is "Win or Draw" is the +0.5 side regardless of home/away.
-      // Without this check the code inverts lines whenever the home team is the underdog.
+      // Determine ±0.5 line assignment.
+      // Priority 1: explicit "Win or Draw" label — the WoD team is +0.5 underdog.
+      // Priority 2: 2-way market (pDraw==null, labels stripped to team names by keyToName) —
+      //   higher probability = Win outright = -0.5 side. Lower = Win or Draw = +0.5 side.
+      //   This handles away-team favorites correctly (e.g. Turkey @ Australia).
+      // Priority 3: standard 3-way — home -0.5, away +0.5 with draw added to away.
       let homeAHLine, awayAHLine, pHomeAH, pAwayAH;
       if (homeIsWod && !awayIsWod) {
         homeAHLine =  0.5; awayAHLine = -0.5;
-        pHomeAH = pHome; pAwayAH = pAway; // home Win or Draw = +0.5; away Win = -0.5
+        pHomeAH = pHome; pAwayAH = pAway;
       } else if (awayIsWod && !homeIsWod) {
         homeAHLine = -0.5; awayAHLine =  0.5;
-        pHomeAH = pHome; pAwayAH = pAway; // home Win = -0.5; away Win or Draw = +0.5
+        pHomeAH = pHome; pAwayAH = pAway;
+      } else if (pDraw == null) {
+        // 2-way market — higher prob team wins outright → gets -0.5
+        if (pHome >= pAway) {
+          homeAHLine = -0.5; awayAHLine =  0.5;
+        } else {
+          homeAHLine =  0.5; awayAHLine = -0.5;
+        }
+        pHomeAH = pHome; pAwayAH = pAway;
       } else {
-        // Standard 3-way (separate Draw outcome) — original logic
-        homeAHLine = -0.5; awayAHLine = 0.5;
-        pHomeAH = pHome; pAwayAH = pAway + (pDraw || 0);
+        homeAHLine = -0.5; awayAHLine =  0.5;
+        pHomeAH = pHome; pAwayAH = pAway + pDraw;
       }
 
       const ahSides = [
