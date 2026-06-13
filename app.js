@@ -886,6 +886,7 @@
             btn.style.color = showEVOnly ? '#fff' : 'var(--muted)';
             btn.style.borderColor = showEVOnly ? 'var(--green)' : 'var(--border2)';
         }
+        try { posthog.capture('ev_filter_toggled', { enabled: showEVOnly, sport: currentSport }); } catch(e) {}
         renderTable();
     }
 
@@ -1721,7 +1722,10 @@
                         tbLink.target = '_blank';
                         tbLink.textContent = 'Link to Game ↗';
                         tbLink.style.cssText = 'font-size:10px;font-weight:700;letter-spacing:.05em;color:var(--accent);text-decoration:none;padding:3px 8px;border:1px solid var(--accent);border-radius:4px;opacity:0.9';
-                        tbLink.addEventListener('click', function(e) { e.stopPropagation(); });
+                        tbLink.addEventListener('click', function(e) {
+                            e.stopPropagation();
+                            try { posthog.capture('bet_link_opened', { sport: currentSport, game: game }); } catch(_e) {}
+                        });
                         mlTopBar.appendChild(tbLink);
                     }
                     section.appendChild(mlTopBar);
@@ -2688,6 +2692,7 @@
                         btn.disabled = false;
                         btn.textContent = 'Open Telegram to Connect →';
                         status.style.display = 'none';
+                        try { posthog.capture('telegram_connected'); } catch(e) {}
                     }
                 } catch(e) {}
             }, 3000);
@@ -3515,6 +3520,7 @@
         try {
             await fetch('/api/real/connect', { method: 'DELETE', credentials: 'same-origin' });
         } catch(e) {}
+        try { posthog.capture('rs_disconnected'); } catch(e) {}
         portfolioConnected = false;
         portHistoryAll = []; portHistoryCursor = null; portHistoryMore = false;
         try { localStorage.removeItem(PORT_CACHE_KEY); } catch(e) {}
@@ -3544,6 +3550,7 @@
                     return;
                 }
                 portfolioConnected = true;
+                try { posthog.capture('rs_connected'); } catch(e) {}
                 // Fall through — continue to fetch and render portfolio below
             }
 
@@ -5178,6 +5185,7 @@
     }
     function closeUpgradeModal() {
         document.getElementById('upgrade-modal').style.display = 'none';
+        try { posthog.capture('upgrade_modal_dismissed', { sport: currentSport }); } catch(e) {}
     }
 
     // Annual upsell entry point — free users go to checkout (annual pre-selected),
@@ -5562,6 +5570,7 @@
     }
 
     function loadOdds() {
+        try { posthog.capture('refresh_clicked', { sport: currentSport }); } catch(e) {}
         stopAllPollers();
         payoutRatios = {}; rsMarketIds = {}; rsOutcomeKeys = {};
         if (!isPro()) {
