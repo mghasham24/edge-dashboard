@@ -6314,7 +6314,7 @@
                     // Exclude geographic direction words — "south" in "South Korea" must not match "South Africa"
                     var _geoStop = { south: 1, north: 1, east: 1, west: 1, central: 1, new: 1 };
                     function notGeo(w) { return !_geoStop[w]; }
-                    var _wcNameAliases = { 'usa': 'united states', 'united states': 'usa', "côte d'ivoire": 'ivory coast', 'ivory coast': "côte d'ivoire", 'curaçao': 'curacao', 'curacao': 'curaçao' };
+                    var _wcNameAliases = { 'usa': 'united states', 'united states': 'usa', "cote d'ivoire": 'ivory coast', 'ivory coast': "cote d'ivoire" };
                     function matchSide(r1, r1Nick, r1Raw, fd, fdNick) {
                         if (r1Nick === fdNick || r1.indexOf(fdNick) !== -1 || fd.indexOf(r1Nick) !== -1
                             || r1.split(' ').some(function(w) { return w.length > 2 && notGeo(w) && fd.indexOf(w) !== -1; })
@@ -7866,7 +7866,7 @@
                         // Any word from RS name appearing in DK name (or vice versa) is a match.
                         // Exclude geographic direction words — "south" must not match across "South Korea" / "South Africa".
                         var _gs = { south: 1, north: 1, east: 1, west: 1, central: 1, new: 1 };
-                        var _wcA = { 'usa': 'united states', 'united states': 'usa', 'turkiye': 'turkey', 'turkey': 'turkiye', "côte d'ivoire": 'ivory coast', 'ivory coast': "côte d'ivoire", 'curaçao': 'curacao', 'curacao': 'curaçao' };
+                        var _wcA = { 'usa': 'united states', 'united states': 'usa', 'turkiye': 'turkey', 'turkey': 'turkiye', "cote d'ivoire": 'ivory coast', 'ivory coast': "cote d'ivoire" };
                         var awayMatch = rAway.split(' ').some(function(w) { return w.length > 2 && !_gs[w] && fdAway.indexOf(w) !== -1; })
                                      || fdAway.split(' ').some(function(w) { return w.length > 2 && !_gs[w] && rAway.indexOf(w) !== -1; })
                                      || (!!_wcA[rAway] && (fdAway === _wcA[rAway] || fdAway.indexOf(_wcA[rAway]) !== -1))
