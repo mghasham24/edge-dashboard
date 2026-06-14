@@ -927,8 +927,14 @@ async function runCron(env, ctx) {
           for (let i = 0; i < fdOutcomes.length; i++) {
             const fdO    = fdOutcomes[i];
             const fdFair = i === 0 ? noVig.fa : noVig.fb;
-            const rsO    = findRSOutcome(fdO.name, rsOutcomes);
+            let rsO      = findRSOutcome(fdO.name, rsOutcomes);
             if (!rsO || !rsO.probability) continue;
+            // Directional sanity check: if FD says this fighter is a favorite (>50%)
+            // but RS returns <50%, outcome labels likely resolved incorrectly — swap to the other outcome.
+            if (rsOutcomes.length === 2 && (fdFair > 0.5) !== (rsO.probability > 0.5)) {
+              const alt = rsOutcomes.find(o => o !== rsO);
+              if (alt && alt.probability != null && (alt.probability > 0.5) === (fdFair > 0.5)) rsO = alt;
+            }
 
             const ev = calcEV(fdFair, rsO.probability);
             if (ev == null || ev < posterMinEv || ev > 200) continue;
