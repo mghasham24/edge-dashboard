@@ -259,9 +259,19 @@ export async function onRequestGet(context) {
 
     const dkHeaders = {
       'Accept': '*/*',
-      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Safari/605.1.15',
       'Origin': 'https://sportsbook.draftkings.com',
-      'Referer': 'https://sportsbook.draftkings.com/'
+      'Referer': 'https://sportsbook.draftkings.com/',
+      'Sec-Fetch-Dest': 'empty',
+      'Sec-Fetch-Site': 'same-site',
+      'Sec-Fetch-Mode': 'cors',
+      'x-client-name': 'web',
+      'x-client-version': '2624.3.1.5',
+      'x-client-widget-name': 'cms',
+      'x-client-widget-version': '2.13.0',
+      'x-client-page': 'league',
+      'x-client-feature': 'leagueSubcategory',
     };
 
     const { token: rsToken, deviceUuid: rsDevice } = await getRSAuth(env);
