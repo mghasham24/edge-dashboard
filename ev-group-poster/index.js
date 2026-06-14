@@ -196,11 +196,36 @@ async function fetchLiveRSData(bet) {
     const labels   = RS_MARKET_MAP[bet.market] || RS_ML_LABELS;
     const mkt      = markets.find(m => labels.includes(m.label));
     if (!mkt) return null;
-    const normSide = normName(bet.side);
-    const outcome  = (mkt.outcomes || []).find(o => {
-      const norm = normName(o.label).replace(/\d/g, '');
-      return norm === normSide || normSide.includes(norm) || norm.includes(normSide) || isSubseq(norm, normSide);
-    });
+    const outcomes = mkt.outcomes || [];
+    let outcome;
+    if (outcomes.length === 2 && bet.game) {
+      // Exclusive score-based pairing for 2-outcome markets (fights, H2H).
+      // Prevents isSubseq false matches like "MC" matching "Mauricio Ruffy".
+      const parts   = bet.game.split(' @ ');
+      const fdAway  = parts[0] || '', fdHome = parts[1] || '';
+      function _score(fdName, rsO) {
+        if (!rsO) return 0;
+        const n = normName(fdName), r = normName(rsO.label || '').replace(/\d/g, '');
+        if (!r) return 0;
+        if (r === n) return 3;
+        if (r.includes(n) || n.includes(r)) return 2;
+        const nL = n.split(' ').pop(), rL = r.split(' ').pop();
+        if (nL && rL && nL.length > 1 && rL.length > 1 && (nL.includes(rL) || rL.includes(nL))) return 1;
+        return 0;
+      }
+      const scoreDirect  = _score(fdAway, outcomes[0]) + _score(fdHome, outcomes[1]);
+      const scoreSwapped = _score(fdAway, outcomes[1]) + _score(fdHome, outcomes[0]);
+      const assigned     = scoreSwapped > scoreDirect ? [outcomes[1], outcomes[0]] : [outcomes[0], outcomes[1]];
+      const normBet      = normName(bet.side), normAway = normName(fdAway);
+      const isAway       = normAway === normBet || normAway.includes(normBet) || normBet.includes(normAway);
+      outcome = assigned[isAway ? 0 : 1];
+    } else {
+      const normSide = normName(bet.side);
+      outcome = outcomes.find(o => {
+        const norm = normName(o.label).replace(/\d/g, '');
+        return norm === normSide || normSide.includes(norm) || norm.includes(normSide);
+      });
+    }
     if (!outcome || !outcome.probability) return null;
     return { prob: outcome.probability, marketId: mkt.id, outcomeId: outcome.id };
   } catch(e) { return null; }
