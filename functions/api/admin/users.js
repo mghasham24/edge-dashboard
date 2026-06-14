@@ -23,7 +23,6 @@ async function handleRequest({ request, env }) {
   // GET /api/admin/users — list users (paginated)
   if (method === 'GET') {
     await ensureRsHashidColumn(env.DB);
-    await ensureStripeStatusColumn(env.DB);
     const search = url.searchParams.get('q') || '';
     const plan   = url.searchParams.get('plan') || '';
     const sort   = url.searchParams.get('sort') || 'signup_desc';
@@ -40,15 +39,14 @@ async function handleRequest({ request, env }) {
     const where = [];
     const binds = [];
     if (search)          { where.push('(LOWER(u.email) LIKE LOWER(?) OR LOWER(u.rs_group_username) LIKE LOWER(?))'); binds.push('%' + search + '%', '%' + search + '%'); }
-    if (plan === 'trialing') { where.push('u.stripe_status=?'); binds.push('trialing'); }
-    else if (plan)       { where.push('u.plan=?'); binds.push(plan); }
+    if (plan)            { where.push('u.plan=?'); binds.push(plan); }
     if (group !== null && group !== '') { where.push('u.group_access=?'); binds.push(parseInt(group)); }
     const whereClause = where.length ? 'WHERE ' + where.join(' AND ') : '';
 
     const now = Math.floor(Date.now() / 1000);
     const [countRow, rows] = await Promise.all([
       env.DB.prepare(`SELECT COUNT(*) as total FROM users u ${whereClause}`).bind(...binds).first(),
-      env.DB.prepare(`SELECT u.id, u.email, u.plan, u.stripe_status, u.is_admin, u.banned, u.created_at, u.pro_expires_at, u.group_access, u.rs_group_username, u.rs_hashid, u.rs_username, ra.rs_user_id, ra.rs_username as ra_rs_username, COUNT(s.id) as sessions FROM users u LEFT JOIN sessions s ON s.user_id=u.id AND s.expires_at>? LEFT JOIN real_auth ra ON ra.user_id=u.id ${whereClause} GROUP BY u.id ORDER BY ${orderBy} LIMIT ? OFFSET ?`).bind(now, ...binds, limit, offset).all(),
+      env.DB.prepare(`SELECT u.id, u.email, u.plan, u.is_admin, u.banned, u.created_at, u.pro_expires_at, u.group_access, u.rs_group_username, u.rs_hashid, u.rs_username, ra.rs_user_id, ra.rs_username as ra_rs_username, COUNT(s.id) as sessions FROM users u LEFT JOIN sessions s ON s.user_id=u.id AND s.expires_at>? LEFT JOIN real_auth ra ON ra.user_id=u.id ${whereClause} GROUP BY u.id ORDER BY ${orderBy} LIMIT ? OFFSET ?`).bind(now, ...binds, limit, offset).all(),
     ]);
 
     const total = countRow?.total || 0;
@@ -146,10 +144,6 @@ async function handleRequest({ request, env }) {
 async function ensureRsHashidColumn(db) {
   await db.prepare('ALTER TABLE users ADD COLUMN rs_hashid TEXT').run().catch(() => {});
   await db.prepare('ALTER TABLE users ADD COLUMN rs_username TEXT').run().catch(() => {});
-}
-
-async function ensureStripeStatusColumn(db) {
-  await db.prepare('ALTER TABLE users ADD COLUMN stripe_status TEXT').run().catch(() => {});
 }
 
 async function fetchRsHashid(username, env) {
