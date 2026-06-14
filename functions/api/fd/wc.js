@@ -5,9 +5,9 @@ import { getSessionOrCron } from '../../_lib/auth.js';
 // Step 1: Get today's WC events from DK league endpoint
 // Step 2: For each event, fetch subcat 13170 to get actual ±0.5 prices
 
-const DK_BASE   = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
-const DK_SUBCAT = '13170'; // Soccer Asian Handicap ±0.5 (2-way, no draw)
-const CACHE_TTL = 4; // 4s ensures 5s frontend poller always gets a fresh DK fetch
+const DK_BASE      = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
+const DK_SUBCAT    = '13171'; // WC Asian Handicap ±0.5 — DK uses 13171 for WC (13170 for regular FC leagues)
+const CACHE_TTL    = 4; // 4s ensures 5s frontend poller always gets a fresh DK fetch
 
 const DK_WC_LEAGUES = {
   '209533': 'WC', // FIFA World Cup 2026
@@ -73,9 +73,19 @@ export async function onRequestGet(context) {
 
   const headers = {
     'Accept': '*/*',
-    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Safari/605.1.15',
     'Origin': 'https://sportsbook.draftkings.com',
-    'Referer': 'https://sportsbook.draftkings.com/'
+    'Referer': 'https://sportsbook.draftkings.com/',
+    'Sec-Fetch-Dest': 'empty',
+    'Sec-Fetch-Site': 'same-site',
+    'Sec-Fetch-Mode': 'cors',
+    'x-client-name': 'web',
+    'x-client-version': '2624.3.1.5',
+    'x-client-widget-name': 'cms',
+    'x-client-widget-version': '2.13.0',
+    'x-client-page': 'league',
+    'x-client-feature': 'leagueSubcategory',
   };
 
   const nowMs = Date.now();
