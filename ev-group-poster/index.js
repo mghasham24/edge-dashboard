@@ -559,7 +559,21 @@ function findOutcome(post, markets) {
   // Use pt direction instead of team name matching (RS abbreviates country names: "PAR" not "Paraguay").
   if (mkt.label === 'Match Result' && post.pt != null) {
     const wantWinOrDraw = post.pt > 0;
-    return outcomes.find(o => /win or draw/i.test(o.label) === wantWinOrDraw) || null;
+    // 2-way format: outcomes labeled "X Win or Draw" / "Y Win"
+    if (outcomes.some(o => /win or draw/i.test(o.label))) {
+      return outcomes.find(o => /win or draw/i.test(o.label) === wantWinOrDraw) || null;
+    }
+    // 3-way format: separate Draw outcome (standard for WC on RS)
+    const normSide = normName(post.side);
+    const teamOut  = outcomes.find(o => { const n = normName(o.label); return n === normSide || n.includes(normSide) || normSide.includes(n); });
+    if (!teamOut) return null;
+    if (!wantWinOrDraw) return teamOut; // -0.5 favorite: wins only if team wins outright
+    // +0.5 underdog: bet wins if team wins OR draw
+    const drawOut = outcomes.find(o => /^(draw|tie)$/i.test(o.label.trim()));
+    const settled = outcomes.some(o => o.isWinner === true);
+    if (teamOut.isWinner === true || drawOut?.isWinner === true) return { isWinner: true };
+    if (settled) return { isWinner: false };
+    return null;
   }
 
   const normSide = normName(post.side);
