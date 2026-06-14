@@ -924,17 +924,33 @@ async function runCron(env, ctx) {
           const noVig = noVigFair(fdOutcomes[0].price, fdOutcomes[1].price);
           if (!noVig) continue;
 
+          // Exclusively assign RS outcomes to FD fighters by name score — prevents
+          // one outcome being matched to both fighters (which happens when RS labels are
+          // initials/keys that don't cleanly include the full fighter name).
+          // Score each (fdFighter, rsOutcome) pair; pick the assignment that maximises total score.
+          // Falls back to position-based (direct) when no labels match at all.
+          function _ufcScore(fdName, rsO) {
+            if (!rsO) return 0;
+            const n = normName(fdName), r = normName(rsO.label || '');
+            if (!r) return 0;
+            if (r === n) return 3;
+            if (r.includes(n) || n.includes(r)) return 2;
+            const nL = n.split(' ').pop(), rL = r.split(' ').pop();
+            if (nL && rL && nL.length > 1 && rL.length > 1 && (nL.includes(rL) || rL.includes(nL))) return 1;
+            return 0;
+          }
+          let rsAssign = [rsOutcomes[0] || null, rsOutcomes[1] || null];
+          if (rsOutcomes.length === 2 && fdOutcomes.length === 2) {
+            const scoreDirect  = _ufcScore(fdOutcomes[0].name, rsOutcomes[0]) + _ufcScore(fdOutcomes[1].name, rsOutcomes[1]);
+            const scoreSwapped = _ufcScore(fdOutcomes[0].name, rsOutcomes[1]) + _ufcScore(fdOutcomes[1].name, rsOutcomes[0]);
+            if (scoreSwapped > scoreDirect) rsAssign = [rsOutcomes[1], rsOutcomes[0]];
+          }
+
           for (let i = 0; i < fdOutcomes.length; i++) {
             const fdO    = fdOutcomes[i];
             const fdFair = i === 0 ? noVig.fa : noVig.fb;
-            let rsO      = findRSOutcome(fdO.name, rsOutcomes);
+            const rsO    = rsAssign[i];
             if (!rsO || !rsO.probability) continue;
-            // Directional sanity check: if FD says this fighter is a favorite (>50%)
-            // but RS returns <50%, outcome labels likely resolved incorrectly — swap to the other outcome.
-            if (rsOutcomes.length === 2 && (fdFair > 0.5) !== (rsO.probability > 0.5)) {
-              const alt = rsOutcomes.find(o => o !== rsO);
-              if (alt && alt.probability != null && (alt.probability > 0.5) === (fdFair > 0.5)) rsO = alt;
-            }
 
             const ev = calcEV(fdFair, rsO.probability);
             if (ev == null || ev < posterMinEv || ev > 200) continue;
