@@ -7790,22 +7790,23 @@
             // For MMA, filter rawRows to only UFC fights (those that exist in Real Sports)
             // Only filter if RS actually returned fights — if marketKeys is empty, RS has no data for this card
             // and we still want to show FD odds (even without RS preds).
+            var _mmaLast = function(n) { var _sfx={'jr.':1,'sr.':1,'jr':1,'sr':1,'ii':1,'iii':1,'iv':1}; var p=n.split(' '); while(p.length>1&&_sfx[p[p.length-1]])p.pop(); return p[p.length-1]||''; };
             if (sport === 'mma_mixed_martial_arts' && marketKeys.length > 0) {
                 rawRows = rawRows.filter(function(r) {
                     if (resolvedMap[r.game]) return true;
                     var fdTeams = r.game.split(' @ ');
                     var fdAway = fdTeams[0] ? fdTeams[0].toLowerCase() : '';
                     var fdHome = fdTeams[1] ? fdTeams[1].toLowerCase() : '';
-                    var fdAwayLast = fdAway.split(' ').pop();
-                    var fdHomeLast = fdHome.split(' ').pop();
+                    var fdAwayLast = _mmaLast(fdAway);
+                    var fdHomeLast = _mmaLast(fdHome);
                     return marketKeys.some(function(k) {
                         if (k.endsWith('__lines') || k.endsWith('__gid')) return false;
                         var realTeams = k.split(' @ ');
                         if (realTeams.length !== 2) return false;
                         var rAway = realTeams[0].trim().toLowerCase();
                         var rHome = realTeams[1].trim().toLowerCase();
-                        var rAwayLast = rAway.split(' ').pop();
-                        var rHomeLast = rHome.split(' ').pop();
+                        var rAwayLast = _mmaLast(rAway);
+                        var rHomeLast = _mmaLast(rHome);
                         // Check both orientations — FD and Real Sports sometimes flip home/away
                         var normalMatch = (rAwayLast.indexOf(fdAwayLast) !== -1 || fdAwayLast.indexOf(rAwayLast) !== -1)
                                        && (rHomeLast.indexOf(fdHomeLast) !== -1 || fdHomeLast.indexOf(rHomeLast) !== -1);
@@ -7844,16 +7845,16 @@
                     var fdTeams = _fuzzyGame.split(' @ ');
                     var fdAway = norm(fdTeams[0] || '');
                     var fdHome = norm(fdTeams[1] || '');
-                    var fdAwayLast = fdAway.split(' ').pop();
-                    var fdHomeLast = fdHome.split(' ').pop();
+                    var fdAwayLast = _mmaLast(fdAway);
+                    var fdHomeLast = _mmaLast(fdHome);
                     var matched = marketKeys.find(function(k) {
                         if (k.endsWith('__lines') || k.endsWith('__gid')) return false;
                         var realTeams = k.split(' @ ');
                         if (realTeams.length !== 2) return false;
                         var rAway = norm(resolveTeamName(realTeams[0].trim()));
                         var rHome = norm(resolveTeamName(realTeams[1].trim()));
-                        var rAwayLast = rAway.split(' ').pop();
-                        var rHomeLast = rHome.split(' ').pop();
+                        var rAwayLast = _mmaLast(rAway);
+                        var rHomeLast = _mmaLast(rHome);
                         // For MMA: check last names in both orientations
                         if (sport === 'mma_mixed_martial_arts') {
                             var normalMatch = (rAwayLast.indexOf(fdAwayLast) !== -1 || fdAwayLast.indexOf(rAwayLast) !== -1)
