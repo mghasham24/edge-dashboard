@@ -216,7 +216,7 @@ async function loadRSCache(rsKey, env, now, staleThreshold) {
 
 // normName strips "united", so "United States" becomes "states" and "USA" becomes "usa".
 // This alias map lets them still match each other for WC team name lookups.
-const WC_NORM_ALIAS = { 'usa': 'states', 'states': 'usa', 'turkiye': 'turkey', 'turkey': 'turkiye' };
+const WC_NORM_ALIAS = { 'usa': 'states', 'states': 'usa', 'turkiye': 'turkey', 'turkey': 'turkiye', 'ivory coast': 'cote divoire', 'cote divoire': 'ivory coast' };
 
 function normName(name) {
   return (name || '')
@@ -1139,8 +1139,9 @@ async function runCron(env, ctx) {
           // Live game, last alert was pre-game → fire one re-alert at game start
           // After that, entry.sentAt >= commenceTime so the 4% jump rule resumes
           const wasAlertedPreGame = bet.isLive && bet.commenceTime && entry.sentAt < bet.commenceTime;
-          const isStale = (now - entry.sentAt) >= RESEND_AFTER_SECS;
-          const evChanged = Math.abs(bet.ev - entry.ev) >= RE_ALERT_EV_JUMP;
+          const timeSinceLast = now - entry.sentAt;
+          const isStale = timeSinceLast >= RESEND_AFTER_SECS;
+          const evChanged = timeSinceLast >= 30 * 60 && Math.abs(bet.ev - entry.ev) >= RE_ALERT_EV_JUMP;
           if (!wasAlertedPreGame && !isStale && !evChanged) { dbg.suppressedCount++; continue; }
         }
 

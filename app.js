@@ -6314,7 +6314,7 @@
                     // Exclude geographic direction words — "south" in "South Korea" must not match "South Africa"
                     var _geoStop = { south: 1, north: 1, east: 1, west: 1, central: 1, new: 1 };
                     function notGeo(w) { return !_geoStop[w]; }
-                    var _wcNameAliases = { 'usa': 'united states', 'united states': 'usa' };
+                    var _wcNameAliases = { 'usa': 'united states', 'united states': 'usa', "côte d'ivoire": 'ivory coast', 'ivory coast': "côte d'ivoire", 'curaçao': 'curacao', 'curacao': 'curaçao' };
                     function matchSide(r1, r1Nick, r1Raw, fd, fdNick) {
                         if (r1Nick === fdNick || r1.indexOf(fdNick) !== -1 || fd.indexOf(r1Nick) !== -1
                             || r1.split(' ').some(function(w) { return w.length > 2 && notGeo(w) && fd.indexOf(w) !== -1; })
@@ -7866,7 +7866,7 @@
                         // Any word from RS name appearing in DK name (or vice versa) is a match.
                         // Exclude geographic direction words — "south" must not match across "South Korea" / "South Africa".
                         var _gs = { south: 1, north: 1, east: 1, west: 1, central: 1, new: 1 };
-                        var _wcA = { 'usa': 'united states', 'united states': 'usa', 'turkiye': 'turkey', 'turkey': 'turkiye' };
+                        var _wcA = { 'usa': 'united states', 'united states': 'usa', 'turkiye': 'turkey', 'turkey': 'turkiye', "côte d'ivoire": 'ivory coast', 'ivory coast': "côte d'ivoire", 'curaçao': 'curacao', 'curacao': 'curaçao' };
                         var awayMatch = rAway.split(' ').some(function(w) { return w.length > 2 && !_gs[w] && fdAway.indexOf(w) !== -1; })
                                      || fdAway.split(' ').some(function(w) { return w.length > 2 && !_gs[w] && rAway.indexOf(w) !== -1; })
                                      || (!!_wcA[rAway] && (fdAway === _wcA[rAway] || fdAway.indexOf(_wcA[rAway]) !== -1))
@@ -7978,7 +7978,7 @@ if (!match && r.mkt === 'Spread' && (sport === 'soccer_fc' || sport === 'soccer_
                     var fcPlusO  = outcomes.find(function(o) { return o.line === 0.5  || (o.label && o.label.indexOf('+0.5') !== -1); });
                     if (fcMinusO || fcPlusO) {
                         var fcTeamLow = r.side.toLowerCase();
-                        var _wcLblAliases = { 'usa': 'united states', 'united states': 'usa' };
+                        var _wcLblAliases = { 'usa': 'united states', 'united states': 'usa', "côte d'ivoire": 'ivory coast', 'ivory coast': "côte d'ivoire", 'curaçao': 'curacao', 'curacao': 'curaçao' };
                         var fcTeamWords = fcTeamLow.split(' ').filter(function(w) { return w.length > 2; });
                         if (_wcLblAliases[fcTeamLow]) fcTeamWords = fcTeamWords.concat(_wcLblAliases[fcTeamLow].split(' ').filter(function(w) { return w.length > 2; }));
                         function fcLabelMatch(o) {
@@ -8010,7 +8010,7 @@ if (!match && r.mkt === 'Spread' && (sport === 'soccer_fc' || sport === 'soccer_
                         if (_wodO && _wonO) {
                             var _rTeamLow = r.side.toLowerCase();
                             var _rWords2  = _rTeamLow.split(' ').filter(function(w) { return w.length > 2; });
-                            var _wcAlias2 = ({'usa':'united states','united states':'usa','bih':'bosnia','bosnia':'bih','can':'canada','canada':'can'})[_rTeamLow] || '';
+                            var _wcAlias2 = ({'usa':'united states','united states':'usa','bih':'bosnia','bosnia':'bih','can':'canada','canada':'can',"côte d'ivoire":'ivory coast','ivory coast':"côte d'ivoire",'curaçao':'curacao','curacao':'curaçao'})[_rTeamLow] || '';
                             if (_wcAlias2) _rWords2 = _rWords2.concat(_wcAlias2.split(' ').filter(function(w) { return w.length > 2; }));
                             function _wcLblHit(o) {
                                 if (!o || !o.label) return false;
