@@ -926,7 +926,7 @@ const payoutServer = createServer(async (req, res) => {
 // ── Dennis daily boost message ─────────────────────────
 
 const DENNIS_GROUP_ID = '51048';
-const DENNIS_BOOST_MSG = 'boost mlb pitchers | wnba - https://realapp.tools/user-boosts\nClaim OTD';
+const DENNIS_BOOST_MSG = 'boost mlb pitchers | wnba - https://slybot.vercel.app\nClaim OTD';
 
 function scheduleDennisBoost() {
   const etStr = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
