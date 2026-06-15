@@ -6,7 +6,7 @@ import { getSessionOrCron } from '../../_lib/auth.js';
 // Step 2: For each event, fetch subcat 13170 to get actual ±0.5 prices
 
 const DK_BASE      = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
-const DK_SUBCAT    = '13171'; // WC Asian Handicap ±0.5 — DK uses 13171 for WC (13170 for regular FC leagues)
+const DK_SUBCAT    = '13170'; // WC Asian Handicap ±0.5 — same subcat as regular FC leagues
 const CACHE_TTL    = 4; // 4s ensures 5s frontend poller always gets a fresh DK fetch
 
 const DK_WC_LEAGUES = {
