@@ -28,7 +28,7 @@ const SPORT_MAP = {
   'soccer_epl': 'epl',
   'soccer_uefa_champs_league': 'ucl',
   'soccer_fc': 'soccer',
-  'soccer_wc': 'worldcup'
+  'soccer_wc': 'soccer'
 };
 
 // Sports not supported by Real Sports API
