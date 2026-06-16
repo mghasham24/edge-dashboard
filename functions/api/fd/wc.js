@@ -118,6 +118,7 @@ export async function onRequestGet(context) {
             home = parts[0].trim(); away = parts[1].trim();
           }
 
+          if (!isToday_ET(ev.startEventDate)) continue;
           events.push({ eventId: ev.id, home, away, league: leagueLabel, openDate: ev.startEventDate });
         }
       } catch(e) {}
