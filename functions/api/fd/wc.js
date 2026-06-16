@@ -118,7 +118,9 @@ export async function onRequestGet(context) {
             home = parts[0].trim(); away = parts[1].trim();
           }
 
-          if (!isToday_ET(ev.startEventDate)) continue;
+          if (!ev.startEventDate) continue;
+          const evMs = new Date(ev.startEventDate).getTime();
+          if (evMs < nowMs - 4 * 3600 * 1000 || evMs > nowMs + 36 * 3600 * 1000) continue;
           events.push({ eventId: ev.id, home, away, league: leagueLabel, openDate: ev.startEventDate });
         }
       } catch(e) {}
