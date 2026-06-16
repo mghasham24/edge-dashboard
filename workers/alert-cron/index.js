@@ -92,7 +92,7 @@ const NATIVE_SPORTS = [
   { fdKey: 'baseball_mlb',          rsKey: 'mlb',    label: 'MLB',   cacheKey: 'fd_mlb',       type: 'ml_only' },
   { fdKey: 'icehockey_nhl',         rsKey: 'nhl',    label: 'NHL',   cacheKey: 'fd_nhl',       type: 'nhl'     },
   { fdKey: 'soccer_fc',             rsKey: 'soccer', label: 'FC',    cacheKey: 'fd_fc',        type: 'fc'      },
-  { fdKey: 'soccer_wc',             rsKey: 'soccer', label: 'WC',    cacheKey: 'fd_wc',        type: 'fc'      },
+  { fdKey: 'soccer_wc',             rsKey: 'worldcup', label: 'WC',    cacheKey: 'fd_wc',        type: 'fc'      },
 ];
 
 // FD/DK site endpoints — cron calls these to keep odds fresh during live games
@@ -159,7 +159,7 @@ function parseRSCache(cacheData) {
 
 const FDKEY_TO_RSKEY = {
   'basketball_nba': 'nba', 'basketball_wnba': 'wnba', 'baseball_mlb': 'mlb',
-  'icehockey_nhl': 'nhl', 'soccer_fc': 'soccer', 'soccer_wc': 'soccer',
+  'icehockey_nhl': 'nhl', 'soccer_fc': 'soccer', 'soccer_wc': 'worldcup',
   'basketball_ncaab': 'cbb', 'mma_mixed_martial_arts': 'ufc'
 };
 
