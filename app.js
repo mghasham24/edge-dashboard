@@ -156,7 +156,7 @@
     var REAL_SPORT_LABELS = { 1:'NBA', 2:'NFL', 3:'NCAAB', 4:'MLB', 5:'EPL', 6:'UCL', 7:'NHL', 8:'MLS', 9:'FIFA', 10:'UFC', 11:'NCAAF', 12:'WNBA', 14:'Soccer', 15:'Golf' };
     var FC_LEAGUE_SPORT_ID = { 'EPL': 5, 'UCL': 6, 'MLS': 8, 'La Liga': 14, 'Serie A': 14, 'Bundesliga': 14, 'Ligue 1': 14 };
     // RS sport key → sport ID for URL hash encoding
-    var RS_SPORT_KEY_ID = { 'epl': 5, 'ucl': 6, 'mls': 8, 'nba': 1, 'nfl': 2, 'mlb': 4, 'nhl': 7, 'ufc': 10, 'soccer': 14, 'cbb': 3 };
+    var RS_SPORT_KEY_ID = { 'epl': 5, 'ucl': 6, 'mls': 8, 'nba': 1, 'nfl': 2, 'mlb': 4, 'nhl': 7, 'ufc': 10, 'soccer': 14, 'cbb': 3, 'ncaabb': 16 };
 
     // ESPN CDN team logo URLs — keyed by DraftKings team name
     var TEAM_LOGO_URLS = {
@@ -801,8 +801,8 @@
         } else if (sport === 'soccer_fc' && league) {
             sportId = FC_LEAGUE_SPORT_ID[league] || 14;
         } else {
-            var sportKey = sport === 'mma_mixed_martial_arts' ? 'ufc' : (sport || '').split('_').pop();
-            sportId = REAL_SPORT_IDS[sportKey] || 0;
+            var sportKey = sport === 'mma_mixed_martial_arts' ? 'ufc' : sport === 'baseball_cws' ? 'cws' : (sport || '').split('_').pop();
+            sportId = sportKey === 'cws' ? 16 : (REAL_SPORT_IDS[sportKey] || 0);
         }
         var hash = _hashids.encode([4, sportId, 0, gid]);
         return 'https://www.realapp.com/' + hash;
