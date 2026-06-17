@@ -155,12 +155,13 @@ export async function onRequestGet(context) {
   try {
     // For soccer_fc, also fetch UCL in parallel — RS treats UCL as a separate sport
     const fetchPromises = [
-      fetch(`https://web.realapp.com/home/${realSport}/next?cohort=0`, { headers: buildHeaders(rsAuthToken, rsDeviceUuid) })
+      fetch(`https://web.realapp.com/home/${realSport}/next?cohort=0`, { headers: buildHeaders(rsAuthToken, rsDeviceUuid) }),
+      fetch(`https://web.realapp.com/home/${realSport}/live?cohort=0`, { headers: buildHeaders(rsAuthToken, rsDeviceUuid) })
     ];
     if (realSport === 'soccer') {
       fetchPromises.push(fetch('https://web.realapp.com/home/ucl/next?cohort=0', { headers: buildHeaders(rsAuthToken, rsDeviceUuid) }));
     }
-    const [gamesRes, uclRes] = await Promise.all(fetchPromises);
+    const [gamesRes, liveRes, uclRes] = await Promise.all(fetchPromises);
 
     const gamesStatus = gamesRes.status;
     const gamesText = await gamesRes.text();
@@ -177,6 +178,19 @@ export async function onRequestGet(context) {
 
     const gamesData = JSON.parse(gamesText);
     const games = extractGames(gamesData);
+
+    // Merge live games — RS /next only returns upcoming; /live covers in-progress games
+    if (liveRes && liveRes.ok) {
+      try {
+        const liveData = await liveRes.json();
+        const liveGames = extractGames(liveData);
+        const seenIds = new Set(games.map(g => g.id || g.gameId));
+        for (const g of liveGames) {
+          const id = g.id || g.gameId;
+          if (id && !seenIds.has(id)) { games.push(g); seenIds.add(id); }
+        }
+      } catch(e) {}
+    }
 
     // Merge UCL games — tag with _rsSport so market URL uses 'ucl' not 'soccer'
     if (uclRes && uclRes.ok) {
