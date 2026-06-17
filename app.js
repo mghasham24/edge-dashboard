@@ -7563,7 +7563,13 @@
         'NYY': 'New York Yankees', 'OAK': 'Oakland Athletics', 'PHI': 'Philadelphia Phillies',
         'PIT': 'Pittsburgh Pirates', 'SDP': 'San Diego Padres', 'SD': 'San Diego Padres', 'SFG': 'San Francisco Giants', 'SF': 'San Francisco Giants',
         'SEA': 'Seattle Mariners', 'STL': 'St. Louis Cardinals', 'TB': 'Tampa Bay Rays', 'TBR': 'Tampa Bay Rays',
-        'TEX': 'Texas Rangers', 'TOR': 'Toronto Blue Jays', 'WSN': 'Washington Nationals'
+        'TEX': 'Texas Rangers', 'TOR': 'Toronto Blue Jays', 'WSN': 'Washington Nationals',
+        // College (CWS / ncaabb) — RS uses abbreviations for some schools
+        'UNC': 'North Carolina', 'WVU': 'West Virginia', 'UGA': 'Georgia',
+        'LSU': 'LSU', 'TCU': 'TCU', 'OU': 'Oklahoma', 'OSU': 'Oklahoma State',
+        'FSU': 'Florida State', 'UCF': 'UCF', 'USF': 'South Florida',
+        'USC': 'USC', 'UCLA': 'UCLA', 'TENN': 'Tennessee', 'ARK': 'Arkansas',
+        'MISS': 'Mississippi', 'MSST': 'Mississippi State', 'AUB': 'Auburn'
     };
 
     function resolveTeamName(abbrevOrName) {
