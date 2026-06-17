@@ -500,6 +500,15 @@
         'San Francisco Giants':'#fd5a1e','Seattle Mariners':'#0c2c56','St. Louis Cardinals':'#c41e3a',
         'Tampa Bay Rays':'#092c5c','Texas Rangers':'#003278','Toronto Blue Jays':'#134a8e',
         'Washington Nationals':'#ab0003',
+        // College Baseball / CWS
+        'North Carolina':'#7BAFD4','West Virginia':'#002855','Oklahoma':'#841617',
+        'Georgia':'#BA0C2F','LSU':'#461D7C','Tennessee':'#FF8200','Arkansas':'#9D2235',
+        'Florida':'#0021A5','Texas':'#BF5700','Texas A&M':'#500000','Florida State':'#782F40',
+        'Mississippi State':'#5D1725','Oregon State':'#D3492A','Stanford':'#8C1515',
+        'Virginia':'#232D4B','Ole Miss':'#14213D','Miami':'#005030','Arizona':'#003366',
+        'Arizona State':'#8C1D40','South Carolina':'#73000A','Vanderbilt':'#866D4B',
+        'TCU':'#4D1979','Louisville':'#AD0000','NC State':'#CC0000','Kentucky':'#0033A0',
+        'Auburn':'#0C2340','Alabama':'#9E1B32',
         // EPL
         'Arsenal':'#ef0107','Chelsea':'#034694','Liverpool':'#c8102e','Manchester City':'#6cabdd',
         'Manchester United':'#da291c','Man City':'#6cabdd','Man United':'#da291c',
