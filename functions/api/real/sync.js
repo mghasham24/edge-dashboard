@@ -23,6 +23,7 @@ const SPORT_MAP = {
   'basketball_wnba': 'wnba',
   'icehockey_nhl': 'nhl',
   'baseball_mlb': 'mlb',
+  'baseball_cws': 'ncaabb',
   'basketball_ncaab': 'cbb',
   'mma_mixed_martial_arts': 'ufc',
   'soccer_epl': 'epl',
@@ -35,7 +36,7 @@ const SPORT_MAP = {
 const UNSUPPORTED_SPORTS = new Set([]);
 
 // Sports accessible to free-plan users (on their individual sport tabs)
-const FREE_PLAN_SPORTS = new Set(['basketball_nba', 'icehockey_nhl', 'baseball_mlb', 'basketball_wnba']);
+const FREE_PLAN_SPORTS = new Set(['basketball_nba', 'icehockey_nhl', 'baseball_mlb', 'basketball_wnba', 'baseball_cws']);
 
 function extractGames(gamesData) {
   // Collect from ALL possible locations and deduplicate by game ID.

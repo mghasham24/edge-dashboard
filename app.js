@@ -19,8 +19,11 @@
     }, {
         key: 'soccer_wc',
         label: 'WC'
+    }, {
+        key: 'baseball_cws',
+        label: 'CWS'
     }];
-    var FREE_SPORTS = ['basketball_nba', 'icehockey_nhl', 'baseball_mlb', 'basketball_wnba']; // free plan sports
+    var FREE_SPORTS = ['basketball_nba', 'icehockey_nhl', 'baseball_mlb', 'basketball_wnba', 'baseball_cws']; // free plan sports
     var MARKET_KEYS = {
         ML: 'h2h',
         Spread: 'spreads',
@@ -1596,7 +1599,8 @@
             baseball_mlb: 'MLB',
             mma_mixed_martial_arts: 'UFC',
             soccer_fc: 'FC',
-            soccer_wc: 'WC'
+            soccer_wc: 'WC',
+            baseball_cws: 'CWS'
         };
         var leagueColorMap = {
             basketball_nba: '#4f6ef7',
@@ -1605,7 +1609,8 @@
             baseball_mlb: '#2dcc7e',
             mma_mixed_martial_arts: '#f05252',
             soccer_fc: '#2dcc7e',
-            soccer_wc: '#f5a623'
+            soccer_wc: '#f5a623',
+            baseball_cws: '#f5a623'
         };
         var leagueLbl = leagueBadgeMap[currentSport] || '';
         var leagueClr = leagueColorMap[currentSport] || 'var(--muted)';
@@ -1678,7 +1683,7 @@
             body.className = 'game-card-body' + (isC ? ' collapsed' : '');
             body.dataset.game = game;
 
-            var mkts = currentSport === 'baseball_mlb' ? ['ML', 'RFI'] : ['ML', 'Spread', 'Total'];
+            var mkts = (currentSport === 'baseball_mlb' || currentSport === 'baseball_cws') ? ['ML', 'RFI'] : ['ML', 'Spread', 'Total'];
             mkts.forEach(function(mkt) {
                 var mktRows = gameRows.filter(function(r) {
                     return r.mkt === mkt;
@@ -2526,6 +2531,7 @@
         { key: 'mma_mixed_martial_arts', label: 'UFC'   },
         { key: 'soccer_fc',              label: 'FC'    },
         { key: 'soccer_wc',              label: 'WC'    },
+        { key: 'baseball_cws',           label: 'CWS'   },
     ];
 
     async function loadAlertsPanel() {
@@ -2997,6 +3003,7 @@
             'icehockey_nhl': 3 * 3600000,
             'soccer_fc': 2.5 * 3600000,
             'soccer_wc': 2.5 * 3600000,
+            'baseball_cws': 4 * 3600000,
         };
         var all = [];
         Object.values(evTabCache).forEach(function(arr) {
@@ -3306,6 +3313,22 @@
                                 rows.push({ id: rpid + '-B', game: gameKey, cm: cm, mkt: 'RFI', side: 'No (NRFI)',  am: rfi.noAm,  pt: null, pid: rpid, ps: 'B', gid: gid, rfiFair: rfi.noFair });
                             }
                         }
+                    });
+                    rawRowsBySport[s.key] = rows;
+                    return;
+                }
+                if (s.key === 'baseball_cws') {
+                    var cwsRes = await fetch('/api/dk/cws', { credentials: 'same-origin' });
+                    var cwsData = cwsRes.ok ? await cwsRes.json() : null;
+                    if (!cwsData || !cwsData.ok || !cwsData.games) return;
+                    var rows = [];
+                    Object.entries(cwsData.games).forEach(function([gameKey, game]) {
+                        var away = game.away, home = game.home;
+                        var cm = game.cm ? new Date(game.cm) : null;
+                        var gid = String(game.id);
+                        var pid = gid + '-h2h';
+                        if (game.awayOdds != null) rows.push({ id: pid + '-A', game: gameKey, cm: cm, mkt: 'ML', side: away, am: game.awayOdds, pt: null, pid: pid, ps: 'A', gid: gid });
+                        if (game.homeOdds != null) rows.push({ id: pid + '-B', game: gameKey, cm: cm, mkt: 'ML', side: home, am: game.homeOdds, pt: null, pid: pid, ps: 'B', gid: gid });
                     });
                     rawRowsBySport[s.key] = rows;
                     return;
@@ -6055,6 +6078,49 @@
                 } else {
                     renderTable();
                 }
+            });
+            return;
+        }
+
+        // CWS: DK native moneyline
+        if (currentSport === 'baseball_cws') {
+            altOdds = {};
+            fetch('/api/dk/cws?fresh=1', { credentials: 'same-origin' })
+            .then(function(r) {
+                if (r.status === 401) { dot.className = 'sdot error'; stxt.textContent = 'Session expired — please log in again.'; resetRefreshBtn(); handleUnauthenticated(); return Promise.reject('unauth'); }
+                return r.json();
+            })
+            .then(function(data) {
+                if (!data.ok || !data.games || !Object.keys(data.games).length) {
+                    rawRows = []; rsGameIds = {};
+                    dot.className = 'sdot error'; stxt.textContent = 'No CWS games right now';
+                    return;
+                }
+                var rows = [];
+                Object.entries(data.games).forEach(function([gameKey, game]) {
+                    var away = game.away, home = game.home;
+                    var cm = game.cm ? new Date(game.cm) : null;
+                    var gid = String(game.id);
+                    var pid = gid + '-h2h';
+                    if (game.awayOdds != null) rows.push({ id: pid + '-A', game: gameKey, cm: cm, mkt: 'ML', side: away, am: game.awayOdds, pt: null, pid: pid, ps: 'A', gid: gid });
+                    if (game.homeOdds != null) rows.push({ id: pid + '-B', game: gameKey, cm: cm, mkt: 'ML', side: home, am: game.homeOdds, pt: null, pid: pid, ps: 'B', gid: gid });
+                });
+                rawRows = rows;
+                rawRowsBySport[currentSport] = rawRows;
+                var nowStr = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+                dot.className = rawRows.length ? 'sdot live' : 'sdot error';
+                stxt.textContent = rawRows.length ? 'Updated ' + nowStr + ' - ' + Object.keys(data.games).length + ' games - DraftKings' : 'No CWS games right now';
+            })
+            .catch(function(e) {
+                if (e === 'unauth') return;
+                rawRows = []; rsGameIds = {};
+                dot.className = 'sdot error'; stxt.textContent = 'Error fetching CWS data';
+            })
+            .then(function() {
+                resetRefreshBtn();
+                if (rawRows.length > 0) {
+                    fetchRealMarkets(currentSport).then(function() { fetchExactEvForRows(currentSport); }).catch(function() { renderTable(); });
+                } else { renderTable(); }
             });
             return;
         }
