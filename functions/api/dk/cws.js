@@ -11,17 +11,19 @@ const DK_LEAGUE   = '41151'; // College Baseball / CWS
 const CACHE_TTL   = 5;
 const CACHE_KEY   = 'dk_cws';
 
+const DK_ML_SUBCAT = '4519'; // DK baseball Game Winner (moneyline)
+
 function dkLeagueEventsUrl() {
   const eq = encodeURIComponent(`$filter=leagueId eq '${DK_LEAGUE}'`);
-  const mq = encodeURIComponent(`$filter=tags/all(t: t ne 'SportcastBetBuilder')`);
+  const mq = encodeURIComponent(`$filter=clientMetadata/subCategoryId eq '${DK_ML_SUBCAT}' AND tags/all(t: t ne 'SportcastBetBuilder')`);
   return `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${DK_LEAGUE}&eventsQuery=${eq}&marketsQuery=${mq}&include=Events&entity=events`;
 }
 
 function dkEventMarketsUrl(eventId) {
   const mq = encodeURIComponent(
-    `$filter=eventId eq '${eventId}' AND tags/all(t: t ne 'SportcastBetBuilder')`
+    `$filter=eventId eq '${eventId}' AND clientMetadata/subCategoryId eq '${DK_ML_SUBCAT}' AND tags/all(t: t ne 'SportcastBetBuilder')`
   );
-  return `${DK_BASE}/controldata/event/eventSubcategory/v1/markets?isBatchable=false&templateVars=${eventId}&marketsQuery=${mq}&include=MarketSplits&entity=markets`;
+  return `${DK_BASE}/controldata/event/eventSubcategory/v1/markets?isBatchable=false&templateVars=${eventId}%2C${DK_ML_SUBCAT}&marketsQuery=${mq}&include=MarketSplits&entity=markets`;
 }
 
 function parseAmerican(str) {
