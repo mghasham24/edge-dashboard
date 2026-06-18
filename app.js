@@ -1745,8 +1745,9 @@
                     volTag.textContent = vols[firstRow.id] + ' vol';
                     lbl.appendChild(volTag);
                 }
-                // Time + RS link bar above ML label
-                if (mkt === 'ML' && (_ti && _ti.lbl || _rsUrl)) {
+                // Time + RS link bar above ML label (WC has no ML rows, use Spread instead)
+                var _isLinkSection = mkt === 'ML' || (currentSport === 'soccer_wc' && mkt === 'Spread');
+                if (_isLinkSection && (_ti && _ti.lbl || _rsUrl)) {
                     var mlTopBar = document.createElement('div');
                     mlTopBar.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--border)';
                     if (_ti && _ti.lbl) {
