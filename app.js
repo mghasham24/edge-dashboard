@@ -50,25 +50,27 @@
     var payoutRatios = {}; // row id -> expectedPayout/amount (exact WS payout ratio, includes slippage)
     var yourLines = {};
     var altOdds = {}; // gameId -> { spreads: {teamName: {point: price}}, totals: {side: {point: price}} }
-    var nbaPoller  = null;
-    var wnbaPoller = null;
-    var mlbPoller  = null;
-    var nhlPoller  = null;
-    var dkPoller   = null;
-    var fcPoller   = null;
-    var wcPoller   = null;
-    var wcSubTab   = 'games'; // 'games' | 'futures'
+    var nbaPoller    = null;
+    var wnbaPoller   = null;
+    var mlbPoller    = null;
+    var nhlPoller    = null;
+    var dkPoller     = null;
+    var fcPoller     = null;
+    var wcPoller     = null;
+    var scoresPoller = null;
+    var wcSubTab     = 'games'; // 'games' | 'futures'
     var currentLoadAbort = null;
 
     function stopAllPollers() {
         if (currentLoadAbort) { currentLoadAbort.abort(); currentLoadAbort = null; }
-        if (nbaPoller)  { clearInterval(nbaPoller);  nbaPoller  = null; }
-        if (wnbaPoller) { clearInterval(wnbaPoller); wnbaPoller = null; }
-        if (mlbPoller)  { clearInterval(mlbPoller);  mlbPoller  = null; }
-        if (nhlPoller)  { clearInterval(nhlPoller);  nhlPoller  = null; }
-        if (dkPoller)   { clearInterval(dkPoller);   dkPoller   = null; }
-        if (fcPoller)   { clearInterval(fcPoller);   fcPoller   = null; }
-        if (wcPoller)   { clearInterval(wcPoller);   wcPoller   = null; }
+        if (nbaPoller)    { clearInterval(nbaPoller);    nbaPoller    = null; }
+        if (wnbaPoller)   { clearInterval(wnbaPoller);   wnbaPoller   = null; }
+        if (mlbPoller)    { clearInterval(mlbPoller);    mlbPoller    = null; }
+        if (nhlPoller)    { clearInterval(nhlPoller);    nhlPoller    = null; }
+        if (dkPoller)     { clearInterval(dkPoller);     dkPoller     = null; }
+        if (fcPoller)     { clearInterval(fcPoller);     fcPoller     = null; }
+        if (wcPoller)     { clearInterval(wcPoller);     wcPoller     = null; }
+        if (scoresPoller) { clearInterval(scoresPoller); scoresPoller = null; }
         if (evAutoRefreshTimer) { clearInterval(evAutoRefreshTimer); evAutoRefreshTimer = null; }
     }
 
@@ -1478,6 +1480,83 @@
         if (priceA == null || priceB == null) return null;
         return novig(imp(priceA), imp(priceB));
     }
+    // Live scores — ESPN public scoreboard, polled every 30s while a sport tab is active
+    var _scoresCache = {}; // sport → { games: [...] }
+
+    var SCORES_SPORTS = new Set(['baseball_mlb','basketball_wnba','icehockey_nhl','soccer_wc','baseball_cws']);
+
+    function normTeam(name) {
+        return (name || '').toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+    }
+
+    function teamsMatch(a, b) {
+        var na = normTeam(a), nb = normTeam(b);
+        if (!na || !nb) return false;
+        return na === nb || na.includes(nb) || nb.includes(na);
+    }
+
+    function findScoreForGame(gameKey, sport) {
+        var cache = _scoresCache[sport];
+        if (!cache || !cache.games) return null;
+        var parts = gameKey.split(' @ ');
+        var awayKey = (parts[0] || '').trim();
+        var homeKey = (parts[1] || '').trim();
+        for (var i = 0; i < cache.games.length; i++) {
+            var g = cache.games[i];
+            if (teamsMatch(g.awayTeam, awayKey) && teamsMatch(g.homeTeam, homeKey)) return g;
+        }
+        return null;
+    }
+
+    function updateScoreBadges() {
+        var sport = currentSport;
+        if (!SCORES_SPORTS.has(sport)) return;
+        document.querySelectorAll('.gh-score-badge').forEach(function(el) {
+            var gameKey = el.dataset.game;
+            if (!gameKey) return;
+            var g = findScoreForGame(gameKey, sport);
+            if (!g || g.status === 'pre') { el.style.display = 'none'; return; }
+            var scoreText = g.awayScore + ' - ' + g.homeScore;
+            var labelText = g.label ? ' | ' + g.label : '';
+            el.textContent = scoreText + labelText;
+            el.style.display = '';
+            el.className = 'gh-score-badge gh-badge' + (g.status === 'live' ? ' urgent' : '');
+        });
+        // Mobile cards score badges
+        document.querySelectorAll('.mc-score-badge').forEach(function(el) {
+            var gameKey = el.dataset.game;
+            if (!gameKey) return;
+            var g = findScoreForGame(gameKey, sport);
+            if (!g || g.status === 'pre') { el.style.display = 'none'; return; }
+            el.textContent = g.awayScore + ' - ' + g.homeScore + (g.label ? ' | ' + g.label : '');
+            el.style.display = '';
+            el.className = 'mc-score-badge gh-badge' + (g.status === 'live' ? ' urgent' : '');
+        });
+    }
+
+    async function fetchAndApplyScores(sport) {
+        if (!SCORES_SPORTS.has(sport)) return;
+        try {
+            var res = await fetch('/api/scores?sport=' + sport, { credentials: 'same-origin' });
+            if (!res.ok) return;
+            var data = await res.json();
+            if (data.ok && data.games) {
+                _scoresCache[sport] = data;
+                if (currentSport === sport) updateScoreBadges();
+            }
+        } catch(e) {}
+    }
+
+    function startScoresPoller(sport) {
+        if (scoresPoller) { clearInterval(scoresPoller); scoresPoller = null; }
+        if (!SCORES_SPORTS.has(sport)) return;
+        fetchAndApplyScores(sport);
+        scoresPoller = setInterval(function() {
+            if (currentSport !== sport) { clearInterval(scoresPoller); scoresPoller = null; return; }
+            fetchAndApplyScores(sport);
+        }, 30000);
+    }
+
     function timeInfo(c) {
         if (!c)
             return {
@@ -5090,6 +5169,7 @@
             document.getElementById('wc-sub-nav').style.display = 'none';
         }
         loadOdds();
+        startScoresPoller(firstKey);
     }
 
     function renderSortList() {
@@ -5422,6 +5502,7 @@
                     showWcFuturesPanel(false);
                 }
                 loadOdds();
+                startScoresPoller(s.key);
             };
             nav.appendChild(b);
         });
@@ -7356,6 +7437,7 @@
         });
         document.getElementById('tbody').innerHTML = html;
         renderMobileCards(filtered);
+        updateScoreBadges();
     }
 
     function buildRow(r, color, isC) {
