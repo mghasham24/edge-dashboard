@@ -32,6 +32,9 @@ export async function onRequestGet(context) {
   const session = await getSessionOrCron(request, env);
   if (!session) return fail(401, 'Not authenticated');
 
+  const reqUrl = new URL(request.url);
+  const debugMode = reqUrl.searchParams.get('debug');
+
   const now = Math.floor(Date.now() / 1000);
   const cacheKey = 'fd_nba_alts';
 
@@ -40,7 +43,7 @@ export async function onRequestGet(context) {
     const cached = await env.DB.prepare(
       'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
     ).bind(cacheKey).first();
-    if (cached && (now - cached.fetched_at) < CACHE_TTL) {
+    if (!debugMode && cached && (now - cached.fetched_at) < CACHE_TTL) {
       return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
     }
   } catch(e) {}
@@ -110,6 +113,11 @@ export async function onRequestGet(context) {
 
         if (entry.spreadId || entry.mlId || entry.totalId) {
           gameData[gameKey] = entry;
+        }
+
+        // debug=1: dump raw event-page for first game and stop
+        if (debugMode === '1') {
+          return new Response(JSON.stringify({ ok: true, debug: true, gameKey, rawEvent: evData }, null, 2), { headers: { 'Content-Type': 'application/json' } });
         }
       } catch(e) {}
 
