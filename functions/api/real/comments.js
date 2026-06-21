@@ -28,18 +28,17 @@ export async function onRequestGet({ request, env }) {
 
   if (!postId) return fail(400, 'postId required');
 
-  // Token priority: caller-supplied → D1 (token bridge) → env var
-  let rsToken = url.searchParams.get('rsToken') || null;
-  if (!rsToken) {
-    try {
-      const row = await env.DB.prepare(
-        'SELECT data FROM odds_cache WHERE cache_key=?'
-      ).bind('meta:rs_auth_token').first();
-      if (row) rsToken = JSON.parse(row.data).token;
-    } catch(e) {}
-  }
+  // Token priority: D1 (token bridge, always fresh) → caller-supplied → env var
+  let rsToken = null;
+  try {
+    const row = await env.DB.prepare(
+      'SELECT data FROM odds_cache WHERE cache_key=?'
+    ).bind('meta:rs_auth_token').first();
+    if (row) rsToken = JSON.parse(row.data).token;
+  } catch(e) {}
+  if (!rsToken) rsToken = url.searchParams.get('rsToken') || null;
   if (!rsToken) rsToken = env.RS_AUTH_TOKEN;
-  if (!rsToken) return fail(503, 'No RS token available');
+  if (!rsToken) return fail(503, 'No RS token — open realsports.io with the token bridge TM script running first');
 
   const params = new URLSearchParams({ limit: String(limit) });
   if (cursor) params.set('cursor', cursor);
@@ -65,10 +64,7 @@ export async function onRequestGet({ request, env }) {
     });
 
     const text = await res.text();
-    if (!res.ok) return new Response(JSON.stringify({
-      ok: false, error: `RS error ${res.status}: ${text}`,
-      debug: { rsUrl, tokenPrefix: rsToken.slice(0, 20), tokenLen: rsToken.length }
-    }), { status: res.status, headers: { 'Content-Type': 'application/json' } });
+    if (!res.ok) return fail(res.status, `RS error ${res.status}: ${text}`);
 
     const data = JSON.parse(text);
     return new Response(JSON.stringify({ ok: true, comments: data.comments || [], cursor: data.cursor || data.nextCursor || null }), {
