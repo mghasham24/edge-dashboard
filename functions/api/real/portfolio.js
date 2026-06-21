@@ -59,7 +59,14 @@ export async function onRequestGet({ request, env }) {
     return json({ ok: true, connected: false });
   }
 
-  if (!authRow || !authRow.auth_token) return json({ ok: true, connected: false });
+  // Fall back to static env token for admin when no real_auth row exists
+  if (!authRow?.auth_token) {
+    if (session.is_admin && env.RS_AUTH_TOKEN) {
+      authRow = { auth_token: env.RS_AUTH_TOKEN, device_uuid: null };
+    } else {
+      return json({ ok: true, connected: false });
+    }
+  }
 
   const hdrs = buildHeaders(authRow.auth_token, authRow.device_uuid);
   const base = 'https://web.realapp.com';
