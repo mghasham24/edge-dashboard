@@ -14,7 +14,7 @@
 (function() {
   'use strict';
 
-  const GROUP_ID   = '60099'; // main group
+  const GROUP_ID   = '60106'; // main 1.5k group
   const RAXEDGE    = 'https://raxedge.com';
   const TM_KEY     = 'rax-bridge-9w2k5j7n';
   const LIMIT      = 100;

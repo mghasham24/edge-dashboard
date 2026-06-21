@@ -22,7 +22,7 @@ export async function onRequestGet({ request, env }) {
   }
 
   const postId  = url.searchParams.get('postId');
-  const groupId = url.searchParams.get('groupId') || '60099';
+  const groupId = url.searchParams.get('groupId') || '60106';
   const limit   = Math.min(parseInt(url.searchParams.get('limit') || '100', 10), 100);
   const cursor  = url.searchParams.get('cursor') || null;
 
