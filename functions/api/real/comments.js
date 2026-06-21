@@ -28,7 +28,7 @@ export async function onRequestGet({ request, env }) {
 
   if (!postId) return fail(400, 'postId required');
 
-  // Token priority: D1 (token bridge, always fresh) → caller-supplied → env var
+  // Token priority: D1 (bridge) → env var (static, powers Best EV) → caller-supplied
   let rsToken = null;
   try {
     const row = await env.DB.prepare(
@@ -36,9 +36,9 @@ export async function onRequestGet({ request, env }) {
     ).bind('meta:rs_auth_token').first();
     if (row) rsToken = JSON.parse(row.data).token;
   } catch(e) {}
-  if (!rsToken) rsToken = url.searchParams.get('rsToken') || null;
   if (!rsToken) rsToken = env.RS_AUTH_TOKEN;
-  if (!rsToken) return fail(503, 'No RS token — open realsports.io with the token bridge TM script running first');
+  if (!rsToken) rsToken = url.searchParams.get('rsToken') || null;
+  if (!rsToken) return fail(503, 'No RS token available');
 
   const params = new URLSearchParams({ limit: String(limit) });
   if (cursor) params.set('cursor', cursor);
