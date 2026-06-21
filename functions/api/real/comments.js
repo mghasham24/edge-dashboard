@@ -28,16 +28,22 @@ export async function onRequestGet({ request, env }) {
 
   if (!postId) return fail(400, 'postId required');
 
-  // Token priority: D1 (bridge) → env var (static, powers Best EV) → caller-supplied
+  // Token priority: admin real_auth (bridge keeps fresh) → D1 meta → env var
   let rsToken = null;
   try {
-    const row = await env.DB.prepare(
-      'SELECT data FROM odds_cache WHERE cache_key=?'
-    ).bind('meta:rs_auth_token').first();
-    if (row) rsToken = JSON.parse(row.data).token;
+    const admin = await env.DB.prepare('SELECT id FROM users WHERE is_admin=1 LIMIT 1').first();
+    if (admin) {
+      const row = await env.DB.prepare('SELECT auth_token FROM real_auth WHERE user_id=?').bind(admin.id).first();
+      if (row?.auth_token) rsToken = row.auth_token;
+    }
   } catch(e) {}
+  if (!rsToken) {
+    try {
+      const row = await env.DB.prepare('SELECT data FROM odds_cache WHERE cache_key=?').bind('meta:rs_auth_token').first();
+      if (row) rsToken = JSON.parse(row.data).token;
+    } catch(e) {}
+  }
   if (!rsToken) rsToken = env.RS_AUTH_TOKEN;
-  if (!rsToken) rsToken = url.searchParams.get('rsToken') || null;
   if (!rsToken) return fail(503, 'No RS token available');
 
   const params = new URLSearchParams({ limit: String(limit) });

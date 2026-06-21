@@ -37,6 +37,23 @@ export async function onRequestPost({ request, env }) {
     "INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES ('meta:rs_auth_token',?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at"
   ).bind(data, now).run();
 
+  // Also save to real_auth for the admin user so giveaway counter can use it
+  try {
+    const admin = await env.DB.prepare('SELECT id FROM users WHERE is_admin=1 LIMIT 1').first();
+    if (admin) {
+      const rsUserId = token.split('!')[0] || null;
+      await env.DB.prepare(
+        `INSERT INTO real_auth (user_id, auth_token, device_uuid, rs_user_id, updated_at)
+         VALUES (?,?,?,?,?)
+         ON CONFLICT(user_id) DO UPDATE SET
+           auth_token  = excluded.auth_token,
+           device_uuid = excluded.device_uuid,
+           rs_user_id  = COALESCE(excluded.rs_user_id, real_auth.rs_user_id),
+           updated_at  = excluded.updated_at`
+      ).bind(admin.id, token, deviceUuid || null, rsUserId, now).run();
+    }
+  } catch(e) {}
+
   return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': 'https://realsports.io' } });
 }
 
