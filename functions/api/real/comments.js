@@ -28,16 +28,18 @@ export async function onRequestGet({ request, env }) {
 
   if (!postId) return fail(400, 'postId required');
 
-  // Read RS token from D1 (kept fresh by TM token bridge), fall back to env var
-  let rsToken = null;
-  try {
-    const row = await env.DB.prepare(
-      'SELECT data FROM odds_cache WHERE cache_key=?'
-    ).bind('meta:rs_auth_token').first();
-    if (row) rsToken = JSON.parse(row.data).token;
-  } catch(e) {}
+  // Token priority: caller-supplied → D1 (token bridge) → env var
+  let rsToken = url.searchParams.get('rsToken') || null;
+  if (!rsToken) {
+    try {
+      const row = await env.DB.prepare(
+        'SELECT data FROM odds_cache WHERE cache_key=?'
+      ).bind('meta:rs_auth_token').first();
+      if (row) rsToken = JSON.parse(row.data).token;
+    } catch(e) {}
+  }
   if (!rsToken) rsToken = env.RS_AUTH_TOKEN;
-  if (!rsToken) return fail(503, 'No RS token available — token bridge may not be running');
+  if (!rsToken) return fail(503, 'No RS token available');
 
   const params = new URLSearchParams({ limit: String(limit) });
   if (cursor) params.set('cursor', cursor);

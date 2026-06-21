@@ -19,6 +19,17 @@
   const TM_KEY     = 'rax-bridge-9w2k5j7n';
   const LIMIT      = 100;
 
+  // ── Read RS token from localStorage ──────────────────────────────────────────
+  function getRsToken() {
+    try {
+      const accounts = JSON.parse(localStorage.getItem('e-accounts') || '[]');
+      const info = (accounts[0] || {}).authInfo || {};
+      if (info.userId && info.deviceId && info.token)
+        return info.userId + '!' + info.deviceId + '!' + info.token;
+    } catch(e) {}
+    return null;
+  }
+
   // ── Fetch all replies via RaxEdge CF proxy (avoids TM/CORS/RS auth issues) ────
   function gmGet(url) {
     return new Promise((resolve, reject) => {
@@ -32,6 +43,7 @@
   }
 
   async function fetchAllComments(postId) {
+    const rsToken = getRsToken();
     const comments = [];
     let cursor = null;
     let page   = 0;
@@ -39,6 +51,7 @@
     while (true) {
       page++;
       const params = new URLSearchParams({ postId, groupId: GROUP_ID, limit: LIMIT, _tm_key: TM_KEY });
+      if (rsToken) params.set('rsToken', rsToken);
       if (cursor) params.set('cursor', cursor);
       const url = `${RAXEDGE}/api/real/comments?${params}`;
 
