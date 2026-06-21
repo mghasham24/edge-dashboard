@@ -65,7 +65,10 @@ export async function onRequestGet({ request, env }) {
     });
 
     const text = await res.text();
-    if (!res.ok) return fail(res.status, `RS error ${res.status}: ${text}`);
+    if (!res.ok) return new Response(JSON.stringify({
+      ok: false, error: `RS error ${res.status}: ${text}`,
+      debug: { rsUrl, tokenPrefix: rsToken.slice(0, 20), tokenLen: rsToken.length }
+    }), { status: res.status, headers: { 'Content-Type': 'application/json' } });
 
     const data = JSON.parse(text);
     return new Response(JSON.stringify({ ok: true, comments: data.comments || [], cursor: data.cursor || data.nextCursor || null }), {
