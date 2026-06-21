@@ -49,15 +49,17 @@ export async function onRequestGet({ request, env }) {
     const res = await fetch(rsUrl, {
       headers: {
         'Accept':             'application/json',
+        'Accept-Language':    'en-US,en;q=0.9',
         'Content-Type':       'application/json',
         'Origin':             'https://realsports.io',
         'Referer':            'https://realsports.io/',
+        'User-Agent':         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Safari/605.1.15',
         'real-auth-info':     rsToken,
         'real-device-uuid':   '2e0a38e2-0ee8-4f93-9a34-218ac1d10161',
-        'real-device-name':   '5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
+        'real-device-name':   '5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Safari/605.1.15',
         'real-device-type':   'desktop_web',
-        'real-version':       '32',
-        'real-request-token': String(Date.now()),
+        'real-version':       '34',
+        'real-request-token': Math.random().toString(36).slice(2, 18),
       },
       signal: AbortSignal.timeout(10000),
     });
