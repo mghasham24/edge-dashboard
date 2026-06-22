@@ -7306,7 +7306,7 @@
             var predPct = Math.round(pred * 1000) / 10;
             var rsUrl = getRealSportsUrl(rsGameIds[r.game], sport, r.league, r.game) || '';
 
-            cards.push({ id: r.id, ev: ev, stars: stars, gameLabel: escHtml(gameLabel), sideLabel: sideLabel, predPct: predPct, rsUrl: rsUrl, af: af, mkt: r.mkt, pred: pred });
+            cards.push({ id: r.id, ev: ev, stars: stars, gameLabel: escHtml(gameLabel), sideLabel: sideLabel, side: side, predPct: predPct, rsUrl: rsUrl, af: af, mkt: r.mkt, pred: pred });
         });
 
         if (!cards.length) {
@@ -7334,6 +7334,7 @@
                 : '';
             html += '<div class="sm-card" data-af="' + c.af + '" data-mkt="' + c.mkt + '" data-card-id="' + c.id + '">'
                 + '<div class="sm-stars">' + stars + '</div>'
+                + '<div class="sm-logo">' + teamLogoHtml(c.side, 36) + '</div>'
                 + '<div class="sm-info">'
                 +   '<div class="sm-game">' + c.gameLabel + '</div>'
                 +   '<div class="sm-sentence">BET <span class="sm-bet-num">' + (bet > 0 ? bet : '—') + '</span> ' + SM_RAX_ICON + ' ON <strong class="sm-side">' + c.sideLabel + '</strong> AT <input class="sm-input sm-rs-pct" type="number" min="1" max="99" step="1" value="' + rsPct + '" oninput="smRecalc(this)" onclick="this.select()">% <span class="sm-ev-badge" style="color:' + (ev >= 10 ? 'var(--green)' : 'var(--accent)') + '">' + evStr + '</span></div>'
