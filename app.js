@@ -39,6 +39,7 @@
     })();
     var currentFcLeague = 'ALL';
     var simpleMode = localStorage.getItem('rax_simple_mode') === '1';
+    var smRsPctOverrides = {}; // marketId → user-adjusted RS%
     var rawRows = [];
     var rawRowsBySport = {}; // sport key -> parsed rows (same IDs as preds)
     var _alertSyncedIds = new Set(); // row IDs checked via alert sync (so we can uncheck on untake)
@@ -7305,7 +7306,7 @@
             var predPct = Math.round(pred * 1000) / 10;
             var rsUrl = getRealSportsUrl(rsGameIds[r.game], sport, r.league, r.game) || '';
 
-            cards.push({ ev: ev, stars: stars, gameLabel: escHtml(gameLabel), sideLabel: sideLabel, predPct: predPct, rsUrl: rsUrl, af: af, mkt: r.mkt, pred: pred });
+            cards.push({ id: r.id, ev: ev, stars: stars, gameLabel: escHtml(gameLabel), sideLabel: sideLabel, predPct: predPct, rsUrl: rsUrl, af: af, mkt: r.mkt, pred: pred });
         });
 
         if (!cards.length) {
@@ -7321,17 +7322,21 @@
         var sportLabel = sp ? sp.label : sport;
         var html = '<div class="sm-sport-group"><div class="sm-sport-header">' + escHtml(sportLabel) + '</div>';
         cards.forEach(function(c) {
-            var u = unitsEV(c.ev, c.pred);
-            var bet = u > 0 ? Math.round(u * unitSize) : 0;
-            var evStr = (c.ev >= 0 ? '+' : '') + c.ev.toFixed(1) + '% EV';
+            var rsPct = smRsPctOverrides[c.id] != null ? smRsPctOverrides[c.id] : Math.round(c.predPct);
+            var pred  = Math.min(0.999, Math.max(0.001, rsPct / 100));
+            var ev    = smRsPctOverrides[c.id] != null ? (c.af * (1 / pred) * (1 - rsBaseTake(pred)) - 1) * 100 : c.ev;
+            var u     = unitsEV(ev, pred);
+            var bet   = u > 0 ? Math.round(u * unitSize) : 0;
+            var stars = ev >= 10 ? '⭐⭐⭐' : ev >= 7 ? '⭐⭐' : '';
+            var evStr = (ev >= 0 ? '+' : '') + ev.toFixed(1) + '% EV';
             var gameBtn = c.rsUrl
                 ? '<a class="sm-game-btn" href="' + c.rsUrl + '" target="_blank" rel="noopener" onclick="event.stopPropagation()">View Game ↗</a>'
                 : '';
-            html += '<div class="sm-card" data-af="' + c.af + '" data-mkt="' + c.mkt + '">'
-                + '<div class="sm-stars">' + c.stars + '</div>'
+            html += '<div class="sm-card" data-af="' + c.af + '" data-mkt="' + c.mkt + '" data-card-id="' + c.id + '">'
+                + '<div class="sm-stars">' + stars + '</div>'
                 + '<div class="sm-info">'
                 +   '<div class="sm-game">' + c.gameLabel + '</div>'
-                +   '<div class="sm-sentence">BET <span class="sm-bet-num">' + (bet > 0 ? bet : '—') + '</span> ' + SM_RAX_ICON + ' ON <strong class="sm-side">' + c.sideLabel + '</strong> AT <input class="sm-input sm-rs-pct" type="number" min="1" max="99" step="1" value="' + Math.round(c.predPct) + '" oninput="smRecalc(this)" onclick="this.select()">% <span class="sm-ev-badge">' + evStr + '</span></div>'
+                +   '<div class="sm-sentence">BET <span class="sm-bet-num">' + (bet > 0 ? bet : '—') + '</span> ' + SM_RAX_ICON + ' ON <strong class="sm-side">' + c.sideLabel + '</strong> AT <input class="sm-input sm-rs-pct" type="number" min="1" max="99" step="1" value="' + rsPct + '" oninput="smRecalc(this)" onclick="this.select()">% <span class="sm-ev-badge" style="color:' + (ev >= 10 ? 'var(--green)' : 'var(--accent)') + '">' + evStr + '</span></div>'
                 + '</div>'
                 + gameBtn
                 + '</div>';
@@ -7347,6 +7352,7 @@
         if (!isFinite(af)) return;
         var pct = Math.round(parseFloat(input.value));
         if (!isFinite(pct) || pct <= 0 || pct >= 100) return;
+        if (card.dataset.cardId) smRsPctOverrides[card.dataset.cardId] = pct;
         var pred = Math.min(0.999, Math.max(0.001, pct / 100));
         var ev = (af * (1 / pred) * (1 - rsBaseTake(pred)) - 1) * 100;
         if (!isFinite(ev)) return;
