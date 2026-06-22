@@ -7305,7 +7305,7 @@
             var predPct = Math.round(pred * 1000) / 10;
             var rsUrl = getRealSportsUrl(rsGameIds[r.game], sport, r.league, r.game) || '';
 
-            cards.push({ ev: ev, stars: stars, gameLabel: escHtml(gameLabel), sideLabel: sideLabel, predPct: predPct, rsUrl: rsUrl });
+            cards.push({ ev: ev, stars: stars, gameLabel: escHtml(gameLabel), sideLabel: sideLabel, predPct: predPct, rsUrl: rsUrl, af: af, mkt: r.mkt, pred: pred });
         });
 
         if (!cards.length) {
@@ -7315,26 +7315,57 @@
 
         cards.sort(function(a, b) { return b.ev - a.ev; });
 
-        var defaultBet = parseFloat(document.getElementById('unit-size')?.value) || 300;
+        var unitSize = parseFloat(document.getElementById('unit-size')?.value) || 300;
         var SM_RAX_ICON = '<svg viewBox="0 0 512 512" class="sm-rax-icon" aria-hidden="true"><g fill="currentColor"><path d="M128.1,141.1h356.8C442.8,57.4,356.1,0,256,0C192,0,133.5,23.5,88.6,62.3L128.1,141.1z"/><polygon points="355.3,193.2 154.2,193.2 254.7,394"/><path d="M413.6,193.2L253.9,512c0.7,0,1.4,0,2.1,0c141.4,0,256-114.6,256-256c0-21.7-2.7-42.7-7.8-62.8H413.6z"/><path d="M225.6,452.1L50.7,103C18.9,145.7,0,198.6,0,256c0,121.7,85,223.6,198.8,249.6L225.6,452.1z"/></g></svg>';
         var sp = SPORTS.find(function(s) { return s.key === sport; });
         var sportLabel = sp ? sp.label : sport;
         var html = '<div class="sm-sport-group"><div class="sm-sport-header">' + escHtml(sportLabel) + '</div>';
         cards.forEach(function(c) {
+            var u = unitsEV(c.ev, c.pred);
+            var bet = u > 0 ? Math.round(u * unitSize) : 0;
+            var evStr = (c.ev >= 0 ? '+' : '') + c.ev.toFixed(1) + '% EV';
             var gameBtn = c.rsUrl
                 ? '<a class="sm-game-btn" href="' + c.rsUrl + '" target="_blank" rel="noopener" onclick="event.stopPropagation()">View Game ↗</a>'
                 : '';
-            html += '<div class="sm-card">'
+            html += '<div class="sm-card" data-af="' + c.af + '" data-mkt="' + c.mkt + '">'
                 + '<div class="sm-stars">' + c.stars + '</div>'
                 + '<div class="sm-info">'
                 +   '<div class="sm-game">' + c.gameLabel + '</div>'
-                +   '<div class="sm-sentence">BET <span class="sm-num">' + defaultBet + '</span> ' + SM_RAX_ICON + ' ON <strong class="sm-side">' + c.sideLabel + '</strong> AT <input class="sm-input sm-rs-pct" type="number" step="0.1" value="' + c.predPct + '" onclick="this.select()">%</div>'
+                +   '<div class="sm-sentence">BET <span class="sm-bet-num">' + (bet > 0 ? bet : '—') + '</span> ' + SM_RAX_ICON + ' ON <strong class="sm-side">' + c.sideLabel + '</strong> AT <input class="sm-input sm-rs-pct" type="number" min="1" max="99" step="0.1" value="' + c.predPct + '" oninput="smRecalc(this)" onclick="this.select()">% <span class="sm-ev-badge">' + evStr + '</span></div>'
                 + '</div>'
                 + gameBtn
                 + '</div>';
         });
         html += '</div>';
         wrap.innerHTML = html;
+    }
+
+    function smRecalc(input) {
+        var card = input.closest('.sm-card');
+        if (!card) return;
+        var af = parseFloat(card.dataset.af);
+        if (!isFinite(af)) return;
+        var pct = parseFloat(input.value);
+        if (!isFinite(pct) || pct <= 0 || pct >= 100) return;
+        var pred = Math.min(0.999, Math.max(0.001, pct / 100));
+        var ev = (af * (1 / pred) * (1 - rsBaseTake(pred)) - 1) * 100;
+        if (!isFinite(ev)) return;
+        var unit = parseFloat(document.getElementById('unit-size')?.value) || 300;
+        var u = unitsEV(ev, pred);
+        var bet = u > 0 ? Math.round(u * unit) : 0;
+        var stars = ev >= 10 ? '⭐⭐⭐' : ev >= 7 ? '⭐⭐' : '';
+        var evStr = (ev >= 0 ? '+' : '') + ev.toFixed(1) + '% EV';
+
+        var starsEl = card.querySelector('.sm-stars');
+        if (starsEl) starsEl.textContent = stars;
+        var betEl = card.querySelector('.sm-bet-num');
+        if (betEl) betEl.textContent = bet > 0 ? bet : '—';
+        var badge = card.querySelector('.sm-ev-badge');
+        if (badge) {
+            badge.textContent = evStr;
+            badge.style.color = ev >= 10 ? 'var(--green)' : ev >= 7 ? 'var(--accent)' : 'var(--muted)';
+        }
+        card.style.opacity = ev < 0 ? '0.45' : '';
     }
 
     function renderTable() {
