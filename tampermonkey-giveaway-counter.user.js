@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RaxEdge Giveaway Counter
 // @namespace    raxedge
-// @version      5.0
+// @version      6.0
 // @description  Auto-scrolls RS giveaway post and builds referral leaderboard
 // @match        https://realsports.io/*
 // @match        https://www.realsports.io/*
