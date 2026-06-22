@@ -7323,7 +7323,7 @@
                 + '<div class="sm-stars">' + c.stars + '</div>'
                 + '<div class="sm-info">'
                 +   '<div class="sm-game">' + c.gameLabel + '</div>'
-                +   '<div class="sm-sentence">BET <input class="sm-input sm-bet-size" type="number" value="' + defaultBet + '" onclick="this.select()"> RAX ON <strong class="sm-side">' + c.sideLabel + '</strong> AT <input class="sm-input sm-rs-pct" type="number" step="0.1" value="' + c.predPct + '" onclick="this.select()">%</div>'
+                +   '<div class="sm-sentence">BET ' + defaultBet + ' RAX ON <strong class="sm-side">' + c.sideLabel + '</strong> AT <input class="sm-input sm-rs-pct" type="number" step="0.1" value="' + c.predPct + '" onclick="this.select()">%</div>'
                 + '</div>'
                 + '</div>';
         });
