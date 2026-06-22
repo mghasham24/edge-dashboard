@@ -7300,12 +7300,11 @@
                 ? parts[0].trim() + ' @ ' + parts[1].trim()
                 : game;
             var side = r.ps === 'A' ? (r.away || parts[0] || 'Away') : (r.home || (parts[1] || 'Home'));
-            var betLabel = r.mkt + ' · ' + escHtml(side) + (r.pt != null ? ' ' + (r.pt > 0 ? '+' : '') + r.pt : '');
+            var sideLabel = escHtml(side) + (r.pt != null ? (r.pt > 0 ? ' +' : ' ') + r.pt : '') + ' ' + r.mkt;
             var stars = ev >= 10 ? '⭐⭐⭐' : '⭐⭐';
-            var oddsStr = r.am != null ? (r.am > 0 ? '+' + r.am : r.am) : '—';
-            var oddsPos = r.am > 0;
+            var predPct = Math.round(pred * 1000) / 10;
 
-            cards.push({ ev: ev, stars: stars, gameLabel: escHtml(gameLabel), betLabel: betLabel, oddsStr: oddsStr, oddsPos: oddsPos });
+            cards.push({ ev: ev, stars: stars, gameLabel: escHtml(gameLabel), sideLabel: sideLabel, predPct: predPct });
         });
 
         if (!cards.length) {
@@ -7315,6 +7314,7 @@
 
         cards.sort(function(a, b) { return b.ev - a.ev; });
 
+        var defaultBet = parseFloat(document.getElementById('unit-size')?.value) || 300;
         var sp = SPORTS.find(function(s) { return s.key === sport; });
         var sportLabel = sp ? sp.label : sport;
         var html = '<div class="sm-sport-group"><div class="sm-sport-header">' + escHtml(sportLabel) + '</div>';
@@ -7323,9 +7323,8 @@
                 + '<div class="sm-stars">' + c.stars + '</div>'
                 + '<div class="sm-info">'
                 +   '<div class="sm-game">' + c.gameLabel + '</div>'
-                +   '<div class="sm-bet">' + c.betLabel + '</div>'
+                +   '<div class="sm-sentence">BET <input class="sm-input sm-bet-size" type="number" value="' + defaultBet + '" onclick="this.select()"> RAX ON <strong class="sm-side">' + c.sideLabel + '</strong> AT <input class="sm-input sm-rs-pct" type="number" step="0.1" value="' + c.predPct + '" onclick="this.select()">%</div>'
                 + '</div>'
-                + '<div class="sm-odds' + (c.oddsPos ? ' pos' : '') + '">' + c.oddsStr + '</div>'
                 + '</div>';
         });
         html += '</div>';
