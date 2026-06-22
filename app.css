@@ -2518,10 +2518,38 @@
         gap: 6px;
         line-height: 1.5;
     }
+    .sm-num {
+        color: var(--accent);
+        font-weight: 800;
+    }
+    .sm-rax-icon {
+        width: 17px;
+        height: 17px;
+        flex-shrink: 0;
+        vertical-align: middle;
+        position: relative;
+        top: -1px;
+    }
     .sm-side {
         font-weight: 800;
         color: var(--accent);
     }
+    .sm-game-btn {
+        flex-shrink: 0;
+        align-self: center;
+        display: inline-block;
+        padding: 7px 14px;
+        background: var(--accent);
+        color: #fff;
+        font-size: 13px;
+        font-weight: 700;
+        border-radius: 7px;
+        text-decoration: none;
+        white-space: nowrap;
+        margin-left: 8px;
+        transition: opacity .15s;
+    }
+    .sm-game-btn:hover { opacity: .82; }
     .sm-input {
         background: var(--bg3, var(--bg2));
         border: 1px solid var(--border);

@@ -7303,8 +7303,9 @@
             var sideLabel = escHtml(side) + (r.pt != null ? (r.pt > 0 ? ' +' : ' ') + r.pt : '') + ' ' + r.mkt;
             var stars = ev >= 10 ? '⭐⭐⭐' : '⭐⭐';
             var predPct = Math.round(pred * 1000) / 10;
+            var rsUrl = getRealSportsUrl(rsGameIds[r.game], sport, r.league, r.game) || '';
 
-            cards.push({ ev: ev, stars: stars, gameLabel: escHtml(gameLabel), sideLabel: sideLabel, predPct: predPct });
+            cards.push({ ev: ev, stars: stars, gameLabel: escHtml(gameLabel), sideLabel: sideLabel, predPct: predPct, rsUrl: rsUrl });
         });
 
         if (!cards.length) {
@@ -7315,16 +7316,21 @@
         cards.sort(function(a, b) { return b.ev - a.ev; });
 
         var defaultBet = parseFloat(document.getElementById('unit-size')?.value) || 300;
+        var RAX_ICON = '<svg class="sm-rax-icon" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg"><polygon points="256,48 464,256 256,464 48,256" fill="none" stroke="#4f6ef7" stroke-width="40"/><polygon points="256,165 347,256 256,347 165,256" fill="#4f6ef7"/></svg>';
         var sp = SPORTS.find(function(s) { return s.key === sport; });
         var sportLabel = sp ? sp.label : sport;
         var html = '<div class="sm-sport-group"><div class="sm-sport-header">' + escHtml(sportLabel) + '</div>';
         cards.forEach(function(c) {
+            var gameBtn = c.rsUrl
+                ? '<a class="sm-game-btn" href="' + c.rsUrl + '" target="_blank" rel="noopener" onclick="event.stopPropagation()">View Game ↗</a>'
+                : '';
             html += '<div class="sm-card">'
                 + '<div class="sm-stars">' + c.stars + '</div>'
                 + '<div class="sm-info">'
                 +   '<div class="sm-game">' + c.gameLabel + '</div>'
-                +   '<div class="sm-sentence">BET ' + defaultBet + ' RAX ON <strong class="sm-side">' + c.sideLabel + '</strong> AT <input class="sm-input sm-rs-pct" type="number" step="0.1" value="' + c.predPct + '" onclick="this.select()">%</div>'
+                +   '<div class="sm-sentence">BET <span class="sm-num">' + defaultBet + '</span> ' + RAX_ICON + ' ON <strong class="sm-side">' + c.sideLabel + '</strong> AT <input class="sm-input sm-rs-pct" type="number" step="0.1" value="' + c.predPct + '" onclick="this.select()">%</div>'
                 + '</div>'
+                + gameBtn
                 + '</div>';
         });
         html += '</div>';
