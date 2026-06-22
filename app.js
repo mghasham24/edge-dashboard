@@ -7331,7 +7331,7 @@
                 + '<div class="sm-stars">' + c.stars + '</div>'
                 + '<div class="sm-info">'
                 +   '<div class="sm-game">' + c.gameLabel + '</div>'
-                +   '<div class="sm-sentence">BET <span class="sm-bet-num">' + (bet > 0 ? bet : '—') + '</span> ' + SM_RAX_ICON + ' ON <strong class="sm-side">' + c.sideLabel + '</strong> AT <input class="sm-input sm-rs-pct" type="number" min="1" max="99" step="0.1" value="' + c.predPct + '" oninput="smRecalc(this)" onclick="this.select()">% <span class="sm-ev-badge">' + evStr + '</span></div>'
+                +   '<div class="sm-sentence">BET <span class="sm-bet-num">' + (bet > 0 ? bet : '—') + '</span> ' + SM_RAX_ICON + ' ON <strong class="sm-side">' + c.sideLabel + '</strong> AT <input class="sm-input sm-rs-pct" type="number" min="1" max="99" step="1" value="' + Math.round(c.predPct) + '" oninput="smRecalc(this)" onclick="this.select()">% <span class="sm-ev-badge">' + evStr + '</span></div>'
                 + '</div>'
                 + gameBtn
                 + '</div>';
@@ -7345,7 +7345,7 @@
         if (!card) return;
         var af = parseFloat(card.dataset.af);
         if (!isFinite(af)) return;
-        var pct = parseFloat(input.value);
+        var pct = Math.round(parseFloat(input.value));
         if (!isFinite(pct) || pct <= 0 || pct >= 100) return;
         var pred = Math.min(0.999, Math.max(0.001, pct / 100));
         var ev = (af * (1 / pred) * (1 - rsBaseTake(pred)) - 1) * 100;
