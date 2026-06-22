@@ -117,6 +117,7 @@ async function run() {
     }
 
     const positions    = (await posRes.json()).positions || [];
+    console.log('rs-poster: positions:', positions.map(p => ({ game: p.marketDisplay?.display, sharedId: p.sharedPositionId || 'NONE' })));
     const newPositions = positions.filter(p => p.sharedPositionId && !postedIds.has(p.sharedPositionId));
 
     if (!positions.length)    { console.log('rs-poster: no open positions'); return; }

@@ -87,6 +87,14 @@
 
       const positions    = (await posRes.json()).positions || [];
       const postedIds    = getPostedIds();
+      // Log all positions so we can see which fields WC positions use
+      console.log('[RS Poster] All positions:', positions.map(p => ({
+        game: p.marketDisplay?.display,
+        sharedId: p.sharedPositionId,
+        id: p.id,
+        predictionId: p.predictionId,
+        positionId: p.positionId
+      })));
       const newPositions = positions.filter(p => p.sharedPositionId && !postedIds.has(p.sharedPositionId));
 
       if (!positions.length)    { console.log('[RS Poster] No open positions'); return; }

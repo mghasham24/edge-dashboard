@@ -38,6 +38,7 @@
         return 'basketball_nba';
     })();
     var currentFcLeague = 'ALL';
+    var simpleMode = localStorage.getItem('rax_simple_mode') === '1';
     var rawRows = [];
     var rawRowsBySport = {}; // sport key -> parsed rows (same IDs as preds)
     var _alertSyncedIds = new Set(); // row IDs checked via alert sync (so we can uncheck on untake)
@@ -1232,6 +1233,7 @@
                 document.getElementById('dashboard').style.display = 'block';
                 showTrialNudge(data);
                 buildTabs();
+                applySimpleModeToggleUI();
                 if (isPro()) loadGroupCode();
                 await loadBetsTaken();
                 // If redirected back from bookmarklet, open portfolio tab
@@ -7234,7 +7236,108 @@
         });
     }
 
+    function applySimpleModeToggleUI() {
+        var el = document.getElementById('simple-toggle');
+        if (el) el.classList.toggle('on', simpleMode);
+    }
+
+    function toggleSimpleMode() {
+        simpleMode = !simpleMode;
+        localStorage.setItem('rax_simple_mode', simpleMode ? '1' : '0');
+        applySimpleModeToggleUI();
+        renderTable();
+    }
+
+    function renderSimpleCards() {
+        var wrap = document.getElementById('simple-mode-wrap');
+        var tableWrap = document.querySelector('.table-wrap');
+        if (!wrap) return;
+        wrap.style.display = 'block';
+        if (tableWrap) tableWrap.style.display = 'none';
+
+        var pro = isPro();
+        var FREE_SPORTS_SM = ['basketball_nba', 'icehockey_nhl', 'baseball_mlb'];
+        var sport = currentSport;
+
+        // Pro gate — locked sports show upgrade prompt
+        if (!pro && FREE_SPORTS_SM.indexOf(sport) === -1) {
+            wrap.innerHTML = '<div class="sm-empty">⭐ This sport is a Pro feature.<br><br>'
+                + '<button onclick="showUpgradeModal(\'Upgrade to Pro to unlock all sports.\')" '
+                + 'style="margin-top:10px;padding:10px 20px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer">Upgrade to Pro</button></div>';
+            return;
+        }
+
+        if (!rawRows.length) {
+            wrap.innerHTML = '<div class="sm-empty">No data — hit Refresh</div>';
+            return;
+        }
+
+        // Build EV for each row (mirrors renderTable logic)
+        var pairs = {};
+        rawRows.forEach(function(r) {
+            if (!pairs[r.pid]) pairs[r.pid] = {};
+            pairs[r.pid][r.ps] = r;
+        });
+
+        var cards = [];
+        rawRows.forEach(function(r) {
+            var p = pairs[r.pid] || {};
+            var nv = novig(p.A ? imp(p.A.am) : null, p.B ? imp(p.B.am) : null);
+            var fair = r.ps === 'A' ? nv.fa : nv.fb;
+            var af = adjFair(fair, r.pt, null, r.mkt, r.ps);
+            var pr = preds[r.id];
+            if (pr === undefined || pr === '') return;
+            var pred = Math.min(0.999, Math.max(0.001, parseFloat(pr) / 100 + rsPredAdj / 100));
+            if (!isFinite(pred) || pred <= 0) return;
+            var ev = (af * (1 / pred) * (1 - rsBaseTake(pred)) - 1) * 100;
+            if (!isFinite(ev) || ev < 7) return;
+            // Pro gate: non-ML markets locked for free users
+            if (!pro && r.mkt !== 'ML' && r.mkt !== 'RFI') return;
+
+            var game = r.game || '';
+            var parts = game.split('@');
+            var gameLabel = parts.length === 2
+                ? parts[0].trim() + ' @ ' + parts[1].trim()
+                : game;
+            var side = r.ps === 'A' ? (r.away || parts[0] || 'Away') : (r.home || (parts[1] || 'Home'));
+            var betLabel = r.mkt + ' · ' + escHtml(side) + (r.pt != null ? ' ' + (r.pt > 0 ? '+' : '') + r.pt : '');
+            var stars = ev >= 10 ? '⭐⭐⭐' : '⭐⭐';
+            var oddsStr = r.am != null ? (r.am > 0 ? '+' + r.am : r.am) : '—';
+            var oddsPos = r.am > 0;
+
+            cards.push({ ev: ev, stars: stars, gameLabel: escHtml(gameLabel), betLabel: betLabel, oddsStr: oddsStr, oddsPos: oddsPos });
+        });
+
+        if (!cards.length) {
+            wrap.innerHTML = '<div class="sm-empty">No bets above 7% EV right now</div>';
+            return;
+        }
+
+        cards.sort(function(a, b) { return b.ev - a.ev; });
+
+        var sp = SPORTS.find(function(s) { return s.key === sport; });
+        var sportLabel = sp ? sp.label : sport;
+        var html = '<div class="sm-sport-group"><div class="sm-sport-header">' + escHtml(sportLabel) + '</div>';
+        cards.forEach(function(c) {
+            html += '<div class="sm-card">'
+                + '<div class="sm-stars">' + c.stars + '</div>'
+                + '<div class="sm-info">'
+                +   '<div class="sm-game">' + c.gameLabel + '</div>'
+                +   '<div class="sm-bet">' + c.betLabel + '</div>'
+                + '</div>'
+                + '<div class="sm-odds' + (c.oddsPos ? ' pos' : '') + '">' + c.oddsStr + '</div>'
+                + '</div>';
+        });
+        html += '</div>';
+        wrap.innerHTML = html;
+    }
+
     function renderTable() {
+        if (simpleMode) { renderSimpleCards(); return; }
+        var smWrap = document.getElementById('simple-mode-wrap');
+        if (smWrap) smWrap.style.display = 'none';
+        var tableWrap = document.querySelector('.table-wrap');
+        if (tableWrap) tableWrap.style.display = '';
         var unit = parseFloat(document.getElementById('unit-size').value) || 300;
         var q = document.getElementById('search').value.trim().toLowerCase();
         if (!rawRows.length) {
