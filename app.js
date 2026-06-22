@@ -7302,7 +7302,7 @@
                 : game;
             var side = r.ps === 'A' ? (r.away || parts[0] || 'Away') : (r.home || (parts[1] || 'Home'));
             var sideLabel = escHtml(side) + (r.pt != null ? (r.pt > 0 ? ' +' : ' ') + r.pt : '') + ' ' + r.mkt;
-            var stars = ev >= 10 ? '⭐⭐⭐' : '⭐⭐';
+            var stars = smStars(ev);
             var predPct = Math.round(pred * 1000) / 10;
             var rsUrl = getRealSportsUrl(rsGameIds[r.game], sport, r.league, r.game) || '';
 
@@ -7320,15 +7320,16 @@
         var SM_RAX_ICON = '<svg viewBox="0 0 512 512" class="sm-rax-icon" aria-hidden="true"><g fill="currentColor"><path d="M128.1,141.1h356.8C442.8,57.4,356.1,0,256,0C192,0,133.5,23.5,88.6,62.3L128.1,141.1z"/><polygon points="355.3,193.2 154.2,193.2 254.7,394"/><path d="M413.6,193.2L253.9,512c0.7,0,1.4,0,2.1,0c141.4,0,256-114.6,256-256c0-21.7-2.7-42.7-7.8-62.8H413.6z"/><path d="M225.6,452.1L50.7,103C18.9,145.7,0,198.6,0,256c0,121.7,85,223.6,198.8,249.6L225.6,452.1z"/></g></svg>';
         var sp = SPORTS.find(function(s) { return s.key === sport; });
         var sportLabel = sp ? sp.label : sport;
-        var html = '<div class="sm-sport-group"><div class="sm-sport-header">' + escHtml(sportLabel) + '</div>';
+        var html = '<div class="sm-sport-group"><div class="sm-sport-header">' + escHtml(sportLabel) + '<button class="sm-info-btn" onclick="smShowInfo()" title="Rating guide">ⓘ</button></div>';
         cards.forEach(function(c) {
             var rsPct = smRsPctOverrides[c.id] != null ? smRsPctOverrides[c.id] : Math.round(c.predPct);
             var pred  = Math.min(0.999, Math.max(0.001, rsPct / 100));
             var ev    = smRsPctOverrides[c.id] != null ? (c.af * (1 / pred) * (1 - rsBaseTake(pred)) - 1) * 100 : c.ev;
             var u     = unitsEV(ev, pred);
             var bet   = u > 0 ? Math.round(u * unitSize) : 0;
-            var stars = ev >= 10 ? '⭐⭐⭐' : ev >= 7 ? '⭐⭐' : '';
+            var stars = smStars(ev);
             var evStr = (ev >= 0 ? '+' : '') + ev.toFixed(1) + '% EV';
+            var evColor = ev >= 20 ? 'var(--green)' : ev >= 10 ? 'var(--accent)' : 'var(--muted)';
             var gameBtn = c.rsUrl
                 ? '<a class="sm-game-btn" href="' + c.rsUrl + '" target="_blank" rel="noopener" onclick="event.stopPropagation()">View Game ↗</a>'
                 : '';
@@ -7337,7 +7338,7 @@
                 + '<div class="sm-logo">' + teamLogoHtml(c.side, 36) + '</div>'
                 + '<div class="sm-info">'
                 +   '<div class="sm-game">' + c.gameLabel + '</div>'
-                +   '<div class="sm-sentence">BET <span class="sm-bet-num">' + (bet > 0 ? bet : '—') + '</span> ' + SM_RAX_ICON + ' ON <strong class="sm-side">' + c.sideLabel + '</strong> AT <input class="sm-input sm-rs-pct" type="number" min="1" max="99" step="1" value="' + rsPct + '" oninput="smRecalc(this)" onclick="this.select()">% <span class="sm-ev-badge" style="color:' + (ev >= 10 ? 'var(--green)' : 'var(--accent)') + '">' + evStr + '</span></div>'
+                +   '<div class="sm-sentence">BET <span class="sm-bet-num">' + (bet > 0 ? bet : '—') + '</span> ' + SM_RAX_ICON + ' ON <strong class="sm-side">' + c.sideLabel + '</strong> AT <input class="sm-input sm-rs-pct" type="number" min="1" max="99" step="1" value="' + rsPct + '" oninput="smRecalc(this)" onclick="this.select()">% <span class="sm-ev-badge" style="color:' + evColor + '">' + evStr + '</span></div>'
                 + '</div>'
                 + gameBtn
                 + '</div>';
@@ -7360,7 +7361,7 @@
         var unit = parseFloat(document.getElementById('unit-size')?.value) || 300;
         var u = unitsEV(ev, pred);
         var bet = u > 0 ? Math.round(u * unit) : 0;
-        var stars = ev >= 10 ? '⭐⭐⭐' : ev >= 7 ? '⭐⭐' : '';
+        var stars = smStars(ev);
         var evStr = (ev >= 0 ? '+' : '') + ev.toFixed(1) + '% EV';
 
         var starsEl = card.querySelector('.sm-stars');
@@ -7370,9 +7371,46 @@
         var badge = card.querySelector('.sm-ev-badge');
         if (badge) {
             badge.textContent = evStr;
-            badge.style.color = ev >= 10 ? 'var(--green)' : ev >= 7 ? 'var(--accent)' : 'var(--muted)';
+            badge.style.color = ev >= 20 ? 'var(--green)' : ev >= 10 ? 'var(--accent)' : 'var(--muted)';
         }
         card.style.opacity = ev < 0 ? '0.45' : '';
+    }
+
+    function smStars(ev) {
+        if (ev >= 25) return '⭐⭐⭐⭐⭐';
+        if (ev >= 20) return '⭐⭐⭐⭐';
+        if (ev >= 15) return '⭐⭐⭐';
+        if (ev >= 10) return '⭐⭐';
+        if (ev >= 7)  return '⭐';
+        return '';
+    }
+
+    function smShowInfo() {
+        var overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px';
+        overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+        var rows = [
+            ['⭐⭐⭐⭐⭐', '25%+ EV',  '2–3 units'],
+            ['⭐⭐⭐⭐',   '20–24% EV', '2 units'],
+            ['⭐⭐⭐',     '15–19% EV', '1 unit'],
+            ['⭐⭐',       '10–14% EV', '1 unit'],
+            ['⭐',         '7–9% EV',   '0.5 units'],
+        ];
+        var rowHtml = rows.map(function(r) {
+            return '<tr><td style="font-size:14px;padding:8px 14px 8px 0;white-space:nowrap">' + r[0] + '</td>'
+                + '<td style="font-size:13px;padding:8px 14px;color:var(--accent);font-weight:700">' + r[1] + '</td>'
+                + '<td style="font-size:13px;padding:8px 0;color:var(--muted)">' + r[2] + '</td></tr>';
+        }).join('');
+        overlay.innerHTML = '<div style="background:#18181f;border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:24px;max-width:340px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,.6)">'
+            + '<div style="font-weight:800;font-size:15px;color:#f0eff5;margin-bottom:16px">⭐ Rating Guide</div>'
+            + '<table style="border-collapse:collapse;width:100%">' + rowHtml + '</table>'
+            + '<div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.1);font-size:12px;color:var(--muted);line-height:1.6">'
+            + 'Unit sizes are capped for underdogs (RS% under 25%).<br>'
+            + 'Adjust the RS% on any card to update its rating live.'
+            + '</div>'
+            + '<button onclick="this.closest(\'div[style]\').parentElement.remove()" style="margin-top:18px;width:100%;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer">Got it</button>'
+            + '</div>';
+        document.body.appendChild(overlay);
     }
 
     function renderTable() {
