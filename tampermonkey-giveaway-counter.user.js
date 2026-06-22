@@ -125,10 +125,7 @@
     else               { s.textContent = '▶ Auto-Scroll'; s.style.background = '#2ecc71'; }
   }
 
-  // ── MutationObserver + scroll listener ───────────────────────────────────────
-  new MutationObserver(() => scanComments()).observe(document.body, { childList: true, subtree: true });
-  let scrollTimer;
-  window.addEventListener('scroll', () => { clearTimeout(scrollTimer); scrollTimer = setTimeout(scanComments, 300); }, { passive: true });
+  // No auto-scan on load or navigation — user presses Scan when on replies
 
   // ── UI ────────────────────────────────────────────────────────────────────────
   GM_addStyle(`
@@ -138,8 +135,9 @@
       padding: 10px 16px; font-size: 13px; font-weight: 700; cursor: pointer;
       box-shadow: 0 2px 12px rgba(0,0,0,0.4); transition: background .2s;
     }
-    #rax-gc-btn        { bottom: 80px; background: #7c5ef5; }
+    #rax-gc-btn        { bottom: 80px;  background: #7c5ef5; }
     #rax-gc-scroll-btn { bottom: 128px; background: #2ecc71; }
+    #rax-gc-scan-btn   { bottom: 176px; background: #2980b9; }
     #rax-gc-modal {
       position: fixed; inset: 0; z-index: 100000;
       background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center;
@@ -221,6 +219,12 @@
     countBtn.onclick = showLeaderboard;
     document.body.appendChild(countBtn);
 
+    const scanBtn = document.createElement('button');
+    scanBtn.id = 'rax-gc-scan-btn';
+    scanBtn.textContent = '📡 Scan';
+    scanBtn.onclick = () => { scanComments(); const t = Object.keys(entries).length; updateBtn(t); };
+    document.body.appendChild(scanBtn);
+
     const scrollBtn = document.createElement('button');
     scrollBtn.id = 'rax-gc-scroll-btn';
     scrollBtn.textContent = '▶ Auto-Scroll';
@@ -230,7 +234,5 @@
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', injectButton);
   else injectButton();
-
-  setTimeout(scanComments, 1000);
 
 })();
