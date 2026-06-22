@@ -133,7 +133,7 @@ async function run() {
         const detail    = detailRes.ok ? await detailRes.json() : {};
         const path      = detail.position?.marketDisplay?.path;
         const shareUrl  = path ? RS_WEB_BASE + path : '';
-        const text      = formatPost(pos) + (shareUrl ? '\n\n' + shareUrl : '') + '\n\nMake sure to enter giveaway https://www.realapp.com/joclFa5yikR5/178207176251200001';
+        const text      = formatPost(pos) + (shareUrl ? '\n\n' + shareUrl : '');
 
         const groupRes = await fetch(RS_BASE + '/groups/' + RS_GROUP_ID + '/posts', {
           method:  'POST',
