@@ -7316,7 +7316,7 @@
         cards.sort(function(a, b) { return b.ev - a.ev; });
 
         var defaultBet = parseFloat(document.getElementById('unit-size')?.value) || 300;
-        var RAX_ICON = '<svg class="sm-rax-icon" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg"><polygon points="256,48 464,256 256,464 48,256" fill="none" stroke="#4f6ef7" stroke-width="40"/><polygon points="256,165 347,256 256,347 165,256" fill="#4f6ef7"/></svg>';
+        var SM_RAX_ICON = '<svg viewBox="0 0 512 512" class="sm-rax-icon" aria-hidden="true"><g fill="currentColor"><path d="M128.1,141.1h356.8C442.8,57.4,356.1,0,256,0C192,0,133.5,23.5,88.6,62.3L128.1,141.1z"/><polygon points="355.3,193.2 154.2,193.2 254.7,394"/><path d="M413.6,193.2L253.9,512c0.7,0,1.4,0,2.1,0c141.4,0,256-114.6,256-256c0-21.7-2.7-42.7-7.8-62.8H413.6z"/><path d="M225.6,452.1L50.7,103C18.9,145.7,0,198.6,0,256c0,121.7,85,223.6,198.8,249.6L225.6,452.1z"/></g></svg>';
         var sp = SPORTS.find(function(s) { return s.key === sport; });
         var sportLabel = sp ? sp.label : sport;
         var html = '<div class="sm-sport-group"><div class="sm-sport-header">' + escHtml(sportLabel) + '</div>';
@@ -7328,7 +7328,7 @@
                 + '<div class="sm-stars">' + c.stars + '</div>'
                 + '<div class="sm-info">'
                 +   '<div class="sm-game">' + c.gameLabel + '</div>'
-                +   '<div class="sm-sentence">BET <span class="sm-num">' + defaultBet + '</span> ' + RAX_ICON + ' ON <strong class="sm-side">' + c.sideLabel + '</strong> AT <input class="sm-input sm-rs-pct" type="number" step="0.1" value="' + c.predPct + '" onclick="this.select()">%</div>'
+                +   '<div class="sm-sentence">BET <span class="sm-num">' + defaultBet + '</span> ' + SM_RAX_ICON + ' ON <strong class="sm-side">' + c.sideLabel + '</strong> AT <input class="sm-input sm-rs-pct" type="number" step="0.1" value="' + c.predPct + '" onclick="this.select()">%</div>'
                 + '</div>'
                 + gameBtn
                 + '</div>';
