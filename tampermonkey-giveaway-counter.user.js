@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RaxEdge Giveaway Counter
 // @namespace    raxedge
-// @version      6.1
+// @version      6.2
 // @description  Auto-scrolls RS giveaway post and builds referral leaderboard
 // @match        https://realsports.io/*
 // @match        https://www.realsports.io/*
@@ -200,13 +200,16 @@
       return `${rank} @${name} (${count} referral${count!==1?'s':''})`;
     }).join('\n');
 
-    const copyBtn = `<button id="rax-gc-copy" onclick="
-      navigator.clipboard.writeText(${JSON.stringify(copyText)}).then(()=>{
-        this.textContent='✅ Copied!'; setTimeout(()=>this.textContent='📋 Copy Top 7',1800);
-      });
-    " style="margin-top:14px;width:100%;padding:9px;background:#7c5ef5;color:#fff;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer">📋 Copy Top 7</button>`;
+    showModal(rows + `<div id="rax-gc-meta">${total} unique entries captured</div>` +
+      `<button id="rax-gc-copy" style="margin-top:14px;width:100%;padding:9px;background:#7c5ef5;color:#fff;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer">📋 Copy Top 7</button>`);
 
-    showModal(rows + `<div id="rax-gc-meta">${total} unique entries captured</div>` + copyBtn);
+    const copyBtn = document.getElementById('rax-gc-copy');
+    if (copyBtn) copyBtn.addEventListener('click', function() {
+      navigator.clipboard.writeText(copyText).then(() => {
+        copyBtn.textContent = '✅ Copied!';
+        setTimeout(() => { copyBtn.textContent = '📋 Copy Top 7'; }, 1800);
+      });
+    });
   }
 
   function showModal(content) {
