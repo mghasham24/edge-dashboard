@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RaxEdge Giveaway Counter
 // @namespace    raxedge
-// @version      6.0
+// @version      6.1
 // @description  Auto-scrolls RS giveaway post and builds referral leaderboard
 // @match        https://realsports.io/*
 // @match        https://www.realsports.io/*
@@ -186,13 +186,27 @@
     }
 
     const medals = ['🥇','🥈','🥉'], mCls = ['rax-gc-m1','rax-gc-m2','rax-gc-m3'];
+    const ordinals = ['4th','5th','6th','7th','8th','9th','10th'];
     const rows = board.map(([name, count], i) => `
       <div class="rax-gc-row">
-        <span class="rax-gc-rank ${mCls[i]||''}">${medals[i]||`#${i+1}`}</span>
+        <span class="rax-gc-rank ${mCls[i]||''}">${medals[i]||ordinals[i-3]||`#${i+1}`}</span>
         <span class="rax-gc-name">@${name}</span>
         <span class="rax-gc-count">${count} referral${count!==1?'s':''}</span>
       </div>`).join('');
-    showModal(rows + `<div id="rax-gc-meta">${total} unique entries captured</div>`);
+
+    const top7 = board.slice(0, 7);
+    const copyText = 'Top ' + top7.length + ':\n.\n' + top7.map(([name, count], i) => {
+      const rank = medals[i] || ordinals[i-3] || `#${i+1}`;
+      return `${rank} @${name} (${count} referral${count!==1?'s':''})`;
+    }).join('\n');
+
+    const copyBtn = `<button id="rax-gc-copy" onclick="
+      navigator.clipboard.writeText(${JSON.stringify(copyText)}).then(()=>{
+        this.textContent='✅ Copied!'; setTimeout(()=>this.textContent='📋 Copy Top 7',1800);
+      });
+    " style="margin-top:14px;width:100%;padding:9px;background:#7c5ef5;color:#fff;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer">📋 Copy Top 7</button>`;
+
+    showModal(rows + `<div id="rax-gc-meta">${total} unique entries captured</div>` + copyBtn);
   }
 
   function showModal(content) {
