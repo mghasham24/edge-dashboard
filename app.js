@@ -5996,7 +5996,7 @@
 
                 if (wcPoller) clearInterval(wcPoller);
                 wcPoller = setInterval(function() {
-                    if (currentSport !== 'soccer_wc' || wcSubTab !== 'games') { clearInterval(wcPoller); wcPoller = null; return; }
+                    if (currentSport !== 'soccer_wc' || wcSubTab !== 'games' || evTabVisible) { clearInterval(wcPoller); wcPoller = null; return; }
                     fetchWCNativeUpdate();
                 }, 5000);
             });
