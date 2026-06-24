@@ -92,7 +92,8 @@ export async function onRequestGet(context) {
 
     if (!Object.keys(allEvents).length) return fail(502, 'FD MLB list fetch failed');
 
-    const etFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
+    const etFmt     = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
+    const etHourFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', hour: '2-digit', hour12: false });
     const todayET     = etFmt.format(new Date());
     const yesterdayET = etFmt.format(new Date(nowMs - 24 * 60 * 60 * 1000));
     const todayEvents = Object.values(allEvents).filter(e => {
@@ -123,7 +124,7 @@ export async function onRequestGet(context) {
     // same date but have openDates hours apart so both survive dedup.
     const matchupBest = {};
     parsedAll.forEach(p => {
-      const dateET = etFmt.format(new Date(p.event.openDate));
+      const dateET = etFmt.format(new Date(p.event.openDate)) + 'T' + etHourFmt.format(new Date(p.event.openDate));
       const key = p.away + '|' + p.home + '|' + dateET;
       const existing = matchupBest[key];
       if (!existing || new Date(p.event.openDate) > new Date(existing.event.openDate)) {
