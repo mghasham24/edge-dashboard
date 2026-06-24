@@ -7634,11 +7634,14 @@
             else { ec = 'e-neg'; bc = 'var(--red)'; }
             bw = Math.min(Math.abs(edge) * 5, 50);
         }
-        var tds = tr.querySelectorAll('td');
-        tds[9].innerHTML = '<div class="edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:' + bw + 'px;background:' + bc + '"></div></div><span class="edge-val ' + ec + '">' + es + '</span></div>';
-        tds[10].innerHTML = evH;
-        tds[11].innerHTML = u === 0 ? '<span class="u-pass">PASS</span>' : '<span class="u-val">' + u + 'u</span>';
-        tds[12].innerHTML = u === 0 ? '<span class="u-pass">-</span>' : '<span class="bet-val">' + RAX_ICON + (u * unit).toFixed(0) + '</span>';
+        var tdEdge  = tr.querySelector('td[data-label="Edge"]');
+        var tdEV    = tr.querySelector('td[data-label="EV"]');
+        var tdUnits = tr.querySelector('td[data-label="Units"]');
+        var tdBet   = tr.querySelector('td[data-label="Bet"]');
+        if (tdEdge)  tdEdge.innerHTML  = '<div class="edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:' + bw + 'px;background:' + bc + '"></div></div><span class="edge-val ' + ec + '">' + es + '</span></div>';
+        if (tdEV)    tdEV.innerHTML    = evH;
+        if (tdUnits) tdUnits.innerHTML = u === 0 ? '<span class="u-pass">PASS</span>' : '<span class="u-val">' + u + 'u</span>';
+        if (tdBet)   tdBet.innerHTML   = u === 0 ? '<span class="u-pass">-</span>' : '<span class="bet-val">' + RAX_ICON + (u * unit).toFixed(0) + '</span>';
         tr.classList.toggle('has-edge', edge != null && edge > 0);
         tr.style.background = edge != null && edge > 0 ? 'rgba(45,204,126,' + (Math.min(edge / 10, 1) * 0.08).toFixed(3) + ')' : '';
         var _se = document.getElementById('stat-edges'); if (_se) _se.textContent = document.querySelectorAll('tr.has-edge').length;
