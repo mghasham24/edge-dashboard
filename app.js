@@ -8166,8 +8166,9 @@ if (!match && r.mkt === 'Spread' && (sport === 'soccer_fc' || sport === 'soccer_
                     if (fcMinusO || fcPlusO) {
                         var fcTeamLow = r.side.toLowerCase();
                         var _wcLblAliases = { 'usa': 'united states', 'united states': 'usa', "côte d'ivoire": 'ivory coast', 'ivory coast': "côte d'ivoire", 'curaçao': 'curacao', 'curacao': 'curaçao' };
-                        var fcTeamWords = fcTeamLow.split(' ').filter(function(w) { return w.length > 2; });
-                        if (_wcLblAliases[fcTeamLow]) fcTeamWords = fcTeamWords.concat(_wcLblAliases[fcTeamLow].split(' ').filter(function(w) { return w.length > 2; }));
+                        var _fcGeoStop = { south: 1, north: 1, east: 1, west: 1, central: 1, new: 1 };
+                        var fcTeamWords = fcTeamLow.split(' ').filter(function(w) { return w.length > 2 && !_fcGeoStop[w]; });
+                        if (_wcLblAliases[fcTeamLow]) fcTeamWords = fcTeamWords.concat(_wcLblAliases[fcTeamLow].split(' ').filter(function(w) { return w.length > 2 && !_fcGeoStop[w]; }));
                         function fcLabelMatch(o) {
                             if (!o || !o.label) return false;
                             var lbl = o.label.toLowerCase().replace(/[+-]?\d+\.?\d*\s*$/, '').trim();
@@ -8196,9 +8197,10 @@ if (!match && r.mkt === 'Spread' && (sport === 'soccer_fc' || sport === 'soccer_
                         var _wonO = _wodO ? outcomes.find(function(o) { return o !== _wodO; }) : null;
                         if (_wodO && _wonO) {
                             var _rTeamLow = r.side.toLowerCase();
-                            var _rWords2  = _rTeamLow.split(' ').filter(function(w) { return w.length > 2; });
-                            var _wcAlias2 = ({'usa':'united states','united states':'usa','bih':'bosnia','bosnia':'bih','can':'canada','canada':'can',"côte d'ivoire":'ivory coast','ivory coast':"côte d'ivoire",'curaçao':'curacao','curacao':'curaçao'})[_rTeamLow] || '';
-                            if (_wcAlias2) _rWords2 = _rWords2.concat(_wcAlias2.split(' ').filter(function(w) { return w.length > 2; }));
+                            var _wcGeoStop2 = { south: 1, north: 1, east: 1, west: 1, central: 1, new: 1 };
+                            var _rWords2  = _rTeamLow.split(' ').filter(function(w) { return w.length > 2 && !_wcGeoStop2[w]; });
+                            var _wcAlias2 = ({'usa':'united states','united states':'usa','bih':'bosnia','bosnia':'bih','can':'canada','canada':'can',"côte d'ivoire":'ivory coast','ivory coast':"côte d'ivoire",'curaçao':'curacao','curacao':'curaçao','south korea':'kor','kor':'south korea','south africa':'rsa','rsa':'south africa','north macedonia':'mkd','mkd':'north macedonia','costa rica':'crc','crc':'costa rica'})[_rTeamLow] || '';
+                            if (_wcAlias2) _rWords2 = _rWords2.concat(_wcAlias2.split(' ').filter(function(w) { return w.length > 2 && !_wcGeoStop2[w]; }));
                             function _wcLblHit(o) {
                                 if (!o || !o.label) return false;
                                 var lbl = o.label.toLowerCase();
