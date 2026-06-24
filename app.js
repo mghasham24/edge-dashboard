@@ -2021,8 +2021,8 @@
 
                     var colHdr = document.createElement('div');
                     colHdr.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:5px;padding:0 2px';
-                    colHdr.innerHTML = '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);min-width:44px;text-align:center;flex-shrink:0">FD Line</span>'
-                    + '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);width:64px;text-align:center;flex-shrink:0">Real Line</span>'
+                    colHdr.innerHTML = '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);min-width:44px;text-align:center;flex-shrink:0"></span>'
+                    + '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);width:64px;text-align:center;flex-shrink:0"></span>'
                     + '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);flex:1;text-align:center">Over %</span>'
                     + '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);flex:1;text-align:center">Under %</span>';
                     inputRow.appendChild(colHdr);
@@ -2230,9 +2230,7 @@
                     var isWcSpread = (currentSport === 'soccer_wc');
                     var colHdr = document.createElement('div');
                     colHdr.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:5px;padding:0 2px';
-                    colHdr.innerHTML = (isWcSpread ? '' : '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);min-width:44px;text-align:center;flex-shrink:0">FD Line</span>'
-                    + '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);width:64px;text-align:center;flex-shrink:0">Real Line</span>')
-                    + '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);width:58px;text-align:center;flex-shrink:0">Real %</span>'
+                    colHdr.innerHTML = '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);width:58px;text-align:center;flex-shrink:0">Real %</span>'
                     + '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-left:auto;text-align:right">Edge</span>';
                     inputRow.appendChild(colHdr);
                     mktRows.forEach(function(r) {
@@ -7240,7 +7238,7 @@
         var unit = parseFloat(document.getElementById('unit-size').value) || 300;
         var q = document.getElementById('search').value.trim().toLowerCase();
         if (!rawRows.length) {
-            document.getElementById('tbody').innerHTML = '<tr class="state-row"><td colspan="13">No odds - hit Refresh</td></tr>';
+            document.getElementById('tbody').innerHTML = '<tr class="state-row"><td colspan="10">No odds - hit Refresh</td></tr>';
             var _sl = document.getElementById('stat-lines'); if (_sl) _sl.textContent = '0';
             var _se = document.getElementById('stat-edges'); if (_se) _se.textContent = '0';
             return;
@@ -7453,10 +7451,7 @@
             + '<td class="game-td" data-label="Game"><div style="font-weight:600;filter:blur(4px);user-select:none;pointer-events:none">' + r.side + '</div><div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px">' + r.game + '</div></td>'
             + '<td data-label="Market"><span class="mkt-badge">' + r.mkt + '</span></td>'
             + '<td data-label="Side" style="filter:blur(4px);user-select:none;pointer-events:none;color:var(--muted);font-size:12px">' + r.side + '</td>'
-            + '<td data-label="FD Line" style="filter:blur(4px);user-select:none;pointer-events:none;font-family:var(--mono);color:var(--muted);font-size:12px">' + lockedLine + '</td>'
             + '<td class="r" data-label="Consensus" style="filter:blur(4px);user-select:none;pointer-events:none"><span class="odds-neg">-115</span></td>'
-            + '<td class="r" data-label="No-Vig %" style="filter:blur(4px);user-select:none;pointer-events:none;font-family:var(--mono);color:var(--muted2);font-size:11px;opacity:0.5">50.0%</td>'
-            + '<td class="c" data-label="Real Line"></td>'
             + '<td class="r" data-label="Adj. Fair %" style="filter:blur(4px);user-select:none;pointer-events:none;font-family:var(--mono);color:var(--muted)">50.0%</td>'
             + '<td class="c" data-label="Real %"></td>'
             + '<td class="r" data-label="Edge" style="filter:blur(4px);user-select:none;pointer-events:none"><span class="e-weak">+2.5%</span></td>'
@@ -7539,11 +7534,8 @@
         + '<td class="game-td" data-label="Game"><div style="font-weight:600;display:flex;align-items:center;gap:5px">' + (r.mkt !== 'Total' && r.mkt !== 'RFI' ? teamLogoHtml(r.side, 16) : '') + '<span' + (rowGrad ? ' style="padding:1px 8px 1px 4px;background:linear-gradient(90deg,' + rowGrad + ',transparent);border-radius:3px"' : '') + (rfiColor ? ' style="color:' + rfiColor + '"' : '') + '>' + r.side + '</span></div><div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px">' + r.game + '</div></td>'
         + '<td data-label="Market"><span class="mkt-badge">' + r.mkt + '</span></td>'
         + '<td data-label="Side" style="color:var(--muted);font-size:12px">' + r.side + '</td>'
-        + fdLineCell
         + '<td class="r" data-label="Consensus"><span class="' + aCls + '">' + am + '</span></td>'
-        + '<td class="r" data-label="No-Vig %" style="font-family:var(--mono);color:var(--muted2);font-size:11px;opacity:0.5">' + fairStr + '</td>'
-        + ylCell
-        + '<td class="r" data-label="Adj. Fair %" style="font-family:var(--mono);color:' + (afChanged ? 'var(--yellow)' : 'var(--muted)') + '">' + afStr + '</td>'
+        + '<td class="r" data-label="Adj. Fair %" style="font-family:var(--mono);color:var(--muted)">' + afStr + '</td>'
         + '<td class="c" data-label="Real %"><div style="display:flex;flex-direction:column;align-items:center;gap:2px;justify-content:center"><div style="display:flex;align-items:center;gap:4px;justify-content:center"><input class="cell-inp' + (pv ? ' filled' : '') + '" type="number" min="1" max="99" step="1" inputmode="numeric" placeholder="-" value="' + pv + '" data-id="' + r.id + '" oninput="setPred(this)" onblur="setPred(this)" onkeydown="if(event.key===\'Enter\')this.blur()"><span class="pred-unit">%</span></div>' + (vols[r.id] ? '<span style="font-size:9px;color:var(--muted2);font-family:var(--mono)">' + vols[r.id] + ' vol</span>' : '') + '</div></td>'
         + '<td class="r" data-label="Edge"><div class="edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:' + bw + 'px;background:' + bc + '"></div></div><span class="edge-val ' + ec + '">' + es + '</span></div></td>'
         + '<td class="r" data-label="EV">' + (evGated ? evH : '<span style="filter:blur(4px);font-family:var(--mono);font-size:12px;font-weight:600;color:var(--green);user-select:none">+8.4%</span><span style="font-size:9px;font-weight:700;background:var(--accent);color:#fff;border-radius:3px;padding:1px 4px;margin-left:3px;vertical-align:middle">PRO</span>') + '</td>'
