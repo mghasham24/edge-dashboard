@@ -198,9 +198,10 @@ async function fetchLiveRSData(bet) {
     if (!mkt) return null;
     const outcomes = mkt.outcomes || [];
     let outcome;
-    if (outcomes.length === 2 && bet.game) {
+    if (outcomes.length === 2 && bet.game && bet.market !== 'RFI') {
       // Exclusive score-based pairing for 2-outcome markets (fights, H2H).
       // Prevents isSubseq false matches like "MC" matching "Mauricio Ruffy".
+      // RFI excluded: its outcomes are "Yes"/"No", not team names — use label fallback instead.
       const parts   = bet.game.split(' @ ');
       const fdAway  = parts[0] || '', fdHome = parts[1] || '';
       function _score(fdName, rsO) {
@@ -926,7 +927,33 @@ const payoutServer = createServer(async (req, res) => {
 // ── Dennis daily boost message ─────────────────────────
 
 const DENNIS_GROUP_ID = '51048';
-const DENNIS_BOOST_MSG = 'boost mlb pitchers | wnba - https://slybot.vercel.app\nClaim OTD\nMake sure to enter giveaway https://www.realapp.com/joclFa5yikR5/178207176251200001';
+const DENNIS_BOOST_MSG = 'For daily personalized boosts, dm @slybot $optin https://www.realapp.com/joclFa5yikR5/178224697440600001\n‍⠀⠀⠀\nClaim OTD\n‍⠀⠀⠀\nMake sure to enter giveaway https://www.realapp.com/joclFa5yikR5/178207176251200001';
+
+const MORNING_GROUP_ID  = '60001';
+const MORNING_BOOST_MSG = 'Good Morning!\n• Reminder To Boost All Necessary Players Today!\n• Need Help? Go Visit ⬇️ https://slybot.vercel.app\n• Remember To Claim OTD';
+
+function scheduleMorningBoost() {
+  const etStr = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
+  const et    = new Date(etStr);
+  const next  = new Date(et);
+  next.setHours(8, 0, 0, 0);
+  if (next <= et) next.setDate(next.getDate() + 1);
+  const msUntil = next - et;
+  setTimeout(async () => {
+    try {
+      const res = await fetch(`${RS_BASE}/comments/groups/${MORNING_GROUP_ID}`, {
+        method: 'POST', headers: rsHeaders(),
+        body: JSON.stringify({ text: MORNING_BOOST_MSG, content: { nodes: [{ text: MORNING_BOOST_MSG }] } }),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (res.ok) console.log('ev-poster: morning boost posted');
+      else console.error('ev-poster: morning boost failed', res.status, await res.text().catch(() => ''));
+    } catch(e) { console.error('ev-poster: morning boost error', e.message); }
+    scheduleMorningBoost();
+  }, msUntil);
+  const h = Math.floor(msUntil / 3600000), m = Math.floor((msUntil % 3600000) / 60000);
+  console.log(`ev-poster: morning boost scheduled in ${h}h ${m}m`);
+}
 
 function scheduleDennisBoost() {
   const etStr = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
@@ -1006,6 +1033,7 @@ payoutServer.on('error', err => {
 payoutServer.listen(PAYOUT_PROXY_PORT, () => console.log(`ev-poster: payout proxy on port ${PAYOUT_PROXY_PORT}`));
 scheduleMidnightReset();
 scheduleDennisBoost();
+scheduleMorningBoost();
 run();
 setInterval(run, 15_000);
 // Cache game results every 10 minutes while RS still has the markets open

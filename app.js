@@ -947,7 +947,7 @@
             btn.style.color = s.color;
             btn.style.borderColor = s.border;
         });
-        renderTable();
+        if (!evTabVisible) renderTable();
         if (evTabVisible && !evLoadingInProgress) renderEvTab();
     }
 
