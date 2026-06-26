@@ -7234,7 +7234,8 @@
 
     function renderTable() {
         if (evTabVisible) return;
-        if (document.getElementById('admin-panel')?.classList.contains('visible')) return;
+        var _panels = ['admin-panel','portfolio-panel','alerts-panel','referral-panel','ev-panel'];
+        if (_panels.some(function(id){ return document.getElementById(id)?.classList.contains('visible'); })) return;
         var tableWrap = document.querySelector('.table-wrap');
         if (tableWrap) tableWrap.style.display = '';
         var unit = parseFloat(document.getElementById('unit-size').value) || 300;
