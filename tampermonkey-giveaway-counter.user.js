@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RaxEdge Giveaway Counter
 // @namespace    raxedge
-// @version      6.2
+// @version      6.9
 // @description  Auto-scrolls RS giveaway post and builds referral leaderboard
 // @match        https://realsports.io/*
 // @match        https://www.realsports.io/*
@@ -12,19 +12,33 @@
 (function() {
   'use strict';
 
-  const entries  = {}; // commenterKey → referrer (first reply only)
-  const tally    = {}; // referrer → count
+  const entries   = {}; // commenterKey → referrer (first reply only)
+  const tally     = {}; // referrer → count
+  const seenNums  = new Set(); // comment #numbers seen (gap detection)
   let   autoScrolling = false;
 
-  const SKIP_MENTIONS = new Set(['moe_']);
+  const SKIP_MENTIONS = new Set(['moe_', 'rax.realtor']);
 
   // ── Scan visible comment containers ──────────────────────────────────────────
+  // KEY INSIGHT: RS recycles DOM nodes as you scroll — the virtual list reuses
+  // the same div elements for new comments. Any flag stored on the DOM element
+  // (dataset.rcDone) persists on the recycled node and causes new comments to
+  // be skipped. Solution: use the comment #number as the dedup key instead,
+  // stored in JS memory (not on the DOM element).
   function scanComments() {
     const containers = document.querySelectorAll('div.r-1udh08x');
     let newCount = 0;
 
     containers.forEach(c => {
-      if (c.dataset.rcDone) return;
+      // Extract comment number — primary dedup key (survives DOM recycling)
+      const numMatch = c.textContent.match(/#(\d{2,6})\b/);
+      const commentNum = numMatch ? numMatch[1] : null;
+
+      // Gap detection
+      if (commentNum) seenNums.add(parseInt(commentNum, 10));
+
+      // Already processed this comment number — skip
+      if (commentNum && entries['#' + commentNum] !== undefined) return;
 
       // @mention — try RS mention span first, then plain-text regex fallback
       let referrer = null;
@@ -33,7 +47,6 @@
         if (name && !SKIP_MENTIONS.has(name.toLowerCase())) { referrer = name; break; }
       }
       if (!referrer) {
-        // Fallback: plain text @mention typed without using RS mention selector
         const textEl = c.querySelector('div[dir="auto"]');
         const text = textEl?.textContent || '';
         const matches = [...text.matchAll(/@([\w.]+)/g)];
@@ -43,22 +56,23 @@
       }
       if (!referrer) return;
 
-      // Commenter key for deduplication
-      let key = null;
-      for (const a of c.querySelectorAll('a[href]')) {
-        const h = a.getAttribute('href') || '';
-        if (h && !h.startsWith('#') && !h.includes('groups') && !h.includes('game') && !h.includes('market')) {
-          key = h; break;
+      // Use comment number as key if available, else fall back to href/path
+      let key = commentNum ? '#' + commentNum : null;
+      if (!key) {
+        for (const a of c.querySelectorAll('a[href]')) {
+          const h = a.getAttribute('href') || '';
+          if (h && !h.startsWith('#') && !h.includes('groups') && !h.includes('game') && !h.includes('market')) {
+            key = h; break;
+          }
         }
       }
       if (!key) key = c.querySelector('div.r-iphfwy div[dir="auto"]')?.textContent?.trim() || null;
       if (!key) key = getPath(c);
 
-      if (entries[key] !== undefined) { c.dataset.rcDone = '1'; return; }
+      if (entries[key] !== undefined) return;
 
       entries[key] = referrer;
       tally[referrer] = (tally[referrer] || 0) + 1;
-      c.dataset.rcDone = '1';
       newCount++;
     });
 
@@ -79,18 +93,14 @@
     let stallCount = 0;
 
     while (autoScrolling) {
-      // Scroll window + every scrollable div (v4.3 approach — confirmed working)
-      window.scrollBy(0, 400);
+      window.scrollBy(0, 300);
       document.querySelectorAll('div').forEach(el => {
         if (el.scrollHeight > el.clientHeight + 10) {
           const st = window.getComputedStyle(el);
-          if (/auto|scroll/.test(st.overflow + st.overflowY)) {
-            el.scrollBy(0, 400);
-          }
+          if (/auto|scroll/.test(st.overflow + st.overflowY)) el.scrollBy(0, 300);
         }
       });
-
-      await sleep(1000);
+      await sleep(800);
       scanComments();
 
       const count = Object.keys(entries).length;
@@ -185,6 +195,12 @@
       return;
     }
 
+    // Coverage info — RS comment IDs are global (not per-post sequential)
+    // so gap counting is meaningless. Just show how many unique IDs were seen.
+    const coverageInfo = seenNums.size > 0
+      ? `<div style="font-size:11px;color:#888;margin-top:6px;text-align:center">${seenNums.size} comment positions scanned</div>`
+      : '';
+
     const medals = ['🥇','🥈','🥉'], mCls = ['rax-gc-m1','rax-gc-m2','rax-gc-m3'];
     const ordinals = ['4th','5th','6th','7th','8th','9th','10th'];
     const rows = board.map(([name, count], i) => `
@@ -200,7 +216,7 @@
       return `${rank} @${name} (${count} referral${count!==1?'s':''})`;
     }).join('\n');
 
-    showModal(rows + `<div id="rax-gc-meta">${total} unique entries captured</div>` +
+    showModal(rows + `<div id="rax-gc-meta">${total} unique entries captured</div>` + coverageInfo +
       `<button id="rax-gc-copy" style="margin-top:14px;width:100%;padding:9px;background:#7c5ef5;color:#fff;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer">📋 Copy Top 7</button>`);
 
     const copyBtn = document.getElementById('rax-gc-copy');

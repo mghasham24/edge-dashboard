@@ -7234,6 +7234,7 @@
 
     function renderTable() {
         if (evTabVisible) return;
+        if (document.getElementById('admin-panel')?.classList.contains('visible')) return;
         var tableWrap = document.querySelector('.table-wrap');
         if (tableWrap) tableWrap.style.display = '';
         var unit = parseFloat(document.getElementById('unit-size').value) || 300;
