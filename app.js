@@ -947,7 +947,7 @@
             btn.style.color = s.color;
             btn.style.borderColor = s.border;
         });
-        if (!evTabVisible) renderTable();
+        renderTable();
         if (evTabVisible && !evLoadingInProgress) renderEvTab();
     }
 
@@ -7233,6 +7233,7 @@
     }
 
     function renderTable() {
+        if (evTabVisible) return;
         var tableWrap = document.querySelector('.table-wrap');
         if (tableWrap) tableWrap.style.display = '';
         var unit = parseFloat(document.getElementById('unit-size').value) || 300;
