@@ -6,26 +6,29 @@ import { getSessionOrCron } from '../../_lib/auth.js';
 // Step 2: For each event, fetch subcat 13170 to get actual ±0.5 prices
 
 const DK_BASE      = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
-const DK_SUBCAT    = '5826'; // WC "To Advance" (KO round 2-way ML, includes ET + pens)
+const DK_SUBCAT_DISCOVER = '13170'; // AH ±0.5 — reliable for league-level event discovery
+const DK_SUBCAT_ODDS     = '5826';  // "To Advance" — KO round 2-way ML (ET + pens)
 const CACHE_TTL    = 4; // 4s ensures 5s frontend poller always gets a fresh DK fetch
 
 const DK_WC_LEAGUES = {
   '209533': 'WC', // FIFA World Cup 2026
 };
 
+// Step 1: discover events via AH subcat (reliably indexed at league level)
 function dkLeagueEventsUrl(leagueId) {
   const eq = encodeURIComponent(`$filter=leagueId eq '${leagueId}'`);
   const mq = encodeURIComponent(
-    `$filter=clientMetadata/subCategoryId eq '${DK_SUBCAT}' AND tags/all(t: t ne 'SportcastBetBuilder')`
+    `$filter=clientMetadata/subCategoryId eq '${DK_SUBCAT_DISCOVER}' AND tags/all(t: t ne 'SportcastBetBuilder')`
   );
   return `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${leagueId}&eventsQuery=${eq}&marketsQuery=${mq}&include=Events&entity=events`;
 }
 
+// Step 2: fetch "To Advance" odds for each discovered event
 function dkEventSubcatUrl(eventId) {
   const mq = encodeURIComponent(
-    `$filter=eventId eq '${eventId}' AND clientMetadata/subCategoryId eq '${DK_SUBCAT}' AND tags/all(t: t ne 'SportcastBetBuilder')`
+    `$filter=eventId eq '${eventId}' AND clientMetadata/subCategoryId eq '${DK_SUBCAT_ODDS}' AND tags/all(t: t ne 'SportcastBetBuilder')`
   );
-  return `${DK_BASE}/controldata/event/eventSubcategory/v1/markets?isBatchable=false&templateVars=${eventId}%2C${DK_SUBCAT}&marketsQuery=${mq}&include=MarketSplits&entity=markets`;
+  return `${DK_BASE}/controldata/event/eventSubcategory/v1/markets?isBatchable=false&templateVars=${eventId}%2C${DK_SUBCAT_ODDS}&marketsQuery=${mq}&include=MarketSplits&entity=markets`;
 }
 
 function parseAmerican(str) {
