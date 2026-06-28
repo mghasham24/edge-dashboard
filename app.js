@@ -1825,7 +1825,7 @@
                     lbl.appendChild(volTag);
                 }
                 // Time + RS link bar above ML label (WC has no ML rows, use Spread instead)
-                var _isLinkSection = mkt === 'ML' || (currentSport === 'soccer_wc' && mkt === 'Spread');
+                var _isLinkSection = mkt === 'ML';
                 if (_isLinkSection && (_ti && _ti.lbl || _rsUrl)) {
                     var mlTopBar = document.createElement('div');
                     mlTopBar.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--border)';
@@ -3324,7 +3324,7 @@
         await Promise.all(sportsToLoad.map(async function(s) {
             try {
                 if (s.key === 'soccer_wc') {
-                    // WC uses DK AH ±0.5 spread — identical structure to soccer_fc
+                    // WC KO: DK "To Advance" (subcat 5826) — 2-way ML, includes ET + pens
                     var wcEvRes = await fetch('/api/fd/wc', { credentials: 'same-origin' });
                     var wcEvData = wcEvRes.ok ? await wcEvRes.json() : null;
                     if (!wcEvData || !wcEvData.ok || !wcEvData.games) return;
@@ -3333,21 +3333,13 @@
                         var away = game.away, home = game.home;
                         var cm = game.cm ? new Date(game.cm) : null;
                         var gid = String(game.id);
-                        var pid = gid + '-h2h';
-                        var awayGetsMinus;
-                        if (game.awm != null && game.hm != null) { awayGetsMinus = game.awm <= game.hm; }
-                        else if (game.awm != null) { awayGetsMinus = true; }
-                        else { awayGetsMinus = false; }
-                        [[away, 'A'], [home, 'B']].forEach(function(pair) {
-                            var teamName = pair[0], ps = pair[1];
-                            var isAway = ps === 'A';
-                            var isMinus = isAway ? awayGetsMinus : !awayGetsMinus;
-                            var initAm = isMinus ? (isAway ? game.awm : game.hm) : (isAway ? game.awp : game.hp);
-                            var initPt = isMinus ? -0.5 : 0.5;
-                            if (initAm == null) return;
-                            wcEvRows.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName,
-                                am: initAm, pt: initPt, pid: pid, ps: ps, gid: gid, league: game.league || '',
-                                _sport_key: 'soccer_wc', _dkSpreads: game.spreads || { Home: {}, Away: {} } });
+                        var pid = gid + '-ta';
+                        [[away, 'A', game.away_ml], [home, 'B', game.home_ml]].forEach(function(triple) {
+                            var teamName = triple[0], ps = triple[1], am = triple[2];
+                            if (am == null) return;
+                            wcEvRows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'ML', side: teamName,
+                                am: am, pt: null, pid: pid, ps: ps, gid: gid, league: game.league || '',
+                                _sport_key: 'soccer_wc' });
                         });
                     });
                     rawRowsBySport[s.key] = wcEvRows;
@@ -6545,9 +6537,10 @@
                        || gameMarkets['Match Winner'] || gameMarkets['Winner']
                        || Object.values(gameMarkets)[0];
             }
-            // WC: RS soccer may use 'Match Result' or '1X2' for 3-way group stage markets
+            // WC KO: RS may label "To Advance" market various ways
             if (!mktData && (r._sport_key === 'soccer_wc' || currentSport === 'soccer_wc') && r.mkt === 'ML') {
-                mktData = gameMarkets['Match Result'] || gameMarkets['1X2']
+                mktData = gameMarkets['To Advance'] || gameMarkets['To Qualify'] || gameMarkets['To Progress']
+                       || gameMarkets['Match Result'] || gameMarkets['1X2']
                        || gameMarkets['Home/Draw/Away'] || gameMarkets['Game Winner'];
             }
             var outcomes = mktData ? (mktData.outcomes || mktData) : null;
@@ -8115,9 +8108,10 @@
                            || gameMarkets['Match Winner'] || gameMarkets['Winner']
                            || Object.values(gameMarkets)[0]; // last resort: first available market
                 }
-                // WC: RS soccer uses 'Match Result' or '1X2' for 3-way group stage markets
-                if (!mktData && sport === 'soccer_wc' && (r.mkt === 'ML' || r.mkt === 'Spread')) {
-                    mktData = gameMarkets['Match Result'] || gameMarkets['1X2']
+                // WC KO: RS may label "To Advance" market various ways
+                if (!mktData && sport === 'soccer_wc' && r.mkt === 'ML') {
+                    mktData = gameMarkets['To Advance'] || gameMarkets['To Qualify'] || gameMarkets['To Progress']
+                           || gameMarkets['Match Result'] || gameMarkets['1X2']
                            || gameMarkets['Home/Draw/Away'] || gameMarkets['Game Winner'];
                 }
                 var outcomes = mktData ? (mktData.outcomes || mktData) : null;

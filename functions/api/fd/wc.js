@@ -6,7 +6,7 @@ import { getSessionOrCron } from '../../_lib/auth.js';
 // Step 2: For each event, fetch subcat 13170 to get actual ±0.5 prices
 
 const DK_BASE      = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
-const DK_SUBCAT    = '13170'; // WC Asian Handicap ±0.5 — same subcat as regular FC leagues
+const DK_SUBCAT    = '5826'; // WC "To Advance" (KO round 2-way ML, includes ET + pens)
 const CACHE_TTL    = 4; // 4s ensures 5s frontend poller always gets a fresh DK fetch
 
 const DK_WC_LEAGUES = {
@@ -157,31 +157,25 @@ export async function onRequestGet(context) {
         if (!r.ok) return;
         const d = await r.json();
 
-        const spreads = { Home: {}, Away: {} };
+        // "To Advance" — 2-way ML, no point spread
+        const ml = { Home: null, Away: null };
         for (const sel of d.selections || []) {
-          const pts   = sel.points;
           const ot    = sel.outcomeType;
           const price = parseAmerican(sel.displayOdds && sel.displayOdds.american);
-          if (price == null || pts == null) continue;
-          if (ot !== 'Home' && ot !== 'Away') continue;
-          spreads[ot][String(pts)] = price;
+          if (price == null || (ot !== 'Home' && ot !== 'Away')) continue;
+          ml[ot] = price;
         }
 
-        const homeMinus = spreads.Home['-0.5'] || null;
-        const homePlus  = spreads.Home['0.5']  || null;
-        const awayMinus = spreads.Away['-0.5'] || null;
-        const awayPlus  = spreads.Away['0.5']  || null;
-
         if (debugMode === '2') {
-          const allSels = (d.selections || []).map(s => ({ label: s.label, outcomeType: s.outcomeType, points: s.points, odds: s.displayOdds && s.displayOdds.american }));
-          gamesMap[gameKey] = { home: ev.home, away: ev.away, hm: homeMinus, hp: homePlus, awm: awayMinus, awp: awayPlus, spreads, allSels };
+          const allSels = (d.selections || []).map(s => ({ label: s.label, outcomeType: s.outcomeType, odds: s.displayOdds && s.displayOdds.american }));
+          gamesMap[gameKey] = { home: ev.home, away: ev.away, home_ml: ml.Home, away_ml: ml.Away, allSels };
           return;
         }
 
-        if (!Object.keys(spreads.Home).length && !Object.keys(spreads.Away).length) {
-          // DK suspended AH market — freeze last known odds
-          const frozen = prevGames[gameKey] || prevGames[ev.away + ' @ ' + ev.home] || null;
-          if (frozen && (Object.keys(frozen.spreads?.Home || {}).length || Object.keys(frozen.spreads?.Away || {}).length)) {
+        if (ml.Home == null && ml.Away == null) {
+          // DK suspended — freeze last known odds
+          const frozen = prevGames[gameKey] || null;
+          if (frozen && (frozen.home_ml != null || frozen.away_ml != null)) {
             gamesMap[gameKey] = { ...frozen, id: parseInt(ev.eventId), away: ev.away, home: ev.home, cm: ev.openDate, live: true };
           }
           return;
@@ -193,11 +187,8 @@ export async function onRequestGet(context) {
           home: ev.home,
           cm: ev.openDate,
           league: ev.league,
-          hm: homeMinus,
-          hp: homePlus,
-          awm: awayMinus,
-          awp: awayPlus,
-          spreads
+          home_ml: ml.Home,
+          away_ml: ml.Away,
         };
       } catch(e) {}
     }));
