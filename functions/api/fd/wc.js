@@ -17,24 +17,7 @@ function dkEventSubcatUrl(eventId) {
   const mq = encodeURIComponent(
     `$filter=eventId eq '${eventId}' AND clientMetadata/subCategoryId eq '${DK_SUBCAT_ODDS}' AND tags/all(t: t ne 'SportcastBetBuilder')`
   );
-  return `${DK_BASE}/controldata/event/eventSubcategory/v1/markets?isBatchable=false&templateVars=${eventId}%2C${DK_SUBCAT_ODDS}&marketsQuery=${mq}&include=MarketSplits&entity=markets`;
-}
-
-// Recursively walk DK nav response to collect events with startEventDate
-function extractNavEvents(node, out = []) {
-  if (!node || typeof node !== 'object') return out;
-  if (Array.isArray(node)) { node.forEach(n => extractNavEvents(n, out)); return out; }
-  // Node looks like an event if it has an id/eventId and a date field
-  const id = node.eventId || node.id;
-  const date = node.startEventDate || node.startDate || node.eventDate;
-  if (id && date && (node.participants || node.name)) {
-    out.push(node);
-  }
-  // Recurse into common container keys
-  for (const key of ['events','eventGroups','subCategories','subcategories','leagues','items','children','eventGroup']) {
-    if (node[key]) extractNavEvents(node[key], out);
-  }
-  return out;
+  return `${DK_BASE}/controldata/event/eventSubcategory/v1/markets?isBatchable=false&templateVars=${eventId}%2C${DK_SUBCAT_ODDS}&marketsQuery=${mq}&entity=markets`;
 }
 
 function parseAmerican(str) {
@@ -111,32 +94,19 @@ export async function onRequestGet(context) {
     if (!navRes.ok) return new Response(JSON.stringify({ ok: true, games: {} }), { headers: { 'Content-Type': 'application/json' } });
 
     const navData = await navRes.json();
-    const rawEvents = extractNavEvents(navData);
-
     const todayEvents = [];
-    for (const ev of rawEvents) {
-      const id = ev.eventId || ev.id;
-      const date = ev.startEventDate || ev.startDate || ev.eventDate;
-      if (!id || !date) continue;
-      const evMs = new Date(date).getTime();
+    for (const ev of navData.events || []) {
+      if (!ev.id || !ev.startEventDate) continue;
+      const evMs = new Date(ev.startEventDate).getTime();
       if (evMs < nowMs - 4 * 3600 * 1000 || evMs > nowMs + 36 * 3600 * 1000) continue;
-
-      let home, away;
-      const parts_arr = ev.participants || [];
-      const homeP = parts_arr.find(p => p.venueRole === 'Home' || p.type === 'Home');
-      const awayP = parts_arr.find(p => p.venueRole === 'Away' || p.type === 'Away');
-      if (homeP && awayP) {
-        home = homeP.name; away = awayP.name;
-      } else {
-        const parts = (ev.name || ev.eventName || '').split(/\s+vs\.?\s+/i);
-        if (parts.length !== 2) continue;
-        home = parts[0].trim(); away = parts[1].trim();
-      }
-      todayEvents.push({ eventId: String(id), home, away, league: 'WC', openDate: date });
+      const homeP = (ev.participants || []).find(p => p.venueRole === 'Home');
+      const awayP = (ev.participants || []).find(p => p.venueRole === 'Away');
+      if (!homeP || !awayP) continue;
+      todayEvents.push({ eventId: String(ev.id), home: homeP.name, away: awayP.name, league: 'WC', openDate: ev.startEventDate });
     }
 
     if (debugMode === '1') {
-      return new Response(JSON.stringify({ todayEventsFound: todayEvents.length, events: todayEvents, rawCount: rawEvents.length }), {
+      return new Response(JSON.stringify({ todayEventsFound: todayEvents.length, events: todayEvents }), {
         headers: { 'Content-Type': 'application/json' }
       });
     }
@@ -174,7 +144,7 @@ export async function onRequestGet(context) {
 
         if (debugMode === '2') {
           const allSels = (d.selections || []).map(s => ({ label: s.label, outcomeType: s.outcomeType, odds: s.displayOdds && s.displayOdds.american }));
-          gamesMap[gameKey] = { home: ev.home, away: ev.away, home_ml: ml.Home, away_ml: ml.Away, allSels };
+          gamesMap[gameKey] = { home: ev.home, away: ev.away, home_ml: ml.Home, away_ml: ml.Away, allSels, _rawKeys: Object.keys(d) };
           return;
         }
 
