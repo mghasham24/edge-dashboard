@@ -6,29 +6,35 @@ import { getSessionOrCron } from '../../_lib/auth.js';
 // Step 2: For each event, fetch subcat 13170 to get actual ±0.5 prices
 
 const DK_BASE      = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
-const DK_SUBCAT_DISCOVER = '13170'; // AH ±0.5 — reliable for league-level event discovery
-const DK_SUBCAT_ODDS     = '5826';  // "To Advance" — KO round 2-way ML (ET + pens)
+const DK_SUBCAT_ODDS = '5826'; // "To Advance" — KO round 2-way ML (ET + pens)
 const CACHE_TTL    = 4; // 4s ensures 5s frontend poller always gets a fresh DK fetch
 
-const DK_WC_LEAGUES = {
-  '209533': 'WC', // FIFA World Cup 2026
-};
+const DK_WC_LEAGUE_ID = '209533'; // FIFA World Cup 2026
+const DK_NAV_URL = `${DK_BASE}/navigation/dkusnj/v2/nav/leagues/${DK_WC_LEAGUE_ID}`;
 
-// Step 1: discover events via AH subcat (reliably indexed at league level)
-function dkLeagueEventsUrl(leagueId) {
-  const eq = encodeURIComponent(`$filter=leagueId eq '${leagueId}'`);
-  const mq = encodeURIComponent(
-    `$filter=clientMetadata/subCategoryId eq '${DK_SUBCAT_DISCOVER}' AND tags/all(t: t ne 'SportcastBetBuilder')`
-  );
-  return `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${leagueId}&eventsQuery=${eq}&marketsQuery=${mq}&include=Events&entity=events`;
-}
-
-// Step 2: fetch "To Advance" odds for each discovered event
+// Step 2: fetch "To Advance" odds for a discovered event
 function dkEventSubcatUrl(eventId) {
   const mq = encodeURIComponent(
     `$filter=eventId eq '${eventId}' AND clientMetadata/subCategoryId eq '${DK_SUBCAT_ODDS}' AND tags/all(t: t ne 'SportcastBetBuilder')`
   );
   return `${DK_BASE}/controldata/event/eventSubcategory/v1/markets?isBatchable=false&templateVars=${eventId}%2C${DK_SUBCAT_ODDS}&marketsQuery=${mq}&include=MarketSplits&entity=markets`;
+}
+
+// Recursively walk DK nav response to collect events with startEventDate
+function extractNavEvents(node, out = []) {
+  if (!node || typeof node !== 'object') return out;
+  if (Array.isArray(node)) { node.forEach(n => extractNavEvents(n, out)); return out; }
+  // Node looks like an event if it has an id/eventId and a date field
+  const id = node.eventId || node.id;
+  const date = node.startEventDate || node.startDate || node.eventDate;
+  if (id && date && (node.participants || node.name)) {
+    out.push(node);
+  }
+  // Recurse into common container keys
+  for (const key of ['events','eventGroups','subCategories','subcategories','leagues','items','children','eventGroup']) {
+    if (node[key]) extractNavEvents(node[key], out);
+  }
+  return out;
 }
 
 function parseAmerican(str) {
@@ -84,56 +90,53 @@ export async function onRequestGet(context) {
     'Sec-Fetch-Site': 'same-site',
     'Sec-Fetch-Mode': 'cors',
     'x-client-name': 'web',
-    'x-client-version': '2624.3.1.5',
+    'x-client-version': '2626.3.1.8',
     'x-client-widget-name': 'cms',
-    'x-client-widget-version': '2.13.0',
+    'x-client-widget-version': '2.15.4',
     'x-client-page': 'league',
-    'x-client-feature': 'leagueSubcategory',
+    'x-client-feature': 'eventSubcategory',
   };
 
   const nowMs = Date.now();
 
   try {
-    // Step 1: Fetch WC league events
-    const leagueEntries = Object.entries(DK_WC_LEAGUES);
-    const leagueResults = await Promise.all(leagueEntries.map(async ([leagueId, leagueLabel]) => {
-      const events = [];
-      try {
-        const r = await fetch(dkLeagueEventsUrl(leagueId), { headers });
-        if (!r.ok) {
-          if (debugMode === '1') events.push({ _error: `league ${leagueId} status ${r.status}` });
-          return events;
-        }
-        const d = await r.json();
-        if (debugMode === '1' && !d.events) events.push({ _warn: `league ${leagueId} no events key`, keys: Object.keys(d) });
+    // Step 1: Discover today's WC events via the navigation endpoint
+    const navRes = await fetch(DK_NAV_URL, { headers });
 
-        for (const ev of d.events || []) {
+    if (debugMode === 'nav') {
+      const raw = navRes.ok ? await navRes.json() : { error: navRes.status };
+      return new Response(JSON.stringify(raw), { headers: { 'Content-Type': 'application/json' } });
+    }
 
-          let home, away;
-          const parts_arr = ev.participants || [];
-          const homeP = parts_arr.find(p => p.venueRole === 'Home');
-          const awayP = parts_arr.find(p => p.venueRole === 'Away');
-          if (homeP && awayP) {
-            home = homeP.name; away = awayP.name;
-          } else {
-            const parts = (ev.name || '').split(' vs ');
-            if (parts.length !== 2) continue;
-            home = parts[0].trim(); away = parts[1].trim();
-          }
+    if (!navRes.ok) return new Response(JSON.stringify({ ok: true, games: {} }), { headers: { 'Content-Type': 'application/json' } });
 
-          if (!ev.startEventDate) continue;
-          const evMs = new Date(ev.startEventDate).getTime();
-          if (evMs < nowMs - 4 * 3600 * 1000 || evMs > nowMs + 36 * 3600 * 1000) continue;
-          events.push({ eventId: ev.id, home, away, league: leagueLabel, openDate: ev.startEventDate });
-        }
-      } catch(e) {}
-      return events;
-    }));
+    const navData = await navRes.json();
+    const rawEvents = extractNavEvents(navData);
 
-    const todayEvents = leagueResults.flat();
+    const todayEvents = [];
+    for (const ev of rawEvents) {
+      const id = ev.eventId || ev.id;
+      const date = ev.startEventDate || ev.startDate || ev.eventDate;
+      if (!id || !date) continue;
+      const evMs = new Date(date).getTime();
+      if (evMs < nowMs - 4 * 3600 * 1000 || evMs > nowMs + 36 * 3600 * 1000) continue;
+
+      let home, away;
+      const parts_arr = ev.participants || [];
+      const homeP = parts_arr.find(p => p.venueRole === 'Home' || p.type === 'Home');
+      const awayP = parts_arr.find(p => p.venueRole === 'Away' || p.type === 'Away');
+      if (homeP && awayP) {
+        home = homeP.name; away = awayP.name;
+      } else {
+        const parts = (ev.name || ev.eventName || '').split(/\s+vs\.?\s+/i);
+        if (parts.length !== 2) continue;
+        home = parts[0].trim(); away = parts[1].trim();
+      }
+      todayEvents.push({ eventId: String(id), home, away, league: 'WC', openDate: date });
+    }
 
     if (debugMode === '1') {
-      return new Response(JSON.stringify({ todayEventsFound: todayEvents.length, events: todayEvents }), {
+      return new Response(JSON.stringify({ todayEventsFound: todayEvents.length, events: todayEvents, rawCount: rawEvents.length }), {
         headers: { 'Content-Type': 'application/json' }
       });
     }
