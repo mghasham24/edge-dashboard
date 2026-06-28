@@ -117,11 +117,33 @@ export async function onRequestPost({ request, env }) {
           'UPDATE users SET stripe_sub_id=NULL, pro_expires_at=? WHERE stripe_customer_id=? AND stripe_sub_id=?'
         ).bind(obj.trial_end, obj.customer, obj.id).run();
       } else {
-        // Only downgrade if this is the subscription we have on record — prevents
-        // a duplicate/stale sub being cancelled from wiping out a still-active sub.
-        await env.DB.prepare(
-          'UPDATE users SET plan=\'free\', stripe_sub_id=NULL, pro_expires_at=NULL, billing_interval=\'monthly\' WHERE stripe_customer_id=? AND stripe_sub_id=?'
-        ).bind(obj.customer, obj.id).run();
+        // Before downgrading, check if customer still has another active/past_due sub.
+        // A customer can have multiple subs (e.g. old canceled + new active) — canceling
+        // the old one should not downgrade them if the new one is still running.
+        let otherActiveSub = null;
+        try {
+          const subsRes = await fetch(
+            'https://api.stripe.com/v1/subscriptions?customer=' + obj.customer + '&status=all&limit=10',
+            { headers: { 'Authorization': 'Bearer ' + env.STRIPE_SECRET_KEY } }
+          );
+          const subs = await subsRes.json();
+          otherActiveSub = (subs.data || []).find(function(s) {
+            return s.id !== obj.id && (s.status === 'active' || s.status === 'past_due' || s.status === 'trialing');
+          }) || null;
+        } catch(e) {}
+
+        if (otherActiveSub) {
+          // Still has a live sub — point stripe_sub_id to it and keep pro
+          const proExpiresAt = otherActiveSub.current_period_end || null;
+          await env.DB.prepare(
+            'UPDATE users SET plan=\'pro\', stripe_sub_id=?, pro_expires_at=? WHERE stripe_customer_id=? AND stripe_sub_id=?'
+          ).bind(otherActiveSub.id, proExpiresAt, obj.customer, obj.id).run();
+        } else {
+          // No other active subs — safe to downgrade
+          await env.DB.prepare(
+            'UPDATE users SET plan=\'free\', stripe_sub_id=NULL, pro_expires_at=NULL, billing_interval=\'monthly\' WHERE stripe_customer_id=? AND stripe_sub_id=?'
+          ).bind(obj.customer, obj.id).run();
+        }
       }
       break;
     }
