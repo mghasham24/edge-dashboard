@@ -5918,7 +5918,7 @@
             return;
         }
 
-        // WC: DK AH ±0.5 spread — identical structure to soccer_fc
+        // WC KO: DK "To Advance" (subcat 5826) — 2-way ML, includes ET + pens
         if (currentSport === 'soccer_wc') {
             showWcFuturesPanel(false);
             altOdds = {};
@@ -5946,21 +5946,13 @@
                     var away = game.away, home = game.home;
                     var cm = game.cm ? new Date(game.cm) : null;
                     var gid = String(game.id);
-                    var pid = gid + '-h2h';
-                    var awayGetsMinus;
-                    if (game.awm != null && game.hm != null) { awayGetsMinus = game.awm <= game.hm; }
-                    else if (game.awm != null) { awayGetsMinus = true; }
-                    else { awayGetsMinus = false; }
-                    [[away, 'A'], [home, 'B']].forEach(function(pair) {
-                        var teamName = pair[0], ps = pair[1];
-                        var isAway = ps === 'A';
-                        var isMinus = isAway ? awayGetsMinus : !awayGetsMinus;
-                        var initAm = isMinus ? (isAway ? game.awm : game.hm) : (isAway ? game.awp : game.hp);
-                        var initPt = isMinus ? -0.5 : 0.5;
-                        if (initAm == null) return;
-                        rows.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName,
-                            am: initAm, pt: initPt, pid: pid, ps: ps, gid: gid, league: game.league || '',
-                            _dkSpreads: game.spreads || { Home: {}, Away: {} } });
+                    var pid = gid + '-ta';
+                    [[away, 'A', game.away_ml], [home, 'B', game.home_ml]].forEach(function(triple) {
+                        var teamName = triple[0], ps = triple[1], am = triple[2];
+                        if (am == null) return;
+                        rows.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'ML', side: teamName,
+                            am: am, pt: null, pid: pid, ps: ps, gid: gid, league: game.league || '',
+                            _sport_key: 'soccer_wc' });
                     });
                 });
                 rawRows = rows;
@@ -6639,7 +6631,7 @@
                 return;
             }
             try {
-                // WC: DK AH ±0.5 spread — identical structure to soccer_fc
+                // WC KO: DK "To Advance" (subcat 5826) — 2-way ML, includes ET + pens
                 if (s.key === 'soccer_wc') {
                     var [wcResP, wcSyncResP] = await Promise.all([
                         fetch('/api/fd/wc', { credentials: 'same-origin' }),
@@ -6652,21 +6644,13 @@
                             var away = game.away, home = game.home;
                             var cm = game.cm ? new Date(game.cm) : null;
                             var gid = String(game.id);
-                            var pid = gid + '-h2h';
-                            var awayGetsMinus;
-                            if (game.awm != null && game.hm != null) { awayGetsMinus = game.awm <= game.hm; }
-                            else if (game.awm != null) { awayGetsMinus = true; }
-                            else { awayGetsMinus = false; }
-                            [[away, 'A'], [home, 'B']].forEach(function(pair) {
-                                var teamName = pair[0], ps = pair[1];
-                                var isAway = ps === 'A';
-                                var isMinus = isAway ? awayGetsMinus : !awayGetsMinus;
-                                var initAm = isMinus ? (isAway ? game.awm : game.hm) : (isAway ? game.awp : game.hp);
-                                var initPt = isMinus ? -0.5 : 0.5;
-                                if (initAm == null) return;
-                                wcRowsP.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName,
-                                    am: initAm, pt: initPt, pid: pid, ps: ps, gid: gid, league: game.league || '',
-                                    _sport_key: 'soccer_wc', _dkSpreads: game.spreads || { Home: {}, Away: {} } });
+                            var pid = gid + '-ta';
+                            [[away, 'A', game.away_ml], [home, 'B', game.home_ml]].forEach(function(triple) {
+                                var teamName = triple[0], ps = triple[1], am = triple[2];
+                                if (am == null) return;
+                                wcRowsP.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'ML', side: teamName,
+                                    am: am, pt: null, pid: pid, ps: ps, gid: gid, league: game.league || '',
+                                    _sport_key: 'soccer_wc' });
                             });
                         });
                         rawRowsBySport[s.key] = wcRowsP;
@@ -8698,39 +8682,26 @@ if (!match && r.mkt === 'Spread' && (sport === 'soccer_fc' || sport === 'soccer_
                     var away = game.away, home = game.home;
                     var cm = game.cm ? new Date(game.cm) : null;
                     var gid = String(game.id);
-                    var pid = gid + '-h2h';
-                    var awayGetsMinus;
-                    if (game.awm != null && game.hm != null) { awayGetsMinus = game.awm <= game.hm; }
-                    else if (game.awm != null) { awayGetsMinus = true; }
-                    else { awayGetsMinus = false; }
-                    [[away, 'A'], [home, 'B']].forEach(function(pair) {
-                        var teamName = pair[0], ps = pair[1];
-                        var isAway = ps === 'A';
-                        var isMinus = isAway ? awayGetsMinus : !awayGetsMinus;
-                        var initAm = isMinus ? (isAway ? game.awm : game.hm) : (isAway ? game.awp : game.hp);
-                        var initPt = isMinus ? -0.5 : 0.5;
-                        if (initAm == null) return;
-                        rows.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName,
-                            am: initAm, pt: initPt, pid: pid, ps: ps, gid: gid, league: game.league || '',
-                            _sport_key: 'soccer_wc', _dkHm: game.hm, _dkHp: game.hp, _dkAwm: game.awm, _dkAwp: game.awp });
+                    var pid = gid + '-ta';
+                    [[away, 'A', game.away_ml], [home, 'B', game.home_ml]].forEach(function(triple) {
+                        var teamName = triple[0], ps = triple[1], am = triple[2];
+                        if (am == null) return;
+                        rows.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'ML', side: teamName,
+                            am: am, pt: null, pid: pid, ps: ps, gid: gid, league: game.league || '',
+                            _sport_key: 'soccer_wc' });
                     });
                 });
                 rawRows = rows;
                 rawRowsBySport[sport] = rawRows;
                 fetchRealMarkets(sport, true);
             } else {
-                // Update stored DK prices and re-apply the RS line
+                // Update ML odds for existing rows
                 rawRows.forEach(function(r) {
-                    if (r.mkt !== 'Spread') return;
+                    if (r.mkt !== 'ML') return;
                     var game = data.games[r.game];
                     if (!game) return;
-                    r._dkSpreads = game.spreads || { Home: {}, Away: {} };
-                    var yl = yourLines[r.id];
-                    if (yl != null) {
-                        var wcOutType = r.ps === 'B' ? 'Home' : 'Away';
-                        var dk = (r._dkSpreads[wcOutType] || {})[String(yl)];
-                        if (dk != null) { r.am = dk; r.pt = yl; }
-                    }
+                    var newAm = r.ps === 'A' ? game.away_ml : game.home_ml;
+                    if (newAm != null) r.am = newAm;
                     if (game.league) r.league = game.league;
                 });
                 rawRowsBySport[sport] = rawRows;
