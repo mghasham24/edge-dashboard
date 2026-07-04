@@ -847,6 +847,7 @@
                 <div style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
                     <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);font-family:var(--sans);font-weight:600;white-space:nowrap">Min EV<input id="ev-min-ev" type="number" min="0" max="50" step="0.5" value="5" oninput="onEvMinEvChange(this.value)" style="width:48px;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--mono);font-size:12px;font-weight:700;padding:4px 6px;border-radius:5px;text-align:right">%</label>
                     <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);font-family:var(--sans);font-weight:600;white-space:nowrap">Unit $<input id="ev-unit-size" type="number" min="1" step="1" value="300" oninput="onEvUnitChange(this.value)" style="width:64px;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--mono);font-size:12px;font-weight:700;padding:4px 6px;border-radius:5px;text-align:right"></label>
+                    <button id="ev-one-side-btn" onclick="toggleExclusiveBets()" title="Auto-mark the other side taken when you check a bet — prevents betting both teams" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:11px;font-weight:700;padding:7px 14px;border-radius:6px;cursor:pointer;letter-spacing:.04em">1 Side</button>
                     <button id="ev-hide-taken-btn" onclick="toggleEvHideTaken()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:11px;font-weight:700;padding:7px 14px;border-radius:6px;cursor:pointer;letter-spacing:.04em">Hide Taken</button>
                     <button id="ev-rs-adj-btn" onclick="toggleRsAdj()" title="Shift RS% by +1 or +2 points to test sensitivity to price movement" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:11px;font-weight:700;padding:7px 14px;border-radius:6px;cursor:pointer;letter-spacing:.04em">RS +0%</button>
                     <button onclick="loadAllEvSports()" id="ev-load-btn" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:11px;font-weight:700;padding:7px 16px;border-radius:6px;cursor:pointer;letter-spacing:.04em">&#8635; Refresh</button>
@@ -863,6 +864,6 @@
     <!-- end #dashboard -->
 
     <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script>
-    <script src="/app.js?v=47"></script>
+    <script src="/app.js?v=48"></script>
 </body>
 </html>

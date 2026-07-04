@@ -92,6 +92,7 @@
     var lastSyncData = {}; // sport -> last Real Sports sync response (d.markets object)
     var exclusiveBets = localStorage.getItem('raxedge_exclusive_bets') === '1';
     var betTaken = JSON.parse(localStorage.getItem('raxedge_bets_taken') || '{}');
+    var autoTakenFrom = JSON.parse(localStorage.getItem('raxedge_auto_taken') || '{}'); // rowId → team name that was manually bet on the other side
     var wcFuturesCache = null;
     var portfolioConnected = false;
     var portHistoryAll    = [];   // accumulated all settled history items
@@ -887,7 +888,32 @@
         if (!betTaken[id]) delete betTaken[id];
         localStorage.setItem('raxedge_bets_taken', JSON.stringify(betTaken));
         try { posthog.capture(betTaken[id] ? 'bet_checked' : 'bet_unchecked', { sport: currentSport }); } catch(e) {}
-        if (betTaken[id] && exclusiveBets) applyExclusiveBet(id);
+        if (betTaken[id]) {
+            if (exclusiveBets) applyExclusiveBet(id);
+        } else {
+            // Un-taking — clean up auto-taken state
+            if (autoTakenFrom.hasOwnProperty(id)) {
+                // This was an auto-taken row — just clear its metadata
+                delete autoTakenFrom[id];
+            } else if (exclusiveBets) {
+                // Manually-taken row un-checked — also clear the auto-taken opposite
+                var opp = id.endsWith('-A') ? id.slice(0,-2)+'-B' : id.endsWith('-B') ? id.slice(0,-2)+'-A' : null;
+                if (opp && autoTakenFrom.hasOwnProperty(opp)) {
+                    delete betTaken[opp];
+                    delete autoTakenFrom[opp];
+                    localStorage.setItem('raxedge_bets_taken', JSON.stringify(betTaken));
+                    fetch('/api/bets/taken', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: opp, taken: false }) }).catch(function() {});
+                    document.querySelectorAll('input[type="checkbox"][data-id="' + opp + '"]').forEach(function(cb) { cb.checked = false; });
+                    var oppTr = document.querySelector('tr[data-row-id="' + opp + '"]');
+                    if (oppTr) { oppTr.style.opacity = ''; oppTr.style.borderLeft = ''; }
+                    document.querySelectorAll('.mc-bet-check[data-id="' + opp + '"]').forEach(function(el) {
+                        var sideRow = el.closest('div[style*="display:flex"]');
+                        if (sideRow) sideRow.style.opacity = '';
+                    });
+                }
+            }
+            localStorage.setItem('raxedge_auto_taken', JSON.stringify(autoTakenFrom));
+        }
         // Sync to server so state persists across devices
         fetch('/api/bets/taken', {
             method: 'POST',
@@ -899,11 +925,12 @@
             cb.checked = !!betTaken[id];
         });
         var tr = document.querySelector('tr[data-row-id="' + id + '"]');
-        if (tr) tr.style.opacity = betTaken[id] ? '0.4' : '';
+        if (tr) { tr.style.opacity = betTaken[id] ? '0.4' : ''; if (!betTaken[id]) tr.style.borderLeft = ''; }
         document.querySelectorAll('.mc-bet-check[data-id="' + id + '"]').forEach(function(el) {
             var sideRow = el.closest('div[style*="display:flex"]');
             if (sideRow) sideRow.style.opacity = betTaken[id] ? '0.4' : '';
         });
+        if (evTabVisible && !evLoadingInProgress) renderEvTab();
     }
 
     var collapsed = {};
@@ -954,24 +981,34 @@
     function toggleExclusiveBets() {
         exclusiveBets = !exclusiveBets;
         localStorage.setItem('raxedge_exclusive_bets', exclusiveBets ? '1' : '0');
-        var btn = document.getElementById('excl-bets-btn');
-        if (btn) {
+        ['excl-bets-btn', 'ev-one-side-btn'].forEach(function(btnId) {
+            var btn = document.getElementById(btnId);
+            if (!btn) return;
             btn.style.background = exclusiveBets ? 'var(--accent)' : 'var(--bg3)';
             btn.style.color = exclusiveBets ? '#fff' : 'var(--muted)';
             btn.style.borderColor = exclusiveBets ? 'var(--accent)' : 'var(--border2)';
-        }
+        });
     }
 
     function applyExclusiveBet(id) {
-        // All row IDs end in -A or -B — the opposite is simply swapping that suffix
         var oppositeId = id.endsWith('-A') ? id.slice(0, -2) + '-B'
                        : id.endsWith('-B') ? id.slice(0, -2) + '-A'
                        : null;
         if (!oppositeId) return;
         if (betTaken[oppositeId]) return; // opposite already checked — nothing to do
-        // Auto-check the opposite side so the full game position is tracked
+
+        // Find the manually-taken row to record its team name for the "Took X" badge
+        var manualTeam = '';
+        var searchIn = [].concat(rawRows || []);
+        for (var k in rawRowsBySport) { searchIn = searchIn.concat(rawRowsBySport[k] || []); }
+        for (var k in evTabCache) { searchIn = searchIn.concat(evTabCache[k] || []); }
+        var manualRow = searchIn.find(function(r) { return r.id === id; });
+        if (manualRow) manualTeam = manualRow.side || '';
+
         betTaken[oppositeId] = true;
+        autoTakenFrom[oppositeId] = manualTeam;
         localStorage.setItem('raxedge_bets_taken', JSON.stringify(betTaken));
+        localStorage.setItem('raxedge_auto_taken', JSON.stringify(autoTakenFrom));
         fetch('/api/bets/taken', {
             method: 'POST', credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json' },
@@ -3209,6 +3246,7 @@
             var home    = teams[1] || '';
             var gameStr = away + (home ? ' @ ' + home : '');
             var taken   = !!betTaken[r.id];
+            var autoFrom = taken ? (autoTakenFrom[r.id] || null) : null; // team name bet on the other side
             var rsUrl   = '';
             if (rsGameIds[r.game]) {
                 rsUrl = getRealSportsUrl(rsGameIds[r.game], r._sport_key, r.league, r.game) || '';
@@ -3229,8 +3267,12 @@
                 + (taken ? 'checked ' : '')
                 + 'onchange="toggleBet(this.dataset.id)" title="Mark bet taken" '
                 + 'style="width:15px;height:15px;cursor:pointer;accent-color:var(--green)">';
-            html += '<tr class="' + trStyle.trim() + '" data-row-id="' + escHtml(r.id) + '" style="' + (taken ? 'opacity:0.4' : '') + '">'
-                + '<td>' + cbHtml + '</td>'
+            var autoTag = autoFrom
+                ? '<span style="display:inline-block;font-size:9px;font-weight:700;color:#f5a623;background:rgba(245,166,35,0.12);border:1px solid rgba(245,166,35,0.3);border-radius:3px;padding:1px 4px;margin-left:4px;white-space:nowrap;letter-spacing:.04em;vertical-align:middle">Took ' + escHtml(autoFrom) + '</span>'
+                : '';
+            var trRowStyle = taken ? 'opacity:0.4' + (autoFrom ? ';border-left:3px solid #f5a623' : '') : '';
+            html += '<tr class="' + trStyle.trim() + '" data-row-id="' + escHtml(r.id) + '" style="' + trRowStyle + '">'
+                + '<td>' + cbHtml + autoTag + '</td>'
                 + '<td class="r ev-val-td">' + evCell + '</td>'
                 + '<td><span style="font-size:9px;font-weight:800;letter-spacing:.07em;color:var(--muted2);text-transform:uppercase;white-space:nowrap">' + escHtml(r._sport || '') + '</span></td>'
                 + '<td style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escHtml(gameStr) + timeBadge + rsLink + '</td>'
@@ -3246,7 +3288,7 @@
                 + '</tr>';
 
             // Mobile card
-            var cardCls = 'ev-mobile-card' + (ev != null && ev >= 10 ? ' ev-card-win' : '') + (taken ? ' ev-card-taken' : '');
+            var cardCls = 'ev-mobile-card' + (ev != null && ev >= 10 ? ' ev-card-win' : '') + (taken && !autoFrom ? ' ev-card-taken' : '') + (taken && autoFrom ? ' ev-card-auto-taken' : '');
             var redirectBtn = rsUrl
                 ? '<a href="' + rsUrl + '" target="_blank" rel="noopener" class="evm-redirect-btn">Redirect to Game</a>'
                 : '';
@@ -3279,9 +3321,9 @@
                 + '</div>'
                 // Redirect button (if available)
                 + redirectBtn
-                // Footer: checkbox bottom-right
+                // Footer: auto-taken badge (left) + checkbox (right)
                 + '<div class="evm-footer">'
-                +   '<span></span>'
+                +   (autoFrom ? '<span style="font-size:9px;font-weight:700;color:#f5a623;background:rgba(245,166,35,0.12);border:1px solid rgba(245,166,35,0.3);border-radius:3px;padding:2px 5px;letter-spacing:.04em">Took ' + escHtml(autoFrom) + '</span>' : '<span></span>')
                 +   '<input type="checkbox" class="evm-cb" data-id="' + escHtml(r.id) + '" '
                 +   (taken ? 'checked ' : '') + 'onchange="toggleBet(this.dataset.id)" title="Mark bet taken">'
                 + '</div>'
@@ -9007,12 +9049,14 @@ if (!match && r.mkt === 'Spread' && (sport === 'soccer_fc' || sport === 'soccer_
     });
     // Restore exclusive bets button state
     (function() {
-        var btn = document.getElementById('excl-bets-btn');
-        if (btn && exclusiveBets) {
-            btn.style.background = 'var(--accent)';
-            btn.style.color = '#fff';
-            btn.style.borderColor = 'var(--accent)';
-        }
+        ['excl-bets-btn', 'ev-one-side-btn'].forEach(function(btnId) {
+            var btn = document.getElementById(btnId);
+            if (btn && exclusiveBets) {
+                btn.style.background = 'var(--accent)';
+                btn.style.color = '#fff';
+                btn.style.borderColor = 'var(--accent)';
+            }
+        });
     })();
 
     // ── GROUP JOIN BANNER ──
