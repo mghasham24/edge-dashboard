@@ -931,6 +931,7 @@
             if (sideRow) sideRow.style.opacity = betTaken[id] ? '0.4' : '';
         });
         if (evTabVisible && !evLoadingInProgress) renderEvTab();
+        else renderTable();
     }
 
     var collapsed = {};
@@ -7552,8 +7553,15 @@
                : teamColorAt(r.side, '2e')))
             : '';
         var rfiColor = r.mkt === 'RFI' ? (r.ps === 'A' ? '#3ddc84' : '#ff5f5f') : '';
-        return '<tr class="' + (r.edge != null && r.edge > 0 ? 'has-edge' : '') + (isC ? ' collapsed-row' : '') + '" data-gk="' + gk + '" data-row-id="' + r.id + '" style="border-left:3px solid ' + rowColor + ';' + edgeBg(r.edge) + (betTaken[r.id] ? 'opacity:0.4' : '') + '">'
-        + '<td class="game-td" data-label="Game"><div style="font-weight:600;display:flex;align-items:center;gap:5px">' + (r.mkt !== 'Total' && r.mkt !== 'RFI' ? teamLogoHtml(r.side, 16) : '') + '<span' + (rowGrad ? ' style="padding:1px 8px 1px 4px;background:linear-gradient(90deg,' + rowGrad + ',transparent);border-radius:3px"' : '') + (rfiColor ? ' style="color:' + rfiColor + '"' : '') + '>' + r.side + '</span></div><div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px">' + r.game + '</div></td>'
+        var autoFromRow = autoTakenFrom[r.id] || null;
+        var takenBl = betTaken[r.id] ? (autoFromRow ? 'border-left:3px solid #f5a623;' : 'border-left:3px solid ' + rowColor + ';') : 'border-left:3px solid ' + rowColor + ';';
+        var takenBg = autoFromRow ? 'background:rgba(245,166,35,0.06);' : '';
+        var takenOp = betTaken[r.id] ? 'opacity:0.4;' : '';
+        var autoRowTag = autoFromRow
+            ? '<span style="display:inline-block;font-size:8px;font-weight:700;color:#f5a623;background:rgba(245,166,35,0.15);border:1px solid rgba(245,166,35,0.4);border-radius:3px;padding:1px 4px;margin-left:4px;letter-spacing:.03em;vertical-align:middle;white-space:nowrap">Took ' + escHtml(autoFromRow) + '</span>'
+            : '';
+        return '<tr class="' + (r.edge != null && r.edge > 0 ? 'has-edge' : '') + (isC ? ' collapsed-row' : '') + '" data-gk="' + gk + '" data-row-id="' + r.id + '" style="' + takenBl + takenBg + takenOp + edgeBg(r.edge) + '">'
+        + '<td class="game-td" data-label="Game"><div style="font-weight:600;display:flex;align-items:center;gap:5px">' + (r.mkt !== 'Total' && r.mkt !== 'RFI' ? teamLogoHtml(r.side, 16) : '') + '<span' + (rowGrad ? ' style="padding:1px 8px 1px 4px;background:linear-gradient(90deg,' + rowGrad + ',transparent);border-radius:3px"' : '') + (rfiColor ? ' style="color:' + rfiColor + '"' : '') + '>' + r.side + '</span>' + autoRowTag + '</div><div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px">' + r.game + '</div></td>'
         + '<td data-label="Market"><span class="mkt-badge">' + r.mkt + '</span></td>'
         + '<td data-label="Side" style="color:var(--muted);font-size:12px">' + r.side + '</td>'
         + '<td class="r" data-label="Consensus"><span class="' + aCls + '">' + am + '</span></td>'
