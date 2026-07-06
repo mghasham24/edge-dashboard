@@ -59,8 +59,26 @@ async function handleRequest({ request, env }) {
   if (method === 'PATCH') {
     let body;
     try { body = await request.json(); } catch { return fail(400, 'Invalid JSON'); }
-    const { id, plan, banned, group_access, rs_group_username } = body;
+    const { id, plan, banned, group_access, rs_group_username, grant_months } = body;
     if (!id) return fail(400, 'Missing user id');
+
+    if (grant_months !== undefined) {
+      const months = parseInt(grant_months, 10);
+      if (!months || months < 1 || months > 24) return fail(400, 'Invalid months — must be 1–24');
+      const user = await env.DB.prepare('SELECT stripe_sub_id, plan, pro_expires_at FROM users WHERE id=?').bind(id).first();
+      if (!user) return fail(404, 'User not found');
+      if (user.stripe_sub_id) {
+        // Active Stripe sub — bank credits, applied against next invoices
+        await env.DB.prepare('UPDATE users SET referral_credits = referral_credits + ? WHERE id=?').bind(months, id).run();
+      } else {
+        // No Stripe sub — extend pro_expires_at directly
+        const nowTs = Math.floor(Date.now() / 1000);
+        const base = (user.pro_expires_at && user.pro_expires_at > nowTs) ? user.pro_expires_at : nowTs;
+        const newExpiry = base + months * 30 * 24 * 3600;
+        await env.DB.prepare('UPDATE users SET plan=\'pro\', pro_expires_at=? WHERE id=?').bind(newExpiry, id).run();
+      }
+      return ok({ updated: true, grant_months: months, via: user.stripe_sub_id ? 'credits' : 'expiry' });
+    }
 
     if (plan !== undefined) {
       if (!['free', 'pro'].includes(plan)) return fail(400, 'Invalid plan — must be free or pro');

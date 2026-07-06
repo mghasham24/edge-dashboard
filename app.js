@@ -4840,7 +4840,13 @@
                 : '';
             return '<tr>'
                 + '<td><span style="font-family:var(--mono);font-size:12px">' + escHtml(u.email) + '</span>' + adminBadge + bannedBadge + rsProfileLink + rsIdCell + '</td>'
-                + '<td><select class="plan-sel" data-uid="' + u.id + '" onchange="adminChangePlan(this)"><option value="free"' + (u.plan === 'free' ? ' selected' : '') + '>Free</option><option value="pro"' + (u.plan === 'pro' ? ' selected' : '') + '>Pro</option></select></td>'
+                + '<td>'
+                + '<select class="plan-sel" data-uid="' + u.id + '" onchange="adminChangePlan(this)"><option value="free"' + (u.plan === 'free' ? ' selected' : '') + '>Free</option><option value="pro"' + (u.plan === 'pro' ? ' selected' : '') + '>Pro</option></select>'
+                + '<div style="display:flex;align-items:center;gap:4px;margin-top:5px">'
+                + '<input type="number" min="1" max="24" value="3" class="admin-grant-inp" style="width:36px;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--mono);font-size:11px;padding:2px 4px;border-radius:4px;text-align:center">'
+                + '<button class="admin-btn" style="font-size:10px;padding:2px 8px" onclick="adminGrantMonths(' + u.id + ',this)">+Mo</button>'
+                + '</div>'
+                + '</td>'
                 + '<td>' + groupCell + '</td>'
                 + '<td style="font-family:var(--mono);color:var(--muted)">' + u.sessions + '</td>'
                 + '<td style="font-family:var(--mono);font-size:12px;color:var(--muted)">' + date + '</td>'
@@ -4873,6 +4879,28 @@
         var id = sel.getAttribute('data-uid');
         var plan = sel.value;
         await fetch('/api/admin/users', { method: 'PATCH', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: parseInt(id), plan }) });
+    }
+
+    function adminGrantMonths(id, btn) {
+        var row = btn.closest('tr');
+        var inp = row ? row.querySelector('.admin-grant-inp') : null;
+        var months = parseInt(inp ? inp.value : 3, 10);
+        if (!months || months < 1) return;
+        showConfirm('Grant ' + months + ' month' + (months !== 1 ? 's' : '') + ' Pro to user #' + id + '?', async function() {
+            var res = await fetch('/api/admin/users', {
+                method: 'PATCH', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: id, grant_months: months })
+            });
+            var data = await res.json();
+            if (data.ok) {
+                var via = data.via === 'credits' ? ' (via invoice credits)' : ' (expiry extended)';
+                showToast('Granted ' + months + ' month' + (months !== 1 ? 's' : '') + ' Pro' + via);
+                loadAdminUsers(document.getElementById('admin-search').value.trim(), 0, false);
+            } else {
+                showToast(data.error || 'Error granting Pro');
+            }
+        });
     }
 
     async function adminForceLogout(id) {
