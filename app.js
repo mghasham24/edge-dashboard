@@ -6517,8 +6517,7 @@
                     var _dhNum2 = parseInt(_dhm2[1]);
                     if (_dhNum2 >= 2) {
                         if (resolvedMap[_dhBase2 + ' (2)']) realKey = resolvedMap[_dhBase2 + ' (2)'];
-                        else if (resolvedMap[_dhBase2]) realKey = resolvedMap[_dhBase2];
-                        // else: fall through to fuzzy — RS uses short nicknames so exact resolved fails
+                        // No fallback to base key for Game 2 — let fuzzy handle it with DH-awareness
                     } else {
                         if (resolvedMap[_dhBase2]) realKey = resolvedMap[_dhBase2];
                     }
@@ -6566,7 +6565,17 @@
                     }
                     return matchSide(ra, raNick, raRaw, fdAway, fdAwayNick) && matchSide(rh, rhNick, rhRaw, fdHome, fdHomeNick);
                 });
-                if (found) realKey = found;
+                if (found) {
+                    // DH-awareness: Game 2 FD rows must use the RS ' (2)' key, not Game 1's key
+                    var _isFdDH2 = /\(Game [2-9]/.test(r.game);
+                    if (_isFdDH2 && !found.endsWith(' (2)')) {
+                        if (marketKeys.indexOf(found + ' (2)') !== -1) found = found + ' (2)';
+                    } else if (!_isFdDH2 && found.endsWith(' (2)')) {
+                        var _foundBase = found.replace(/ \(2\)$/, '');
+                        if (marketKeys.indexOf(_foundBase) !== -1) found = _foundBase;
+                    }
+                    realKey = found;
+                }
             }
             if (!realKey) return;
 
@@ -8125,7 +8134,16 @@
                                      || (!!_wcA[fdHome] && (rHome === _wcA[fdHome] || rHome.indexOf(_wcA[fdHome]) !== -1));
                         return awayMatch && homeMatch;
                     });
-                    if (matched) realKey = matched;
+                    if (matched) {
+                        var _isFdDH2b = /\(Game [2-9]/.test(r.game);
+                        if (_isFdDH2b && !matched.endsWith(' (2)')) {
+                            if (marketKeys.indexOf(matched + ' (2)') !== -1) matched = matched + ' (2)';
+                        } else if (!_isFdDH2b && matched.endsWith(' (2)')) {
+                            var _matchedBase = matched.replace(/ \(2\)$/, '');
+                            if (marketKeys.indexOf(_matchedBase) !== -1) matched = _matchedBase;
+                        }
+                        realKey = matched;
+                    }
                 }
 
                 if (!realKey) return;
