@@ -8310,18 +8310,24 @@ if (!match && r.mkt === 'Spread' && (sport === 'soccer_fc' || sport === 'soccer_
                 }
 
                 // Pass 1: exact word match or full label phrase in FD side
-                if (!match) match = outcomes.find(function(o) {
-                    if (!o.label) return false;
-                    var oLower = o.label.toLowerCase();
-                    var oWords = oLower.split(' ').filter(function(w) { return w.length > 2; });
-                    // Exact word match between label words and FD side words
-                    var exactMatch = oWords.some(function(ow) {
-                        return sideWords.some(function(sw) { return sw === ow; });
+                // Use best-score (most matching words) rather than first-match to avoid ambiguous
+                // shared words — e.g. both "Red Sox" and "White Sox" contain "sox", so first-match
+                // would assign Boston's probability to Chicago.
+                if (!match) {
+                    var _p1best = null, _p1score = 0;
+                    outcomes.forEach(function(o) {
+                        if (!o.label) return;
+                        var oLower = o.label.toLowerCase();
+                        var oWords = oLower.split(' ').filter(function(w) { return w.length > 2; });
+                        var phraseMatch = sideLower.indexOf(oLower) !== -1;
+                        var wordScore = oWords.filter(function(ow) {
+                            return sideWords.some(function(sw) { return sw === ow; });
+                        }).length;
+                        var score = (phraseMatch ? 10 : 0) + wordScore;
+                        if (score > 0 && score > _p1score) { _p1best = o; _p1score = score; }
                     });
-                    // Full label phrase is a word-boundary substring of FD side
-                    var phraseMatch = sideLower.indexOf(oLower) !== -1;
-                    return exactMatch || phraseMatch;
-                });
+                    match = _p1best;
+                }
                 // Pass 2: resolve full label or leading abbreviation (e.g. "ATL +2.5" -> "Atlanta Hawks")
                 if (!match) {
                     match = outcomes.find(function(o) {
@@ -8332,13 +8338,16 @@ if (!match && r.mkt === 'Spread' && (sport === 'soccer_fc' || sport === 'soccer_
                         return sideWords.some(function(w) { return resolved.indexOf(w) !== -1; });
                     });
                 }
-                // Pass 3: full label resolve
+                // Pass 3: full label resolve — best-score to avoid ambiguous shared words
                 if (!match) {
-                    match = outcomes.find(function(o) {
-                        if (!o.label) return false;
+                    var _p3best = null, _p3score = 0;
+                    outcomes.forEach(function(o) {
+                        if (!o.label) return;
                         var resolved = resolveTeamName(o.label).toLowerCase();
-                        return sideWords.some(function(w) { return resolved.indexOf(w) !== -1; });
+                        var score = sideWords.filter(function(w) { return resolved.indexOf(w) !== -1; }).length;
+                        if (score > 0 && score > _p3score) { _p3best = o; _p3score = score; }
                     });
+                    match = _p3best;
                 }
                 // Pass 4: last word of FD side name matches resolved token
                 if (!match) {
