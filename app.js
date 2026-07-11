@@ -80,6 +80,7 @@
         } else {
             // Only restart pollers if the user is actually logged in
             if (!currentUser) return;
+            loadBetsTaken(); // re-sync taken bets from server when tab becomes visible
             if (evTabVisible) {
                 loadAllEvSports();
             } else {
@@ -942,9 +943,18 @@
             var res = await fetch('/api/bets/taken', { credentials: 'same-origin' });
             if (!res.ok) return;
             var data = await res.json();
-            // Server wins — merge into local state
-            data.bet_ids.forEach(function(id) { betTaken[id] = true; });
-            localStorage.setItem('raxedge_bets_taken', JSON.stringify(betTaken));
+            var changed = false;
+            (data.bet_ids || []).forEach(function(rawId) {
+                var isAuto = rawId.startsWith('auto||');
+                var id = isAuto ? rawId.slice(6) : rawId;
+                if (!betTaken[id]) { betTaken[id] = true; changed = true; }
+                if (isAuto && !autoTakenFrom[id]) { autoTakenFrom[id] = '__auto__'; changed = true; }
+            });
+            if (changed) {
+                localStorage.setItem('raxedge_bets_taken', JSON.stringify(betTaken));
+                localStorage.setItem('raxedge_auto_taken', JSON.stringify(autoTakenFrom));
+                renderTable();
+            }
         } catch(e) {}
     }
 
@@ -1013,7 +1023,7 @@
         fetch('/api/bets/taken', {
             method: 'POST', credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: oppositeId, taken: true })
+            body: JSON.stringify({ id: 'auto||' + oppositeId, taken: true })
         }).catch(function() {});
         document.querySelectorAll('input[type="checkbox"][data-id="' + oppositeId + '"]').forEach(function(cb) { cb.checked = true; });
         var tr = document.querySelector('tr[data-row-id="' + oppositeId + '"]');
@@ -3269,7 +3279,7 @@
                 + 'onchange="toggleBet(this.dataset.id)" title="Mark bet taken" '
                 + 'style="width:15px;height:15px;cursor:pointer;accent-color:var(--green)">';
             var autoTag = autoFrom
-                ? '<span style="display:inline-block;font-size:9px;font-weight:700;color:#f5a623;background:rgba(245,166,35,0.12);border:1px solid rgba(245,166,35,0.3);border-radius:3px;padding:1px 4px;margin-left:4px;white-space:nowrap;letter-spacing:.04em;vertical-align:middle">Took ' + escHtml(autoFrom) + '</span>'
+                ? '<span style="display:inline-block;font-size:9px;font-weight:700;color:#f5a623;background:rgba(245,166,35,0.12);border:1px solid rgba(245,166,35,0.3);border-radius:3px;padding:1px 4px;margin-left:4px;white-space:nowrap;letter-spacing:.04em;vertical-align:middle">' + (autoFrom === '__auto__' ? 'Other side taken' : 'Took ' + escHtml(autoFrom)) + '</span>'
                 : '';
             var trRowStyle = taken ? 'opacity:0.4' + (autoFrom ? ';border-left:3px solid #f5a623' : '') : '';
             html += '<tr class="' + trStyle.trim() + '" data-row-id="' + escHtml(r.id) + '" style="' + trRowStyle + '">'
@@ -3324,7 +3334,7 @@
                 + redirectBtn
                 // Footer: auto-taken badge (left) + checkbox (right)
                 + '<div class="evm-footer">'
-                +   (autoFrom ? '<span style="font-size:9px;font-weight:700;color:#f5a623;background:rgba(245,166,35,0.12);border:1px solid rgba(245,166,35,0.3);border-radius:3px;padding:2px 5px;letter-spacing:.04em">Took ' + escHtml(autoFrom) + '</span>' : '<span></span>')
+                +   (autoFrom ? '<span style="font-size:9px;font-weight:700;color:#f5a623;background:rgba(245,166,35,0.12);border:1px solid rgba(245,166,35,0.3);border-radius:3px;padding:2px 5px;letter-spacing:.04em">' + (autoFrom === '__auto__' ? 'Other side taken' : 'Took ' + escHtml(autoFrom)) + '</span>' : '<span></span>')
                 +   '<input type="checkbox" class="evm-cb" data-id="' + escHtml(r.id) + '" '
                 +   (taken ? 'checked ' : '') + 'onchange="toggleBet(this.dataset.id)" title="Mark bet taken">'
                 + '</div>'
@@ -5774,6 +5784,7 @@
 
     function loadOdds() {
         try { posthog.capture('refresh_clicked', { sport: currentSport }); } catch(e) {}
+        loadBetsTaken(); // keep taken bets in sync across devices
         stopAllPollers();
         payoutRatios = {}; rsMarketIds = {}; rsOutcomeKeys = {};
         if (!isPro()) {
@@ -7595,7 +7606,7 @@
         var takenBg = autoFromRow ? 'background:rgba(245,166,35,0.06);' : '';
         var takenOp = betTaken[r.id] ? 'opacity:0.4;' : '';
         var autoRowTag = autoFromRow
-            ? '<span style="display:inline-block;font-size:8px;font-weight:700;color:#f5a623;background:rgba(245,166,35,0.15);border:1px solid rgba(245,166,35,0.4);border-radius:3px;padding:1px 4px;margin-left:4px;letter-spacing:.03em;vertical-align:middle;white-space:nowrap">Took ' + escHtml(autoFromRow) + '</span>'
+            ? '<span style="display:inline-block;font-size:8px;font-weight:700;color:#f5a623;background:rgba(245,166,35,0.15);border:1px solid rgba(245,166,35,0.4);border-radius:3px;padding:1px 4px;margin-left:4px;letter-spacing:.03em;vertical-align:middle;white-space:nowrap">' + (autoFromRow === '__auto__' ? 'Other side taken' : 'Took ' + escHtml(autoFromRow)) + '</span>'
             : '';
         return '<tr class="' + (r.edge != null && r.edge > 0 ? 'has-edge' : '') + (isC ? ' collapsed-row' : '') + '" data-gk="' + gk + '" data-row-id="' + r.id + '" style="' + takenBl + takenBg + takenOp + edgeBg(r.edge) + '">'
         + '<td class="game-td" data-label="Game"><div style="font-weight:600;display:flex;align-items:center;gap:5px">' + (r.mkt !== 'Total' && r.mkt !== 'RFI' ? teamLogoHtml(r.side, 16) : '') + '<span' + (rowGrad ? ' style="padding:1px 8px 1px 4px;background:linear-gradient(90deg,' + rowGrad + ',transparent);border-radius:3px"' : '') + (rfiColor ? ' style="color:' + rfiColor + '"' : '') + '>' + r.side + '</span>' + autoRowTag + '</div><div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px">' + r.game + '</div></td>'

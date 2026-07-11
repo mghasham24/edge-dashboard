@@ -29,7 +29,9 @@ export async function onRequest({ request, env }) {
       if (!ids.includes(id)) ids.push(id);
       if (ids.length > 1000) ids.splice(0, ids.length - 1000);
     } else {
-      ids = ids.filter(i => i !== id);
+      // Remove both plain and auto|| variant so un-taking cleans up cross-device state
+      const plainId = id.startsWith('auto||') ? id.slice(6) : id;
+      ids = ids.filter(i => i !== plainId && i !== 'auto||' + plainId);
     }
 
     const now = Math.floor(Date.now() / 1000);
