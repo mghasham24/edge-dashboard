@@ -11,12 +11,6 @@ export async function onRequest(context) {
   const session = await getSession(request, env.DB);
   if (!session) return fail(401, 'Not authenticated');
 
-  // UFC — DK native fetch (free, real-time). No Odds API credits consumed.
-  if (sport === 'mma_mixed_martial_arts') {
-    const debug = url.searchParams.get('debug');
-    return fetchUFCNative(env, debug);
-  }
-
   const API_KEY = env.ODDS_API_KEY;
   if (!API_KEY) {
     return new Response(JSON.stringify({ error: 'Missing API key' }), { status: 500 });
