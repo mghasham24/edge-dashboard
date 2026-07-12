@@ -228,8 +228,6 @@ async function fetchListings(entityId, sport, season, token) {
     const listings = await fetchOnePage(entityId, sport, season, token, page > 0 ? offset : null, beforeEndsAt);
     all.push(...listings);
     if (listings.length < PAGE_SIZE) break;
-    const anyNew = listings.some(l => !seenIds.has(String(l.id || '')));
-    if (!anyNew) break;
     beforeEndsAt = listings[listings.length - 1].endsAt;
     offset += PAGE_SIZE;
   }
