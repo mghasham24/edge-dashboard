@@ -83,8 +83,11 @@ const TARGETS = [
   { name: 'Mahomes',         entityId: '18890',   sport: 'nfl', season: 2023 },
 ];
 
-function buildUrl(sport, entityId, season) {
-  return `https://web.realapp.com/cardmarketplacelistings?cohort=all&filterEntityType=player&listingType=userpassfull&prestige=all&rarity=all&season=${season}&sport=${sport}&limit=50&pageSize=50&filterEntityId=${entityId}`;
+function buildUrl(sport, entityId, season, offset, beforeEndsAt) {
+  let url = `https://web.realapp.com/cardmarketplacelistings?cohort=all&filterEntityType=player&listingType=userpassfull&prestige=all&rarity=all&season=${season}&sport=${sport}&filterEntityId=${entityId}`;
+  if (offset) url += `&offset=${offset}`;
+  if (beforeEndsAt) url += `&beforeEndsAt=${encodeURIComponent(beforeEndsAt)}`;
+  return url;
 }
 
 const dispatcher = RS_PROXY_URL ? new ProxyAgent(RS_PROXY_URL) : undefined;
@@ -183,8 +186,8 @@ function formatEndsAt(endsAt) {
 
 // ── Fetch pass listings for one player ────────────────────────────────────────
 
-async function fetchListings(entityId, sport, season, token) {
-  const res = await uFetch(buildUrl(sport, entityId, season), {
+async function fetchOnePage(entityId, sport, season, token, offset, beforeEndsAt) {
+  const res = await uFetch(buildUrl(sport, entityId, season, offset, beforeEndsAt), {
     dispatcher,
     headers: {
       'Accept': 'application/json',
@@ -209,6 +212,27 @@ async function fetchListings(entityId, sport, season, token) {
   }
   const data = await res.json();
   return data.listings || [];
+}
+
+async function fetchListings(entityId, sport, season, token) {
+  const PAGE_SIZE = 10;
+  const MAX_PAGES = 5;
+  const all = [];
+  let offset = 0;
+  let beforeEndsAt = null;
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const listings = await fetchOnePage(entityId, sport, season, token, page > 0 ? offset : null, beforeEndsAt);
+    all.push(...listings);
+    if (listings.length < PAGE_SIZE) break; // last page
+    // Stop paginating if all listings on this page are already seen (caught up)
+    const anyNew = listings.some(l => !seenIds.has(String(l.id || '')));
+    if (!anyNew) break;
+    beforeEndsAt = listings[listings.length - 1].endsAt;
+    offset += PAGE_SIZE;
+  }
+
+  return all;
 }
 
 // ── Poll ──────────────────────────────────────────────────────────────────────
