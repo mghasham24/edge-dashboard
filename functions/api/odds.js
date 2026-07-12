@@ -238,7 +238,7 @@ async function fetchUFCFromFD(env, debugMode) {
       Object.entries(markets).forEach(([marketId, mkt]) => {
         const mktType = mkt.marketType || '';
         if (!entry.marketTypes.includes(mktType)) entry.marketTypes.push(mktType);
-        if (!entry.mlId && (mktType === 'MONEY_LINE' || mktType === 'MATCH_WINNER' || mktType === 'FIGHT_WINNER' || (mkt.marketName || '').toLowerCase().includes('winner'))) {
+        if (!entry.mlId && (mktType === 'MATCH_BETTING' || mktType === 'MONEY_LINE' || mktType === 'MATCH_WINNER' || mktType === 'FIGHT_WINNER' || (mkt.marketName || '').toLowerCase() === 'moneyline')) {
           entry.mlId = marketId;
           (mkt.runners || []).forEach(ref => {
             if (ref.selectionId != null && ref.runnerName) entry.mlRunners[ref.selectionId] = ref.runnerName;
