@@ -214,6 +214,8 @@ async function fetchOnePage(entityId, sport, season, token, offset, beforeEndsAt
   return data.listings || [];
 }
 
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
 async function fetchListings(entityId, sport, season, token) {
   const PAGE_SIZE = 10;
   const MAX_PAGES = 5;
@@ -222,10 +224,10 @@ async function fetchListings(entityId, sport, season, token) {
   let beforeEndsAt = null;
 
   for (let page = 0; page < MAX_PAGES; page++) {
+    if (page > 0) await sleep(400); // avoid 429 between pages
     const listings = await fetchOnePage(entityId, sport, season, token, page > 0 ? offset : null, beforeEndsAt);
     all.push(...listings);
-    if (listings.length < PAGE_SIZE) break; // last page
-    // Stop paginating if all listings on this page are already seen (caught up)
+    if (listings.length < PAGE_SIZE) break;
     const anyNew = listings.some(l => !seenIds.has(String(l.id || '')));
     if (!anyNew) break;
     beforeEndsAt = listings[listings.length - 1].endsAt;
@@ -244,6 +246,7 @@ async function poll() {
   console.log('pass-scanner: poll', new Date().toISOString());
 
   for (const target of TARGETS) {
+    await sleep(300); // 300ms between targets to stay under RS rate limit
     let listings;
     try {
       listings = await fetchListings(target.entityId, target.sport, target.season, token);
