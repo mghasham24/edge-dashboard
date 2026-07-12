@@ -3280,7 +3280,7 @@
                 + 'style="width:15px;height:15px;cursor:pointer;accent-color:var(--green)">';
             var autoTag = autoFrom
                 ? '<span style="display:inline-block;font-size:9px;font-weight:700;color:#f5a623;background:rgba(245,166,35,0.12);border:1px solid rgba(245,166,35,0.3);border-radius:3px;padding:1px 4px;margin-left:4px;white-space:nowrap;letter-spacing:.04em;vertical-align:middle">' + (autoFrom === '__auto__' ? 'Other side taken' : 'Took ' + escHtml(autoFrom)) + '</span>'
-                : '';
+                : (taken ? '<span style="display:inline-block;font-size:9px;font-weight:700;color:#4caf50;background:rgba(76,175,80,0.12);border:1px solid rgba(76,175,80,0.3);border-radius:3px;padding:1px 4px;margin-left:4px;white-space:nowrap;letter-spacing:.04em;vertical-align:middle">Taken</span>' : '');
             var trRowStyle = taken ? 'opacity:0.4' + (autoFrom ? ';border-left:3px solid #f5a623' : '') : '';
             html += '<tr class="' + trStyle.trim() + '" data-row-id="' + escHtml(r.id) + '" style="' + trRowStyle + '">'
                 + '<td>' + cbHtml + autoTag + '</td>'
@@ -3334,7 +3334,7 @@
                 + redirectBtn
                 // Footer: auto-taken badge (left) + checkbox (right)
                 + '<div class="evm-footer">'
-                +   (autoFrom ? '<span style="font-size:9px;font-weight:700;color:#f5a623;background:rgba(245,166,35,0.12);border:1px solid rgba(245,166,35,0.3);border-radius:3px;padding:2px 5px;letter-spacing:.04em">' + (autoFrom === '__auto__' ? 'Other side taken' : 'Took ' + escHtml(autoFrom)) + '</span>' : '<span></span>')
+                +   (autoFrom ? '<span style="font-size:9px;font-weight:700;color:#f5a623;background:rgba(245,166,35,0.12);border:1px solid rgba(245,166,35,0.3);border-radius:3px;padding:2px 5px;letter-spacing:.04em">' + (autoFrom === '__auto__' ? 'Other side taken' : 'Took ' + escHtml(autoFrom)) + '</span>' : (taken ? '<span style="font-size:9px;font-weight:700;color:#4caf50;background:rgba(76,175,80,0.12);border:1px solid rgba(76,175,80,0.3);border-radius:3px;padding:2px 5px;letter-spacing:.04em">Taken</span>' : '<span></span>'))
                 +   '<input type="checkbox" class="evm-cb" data-id="' + escHtml(r.id) + '" '
                 +   (taken ? 'checked ' : '') + 'onchange="toggleBet(this.dataset.id)" title="Mark bet taken">'
                 + '</div>'
@@ -7607,7 +7607,7 @@
         var takenOp = betTaken[r.id] ? 'opacity:0.4;' : '';
         var autoRowTag = autoFromRow
             ? '<span style="display:inline-block;font-size:8px;font-weight:700;color:#f5a623;background:rgba(245,166,35,0.15);border:1px solid rgba(245,166,35,0.4);border-radius:3px;padding:1px 4px;margin-left:4px;letter-spacing:.03em;vertical-align:middle;white-space:nowrap">' + (autoFromRow === '__auto__' ? 'Other side taken' : 'Took ' + escHtml(autoFromRow)) + '</span>'
-            : '';
+            : (betTaken[r.id] ? '<span style="display:inline-block;font-size:8px;font-weight:700;color:#4caf50;background:rgba(76,175,80,0.15);border:1px solid rgba(76,175,80,0.4);border-radius:3px;padding:1px 4px;margin-left:4px;letter-spacing:.03em;vertical-align:middle;white-space:nowrap">Taken</span>' : '');
         return '<tr class="' + (r.edge != null && r.edge > 0 ? 'has-edge' : '') + (isC ? ' collapsed-row' : '') + '" data-gk="' + gk + '" data-row-id="' + r.id + '" style="' + takenBl + takenBg + takenOp + edgeBg(r.edge) + '">'
         + '<td class="game-td" data-label="Game"><div style="font-weight:600;display:flex;align-items:center;gap:5px">' + (r.mkt !== 'Total' && r.mkt !== 'RFI' ? teamLogoHtml(r.side, 16) : '') + '<span' + (rowGrad ? ' style="padding:1px 8px 1px 4px;background:linear-gradient(90deg,' + rowGrad + ',transparent);border-radius:3px"' : '') + (rfiColor ? ' style="color:' + rfiColor + '"' : '') + '>' + r.side + '</span>' + autoRowTag + '</div><div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px">' + r.game + '</div></td>'
         + '<td data-label="Market"><span class="mkt-badge">' + r.mkt + '</span></td>'
