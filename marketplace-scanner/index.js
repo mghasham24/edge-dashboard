@@ -1,7 +1,7 @@
 // marketplace-scanner/index.js
-// Pure HTTP FC marketplace scanner. Polls RS card marketplace every 2 min.
-// No Playwright. Sends Telegram alert when a target player card is listed
-// at or below their rating × RAX_PER_RATING.
+// Polls RS marketplace every 2 min for player PASS listings (listingType=userpassfull).
+// Alerts via Telegram when a new pass is listed for any target player.
+// No price filter — alert on every new listing.
 //
 // Required env vars:
 //   RS_AUTH_INFO   — RS auth token: userId!deviceId!token
@@ -16,12 +16,11 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
-const SEEN_FILE       = join(__dir, 'seen-ids.json');
+const SEEN_FILE         = join(__dir, 'seen-ids.json');
 const SHARED_TOKEN_FILE = '/root/raxedge/shared-token.txt';
 
-const DEVICE_UUID    = process.env.RS_DEVICE_UUID  || '2e0a38e2-0ee8-4f93-9a34-218ac1d10161';
+const DEVICE_UUID = process.env.RS_DEVICE_UUID || '2e0a38e2-0ee8-4f93-9a34-218ac1d10161';
 
-// Token: shared file written by pack scanner (freshest) → .env fallback
 function getToken() {
   try {
     const t = readFileSync(SHARED_TOKEN_FILE, 'utf8').trim();
@@ -29,29 +28,68 @@ function getToken() {
   } catch(_) {}
   return process.env.RS_AUTH_INFO || '';
 }
-const RS_PROXY_URL   = process.env.RS_PROXY_URL    || null;
-const TG_TOKEN       = process.env.TG_TOKEN        || '';
-const TG_CHAT        = process.env.TG_CHAT         || '';
 
-const RAX_PER_RATING = 13;
-const POLL_MS        = 2 * 60 * 1000;
+const RS_PROXY_URL = process.env.RS_PROXY_URL || null;
+const TG_TOKEN     = process.env.TG_TOKEN     || '';
+const TG_CHAT      = process.env.TG_CHAT      || '';
 
-// Entity IDs sourced from pack scanner gc-entity-ids.json
+const POLL_MS = 2 * 60 * 1000;
+
 const TARGETS = [
-  { key: 'guilavogui', entityId: '2348926' },
-  { key: 'denkey',     entityId: '2348553' },
-  { key: 'pec',        entityId: '2348684' },
-  { key: 'grimaldo',   entityId: '732879'  },
-  { key: 'ingvartsen', entityId: '2338416' },
-  { key: 'arfsten',    entityId: '2338050' },
+  // Golf 2026
+  { name: 'Scheffler',          entityId: '46046',   sport: 'golf', season: 2026 },
+  // Golf 2025
+  { name: 'Scheffler',          entityId: '46046',   sport: 'golf', season: 2025 },
+  { name: 'Ben Griffin',        entityId: '54591',   sport: 'golf', season: 2025 },
+  // Golf 2024
+  { name: 'Scheffler',          entityId: '46046',   sport: 'golf', season: 2024 },
+  { name: 'Schauffele',         entityId: '48081',   sport: 'golf', season: 2024 },
+  // Golf 2023
+  { name: 'Scheffler',          entityId: '46046',   sport: 'golf', season: 2023 },
+  { name: 'Viktor Hovland',     entityId: '46717',   sport: 'golf', season: 2023 },
+  // Golf 2022
+  { name: 'Scheffler',          entityId: '46046',   sport: 'golf', season: 2022 },
+  // Golf 2021
+  { name: 'Jon Rahm',           entityId: '46970',   sport: 'golf', season: 2021 },
+  { name: 'Sungjae Im',         entityId: '39971',   sport: 'golf', season: 2021 },
+  // Golf 2018
+  { name: 'Tony Finau',         entityId: '29725',   sport: 'golf', season: 2018 },
+  { name: 'Dustin Johnson',     entityId: '30925',   sport: 'golf', season: 2018 },
+  // Golf 2016
+  { name: 'Dustin Johnson',     entityId: '30925',   sport: 'golf', season: 2016 },
+  // Golf 2015
+  { name: 'Spieth',             entityId: '34046',   sport: 'golf', season: 2015 },
+  // Soccer 2025
+  { name: 'Messi',            entityId: '2337496', sport: 'soccer', season: 2025 },
+  { name: 'Haaland',         entityId: '461',     sport: 'soccer', season: 2025 },
+  { name: 'Olise',           entityId: '733199',  sport: 'soccer', season: 2025 },
+  { name: 'Luis Diaz',       entityId: '397',     sport: 'soccer', season: 2025 },
+  { name: 'Vinicius Jr',     entityId: '735023',  sport: 'soccer', season: 2025 },
+  { name: 'Enzo Fernandez',  entityId: '184',     sport: 'soccer', season: 2025 },
+  { name: 'Mbappe',          entityId: '735009',  sport: 'soccer', season: 2025 },
+  { name: 'Kane',            entityId: '733187',  sport: 'soccer', season: 2025 },
+  { name: 'Yamal',           entityId: '733142',  sport: 'soccer', season: 2025 },
+  { name: 'Bruno Fernandes', entityId: '485',     sport: 'soccer', season: 2025 },
+  { name: 'Van Dijk',        entityId: '421',     sport: 'soccer', season: 2025 },
+  { name: 'Bellingham',      entityId: '735030',  sport: 'soccer', season: 2025 },
+  { name: 'McKennie',        entityId: '734301',  sport: 'soccer', season: 2025 },
+  { name: 'Ingvartsen',      entityId: '2338416', sport: 'soccer', season: 2025 },
+  // NFL 2025
+  { name: 'Puka Nacua',      entityId: '24172',   sport: 'nfl', season: 2025 },
+  { name: 'McCaffrey',       entityId: '18877',   sport: 'nfl', season: 2025 },
+  // NFL 2024
+  { name: 'Saquon Barkley',  entityId: '19766',   sport: 'nfl', season: 2024 },
+  { name: 'Derrick Henry',   entityId: '17959',   sport: 'nfl', season: 2024 },
+  // NFL 2023
+  { name: 'McCaffrey',       entityId: '18877',   sport: 'nfl', season: 2023 },
+  { name: 'Mahomes',         entityId: '18890',   sport: 'nfl', season: 2023 },
 ];
 
-const RS_API_BASE = 'https://web.realapp.com/cardmarketplacelistings?sport=soccer&sort=new&filterEntityId=';
+function buildUrl(sport, entityId, season) {
+  return `https://web.realapp.com/cardmarketplacelistings?cohort=all&filterEntityType=player&listingType=userpassfull&prestige=all&rarity=all&season=${season}&sport=${sport}&limit=50&pageSize=50&filterEntityId=${entityId}`;
+}
 
 const dispatcher = RS_PROXY_URL ? new ProxyAgent(RS_PROXY_URL) : undefined;
-
-const RS_WEB_BASE = 'https://realsports.io';
-const DEVICE_NAME = '5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15';
 
 function hashidsEncode(number) {
   const saltChars = Array.from('realwebapp');
@@ -78,10 +116,6 @@ function hashidsEncode(number) {
   const uniq = keepUnique(alpha);
   alpha = without(uniq, seps);
   seps  = shuffle(only(seps, uniq), saltChars);
-  if (!seps.length || alpha.length/seps.length > 3.5) {
-    const sl = Math.ceil(alpha.length/3.5);
-    if (sl > seps.length) { seps.push(...alpha.slice(0,sl-seps.length)); alpha=alpha.slice(sl-seps.length); }
-  }
   alpha = shuffle(alpha, saltChars);
   const gc = Math.ceil(alpha.length/12);
   let guards;
@@ -112,7 +146,7 @@ function loadSeen() {
   if (existsSync(SEEN_FILE)) {
     try { seenIds = new Set(JSON.parse(readFileSync(SEEN_FILE, 'utf8'))); } catch(_) {}
   }
-  console.log('marketplace: loaded', seenIds.size, 'seen IDs');
+  console.log('pass-scanner: loaded', seenIds.size, 'seen IDs');
 }
 
 function saveSeen() {
@@ -129,111 +163,105 @@ async function sendTelegram(text) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chat_id: TG_CHAT, text, parse_mode: 'HTML' }),
     });
-    if (!res.ok) console.error('marketplace: telegram error', await res.text());
-  } catch(e) { console.error('marketplace: telegram error', e.message); }
+    if (!res.ok) console.error('pass-scanner: telegram error', await res.text());
+  } catch(e) { console.error('pass-scanner: telegram error', e.message); }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function getPlayerName(listing) {
-  const p = listing.card?.primaryPlayer;
-  if (!p) return null;
-  return [p.firstName, p.lastName].filter(Boolean).join(' ');
-}
-
-function cardRating(card) {
-  if (!card) return null;
-  return card.value ?? card.score ?? card.rating ?? card.overallScore ?? card.overallRating ?? null;
-}
-
-function listingPrice(listing) {
-  return listing.currentBidAmount ?? listing.minBidPrice ?? listing.buyNowPrice ?? null;
-}
 
 function formatEndsAt(endsAt) {
   if (!endsAt) return '';
   const diff = new Date(endsAt) - Date.now();
   if (diff <= 0) return ' | Ended';
-  const h = Math.floor(diff / 3600000);
-  const m = Math.floor((diff % 3600000) / 60000);
-  return h > 0 ? ` | Ends: ${h}h ${m}m` : ` | Ends: ${m}m`;
+  const totalHours = Math.floor(diff / 3600000);
+  const mins = Math.floor((diff % 3600000) / 60000);
+  if (totalHours >= 24) {
+    const days = Math.floor(totalHours / 24);
+    const hrs  = totalHours % 24;
+    return ` | Ends: ${days}d ${hrs}h`;
+  }
+  return totalHours > 0 ? ` | Ends: ${totalHours}h ${mins}m` : ` | Ends: ${mins}m`;
 }
 
-// ── Fetch listings for one player ─────────────────────────────────────────────
+// ── Fetch pass listings for one player ────────────────────────────────────────
 
-async function fetchListings(entityId, token) {
-  const res = await uFetch(RS_API_BASE + entityId, {
+async function fetchListings(entityId, sport, season, token) {
+  const res = await uFetch(buildUrl(sport, entityId, season), {
     dispatcher,
     headers: {
       'Accept': 'application/json',
       'Content-Type': 'application/json',
-      'Origin': RS_WEB_BASE,
-      'Referer': RS_WEB_BASE + '/',
+      'Origin': 'https://realsports.io',
+      'Referer': 'https://realsports.io/',
       'Sec-Fetch-Dest': 'empty',
       'Sec-Fetch-Mode': 'cors',
       'Sec-Fetch-Site': 'cross-site',
       'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
       'real-device-uuid': DEVICE_UUID,
-      'real-device-name': DEVICE_NAME,
       'real-device-type': 'desktop_web',
-      'real-version': '32',
+      'real-version': '34',
       'real-request-token': hashidsEncode(Date.now()),
       'real-auth-info': token,
     },
     signal: AbortSignal.timeout(10000),
   });
-  if (!res.ok) { console.error('marketplace: RS API error', res.status, 'for entity', entityId); return []; }
+  if (!res.ok) {
+    console.error('pass-scanner: RS API error', res.status, 'for entity', entityId);
+    return [];
+  }
   const data = await res.json();
-  return data.listings || data.items || data.data || [];
+  return data.listings || [];
 }
 
 // ── Poll ──────────────────────────────────────────────────────────────────────
 
 async function poll() {
   const token = getToken();
-  if (!token) { console.error('marketplace: no RS token available'); return; }
+  if (!token) { console.error('pass-scanner: no RS token available'); return; }
 
-  console.log('marketplace: poll', new Date().toISOString());
+  console.log('pass-scanner: poll', new Date().toISOString());
 
   for (const target of TARGETS) {
     let listings;
     try {
-      listings = await fetchListings(target.entityId, token);
+      listings = await fetchListings(target.entityId, target.sport, target.season, token);
     } catch(e) {
-      console.error('marketplace: fetch error for', target.key, e.message);
+      console.error('pass-scanner: fetch error for', target.name, e.message);
       continue;
     }
 
+    console.log('pass-scanner:', target.name, '→', listings.length, 'pass listing(s)');
+
     for (const listing of listings) {
-      const id = String(listing.id ?? listing.listingId ?? '');
+      const id = String(listing.id || '');
       if (!id || seenIds.has(id)) continue;
       seenIds.add(id);
 
-      const name     = getPlayerName(listing);
-      if (!name || !name.toLowerCase().includes(target.key)) continue;
-
-      const rating   = cardRating(listing.card) ?? cardRating(listing.card?.card) ?? null;
-      const price    = listingPrice(listing);
-      const maxPrice = rating != null ? rating * RAX_PER_RATING : null;
-
-      if (price == null) continue;
-
-      if (maxPrice != null && price > maxPrice) {
-        console.log(`marketplace: ${target.key} | rating ${rating} | price ${price} > max ${maxPrice.toFixed(1)} — skip`);
-        continue;
-      }
-
-      const rarity    = listing.card?.rarityLabel || '';
+      const name      = listing.card?.label || listing.card?.entity?.firstName + ' ' + listing.card?.entity?.lastName || target.name;
+      const rarity    = listing.card?.boostInfo?.rarityLabel || '';
+      const rating    = listing.value || listing.card?.boostValue || '';
+      const serial    = listing.mintNumber ? `#${listing.mintNumber}` : '';
+      const curBid    = listing.currentBidAmount;
       const buyNow    = listing.buyNowPrice;
+      const numBids   = listing.numBids || 0;
       const endsStr   = formatEndsAt(listing.endsAt);
-      const ratingStr = rating != null ? ` | Rating: ${rating}` : '';
-      const maxStr    = maxPrice != null ? ` | Max: ${maxPrice.toFixed(0)} Rax` : '';
-      const buyStr    = buyNow && buyNow !== price ? ` | Buy Now: ${buyNow} Rax` : '';
-      const hash      = listing.card?.hash || listing.card?.shareHash || listing.shareHash || '';
-      const cardUrl   = hash ? `\nhttps://www.realapp.com/${hash}` : '';
 
-      const msg = `🛒 <b>Marketplace Alert</b>\n${name ?? target.key}${rarity ? ` (${rarity})` : ''}${ratingStr}${maxStr}\nPrice: <b>${price} Rax</b>${buyStr}${endsStr}${cardUrl}`;
-      console.log(`marketplace: ALERT ${target.key} | ${rarity} | rating ${rating} | price ${price} / max ${maxPrice?.toFixed(0)}`);
+      const priceStr  = curBid != null ? `Current bid: <b>${curBid.toLocaleString()} Rax</b>` : '';
+      const buyStr    = buyNow && buyNow !== curBid ? ` | Buy Now: ${buyNow.toLocaleString()} Rax` : (buyNow ? ` | Buy Now: ${buyNow.toLocaleString()} Rax` : '');
+      const bidsStr   = numBids > 0 ? ` | ${numBids} bid${numBids !== 1 ? 's' : ''}` : '';
+      const link      = `https://realapp.com/cards?sport=${target.sport}&filterEntityId=${target.entityId}&listingType=userpassfull&sort=new`;
+
+      const seasonTag = target.sport !== 'soccer' ? ` (${target.season})` : '';
+      const priceForAvg = buyNow || curBid;
+      const avgRaw    = (priceForAvg && rating) ? Math.round(priceForAvg / rating) : null;
+      const avgVal    = avgRaw != null ? avgRaw.toLocaleString() : null;
+      const header    = avgRaw != null && avgRaw <= 20 ? '🔥 <b>Deal Alert</b>' : '📦 <b>Pass Listed</b>';
+      const line1     = `${name}${seasonTag}${rarity ? ` · ${rarity}` : ''}${avgVal ? ` · ${avgVal} Rax/pt` : ''}`;
+      const line2     = [rating ? `${rating} rated` : '', serial].filter(Boolean).join(' · ');
+      const line3     = `${priceStr}${buyStr}${bidsStr}${endsStr}`;
+      const msg = `${header}\n${line1}${line2 ? '\n' + line2 : ''}\n${line3}\n<a href="${link}">View on RS ↗</a>`;
+
+      console.log(`pass-scanner: ALERT ${target.name} | ${rarity} | ${rating} | bid ${curBid} | buy ${buyNow}`);
       await sendTelegram(msg);
     }
   }
@@ -244,6 +272,6 @@ async function poll() {
 // ── Start ─────────────────────────────────────────────────────────────────────
 
 loadSeen();
-await sendTelegram('✅ Marketplace scanner started. Targets: ' + TARGETS.join(', '));
+await sendTelegram('✅ Pass scanner started. Targets: ' + TARGETS.map(t => t.name).join(', '));
 await poll();
 setInterval(poll, POLL_MS);
