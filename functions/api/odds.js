@@ -155,7 +155,7 @@ function fail(status, msg) {
 
 async function fetchUFCFromFD(env, debugMode) {
   const FD_AK      = 'FhMFpcPWXMeyZxOx';
-  const LIST_URL   = `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=CUSTOM&customPageId=mma&_ak=${FD_AK}&timezone=America/New_York`;
+  const LIST_URL   = `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=CUSTOM&customPageId=ufc&_ak=${FD_AK}&timezone=America/New_York`;
   const PRICES_URL = 'https://smp.nj.sportsbook.fanduel.com/api/sports/fixedodds/readonly/v1/getMarketPrices?priceHistory=0';
   const CACHE_KEY  = 'fd_ufc_native';
   const CACHE_TTL  = 30;
