@@ -182,18 +182,11 @@ async function fetchUFCFromFD(env, debugMode) {
     'X-Sportsbook-Region': 'NJ',
   };
 
-  // Try two URL variants in parallel — whichever returns 200 wins
-  const LIST_URL_NJ = `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=SPORT&eventTypeId=26420387&_ak=${FD_AK}&timezone=America/New_York`;
-
   // Step 1: get UFC event list
   let events = [], listRaw = null;
   try {
-    const [r1, r2] = await Promise.all([
-      fetch(LIST_URL,    { headers, signal: AbortSignal.timeout(8000) }).catch(e => ({ ok: false, status: 0, _err: e.message })),
-      fetch(LIST_URL_NJ, { headers, signal: AbortSignal.timeout(8000) }).catch(e => ({ ok: false, status: 0, _err: e.message })),
-    ]);
-    const r = (r1.ok) ? r1 : (r2.ok ? r2 : r1);
-    listRaw = { status_api: r1.status || r1._err, status_nj: r2.status || r2._err, used: r1.ok ? 'api' : (r2.ok ? 'nj' : 'neither') };
+    const r = await fetch(LIST_URL, { headers, signal: AbortSignal.timeout(8000) });
+    listRaw = { status: r.status };
     if (r.ok) {
       const d = await r.json();
       const all = Object.values(d?.attachments?.events || {});
@@ -205,13 +198,12 @@ async function fetchUFCFromFD(env, debugMode) {
       });
       listRaw.filtered = events.length;
     } else {
-      listRaw.body1 = r1._err || (typeof r1.text === 'function' ? await r1.text().then(t => t.slice(0, 200)) : '');
-      listRaw.body2 = r2._err || (typeof r2.text === 'function' ? await r2.text().then(t => t.slice(0, 200)) : '');
+      listRaw.body = await r.text().then(t => t.slice(0, 300));
     }
   } catch(e) { listRaw = { error: e.message }; }
 
   if (debugMode === '1') {
-    return new Response(JSON.stringify({ LIST_URL, LIST_URL_NJ, listRaw, events: events.map(e => ({ id: e.eventId, name: e.name, openDate: e.openDate })) }), {
+    return new Response(JSON.stringify({ LIST_URL, listRaw, events: events.map(e => ({ id: e.eventId, name: e.name, openDate: e.openDate })) }), {
       headers: { 'Content-Type': 'application/json' }
     });
   }
@@ -220,19 +212,17 @@ async function fetchUFCFromFD(env, debugMode) {
 
   // Step 2: fetch event-page per fight in parallel to collect moneyline market IDs
   const fightData = {};
-
   const evDebug = {};
+
   await Promise.all(events.map(async (event) => {
     const evUrl = `https://api.sportsbook.fanduel.com/sbapi/event-page?_ak=${FD_AK}&eventId=${event.eventId}&tab=all&timezone=America%2FNew_York`;
     try {
       const r = await fetch(evUrl, { headers, signal: AbortSignal.timeout(8000) });
-      evDebug[event.eventId] = { status: r.status, url: evUrl };
+      evDebug[event.eventId] = { status: r.status };
       if (!r.ok) { evDebug[event.eventId].body = await r.text().then(t => t.slice(0, 200)); return; }
       const d = await r.json();
       const markets = d?.attachments?.markets || {};
       evDebug[event.eventId].marketCount = Object.keys(markets).length;
-      const allMarketMeta = Object.entries(markets).map(([id, m]) => ({ id, type: m.marketType, name: m.marketName }));
-      evDebug[event.eventId].markets = allMarketMeta;
       const entry = { name: event.name, openDate: event.openDate, mlId: null, mlRunners: {}, marketTypes: [] };
 
       Object.entries(markets).forEach(([marketId, mkt]) => {
@@ -247,7 +237,7 @@ async function fetchUFCFromFD(env, debugMode) {
       });
 
       if (entry.mlId) fightData[event.eventId] = entry;
-    } catch(e) { evDebug[event.eventId] = { error: e.message, url: evUrl }; }
+    } catch(e) { evDebug[event.eventId] = { error: e.message }; }
   }));
 
   if (debugMode === '2') {
@@ -263,27 +253,17 @@ async function fetchUFCFromFD(env, debugMode) {
 
   // Step 3: batch getMarketPrices for real-time odds
   let marketPricesList = [];
-  let pricesDebug = null;
   try {
     const pr = await fetch(PRICES_URL, {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ marketIds: allMarketIds }),
     });
-    pricesDebug = { status: pr.status, marketIds: allMarketIds };
     if (pr.ok) {
       const raw = await pr.json();
       marketPricesList = Array.isArray(raw) ? raw : (raw.marketPrices || []);
-      pricesDebug.returned = marketPricesList.length;
-      pricesDebug.sample = marketPricesList[0] || null;
-    } else {
-      pricesDebug.body = await pr.text().then(t => t.slice(0, 300));
     }
-  } catch(e) { pricesDebug = { error: e.message }; }
-
-  if (debugMode === '3') {
-    return new Response(JSON.stringify({ pricesDebug, marketPricesList }), { headers: { 'Content-Type': 'application/json' } });
-  }
+  } catch(e) {}
 
   const marketToEvent = {};
   Object.entries(fightData).forEach(([eventId, e]) => { if (e.mlId) marketToEvent[e.mlId] = eventId; });
