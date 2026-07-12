@@ -255,7 +255,8 @@ async function poll() {
       const priceForAvg = buyNow || curBid;
       const avgRaw    = (priceForAvg && rating) ? Math.round(priceForAvg / rating) : null;
       const avgVal    = avgRaw != null ? avgRaw.toLocaleString() : null;
-      const header    = avgRaw != null && avgRaw <= 20 ? '🔥 <b>Deal Alert</b>' : '📦 <b>Pass Listed</b>';
+      const sportEmoji = { golf: '⛳', soccer: '⚽', nfl: '🏈', nba: '🏀', nhl: '🏒', baseball: '⚾' }[target.sport] || '🎮';
+      const header    = avgRaw != null && avgRaw <= 20 ? `🔥 <b>Deal Alert</b>` : `${sportEmoji} <b>Pass Listed</b>`;
       const line1     = `${name}${seasonTag}${rarity ? ` · ${rarity}` : ''}${avgVal ? ` · ${avgVal} Rax/pt` : ''}`;
       const line2     = [rating ? `${rating} rated` : '', serial].filter(Boolean).join(' · ');
       const line3     = `${priceStr}${buyStr}${bidsStr}${endsStr}`;
