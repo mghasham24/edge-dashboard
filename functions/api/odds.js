@@ -186,10 +186,6 @@ async function fetchUFCNative(env, debugMode) {
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15',
     'Origin': 'https://sportsbook.draftkings.com',
     'Referer': 'https://sportsbook.draftkings.com/',
-    'x-client-name': 'web',
-    'x-pe-ep': 'SB',
-    'x-pe-cn': 'web',
-    'x-pe-loc': 'US-TX',
   };
 
   // Step 1: get UFC event list from DK league 9034
