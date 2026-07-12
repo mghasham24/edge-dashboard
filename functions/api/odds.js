@@ -2,10 +2,6 @@ import { getSession } from '../_lib/session.js';
 // functions/api/odds.js
 export async function onRequest(context) {
   const { request, env } = context;
-  const API_KEY = env.ODDS_API_KEY;
-  if (!API_KEY) {
-    return new Response(JSON.stringify({ error: 'Missing API key' }), { status: 500 });
-  }
 
   const url        = new URL(request.url);
   const sport      = url.searchParams.get('sport')      || 'basketball_nba';
@@ -15,13 +11,14 @@ export async function onRequest(context) {
   const session = await getSession(request, env.DB);
   if (!session) return fail(401, 'Not authenticated');
 
-  // UFC only runs on Saturdays/Sundays — block on all other days to save Odds API credits.
-  // Allow Sat (6), Sun (0), Mon (1) UTC to cover late-night fights running past midnight.
-  if (sport === 'mma_mixed_martial_arts' && !session.is_admin) {
-    const day = new Date().getUTCDay();
-    if (day !== 6 && day !== 0 && day !== 1) {
-      return new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
-    }
+  // UFC — DK native fetch (free, real-time). No Odds API credits consumed.
+  if (sport === 'mma_mixed_martial_arts') {
+    return fetchUFCNative(env);
+  }
+
+  const API_KEY = env.ODDS_API_KEY;
+  if (!API_KEY) {
+    return new Response(JSON.stringify({ error: 'Missing API key' }), { status: 500 });
   }
 
   // Strip spreads/totals for non-Pro users server-side — defeats client console bypass
@@ -152,4 +149,111 @@ function fail(status, msg) {
   return new Response(JSON.stringify({ error: msg }), {
     status, headers: { 'Content-Type': 'application/json' }
   });
+}
+
+// ── UFC native (DK) ───────────────────────────────────────────────────────────
+
+function parseAmericanDK(str) {
+  if (!str) return null;
+  const s = String(str).replace(/−/g, '-').replace(/[^0-9+\-]/g, '');
+  const n = parseInt(s, 10);
+  return isFinite(n) ? n : null;
+}
+
+async function fetchUFCNative(env) {
+  const DK_BASE   = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
+  const LEAGUE_ID = '9034';
+  const SUBCAT    = '13025';
+  const CACHE_KEY = 'dk_ufc_native';
+  const CACHE_TTL = 60;
+
+  const now = Math.floor(Date.now() / 1000);
+
+  try {
+    const cached = await env.DB.prepare(
+      'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
+    ).bind(CACHE_KEY).first();
+    if (cached && (now - cached.fetched_at) < CACHE_TTL) {
+      return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
+    }
+  } catch(e) {}
+
+  const headers = {
+    'Accept': '*/*',
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15',
+    'Origin': 'https://sportsbook.draftkings.com',
+    'Referer': 'https://sportsbook.draftkings.com/',
+    'x-client-name': 'web',
+    'x-pe-ep': 'SB',
+    'x-pe-cn': 'web',
+    'x-pe-loc': 'US-TX',
+  };
+
+  // Step 1: get UFC event list from DK league 9034
+  const evQ = encodeURIComponent(`$filter=leagueId eq '${LEAGUE_ID}'`);
+  const mQ1 = encodeURIComponent(`$filter=clientMetadata/subCategoryId eq '${SUBCAT}' AND tags/all(t: t ne 'SportcastBetBuilder')`);
+  const eventsUrl = `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${LEAGUE_ID}&eventsQuery=${evQ}&marketsQuery=${mQ1}&include=Events&entity=events`;
+
+  let events = [];
+  try {
+    const r = await fetch(eventsUrl, { headers });
+    if (r.ok) events = (await r.json()).events || [];
+  } catch(e) {}
+
+  if (!events.length) {
+    return new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  // Step 2: fetch moneyline for each event in parallel
+  const games = await Promise.all(events.map(async (ev) => {
+    const mQ2 = encodeURIComponent(
+      `$filter=eventId eq '${ev.id}' AND clientMetadata/subCategoryId eq '${SUBCAT}' AND tags/all(t: t ne 'SportcastBetBuilder') and tags/any(t: t eq 'OSB')`
+    );
+    const marketsUrl = `${DK_BASE}/controldata/event/eventSubcategory/v1/markets?isBatchable=false&templateVars=${ev.id}&marketsQuery=${mQ2}&include=MarketSplits&entity=markets`;
+
+    try {
+      const r = await fetch(marketsUrl, { headers });
+      if (!r.ok) return null;
+      const d = await r.json();
+
+      const mlMarket = (d.markets || []).find(m => m.name === 'Moneyline');
+      if (!mlMarket) return null;
+
+      const outcomes = (d.selections || [])
+        .filter(s => s.marketId === mlMarket.id)
+        .map(s => ({ name: s.label, price: parseAmericanDK(s.displayOdds && s.displayOdds.american) }))
+        .filter(o => o.price != null);
+
+      if (outcomes.length < 2) return null;
+
+      const homeP = (ev.participants || []).find(p => p.venueRole === 'Home');
+      const awayP = (ev.participants || []).find(p => p.venueRole === 'Away');
+
+      return {
+        id: ev.id,
+        sport_key: 'mma_mixed_martial_arts',
+        sport_title: 'MMA',
+        commence_time: ev.startEventDate,
+        home_team: homeP ? homeP.name : outcomes[0].name,
+        away_team: awayP ? awayP.name : outcomes[1].name,
+        bookmakers: [{
+          key: 'fanduel',
+          title: 'FanDuel',
+          last_update: new Date().toISOString(),
+          markets: [{ key: 'h2h', last_update: new Date().toISOString(), outcomes }],
+        }],
+      };
+    } catch(e) { return null; }
+  }));
+
+  const result = games.filter(Boolean);
+  const text   = JSON.stringify(result);
+
+  try {
+    await env.DB.prepare(
+      'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at'
+    ).bind(CACHE_KEY, text, now).run();
+  } catch(e) {}
+
+  return new Response(text, { headers: { 'Content-Type': 'application/json' } });
 }
