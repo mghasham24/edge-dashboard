@@ -188,10 +188,9 @@ async function fetchUFCNative(env, debugMode) {
     'Referer': 'https://sportsbook.draftkings.com/',
   };
 
-  // Step 1: get UFC event list from DK league 9034
-  // Manual percent-encoding for quotes/parens to match what nhalalts.js uses (encodeURIComponent
-  // leaves ' and () unencoded; Cloudflare fetch normalises them and DK WAF blocks the request)
-  const eventsUrl = `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${LEAGUE_ID}&eventsQuery=%24filter%3DleagueId%20eq%20%27${LEAGUE_ID}%27%20AND%20clientMetadata%2FSubcategories%2Fany%28s%3A%20s%2FId%20eq%20%27${SUBCAT}%27%29&marketsQuery=%24filter%3DclientMetadata%2FsubCategoryId%20eq%20%27${SUBCAT}%27%20AND%20tags%2Fall%28t%3A%20t%20ne%20%27SportcastBetBuilder%27%29&include=Events&entity=events`;
+  // Step 1: get UFC event list via DK public v5 API (sportsbook.draftkings.com, not nash —
+  // nash /league endpoint returns 403 from CF IPs for UFC specifically)
+  const eventsUrl = `https://sportsbook.draftkings.com/sites/US-SB/api/v5/eventgroups/${LEAGUE_ID}?format=json`;
 
   let events = [], eventsRaw = null;
   try {
@@ -199,9 +198,24 @@ async function fetchUFCNative(env, debugMode) {
     eventsRaw = { status: r.status };
     if (r.ok) {
       const d = await r.json();
-      eventsRaw.keys = Object.keys(d);
-      eventsRaw.eventsCount = (d.events || []).length;
-      events = d.events || [];
+      const eg = d.eventGroup || {};
+      const direct    = eg.events || [];
+      const subLeague = (eg.subLeagues || []).flatMap(sl => sl.events || []);
+      const all = [...direct, ...subLeague];
+      eventsRaw.directCount    = direct.length;
+      eventsRaw.subLeagueCount = subLeague.length;
+      eventsRaw.egKeys         = Object.keys(eg);
+      eventsRaw.sample         = all[0] ? Object.keys(all[0]) : [];
+      // Normalise v5 shape → internal shape
+      events = all.map(e => ({
+        id:             String(e.eventId),
+        name:           e.name || '',
+        startEventDate: e.startDate || e.startEventDate || '',
+        participants: [
+          { name: e.teamName1 || '', venueRole: 'Home' },
+          { name: e.teamName2 || '', venueRole: 'Away' },
+        ],
+      }));
     } else {
       eventsRaw.body = await r.text().then(t => t.slice(0, 300));
     }
