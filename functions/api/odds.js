@@ -11,6 +11,11 @@ export async function onRequest(context) {
   const session = await getSession(request, env.DB);
   if (!session) return fail(401, 'Not authenticated');
 
+  // UFC — FD native (free, real-time, updates during live fights)
+  if (sport === 'mma_mixed_martial_arts') {
+    return fetchUFCFromFD(env, url.searchParams.get('debug'));
+  }
+
   const API_KEY = env.ODDS_API_KEY;
   if (!API_KEY) {
     return new Response(JSON.stringify({ error: 'Missing API key' }), { status: 500 });
@@ -144,4 +149,164 @@ function fail(status, msg) {
   return new Response(JSON.stringify({ error: msg }), {
     status, headers: { 'Content-Type': 'application/json' }
   });
+}
+
+// ── UFC native (FD) ───────────────────────────────────────────────────────────
+
+async function fetchUFCFromFD(env, debugMode) {
+  const FD_AK      = 'FhMFpcPWXMeyZxOx';
+  const LIST_URL   = `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=CUSTOM&customPageId=mma&_ak=${FD_AK}&timezone=America/New_York`;
+  const PRICES_URL = 'https://smp.nj.sportsbook.fanduel.com/api/sports/fixedodds/readonly/v1/getMarketPrices?priceHistory=0';
+  const CACHE_KEY  = 'fd_ufc_native';
+  const CACHE_TTL  = 30;
+
+  const now   = Math.floor(Date.now() / 1000);
+  const nowMs = Date.now();
+
+  if (!debugMode) {
+    try {
+      const cached = await env.DB.prepare(
+        'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
+      ).bind(CACHE_KEY).first();
+      if (cached && (now - cached.fetched_at) < CACHE_TTL) {
+        return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
+      }
+    } catch(e) {}
+  }
+
+  const headers = {
+    'Accept': 'application/json',
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15',
+    'Origin': 'https://sportsbook.fanduel.com',
+    'Referer': 'https://sportsbook.fanduel.com/',
+  };
+
+  // Step 1: get UFC event list
+  let events = [], listRaw = null;
+  try {
+    const r = await fetch(LIST_URL, { headers });
+    listRaw = { status: r.status };
+    if (r.ok) {
+      const d = await r.json();
+      const all = Object.values(d?.attachments?.events || {});
+      listRaw.total = all.length;
+      // Include fights on active card: started <6h ago or starting <48h from now
+      events = all.filter(e => {
+        if (!e.openDate) return false;
+        const t = new Date(e.openDate).getTime();
+        return t > nowMs - 6 * 60 * 60 * 1000 && t < nowMs + 48 * 60 * 60 * 1000;
+      });
+      listRaw.filtered = events.length;
+    } else {
+      listRaw.body = await r.text().then(t => t.slice(0, 300));
+    }
+  } catch(e) { listRaw = { error: e.message }; }
+
+  if (debugMode === '1') {
+    return new Response(JSON.stringify({ LIST_URL, listRaw, events: events.map(e => ({ id: e.eventId, name: e.name, openDate: e.openDate })) }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  if (!events.length) return new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
+
+  // Step 2: fetch event-page per fight in parallel to collect moneyline market IDs
+  const fightData = {};
+
+  await Promise.all(events.map(async (event) => {
+    const evUrl = `https://sbapi.nj.sportsbook.fanduel.com/api/event-page?_ak=${FD_AK}&eventId=${event.eventId}&tab=all&timezone=America/New_York`;
+    try {
+      const r = await fetch(evUrl, { headers, signal: AbortSignal.timeout(8000) });
+      if (!r.ok) return;
+      const d = await r.json();
+      const markets = d?.attachments?.markets || {};
+      const entry = { name: event.name, openDate: event.openDate, mlId: null, mlRunners: {}, marketTypes: [] };
+
+      Object.entries(markets).forEach(([marketId, mkt]) => {
+        const mktType = mkt.marketType || '';
+        if (!entry.marketTypes.includes(mktType)) entry.marketTypes.push(mktType);
+        // FD may call the UFC ML market MONEY_LINE, MATCH_WINNER, or FIGHT_WINNER
+        if (!entry.mlId && (mktType === 'MONEY_LINE' || mktType === 'MATCH_WINNER' || mktType === 'FIGHT_WINNER' || (mkt.marketName || '').toLowerCase().includes('winner'))) {
+          entry.mlId = marketId;
+          (mkt.runners || []).forEach(ref => {
+            if (ref.selectionId != null && ref.runnerName) entry.mlRunners[ref.selectionId] = ref.runnerName;
+          });
+        }
+      });
+
+      if (entry.mlId) fightData[event.eventId] = entry;
+    } catch(e) {}
+  }));
+
+  if (debugMode === '2') {
+    return new Response(JSON.stringify({
+      fightCount: Object.keys(fightData).length,
+      fights: Object.entries(fightData).map(([id, e]) => ({ id, name: e.name, mlId: e.mlId, marketTypes: e.marketTypes, runners: e.mlRunners }))
+    }), { headers: { 'Content-Type': 'application/json' } });
+  }
+
+  const allMarketIds = Object.values(fightData).map(e => e.mlId).filter(Boolean);
+  if (!allMarketIds.length) return new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
+
+  // Step 3: batch getMarketPrices for real-time odds
+  let marketPricesList = [];
+  try {
+    const pr = await fetch(PRICES_URL, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ marketIds: allMarketIds }),
+    });
+    if (pr.ok) {
+      const raw = await pr.json();
+      marketPricesList = Array.isArray(raw) ? raw : (raw.marketPrices || []);
+    }
+  } catch(e) {}
+
+  const marketToEvent = {};
+  Object.entries(fightData).forEach(([eventId, e]) => { if (e.mlId) marketToEvent[e.mlId] = eventId; });
+
+  // Build Odds API-compatible output
+  const gamesMap = {};
+  marketPricesList.forEach(mp => {
+    const eventId = marketToEvent[mp.marketId];
+    if (!eventId || !fightData[eventId] || mp.marketStatus !== 'OPEN') return;
+    const entry = fightData[eventId];
+    const outcomes = (mp.runnerDetails || [])
+      .filter(rd => rd.runnerStatus === 'ACTIVE' && rd.winRunnerOdds?.americanDisplayOdds?.americanOddsInt != null)
+      .map(rd => ({
+        name:  entry.mlRunners[rd.selectionId] || entry.mlRunners[String(rd.selectionId)] || '',
+        price: rd.winRunnerOdds.americanDisplayOdds.americanOddsInt,
+      }))
+      .filter(o => o.name);
+    if (outcomes.length >= 2) gamesMap[eventId] = { outcomes, name: entry.name, openDate: entry.openDate };
+  });
+
+  const result = Object.entries(gamesMap).map(([eventId, g]) => {
+    // FD event names: "Fighter A @ Fighter B" or "Fighter A vs Fighter B"
+    const sep   = g.name.includes('@') ? '@' : 'vs';
+    const parts = g.name.split(sep).map(s => s.trim());
+    return {
+      id:           String(eventId),
+      sport_key:    'mma_mixed_martial_arts',
+      sport_title:  'MMA',
+      commence_time: g.openDate,
+      home_team:    parts[1] || g.outcomes[0]?.name || '',
+      away_team:    parts[0] || g.outcomes[1]?.name || '',
+      bookmakers: [{
+        key:         'fanduel',
+        title:       'FanDuel',
+        last_update: new Date().toISOString(),
+        markets:     [{ key: 'h2h', last_update: new Date().toISOString(), outcomes: g.outcomes }],
+      }],
+    };
+  });
+
+  const text = JSON.stringify(result);
+  try {
+    await env.DB.prepare(
+      'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at'
+    ).bind(CACHE_KEY, text, now).run();
+  } catch(e) {}
+
+  return new Response(text, { headers: { 'Content-Type': 'application/json' } });
 }
