@@ -221,19 +221,21 @@ async function fetchUFCFromFD(env, debugMode) {
   // Step 2: fetch event-page per fight in parallel to collect moneyline market IDs
   const fightData = {};
 
+  const evDebug = {};
   await Promise.all(events.map(async (event) => {
     const evUrl = `https://api.sportsbook.fanduel.com/sbapi/event-page?_ak=${FD_AK}&eventId=${event.eventId}&tab=all&timezone=America%2FNew_York`;
     try {
       const r = await fetch(evUrl, { headers, signal: AbortSignal.timeout(8000) });
-      if (!r.ok) return;
+      evDebug[event.eventId] = { status: r.status, url: evUrl };
+      if (!r.ok) { evDebug[event.eventId].body = await r.text().then(t => t.slice(0, 200)); return; }
       const d = await r.json();
       const markets = d?.attachments?.markets || {};
+      evDebug[event.eventId].marketCount = Object.keys(markets).length;
       const entry = { name: event.name, openDate: event.openDate, mlId: null, mlRunners: {}, marketTypes: [] };
 
       Object.entries(markets).forEach(([marketId, mkt]) => {
         const mktType = mkt.marketType || '';
         if (!entry.marketTypes.includes(mktType)) entry.marketTypes.push(mktType);
-        // FD may call the UFC ML market MONEY_LINE, MATCH_WINNER, or FIGHT_WINNER
         if (!entry.mlId && (mktType === 'MONEY_LINE' || mktType === 'MATCH_WINNER' || mktType === 'FIGHT_WINNER' || (mkt.marketName || '').toLowerCase().includes('winner'))) {
           entry.mlId = marketId;
           (mkt.runners || []).forEach(ref => {
@@ -243,12 +245,13 @@ async function fetchUFCFromFD(env, debugMode) {
       });
 
       if (entry.mlId) fightData[event.eventId] = entry;
-    } catch(e) {}
+    } catch(e) { evDebug[event.eventId] = { error: e.message, url: evUrl }; }
   }));
 
   if (debugMode === '2') {
     return new Response(JSON.stringify({
       fightCount: Object.keys(fightData).length,
+      evDebug,
       fights: Object.entries(fightData).map(([id, e]) => ({ id, name: e.name, mlId: e.mlId, marketTypes: e.marketTypes, runners: e.mlRunners }))
     }), { headers: { 'Content-Type': 'application/json' } });
   }
