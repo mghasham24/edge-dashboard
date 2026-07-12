@@ -231,6 +231,8 @@ async function fetchUFCFromFD(env, debugMode) {
       const d = await r.json();
       const markets = d?.attachments?.markets || {};
       evDebug[event.eventId].marketCount = Object.keys(markets).length;
+      const allMarketMeta = Object.entries(markets).map(([id, m]) => ({ id, type: m.marketType, name: m.marketName }));
+      evDebug[event.eventId].markets = allMarketMeta;
       const entry = { name: event.name, openDate: event.openDate, mlId: null, mlRunners: {}, marketTypes: [] };
 
       Object.entries(markets).forEach(([marketId, mkt]) => {
