@@ -179,18 +179,25 @@ async function fetchUFCFromFD(env, debugMode) {
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15',
     'Origin': 'https://sportsbook.fanduel.com',
     'Referer': 'https://sportsbook.fanduel.com/',
+    'X-Sportsbook-Region': 'NJ',
   };
+
+  // Try two URL variants in parallel — whichever returns 200 wins
+  const LIST_URL_NJ = `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=SPORT&eventTypeId=26420387&_ak=${FD_AK}&timezone=America/New_York`;
 
   // Step 1: get UFC event list
   let events = [], listRaw = null;
   try {
-    const r = await fetch(LIST_URL, { headers });
-    listRaw = { status: r.status };
+    const [r1, r2] = await Promise.all([
+      fetch(LIST_URL,    { headers, signal: AbortSignal.timeout(8000) }).catch(e => ({ ok: false, status: 0, _err: e.message })),
+      fetch(LIST_URL_NJ, { headers, signal: AbortSignal.timeout(8000) }).catch(e => ({ ok: false, status: 0, _err: e.message })),
+    ]);
+    const r = (r1.ok) ? r1 : (r2.ok ? r2 : r1);
+    listRaw = { status_api: r1.status || r1._err, status_nj: r2.status || r2._err, used: r1.ok ? 'api' : (r2.ok ? 'nj' : 'neither') };
     if (r.ok) {
       const d = await r.json();
       const all = Object.values(d?.attachments?.events || {});
       listRaw.total = all.length;
-      // Include fights on active card: started <6h ago or starting <48h from now
       events = all.filter(e => {
         if (!e.openDate) return false;
         const t = new Date(e.openDate).getTime();
@@ -198,12 +205,13 @@ async function fetchUFCFromFD(env, debugMode) {
       });
       listRaw.filtered = events.length;
     } else {
-      listRaw.body = await r.text().then(t => t.slice(0, 300));
+      listRaw.body1 = r1._err || (typeof r1.text === 'function' ? await r1.text().then(t => t.slice(0, 200)) : '');
+      listRaw.body2 = r2._err || (typeof r2.text === 'function' ? await r2.text().then(t => t.slice(0, 200)) : '');
     }
   } catch(e) { listRaw = { error: e.message }; }
 
   if (debugMode === '1') {
-    return new Response(JSON.stringify({ LIST_URL, listRaw, events: events.map(e => ({ id: e.eventId, name: e.name, openDate: e.openDate })) }), {
+    return new Response(JSON.stringify({ LIST_URL, LIST_URL_NJ, listRaw, events: events.map(e => ({ id: e.eventId, name: e.name, openDate: e.openDate })) }), {
       headers: { 'Content-Type': 'application/json' }
     });
   }
