@@ -158,7 +158,7 @@ async function fetchUFCFromFD(env, debugMode) {
   const LIST_URL   = `https://api.sportsbook.fanduel.com/sbapi/content-managed-page?page=SPORT&eventTypeId=26420387&_ak=${FD_AK}&timezone=America%2FNew_York`;
   const PRICES_URL = 'https://smp.nj.sportsbook.fanduel.com/api/sports/fixedodds/readonly/v1/getMarketPrices?priceHistory=0';
   const CACHE_KEY  = 'fd_ufc_native';
-  const CACHE_TTL  = 30;
+  const CACHE_TTL  = 5;
 
   const now   = Math.floor(Date.now() / 1000);
   const nowMs = Date.now();
