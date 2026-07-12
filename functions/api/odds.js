@@ -263,17 +263,27 @@ async function fetchUFCFromFD(env, debugMode) {
 
   // Step 3: batch getMarketPrices for real-time odds
   let marketPricesList = [];
+  let pricesDebug = null;
   try {
     const pr = await fetch(PRICES_URL, {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ marketIds: allMarketIds }),
     });
+    pricesDebug = { status: pr.status, marketIds: allMarketIds };
     if (pr.ok) {
       const raw = await pr.json();
       marketPricesList = Array.isArray(raw) ? raw : (raw.marketPrices || []);
+      pricesDebug.returned = marketPricesList.length;
+      pricesDebug.sample = marketPricesList[0] || null;
+    } else {
+      pricesDebug.body = await pr.text().then(t => t.slice(0, 300));
     }
-  } catch(e) {}
+  } catch(e) { pricesDebug = { error: e.message }; }
+
+  if (debugMode === '3') {
+    return new Response(JSON.stringify({ pricesDebug, marketPricesList }), { headers: { 'Content-Type': 'application/json' } });
+  }
 
   const marketToEvent = {};
   Object.entries(fightData).forEach(([eventId, e]) => { if (e.mlId) marketToEvent[e.mlId] = eventId; });
