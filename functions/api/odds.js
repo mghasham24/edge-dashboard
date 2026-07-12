@@ -189,9 +189,9 @@ async function fetchUFCNative(env, debugMode) {
   };
 
   // Step 1: get UFC event list from DK league 9034
-  const evQ = encodeURIComponent(`$filter=leagueId eq '${LEAGUE_ID}' AND clientMetadata/Subcategories/any(s: s/Id eq '${SUBCAT}')`);
-  const mQ1 = encodeURIComponent(`$filter=clientMetadata/subCategoryId eq '${SUBCAT}' AND tags/all(t: t ne 'SportcastBetBuilder')`);
-  const eventsUrl = `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${LEAGUE_ID}&eventsQuery=${evQ}&marketsQuery=${mQ1}&include=Events&entity=events`;
+  // Manual percent-encoding for quotes/parens to match what nhalalts.js uses (encodeURIComponent
+  // leaves ' and () unencoded; Cloudflare fetch normalises them and DK WAF blocks the request)
+  const eventsUrl = `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${LEAGUE_ID}&eventsQuery=%24filter%3DleagueId%20eq%20%27${LEAGUE_ID}%27%20AND%20clientMetadata%2FSubcategories%2Fany%28s%3A%20s%2FId%20eq%20%27${SUBCAT}%27%29&marketsQuery=%24filter%3DclientMetadata%2FsubCategoryId%20eq%20%27${SUBCAT}%27%20AND%20tags%2Fall%28t%3A%20t%20ne%20%27SportcastBetBuilder%27%29&include=Events&entity=events`;
 
   let events = [], eventsRaw = null;
   try {
@@ -219,10 +219,7 @@ async function fetchUFCNative(env, debugMode) {
 
   // Step 2: fetch moneyline for each event in parallel
   const games = await Promise.all(events.map(async (ev) => {
-    const mQ2 = encodeURIComponent(
-      `$filter=eventId eq '${ev.id}' AND clientMetadata/subCategoryId eq '${SUBCAT}' AND tags/all(t: t ne 'SportcastBetBuilder') and tags/any(t: t eq 'OSB')`
-    );
-    const marketsUrl = `${DK_BASE}/controldata/event/eventSubcategory/v1/markets?isBatchable=false&templateVars=${ev.id}&marketsQuery=${mQ2}&include=MarketSplits&entity=markets`;
+    const marketsUrl = `${DK_BASE}/controldata/event/eventSubcategory/v1/markets?isBatchable=false&templateVars=${ev.id}&marketsQuery=%24filter%3DeventId%20eq%20%27${ev.id}%27%20AND%20clientMetadata%2FsubCategoryId%20eq%20%27${SUBCAT}%27%20AND%20tags%2Fall%28t%3A%20t%20ne%20%27SportcastBetBuilder%27%29%20and%20tags%2Fany%28t%3A%20t%20eq%20%27OSB%27%29&include=MarketSplits&entity=markets`;
 
     try {
       const r = await fetch(marketsUrl, { headers });
