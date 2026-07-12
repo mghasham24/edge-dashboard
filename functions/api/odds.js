@@ -13,7 +13,8 @@ export async function onRequest(context) {
 
   // UFC — DK native fetch (free, real-time). No Odds API credits consumed.
   if (sport === 'mma_mixed_martial_arts') {
-    return fetchUFCNative(env);
+    const debug = url.searchParams.get('debug');
+    return fetchUFCNative(env, debug);
   }
 
   const API_KEY = env.ODDS_API_KEY;
@@ -160,7 +161,7 @@ function parseAmericanDK(str) {
   return isFinite(n) ? n : null;
 }
 
-async function fetchUFCNative(env) {
+async function fetchUFCNative(env, debugMode) {
   const DK_BASE   = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
   const LEAGUE_ID = '9034';
   const SUBCAT    = '13025';
@@ -169,14 +170,16 @@ async function fetchUFCNative(env) {
 
   const now = Math.floor(Date.now() / 1000);
 
-  try {
-    const cached = await env.DB.prepare(
-      'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
-    ).bind(CACHE_KEY).first();
-    if (cached && (now - cached.fetched_at) < CACHE_TTL) {
-      return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
-    }
-  } catch(e) {}
+  if (!debugMode) {
+    try {
+      const cached = await env.DB.prepare(
+        'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
+      ).bind(CACHE_KEY).first();
+      if (cached && (now - cached.fetched_at) < CACHE_TTL) {
+        return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
+      }
+    } catch(e) {}
+  }
 
   const headers = {
     'Accept': '*/*',
@@ -190,15 +193,29 @@ async function fetchUFCNative(env) {
   };
 
   // Step 1: get UFC event list from DK league 9034
-  const evQ = encodeURIComponent(`$filter=leagueId eq '${LEAGUE_ID}'`);
+  const evQ = encodeURIComponent(`$filter=leagueId eq '${LEAGUE_ID}' AND clientMetadata/Subcategories/any(s: s/Id eq '${SUBCAT}')`);
   const mQ1 = encodeURIComponent(`$filter=clientMetadata/subCategoryId eq '${SUBCAT}' AND tags/all(t: t ne 'SportcastBetBuilder')`);
   const eventsUrl = `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${LEAGUE_ID}&eventsQuery=${evQ}&marketsQuery=${mQ1}&include=Events&entity=events`;
 
-  let events = [];
+  let events = [], eventsRaw = null;
   try {
     const r = await fetch(eventsUrl, { headers });
-    if (r.ok) events = (await r.json()).events || [];
-  } catch(e) {}
+    eventsRaw = { status: r.status };
+    if (r.ok) {
+      const d = await r.json();
+      eventsRaw.keys = Object.keys(d);
+      eventsRaw.eventsCount = (d.events || []).length;
+      events = d.events || [];
+    } else {
+      eventsRaw.body = await r.text().then(t => t.slice(0, 300));
+    }
+  } catch(e) { eventsRaw = { error: e.message }; }
+
+  if (debugMode) {
+    return new Response(JSON.stringify({ eventsUrl, eventsRaw, eventIds: events.map(e => ({ id: e.id, name: e.name, start: e.startEventDate })) }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
 
   if (!events.length) {
     return new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
