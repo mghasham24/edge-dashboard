@@ -75,7 +75,11 @@ const TARGETS = [
   { name: 'McKennie',        entityId: '734301',  sport: 'soccer', season: 2025 },
   { name: 'Ingvartsen',      entityId: '2338416', sport: 'soccer', season: 2025 },
   // NBA 2024
-  { name: 'Luka Doncic',       entityId: '20001984', sport: 'nba', season: 2024 },
+  { name: 'Luka Doncic',       entityId: '20001984', sport: 'nba',   season: 2024 },
+  // NHL 2023
+  { name: 'Draisaitl',         entityId: '8477934',  sport: 'nhl',   season: 2023 },
+  // NCAAM 2024
+  { name: 'Zach Edey',         entityId: '4600663',  sport: 'ncaam', season: 2024 },
   // NFL 2025
   { name: 'McCaffrey',       entityId: '18877',   sport: 'nfl', season: 2025 },
   // NFL 2024
@@ -280,7 +284,7 @@ async function poll() {
       const priceForAvg = buyNow || curBid;
       const avgRaw    = (priceForAvg && rating) ? Math.round(priceForAvg / rating) : null;
       const avgVal    = avgRaw != null ? avgRaw.toLocaleString() : null;
-      const sportEmoji = { golf: '⛳', soccer: '⚽', nfl: '🏈', nba: '🏀', nhl: '🏒', baseball: '⚾' }[target.sport] || '🎮';
+      const sportEmoji = { golf: '⛳', soccer: '⚽', nfl: '🏈', nba: '🏀', nhl: '🏒', baseball: '⚾', ncaam: '🏀' }[target.sport] || '🎮';
       const isDeal    = avgRaw != null && avgRaw <= 20;
       if (target.sport === 'golf' && !isDeal) continue;
       const header    = isDeal ? `🔥 <b>Deal Alert</b>` : `${sportEmoji} <b>Pass Listed</b>`;
