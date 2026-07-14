@@ -74,6 +74,8 @@ const TARGETS = [
   { name: 'Bellingham',      entityId: '735030',  sport: 'soccer', season: 2025 },
   { name: 'McKennie',        entityId: '734301',  sport: 'soccer', season: 2025 },
   { name: 'Ingvartsen',      entityId: '2338416', sport: 'soccer', season: 2025 },
+  // NBA 2024
+  { name: 'Luka Doncic',       entityId: '20001984', sport: 'nba', season: 2024 },
   // NFL 2025
   { name: 'McCaffrey',       entityId: '18877',   sport: 'nfl', season: 2025 },
   // NFL 2024
