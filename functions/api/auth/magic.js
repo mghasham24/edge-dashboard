@@ -27,10 +27,13 @@ export async function onRequestGet({ request, env }) {
     'INSERT INTO sessions (user_id, token, expires_at) VALUES (?,?,?)'
   ).bind(row.user_id, sessionToken, exp).run();
 
+  const redirect = url.searchParams.get('redirect') || '/';
+  const dest = redirect.startsWith('/') ? redirect : '/';
+
   return new Response(null, {
     status: 302,
     headers: {
-      'Location': '/',
+      'Location': dest,
       'Set-Cookie': `session=${sessionToken}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_DAYS * 86400}`
     }
   });

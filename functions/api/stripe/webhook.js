@@ -262,9 +262,24 @@ export async function onRequestPost({ request, env }) {
     }
 
     case 'invoice.payment_failed': {
-      // Intentionally no-op. Stripe retries failed payments via its dunning schedule.
-      // Downgrade only happens when Stripe gives up and fires customer.subscription.deleted.
-      // Immediately dropping to free on first failure punishes users before Stripe even retries.
+      // No plan change — Stripe retries via dunning; downgrade only on subscription.deleted.
+      // On the first failure only, send a "update your card" email.
+      if (obj.attempt_count === 1 && obj.customer && env.RESEND_API_KEY) {
+        try {
+          const user = await env.DB.prepare(
+            'SELECT id, email FROM users WHERE stripe_customer_id=?'
+          ).bind(obj.customer).first();
+          if (user) {
+            const alreadySent = await env.DB.prepare(
+              'SELECT 1 FROM onboarding_emails WHERE user_id=? AND step=5'
+            ).bind(user.id).first();
+            if (!alreadySent) {
+              const portalMagicUrl = await createMagicLink(user.id, env, '/api/stripe/portal');
+              await sendDunningEmail(user.id, user.email, portalMagicUrl, env);
+            }
+          }
+        } catch(e) {}
+      }
       break;
     }
   }
@@ -354,14 +369,15 @@ function hexRandom(bytes) {
     .map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-async function createMagicLink(userId, env) {
+async function createMagicLink(userId, env, redirect) {
   const token = hexRandom(32);
   const expires = Math.floor(Date.now() / 1000) + 48 * 3600; // 48h
   await env.DB.prepare(
     'INSERT OR REPLACE INTO magic_tokens (token, user_id, expires_at) VALUES (?,?,?)'
   ).bind(token, userId, expires).run();
   const base = 'https://raxedge.com';
-  return base + '/api/auth/magic?token=' + token;
+  const url = base + '/api/auth/magic?token=' + token;
+  return redirect ? url + '&redirect=' + encodeURIComponent(redirect) : url;
 }
 
 async function sendEmail1(userId, email, magicUrl, env) {
@@ -396,6 +412,36 @@ async function sendEmail1(userId, email, magicUrl, env) {
   const now = Math.floor(Date.now() / 1000);
   await env.DB.prepare(
     'INSERT OR IGNORE INTO onboarding_emails (user_id, step, sent_at) VALUES (?,1,?)'
+  ).bind(userId, now).run();
+}
+
+async function sendDunningEmail(userId, email, portalMagicUrl, env) {
+  const html = `
+    <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:40px 24px;background:#0a0a0c;color:#f0eff5;border-radius:12px">
+      <div style="font-size:20px;font-weight:700;margin-bottom:4px">RaxEdge</div>
+      <div style="font-size:13px;color:#7a7990;margin-bottom:32px">Billing</div>
+      <div style="font-size:18px;font-weight:600;margin-bottom:16px">Your payment didn't go through</div>
+      <p style="color:#b0afc5;font-size:14px;line-height:1.7;margin:0 0 16px">We weren't able to charge your card for your RaxEdge Pro subscription. Stripe will retry automatically, but to avoid losing access you can update your payment method now.</p>
+      <a href="${portalMagicUrl}" style="display:inline-block;background:#4f6ef7;color:#fff;text-decoration:none;padding:13px 32px;border-radius:7px;font-weight:600;font-size:15px;margin-bottom:28px">Update payment method</a>
+      <p style="color:#4a4960;font-size:13px;margin:0">— Moe, RaxEdge</p>
+    </div>`;
+
+  await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    signal: AbortSignal.timeout(10000),
+    headers: { 'Authorization': 'Bearer ' + env.RESEND_API_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from: 'Moe at RaxEdge <noreply@raxedge.com>',
+      to: email,
+      subject: "Your payment didn't go through",
+      text: `Hey,\n\nWe weren't able to charge your card for your RaxEdge Pro subscription. Stripe will retry automatically, but to avoid losing access you can update your payment method now.\n\nUpdate your card: ${portalMagicUrl}\n\n— Moe, RaxEdge`,
+      html
+    })
+  });
+
+  const now = Math.floor(Date.now() / 1000);
+  await env.DB.prepare(
+    'INSERT OR IGNORE INTO onboarding_emails (user_id, step, sent_at) VALUES (?,5,?)'
   ).bind(userId, now).run();
 }
 
