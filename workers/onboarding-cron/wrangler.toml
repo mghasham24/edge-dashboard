@@ -1,0 +1,30 @@
+# workers/onboarding-cron/wrangler.toml
+# Deploy separately from the Pages project:
+#   cd workers/onboarding-cron && npx wrangler deploy
+#
+# Required secrets (set via: npx wrangler secret put RESEND_API_KEY):
+#   RESEND_API_KEY   — same key used by the Pages project
+
+name = "raxedge-onboarding-cron"
+main = "index.js"
+compatibility_date = "2024-09-23"
+usage_model = "unbound"
+
+[vars]
+SITE_URL = "https://raxedge.com"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "edge-db"
+database_id = "ff9b93f1-81f8-4370-bd57-f634e0300443"
+
+# Runs once daily at 2pm UTC (10am ET)
+[triggers]
+crons = ["0 14 * * *"]
+
+[observability]
+enabled = true
+
+[observability.logs]
+enabled = true
+invocation_logs = true

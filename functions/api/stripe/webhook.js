@@ -178,6 +178,7 @@ export async function onRequestPost({ request, env }) {
             await env.DB.prepare(
               'UPDATE users SET plan=\'free\', stripe_sub_id=NULL, pro_expires_at=NULL, had_free_trial=0, billing_interval=\'monthly\' WHERE stripe_customer_id=?'
             ).bind(obj.customer).run();
+            break; // abused — skip welcome email
           } else {
             // Activate pro immediately — don't rely on subscription.created webhook firing successfully
             const proExpiresAt = subData.trial_end || subData.current_period_end || null;
@@ -195,6 +196,24 @@ export async function onRequestPost({ request, env }) {
           ).bind(obj.subscription, proExpiresAt, billingInterval, obj.customer).run();
           const subInterval = subData?.items?.data?.[0]?.price?.recurring?.interval || 'month';
           await rewardReferrerForCustomer(obj.customer, subData?.metadata || {}, env.DB, subInterval);
+        }
+
+        // Send Email 1 (welcome) — fire-and-forget, don't block webhook response
+        if ((isTrial || isPaid) && env.RESEND_API_KEY) {
+          try {
+            const user = await env.DB.prepare(
+              'SELECT id, email FROM users WHERE stripe_customer_id=?'
+            ).bind(obj.customer).first();
+            if (user) {
+              const alreadySent = await env.DB.prepare(
+                'SELECT 1 FROM onboarding_emails WHERE user_id=? AND step=1'
+              ).bind(user.id).first();
+              if (!alreadySent) {
+                const magicUrl = await createMagicLink(user.id, env);
+                await sendEmail1(user.id, user.email, magicUrl, env);
+              }
+            }
+          } catch(e) {}
         }
       }
       break;
@@ -326,6 +345,58 @@ async function resolveFingerprint(pmId, stripeCustomerId, secretKey) {
   } catch(e) {}
 
   return null;
+}
+
+// ── Onboarding email helpers ──────────────────────────
+
+function hexRandom(bytes) {
+  return Array.from(crypto.getRandomValues(new Uint8Array(bytes)))
+    .map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function createMagicLink(userId, env) {
+  const token = hexRandom(32);
+  const expires = Math.floor(Date.now() / 1000) + 48 * 3600; // 48h
+  await env.DB.prepare(
+    'INSERT OR REPLACE INTO magic_tokens (token, user_id, expires_at) VALUES (?,?,?)'
+  ).bind(token, userId, expires).run();
+  const base = 'https://raxedge.com';
+  return base + '/api/auth/magic?token=' + token;
+}
+
+async function sendEmail1(userId, email, magicUrl, env) {
+  const html = `
+    <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:40px 24px;background:#0a0a0c;color:#f0eff5;border-radius:12px">
+      <div style="font-size:20px;font-weight:700;margin-bottom:4px">RaxEdge</div>
+      <div style="font-size:13px;color:#7a7990;margin-bottom:32px">Pro Member</div>
+      <div style="font-size:18px;font-weight:600;margin-bottom:16px">You're in — here's what to do first</div>
+      <p style="color:#b0afc5;font-size:14px;line-height:1.7;margin:0 0 24px">Here's the fastest way to see what you're paying for:</p>
+      <ol style="color:#b0afc5;font-size:14px;line-height:1.9;margin:0 0 28px;padding-left:20px">
+        <li>Open your dashboard — every bet flagged green is one where the math is in your favor right now</li>
+        <li>Tap any bet to see edge %, Kelly stake suggestion, and where the value is coming from</li>
+        <li>That's it. No setup, no linking accounts required to start seeing value</li>
+      </ol>
+      <a href="${magicUrl}" style="display:inline-block;background:#4f6ef7;color:#fff;text-decoration:none;padding:13px 32px;border-radius:7px;font-weight:600;font-size:15px;margin-bottom:28px">Open my dashboard →</a>
+      <p style="color:#4a4960;font-size:13px;margin:0">Questions? Just reply to this email.<br>— Moe, RaxEdge</p>
+    </div>`;
+
+  await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    signal: AbortSignal.timeout(10000),
+    headers: { 'Authorization': 'Bearer ' + env.RESEND_API_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from: 'Moe at RaxEdge <noreply@raxedge.com>',
+      to: email,
+      subject: "You're in — here's what to do first",
+      text: `You're now a RaxEdge Pro member.\n\nHere's the fastest way to see what you're paying for:\n\n1. Open your dashboard — every bet flagged green is one where the math is in your favor right now\n2. Tap any bet to see edge %, Kelly stake suggestion, and where the value is coming from\n3. That's it. No setup required.\n\nOpen your dashboard: ${magicUrl}\n\nQuestions? Just reply to this email.\n— Moe, RaxEdge`,
+      html
+    })
+  });
+
+  const now = Math.floor(Date.now() / 1000);
+  await env.DB.prepare(
+    'INSERT OR IGNORE INTO onboarding_emails (user_id, step, sent_at) VALUES (?,1,?)'
+  ).bind(userId, now).run();
 }
 
 // ── Reward referrer helper ────────────────────────────
