@@ -12,7 +12,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Barlow:wght@400;500;600;700&display=swap">
-    <link rel="stylesheet" href="/app.css?v=13">
+    <link rel="stylesheet" href="/app.css?v=14">
     <script src="https://www.google.com/recaptcha/api.js?render=6Let4qMsAAAAAFhvh6wy6Ai_Ruzq2j4MIlMhqRnl"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/hashids/2.3.0/hashids.min.js"></script>
     <script>
@@ -444,7 +444,11 @@
             <button id="ev-only-btn" onclick="toggleEVOnly()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:.05em;padding:6px 14px;border-radius:5px;cursor:pointer;white-space:nowrap">+EV Only</button>
             <button id="rs-adj-btn" onclick="toggleRsAdj()" title="Shift RS% by +1 or +2 points to test sensitivity to price movement" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:.05em;padding:6px 14px;border-radius:5px;cursor:pointer;white-space:nowrap">RS +0%</button>
             <button id="excl-bets-btn" onclick="toggleExclusiveBets()" title="When on, checking one side automatically checks the other side too (marks the full game as positioned)" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:.05em;padding:6px 14px;border-radius:5px;cursor:pointer;white-space:nowrap">1 Side</button>
-            <button onclick="toggleAll()" style="display:none;background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:11px;font-weight:600;padding:6px 12px;border-radius:5px;cursor:pointer;text-transform:uppercase;letter-spacing:.04em;margin-left:auto" id="mobile-collapse-btn">Collapse All</button>
+            <div class="dash-toggle" id="dash-toggle" style="margin-left:auto">
+                <button class="dash-tog-btn" data-mode="simple" onclick="setDashMode('simple')">Simple</button>
+                <button class="dash-tog-btn" data-mode="advanced" onclick="setDashMode('advanced')">Advanced</button>
+            </div>
+            <button onclick="toggleAll()" style="display:none;background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:11px;font-weight:600;padding:6px 12px;border-radius:5px;cursor:pointer;text-transform:uppercase;letter-spacing:.04em" id="mobile-collapse-btn">Collapse All</button>
         </div>
         </div><!-- /.subheader-sticky -->
 
@@ -458,14 +462,14 @@
                 <thead>
                     <tr>
                         <th>Game</th>
-                        <th>Mkt</th>
+                        <th class="adv-col">Mkt</th>
                         <th>Side</th>
-                        <th class="r">FD Odds</th>
-                        <th class="r">Adj. Fair %</th>
-                        <th class="c">Real %</th>
-                        <th class="r">Edge</th>
-                        <th class="r" title="Estimated return on stake at small bet sizes (~$10-50). Overstates EV for larger bets due to slippage." style="cursor:help">EV *</th>
-                        <th class="r">Units</th>
+                        <th class="r adv-col">FD Odds</th>
+                        <th class="r adv-col">Adj. Fair %</th>
+                        <th class="c"><span class="th-adv">Real %</span><span class="th-simple">RS Odds</span></th>
+                        <th class="r adv-col">Edge</th>
+                        <th class="r ev-th" title="Estimated return on stake at small bet sizes (~$10-50). Overstates EV for larger bets due to slippage." style="cursor:help;position:relative;white-space:nowrap">EV <button class="ev-info-btn" onclick="toggleEvPopover(event)" title="EV guide">ⓘ</button><div id="ev-popover" class="ev-popover" style="display:none"><div class="ev-pop-title">EV % Guide</div><div class="ev-pop-row"><span class="ev-pop-range">0–2%</span><span class="ev-pop-label">Slight edge</span></div><div class="ev-pop-row"><span class="ev-pop-range">2–5%</span><span class="ev-pop-label">Solid value</span></div><div class="ev-pop-row"><span class="ev-pop-range">5–10%</span><span class="ev-pop-label">Strong value</span></div><div class="ev-pop-row"><span class="ev-pop-range ev-pop-best">10%+</span><span class="ev-pop-label ev-pop-best">Excellent value</span></div></div></th>
+                        <th class="r adv-col">Units</th>
                         <th class="r">Bet Size</th>
                         <th class="c" style="width:36px" title="Mark bet as taken">✓</th>
                     </tr>
@@ -864,6 +868,6 @@
     <!-- end #dashboard -->
 
     <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script>
-    <script src="/app.js?v=55"></script>
+    <script src="/app.js?v=56"></script>
 </body>
 </html>

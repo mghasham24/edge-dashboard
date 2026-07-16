@@ -2410,7 +2410,98 @@
         button, a, select, input { -webkit-tap-highlight-color: transparent; }
     }
 
-    /* ── Simple Mode Toggle ─────────────────────────────────────────────────── */
+    /* ── Simple / Advanced toggle ───────────────────────────────────────────── */
+
+    #main-table.dash-simple .adv-col { display: none }
+
+    /* Column header label swap */
+    .th-simple { display: none }
+    .th-adv    { display: inline }
+    #main-table.dash-simple .th-simple { display: inline }
+    #main-table.dash-simple .th-adv    { display: none }
+
+    /* Toggle pill */
+    .dash-toggle {
+        display: flex;
+        border: 1px solid var(--border2);
+        border-radius: 5px;
+        overflow: hidden;
+        flex-shrink: 0
+    }
+    .dash-tog-btn {
+        background: var(--bg3);
+        border: none;
+        color: var(--muted);
+        font-family: var(--sans);
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: .05em;
+        padding: 6px 14px;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: background .15s, color .15s
+    }
+    .dash-tog-btn.active {
+        background: var(--accent);
+        color: #fff
+    }
+
+    /* EV info button */
+    .ev-info-btn {
+        background: none;
+        border: none;
+        color: var(--muted2);
+        font-size: 11px;
+        cursor: pointer;
+        padding: 0 0 0 3px;
+        vertical-align: middle;
+        line-height: 1
+    }
+    .ev-info-btn:hover { color: var(--accent) }
+
+    /* EV popover */
+    .ev-popover {
+        position: absolute;
+        top: calc(100% + 4px);
+        right: 0;
+        min-width: 180px;
+        background: var(--bg2);
+        border: 1px solid var(--border2);
+        border-radius: 7px;
+        padding: 10px 12px;
+        z-index: 200;
+        box-shadow: 0 4px 20px rgba(0,0,0,.4);
+        cursor: default
+    }
+    .ev-pop-title {
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+        color: var(--muted2);
+        margin-bottom: 8px
+    }
+    .ev-pop-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 3px 0;
+        border-bottom: 1px solid var(--border)
+    }
+    .ev-pop-row:last-child { border-bottom: none }
+    .ev-pop-range {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--muted);
+        white-space: nowrap
+    }
+    .ev-pop-label {
+        font-size: 11px;
+        color: var(--text);
+        text-align: right
+    }
+    .ev-pop-best { color: var(--green) }
+
     /* Disable animations for users who prefer reduced motion */
     @media (prefers-reduced-motion: reduce) {
         *, *::before, *::after {

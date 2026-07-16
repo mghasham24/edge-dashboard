@@ -833,6 +833,38 @@
         }
     })();
 
+    // Dashboard mode: 'simple' (default for new users) or 'advanced'
+    var dashMode = localStorage.getItem('raxedge_dash_mode') || 'simple';
+    (function() {
+        applyDashMode(dashMode);
+    })();
+
+    function applyDashMode(mode) {
+        var tbl = document.getElementById('main-table');
+        if (tbl) tbl.classList.toggle('dash-simple', mode === 'simple');
+        document.querySelectorAll('.dash-tog-btn').forEach(function(btn) {
+            btn.classList.toggle('active', btn.getAttribute('data-mode') === mode);
+        });
+    }
+
+    function setDashMode(mode) {
+        dashMode = mode;
+        localStorage.setItem('raxedge_dash_mode', mode);
+        applyDashMode(mode);
+    }
+
+    function toggleEvPopover(event) {
+        event.stopPropagation();
+        var pop = document.getElementById('ev-popover');
+        if (!pop) return;
+        pop.style.display = pop.style.display === 'block' ? 'none' : 'block';
+    }
+
+    document.addEventListener('click', function() {
+        var pop = document.getElementById('ev-popover');
+        if (pop) pop.style.display = 'none';
+    });
+
     // Called when main dashboard unit size changes — sync to EV tab
     var _origUnitOninput = (function() {
         var el = document.getElementById('unit-size');
@@ -7520,14 +7552,14 @@
             var _lrc = r.mkt === 'Total' ? teamColor(r.ps === 'A' ? (_lgp[0]||'').trim() : (_lgp[1]||'').trim()) : teamColor(r.side);
             return '<tr class="' + (isC ? 'collapsed-row' : '') + '" data-gk="' + gk + '" data-row-id="' + r.id + '" style="border-left:3px solid ' + _lrc + ';cursor:pointer;' + edgeBg(null) + '" onclick="showUpgradeModal(\'Spread and Total markets are available on the Pro plan. Upgrade to unlock spread and total betting across all sports.\')">'
             + '<td class="game-td" data-label="Game"><div style="font-weight:600;filter:blur(4px);user-select:none;pointer-events:none">' + r.side + '</div><div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px">' + r.game + '</div></td>'
-            + '<td data-label="Market"><span class="mkt-badge">' + r.mkt + '</span></td>'
+            + '<td class="adv-col" data-label="Market"><span class="mkt-badge">' + r.mkt + '</span></td>'
             + '<td data-label="Side" style="filter:blur(4px);user-select:none;pointer-events:none;color:var(--muted);font-size:12px">' + r.side + '</td>'
-            + '<td class="r" data-label="Consensus" style="filter:blur(4px);user-select:none;pointer-events:none"><span class="odds-neg">-115</span></td>'
-            + '<td class="r" data-label="Adj. Fair %" style="filter:blur(4px);user-select:none;pointer-events:none;font-family:var(--mono);color:var(--muted)">50.0%</td>'
+            + '<td class="r adv-col" data-label="Consensus" style="filter:blur(4px);user-select:none;pointer-events:none"><span class="odds-neg">-115</span></td>'
+            + '<td class="r adv-col" data-label="Adj. Fair %" style="filter:blur(4px);user-select:none;pointer-events:none;font-family:var(--mono);color:var(--muted)">50.0%</td>'
             + '<td class="c" data-label="Real %"></td>'
-            + '<td class="r" data-label="Edge" style="filter:blur(4px);user-select:none;pointer-events:none"><span class="e-weak">+2.5%</span></td>'
+            + '<td class="r adv-col" data-label="Edge" style="filter:blur(4px);user-select:none;pointer-events:none"><span class="e-weak">+2.5%</span></td>'
             + '<td class="r" data-label="EV"><span style="filter:blur(4px);font-family:var(--mono);font-size:12px;font-weight:600;color:var(--green);user-select:none;pointer-events:none">+5.2%</span><span style="font-size:9px;font-weight:700;background:var(--accent);color:#fff;border-radius:3px;padding:1px 4px;margin-left:3px;vertical-align:middle">PRO</span></td>'
-            + '<td class="r" data-label="Units"><span class="u-pass">—</span></td>'
+            + '<td class="r adv-col" data-label="Units"><span class="u-pass">—</span></td>'
             + '<td class="r" data-label="Bet"><span class="u-pass">—</span></td>'
             + '<td class="c"></td>'
             + '</tr>';
@@ -7610,14 +7642,14 @@
             : (betTaken[r.id] ? '<span style="display:inline-block;font-size:8px;font-weight:700;color:#4caf50;background:rgba(76,175,80,0.15);border:1px solid rgba(76,175,80,0.4);border-radius:3px;padding:1px 4px;margin-left:4px;letter-spacing:.03em;vertical-align:middle;white-space:nowrap">Taken</span>' : '');
         return '<tr class="' + (r.edge != null && r.edge > 0 ? 'has-edge' : '') + (isC ? ' collapsed-row' : '') + '" data-gk="' + gk + '" data-row-id="' + r.id + '" style="' + takenBl + takenBg + takenOp + edgeBg(r.edge) + '">'
         + '<td class="game-td" data-label="Game"><div style="font-weight:600;display:flex;align-items:center;gap:5px">' + (r.mkt !== 'Total' && r.mkt !== 'RFI' ? teamLogoHtml(r.side, 16) : '') + '<span' + (rowGrad ? ' style="padding:1px 8px 1px 4px;background:linear-gradient(90deg,' + rowGrad + ',transparent);border-radius:3px"' : '') + (rfiColor ? ' style="color:' + rfiColor + '"' : '') + '>' + r.side + '</span>' + autoRowTag + '</div><div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px">' + r.game + '</div></td>'
-        + '<td data-label="Market"><span class="mkt-badge">' + r.mkt + '</span></td>'
+        + '<td class="adv-col" data-label="Market"><span class="mkt-badge">' + r.mkt + '</span></td>'
         + '<td data-label="Side" style="color:var(--muted);font-size:12px">' + r.side + '</td>'
-        + '<td class="r" data-label="Consensus"><span class="' + aCls + '">' + am + '</span></td>'
-        + '<td class="r" data-label="Adj. Fair %" style="font-family:var(--mono);color:var(--muted)">' + afStr + '</td>'
+        + '<td class="r adv-col" data-label="Consensus"><span class="' + aCls + '">' + am + '</span></td>'
+        + '<td class="r adv-col" data-label="Adj. Fair %" style="font-family:var(--mono);color:var(--muted)">' + afStr + '</td>'
         + '<td class="c" data-label="Real %"><div style="display:flex;flex-direction:column;align-items:center;gap:2px;justify-content:center"><div style="display:flex;align-items:center;gap:4px;justify-content:center"><input class="cell-inp' + (pv ? ' filled' : '') + '" type="number" min="1" max="99" step="1" inputmode="numeric" placeholder="-" value="' + pv + '" data-id="' + r.id + '" oninput="setPred(this)" onblur="setPred(this)" onkeydown="if(event.key===\'Enter\')this.blur()"><span class="pred-unit">%</span></div>' + (vols[r.id] ? '<span style="font-size:9px;color:var(--muted2);font-family:var(--mono)">' + vols[r.id] + ' vol</span>' : '') + '</div></td>'
-        + '<td class="r" data-label="Edge"><div class="edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:' + bw + 'px;background:' + bc + '"></div></div><span class="edge-val ' + ec + '">' + es + '</span></div></td>'
+        + '<td class="r adv-col" data-label="Edge"><div class="edge-wrap"><div class="edge-bar-bg"><div class="edge-bar-fill" style="width:' + bw + 'px;background:' + bc + '"></div></div><span class="edge-val ' + ec + '">' + es + '</span></div></td>'
         + '<td class="r" data-label="EV">' + (evGated ? evH : '<span style="filter:blur(4px);font-family:var(--mono);font-size:12px;font-weight:600;color:var(--green);user-select:none">+8.4%</span><span style="font-size:9px;font-weight:700;background:var(--accent);color:#fff;border-radius:3px;padding:1px 4px;margin-left:3px;vertical-align:middle">PRO</span>') + '</td>'
-        + '<td class="r" data-label="Units">' + uH + '</td>'
+        + '<td class="r adv-col" data-label="Units">' + uH + '</td>'
         + '<td class="r" data-label="Bet">' + bH + '</td>'
         + '<td class="c"><input type="checkbox" data-id="' + r.id + '" ' + (betTaken[r.id] ? 'checked' : '') + ' onchange="toggleBet(\'' + r.id + '\')" style="width:16px;height:16px;cursor:pointer;accent-color:var(--green)"></td>'
         + '</tr>';
