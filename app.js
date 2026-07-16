@@ -1425,6 +1425,9 @@
     function mktLbl(m) {
         return m === 'h2h' ? 'ML' : m === 'spreads' ? 'Spread' : m === 'totals' ? 'Total' : m;
     }
+    function fmtMkt(m) {
+        return m === 'ML' ? 'Game Winner' : m;
+    }
     function fmtAm(n) {
         n = Number(n);
         return !isFinite(n) ? '-' : n >= 0 ? '+' + n : '' + n;
@@ -3280,7 +3283,7 @@
             var uStr    = (ev != null && u > 0) ? '+' + u.toFixed(2) + 'u' : '—';
             var betAmt  = (u > 0) ? RAX_ICON + Math.round(u * evUnit) : '—';
             var displayPt = (yourLines[r.id] != null) ? yourLines[r.id] : r.pt;
-            var mktLabel = r.mkt + (displayPt != null ? ' ' + (displayPt >= 0 ? '+' : '') + displayPt : '');
+            var mktLabel = fmtMkt(r.mkt) + (displayPt != null ? ' ' + (displayPt >= 0 ? '+' : '') + displayPt : '');
             var amStr   = (r.am >= 0 ? '+' : '') + r.am;
             var afStr   = r.af != null ? (r.af * 100).toFixed(1) + '%' : '—';
             var predPct = r._pred != null ? (r._pred * 100).toFixed(1) : '';
@@ -7552,7 +7555,7 @@
             var _lrc = r.mkt === 'Total' ? teamColor(r.ps === 'A' ? (_lgp[0]||'').trim() : (_lgp[1]||'').trim()) : teamColor(r.side);
             return '<tr class="' + (isC ? 'collapsed-row' : '') + '" data-gk="' + gk + '" data-row-id="' + r.id + '" style="border-left:3px solid ' + _lrc + ';cursor:pointer;' + edgeBg(null) + '" onclick="showUpgradeModal(\'Spread and Total markets are available on the Pro plan. Upgrade to unlock spread and total betting across all sports.\')">'
             + '<td class="game-td" data-label="Game"><div style="font-weight:600;filter:blur(4px);user-select:none;pointer-events:none">' + r.side + '</div><div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px">' + r.game + '</div></td>'
-            + '<td data-label="Market"><span class="mkt-badge">' + r.mkt + '</span></td>'
+            + '<td data-label="Market"><span class="mkt-badge">' + fmtMkt(r.mkt) + '</span></td>'
             + '<td data-label="Side" style="filter:blur(4px);user-select:none;pointer-events:none;color:var(--muted);font-size:12px">' + r.side + '</td>'
             + '<td class="r adv-col" data-label="Consensus" style="filter:blur(4px);user-select:none;pointer-events:none"><span class="odds-neg">-115</span></td>'
             + '<td class="r adv-col" data-label="Adj. Fair %" style="filter:blur(4px);user-select:none;pointer-events:none;font-family:var(--mono);color:var(--muted)">50.0%</td>'
@@ -7642,7 +7645,7 @@
             : (betTaken[r.id] ? '<span style="display:inline-block;font-size:8px;font-weight:700;color:#4caf50;background:rgba(76,175,80,0.15);border:1px solid rgba(76,175,80,0.4);border-radius:3px;padding:1px 4px;margin-left:4px;letter-spacing:.03em;vertical-align:middle;white-space:nowrap">Taken</span>' : '');
         return '<tr class="' + (r.edge != null && r.edge > 0 ? 'has-edge' : '') + (isC ? ' collapsed-row' : '') + '" data-gk="' + gk + '" data-row-id="' + r.id + '" style="' + takenBl + takenBg + takenOp + edgeBg(r.edge) + '">'
         + '<td class="game-td" data-label="Game"><div style="font-weight:600;display:flex;align-items:center;gap:5px">' + (r.mkt !== 'Total' && r.mkt !== 'RFI' ? teamLogoHtml(r.side, 16) : '') + '<span' + (rowGrad ? ' style="padding:1px 8px 1px 4px;background:linear-gradient(90deg,' + rowGrad + ',transparent);border-radius:3px"' : '') + (rfiColor ? ' style="color:' + rfiColor + '"' : '') + '>' + r.side + '</span>' + autoRowTag + '</div><div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px">' + r.game + '</div></td>'
-        + '<td data-label="Market"><span class="mkt-badge">' + r.mkt + '</span></td>'
+        + '<td data-label="Market"><span class="mkt-badge">' + fmtMkt(r.mkt) + '</span></td>'
         + '<td data-label="Side" style="color:var(--muted);font-size:12px">' + r.side + '</td>'
         + '<td class="r adv-col" data-label="Consensus"><span class="' + aCls + '">' + am + '</span></td>'
         + '<td class="r adv-col" data-label="Adj. Fair %" style="font-family:var(--mono);color:var(--muted)">' + afStr + '</td>'
