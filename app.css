@@ -2413,6 +2413,7 @@
     /* ── Simple / Advanced toggle ───────────────────────────────────────────── */
 
     #main-table.dash-simple .adv-col { display: none }
+    #main-table.dash-simple .vol-span { display: none }
 
     /* Column header label swap */
     .th-simple { display: none }
