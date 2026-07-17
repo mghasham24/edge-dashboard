@@ -2025,7 +2025,8 @@
                         var teamNick = r.side.split(' ').pop();
                         // Wrapper so opacity applies to row + ev together
                         var teamWrap = document.createElement('div');
-                        teamWrap.style.cssText = 'margin-bottom:5px' + (betTaken[r.id] ? ';opacity:0.4' : '');
+                        teamWrap.className = 'mc-team-wrap';
+                        teamWrap.style.cssText = 'margin-bottom:5px;padding-left:6px;border-left:3px solid transparent;border-radius:1px' + (betTaken[r.id] ? ';opacity:0.4' : '');
                         // Top row: logo + nickname | input | checkbox
                         var sideRow = document.createElement('div');
                         sideRow.style.cssText = 'display:flex;align-items:center;gap:5px';
@@ -2257,7 +2258,8 @@
                     mktRows.forEach(function(r) {
                         var pval = preds[r.id] || '';
                         var sideRow = document.createElement('div');
-                        sideRow.style.cssText = 'display:flex;align-items:center;gap:5px;margin-bottom:4px' + (betTaken[r.id] ? ';opacity:0.4' : '');
+                        sideRow.className = 'mc-team-wrap';
+                        sideRow.style.cssText = 'display:flex;align-items:center;gap:5px;margin-bottom:4px;padding-left:6px;border-left:3px solid transparent;border-radius:1px' + (betTaken[r.id] ? ';opacity:0.4' : '');
                         var sideLbl = document.createElement('span');
                         sideLbl.style.cssText = 'font-family:var(--sans);font-size:11px;font-weight:600;color:var(--text);flex-shrink:0;min-width:32px';
                         sideLbl.textContent = r.ps === 'A' ? 'YRFI' : 'NRFI';
@@ -2540,6 +2542,13 @@
             } else {
                 evEl.style.display = 'none';
             }
+        }
+        // Green left accent on the team row when there's a valued bet
+        var wrapEl = el.closest('.mc-team-wrap');
+        if (wrapEl) {
+            var showAccent = u > 0 && evForU != null && evForU > 0;
+            var accentColor = showAccent ? (evForU >= 5 ? 'var(--green)' : 'var(--yellow)') : 'transparent';
+            wrapEl.style.borderLeftColor = accentColor;
         }
     }
 
