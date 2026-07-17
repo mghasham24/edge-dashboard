@@ -2414,6 +2414,8 @@
 
     #main-table.dash-simple .adv-col { display: none }
     #main-table.dash-simple .vol-span { display: none }
+    #mobile-cards.dash-simple .mc-adv { display: none }
+    #mobile-cards.dash-simple .mc-vol { display: none }
 
     /* Column header label swap */
     .th-simple { display: none }

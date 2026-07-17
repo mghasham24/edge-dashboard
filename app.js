@@ -842,6 +842,8 @@
     function applyDashMode(mode) {
         var tbl = document.getElementById('main-table');
         if (tbl) tbl.classList.toggle('dash-simple', mode === 'simple');
+        var mc = document.getElementById('mobile-cards');
+        if (mc) mc.classList.toggle('dash-simple', mode === 'simple');
         document.querySelectorAll('.dash-tog-btn').forEach(function(btn) {
             btn.classList.toggle('active', btn.getAttribute('data-mode') === mode);
         });
@@ -1898,11 +1900,12 @@
                 lbl.className = 'mc-label';
                 lbl.style.cssText = 'display:flex;align-items:center;justify-content:space-between';
                 var lblTxt = document.createElement('span');
-                lblTxt.textContent = mkt;
+                lblTxt.textContent = fmtMkt(mkt);
                 lbl.appendChild(lblTxt);
                 var firstRow = mktRows[0];
                 if (firstRow && vols[firstRow.id]) {
                     var volTag = document.createElement('span');
+                    volTag.className = 'mc-vol';
                     volTag.style.cssText = 'font-size:9px;color:var(--muted2);font-family:var(--mono);font-weight:400';
                     volTag.textContent = vols[firstRow.id] + ' vol';
                     lbl.appendChild(volTag);
@@ -1997,12 +2000,12 @@
                     }
 
                     var odds = document.createElement('span');
-                    odds.className = 'mc-odds ' + (Number(dispAmMc) >= 0 ? 'odds-pos' : 'odds-neg');
+                    odds.className = 'mc-odds mc-adv ' + (Number(dispAmMc) >= 0 ? 'odds-pos' : 'odds-neg');
                     odds.textContent = fmtAm(dispAmMc);
                     row.appendChild(odds);
 
                     var fair = document.createElement('span');
-                    fair.className = 'mc-fair';
+                    fair.className = 'mc-fair mc-adv';
                     fair.textContent = r.af != null ? (r.af * 100).toFixed(1) + '%' : '-';
                     row.appendChild(fair);
 
