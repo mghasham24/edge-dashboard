@@ -2534,7 +2534,8 @@
         }
         // EV element: show EV+bet in simple mode (edge hidden), just EV in advanced
         if (evEl) {
-            if (edge != null && evForU != null && evForU > 0) {
+            var showEv = edge != null && evForU != null && evForU > 0 && (dashMode !== 'simple' || u > 0);
+            if (showEv) {
                 evEl.style.display = '';
                 if (isPro() || r.mkt === 'ML' || r.mkt === 'RFI') {
                     var evColor = evForU >= 5 ? 'var(--green)' : 'var(--yellow)';
