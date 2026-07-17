@@ -2516,22 +2516,16 @@
         var el = document.querySelector('.mc-side-edge[data-id="' + id + '"]');
         if (!el) return;
         var evEl = document.querySelector('.mc-side-ev[data-id="' + id + '"]');
-        if (edge != null) {
-            var edgeStr = (edge > 0 ? '+' : '') + edge.toFixed(1) + '%';
-            var col = edge >= 8 ? 'var(--green)' : edge >= 5 ? '#7ddfab' : edge > 0 ? 'var(--yellow)' : 'var(--red)';
-            el.style.color = col;
-            el.innerHTML = edgeStr + (u > 0 ? ' ' + u + 'u ' + RAX_ICON + bet.toFixed(0) : '');
-            var sideRowEl = el.closest('div[style*="display:flex"]');
-            if (sideRowEl && edge > 0) sideRowEl.style.background = 'rgba(45,204,126,' + (Math.min(edge / 10, 1) * 0.08).toFixed(3) + ')';
-            // Show EV on separate line only when positive
+        if (dashMode === 'simple') {
+            el.style.display = 'none';
             if (evEl) {
-                if (evForU != null && evForU > 0) {
+                if (edge != null && evForU != null && evForU > 0) {
                     evEl.style.display = '';
-                    if (isPro() || r.mkt === 'ML') {
+                    if (isPro() || r.mkt === 'ML' || r.mkt === 'RFI') {
                         var evColor = evForU >= 5 ? 'var(--green)' : 'var(--yellow)';
                         evEl.style.color = evColor;
                         evEl.style.filter = '';
-                        evEl.textContent = 'EV:+' + evForU.toFixed(1) + '%';
+                        evEl.innerHTML = 'EV:+' + evForU.toFixed(1) + '%' + (u > 0 ? ' <span style="color:var(--muted2)">' + u + 'u ' + RAX_ICON + bet.toFixed(0) + '</span>' : '');
                     } else {
                         evEl.style.color = 'var(--green)';
                         evEl.style.filter = '';
@@ -2542,9 +2536,36 @@
                 }
             }
         } else {
-            el.style.color = 'var(--muted2)';
-            el.textContent = '-';
-            if (evEl) evEl.style.display = 'none';
+            el.style.display = '';
+            if (edge != null) {
+                var edgeStr = (edge > 0 ? '+' : '') + edge.toFixed(1) + '%';
+                var col = edge >= 8 ? 'var(--green)' : edge >= 5 ? '#7ddfab' : edge > 0 ? 'var(--yellow)' : 'var(--red)';
+                el.style.color = col;
+                el.innerHTML = edgeStr + (u > 0 ? ' ' + u + 'u ' + RAX_ICON + bet.toFixed(0) : '');
+                var sideRowEl = el.closest('div[style*="display:flex"]');
+                if (sideRowEl && edge > 0) sideRowEl.style.background = 'rgba(45,204,126,' + (Math.min(edge / 10, 1) * 0.08).toFixed(3) + ')';
+                if (evEl) {
+                    if (evForU != null && evForU > 0) {
+                        evEl.style.display = '';
+                        if (isPro() || r.mkt === 'ML') {
+                            var evColor = evForU >= 5 ? 'var(--green)' : 'var(--yellow)';
+                            evEl.style.color = evColor;
+                            evEl.style.filter = '';
+                            evEl.textContent = 'EV:+' + evForU.toFixed(1) + '%';
+                        } else {
+                            evEl.style.color = 'var(--green)';
+                            evEl.style.filter = '';
+                            evEl.innerHTML = 'EV:<span style="filter:blur(4px);display:inline-block">+8.4%</span>';
+                        }
+                    } else {
+                        evEl.style.display = 'none';
+                    }
+                }
+            } else {
+                el.style.color = 'var(--muted2)';
+                el.textContent = '-';
+                if (evEl) evEl.style.display = 'none';
+            }
         }
     }
 
