@@ -2080,14 +2080,15 @@
         }
 
         .mobile-cards {
-            display: block;
-            padding: 0 10px
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            padding: 0 8px
         }
 
         .game-card {
             background: var(--bg2);
             border-radius: 3px;
-            margin-bottom: 8px;
             overflow: hidden;
             border: 1px solid var(--border2)
         }
@@ -2095,8 +2096,8 @@
         .game-card-header {
             display: flex;
             align-items: center;
-            gap: 8px;
-            padding: 10px 12px;
+            gap: 6px;
+            padding: 8px 8px;
             background: var(--bg3);
             cursor: pointer;
             border-bottom: 1px solid var(--border2)
@@ -2174,7 +2175,7 @@
 
         .mc-section {
             border-bottom: 1px solid var(--border);
-            padding: 10px 12px
+            padding: 8px 10px
         }
 
         .mc-section:last-child {
@@ -2183,11 +2184,13 @@
 
         .mc-label {
             font-size: 9px;
-            font-weight: 700;
-            letter-spacing: .12em;
+            font-weight: 400;
+            letter-spacing: .10em;
             text-transform: uppercase;
-            color: var(--muted2);
-            margin-bottom: 9px
+            color: rgba(255,255,255,0.45);
+            margin-bottom: 8px;
+            text-align: center;
+            position: relative
         }
 
         .mc-row {

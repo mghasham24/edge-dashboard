@@ -1901,7 +1901,6 @@
 
                 var lbl = document.createElement('div');
                 lbl.className = 'mc-label';
-                lbl.style.cssText = 'display:flex;align-items:center;justify-content:space-between';
                 var lblTxt = document.createElement('span');
                 lblTxt.textContent = fmtMkt(mkt);
                 lbl.appendChild(lblTxt);
@@ -1909,7 +1908,7 @@
                 if (firstRow && vols[firstRow.id]) {
                     var volTag = document.createElement('span');
                     volTag.className = 'mc-vol';
-                    volTag.style.cssText = 'font-size:9px;color:var(--muted2);font-family:var(--mono);font-weight:400';
+                    volTag.style.cssText = 'font-size:9px;color:var(--muted2);font-family:var(--mono);font-weight:400;position:absolute;right:0;top:0';
                     volTag.textContent = vols[firstRow.id] + ' vol';
                     lbl.appendChild(volTag);
                 }
@@ -2020,31 +2019,23 @@
                 inputRow.style.cssText = 'flex-direction:column;gap:6px;display:flex';
 
                 if (mkt === 'ML') {
-                    var mlRow = document.createElement('div');
-                    mlRow.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap';
                     var mlInputs = [];
                     mktRows.forEach(function(r) {
                         var pval = preds[r.id] || '';
-                        var grp = document.createElement('div');
-                        grp.style.cssText = 'display:flex;align-items:center;gap:4px;flex:1;min-width:110px';
-                        var lbl = document.createElement('span');
-                        lbl.className = 'mc-inp-lbl';
-                        lbl.textContent = r.side.split(' ').pop();
-                        lbl.style.cssText = 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:70px';
-                        grp.appendChild(lbl);
+                        var sideRow = document.createElement('div');
+                        sideRow.style.cssText = 'display:flex;align-items:center;gap:5px;margin-bottom:5px' + (betTaken[r.id] ? ';opacity:0.4' : '');
+                        var mlLbl = document.createElement('span');
+                        mlLbl.className = 'mc-inp-lbl';
+                        mlLbl.style.cssText = 'font-size:10px;min-width:0;flex-shrink:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:44px';
+                        mlLbl.textContent = r.side.split(' ').pop();
+                        sideRow.appendChild(mlLbl);
                         var inp = document.createElement('input');
                         inp.className = 'mc-inp' + (pval ? ' filled' : '');
-                        inp.type = 'number';
-                        inp.min = '1';
-                        inp.max = '99';
-                        inp.step = '0.5';
-                        inp.placeholder = '%';
-                        inp.value = pval;
-                        inp.dataset.id = r.id;
-                        grp.appendChild(inp);
+                        inp.type = 'number'; inp.min = '1'; inp.max = '99'; inp.step = '0.5';
+                        inp.placeholder = '%'; inp.value = pval; inp.dataset.id = r.id;
+                        inp.style.cssText = 'width:46px;flex-shrink:0';
                         inp.addEventListener('input', function() {
                             var v = parseFloat(this.value);
-                            // Only auto-fill the opposite for 2-way markets (not 3-way soccer)
                             if (!isNaN(v) && v >= 1 && v <= 99 && mlInputs.length === 2) {
                                 mlInputs.forEach(function(other) {
                                     if (other !== inp) {
@@ -2058,48 +2049,32 @@
                             }
                             setPredMobile(this);
                         });
-                        inp.addEventListener('keydown', function(e) {
-                            if (e.key === 'Enter')
-                                this.blur();
-                        });
-                        grp.appendChild(inp);
-                        mlRow.appendChild(grp);
+                        inp.addEventListener('keydown', function(e) { if (e.key === 'Enter') this.blur(); });
+                        sideRow.appendChild(inp);
                         mlInputs.push(inp);
-                    });
-                    inputRow.appendChild(mlRow);
-                    // ML: per-side edge + checkbox below inputs
-                    var mlEdgeRow = document.createElement('div');
-                    mlEdgeRow.style.cssText = 'display:flex;gap:6px;margin-top:6px';
-                    mktRows.forEach(function(r) {
-                        var col = document.createElement('div');
-                        col.style.cssText = 'display:flex;flex-direction:column;align-items:center;flex:1;gap:1px';
+                        var evWrap = document.createElement('div');
+                        evWrap.style.cssText = 'display:flex;flex-direction:column;align-items:flex-end;flex:1;min-width:0;gap:0px';
                         var se = document.createElement('span');
                         se.className = 'mc-side-edge mc-adv';
                         se.dataset.id = r.id;
-                        se.style.cssText = 'font-family:var(--mono);font-size:12px;font-weight:600;text-align:center;color:var(--muted2)';
-                        se.textContent = '';
+                        se.style.cssText = 'font-family:var(--mono);font-size:10px;font-weight:600;text-align:right;white-space:nowrap;color:var(--muted2)';
                         var sev = document.createElement('span');
                         sev.className = 'mc-side-ev';
                         sev.dataset.id = r.id;
-                        sev.style.cssText = 'font-family:var(--mono);font-size:10px;font-weight:600;text-align:center;color:var(--muted2);display:none';
-                        col.appendChild(se);
-                        col.appendChild(sev);
-                        // Bet taken checkbox for ML
+                        sev.style.cssText = 'font-family:var(--mono);font-size:9px;font-weight:600;text-align:right;color:var(--muted2);display:none;word-break:break-word';
+                        evWrap.appendChild(se); evWrap.appendChild(sev);
+                        sideRow.appendChild(evWrap);
                         var mlCb = document.createElement('input');
-                        mlCb.type = 'checkbox';
-                        mlCb.className = 'mc-bet-check';
-                        mlCb.dataset.id = r.id;
-                        mlCb.checked = !!betTaken[r.id];
-                        mlCb.title = 'Mark bet taken';
-                        mlCb.style.cssText = 'width:16px;height:16px;cursor:pointer;accent-color:var(--green);margin-top:4px';
+                        mlCb.type = 'checkbox'; mlCb.className = 'mc-bet-check'; mlCb.dataset.id = r.id;
+                        mlCb.checked = !!betTaken[r.id]; mlCb.title = 'Mark bet taken';
+                        mlCb.style.cssText = 'width:16px;height:16px;cursor:pointer;accent-color:var(--green);flex-shrink:0';
                         mlCb.addEventListener('change', function() { toggleBet(this.dataset.id); });
-                        col.appendChild(mlCb);
+                        sideRow.appendChild(mlCb);
                         if (preds[r.id] !== undefined && preds[r.id] !== '') {
                             (function(id){ setTimeout(function(){ updateSideEdge(id); }, 0); })(r.id);
                         }
-                        mlEdgeRow.appendChild(col);
+                        inputRow.appendChild(sideRow);
                     });
-                    inputRow.appendChild(mlEdgeRow);
                 } else if (mkt === 'Total') {
                     var rA = mktRows[0], rB = mktRows[1];
                     var fdVal = rA && rA.pt != null ? rA.pt : null;
@@ -2263,23 +2238,23 @@
                 } else if (mkt === 'RFI') {
                     // RFI: Yes (YRFI) / No (NRFI) with Real % and edge
                     var colHdrR = document.createElement('div');
-                    colHdrR.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:5px;padding:0 2px';
-                    colHdrR.innerHTML = '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);flex-shrink:0">RFI</span>'
-                    + '<span class="mc-adv" style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);width:52px;text-align:center;flex-shrink:0">FD Odds</span>'
-                    + '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);width:58px;text-align:center;flex-shrink:0">Real %</span>'
+                    colHdrR.style.cssText = 'display:flex;align-items:center;gap:5px;margin-bottom:5px;padding:0 2px';
+                    colHdrR.innerHTML = '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);flex-shrink:0;min-width:32px">RFI</span>'
+                    + '<span class="mc-adv" style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);width:44px;text-align:center;flex-shrink:0">FD</span>'
+                    + '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);width:48px;text-align:center;flex-shrink:0">Real %</span>'
                     + '<span class="mc-adv" style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-left:auto;text-align:right">Edge</span>';
                     inputRow.appendChild(colHdrR);
                     mktRows.forEach(function(r) {
                         var pval = preds[r.id] || '';
                         var sideRow = document.createElement('div');
-                        sideRow.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:4px' + (betTaken[r.id] ? ';opacity:0.4' : '');
+                        sideRow.style.cssText = 'display:flex;align-items:center;gap:5px;margin-bottom:4px' + (betTaken[r.id] ? ';opacity:0.4' : '');
                         var sideLbl = document.createElement('span');
-                        sideLbl.style.cssText = 'font-family:var(--sans);font-size:12px;font-weight:600;color:var(--text);flex-shrink:0;min-width:80px';
-                        sideLbl.textContent = r.ps === 'A' ? 'Yes (YRFI)' : 'No (NRFI)';
+                        sideLbl.style.cssText = 'font-family:var(--sans);font-size:11px;font-weight:600;color:var(--text);flex-shrink:0;min-width:32px';
+                        sideLbl.textContent = r.ps === 'A' ? 'YRFI' : 'NRFI';
                         sideRow.appendChild(sideLbl);
                         var fdAmSpan = document.createElement('span');
                         fdAmSpan.className = 'mc-adv';
-                        fdAmSpan.style.cssText = 'font-family:var(--mono);font-size:12px;color:var(--muted);width:52px;text-align:center;flex-shrink:0';
+                        fdAmSpan.style.cssText = 'font-family:var(--mono);font-size:11px;color:var(--muted);width:44px;text-align:center;flex-shrink:0';
                         fdAmSpan.textContent = r.am != null ? (r.am > 0 ? '+' + r.am : r.am) : '-';
                         sideRow.appendChild(fdAmSpan);
                         var predInp = document.createElement('input');
@@ -2287,7 +2262,7 @@
                         predInp.type = 'number'; predInp.min = '1'; predInp.max = '99'; predInp.step = '0.5';
                         predInp.placeholder = '%'; predInp.value = pval;
                         predInp.dataset.id = r.id; predInp.dataset.type = 'pred';
-                        predInp.style.cssText = 'width:58px;flex-shrink:0';
+                        predInp.style.cssText = 'width:48px;flex-shrink:0';
                         predInp.addEventListener('input', function() { setPredMobile(this); });
                         predInp.addEventListener('keydown', function(e) { if (e.key === 'Enter') this.blur(); });
                         sideRow.appendChild(predInp);
