@@ -16,7 +16,7 @@ export async function onRequest({ request, env }) {
 
   if (request.method === 'POST') {
     const body = await request.json().catch(() => ({}));
-    const { id, taken } = body;
+    const { id, taken, also } = body;
     if (!id) return fail(400, 'Missing id');
 
     const row = await env.DB.prepare(
@@ -27,6 +27,8 @@ export async function onRequest({ request, env }) {
 
     if (taken) {
       if (!ids.includes(id)) ids.push(id);
+      // also: auto-taken opposite side, sent in same request to avoid race condition
+      if (also && !ids.includes(also)) ids.push(also);
       if (ids.length > 1000) ids.splice(0, ids.length - 1000);
     } else {
       // Remove both plain and auto|| variant so un-taking cleans up cross-device state

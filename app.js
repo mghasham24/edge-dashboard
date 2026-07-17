@@ -923,8 +923,9 @@
         if (!betTaken[id]) delete betTaken[id];
         localStorage.setItem('raxedge_bets_taken', JSON.stringify(betTaken));
         try { posthog.capture(betTaken[id] ? 'bet_checked' : 'bet_unchecked', { sport: currentSport }); } catch(e) {}
+        var _autoId = null;
         if (betTaken[id]) {
-            if (exclusiveBets) applyExclusiveBet(id);
+            if (exclusiveBets) _autoId = applyExclusiveBet(id);
         } else {
             // Un-taking — clean up auto-taken state
             if (autoTakenFrom.hasOwnProperty(id)) {
@@ -949,12 +950,14 @@
             }
             localStorage.setItem('raxedge_auto_taken', JSON.stringify(autoTakenFrom));
         }
-        // Sync to server so state persists across devices
+        // Sync to server so state persists across devices (single request to avoid race condition)
+        var _syncBody = { id: id, taken: !!betTaken[id] };
+        if (_autoId) _syncBody.also = _autoId;
         fetch('/api/bets/taken', {
             method: 'POST',
             credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: id, taken: !!betTaken[id] })
+            body: JSON.stringify(_syncBody)
         }).catch(function() {});
         document.querySelectorAll('input[type="checkbox"][data-id="' + id + '"]').forEach(function(cb) {
             cb.checked = !!betTaken[id];
@@ -1054,11 +1057,6 @@
         autoTakenFrom[oppositeId] = manualTeam;
         localStorage.setItem('raxedge_bets_taken', JSON.stringify(betTaken));
         localStorage.setItem('raxedge_auto_taken', JSON.stringify(autoTakenFrom));
-        fetch('/api/bets/taken', {
-            method: 'POST', credentials: 'same-origin',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: 'auto||' + oppositeId, taken: true })
-        }).catch(function() {});
         document.querySelectorAll('input[type="checkbox"][data-id="' + oppositeId + '"]').forEach(function(cb) { cb.checked = true; });
         var tr = document.querySelector('tr[data-row-id="' + oppositeId + '"]');
         if (tr) tr.style.opacity = '0.4';
@@ -1066,6 +1064,7 @@
             var sideRow = el.closest('div[style*="display:flex"]');
             if (sideRow) sideRow.style.opacity = '0.4';
         });
+        return 'auto||' + oppositeId; // caller (toggleBet) sends both IDs in one request
     }
     var mobileCollapsed = {};
 
