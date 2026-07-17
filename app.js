@@ -2542,7 +2542,7 @@
                     evEl.style.color = evColor;
                     evEl.style.filter = '';
                     if (dashMode === 'simple') {
-                        evEl.innerHTML = 'EV:+' + evForU.toFixed(1) + '%' + (u > 0 ? ' <span style="color:var(--muted2)">' + u + 'u ' + RAX_ICON + bet.toFixed(0) + '</span>' : '');
+                        evEl.innerHTML = 'EV:+' + evForU.toFixed(1) + '%' + (u > 0 ? ' <span style="color:' + evColor + '">' + u + 'u ' + RAX_ICON + bet.toFixed(0) + '</span>' : '');
                     } else {
                         evEl.textContent = 'EV:+' + evForU.toFixed(1) + '%';
                     }
