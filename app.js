@@ -2061,19 +2061,6 @@
                         inp.addEventListener('keydown', function(e) { if (e.key === 'Enter') this.blur(); });
                         sideRow.appendChild(inp);
                         mlInputs.push(inp);
-                        // EV/edge inline between input and checkbox
-                        var evWrap = document.createElement('div');
-                        evWrap.style.cssText = 'display:flex;flex-direction:column;align-items:flex-end;flex:1;min-width:0';
-                        var se = document.createElement('span');
-                        se.className = 'mc-side-edge mc-adv';
-                        se.dataset.id = r.id;
-                        se.style.cssText = 'font-family:var(--mono);font-size:10px;font-weight:600;text-align:right;white-space:nowrap;color:var(--muted2)';
-                        var sev = document.createElement('span');
-                        sev.className = 'mc-side-ev';
-                        sev.dataset.id = r.id;
-                        sev.style.cssText = 'font-family:var(--mono);font-size:9px;font-weight:600;text-align:right;color:var(--muted2);display:none';
-                        evWrap.appendChild(se); evWrap.appendChild(sev);
-                        sideRow.appendChild(evWrap);
                         var mlCb = document.createElement('input');
                         mlCb.type = 'checkbox'; mlCb.className = 'mc-bet-check'; mlCb.dataset.id = r.id;
                         mlCb.checked = !!betTaken[r.id]; mlCb.title = 'Mark bet taken';
@@ -2081,6 +2068,19 @@
                         mlCb.addEventListener('change', function() { toggleBet(this.dataset.id); });
                         sideRow.appendChild(mlCb);
                         teamWrap.appendChild(sideRow);
+                        // EV below the row so team name has full width
+                        var evRow = document.createElement('div');
+                        evRow.style.cssText = 'text-align:right;padding-right:21px;margin-top:1px';
+                        var se = document.createElement('span');
+                        se.className = 'mc-side-edge mc-adv';
+                        se.dataset.id = r.id;
+                        se.style.cssText = 'font-family:var(--mono);font-size:10px;font-weight:600;color:var(--muted2)';
+                        var sev = document.createElement('span');
+                        sev.className = 'mc-side-ev';
+                        sev.dataset.id = r.id;
+                        sev.style.cssText = 'font-family:var(--mono);font-size:9px;font-weight:600;color:var(--muted2);display:none';
+                        evRow.appendChild(se); evRow.appendChild(sev);
+                        teamWrap.appendChild(evRow);
                         if (preds[r.id] !== undefined && preds[r.id] !== '') {
                             (function(id){ setTimeout(function(){ updateSideEdge(id); }, 0); })(r.id);
                         }
@@ -2261,7 +2261,8 @@
                         sideRow.className = 'mc-team-wrap';
                         sideRow.style.cssText = 'display:flex;align-items:center;gap:5px;margin-bottom:4px;padding-left:6px;border-left:3px solid transparent;border-radius:1px' + (betTaken[r.id] ? ';opacity:0.4' : '');
                         var sideLbl = document.createElement('span');
-                        sideLbl.style.cssText = 'font-family:var(--sans);font-size:11px;font-weight:600;color:var(--text);flex-shrink:0;min-width:32px';
+                        var rfiColor = r.ps === 'A' ? 'var(--green)' : 'var(--red)';
+                        sideLbl.style.cssText = 'font-family:var(--sans);font-size:11px;font-weight:700;color:' + rfiColor + ';flex-shrink:0;min-width:32px';
                         sideLbl.textContent = r.ps === 'A' ? 'YRFI' : 'NRFI';
                         sideRow.appendChild(sideLbl);
                         var fdAmSpan = document.createElement('span');
