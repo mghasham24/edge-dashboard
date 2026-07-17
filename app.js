@@ -3051,6 +3051,7 @@
         document.getElementById('ev-panel').classList.remove('visible');
         evTabVisible = false;
         if (evAutoRefreshTimer) { clearInterval(evAutoRefreshTimer); evAutoRefreshTimer = null; }
+        renderTable();
     }
 
     // Compute EV for a sport's rows and cache+render immediately — safe to call in parallel
