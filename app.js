@@ -2260,10 +2260,10 @@
                     // RFI: Yes (YRFI) / No (NRFI) with Real % and edge
                     var colHdrR = document.createElement('div');
                     colHdrR.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:5px;padding:0 2px';
-                    colHdrR.innerHTML = '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);flex-shrink:0">FD RFI</span>'
-                    + '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);width:52px;text-align:center;flex-shrink:0">FD Odds</span>'
+                    colHdrR.innerHTML = '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);flex-shrink:0">RFI</span>'
+                    + '<span class="mc-adv" style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);width:52px;text-align:center;flex-shrink:0">FD Odds</span>'
                     + '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);width:58px;text-align:center;flex-shrink:0">Real %</span>'
-                    + '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-left:auto;text-align:right">Edge</span>';
+                    + '<span class="mc-adv" style="font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-left:auto;text-align:right">Edge</span>';
                     inputRow.appendChild(colHdrR);
                     mktRows.forEach(function(r) {
                         var pval = preds[r.id] || '';
@@ -2274,6 +2274,7 @@
                         sideLbl.textContent = r.ps === 'A' ? 'Yes (YRFI)' : 'No (NRFI)';
                         sideRow.appendChild(sideLbl);
                         var fdAmSpan = document.createElement('span');
+                        fdAmSpan.className = 'mc-adv';
                         fdAmSpan.style.cssText = 'font-family:var(--mono);font-size:12px;color:var(--muted);width:52px;text-align:center;flex-shrink:0';
                         fdAmSpan.textContent = r.am != null ? (r.am > 0 ? '+' + r.am : r.am) : '-';
                         sideRow.appendChild(fdAmSpan);
@@ -2289,7 +2290,7 @@
                         var evWrap = document.createElement('div');
                         evWrap.style.cssText = 'display:flex;flex-direction:column;align-items:flex-end;margin-left:auto;gap:1px';
                         var sideEdge = document.createElement('span');
-                        sideEdge.className = 'mc-side-edge';
+                        sideEdge.className = 'mc-side-edge mc-adv';
                         sideEdge.dataset.id = r.id;
                         sideEdge.style.cssText = 'font-family:var(--mono);font-size:12px;font-weight:600;white-space:nowrap;color:var(--muted2);text-align:right';
                         sideEdge.textContent = '-';
