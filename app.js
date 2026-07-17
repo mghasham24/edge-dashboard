@@ -2022,18 +2022,26 @@
                     var mlInputs = [];
                     mktRows.forEach(function(r) {
                         var pval = preds[r.id] || '';
+                        var teamNick = r.side.split(' ').pop();
+                        // Wrapper so opacity applies to row + ev together
+                        var teamWrap = document.createElement('div');
+                        teamWrap.style.cssText = 'margin-bottom:5px' + (betTaken[r.id] ? ';opacity:0.4' : '');
+                        // Top row: logo + nickname | input | checkbox
                         var sideRow = document.createElement('div');
-                        sideRow.style.cssText = 'display:flex;align-items:center;gap:5px;margin-bottom:5px' + (betTaken[r.id] ? ';opacity:0.4' : '');
-                        var mlLbl = document.createElement('span');
-                        mlLbl.className = 'mc-inp-lbl';
-                        mlLbl.style.cssText = 'font-size:10px;min-width:0;flex-shrink:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:44px';
-                        mlLbl.textContent = r.side.split(' ').pop();
-                        sideRow.appendChild(mlLbl);
+                        sideRow.style.cssText = 'display:flex;align-items:center;gap:5px';
+                        var teamInfo = document.createElement('div');
+                        teamInfo.style.cssText = 'display:flex;align-items:center;gap:4px;flex:1;min-width:0';
+                        teamInfo.innerHTML = teamLogoHtml(r.side, 14);
+                        var nameLbl = document.createElement('span');
+                        nameLbl.style.cssText = 'font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+                        nameLbl.textContent = teamNick;
+                        teamInfo.appendChild(nameLbl);
+                        sideRow.appendChild(teamInfo);
                         var inp = document.createElement('input');
                         inp.className = 'mc-inp' + (pval ? ' filled' : '');
                         inp.type = 'number'; inp.min = '1'; inp.max = '99'; inp.step = '0.5';
                         inp.placeholder = '%'; inp.value = pval; inp.dataset.id = r.id;
-                        inp.style.cssText = 'width:46px;flex-shrink:0';
+                        inp.style.cssText = 'width:44px;flex-shrink:0';
                         inp.addEventListener('input', function() {
                             var v = parseFloat(this.value);
                             if (!isNaN(v) && v >= 1 && v <= 99 && mlInputs.length === 2) {
@@ -2052,28 +2060,30 @@
                         inp.addEventListener('keydown', function(e) { if (e.key === 'Enter') this.blur(); });
                         sideRow.appendChild(inp);
                         mlInputs.push(inp);
-                        var evWrap = document.createElement('div');
-                        evWrap.style.cssText = 'display:flex;flex-direction:column;align-items:flex-end;flex:1;min-width:0;gap:0px';
-                        var se = document.createElement('span');
-                        se.className = 'mc-side-edge mc-adv';
-                        se.dataset.id = r.id;
-                        se.style.cssText = 'font-family:var(--mono);font-size:10px;font-weight:600;text-align:right;white-space:nowrap;color:var(--muted2)';
-                        var sev = document.createElement('span');
-                        sev.className = 'mc-side-ev';
-                        sev.dataset.id = r.id;
-                        sev.style.cssText = 'font-family:var(--mono);font-size:9px;font-weight:600;text-align:right;color:var(--muted2);display:none;word-break:break-word';
-                        evWrap.appendChild(se); evWrap.appendChild(sev);
-                        sideRow.appendChild(evWrap);
                         var mlCb = document.createElement('input');
                         mlCb.type = 'checkbox'; mlCb.className = 'mc-bet-check'; mlCb.dataset.id = r.id;
                         mlCb.checked = !!betTaken[r.id]; mlCb.title = 'Mark bet taken';
                         mlCb.style.cssText = 'width:16px;height:16px;cursor:pointer;accent-color:var(--green);flex-shrink:0';
                         mlCb.addEventListener('change', function() { toggleBet(this.dataset.id); });
                         sideRow.appendChild(mlCb);
+                        teamWrap.appendChild(sideRow);
+                        // EV row below (edge hidden in simple, ev shown when valued)
+                        var evRow = document.createElement('div');
+                        evRow.style.cssText = 'padding-left:18px;margin-top:2px';
+                        var se = document.createElement('span');
+                        se.className = 'mc-side-edge mc-adv';
+                        se.dataset.id = r.id;
+                        se.style.cssText = 'font-family:var(--mono);font-size:10px;font-weight:600;color:var(--muted2)';
+                        var sev = document.createElement('span');
+                        sev.className = 'mc-side-ev';
+                        sev.dataset.id = r.id;
+                        sev.style.cssText = 'font-family:var(--mono);font-size:9px;font-weight:600;color:var(--muted2);display:none';
+                        evRow.appendChild(se); evRow.appendChild(sev);
+                        teamWrap.appendChild(evRow);
                         if (preds[r.id] !== undefined && preds[r.id] !== '') {
                             (function(id){ setTimeout(function(){ updateSideEdge(id); }, 0); })(r.id);
                         }
-                        inputRow.appendChild(sideRow);
+                        inputRow.appendChild(teamWrap);
                     });
                 } else if (mkt === 'Total') {
                     var rA = mktRows[0], rB = mktRows[1];
