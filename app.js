@@ -853,6 +853,10 @@
         dashMode = mode;
         localStorage.setItem('raxedge_dash_mode', mode);
         applyDashMode(mode);
+        // Re-update EV elements so bet size appears/disappears immediately on mode switch
+        document.querySelectorAll('.mc-side-ev[data-id]').forEach(function(el) {
+            if (el.dataset.id) updateSideEdge(el.dataset.id);
+        });
     }
 
     function toggleEvPopover(event) {
@@ -2070,7 +2074,7 @@
                         var col = document.createElement('div');
                         col.style.cssText = 'display:flex;flex-direction:column;align-items:center;flex:1;gap:1px';
                         var se = document.createElement('span');
-                        se.className = 'mc-side-edge';
+                        se.className = 'mc-side-edge mc-adv';
                         se.dataset.id = r.id;
                         se.style.cssText = 'font-family:var(--mono);font-size:12px;font-weight:600;text-align:center;color:var(--muted2)';
                         se.textContent = '';
@@ -2516,55 +2520,38 @@
         var el = document.querySelector('.mc-side-edge[data-id="' + id + '"]');
         if (!el) return;
         var evEl = document.querySelector('.mc-side-ev[data-id="' + id + '"]');
-        if (dashMode === 'simple') {
-            el.style.display = 'none';
-            if (evEl) {
-                if (edge != null && evForU != null && evForU > 0) {
-                    evEl.style.display = '';
-                    if (isPro() || r.mkt === 'ML' || r.mkt === 'RFI') {
-                        var evColor = evForU >= 5 ? 'var(--green)' : 'var(--yellow)';
-                        evEl.style.color = evColor;
-                        evEl.style.filter = '';
+        // Edge element: always update content (CSS mc-adv hides it in simple mode)
+        if (edge != null) {
+            var edgeStr = (edge > 0 ? '+' : '') + edge.toFixed(1) + '%';
+            var col = edge >= 8 ? 'var(--green)' : edge >= 5 ? '#7ddfab' : edge > 0 ? 'var(--yellow)' : 'var(--red)';
+            el.style.color = col;
+            el.innerHTML = edgeStr + (u > 0 ? ' ' + u + 'u ' + RAX_ICON + bet.toFixed(0) : '');
+            var sideRowEl = el.closest('div[style*="display:flex"]');
+            if (sideRowEl && edge > 0 && dashMode !== 'simple') sideRowEl.style.background = 'rgba(45,204,126,' + (Math.min(edge / 10, 1) * 0.08).toFixed(3) + ')';
+        } else {
+            el.style.color = 'var(--muted2)';
+            el.textContent = '-';
+        }
+        // EV element: show EV+bet in simple mode (edge hidden), just EV in advanced
+        if (evEl) {
+            if (edge != null && evForU != null && evForU > 0) {
+                evEl.style.display = '';
+                if (isPro() || r.mkt === 'ML' || r.mkt === 'RFI') {
+                    var evColor = evForU >= 5 ? 'var(--green)' : 'var(--yellow)';
+                    evEl.style.color = evColor;
+                    evEl.style.filter = '';
+                    if (dashMode === 'simple') {
                         evEl.innerHTML = 'EV:+' + evForU.toFixed(1) + '%' + (u > 0 ? ' <span style="color:var(--muted2)">' + u + 'u ' + RAX_ICON + bet.toFixed(0) + '</span>' : '');
                     } else {
-                        evEl.style.color = 'var(--green)';
-                        evEl.style.filter = '';
-                        evEl.innerHTML = 'EV:<span style="filter:blur(4px);display:inline-block">+8.4%</span>';
+                        evEl.textContent = 'EV:+' + evForU.toFixed(1) + '%';
                     }
                 } else {
-                    evEl.style.display = 'none';
-                }
-            }
-        } else {
-            el.style.display = '';
-            if (edge != null) {
-                var edgeStr = (edge > 0 ? '+' : '') + edge.toFixed(1) + '%';
-                var col = edge >= 8 ? 'var(--green)' : edge >= 5 ? '#7ddfab' : edge > 0 ? 'var(--yellow)' : 'var(--red)';
-                el.style.color = col;
-                el.innerHTML = edgeStr + (u > 0 ? ' ' + u + 'u ' + RAX_ICON + bet.toFixed(0) : '');
-                var sideRowEl = el.closest('div[style*="display:flex"]');
-                if (sideRowEl && edge > 0) sideRowEl.style.background = 'rgba(45,204,126,' + (Math.min(edge / 10, 1) * 0.08).toFixed(3) + ')';
-                if (evEl) {
-                    if (evForU != null && evForU > 0) {
-                        evEl.style.display = '';
-                        if (isPro() || r.mkt === 'ML') {
-                            var evColor = evForU >= 5 ? 'var(--green)' : 'var(--yellow)';
-                            evEl.style.color = evColor;
-                            evEl.style.filter = '';
-                            evEl.textContent = 'EV:+' + evForU.toFixed(1) + '%';
-                        } else {
-                            evEl.style.color = 'var(--green)';
-                            evEl.style.filter = '';
-                            evEl.innerHTML = 'EV:<span style="filter:blur(4px);display:inline-block">+8.4%</span>';
-                        }
-                    } else {
-                        evEl.style.display = 'none';
-                    }
+                    evEl.style.color = 'var(--green)';
+                    evEl.style.filter = '';
+                    evEl.innerHTML = 'EV:<span style="filter:blur(4px);display:inline-block">+8.4%</span>';
                 }
             } else {
-                el.style.color = 'var(--muted2)';
-                el.textContent = '-';
-                if (evEl) evEl.style.display = 'none';
+                evEl.style.display = 'none';
             }
         }
     }
