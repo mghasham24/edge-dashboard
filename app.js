@@ -2507,19 +2507,9 @@
         var el = document.querySelector('.mc-side-edge[data-id="' + id + '"]');
         if (!el) return;
         var evEl = document.querySelector('.mc-side-ev[data-id="' + id + '"]');
-        // Edge element: always update content (CSS mc-adv hides it in simple mode)
-        if (edge != null) {
-            var edgeStr = (edge > 0 ? '+' : '') + edge.toFixed(1) + '%';
-            var col = edge >= 8 ? 'var(--green)' : edge >= 5 ? '#7ddfab' : edge > 0 ? 'var(--yellow)' : 'var(--red)';
-            el.style.color = col;
-            el.innerHTML = edgeStr + (u > 0 ? ' ' + u + 'u ' + RAX_ICON + bet.toFixed(0) : '');
-            var sideRowEl = el.closest('div[style*="display:flex"]');
-            if (sideRowEl && edge > 0 && dashMode !== 'simple') sideRowEl.style.background = 'rgba(45,204,126,' + (Math.min(edge / 10, 1) * 0.08).toFixed(3) + ')';
-        } else {
-            el.style.color = 'var(--muted2)';
-            el.textContent = '-';
-        }
-        // EV element: show EV+bet in simple mode (edge hidden), just EV in advanced
+        // Edge element: hidden on mobile cards — EV element carries all display
+        el.style.display = 'none';
+        // EV element: units on top line, EV% below (both simple and advanced)
         if (evEl) {
             var showEv = edge != null && evForU != null && evForU > 0 && (dashMode !== 'simple' || u > 0);
             if (showEv) {
@@ -2528,12 +2518,8 @@
                     var evColor = evForU >= 5 ? 'var(--green)' : 'var(--yellow)';
                     evEl.style.color = evColor;
                     evEl.style.filter = '';
-                    if (dashMode === 'simple') {
-                        evEl.innerHTML = (u > 0 ? '<span style="color:' + evColor + ';display:block">' + u + 'u ' + RAX_ICON + bet.toFixed(0) + '</span>' : '')
-                            + '<span style="display:block;color:' + evColor + ';font-size:9px">EV:+' + evForU.toFixed(1) + '%</span>';
-                    } else {
-                        evEl.textContent = 'EV:+' + evForU.toFixed(1) + '%';
-                    }
+                    evEl.innerHTML = (u > 0 ? '<span style="color:' + evColor + ';display:block">' + u + 'u ' + RAX_ICON + bet.toFixed(0) + '</span>' : '')
+                        + '<span style="display:block;color:' + evColor + ';font-size:9px">EV:+' + evForU.toFixed(1) + '%</span>';
                 } else {
                     evEl.style.color = 'var(--green)';
                     evEl.style.filter = '';
