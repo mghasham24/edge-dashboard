@@ -1979,7 +1979,7 @@
 
                 mktRows.forEach(function(r) {
                     var row = document.createElement('div');
-                    row.className = 'mc-row';
+                    row.className = 'mc-row mc-adv';
 
                     var side = document.createElement('span');
                     side.className = 'mc-side';
