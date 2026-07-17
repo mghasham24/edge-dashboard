@@ -931,8 +931,8 @@
             if (autoTakenFrom.hasOwnProperty(id)) {
                 // This was an auto-taken row — just clear its metadata
                 delete autoTakenFrom[id];
-            } else if (exclusiveBets) {
-                // Manually-taken row un-checked — also clear the auto-taken opposite
+            } else {
+                // Manually-taken row un-checked — also clear the auto-taken opposite (regardless of exclusiveBets setting)
                 var opp = id.endsWith('-A') ? id.slice(0,-2)+'-B' : id.endsWith('-B') ? id.slice(0,-2)+'-A' : null;
                 if (opp && autoTakenFrom.hasOwnProperty(opp)) {
                     delete betTaken[opp];
