@@ -1850,18 +1850,28 @@
                 toggleMobileCard(this.dataset.game);
             });
 
-            var iconEl = document.createElement('span');
-            iconEl.style.cssText = 'flex-shrink:0;display:flex;align-items:center';
-            iconEl.innerHTML = sportLogoHtml(currentSport, gameRows[0] && gameRows[0].league, 20);
-            hdr.appendChild(iconEl);
-
             var _mobDhMatch = (teams[1] || '').match(/^(.*?)\s*(\(Game (\d+)\))\s*$/);
             var _mobHomeTeam = _mobDhMatch ? _mobDhMatch[1].trim() : (teams[1] || '');
             var _mobGameNum  = _mobDhMatch ? _mobDhMatch[3] : null;
+            var _mobSportLbl = (SPORTS.find(function(s) { return s.key === currentSport; }) || {}).label || '';
+            var _mobNickA = (teams[0] || '').replace(/^[↑↓→←⬆⬇➡⬅\s]+/, '').split(' ').pop();
+            var _mobNickH = _mobHomeTeam.replace(/^[↑↓→←⬆⬇➡⬅\s]+/, '').split(' ').pop();
+            function _mobTeamHtml(name, nick) {
+                return '<div style="display:flex;align-items:center;gap:3px;flex:1;min-width:0;overflow:hidden">'
+                    + teamLogoHtml(name, 15)
+                    + '<div style="min-width:0;overflow:hidden;flex:1">'
+                    + '<div style="font-size:7px;color:var(--muted2);letter-spacing:.08em;line-height:1.3;text-transform:uppercase">' + escHtml(_mobSportLbl) + '</div>'
+                    + '<div style="font-size:10px;font-weight:700;letter-spacing:.03em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)">' + escHtml(nick) + '</div>'
+                    + '</div></div>';
+            }
 
             var title = document.createElement('span');
             title.className = 'gc-title';
-            title.innerHTML = '<div style="display:grid;grid-template-columns:auto minmax(0,1fr) auto auto minmax(0,1fr);align-items:center;gap:4px;flex:1;min-width:0">' + teamLogoHtml(teams[0], 22) + teamNameHtml(teams[0] || '') + '<span style="color:var(--muted2);font-weight:400;text-align:center;padding:0 2px">@</span>' + teamLogoHtml(_mobHomeTeam, 22) + teamNameHtml(_mobHomeTeam) + '</div>';
+            title.innerHTML = '<div style="display:flex;align-items:center;gap:3px;flex:1;min-width:0">'
+                + _mobTeamHtml(teams[0], _mobNickA)
+                + '<span style="color:var(--muted2);font-size:9px;flex-shrink:0;padding:0 1px">@</span>'
+                + _mobTeamHtml(_mobHomeTeam, _mobNickH)
+                + '</div>';
             hdr.appendChild(title);
 
             if (_mobGameNum) {
@@ -2034,7 +2044,7 @@
                         teamInfo.style.cssText = 'display:flex;align-items:center;gap:4px;flex:1;min-width:0';
                         teamInfo.innerHTML = teamLogoHtml(r.side, 14);
                         var nameLbl = document.createElement('span');
-                        nameLbl.style.cssText = 'font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+                        nameLbl.style.cssText = 'font-size:10px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0';
                         nameLbl.textContent = teamNick;
                         teamInfo.appendChild(nameLbl);
                         sideRow.appendChild(teamInfo);
