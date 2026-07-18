@@ -8012,12 +8012,24 @@
                     // Find Real Sports game key matching this RFI row
                     var realKey = syncD.markets[r.game] ? r.game : null;
                     if (!realKey) {
-                        var fdTeams = r.game.split(' @ ');
+                        // DH pre-fuzzy: translate FD "(Game N)" suffix to RS " (2)" format
+                        var _rfiDhM = r.game.match(/^(.+?)\s*\(Game (\d+)\)$/);
+                        if (_rfiDhM) {
+                            var _rfiBase = _rfiDhM[1].trim(), _rfiN = parseInt(_rfiDhM[2]);
+                            if (_rfiN >= 2 && syncD.markets[_rfiBase + ' (2)']) realKey = _rfiBase + ' (2)';
+                            else if (_rfiN === 1 && syncD.markets[_rfiBase]) realKey = _rfiBase;
+                        }
+                    }
+                    if (!realKey) {
+                        // Strip (Game N) so team name matching isn't polluted by the suffix
+                        var _rfiGameBase = r.game.replace(/\s*\(Game \d+\)/, '').trim();
+                        var fdTeams = _rfiGameBase.split(' @ ');
                         var fdAway = (fdTeams[0] || '').toLowerCase();
                         var fdHome = (fdTeams[1] || '').toLowerCase();
                         var found = mKeys.find(function(k) {
                             if (k.endsWith('__lines') || k.endsWith('__gid')) return false;
-                            var p = k.split(' @ ');
+                            var kBase = k.endsWith(' (2)') ? k.slice(0, -4) : k;
+                            var p = kBase.split(' @ ');
                             if (p.length !== 2) return false;
                             // Resolve Real Sports nicknames/abbreviations (e.g. "D-backs" → "Arizona Diamondbacks")
                             var ka = resolveTeamName(p[0].trim()).toLowerCase(), kh = resolveTeamName(p[1].trim()).toLowerCase();
@@ -8027,7 +8039,15 @@
                                       || fdHome.split(' ').some(function(w) { return w.length > 2 && kh.indexOf(w) !== -1; });
                             return awayOk && homeOk;
                         });
-                        if (found) realKey = found;
+                        if (found) {
+                            // DH-awareness: Game 2 RFI rows must use RS ' (2)' key, not Game 1's
+                            var _isRfiDH2 = /\(Game [2-9]/.test(r.game);
+                            if (_isRfiDH2 && !found.endsWith(' (2)')) {
+                                if (mKeys.indexOf(found + ' (2)') !== -1) found = found + ' (2)';
+                                else found = null;
+                            }
+                            if (found) realKey = found;
+                        }
                     }
                     if (!realKey) return;
                     var gameMkts = syncD.markets[realKey];
