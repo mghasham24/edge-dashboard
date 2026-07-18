@@ -6258,19 +6258,37 @@
                                 if (r.mkt !== 'RFI') return;
                                 var realKey = syncD.markets[r.game] ? r.game : null;
                                 if (!realKey) {
-                                    var fdTeams = r.game.split(' @ ');
+                                    // DH: translate FD "(Game N)" suffix to RS " (2)" format
+                                    var _dhMl = r.game.match(/^(.+?)\s*\(Game (\d+)\)$/);
+                                    if (_dhMl) {
+                                        var _dhBl = _dhMl[1].trim(), _dhNl = parseInt(_dhMl[2]);
+                                        if (_dhNl >= 2 && syncD.markets[_dhBl + ' (2)']) realKey = _dhBl + ' (2)';
+                                        else if (_dhNl === 1 && syncD.markets[_dhBl]) realKey = _dhBl;
+                                    }
+                                }
+                                if (!realKey) {
+                                    var _gameBase = r.game.replace(/\s*\(Game \d+\)/, '').trim();
+                                    var fdTeams = _gameBase.split(' @ ');
                                     var fdAway = (fdTeams[0] || '').toLowerCase();
                                     var fdHome = (fdTeams[1] || '').toLowerCase();
                                     var found = mKeys.find(function(k) {
                                         if (k.endsWith('__lines') || k.endsWith('__gid')) return false;
-                                        var p = k.split(' @ ');
+                                        var kBase = k.endsWith(' (2)') ? k.slice(0, -4) : k;
+                                        var p = kBase.split(' @ ');
                                         if (p.length !== 2) return false;
                                         var ka = resolveTeamName(p[0].trim()).toLowerCase(), kh = resolveTeamName(p[1].trim()).toLowerCase();
                                         var awayOk = ka.split(' ').some(function(w) { return w.length > 2 && fdAway.indexOf(w) !== -1; }) || fdAway.split(' ').some(function(w) { return w.length > 2 && ka.indexOf(w) !== -1; });
                                         var homeOk = kh.split(' ').some(function(w) { return w.length > 2 && fdHome.indexOf(w) !== -1; }) || fdHome.split(' ').some(function(w) { return w.length > 2 && kh.indexOf(w) !== -1; });
                                         return awayOk && homeOk;
                                     });
-                                    if (found) realKey = found;
+                                    if (found) {
+                                        var _isDH2 = /\(Game [2-9]/.test(r.game);
+                                        if (_isDH2 && !found.endsWith(' (2)')) {
+                                            if (mKeys.indexOf(found + ' (2)') !== -1) found = found + ' (2)';
+                                            else found = null;
+                                        }
+                                        if (found) realKey = found;
+                                    }
                                 }
                                 if (!realKey) return;
                                 var gameMkts = syncD.markets[realKey];
