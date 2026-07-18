@@ -6621,11 +6621,12 @@
                     var _isFdDH2 = /\(Game [2-9]/.test(r.game);
                     if (_isFdDH2 && !found.endsWith(' (2)')) {
                         if (marketKeys.indexOf(found + ' (2)') !== -1) found = found + ' (2)';
+                        else found = null; // RS doesn't have Game 2 yet — don't show Game 1's RS%
                     } else if (!_isFdDH2 && found.endsWith(' (2)')) {
                         var _foundBase = found.replace(/ \(2\)$/, '');
                         if (marketKeys.indexOf(_foundBase) !== -1) found = _foundBase;
                     }
-                    realKey = found;
+                    if (found) realKey = found;
                 }
             }
             if (!realKey) return;
