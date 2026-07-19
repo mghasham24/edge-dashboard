@@ -832,6 +832,7 @@
         return hash ? 'https://www.realapp.com/' + hash : null;
     }
     var RAX_ICON = '<svg viewBox="0 0 512 512" style="width:13px;height:13px;vertical-align:-2px;display:inline-block;margin-right:1px" aria-hidden="true"><g fill="currentColor"><path d="M128.1,141.1h356.8C442.8,57.4,356.1,0,256,0C192,0,133.5,23.5,88.6,62.3L128.1,141.1z"/><polygon points="355.3,193.2 154.2,193.2 254.7,394"/><path d="M413.6,193.2L253.9,512c0.7,0,1.4,0,2.1,0c141.4,0,256-114.6,256-256c0-21.7-2.7-42.7-7.8-62.8H413.6z"/><path d="M225.6,452.1L50.7,103C18.9,145.7,0,198.6,0,256c0,121.7,85,223.6,198.8,249.6L225.6,452.1z"/></g></svg> ';
+    var RS_LOGO_SVG = '<svg viewBox="0 0 800 800" fill="currentColor" aria-hidden="true" style="width:13px;height:13px;display:block"><path d="M183.33,106.42L143.1,36.68c-0.33-0.56-0.93-0.91-1.58-0.91L1.83,35.72c-1.4,0-2.28,1.52-1.58,2.74l418.39,725.21c0.7,1.22,2.46,1.22,3.16,0l69.82-121.01c0.33-0.56,0.33-1.26,0-1.82L257.35,234.72c-0.7-1.22,0.18-2.74,1.58-2.74l322.91,0.11c1.4,0,2.28,1.52,1.58,2.74l-49.72,86.04c-0.7,1.22,0.17,2.74,1.58,2.74l139.69,0.05c0.65,0,1.25-0.35,1.58-0.91l122.77-212.46c0.7-1.22-0.17-2.74-1.58-2.74l-612.82-0.22C184.26,107.34,183.66,106.99,183.33,106.42z"/></svg>';
 
     // Restore saved unit size and sync both inputs
     (function() {
@@ -1987,8 +1988,9 @@
                         var tbLink = document.createElement('a');
                         tbLink.href = _mktRsUrl;
                         tbLink.target = '_blank';
-                        tbLink.textContent = 'View Market ↗';
-                        tbLink.style.cssText = 'font-size:10px;font-weight:700;letter-spacing:.05em;color:var(--accent);text-decoration:none;padding:3px 8px;border:1px solid var(--accent);border-radius:4px;opacity:0.9';
+                        tbLink.className = 'rs-icon-btn';
+                        tbLink.title = 'View on Real Sports';
+                        tbLink.innerHTML = RS_LOGO_SVG;
                         tbLink.addEventListener('click', function(e) {
                             e.stopPropagation();
                             try { posthog.capture('bet_link_opened', { sport: currentSport, game: game, market: mkt }); } catch(_e) {}
@@ -3310,6 +3312,7 @@
             + '<thead><tr>'
             + '<th style="width:28px"></th>'
             + '<th style="width:72px" class="r">EV%</th>'
+            + '<th style="width:28px;padding:0 3px"></th>'
             + '<th style="width:50px">Sport</th>'
             + '<th>Game</th>'
             + '<th style="width:100px">Market</th>'
@@ -3349,6 +3352,8 @@
             if (rsGameIds[r.game]) {
                 rsUrl = getRealSportsUrl(rsGameIds[r.game], r._sport_key, r.league, r.game) || '';
             }
+            var _evRsUrl = rsMarketIds[r.id] ? getRealSportsMarketUrl(rsMarketIds[r.id]) : rsUrl;
+            var _evRsIconTd = _evRsUrl ? '<a href="' + escHtml(_evRsUrl) + '" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="View on Real Sports" class="rs-icon-btn">' + RS_LOGO_SVG + '</a>' : '';
 
             // Desktop table row
             var ti = timeInfo(r.cm);
@@ -3372,6 +3377,7 @@
             html += '<tr class="' + trStyle.trim() + '" data-row-id="' + escHtml(r.id) + '" style="' + trRowStyle + '">'
                 + '<td>' + cbHtml + autoTag + '</td>'
                 + '<td class="r ev-val-td">' + evCell + '</td>'
+                + '<td style="width:28px;padding:0 3px;text-align:center">' + _evRsIconTd + '</td>'
                 + '<td><span style="font-size:9px;font-weight:800;letter-spacing:.07em;color:var(--muted2);text-transform:uppercase;white-space:nowrap">' + escHtml(r._sport || '') + '</span></td>'
                 + '<td style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escHtml(gameStr) + timeBadge + rsLink + '</td>'
                 + '<td><span class="mkt-badge" style="font-size:10px">' + escHtml(mktLabel) + '</span></td>'
@@ -3387,9 +3393,7 @@
 
             // Mobile card
             var cardCls = 'ev-mobile-card' + (ev != null && ev >= 10 ? ' ev-card-win' : '') + (taken && !autoFrom ? ' ev-card-taken' : '') + (taken && autoFrom ? ' ev-card-auto-taken' : '');
-            var redirectBtn = rsUrl
-                ? '<a href="' + rsUrl + '" target="_blank" rel="noopener" class="evm-redirect-btn">Redirect to Game</a>'
-                : '';
+            var _evRsIconMob = _evRsUrl ? '<a href="' + escHtml(_evRsUrl) + '" target="_blank" rel="noopener" class="rs-icon-btn" title="View on Real Sports" onclick="event.stopPropagation()">' + RS_LOGO_SVG + '</a>' : '';
             mhtml += '<div class="' + cardCls + '" data-row-id="' + escHtml(r.id) + '">'
                 // Top row: sport + EV%
                 + '<div style="display:flex;align-items:center;justify-content:space-between;gap:2px">'
@@ -3417,11 +3421,12 @@
                 +   '<span class="evm-units ev-units-td" style="color:' + uColor + '">' + escHtml(uStr) + '</span>'
                 +   '<span class="evm-bet ev-bet-td">' + betAmt + '</span>'
                 + '</div>'
-                // Redirect button (if available)
-                + redirectBtn
-                // Footer: auto-taken badge (left) + checkbox (right)
+                // Footer: RS icon (bottom-left) + taken badge + checkbox (right)
                 + '<div class="evm-footer">'
-                +   (autoFrom ? '<span style="font-size:9px;font-weight:700;color:#f5a623;background:rgba(245,166,35,0.12);border:1px solid rgba(245,166,35,0.3);border-radius:3px;padding:2px 5px;letter-spacing:.04em">' + (autoFrom === '__auto__' ? 'Other side taken' : 'Took ' + escHtml(autoFrom)) + '</span>' : (taken ? '<span style="font-size:9px;font-weight:700;color:#4caf50;background:rgba(76,175,80,0.12);border:1px solid rgba(76,175,80,0.3);border-radius:3px;padding:2px 5px;letter-spacing:.04em">Taken</span>' : '<span></span>'))
+                +   '<div style="display:flex;align-items:center;gap:5px">'
+                +     _evRsIconMob
+                +     (autoFrom ? '<span style="font-size:9px;font-weight:700;color:#f5a623;background:rgba(245,166,35,0.12);border:1px solid rgba(245,166,35,0.3);border-radius:3px;padding:2px 5px;letter-spacing:.04em">' + (autoFrom === '__auto__' ? 'Other side taken' : 'Took ' + escHtml(autoFrom)) + '</span>' : (taken ? '<span style="font-size:9px;font-weight:700;color:#4caf50;background:rgba(76,175,80,0.12);border:1px solid rgba(76,175,80,0.3);border-radius:3px;padding:2px 5px;letter-spacing:.04em">Taken</span>' : ''))
+                +   '</div>'
                 +   '<input type="checkbox" class="evm-cb" data-id="' + escHtml(r.id) + '" '
                 +   (taken ? 'checked ' : '') + 'onchange="toggleBet(this.dataset.id)" title="Mark bet taken">'
                 + '</div>'
@@ -7727,7 +7732,7 @@
             ? getRealSportsMarketUrl(rsMarketIds[r.id])
             : (rsGameIds[r.game] ? getRealSportsUrl(rsGameIds[r.game], currentSport, r.league, r.game) : null);
         return '<tr class="' + (r.edge != null && r.edge > 0 ? 'has-edge' : '') + (isC ? ' collapsed-row' : '') + '" data-gk="' + gk + '" data-row-id="' + r.id + '" style="' + takenBg + takenOp + edgeBg(r.edge) + '">'
-        + '<td style="width:26px;padding:0 3px;text-align:center">' + (_rsRowUrl ? '<a href="' + escHtml(_rsRowUrl) + '" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="View on Real Sports" class="rs-icon-btn"><svg viewBox="0 0 800 800" fill="currentColor" aria-hidden="true" style="width:13px;height:13px;display:block"><path d="M183.33,106.42L143.1,36.68c-0.33-0.56-0.93-0.91-1.58-0.91L1.83,35.72c-1.4,0-2.28,1.52-1.58,2.74l418.39,725.21c0.7,1.22,2.46,1.22,3.16,0l69.82-121.01c0.33-0.56,0.33-1.26,0-1.82L257.35,234.72c-0.7-1.22,0.18-2.74,1.58-2.74l322.91,0.11c1.4,0,2.28,1.52,1.58,2.74l-49.72,86.04c-0.7,1.22,0.17,2.74,1.58,2.74l139.69,0.05c0.65,0,1.25-0.35,1.58-0.91l122.77-212.46c0.7-1.22-0.17-2.74-1.58-2.74l-612.82-0.22C184.26,107.34,183.66,106.99,183.33,106.42z"/></svg></a>' : '') + '</td>'
+        + '<td style="width:26px;padding:0 3px;text-align:center">' + (_rsRowUrl ? '<a href="' + escHtml(_rsRowUrl) + '" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="View on Real Sports" class="rs-icon-btn">' + RS_LOGO_SVG + '</a>' : '') + '</td>'
         + '<td class="game-td" data-label="Game" style="' + takenBl + '"><div style="font-weight:600;display:flex;align-items:center;gap:5px">' + (r.mkt !== 'Total' && r.mkt !== 'RFI' ? teamLogoHtml(r.side, 16) : '') + '<span' + (rowGrad ? ' style="padding:1px 8px 1px 4px;background:linear-gradient(90deg,' + rowGrad + ',transparent);border-radius:3px"' : '') + (rfiColor ? ' style="color:' + rfiColor + '"' : '') + '>' + r.side + '</span>' + autoRowTag + '</div><div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px">' + r.game + '</div></td>'
         + '<td data-label="Market"><span class="mkt-badge">' + fmtMkt(r.mkt) + '</span></td>'
         + '<td data-label="Side" style="color:var(--muted);font-size:12px"><span style="display:inline-flex;align-items:center;gap:4px;vertical-align:middle">' + (r.mkt !== 'Total' && r.mkt !== 'RFI' ? '<span class="adv-col">' + teamLogoHtml(r.side, 14) + '</span>' : '') + r.side + '</span></td>'
