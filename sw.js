@@ -2,7 +2,7 @@
 // App-shell strategy: cache the HTML shell on install, serve from cache on
 // repeat visits for instant load. All API requests always go to the network.
 
-const CACHE = 'raxedge-shell-v4';
+const CACHE = 'raxedge-shell-v5';
 // Only cache the HTML shell — app.js/app.css use network-first so deploys take effect immediately
 const SHELL = ['/'];
 
@@ -34,7 +34,8 @@ self.addEventListener('fetch', function(e) {
     return;
   }
   // Network-first for JS/CSS so deploys take effect on next load without a hard refresh
-  if (url.endsWith('.js') || url.endsWith('.css')) {
+  var _path = new URL(url).pathname;
+  if (_path.endsWith('.js') || _path.endsWith('.css')) {
     e.respondWith(
       fetch(e.request).catch(function() { return caches.match(e.request); })
     );
