@@ -8256,7 +8256,30 @@
                         // Any word from RS name appearing in DK name (or vice versa) is a match.
                         // Exclude geographic direction words — "south" must not match across "South Korea" / "South Africa".
                         var _gs = { south: 1, north: 1, east: 1, west: 1, central: 1, new: 1 };
-                        var _wcA = { 'usa': 'united states', 'united states': 'usa', 'turkiye': 'turkey', 'turkey': 'turkiye', "cote d'ivoire": 'ivory coast', 'ivory coast': "cote d'ivoire" };
+                        var _wcA = {
+                            'usa': 'united states', 'united states': 'usa',
+                            'turkiye': 'turkey', 'turkey': 'turkiye',
+                            "cote d'ivoire": 'ivory coast', 'ivory coast': "cote d'ivoire",
+                            // FIFA 3-letter codes RS uses for national teams
+                            'arg': 'argentina', 'argentina': 'arg',
+                            'esp': 'spain',     'spain': 'esp',
+                            'fra': 'france',    'france': 'fra',
+                            'bra': 'brazil',    'brazil': 'bra',
+                            'ger': 'germany',   'germany': 'ger',
+                            'por': 'portugal',  'portugal': 'por',
+                            'ned': 'netherlands','netherlands': 'ned',
+                            'eng': 'england',   'england': 'eng',
+                            'ita': 'italy',     'italy': 'ita',
+                            'mex': 'mexico',    'mexico': 'mex',
+                            'mor': 'morocco',   'morocco': 'mor',
+                            'jpn': 'japan',     'japan': 'jpn',
+                            'aus': 'australia', 'australia': 'aus',
+                            'uru': 'uruguay',   'uruguay': 'uru',
+                            'col': 'colombia',  'colombia': 'col',
+                            'cro': 'croatia',   'croatia': 'cro',
+                            'sen': 'senegal',   'senegal': 'sen',
+                            'mar': 'morocco',   'cmr': 'cameroon', 'cameroon': 'cmr',
+                        };
                         var awayMatch = rAway.split(' ').some(function(w) { return w.length > 2 && !_gs[w] && fdAway.indexOf(w) !== -1; })
                                      || fdAway.split(' ').some(function(w) { return w.length > 2 && !_gs[w] && rAway.indexOf(w) !== -1; })
                                      || (!!_wcA[rAway] && (fdAway === _wcA[rAway] || fdAway.indexOf(_wcA[rAway]) !== -1))
@@ -8321,9 +8344,10 @@
                            || gameMarkets['Match Winner'] || gameMarkets['Winner']
                            || Object.values(gameMarkets)[0]; // last resort: first available market
                 }
-                // WC KO: RS may label "To Advance" market various ways
+                // WC KO: RS may label the winner market various ways depending on round
                 if (!mktData && sport === 'soccer_wc' && r.mkt === 'ML') {
-                    mktData = gameMarkets['To Advance'] || gameMarkets['To Qualify'] || gameMarkets['To Progress']
+                    mktData = gameMarkets['To Lift Cup'] || gameMarkets['To Win the Cup']
+                           || gameMarkets['To Advance'] || gameMarkets['To Qualify'] || gameMarkets['To Progress']
                            || gameMarkets['Match Result'] || gameMarkets['1X2']
                            || gameMarkets['Home/Draw/Away'] || gameMarkets['Game Winner'];
                 }
