@@ -60,6 +60,7 @@
     var scoresPoller = null;
     var wcSubTab     = 'games'; // 'games' | 'futures'
     var currentLoadAbort = null;
+    var tabHiddenAt  = 0; // timestamp when tab was last hidden, for stale-check on return
 
     function stopAllPollers() {
         if (currentLoadAbort) { currentLoadAbort.abort(); currentLoadAbort = null; }
@@ -76,16 +77,20 @@
 
     document.addEventListener('visibilitychange', function() {
         if (document.hidden) {
-            stopAllPollers();
+            tabHiddenAt = Date.now();
+            // Pollers stay running but skip fetches while hidden (each poller checks document.hidden)
         } else {
-            // Only restart pollers if the user is actually logged in
             if (!currentUser) return;
-            loadBetsTaken(); // re-sync taken bets from server when tab becomes visible
-            if (evTabVisible) {
-                loadAllEvSports();
-            } else {
-                loadOdds();
+            loadBetsTaken();
+            var hiddenMs = tabHiddenAt ? Date.now() - tabHiddenAt : 0;
+            tabHiddenAt = 0;
+            // Only do a full reload if away for > 5 min — game list may have changed
+            if (hiddenMs > 5 * 60 * 1000) {
+                stopAllPollers();
+                if (evTabVisible) loadAllEvSports();
+                else loadOdds();
             }
+            // Under 5 min: pollers resume at their next tick, table stays as-is
         }
     });
     var dkAltOdds = {}; // gid -> { spreads: { Away: {line: price}, Home: {line: price} }, totals: { Over: {line: price}, Under: {line: price} } }
@@ -1641,6 +1646,7 @@
         fetchAndApplyScores(sport);
         scoresPoller = setInterval(function() {
             if (currentSport !== sport) { clearInterval(scoresPoller); scoresPoller = null; return; }
+            if (document.hidden) return;
             fetchAndApplyScores(sport);
         }, 30000);
     }
@@ -3065,7 +3071,7 @@
         loadAllEvSports();
         if (!evAutoRefreshTimer) {
             evAutoRefreshTimer = setInterval(function() {
-                if (evTabVisible) loadAllEvSports();
+                if (evTabVisible && !document.hidden) loadAllEvSports();
             }, EV_REFRESH_MS);
         }
     }
@@ -5966,6 +5972,7 @@
                 if (nbaPoller) clearInterval(nbaPoller);
                 nbaPoller = setInterval(function() {
                     if (currentSport !== 'basketball_nba') { clearInterval(nbaPoller); nbaPoller = null; return; }
+                    if (document.hidden) return;
                     fetchAltLinesForNBA();
                 }, 5000);
                 // Fetch DK alt lines once on load, then every 30s
@@ -5973,6 +5980,7 @@
                 if (dkPoller) clearInterval(dkPoller);
                 dkPoller = setInterval(function() {
                     if (currentSport !== 'basketball_nba') { clearInterval(dkPoller); dkPoller = null; return; }
+                    if (document.hidden) return;
                     fetchDKAltLines();
                 }, 5000);
             });
@@ -6045,6 +6053,7 @@
                 if (wnbaPoller) clearInterval(wnbaPoller);
                 wnbaPoller = setInterval(function() {
                     if (currentSport !== 'basketball_wnba') { clearInterval(wnbaPoller); wnbaPoller = null; return; }
+                    if (document.hidden) return;
                     fetchAltLinesForWNBA();
                 }, 5000);
             });
@@ -6132,6 +6141,7 @@
                 if (wcPoller) clearInterval(wcPoller);
                 wcPoller = setInterval(function() {
                     if (currentSport !== 'soccer_wc' || wcSubTab !== 'games' || evTabVisible) { clearInterval(wcPoller); wcPoller = null; return; }
+                    if (document.hidden) return;
                     fetchWCNativeUpdate();
                 }, 5000);
             });
@@ -6212,6 +6222,7 @@
                 if (fcPoller) clearInterval(fcPoller);
                 fcPoller = setInterval(function() {
                     if (currentSport !== 'soccer_fc') { clearInterval(fcPoller); fcPoller = null; return; }
+                    if (document.hidden) return;
                     fetchFCNativeUpdate();
                 }, 5000);
             });
@@ -6343,6 +6354,7 @@
                     if (mlbPoller) clearInterval(mlbPoller);
                     mlbPoller = setInterval(function() {
                         if (currentSport !== 'baseball_mlb') { clearInterval(mlbPoller); mlbPoller = null; return; }
+                        if (document.hidden) return;
                         fetchMLBNativeUpdate();
                     }, 5000);
                 } else {
@@ -6479,11 +6491,13 @@
                     if (nhlPoller) clearInterval(nhlPoller);
                     nhlPoller = setInterval(function() {
                         if (currentSport !== 'icehockey_nhl') { clearInterval(nhlPoller); nhlPoller = null; return; }
+                        if (document.hidden) return;
                         fetchNHLNativeUpdate();
                     }, 5000);
                     if (dkPoller) clearInterval(dkPoller);
                     dkPoller = setInterval(function() {
                         if (currentSport !== 'icehockey_nhl') { clearInterval(dkPoller); dkPoller = null; return; }
+                        if (document.hidden) return;
                         fetchDKAltLinesNHL();
                     }, 5000);
                 } else { renderTable(); }
