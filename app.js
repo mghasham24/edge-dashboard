@@ -816,6 +816,12 @@
         var hash = _hashids.encode([4, sportId, 0, gid]);
         return 'https://www.realapp.com/' + hash;
     }
+    function getRealSportsMarketUrl(marketId) {
+        if (!marketId || typeof Hashids === 'undefined') return null;
+        if (!_hashids) _hashids = new Hashids('routing', 11);
+        var hash = _hashids.encode([36, 0, 0, marketId]);
+        return hash ? 'https://www.realapp.com/' + hash : null;
+    }
     // Build RS URL directly from portfolio item fields (gameId + sportId already numeric)
     function getPortfolioGameUrl(p) {
         if (!p || p.gameId == null) return null;
@@ -1957,12 +1963,18 @@
                     volTag.textContent = vols[firstRow.id] + ' vol';
                     lbl.appendChild(volTag);
                 }
-                // Time + RS link bar above ML label (WC has no ML rows, use Spread instead)
-                var _isLinkSection = mkt === 'ML';
-                if (_isLinkSection && (_ti && _ti.lbl || _rsUrl)) {
+                // Market-specific RS URL for this section; fall back to game URL
+                var _mktRsUrl = (firstRow && rsMarketIds[firstRow.id])
+                    ? getRealSportsMarketUrl(rsMarketIds[firstRow.id])
+                    : null;
+                if (!_mktRsUrl) _mktRsUrl = _rsUrl;
+
+                // Time badge + RS link bar: ML always (time badge), other sections if we have a market URL
+                var _showLinkBar = mkt === 'ML' ? !!((_ti && _ti.lbl) || _mktRsUrl) : !!_mktRsUrl;
+                if (_showLinkBar) {
                     var mlTopBar = document.createElement('div');
                     mlTopBar.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--border)';
-                    if (_ti && _ti.lbl) {
+                    if (mkt === 'ML' && _ti && _ti.lbl) {
                         var tbTime = document.createElement('span');
                         tbTime.className = 'gh-badge ' + (_ti.cls || '');
                         tbTime.style.cssText = 'font-size:11px;font-family:var(--mono)';
@@ -1971,15 +1983,15 @@
                     } else {
                         mlTopBar.appendChild(document.createElement('span'));
                     }
-                    if (_rsUrl) {
+                    if (_mktRsUrl) {
                         var tbLink = document.createElement('a');
-                        tbLink.href = _rsUrl;
+                        tbLink.href = _mktRsUrl;
                         tbLink.target = '_blank';
-                        tbLink.textContent = 'Link to Game ↗';
+                        tbLink.textContent = 'View Market ↗';
                         tbLink.style.cssText = 'font-size:10px;font-weight:700;letter-spacing:.05em;color:var(--accent);text-decoration:none;padding:3px 8px;border:1px solid var(--accent);border-radius:4px;opacity:0.9';
                         tbLink.addEventListener('click', function(e) {
                             e.stopPropagation();
-                            try { posthog.capture('bet_link_opened', { sport: currentSport, game: game }); } catch(_e) {}
+                            try { posthog.capture('bet_link_opened', { sport: currentSport, game: game, market: mkt }); } catch(_e) {}
                         });
                         mlTopBar.appendChild(tbLink);
                     }
