@@ -1795,6 +1795,23 @@
             }
         });
 
+        // Returns a readable team nickname, preserving multi-word mascots (Red Sox, Blue Jays, etc.)
+        function mobNick(name) {
+            var s = (name || '').replace(/^[↑↓→←⬆⬇➡⬅\s]+/, '').trim();
+            var w = s.split(' ');
+            if (w.length >= 2) {
+                var last2 = w.slice(-2).join(' ').toLowerCase();
+                var MULTI = {
+                    'red sox': 'Red Sox', 'white sox': 'White Sox',
+                    'blue jays': 'Blue Jays', 'trail blazers': 'Blazers',
+                    'blue jackets': 'Blue Jackets', 'maple leafs': 'Maple Leafs',
+                    'red wings': 'Red Wings', 'golden knights': 'G.Knights'
+                };
+                if (MULTI[last2]) return MULTI[last2];
+            }
+            return w[w.length - 1] || s;
+        }
+
         var COLORS = ['#4f6ef7', '#2dcc7e', '#f5c842', '#f05252', '#a78bfa', '#38bdf8', '#fb923c', '#e879f9', '#34d399', '#f87171', '#60a5fa', '#fbbf24'];
         var leagueBadgeMap = {
             basketball_nba: 'NBA',
@@ -1854,22 +1871,33 @@
             var _mobHomeTeam = _mobDhMatch ? _mobDhMatch[1].trim() : (teams[1] || '');
             var _mobGameNum  = _mobDhMatch ? _mobDhMatch[3] : null;
             var _mobSportLbl = (SPORTS.find(function(s) { return s.key === currentSport; }) || {}).label || '';
-            var _mobNickA = (teams[0] || '').replace(/^[↑↓→←⬆⬇➡⬅\s]+/, '').split(' ').pop();
-            var _mobNickH = _mobHomeTeam.replace(/^[↑↓→←⬆⬇➡⬅\s]+/, '').split(' ').pop();
+            var _mobNickA = mobNick(teams[0]);
+            var _mobNickH = mobNick(_mobHomeTeam);
+            var _leagueLogoMap = {
+                'basketball_nba': 'https://a.espncdn.com/i/teamlogos/leagues/500/nba.png',
+                'icehockey_nhl': 'https://a.espncdn.com/i/teamlogos/leagues/500/nhl.png',
+                'baseball_mlb': 'https://a.espncdn.com/i/teamlogos/leagues/500/mlb.png',
+                'basketball_wnba': 'https://a.espncdn.com/i/teamlogos/leagues/500/wnba.png'
+            };
+            var _leagueLogoUrl = _leagueLogoMap[currentSport] || '';
+            var _leagueBadge = _leagueLogoUrl
+                ? '<img src="' + escHtml(_leagueLogoUrl) + '" style="width:18px;height:18px;object-fit:contain;display:block" onerror="this.style.display=\'none\'">'
+                : '<span style="font-size:8px;font-weight:700;color:var(--muted2);letter-spacing:.05em;text-transform:uppercase">' + escHtml(_mobSportLbl) + '</span>';
             function _mobTeamHtml(name, nick) {
-                return '<div style="display:flex;align-items:center;gap:3px;flex:1;min-width:0;overflow:hidden">'
-                    + teamLogoHtml(name, 15)
-                    + '<div style="min-width:0;overflow:hidden;flex:1">'
-                    + '<div style="font-size:7px;color:var(--muted2);letter-spacing:.08em;line-height:1.3;text-transform:uppercase">' + escHtml(_mobSportLbl) + '</div>'
-                    + '<div style="font-size:10px;font-weight:700;letter-spacing:.03em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)">' + escHtml(nick) + '</div>'
-                    + '</div></div>';
+                return '<div style="display:flex;align-items:center;gap:5px;flex:1;min-width:0;overflow:hidden">'
+                    + teamLogoHtml(name, 20)
+                    + '<div style="font-size:13px;font-weight:700;letter-spacing:.03em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)">' + escHtml(nick) + '</div>'
+                    + '</div>';
             }
 
             var title = document.createElement('span');
             title.className = 'gc-title';
-            title.innerHTML = '<div style="display:flex;align-items:center;gap:3px;flex:1;min-width:0">'
+            title.innerHTML = '<div style="display:flex;align-items:center;gap:4px;flex:1;min-width:0">'
                 + _mobTeamHtml(teams[0], _mobNickA)
-                + '<span style="color:var(--muted2);font-size:9px;flex-shrink:0;padding:0 1px">@</span>'
+                + '<div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;gap:1px">'
+                + _leagueBadge
+                + '<span style="color:var(--muted2);font-size:8px;line-height:1">@</span>'
+                + '</div>'
                 + _mobTeamHtml(_mobHomeTeam, _mobNickH)
                 + '</div>';
             hdr.appendChild(title);
@@ -2032,7 +2060,7 @@
                     var mlInputs = [];
                     mktRows.forEach(function(r) {
                         var pval = preds[r.id] || '';
-                        var teamNick = r.side.split(' ').pop();
+                        var teamNick = mobNick(r.side);
                         // Wrapper so opacity applies to row + ev together
                         var teamWrap = document.createElement('div');
                         teamWrap.className = 'mc-team-wrap';
@@ -2042,7 +2070,7 @@
                         sideRow.style.cssText = 'display:flex;align-items:center;gap:5px';
                         var teamInfo = document.createElement('div');
                         teamInfo.style.cssText = 'display:flex;align-items:center;gap:4px;flex:1;min-width:0';
-                        teamInfo.innerHTML = teamLogoHtml(r.side, 14);
+                        teamInfo.innerHTML = teamLogoHtml(r.side, 16);
                         var nameLbl = document.createElement('span');
                         nameLbl.style.cssText = 'font-size:10px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0';
                         nameLbl.textContent = teamNick;
