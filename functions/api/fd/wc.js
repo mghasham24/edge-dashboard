@@ -6,18 +6,18 @@ import { getSessionOrCron } from '../../_lib/auth.js';
 // Step 2: For each event, fetch subcat 13170 to get actual ±0.5 prices
 
 const DK_BASE      = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
-const DK_SUBCAT_ODDS = '5826'; // "To Advance" — KO round 2-way ML (ET + pens)
+// Try both subcats: 5430 = "To Win the Cup" (final), 5826 = "To Advance" (other KO rounds)
+const DK_SUBCAT_IDS = ['5430', '5826'];
 const CACHE_TTL    = 4; // 4s ensures 5s frontend poller always gets a fresh DK fetch
 
 const DK_WC_LEAGUE_ID = '209533'; // FIFA World Cup 2026
 const DK_NAV_URL = `${DK_BASE}/navigation/dkusnj/v2/nav/leagues/${DK_WC_LEAGUE_ID}`;
 
-// Step 2: fetch "To Advance" odds for a discovered event
-function dkEventSubcatUrl(eventId) {
+function dkEventSubcatUrl(eventId, subcatId) {
   const mq = encodeURIComponent(
-    `$filter=eventId eq '${eventId}' AND clientMetadata/subCategoryId eq '${DK_SUBCAT_ODDS}' AND tags/all(t: t ne 'SportcastBetBuilder')`
+    `$filter=eventId eq '${eventId}' AND clientMetadata/subCategoryId eq '${subcatId}' AND tags/all(t: t ne 'SportcastBetBuilder')`
   );
-  return `${DK_BASE}/controldata/event/eventSubcategory/v1/markets?isBatchable=false&templateVars=${eventId}%2C${DK_SUBCAT_ODDS}&marketsQuery=${mq}&entity=markets`;
+  return `${DK_BASE}/controldata/event/eventSubcategory/v1/markets?isBatchable=false&templateVars=${eventId}%2C${subcatId}&marketsQuery=${mq}&entity=markets`;
 }
 
 function parseAmerican(str) {
@@ -99,9 +99,11 @@ export async function onRequestGet(context) {
       if (!ev.id || !ev.startEventDate) continue;
       const evMs = new Date(ev.startEventDate).getTime();
       if (evMs < nowMs - 4 * 3600 * 1000 || evMs > nowMs + 36 * 3600 * 1000) continue;
-      const homeP = (ev.participants || []).find(p => p.venueRole === 'Home');
-      const awayP = (ev.participants || []).find(p => p.venueRole === 'Away');
-      if (!homeP || !awayP) continue;
+      const parts = ev.participants || [];
+      // Neutral-site games (WC final etc.) may have no venueRole — fall back to index order (DK: [away, home])
+      const homeP = parts.find(p => p.venueRole === 'Home') || parts[1];
+      const awayP = parts.find(p => p.venueRole === 'Away') || parts[0];
+      if (!homeP || !awayP || homeP === awayP) continue;
       todayEvents.push({ eventId: String(ev.id), home: homeP.name, away: awayP.name, league: 'WC', openDate: ev.startEventDate });
     }
 
@@ -129,22 +131,24 @@ export async function onRequestGet(context) {
     await Promise.all(todayEvents.map(async (ev) => {
       const gameKey = ev.away + ' @ ' + ev.home;
       try {
-        const r = await fetch(dkEventSubcatUrl(ev.eventId), { headers });
-        if (!r.ok) return;
-        const d = await r.json();
-
-        // "To Advance" — 2-way ML, no point spread
+        // Try each subcat in order; use the first one that returns odds
+        // 5430 = "To Win the Cup" (final), 5826 = "To Advance" (other KO rounds)
         const ml = { Home: null, Away: null };
-        for (const sel of d.selections || []) {
-          const ot    = sel.outcomeType;
-          const price = parseAmerican(sel.displayOdds && sel.displayOdds.american);
-          if (price == null || (ot !== 'Home' && ot !== 'Away')) continue;
-          ml[ot] = price;
+        for (const subcatId of DK_SUBCAT_IDS) {
+          if (ml.Home != null || ml.Away != null) break;
+          const sr = await fetch(dkEventSubcatUrl(ev.eventId, subcatId), { headers });
+          if (!sr.ok) continue;
+          const sd = await sr.json();
+          for (const sel of sd.selections || []) {
+            const ot    = sel.outcomeType;
+            const price = parseAmerican(sel.displayOdds && sel.displayOdds.american);
+            if (price == null || (ot !== 'Home' && ot !== 'Away')) continue;
+            ml[ot] = price;
+          }
         }
 
         if (debugMode === '2') {
-          const allSels = (d.selections || []).map(s => ({ label: s.label, outcomeType: s.outcomeType, odds: s.displayOdds && s.displayOdds.american }));
-          gamesMap[gameKey] = { home: ev.home, away: ev.away, home_ml: ml.Home, away_ml: ml.Away, allSels, _rawKeys: Object.keys(d) };
+          gamesMap[gameKey] = { home: ev.home, away: ev.away, home_ml: ml.Home, away_ml: ml.Away };
           return;
         }
 
