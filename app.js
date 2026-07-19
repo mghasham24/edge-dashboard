@@ -3356,10 +3356,7 @@
             // Desktop table row
             var ti = timeInfo(r.cm);
             var timeBadge = ti.lbl ? '<span class="gh-badge ' + ti.cls + '" style="font-size:9px;padding:2px 5px;margin-left:5px;vertical-align:middle">' + escHtml(ti.lbl) + '</span>' : '';
-            var rsLink = rsUrl
-                ? ' <a href="' + rsUrl + '" target="_blank" rel="noopener" onclick="event.stopPropagation()" '
-                    + 'style="color:var(--accent);font-size:10px;text-decoration:none" title="View on Real Sports">&#8599;</a>'
-                : '';
+
             var evCell = evStr
                 ? '<span style="font-family:var(--mono);font-size:12px;font-weight:800;color:' + evColor + '">' + escHtml(evStr) + '</span>'
                 : '—';
@@ -3377,7 +3374,7 @@
                 + '<td class="r ev-val-td">' + evCell + '</td>'
                 + '<td style="width:28px;padding:0 3px;text-align:center">' + _evRsIconTd + '</td>'
                 + '<td><span style="font-size:9px;font-weight:800;letter-spacing:.07em;color:var(--muted2);text-transform:uppercase;white-space:nowrap">' + escHtml(r._sport || '') + '</span></td>'
-                + '<td style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escHtml(gameStr) + timeBadge + rsLink + '</td>'
+                + '<td style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escHtml(gameStr) + timeBadge + '</td>'
                 + '<td><span class="mkt-badge" style="font-size:10px">' + escHtml(mktLabel) + '</span></td>'
                 + '<td style="font-weight:700;font-size:12px">' + escHtml(r.side || '') + '</td>'
                 + '<td class="r" style="font-family:var(--mono);font-size:12px;color:var(--muted)">' + escHtml(amStr) + '</td>'
@@ -7615,7 +7612,6 @@
                 + '<div style="display:grid;grid-template-columns:auto minmax(0,1fr) auto auto minmax(0,1fr);align-items:center;gap:4px;flex:1;min-width:0">' + teamLogoHtml(teams[0], 20) + teamNameHtml(teams[0]) + '<span style="color:var(--muted2);text-align:center;padding:0 2px">@</span>' + teamLogoHtml(_homeTeam, 20) + teamNameHtml(_homeTeam) + '</div>'
                 + (_gameNum ? '<span class="gh-badge" style="flex-shrink:0;margin-left:6px;background:rgba(255,255,255,0.1);color:var(--muted2);font-size:10px;letter-spacing:.06em">GAME ' + _gameNum + '</span>' : '')
                 + (ti.lbl ? '<span class="gh-badge ' + ti.cls + '" style="flex-shrink:0;margin-left:6px">' + ti.lbl + '</span>' : '')
-                + (rsGameIds[r.game] ? (function(){ var u = getRealSportsUrl(rsGameIds[r.game], currentSport, r.league, r.game); return u ? '<a href="' + u + '" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" style="margin-left:6px;color:var(--accent);font-size:11px;text-decoration:none;opacity:0.9;flex-shrink:0" title="View on Real Sports">&#8599;</a>' : ''; })() : '')
                 + '<span class="gh-score-badge gh-badge" data-game="' + r.game.replace(/"/g, '&quot;') + '" data-cm="' + (r.cm ? r.cm.getTime() : '') + '" style="display:none"></span>'
                 + '<span class="live-score-badge gh-badge" style="display:none"></span>'
                 + '<span class="gh-arrow' + (isC ? '' : ' up') + '" data-gk="' + r.game.replace(/"/g, '&quot;') + '">&#9660;</span>'
