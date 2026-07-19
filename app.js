@@ -1862,7 +1862,8 @@
             hdr.className = 'game-card-header';
             hdr.dataset.game = game;
             hdr.style.borderLeft = '4px solid ' + color;
-            hdr.style.background = 'linear-gradient(90deg, ' + teamColorAt(_mht, '22') + ' 0%, var(--bg3) 60%)';
+            var _homeTeamForGrad = (teams[1] || '').replace(/\s*\(Game \d+\)/, '').trim();
+            hdr.style.background = 'linear-gradient(90deg, ' + teamColorAt(_mht, '22') + ' 0%, var(--bg3) 42%, ' + teamColorAt(_homeTeamForGrad, '22') + ' 100%)';
             hdr.addEventListener('click', function() {
                 toggleMobileCard(this.dataset.game);
             });
@@ -1894,7 +1895,7 @@
             title.className = 'gc-title';
             title.innerHTML = '<div style="display:flex;align-items:center;gap:4px;flex:1;min-width:0">'
                 + _mobTeamHtml(teams[0], _mobNickA)
-                + '<div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;gap:1px">'
+                + '<div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;gap:1px;margin:0 6px">'
                 + _leagueBadge
                 + '<span style="color:var(--muted2);font-size:8px;line-height:1">@</span>'
                 + '</div>'
@@ -7698,7 +7699,7 @@
         return '<tr class="' + (r.edge != null && r.edge > 0 ? 'has-edge' : '') + (isC ? ' collapsed-row' : '') + '" data-gk="' + gk + '" data-row-id="' + r.id + '" style="' + takenBl + takenBg + takenOp + edgeBg(r.edge) + '">'
         + '<td class="game-td" data-label="Game"><div style="font-weight:600;display:flex;align-items:center;gap:5px">' + (r.mkt !== 'Total' && r.mkt !== 'RFI' ? teamLogoHtml(r.side, 16) : '') + '<span' + (rowGrad ? ' style="padding:1px 8px 1px 4px;background:linear-gradient(90deg,' + rowGrad + ',transparent);border-radius:3px"' : '') + (rfiColor ? ' style="color:' + rfiColor + '"' : '') + '>' + r.side + '</span>' + autoRowTag + '</div><div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:2px">' + r.game + '</div></td>'
         + '<td data-label="Market"><span class="mkt-badge">' + fmtMkt(r.mkt) + '</span></td>'
-        + '<td data-label="Side" style="color:var(--muted);font-size:12px">' + r.side + '</td>'
+        + '<td data-label="Side" style="color:var(--muted);font-size:12px"><span style="display:inline-flex;align-items:center;gap:4px;vertical-align:middle">' + (r.mkt !== 'Total' && r.mkt !== 'RFI' ? '<span class="adv-col">' + teamLogoHtml(r.side, 14) + '</span>' : '') + r.side + '</span></td>'
         + '<td class="r adv-col" data-label="Consensus"><span class="' + aCls + '">' + am + '</span></td>'
         + '<td class="r adv-col" data-label="Adj. Fair %" style="font-family:var(--mono);color:var(--muted)">' + afStr + '</td>'
         + '<td class="c" data-label="Real %"><div style="display:flex;flex-direction:column;align-items:center;gap:2px;justify-content:center"><div style="display:flex;align-items:center;gap:4px;justify-content:center"><input class="cell-inp' + (pv ? ' filled' : '') + '" type="number" min="1" max="99" step="1" inputmode="numeric" placeholder="-" value="' + pv + '" data-id="' + r.id + '" oninput="setPred(this)" onblur="setPred(this)" onkeydown="if(event.key===\'Enter\')this.blur()"><span class="pred-unit">%</span></div>' + (vols[r.id] ? '<span class="vol-span" style="font-size:9px;color:var(--muted2);font-family:var(--mono)">' + vols[r.id] + ' vol</span>' : '') + '</div></td>'
