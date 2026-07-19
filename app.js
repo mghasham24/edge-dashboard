@@ -1970,33 +1970,31 @@
                     : null;
                 if (!_mktRsUrl) _mktRsUrl = _rsUrl;
 
-                // Time badge + RS link bar: ML always (time badge), other sections if we have a market URL
-                var _showLinkBar = mkt === 'ML' ? !!((_ti && _ti.lbl) || _mktRsUrl) : !!_mktRsUrl;
-                if (_showLinkBar) {
+                // RS icon inline inside mc-label (next to market name)
+                if (_mktRsUrl) {
+                    var _rsInlineBtn = document.createElement('a');
+                    _rsInlineBtn.href = _mktRsUrl;
+                    _rsInlineBtn.target = '_blank';
+                    _rsInlineBtn.className = 'rs-icon-btn';
+                    _rsInlineBtn.title = 'View on Real Sports';
+                    _rsInlineBtn.innerHTML = RS_LOGO_SVG;
+                    _rsInlineBtn.style.cssText = 'margin-left:5px;vertical-align:middle';
+                    _rsInlineBtn.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        try { posthog.capture('bet_link_opened', { sport: currentSport, game: game, market: mkt }); } catch(_e) {}
+                    });
+                    lbl.appendChild(_rsInlineBtn);
+                }
+
+                // Time badge bar — ML section only
+                if (mkt === 'ML' && _ti && _ti.lbl) {
                     var mlTopBar = document.createElement('div');
-                    mlTopBar.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--border)';
-                    if (mkt === 'ML' && _ti && _ti.lbl) {
-                        var tbTime = document.createElement('span');
-                        tbTime.className = 'gh-badge ' + (_ti.cls || '');
-                        tbTime.style.cssText = 'font-size:11px;font-family:var(--mono)';
-                        tbTime.textContent = _ti.lbl;
-                        mlTopBar.appendChild(tbTime);
-                    } else {
-                        mlTopBar.appendChild(document.createElement('span'));
-                    }
-                    if (_mktRsUrl) {
-                        var tbLink = document.createElement('a');
-                        tbLink.href = _mktRsUrl;
-                        tbLink.target = '_blank';
-                        tbLink.className = 'rs-icon-btn';
-                        tbLink.title = 'View on Real Sports';
-                        tbLink.innerHTML = RS_LOGO_SVG;
-                        tbLink.addEventListener('click', function(e) {
-                            e.stopPropagation();
-                            try { posthog.capture('bet_link_opened', { sport: currentSport, game: game, market: mkt }); } catch(_e) {}
-                        });
-                        mlTopBar.appendChild(tbLink);
-                    }
+                    mlTopBar.style.cssText = 'display:flex;align-items:center;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--border)';
+                    var tbTime = document.createElement('span');
+                    tbTime.className = 'gh-badge ' + (_ti.cls || '');
+                    tbTime.style.cssText = 'font-size:11px;font-family:var(--mono)';
+                    tbTime.textContent = _ti.lbl;
+                    mlTopBar.appendChild(tbTime);
                     section.appendChild(mlTopBar);
                 }
 
