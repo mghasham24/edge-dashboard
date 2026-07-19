@@ -2508,6 +2508,26 @@
     }
     .ev-pop-best { color: var(--green) }
 
+    .rs-icon-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 22px;
+        height: 22px;
+        color: var(--accent);
+        text-decoration: none;
+        border: 1px solid var(--border2);
+        border-radius: 4px;
+        opacity: 0.75;
+        transition: transform 0.15s ease, opacity 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .rs-icon-btn:hover {
+        transform: scale(1.22);
+        opacity: 1;
+        border-color: var(--accent);
+        box-shadow: 0 0 8px var(--accent);
+    }
+
     /* Disable animations for users who prefer reduced motion */
     @media (prefers-reduced-motion: reduce) {
         *, *::before, *::after {
