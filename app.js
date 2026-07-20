@@ -2121,7 +2121,7 @@
                         var mlCb = document.createElement('input');
                         mlCb.type = 'checkbox'; mlCb.className = 'mc-bet-check'; mlCb.dataset.id = r.id;
                         mlCb.checked = !!betTaken[r.id]; mlCb.title = 'Mark bet taken';
-                        mlCb.style.cssText = 'width:16px;height:16px;cursor:pointer;accent-color:var(--green);flex-shrink:0';
+                        mlCb.style.cssText = 'width:16px;height:16px;cursor:pointer;accent-color:' + (autoTakenFrom[r.id] ? '#f5a623' : 'var(--green)') + ';flex-shrink:0';
                         mlCb.addEventListener('change', function() { toggleBet(this.dataset.id); });
                         sideRow.appendChild(mlCb);
                         teamWrap.appendChild(sideRow);
@@ -2268,7 +2268,7 @@
                         var cbA = document.createElement('input');
                         cbA.type = 'checkbox'; cbA.className = 'mc-bet-check'; cbA.dataset.id = rA.id;
                         cbA.checked = !!betTaken[rA.id]; cbA.title = 'Mark bet taken';
-                        cbA.style.cssText = 'width:16px;height:16px;cursor:pointer;accent-color:var(--green);margin-top:4px';
+                        cbA.style.cssText = 'width:16px;height:16px;cursor:pointer;accent-color:' + (autoTakenFrom[rA.id] ? '#f5a623' : 'var(--green)') + ';margin-top:4px';
                         cbA.addEventListener('change', function() { toggleBet(this.dataset.id); });
                         colA.appendChild(cbA);
                         if (preds[rA.id] !== undefined && preds[rA.id] !== '') {
@@ -2293,7 +2293,7 @@
                         var cbB = document.createElement('input');
                         cbB.type = 'checkbox'; cbB.className = 'mc-bet-check'; cbB.dataset.id = rB.id;
                         cbB.checked = !!betTaken[rB.id]; cbB.title = 'Mark bet taken';
-                        cbB.style.cssText = 'width:16px;height:16px;cursor:pointer;accent-color:var(--green);margin-top:4px';
+                        cbB.style.cssText = 'width:16px;height:16px;cursor:pointer;accent-color:' + (autoTakenFrom[rB.id] ? '#f5a623' : 'var(--green)') + ';margin-top:4px';
                         cbB.addEventListener('change', function() { toggleBet(this.dataset.id); });
                         colB.appendChild(cbB);
                         if (preds[rB.id] !== undefined && preds[rB.id] !== '') {
@@ -2352,7 +2352,7 @@
                         var betCbR = document.createElement('input');
                         betCbR.type = 'checkbox'; betCbR.className = 'mc-bet-check'; betCbR.dataset.id = r.id;
                         betCbR.checked = !!betTaken[r.id]; betCbR.title = 'Mark bet taken';
-                        betCbR.style.cssText = 'width:16px;height:16px;cursor:pointer;accent-color:var(--green);flex-shrink:0;margin-left:6px';
+                        betCbR.style.cssText = 'width:16px;height:16px;cursor:pointer;accent-color:' + (autoTakenFrom[r.id] ? '#f5a623' : 'var(--green)') + ';flex-shrink:0;margin-left:6px';
                         betCbR.addEventListener('change', function() { toggleBet(this.dataset.id); });
                         sideRow.appendChild(betCbR);
                         if (preds[r.id] !== undefined && preds[r.id] !== '') {
@@ -2428,7 +2428,7 @@
                         betCb.dataset.id = r.id;
                         betCb.checked = !!betTaken[r.id];
                         betCb.title = 'Mark bet taken';
-                        betCb.style.cssText = 'width:16px;height:16px;cursor:pointer;accent-color:var(--green);flex-shrink:0;margin-left:6px';
+                        betCb.style.cssText = 'width:16px;height:16px;cursor:pointer;accent-color:' + (autoTakenFrom[r.id] ? '#f5a623' : 'var(--green)') + ';flex-shrink:0;margin-left:6px';
                         betCb.addEventListener('change', function() { toggleBet(this.dataset.id); });
                         sideRow.appendChild(betCb);
                         if (betTaken[r.id]) sideRow.style.opacity = '0.4';
@@ -3370,11 +3370,11 @@
                 : (taken ? '<span style="display:inline-block;font-size:9px;font-weight:700;color:#4caf50;background:rgba(76,175,80,0.12);border:1px solid rgba(76,175,80,0.3);border-radius:3px;padding:1px 4px;margin-left:4px;white-space:nowrap;letter-spacing:.04em;vertical-align:middle">Taken</span>' : '');
             var trRowStyle = taken ? 'opacity:0.4' + (autoFrom ? ';border-left:3px solid #f5a623' : '') : '';
             html += '<tr class="' + trStyle.trim() + '" data-row-id="' + escHtml(r.id) + '" style="' + trRowStyle + '">'
-                + '<td>' + cbHtml + autoTag + '</td>'
+                + '<td>' + cbHtml + '</td>'
                 + '<td class="r ev-val-td">' + evCell + '</td>'
                 + '<td style="width:28px;padding:0 3px;text-align:center">' + _evRsIconTd + '</td>'
                 + '<td><span style="font-size:9px;font-weight:800;letter-spacing:.07em;color:var(--muted2);text-transform:uppercase;white-space:nowrap">' + escHtml(r._sport || '') + '</span></td>'
-                + '<td style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escHtml(gameStr) + timeBadge + '</td>'
+                + '<td style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escHtml(gameStr) + timeBadge + autoTag + '</td>'
                 + '<td><span class="mkt-badge" style="font-size:10px">' + escHtml(mktLabel) + '</span></td>'
                 + '<td style="font-weight:700;font-size:12px">' + escHtml(r.side || '') + '</td>'
                 + '<td class="r" style="font-family:var(--mono);font-size:12px;color:var(--muted)">' + escHtml(amStr) + '</td>'
