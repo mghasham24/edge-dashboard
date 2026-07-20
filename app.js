@@ -148,7 +148,7 @@
     var evMinEv           = parseFloat(localStorage.getItem('raxedge_ev_min_ev') || '5');
     var evLoadingInProgress = false; // true while loadAllEvSports Phase1/2 running — suppresses mid-load renders
     var evAutoRefreshTimer = null;
-    var EV_REFRESH_MS = 15000; // refresh every 15 seconds (server caches absorb repeated hits)
+    var EV_REFRESH_MS = 5000; // refresh every 5 seconds (server caches absorb repeated hits)
     var rfiOdds = {}; // game key -> {yesFair, noFair, yesAm, noAm}
     var rsGameIds = {}; // game string -> Real Sports numeric gameId
     var rsGameSports = {}; // game string -> RS sport key (e.g. 'mls', 'epl') for URL generation

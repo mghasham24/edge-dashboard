@@ -476,7 +476,7 @@ export async function onRequestGet(context) {
     // Two-phase fetch: return cached data immediately, fetch missing games in background
     const marketMap = {};
     const cacheKey = 'real_sync_' + realSport + '_v12'; // v12: resolvedMap DH suffix fix
-    const TTL = 15;
+    const TTL = 5;
 
     // Phase 1: Load cache
     try {
