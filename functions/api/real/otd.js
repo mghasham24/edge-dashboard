@@ -195,7 +195,7 @@ export async function onRequestGet(context) {
 
     // Query by season only — no sport filter so RS returns all passes regardless of sport.
     // 5 seasons × 2 entity types = 10 parallel calls (vs 110 sport-filtered calls that RS rate-limits).
-    const cacheKey = `otd_passes_all_v2_${userId}`;
+    const cacheKey = `otd_passes_all_v3_${userId}`;
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
       if (cached && (now - cached.fetched_at) < 1800) {
@@ -235,7 +235,7 @@ export async function onRequestGet(context) {
           : typeof p.level === 'number' ? p.level
           : typeof p.collectingLevel === 'number' ? p.collectingLevel
           : rarityToLevelAll(p.rarity || p.rarityName, p.rarityLevel || p.subLevel);
-        if (playerId && sport && level >= 3) {
+        if (playerId && sport && level >= 1) {
           results.push({ playerId, playerName, sport, season, level, entityType });
         }
       }
@@ -283,7 +283,7 @@ export async function onRequestGet(context) {
     const season = url.searchParams.get('season') || String(new Date().getFullYear());
     if (!userId) return fail(400, 'Missing userId');
 
-    const cacheKey = `otd_passes_v5_${userId}_${sport}_${season}`;
+    const cacheKey = `otd_passes_v6_${userId}_${sport}_${season}`;
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
       if (cached && (now - cached.fetched_at) < 1800) {
@@ -327,7 +327,7 @@ export async function onRequestGet(context) {
               : typeof p.collectingLevel === 'number' ? p.collectingLevel
               : rarityToLevel(p.rarity || p.rarityName, p.rarityLevel || p.subLevel);
             return { playerId, playerName, sport: p.sport || sport, season: String(p.season || season), level, entityType };
-          }).filter(p => p.playerId && p.level >= 3);
+          }).filter(p => p.playerId && p.level >= 1);
         }).catch(() => []);
       }
 
