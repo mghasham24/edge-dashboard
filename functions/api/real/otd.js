@@ -188,6 +188,108 @@ export async function onRequestGet(context) {
     }
   }
 
+  // Fetch ALL passes for an RS user across all sports and seasons — batched to avoid rate limiting
+  if (action === 'user_passes_all') {
+    const userId = url.searchParams.get('userId');
+    if (!userId) return fail(400, 'Missing userId');
+
+    const cacheKey = `otd_passes_all_v1_${userId}`;
+    try {
+      const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
+      if (cached && (now - cached.fetched_at) < 1800) {
+        return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
+      }
+    } catch(e) {}
+
+    const sports = ['mlb', 'nba', 'wnba', 'nhl', 'nfl', 'soccer', 'ufc', 'mma', 'cbb', 'cfb', 'golf'];
+    const yr = new Date().getFullYear();
+    const seasons = [yr, yr-1, yr-2, yr-3, yr-4];
+
+    function rarityToLevelAll(rarity, rarityLevel) {
+      const r = (rarity || '').toLowerCase();
+      const rl = Math.max(1, parseInt(rarityLevel || 1, 10));
+      if (r === 'general')   return 0;
+      if (r === 'common')    return 1;
+      if (r === 'uncommon')  return 2;
+      if (r === 'rare')      return 3;
+      if (r === 'epic')      return 4;
+      if (r === 'legendary') return 4 + rl;
+      if (r === 'mystic')    return 9 + rl;
+      if (r === 'iconic')    return 19 + rl;
+      return 0;
+    }
+
+    async function fetchCombo(sport, season) {
+      try {
+        const [playerRes, teamRes] = await Promise.all([
+          fetch(`${RS_BASE}/userpasses/${encodeURIComponent(userId)}/passes?entityType=player&season=${season}&sport=${sport}`, { headers }),
+          fetch(`${RS_BASE}/userpasses/${encodeURIComponent(userId)}/passes?entityType=team&season=${season}&sport=${sport}`, { headers })
+        ]);
+        const results = [];
+        for (const [res, entityType] of [[playerRes, 'player'], [teamRes, 'team']]) {
+          if (!res.ok) continue;
+          try {
+            const data = await res.json();
+            const raw = Array.isArray(data) ? data : (data.passes || data.items || data.collectingCards || []);
+            for (const p of raw) {
+              const entity = p.entity || p.player || p.team || {};
+              const playerId = p.entityId || p.playerId || entity.id;
+              const playerName = p.label
+                || (entity.firstName && entity.lastName ? (entity.firstName + ' ' + entity.lastName).trim() : null)
+                || entity.name || entity.displayName || null;
+              const level = (p.boostInfo && typeof p.boostInfo.level === 'number') ? p.boostInfo.level
+                : typeof p.level === 'number' ? p.level
+                : typeof p.collectingLevel === 'number' ? p.collectingLevel
+                : rarityToLevelAll(p.rarity || p.rarityName, p.rarityLevel || p.subLevel);
+              if (playerId && level >= 3) {
+                results.push({ playerId, playerName, sport: p.sport || sport, season: String(p.season || season), level, entityType });
+              }
+            }
+          } catch(e) {}
+        }
+        return results;
+      } catch(e) {
+        return [];
+      }
+    }
+
+    try {
+      const combos = [];
+      for (const sport of sports) {
+        for (const season of seasons) {
+          combos.push({ sport, season });
+        }
+      }
+
+      const BATCH_SIZE = 8;
+      const passMap = {};
+
+      for (let i = 0; i < combos.length; i += BATCH_SIZE) {
+        const batch = combos.slice(i, i + BATCH_SIZE);
+        const batchResults = await Promise.all(batch.map(({ sport, season }) => fetchCombo(sport, season)));
+        for (const passes of batchResults) {
+          for (const pass of passes) {
+            const key = `${pass.playerId}|${pass.sport}|${pass.season}`;
+            passMap[key] = pass;
+          }
+        }
+        if (i + BATCH_SIZE < combos.length) {
+          await new Promise(r => setTimeout(r, 200));
+        }
+      }
+
+      const passes = Object.values(passMap);
+      const body = JSON.stringify({ ok: true, passes });
+      try {
+        await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
+          .bind(cacheKey, body, now).run();
+      } catch(e) {}
+      return new Response(body, { headers: { 'Content-Type': 'application/json' } });
+    } catch(e) {
+      return fail(500, e.message);
+    }
+  }
+
   // Fetch all passes for an RS user in a given sport + season
   if (action === 'user_passes') {
     const userId = url.searchParams.get('userId');

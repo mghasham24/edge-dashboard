@@ -3441,106 +3441,84 @@
         renderOtdPanel();
 
         var userId = otdSelectedUser.id;
-        // Collect ALL unique player/team + sport + season combos
-        // Key: entityId+'|'+sport+'|'+season  (no deduplication here — seasons matter for coverage)
-        var passMap = {};
-        var totalFetches = OTD_SPORTS.length * OTD_SCAN_SEASONS.length;
-        var doneCount = 0;
 
-        function onAllPassFetchesDone() {
-            var allPasses = Object.keys(passMap).map(function(k) { return passMap[k]; });
-            otdLoadingPasses = false;
-
-            if (!allPasses.length) {
-                var errEl2 = document.getElementById('otd-search-err');
-                if (errEl2) { errEl2.textContent = 'No Rare+ passes found for ' + otdSelectedUser.username; errEl2.style.display = ''; setTimeout(function() { if (errEl2) errEl2.style.display = 'none'; }, 4000); }
-                renderOtdChips();
-                renderOtdResults();
+        // Single consolidated fetch — backend batches all sports×seasons to avoid RS rate limiting
+        fetch('/api/real/otd?action=user_passes_all&userId=' + encodeURIComponent(userId), { credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                otdLoadingPasses = false;
                 var btn = document.querySelector('[onclick="otdLoadUserPasses()"]');
                 if (btn) btn.textContent = 'Load Passes';
-                return;
-            }
 
-            // For each entity+sport, select the 2 most useful seasons:
-            // 1. Highest level (best earnings multiplier)
-            // 2. Most recent season (best game-date coverage for upcoming months)
-            // Different seasons give different historical game dates which normalize to
-            // different month/day combos in the current year — so 2 seasons per pass
-            // gives much better coverage than 1.
-            var grouped = {};
-            allPasses.forEach(function(p) {
-                var gk = p.playerId + '|' + p.sport;
-                if (!grouped[gk]) grouped[gk] = [];
-                grouped[gk].push(p);
-            });
+                if (!d.ok || !d.passes || !d.passes.length) {
+                    var errEl2 = document.getElementById('otd-search-err');
+                    if (errEl2) { errEl2.textContent = 'No Rare+ passes found for ' + otdSelectedUser.username; errEl2.style.display = ''; setTimeout(function() { if (errEl2) errEl2.style.display = 'none'; }, 4000); }
+                    renderOtdChips();
+                    renderOtdResults();
+                    return;
+                }
 
-            var passesToFetch = [];
-            Object.keys(grouped).forEach(function(gk) {
-                var arr = grouped[gk].sort(function(a, b) { return parseInt(b.season) - parseInt(a.season); });
-                var best = arr.reduce(function(b, p) { return p.level > b.level ? p : b; }, arr[0]);
-                passesToFetch.push(best);
-                // Also include most recent season if it's a different season from best
-                if (arr[0].season !== best.season) passesToFetch.push(arr[0]);
-            });
+                // For each entity+sport, select the 2 most useful seasons:
+                // 1. Highest level (best earnings multiplier)
+                // 2. Most recent season (for best current-year game-date coverage)
+                var grouped = {};
+                d.passes.forEach(function(p) {
+                    var gk = p.playerId + '|' + p.sport;
+                    if (!grouped[gk]) grouped[gk] = [];
+                    grouped[gk].push(p);
+                });
 
-            passesToFetch.forEach(function(pass) {
-                var lbl = (OTD_LEVEL_OPTIONS.find(function(o) { return o.value === pass.level; }) || {}).label || 'Level ' + pass.level;
-                var color = OTD_COLORS[otdColorIdx % OTD_COLORS.length];
-                otdColorIdx++;
-                var entry = { id: pass.playerId, name: pass.playerName || ('Player ' + pass.playerId), sport: pass.sport, season: String(pass.season), level: pass.level, levelLabel: lbl, color: color, earnings: null, entityType: pass.entityType || 'player' };
-                otdPlayers.push(entry);
+                var passesToFetch = [];
+                Object.keys(grouped).forEach(function(gk) {
+                    var arr = grouped[gk].sort(function(a, b) { return parseInt(b.season) - parseInt(a.season); });
+                    var best = arr.reduce(function(b, p) { return p.level > b.level ? p : b; }, arr[0]);
+                    passesToFetch.push(best);
+                    if (arr[0].season !== best.season) passesToFetch.push(arr[0]);
+                });
 
-                fetch('/api/real/otd?action=earnings&id=' + entry.id + '&sport=' + entry.sport + '&season=' + entry.season + '&level=' + entry.level + '&entityType=' + entry.entityType, { credentials: 'same-origin' })
-                    .then(function(r) { return r.json(); })
-                    .then(function(ed) {
-                        if (ed.ok) {
-                            entry.earnings = ed.earnings;
-                            var nLoaded = otdPlayers.filter(function(p) { return p.earnings && p.earnings.length; }).length;
-                            if (nLoaded === 1 && ed.earnings && ed.earnings.length) {
-                                var curYr2 = new Date().getFullYear();
-                                var todayStr2 = new Date().toISOString().slice(0, 10);
-                                var sorted2 = ed.earnings.map(function(e) {
-                                    var dp2 = (e.day || '').split('T')[0].split('-');
-                                    return dp2.length === 3 ? (curYr2 + '-' + dp2[1].padStart(2,'0') + '-' + dp2[2].padStart(2,'0')) : '';
-                                }).filter(Boolean).sort();
-                                var upcoming2 = sorted2.filter(function(x) { return x >= todayStr2; });
-                                var target2 = upcoming2[0] || sorted2[sorted2.length - 1];
-                                if (target2) { var tp2 = target2.split('-'); if (tp2.length === 3) { otdCalYear = parseInt(tp2[0], 10); otdCalMonth = parseInt(tp2[1], 10) - 1; } }
+                passesToFetch.forEach(function(pass) {
+                    var lbl = (OTD_LEVEL_OPTIONS.find(function(o) { return o.value === pass.level; }) || {}).label || 'Level ' + pass.level;
+                    var color = OTD_COLORS[otdColorIdx % OTD_COLORS.length];
+                    otdColorIdx++;
+                    var entry = { id: pass.playerId, name: pass.playerName || ('Player ' + pass.playerId), sport: pass.sport, season: String(pass.season), level: pass.level, levelLabel: lbl, color: color, earnings: null, entityType: pass.entityType || 'player' };
+                    otdPlayers.push(entry);
+
+                    fetch('/api/real/otd?action=earnings&id=' + entry.id + '&sport=' + entry.sport + '&season=' + entry.season + '&level=' + entry.level + '&entityType=' + entry.entityType, { credentials: 'same-origin' })
+                        .then(function(r) { return r.json(); })
+                        .then(function(ed) {
+                            if (ed.ok) {
+                                entry.earnings = ed.earnings;
+                                var nLoaded = otdPlayers.filter(function(p) { return p.earnings && p.earnings.length; }).length;
+                                if (nLoaded === 1 && ed.earnings && ed.earnings.length) {
+                                    var curYr2 = new Date().getFullYear();
+                                    var todayStr2 = new Date().toISOString().slice(0, 10);
+                                    var sorted2 = ed.earnings.map(function(e) {
+                                        var dp2 = (e.day || '').split('T')[0].split('-');
+                                        return dp2.length === 3 ? (curYr2 + '-' + dp2[1].padStart(2,'0') + '-' + dp2[2].padStart(2,'0')) : '';
+                                    }).filter(Boolean).sort();
+                                    var upcoming2 = sorted2.filter(function(x) { return x >= todayStr2; });
+                                    var target2 = upcoming2[0] || sorted2[sorted2.length - 1];
+                                    if (target2) { var tp2 = target2.split('-'); if (tp2.length === 3) { otdCalYear = parseInt(tp2[0], 10); otdCalMonth = parseInt(tp2[1], 10) - 1; } }
+                                }
+                            } else {
+                                entry.earnings = [];
                             }
-                        } else {
-                            entry.earnings = [];
-                        }
-                        renderOtdChips();
-                        renderOtdResults();
-                    })
-                    .catch(function() { entry.earnings = []; renderOtdChips(); renderOtdResults(); });
-            });
+                            renderOtdChips();
+                            renderOtdResults();
+                        })
+                        .catch(function() { entry.earnings = []; renderOtdChips(); renderOtdResults(); });
+                });
 
-            renderOtdChips();
-            renderOtdResults();
-            var btn = document.querySelector('[onclick="otdLoadUserPasses()"]');
-            if (btn) btn.textContent = 'Load Passes';
-        }
-
-        OTD_SPORTS.forEach(function(sport) {
-            OTD_SCAN_SEASONS.forEach(function(season) {
-                fetch('/api/real/otd?action=user_passes&userId=' + encodeURIComponent(userId) + '&sport=' + sport + '&season=' + season, { credentials: 'same-origin' })
-                    .then(function(r) { return r.json(); })
-                    .then(function(d) {
-                        if (d.ok && d.passes) {
-                            d.passes.forEach(function(pass) {
-                                // Key includes season — different seasons kept separately for coverage
-                                var key = pass.playerId + '|' + (pass.sport || sport) + '|' + (pass.season || season);
-                                passMap[key] = pass;
-                            });
-                        }
-                        if (++doneCount === totalFetches) onAllPassFetchesDone();
-                    })
-                    .catch(function() {
-                        if (++doneCount === totalFetches) onAllPassFetchesDone();
-                    });
+                renderOtdChips();
+                renderOtdResults();
+            })
+            .catch(function() {
+                otdLoadingPasses = false;
+                var btn = document.querySelector('[onclick="otdLoadUserPasses()"]');
+                if (btn) btn.textContent = 'Load Passes';
+                renderOtdChips();
+                renderOtdResults();
             });
-        });
     }
 
     function renderOtdChips() {
@@ -3737,7 +3715,7 @@
                 '<button onclick="otdPrevMonth()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-size:16px;width:32px;height:32px;border-radius:6px;cursor:pointer;line-height:1">‹</button>' +
                 '<div style="text-align:center">' +
                     '<div style="font-size:15px;font-weight:700">' + MONTH_NAMES[otdCalMonth] + ' ' + otdCalYear + '</div>' +
-                    (monthlyTotal > 0 ? '<div style="font-size:11px;font-family:var(--mono);font-weight:700;color:var(--yellow);display:flex;align-items:center;justify-content:center;gap:2px;margin-top:1px">' + RAX_ICON + monthlyTotal.toLocaleString() + '</div>' : '') +
+                    (monthlyTotal > 0 ? '<div style="font-size:11px;font-family:var(--mono);font-weight:700;color:#22c55e;display:flex;align-items:center;justify-content:center;gap:2px;margin-top:1px">' + RAX_ICON + monthlyTotal.toLocaleString() + '</div>' : '') +
                 '</div>' +
                 '<button onclick="otdNextMonth()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-size:16px;width:32px;height:32px;border-radius:6px;cursor:pointer;line-height:1">›</button>' +
             '</div>' +
