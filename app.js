@@ -3349,12 +3349,16 @@
             .then(function(d) {
                 if (d.ok) {
                     entry.earnings = d.earnings;
-                    // First player loaded: jump calendar to nearest upcoming claim
+                    // First player loaded: jump calendar to nearest upcoming claim (normalize to current year)
                     var loadedCount = otdPlayers.filter(function(p) { return p.earnings && p.earnings.length; }).length;
                     if (loadedCount === 1 && d.earnings && d.earnings.length) {
+                        var curYr = new Date().getFullYear();
                         var todayStr = new Date().toISOString().slice(0, 10);
-                        var sorted = d.earnings.map(function(e) { return (e.day || '').split('T')[0]; }).sort();
-                        var upcoming = sorted.filter(function(d) { return d >= todayStr; });
+                        var sorted = d.earnings.map(function(e) {
+                            var dp2 = (e.day || '').split('T')[0].split('-');
+                            return dp2.length === 3 ? (curYr + '-' + dp2[1].padStart(2,'0') + '-' + dp2[2].padStart(2,'0')) : '';
+                        }).filter(Boolean).sort();
+                        var upcoming = sorted.filter(function(x) { return x >= todayStr; });
                         var target = upcoming[0] || sorted[sorted.length - 1];
                         if (target) {
                             var tp = target.split('-');
@@ -3459,14 +3463,18 @@
                                 .then(function(ed) {
                                     if (ed.ok) {
                                         entry.earnings = ed.earnings;
-                                        // First earnings loaded: jump to nearest upcoming claim
+                                        // First earnings loaded: jump to nearest upcoming claim (normalize to current year)
                                         var nLoaded = otdPlayers.filter(function(p) { return p.earnings && p.earnings.length; }).length;
                                         if (nLoaded === 1 && ed.earnings && ed.earnings.length) {
-                                            var todayStr = new Date().toISOString().slice(0, 10);
-                                            var sorted = ed.earnings.map(function(e) { return (e.day || '').split('T')[0]; }).sort();
-                                            var upcoming = sorted.filter(function(x) { return x >= todayStr; });
-                                            var target = upcoming[0] || sorted[sorted.length - 1];
-                                            if (target) { var tp = target.split('-'); if (tp.length === 3) { otdCalYear = parseInt(tp[0], 10); otdCalMonth = parseInt(tp[1], 10) - 1; } }
+                                            var curYr2 = new Date().getFullYear();
+                                            var todayStr2 = new Date().toISOString().slice(0, 10);
+                                            var sorted2 = ed.earnings.map(function(e) {
+                                                var dp2 = (e.day || '').split('T')[0].split('-');
+                                                return dp2.length === 3 ? (curYr2 + '-' + dp2[1].padStart(2,'0') + '-' + dp2[2].padStart(2,'0')) : '';
+                                            }).filter(Boolean).sort();
+                                            var upcoming2 = sorted2.filter(function(x) { return x >= todayStr2; });
+                                            var target2 = upcoming2[0] || sorted2[sorted2.length - 1];
+                                            if (target2) { var tp2 = target2.split('-'); if (tp2.length === 3) { otdCalYear = parseInt(tp2[0], 10); otdCalMonth = parseInt(tp2[1], 10) - 1; } }
                                         }
                                     } else {
                                         entry.earnings = [];
@@ -3544,13 +3552,13 @@
         }
 
         // Step 1: group by date → sport → entries
+        // Normalize all dates to otdCalYear — OTD claims recur annually (a 2024 pass claims on Oct 8 every year)
         var rawDateMap = {};
         otdPlayers.forEach(function(p) {
             if (!p.earnings) return;
             p.earnings.forEach(function(e) {
-                var rawDay = (e.day || '').split('T')[0].trim();
-                var dp = rawDay.split('-');
-                var dayKey = dp.length === 3 ? (dp[0] + '-' + dp[1].padStart(2,'0') + '-' + dp[2].padStart(2,'0')) : rawDay;
+                var dp = (e.day || '').split('T')[0].trim().split('-');
+                var dayKey = dp.length === 3 ? (String(otdCalYear) + '-' + dp[1].padStart(2,'0') + '-' + dp[2].padStart(2,'0')) : '';
                 if (!dayKey) return;
                 if (!rawDateMap[dayKey]) rawDateMap[dayKey] = {};
                 var sk = p.sport;
