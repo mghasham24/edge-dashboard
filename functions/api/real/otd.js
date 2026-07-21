@@ -47,7 +47,7 @@ export async function onRequestGet(context) {
     const sport = url.searchParams.get('sport') || 'mlb';
     if (q.length < 2) return fail(400, 'Query too short');
 
-    const cacheKey = 'otd_search_v3_' + sport + '_' + q.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    const cacheKey = 'otd_search_v4_' + sport + '_' + q.toLowerCase().replace(/[^a-z0-9]/g, '_');
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
       if (cached && (now - cached.fetched_at) < 3600) {
