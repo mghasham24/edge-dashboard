@@ -3143,6 +3143,13 @@
         document.getElementById('mobile-cards').style.display = 'none';
         document.getElementById('collapse-btn').style.display = 'none';
         document.getElementById('refresh-btn').style.display = 'none';
+        if (currentLoadAbort) { currentLoadAbort.abort(); currentLoadAbort = null; }
+        if (nbaPoller)  { clearInterval(nbaPoller);  nbaPoller  = null; }
+        if (wnbaPoller) { clearInterval(wnbaPoller); wnbaPoller = null; }
+        if (mlbPoller)  { clearInterval(mlbPoller);  mlbPoller  = null; }
+        if (nhlPoller)  { clearInterval(nhlPoller);  nhlPoller  = null; }
+        if (dkPoller)   { clearInterval(dkPoller);   dkPoller   = null; }
+        if (fcPoller)   { clearInterval(fcPoller);   fcPoller   = null; }
         document.getElementById('otd-panel').classList.add('visible');
         otdVisible = true;
         renderOtdPanel();
@@ -3193,6 +3200,7 @@
                 '<select id="otd-level-sel" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px 8px;border-radius:6px">' + levelOpts + '</select>' +
                 '<button onclick="otdAddPlayer()" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:13px;font-weight:700;padding:8px 16px;border-radius:6px;cursor:pointer;white-space:nowrap">+ Add</button>' +
             '</div>' +
+            '<div id="otd-search-err" style="display:none;font-size:12px;color:#ef5350;margin-bottom:8px"></div>' +
             '<div id="otd-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px"></div>' +
             '<div id="otd-results"></div>';
 
@@ -3238,10 +3246,9 @@
     function otdAddPlayer() {
         if (!otdSelectedPlayer) {
             var inp = document.getElementById('otd-search-input');
-            var val = inp ? inp.value.trim() : '';
-            if (!val) { alert('Search for a player first'); return; }
-            // Treat as manual entry — try to find by exact text match or show error
-            alert('Please select a player from the autocomplete dropdown');
+            if (inp) { inp.style.borderColor = 'var(--red,#ef5350)'; setTimeout(function() { if (inp) inp.style.borderColor = ''; }, 2000); }
+            var errEl = document.getElementById('otd-search-err');
+            if (errEl) { errEl.textContent = 'Search and select a player from the dropdown first'; errEl.style.display = ''; setTimeout(function() { if (errEl) errEl.style.display = 'none'; }, 3000); }
             return;
         }
         var sport  = (document.getElementById('otd-sport-sel') || {}).value || otdSelectedPlayer.sport;
@@ -3250,7 +3257,11 @@
         var lbl    = (OTD_LEVEL_OPTIONS.find(function(o) { return o.value === level; }) || {}).label || 'Level ' + level;
 
         var exists = otdPlayers.some(function(p) { return p.id === otdSelectedPlayer.id && p.sport === sport && p.season === season; });
-        if (exists) { alert('This player is already added for that sport + season'); return; }
+        if (exists) {
+            var errEl = document.getElementById('otd-search-err');
+            if (errEl) { errEl.textContent = 'Already added for that sport + season'; errEl.style.display = ''; setTimeout(function() { if (errEl) errEl.style.display = 'none'; }, 3000); }
+            return;
+        }
 
         var color  = OTD_COLORS[otdColorIdx % OTD_COLORS.length];
         otdColorIdx++;
@@ -7712,8 +7723,8 @@
     }
 
     function renderTable() {
-        if (evTabVisible) return;
-        var _panels = ['admin-panel','portfolio-panel','alerts-panel','referral-panel','ev-panel'];
+        if (evTabVisible || otdVisible) return;
+        var _panels = ['admin-panel','portfolio-panel','alerts-panel','referral-panel','ev-panel','otd-panel'];
         if (_panels.some(function(id){ return document.getElementById(id)?.classList.contains('visible'); })) return;
         var tableWrap = document.querySelector('.table-wrap');
         if (tableWrap) tableWrap.style.display = '';
