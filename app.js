@@ -3253,7 +3253,7 @@
                     '<button onclick="otdAddPlayer()" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:13px;font-weight:700;padding:8px 16px;border-radius:6px;cursor:pointer;white-space:nowrap">+ Add</button>' +
                 '</div>'
             :
-                // Username search row
+                // Username search row — seasons scanned automatically (2022–current)
                 '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:14px">' +
                     '<div style="position:relative;flex:1;min-width:180px">' +
                         '<input id="otd-user-input" type="text" placeholder="RS username…" autocomplete="off" ' +
@@ -3261,7 +3261,6 @@
                             'oninput="otdOnUserInput(this.value)" />' +
                         '<div id="otd-user-autocomplete" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg2);border:1px solid var(--border2);border-radius:6px;z-index:200;margin-top:3px;overflow:hidden"></div>' +
                     '</div>' +
-                    '<select id="otd-user-season-sel" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px 8px;border-radius:6px">' + seasonOpts + '</select>' +
                     '<button onclick="otdLoadUserPasses()" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:13px;font-weight:700;padding:8px 16px;border-radius:6px;cursor:pointer;white-space:nowrap">' + (otdLoadingPasses ? 'Loading…' : 'Load Passes') + '</button>' +
                 '</div>'
             ) +
@@ -3422,6 +3421,9 @@
     }
 
     var OTD_SPORTS = ['mlb', 'nba', 'wnba', 'nhl', 'nfl', 'soccer', 'ufc', 'cbb', 'cfb', 'golf'];
+    var OTD_SCAN_SEASONS = (function() {
+        var y = new Date().getFullYear(); return [y, y-1, y-2, y-3, y-4];
+    })(); // e.g. [2026, 2025, 2024, 2023, 2022]
 
     function otdLoadUserPasses() {
         var errEl = document.getElementById('otd-search-err');
@@ -3433,79 +3435,94 @@
         }
         if (otdLoadingPasses) return;
 
-        var season = (document.getElementById('otd-user-season-sel') || {}).value || String(new Date().getFullYear());
         otdPlayers = [];
         otdColorIdx = 0;
         otdLoadingPasses = true;
-        renderOtdPanel(); // re-render to show "Loading…" button state
+        renderOtdPanel();
 
         var userId = otdSelectedUser.id;
-        var totalLoaded = 0;
-        var sportsRemaining = OTD_SPORTS.length;
+        // passMap: key = playerId+'|'+sport → best pass (highest level; tiebreak = most recent season)
+        var passMap = {};
+        var totalFetches = OTD_SPORTS.length * OTD_SCAN_SEASONS.length;
+        var doneCount = 0;
 
-        OTD_SPORTS.forEach(function(sport) {
-            fetch('/api/real/otd?action=user_passes&userId=' + encodeURIComponent(userId) + '&sport=' + sport + '&season=' + season, { credentials: 'same-origin' })
-                .then(function(r) { return r.json(); })
-                .then(function(d) {
-                    sportsRemaining--;
-                    if (d.ok && d.passes && d.passes.length) {
-                        d.passes.forEach(function(pass) {
-                            var lbl = (OTD_LEVEL_OPTIONS.find(function(o) { return o.value === pass.level; }) || {}).label || 'Level ' + pass.level;
-                            var color = OTD_COLORS[otdColorIdx % OTD_COLORS.length];
-                            otdColorIdx++;
-                            var entry = { id: pass.playerId, name: pass.playerName || ('Player ' + pass.playerId), sport: pass.sport || sport, season: String(pass.season || season), level: pass.level || 0, levelLabel: lbl, color: color, earnings: null };
-                            otdPlayers.push(entry);
-                            totalLoaded++;
+        function onAllPassFetchesDone() {
+            var passes = Object.keys(passMap).map(function(k) { return passMap[k]; });
+            otdLoadingPasses = false;
 
-                            // Fetch earnings for this pass
-                            fetch('/api/real/otd?action=earnings&id=' + entry.id + '&sport=' + entry.sport + '&season=' + entry.season + '&level=' + entry.level, { credentials: 'same-origin' })
-                                .then(function(r) { return r.json(); })
-                                .then(function(ed) {
-                                    if (ed.ok) {
-                                        entry.earnings = ed.earnings;
-                                        // First earnings loaded: jump to nearest upcoming claim (normalize to current year)
-                                        var nLoaded = otdPlayers.filter(function(p) { return p.earnings && p.earnings.length; }).length;
-                                        if (nLoaded === 1 && ed.earnings && ed.earnings.length) {
-                                            var curYr2 = new Date().getFullYear();
-                                            var todayStr2 = new Date().toISOString().slice(0, 10);
-                                            var sorted2 = ed.earnings.map(function(e) {
-                                                var dp2 = (e.day || '').split('T')[0].split('-');
-                                                return dp2.length === 3 ? (curYr2 + '-' + dp2[1].padStart(2,'0') + '-' + dp2[2].padStart(2,'0')) : '';
-                                            }).filter(Boolean).sort();
-                                            var upcoming2 = sorted2.filter(function(x) { return x >= todayStr2; });
-                                            var target2 = upcoming2[0] || sorted2[sorted2.length - 1];
-                                            if (target2) { var tp2 = target2.split('-'); if (tp2.length === 3) { otdCalYear = parseInt(tp2[0], 10); otdCalMonth = parseInt(tp2[1], 10) - 1; } }
-                                        }
-                                    } else {
-                                        entry.earnings = [];
-                                    }
-                                    renderOtdChips();
-                                    renderOtdResults();
-                                })
-                                .catch(function() { entry.earnings = []; renderOtdChips(); renderOtdResults(); });
-                        });
-                    }
-                    if (sportsRemaining === 0) {
-                        otdLoadingPasses = false;
-                        if (totalLoaded === 0) {
-                            var errEl2 = document.getElementById('otd-search-err');
-                            if (errEl2) { errEl2.textContent = 'No passes found for ' + otdSelectedUser.username + ' in ' + season; errEl2.style.display = ''; setTimeout(function() { if (errEl2) errEl2.style.display = 'none'; }, 4000); }
+            if (!passes.length) {
+                var errEl2 = document.getElementById('otd-search-err');
+                if (errEl2) { errEl2.textContent = 'No Rare+ passes found for ' + otdSelectedUser.username; errEl2.style.display = ''; setTimeout(function() { if (errEl2) errEl2.style.display = 'none'; }, 4000); }
+                renderOtdChips();
+                renderOtdResults();
+                var btn = document.querySelector('[onclick="otdLoadUserPasses()"]');
+                if (btn) btn.textContent = 'Load Passes';
+                return;
+            }
+
+            // Build otdPlayers and kick off earnings fetches for each unique pass
+            passes.forEach(function(pass) {
+                var lbl = (OTD_LEVEL_OPTIONS.find(function(o) { return o.value === pass.level; }) || {}).label || 'Level ' + pass.level;
+                var color = OTD_COLORS[otdColorIdx % OTD_COLORS.length];
+                otdColorIdx++;
+                var entry = { id: pass.playerId, name: pass.playerName || ('Player ' + pass.playerId), sport: pass.sport, season: String(pass.season), level: pass.level, levelLabel: lbl, color: color, earnings: null };
+                otdPlayers.push(entry);
+
+                fetch('/api/real/otd?action=earnings&id=' + entry.id + '&sport=' + entry.sport + '&season=' + entry.season + '&level=' + entry.level, { credentials: 'same-origin' })
+                    .then(function(r) { return r.json(); })
+                    .then(function(ed) {
+                        if (ed.ok) {
+                            entry.earnings = ed.earnings;
+                            // First earnings in: auto-jump to nearest upcoming claim (year-normalized)
+                            var nLoaded = otdPlayers.filter(function(p) { return p.earnings && p.earnings.length; }).length;
+                            if (nLoaded === 1 && ed.earnings && ed.earnings.length) {
+                                var curYr2 = new Date().getFullYear();
+                                var todayStr2 = new Date().toISOString().slice(0, 10);
+                                var sorted2 = ed.earnings.map(function(e) {
+                                    var dp2 = (e.day || '').split('T')[0].split('-');
+                                    return dp2.length === 3 ? (curYr2 + '-' + dp2[1].padStart(2,'0') + '-' + dp2[2].padStart(2,'0')) : '';
+                                }).filter(Boolean).sort();
+                                var upcoming2 = sorted2.filter(function(x) { return x >= todayStr2; });
+                                var target2 = upcoming2[0] || sorted2[sorted2.length - 1];
+                                if (target2) { var tp2 = target2.split('-'); if (tp2.length === 3) { otdCalYear = parseInt(tp2[0], 10); otdCalMonth = parseInt(tp2[1], 10) - 1; } }
+                            }
+                        } else {
+                            entry.earnings = [];
                         }
                         renderOtdChips();
                         renderOtdResults();
-                        // Re-render panel to restore "Load Passes" button
-                        var btn = document.querySelector('[onclick="otdLoadUserPasses()"]');
-                        if (btn) btn.textContent = 'Load Passes';
-                    }
-                })
-                .catch(function() {
-                    sportsRemaining--;
-                    if (sportsRemaining === 0) {
-                        otdLoadingPasses = false;
-                        renderOtdChips();
-                        renderOtdResults();
-                    }
-                });
+                    })
+                    .catch(function() { entry.earnings = []; renderOtdChips(); renderOtdResults(); });
+            });
+
+            renderOtdChips();
+            renderOtdResults();
+            var btn = document.querySelector('[onclick="otdLoadUserPasses()"]');
+            if (btn) btn.textContent = 'Load Passes';
+        }
+
+        OTD_SPORTS.forEach(function(sport) {
+            OTD_SCAN_SEASONS.forEach(function(season) {
+                fetch('/api/real/otd?action=user_passes&userId=' + encodeURIComponent(userId) + '&sport=' + sport + '&season=' + season, { credentials: 'same-origin' })
+                    .then(function(r) { return r.json(); })
+                    .then(function(d) {
+                        if (d.ok && d.passes) {
+                            d.passes.forEach(function(pass) {
+                                var key = pass.playerId + '|' + (pass.sport || sport);
+                                var existing = passMap[key];
+                                // Keep highest level; tiebreak: most recent season
+                                if (!existing || pass.level > existing.level ||
+                                    (pass.level === existing.level && parseInt(pass.season) > parseInt(existing.season))) {
+                                    passMap[key] = pass;
+                                }
+                            });
+                        }
+                        if (++doneCount === totalFetches) onAllPassFetchesDone();
+                    })
+                    .catch(function() {
+                        if (++doneCount === totalFetches) onAllPassFetchesDone();
+                    });
+            });
         });
     }
 
