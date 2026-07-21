@@ -1460,7 +1460,7 @@
         font-size: 10px;
         font-family: var(--mono);
         font-weight: 700;
-        color: var(--yellow);
+        color: #22c55e;
         margin-top: 4px;
         display: flex;
         align-items: center;
@@ -1524,7 +1524,7 @@
         font-family: var(--mono);
         font-size: 10px;
         font-weight: 700;
-        color: var(--yellow);
+        color: #22c55e;
         display: flex;
         align-items: center;
         gap: 1px;
@@ -1545,7 +1545,7 @@
         font-family: var(--mono);
         font-size: 12px;
         font-weight: 700;
-        color: var(--yellow);
+        color: #22c55e;
         display: flex;
         align-items: center;
         gap: 3px;
@@ -1559,7 +1559,7 @@
         font-family: var(--mono);
         font-size: 11px;
         font-weight: 700;
-        color: var(--yellow);
+        color: #22c55e;
         border-top: 1px solid var(--border);
         background: rgba(0,0,0,.06);
     }

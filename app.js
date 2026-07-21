@@ -3420,10 +3420,10 @@
         }, 400);
     }
 
-    var OTD_SPORTS = ['mlb', 'nba', 'wnba', 'nhl', 'nfl', 'soccer', 'ufc', 'cbb', 'cfb', 'golf'];
+    var OTD_SPORTS = ['mlb', 'nba', 'wnba', 'nhl', 'nfl', 'soccer', 'ufc', 'mma', 'cbb', 'cfb', 'golf'];
     var OTD_SCAN_SEASONS = (function() {
         var y = new Date().getFullYear(); return [y, y-1, y-2, y-3, y-4];
-    })(); // e.g. [2026, 2025, 2024, 2023, 2022]
+    })();
 
     function otdLoadUserPasses() {
         var errEl = document.getElementById('otd-search-err');
@@ -3441,16 +3441,17 @@
         renderOtdPanel();
 
         var userId = otdSelectedUser.id;
-        // passMap: key = playerId+'|'+sport → best pass (highest level; tiebreak = most recent season)
+        // Collect ALL unique player/team + sport + season combos
+        // Key: entityId+'|'+sport+'|'+season  (no deduplication here — seasons matter for coverage)
         var passMap = {};
         var totalFetches = OTD_SPORTS.length * OTD_SCAN_SEASONS.length;
         var doneCount = 0;
 
         function onAllPassFetchesDone() {
-            var passes = Object.keys(passMap).map(function(k) { return passMap[k]; });
+            var allPasses = Object.keys(passMap).map(function(k) { return passMap[k]; });
             otdLoadingPasses = false;
 
-            if (!passes.length) {
+            if (!allPasses.length) {
                 var errEl2 = document.getElementById('otd-search-err');
                 if (errEl2) { errEl2.textContent = 'No Rare+ passes found for ' + otdSelectedUser.username; errEl2.style.display = ''; setTimeout(function() { if (errEl2) errEl2.style.display = 'none'; }, 4000); }
                 renderOtdChips();
@@ -3460,20 +3461,40 @@
                 return;
             }
 
-            // Build otdPlayers and kick off earnings fetches for each unique pass
-            passes.forEach(function(pass) {
+            // For each entity+sport, select the 2 most useful seasons:
+            // 1. Highest level (best earnings multiplier)
+            // 2. Most recent season (best game-date coverage for upcoming months)
+            // Different seasons give different historical game dates which normalize to
+            // different month/day combos in the current year — so 2 seasons per pass
+            // gives much better coverage than 1.
+            var grouped = {};
+            allPasses.forEach(function(p) {
+                var gk = p.playerId + '|' + p.sport;
+                if (!grouped[gk]) grouped[gk] = [];
+                grouped[gk].push(p);
+            });
+
+            var passesToFetch = [];
+            Object.keys(grouped).forEach(function(gk) {
+                var arr = grouped[gk].sort(function(a, b) { return parseInt(b.season) - parseInt(a.season); });
+                var best = arr.reduce(function(b, p) { return p.level > b.level ? p : b; }, arr[0]);
+                passesToFetch.push(best);
+                // Also include most recent season if it's a different season from best
+                if (arr[0].season !== best.season) passesToFetch.push(arr[0]);
+            });
+
+            passesToFetch.forEach(function(pass) {
                 var lbl = (OTD_LEVEL_OPTIONS.find(function(o) { return o.value === pass.level; }) || {}).label || 'Level ' + pass.level;
                 var color = OTD_COLORS[otdColorIdx % OTD_COLORS.length];
                 otdColorIdx++;
-                var entry = { id: pass.playerId, name: pass.playerName || ('Player ' + pass.playerId), sport: pass.sport, season: String(pass.season), level: pass.level, levelLabel: lbl, color: color, earnings: null };
+                var entry = { id: pass.playerId, name: pass.playerName || ('Player ' + pass.playerId), sport: pass.sport, season: String(pass.season), level: pass.level, levelLabel: lbl, color: color, earnings: null, entityType: pass.entityType || 'player' };
                 otdPlayers.push(entry);
 
-                fetch('/api/real/otd?action=earnings&id=' + entry.id + '&sport=' + entry.sport + '&season=' + entry.season + '&level=' + entry.level, { credentials: 'same-origin' })
+                fetch('/api/real/otd?action=earnings&id=' + entry.id + '&sport=' + entry.sport + '&season=' + entry.season + '&level=' + entry.level + '&entityType=' + entry.entityType, { credentials: 'same-origin' })
                     .then(function(r) { return r.json(); })
                     .then(function(ed) {
                         if (ed.ok) {
                             entry.earnings = ed.earnings;
-                            // First earnings in: auto-jump to nearest upcoming claim (year-normalized)
                             var nLoaded = otdPlayers.filter(function(p) { return p.earnings && p.earnings.length; }).length;
                             if (nLoaded === 1 && ed.earnings && ed.earnings.length) {
                                 var curYr2 = new Date().getFullYear();
@@ -3508,13 +3529,9 @@
                     .then(function(d) {
                         if (d.ok && d.passes) {
                             d.passes.forEach(function(pass) {
-                                var key = pass.playerId + '|' + (pass.sport || sport);
-                                var existing = passMap[key];
-                                // Keep highest level; tiebreak: most recent season
-                                if (!existing || pass.level > existing.level ||
-                                    (pass.level === existing.level && parseInt(pass.season) > parseInt(existing.season))) {
-                                    passMap[key] = pass;
-                                }
+                                // Key includes season — different seasons kept separately for coverage
+                                var key = pass.playerId + '|' + (pass.sport || sport) + '|' + (pass.season || season);
+                                passMap[key] = pass;
                             });
                         }
                         if (++doneCount === totalFetches) onAllPassFetchesDone();
@@ -3584,12 +3601,19 @@
             });
         });
 
-        // Step 2: flatten — top otdClaimsView passes per sport per day (sorted by Rax desc)
+        // Step 2: flatten — deduplicate same entity per sport per day (keep highest Rax season),
+        // then take top otdClaimsView per sport (RS allows 1 claim per entity per day regardless of seasons held)
         var dateMap = {};
         var totalDates = 0;
         Object.keys(rawDateMap).forEach(function(dayKey) {
             Object.keys(rawDateMap[dayKey]).forEach(function(sport) {
-                var sorted = rawDateMap[dayKey][sport].slice().sort(function(a, b) { return (b.rax || 0) - (a.rax || 0); });
+                // Deduplicate: same entity (id+sport) → keep highest Rax entry
+                var entityBest = {};
+                rawDateMap[dayKey][sport].forEach(function(e) {
+                    var ek = e.player.id + '|' + e.player.sport;
+                    if (!entityBest[ek] || (e.rax || 0) > (entityBest[ek].rax || 0)) entityBest[ek] = e;
+                });
+                var sorted = Object.values(entityBest).sort(function(a, b) { return (b.rax || 0) - (a.rax || 0); });
                 sorted.slice(0, otdClaimsView).forEach(function(entry) {
                     if (!dateMap[dayKey]) { dateMap[dayKey] = []; totalDates++; }
                     dateMap[dayKey].push(entry);

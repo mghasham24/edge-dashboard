@@ -89,15 +89,16 @@ export async function onRequestGet(context) {
     }
   }
 
-  // Earnings: get all OTD claimable dates for a player at a rarity level
+  // Earnings: get all OTD claimable dates for a player/team at a rarity level
   if (action === 'earnings') {
     const id = url.searchParams.get('id');
     const sport = url.searchParams.get('sport') || 'mlb';
     const season = url.searchParams.get('season') || '2026';
     const level = parseInt(url.searchParams.get('level') || '1', 10);
+    const entityType = url.searchParams.get('entityType') || 'player';
     if (!id) return fail(400, 'Missing id');
 
-    const cacheKey = `otd_earnings_${sport}_${season}_${id}_l${level}`;
+    const cacheKey = `otd_earnings_v2_${entityType}_${sport}_${season}_${id}_l${level}`;
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
       if (cached && (now - cached.fetched_at) < 43200) {
@@ -106,7 +107,7 @@ export async function onRequestGet(context) {
     } catch(e) {}
 
     try {
-      const res = await fetch(`${RS_BASE}/userpassearnings/${sport}/season/${season}/entity/player/${id}?level=${level}`, { headers });
+      const res = await fetch(`${RS_BASE}/userpassearnings/${sport}/season/${season}/entity/${entityType}/${id}?level=${level}`, { headers });
       if (!res.ok) return fail(res.status, 'RS earnings failed: ' + res.status);
       const data = await res.json();
       const body = JSON.stringify({ ok: true, earnings: data.earnings || [] });
@@ -194,7 +195,7 @@ export async function onRequestGet(context) {
     const season = url.searchParams.get('season') || String(new Date().getFullYear());
     if (!userId) return fail(400, 'Missing userId');
 
-    const cacheKey = `otd_passes_v3_${userId}_${sport}_${season}`;
+    const cacheKey = `otd_passes_v5_${userId}_${sport}_${season}`;
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
       if (cached && (now - cached.fetched_at) < 1800) {
@@ -203,11 +204,11 @@ export async function onRequestGet(context) {
     } catch(e) {}
 
     try {
-      const res = await fetch(`${RS_BASE}/userpasses/${encodeURIComponent(userId)}/passes?entityType=player&season=${season}&sport=${sport}`, { headers });
-      if (!res.ok) return fail(res.status, 'RS passes failed: ' + res.status);
-      const data = await res.json();
-
-      const raw = Array.isArray(data) ? data : (data.passes || data.items || data.collectingCards || []);
+      // Fetch player passes and team passes in parallel
+      const [playerRes, teamRes] = await Promise.all([
+        fetch(`${RS_BASE}/userpasses/${encodeURIComponent(userId)}/passes?entityType=player&season=${season}&sport=${sport}`, { headers }),
+        fetch(`${RS_BASE}/userpasses/${encodeURIComponent(userId)}/passes?entityType=team&season=${season}&sport=${sport}`, { headers })
+      ]);
 
       function rarityToLevel(rarity, rarityLevel) {
         const r = (rarity || '').toLowerCase();
@@ -217,26 +218,37 @@ export async function onRequestGet(context) {
         if (r === 'uncommon')  return 2;
         if (r === 'rare')      return 3;
         if (r === 'epic')      return 4;
-        if (r === 'legendary') return 4 + rl;   // 5–9
-        if (r === 'mystic')    return 9 + rl;   // 10–19
-        if (r === 'iconic')    return 19 + rl;  // 20–39
+        if (r === 'legendary') return 4 + rl;
+        if (r === 'mystic')    return 9 + rl;
+        if (r === 'iconic')    return 19 + rl;
         return 0;
       }
 
-      const passes = raw.map(p => {
-        const entity = p.entity || p.player || {};
-        const playerId = p.entityId || p.playerId || entity.id;
-        const playerName = p.label
-          || (entity.firstName && entity.lastName ? (entity.firstName + ' ' + entity.lastName).trim() : null)
-          || entity.displayName || null;
-        // Level lives in boostInfo.level (confirmed from API response)
-        const level = (p.boostInfo && typeof p.boostInfo.level === 'number') ? p.boostInfo.level
-          : typeof p.level === 'number' ? p.level
-          : typeof p.collectingLevel === 'number' ? p.collectingLevel
-          : rarityToLevel(p.rarity || p.rarityName, p.rarityLevel || p.subLevel);
-        return { playerId, playerName, sport: p.sport || sport, season: String(p.season || season), level };
-      }).filter(p => p.playerId && p.level >= 3); // Rare (3) and above only
+      function extractPasses(res, entityType) {
+        if (!res.ok) return [];
+        return res.json().then(data => {
+          const raw = Array.isArray(data) ? data : (data.passes || data.items || data.collectingCards || []);
+          return raw.map(p => {
+            const entity = p.entity || p.player || p.team || {};
+            const playerId = p.entityId || p.playerId || entity.id;
+            const playerName = p.label
+              || (entity.firstName && entity.lastName ? (entity.firstName + ' ' + entity.lastName).trim() : null)
+              || entity.name || entity.displayName || null;
+            const level = (p.boostInfo && typeof p.boostInfo.level === 'number') ? p.boostInfo.level
+              : typeof p.level === 'number' ? p.level
+              : typeof p.collectingLevel === 'number' ? p.collectingLevel
+              : rarityToLevel(p.rarity || p.rarityName, p.rarityLevel || p.subLevel);
+            return { playerId, playerName, sport: p.sport || sport, season: String(p.season || season), level, entityType };
+          }).filter(p => p.playerId && p.level >= 3);
+        }).catch(() => []);
+      }
 
+      const [playerPasses, teamPasses] = await Promise.all([
+        extractPasses(playerRes, 'player'),
+        extractPasses(teamRes, 'team')
+      ]);
+
+      const passes = [...playerPasses, ...teamPasses];
       const body = JSON.stringify({ ok: true, passes });
       try {
         await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
