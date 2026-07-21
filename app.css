@@ -1409,6 +1409,79 @@
         display: block
     }
 
+    .otd-cal-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 3px;
+        margin-top: 6px
+    }
+    .otd-cal-hdr {
+        text-align: center;
+        font-size: 10px;
+        font-weight: 700;
+        color: var(--muted2);
+        padding: 5px 0;
+        letter-spacing: .05em;
+        text-transform: uppercase
+    }
+    .otd-cal-cell {
+        min-height: 72px;
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        padding: 5px 5px 4px;
+        position: relative;
+        box-sizing: border-box
+    }
+    .otd-cal-cell.otd-has-claim {
+        border-color: var(--border2);
+        cursor: pointer
+    }
+    .otd-cal-cell.otd-has-claim:hover {
+        border-color: var(--muted2)
+    }
+    .otd-cal-cell.otd-today {
+        border-color: var(--accent) !important;
+        background: rgba(99,102,241,.06)
+    }
+    .otd-cal-cell.otd-other-month {
+        opacity: .25;
+        pointer-events: none
+    }
+    .otd-cal-day-num {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--muted2)
+    }
+    .otd-cal-cell.otd-today .otd-cal-day-num {
+        color: var(--accent);
+        font-weight: 800
+    }
+    .otd-cal-rax {
+        font-size: 10px;
+        font-family: var(--mono);
+        font-weight: 700;
+        color: var(--yellow);
+        margin-top: 3px;
+        display: block
+    }
+    .otd-cal-dots {
+        display: flex;
+        gap: 3px;
+        flex-wrap: wrap;
+        margin-top: 4px
+    }
+    .otd-cal-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        flex-shrink: 0
+    }
+    @media (max-width: 600px) {
+        .otd-cal-cell { min-height: 52px; padding: 3px }
+        .otd-cal-rax { font-size: 9px }
+        .otd-cal-dot { width: 5px; height: 5px }
+    }
+
     .admin-stats {
         display: flex;
         gap: 16px;

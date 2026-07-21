@@ -3133,6 +3133,17 @@
     var otdSearchTimer = null;
     var otdSelectedPlayer = null; // { id, name, sport } from autocomplete
     var otdColorIdx = 0;
+    var otdCalYear = new Date().getFullYear();
+    var otdCalMonth = new Date().getMonth(); // 0-indexed
+
+    function otdPrevMonth() {
+        if (otdCalMonth === 0) { otdCalMonth = 11; otdCalYear--; } else { otdCalMonth--; }
+        renderOtdResults();
+    }
+    function otdNextMonth() {
+        if (otdCalMonth === 11) { otdCalMonth = 0; otdCalYear++; } else { otdCalMonth++; }
+        renderOtdResults();
+    }
 
     function showOtdTab() {
         document.getElementById('sport-tabs').style.display = 'none';
@@ -3310,80 +3321,88 @@
         var el = document.getElementById('otd-results');
         if (!el) return;
 
-        var anyLoading = otdPlayers.some(function(p) { return p.earnings === null; });
         if (!otdPlayers.length) {
             el.innerHTML = '<div style="text-align:center;padding:40px 0;color:var(--muted2);font-size:13px">Add players above to see their OTD claimable dates</div>';
             return;
         }
+        var anyLoading = otdPlayers.some(function(p) { return p.earnings === null; });
         if (anyLoading) {
             el.innerHTML = '<div style="text-align:center;padding:20px 0;color:var(--muted2);font-size:13px">Loading earnings data…</div>';
             return;
         }
 
-        // Build map: MM-DD → array of { player, atRarityEarnings, dayDisplay, isoDay }
+        // Build map: full ISO date → array of { player, rax }
         var dateMap = {};
+        var totalDates = 0;
         otdPlayers.forEach(function(p) {
             if (!p.earnings) return;
             p.earnings.forEach(function(e) {
-                var mmdd = e.day.slice(5); // "07-19"
-                if (!dateMap[mmdd]) dateMap[mmdd] = [];
-                dateMap[mmdd].push({ player: p, rax: e.atRarityEarnings, base: e.earnings, dayDisplay: e.dayDisplay, isoDay: e.day });
+                if (!dateMap[e.day]) { dateMap[e.day] = []; totalDates++; }
+                dateMap[e.day].push({ player: p, rax: e.atRarityEarnings });
             });
         });
 
+        var MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+        var DAY_HDRS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
         var today = new Date();
-        var todayMmdd = String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+        var todayISO = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
 
-        var sortedDates = Object.keys(dateMap).sort(function(a, b) {
-            // Sort so today is first, then descending by date distance from today
-            if (a === todayMmdd) return -1;
-            if (b === todayMmdd) return 1;
-            return a < b ? 1 : -1;
-        });
+        // Calendar grid for otdCalYear / otdCalMonth
+        var firstDay = new Date(otdCalYear, otdCalMonth, 1).getDay(); // 0=Sun
+        var daysInMonth = new Date(otdCalYear, otdCalMonth + 1, 0).getDate();
+        var daysInPrev = new Date(otdCalYear, otdCalMonth, 0).getDate();
 
-        var html = '';
-        sortedDates.forEach(function(mmdd) {
-            var entries = dateMap[mmdd];
-            var isToday = mmdd === todayMmdd;
-            var totalRax = entries.reduce(function(s, e) { return s + (e.rax || 0); }, 0);
-            var overlapWarn = entries.length >= 3;
-            var overlapNote = entries.length === 2 ? '' :
-                entries.length === 3 ? ' <span style="font-size:10px;background:rgba(255,152,0,0.15);color:#ff9800;border:1px solid rgba(255,152,0,0.3);border-radius:3px;padding:1px 5px;font-weight:700">3 claims — choose 2</span>' :
-                ' <span style="font-size:10px;background:rgba(244,67,54,0.15);color:#f44336;border:1px solid rgba(244,67,54,0.3);border-radius:3px;padding:1px 5px;font-weight:700">' + entries.length + ' claims — choose 2+1</span>';
+        var cells = '';
+        // Day headers
+        cells += DAY_HDRS.map(function(d) { return '<div class="otd-cal-hdr">' + d + '</div>'; }).join('');
 
-            var parts = (mmdd || '').split('-');
-            var monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-            var displayDate = monthNames[parseInt(parts[0], 10) - 1] + ' ' + parseInt(parts[1], 10);
-
-            html += '<div style="border:1px solid ' + (isToday ? 'var(--accent)' : 'var(--border)') + ';border-radius:8px;margin-bottom:8px;overflow:hidden">' +
-                '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:' + (isToday ? 'rgba(var(--accent-rgb,99,102,241),0.08)' : 'var(--bg2)') + ';border-bottom:1px solid var(--border)">' +
-                    '<div style="display:flex;align-items:center;gap:8px">' +
-                        (isToday ? '<span style="font-size:10px;font-weight:700;color:var(--accent);background:rgba(99,102,241,0.12);border-radius:3px;padding:1px 5px;letter-spacing:.05em">TODAY</span>' : '') +
-                        '<span style="font-size:13px;font-weight:700">' + displayDate + '</span>' +
-                        overlapNote +
-                    '</div>' +
-                    '<span style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--yellow)">' + totalRax.toLocaleString() + ' Rax total</span>' +
-                '</div>' +
-                '<div style="padding:8px 12px;display:flex;flex-direction:column;gap:6px">' +
-                entries.map(function(e) {
-                    return '<div style="display:flex;align-items:center;justify-content:space-between">' +
-                        '<div style="display:flex;align-items:center;gap:6px">' +
-                            '<span style="width:8px;height:8px;border-radius:50%;background:' + e.player.color + ';flex-shrink:0"></span>' +
-                            '<span style="font-size:13px;font-weight:600">' + escHtml(e.player.name) + '</span>' +
-                            '<span style="font-size:10px;color:var(--muted2);font-family:var(--mono)">' + e.player.sport.toUpperCase() + ' ' + e.player.season + ' · ' + escHtml(e.player.levelLabel) + '</span>' +
-                        '</div>' +
-                        '<span style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--green)">' + (e.rax || 0).toLocaleString() + ' Rax</span>' +
-                    '</div>';
-                }).join('') +
-                '</div>' +
-            '</div>';
-        });
-
-        if (!html) {
-            html = '<div style="text-align:center;padding:40px 0;color:var(--muted2);font-size:13px">No earnings data found</div>';
+        // Leading empty cells (prev month)
+        for (var i = 0; i < firstDay; i++) {
+            var prevDay = daysInPrev - firstDay + 1 + i;
+            cells += '<div class="otd-cal-cell otd-other-month"><span class="otd-cal-day-num">' + prevDay + '</span></div>';
         }
 
-        el.innerHTML = '<div style="font-size:11px;color:var(--muted2);margin-bottom:10px">Showing ' + sortedDates.length + ' claimable dates · 2 free claims per sport per day (Pro: +1 bonus)</div>' + html;
+        // Current month cells
+        for (var d = 1; d <= daysInMonth; d++) {
+            var iso = otdCalYear + '-' + String(otdCalMonth + 1).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+            var entries = dateMap[iso] || [];
+            var isToday = iso === todayISO;
+            var hasClaim = entries.length > 0;
+            var totalRax = entries.reduce(function(s, e) { return s + (e.rax || 0); }, 0);
+
+            var cls = 'otd-cal-cell' + (hasClaim ? ' otd-has-claim' : '') + (isToday ? ' otd-today' : '');
+            var dots = hasClaim ? '<div class="otd-cal-dots">' + entries.map(function(e) {
+                return '<span class="otd-cal-dot" style="background:' + e.player.color + '" title="' + escHtml(e.player.name) + '"></span>';
+            }).join('') + '</div>' : '';
+            var raxLbl = hasClaim ? '<span class="otd-cal-rax">' + totalRax.toLocaleString() + '</span>' : '';
+            var overlapBadge = entries.length > 2 ? '<span style="position:absolute;top:3px;right:3px;font-size:8px;font-weight:800;color:#f44336;background:rgba(244,67,54,0.15);border-radius:3px;padding:1px 3px">+' + (entries.length - 2) + '</span>' : '';
+
+            cells += '<div class="' + cls + '">' + overlapBadge +
+                '<span class="otd-cal-day-num">' + d + '</span>' +
+                dots + raxLbl +
+            '</div>';
+        }
+
+        // Trailing empty cells
+        var totalCells = firstDay + daysInMonth;
+        var trail = totalCells % 7 === 0 ? 0 : 7 - (totalCells % 7);
+        for (var t = 1; t <= trail; t++) {
+            cells += '<div class="otd-cal-cell otd-other-month"><span class="otd-cal-day-num">' + t + '</span></div>';
+        }
+
+        // Check if prev/next month have any claims
+        var claimMonths = {};
+        Object.keys(dateMap).forEach(function(iso) { claimMonths[iso.slice(0,7)] = true; });
+
+        el.innerHTML =
+            '<div style="font-size:11px;color:var(--muted2);margin-bottom:12px">' + totalDates + ' claimable dates · 2 free claims/sport/day (Pro: +1)</div>' +
+            '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">' +
+                '<button onclick="otdPrevMonth()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-size:16px;width:32px;height:32px;border-radius:6px;cursor:pointer;line-height:1">‹</button>' +
+                '<span style="font-size:15px;font-weight:700">' + MONTH_NAMES[otdCalMonth] + ' ' + otdCalYear + '</span>' +
+                '<button onclick="otdNextMonth()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-size:16px;width:32px;height:32px;border-radius:6px;cursor:pointer;line-height:1">›</button>' +
+            '</div>' +
+            '<div class="otd-cal-grid">' + cells + '</div>';
     }
 
     // Compute EV for a sport's rows and cache+render immediately — safe to call in parallel

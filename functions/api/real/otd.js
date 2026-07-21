@@ -47,7 +47,7 @@ export async function onRequestGet(context) {
     const sport = url.searchParams.get('sport') || 'mlb';
     if (q.length < 2) return fail(400, 'Query too short');
 
-    const cacheKey = 'otd_search_' + sport + '_' + q.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    const cacheKey = 'otd_search_v2_' + sport + '_' + q.toLowerCase().replace(/[^a-z0-9]/g, '_');
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
       if (cached && (now - cached.fetched_at) < 3600) {
@@ -60,14 +60,22 @@ export async function onRequestGet(context) {
       if (!res.ok) return fail(res.status, 'RS search failed: ' + res.status);
       const data = await res.json();
 
+      // Normalize accent chars for fuzzy matching
+      const norm = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+      const queryWords = norm(q).split(/\s+/).filter(w => w.length > 1);
+
       const playerMap = {};
       for (const play of (data.results && data.results.plays) || []) {
         const pid = play.primaryPlayerId;
         if (!pid || playerMap[pid]) continue;
         const desc = play.description || '';
-        // Names start the description before the first lowercase verb word
-        const m = desc.match(/^((?:[A-ZÁÉÍÓÚ][a-záéíóúñ'.-]+\s+){1,3}[A-ZÁÉÍÓÚ][a-záéíóúñ'.-]+)/);
-        if (m) playerMap[pid] = { id: pid, name: m[1].trim(), sport, teamId: play.teamId };
+        const m = desc.match(/^((?:[A-ZÁÉÍÓÚ][a-záéíóúñ'.\-]+\s+){1,3}[A-ZÁÉÍÓÚ][a-záéíóúñ'.\-]+)/);
+        if (!m) continue;
+        const extractedName = m[1].trim();
+        // Only include if the extracted name actually matches the query (avoids showing wrong players from multi-player plays)
+        const nameNorm = norm(extractedName);
+        if (!queryWords.some(w => nameNorm.includes(w))) continue;
+        playerMap[pid] = { id: pid, name: extractedName, sport, teamId: play.teamId };
       }
       const players = Object.values(playerMap).slice(0, 8);
       const body = JSON.stringify({ ok: true, players });
