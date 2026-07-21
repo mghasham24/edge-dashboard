@@ -3556,14 +3556,21 @@
         }
 
         // Step 1: group by date → sport → entries
-        // Normalize all dates to otdCalYear — OTD claims recur annually (a 2024 pass claims on Oct 8 every year)
+        // Normalize all dates to otdCalYear — OTD claims recur annually on the same MM-DD.
+        // Exception: current-season earnings (origYear >= thisYear) are live claims, not OTD yet.
+        // Their first OTD date is next year (origYear + 1), so skip them if we're viewing a year
+        // that hasn't reached that. E.g. a 2026 July 21 game only appears on July 21, 2027+.
+        var thisYear = new Date().getFullYear();
         var rawDateMap = {};
         otdPlayers.forEach(function(p) {
             if (!p.earnings) return;
             p.earnings.forEach(function(e) {
                 var dp = (e.day || '').split('T')[0].trim().split('-');
-                var dayKey = dp.length === 3 ? (String(otdCalYear) + '-' + dp[1].padStart(2,'0') + '-' + dp[2].padStart(2,'0')) : '';
-                if (!dayKey) return;
+                if (dp.length !== 3) return;
+                var origYear = parseInt(dp[0], 10);
+                // Current/future season: first OTD year is origYear+1; skip if viewing year is earlier
+                if (origYear >= thisYear && otdCalYear <= origYear) return;
+                var dayKey = String(otdCalYear) + '-' + dp[1].padStart(2,'0') + '-' + dp[2].padStart(2,'0');
                 if (!rawDateMap[dayKey]) rawDateMap[dayKey] = {};
                 var sk = p.sport;
                 if (!rawDateMap[dayKey][sk]) rawDateMap[dayKey][sk] = [];
