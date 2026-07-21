@@ -47,7 +47,7 @@ export async function onRequestGet(context) {
     const sport = url.searchParams.get('sport') || 'mlb';
     if (q.length < 2) return fail(400, 'Query too short');
 
-    const cacheKey = 'otd_search_v2_' + sport + '_' + q.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    const cacheKey = 'otd_search_v3_' + sport + '_' + q.toLowerCase().replace(/[^a-z0-9]/g, '_');
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
       if (cached && (now - cached.fetched_at) < 3600) {
@@ -55,29 +55,56 @@ export async function onRequestGet(context) {
       }
     } catch(e) {}
 
+    const norm = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const queryWords = norm(q).split(/\s+/).filter(w => w.length > 1);
+
     try {
       const res = await fetch(`${RS_BASE}/search?query=${encodeURIComponent(q)}&sport=${sport}`, { headers });
       if (!res.ok) return fail(res.status, 'RS search failed: ' + res.status);
       const data = await res.json();
 
-      // Normalize accent chars for fuzzy matching
-      const norm = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-      const queryWords = norm(q).split(/\s+/).filter(w => w.length > 1);
-
-      const playerMap = {};
+      // Collect unique player IDs from search results (RS description may show batter, not the searched player)
+      const seen = new Set();
+      const playerIds = [];
       for (const play of (data.results && data.results.plays) || []) {
-        const pid = play.primaryPlayerId;
-        if (!pid || playerMap[pid]) continue;
-        const desc = play.description || '';
-        const m = desc.match(/^((?:[A-ZÁÉÍÓÚ][a-záéíóúñ'.\-]+\s+){1,3}[A-ZÁÉÍÓÚ][a-záéíóúñ'.\-]+)/);
-        if (!m) continue;
-        const extractedName = m[1].trim();
-        // Only include if the extracted name actually matches the query (avoids showing wrong players from multi-player plays)
-        const nameNorm = norm(extractedName);
-        if (!queryWords.some(w => nameNorm.includes(w))) continue;
-        playerMap[pid] = { id: pid, name: extractedName, sport, teamId: play.teamId };
+        const pid = String(play.primaryPlayerId || '');
+        if (pid && !seen.has(pid)) { seen.add(pid); playerIds.push(pid); }
+        if (playerIds.length >= 12) break;
       }
-      const players = Object.values(playerMap).slice(0, 8);
+
+      if (!playerIds.length) {
+        return new Response(JSON.stringify({ ok: true, players: [] }), { headers: { 'Content-Type': 'application/json' } });
+      }
+
+      // Batch-fetch player profiles (24h-cached per player) to get accurate names
+      const profiles = await Promise.all(playerIds.map(async pid => {
+        const pKey = `otd_player_${sport}_${pid}`;
+        try {
+          const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(pKey).first();
+          if (cached && (now - cached.fetched_at) < 86400) {
+            const pd = JSON.parse(cached.data);
+            return pd.player || null;
+          }
+        } catch(e) {}
+        try {
+          const pr = await fetch(`${RS_BASE}/players/${pid}/sport/${sport}`, { headers });
+          if (!pr.ok) return null;
+          const pd = await pr.json();
+          const p = pd.player || {};
+          const playerObj = { id: p.id || pid, name: ((p.firstName || '') + ' ' + (p.lastName || '')).trim(), sport, teamId: p.teamId };
+          try {
+            await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
+              .bind(pKey, JSON.stringify({ ok: true, player: playerObj }), now).run();
+          } catch(e) {}
+          return playerObj;
+        } catch(e) { return null; }
+      }));
+
+      // Filter by query match on real player name
+      const players = profiles
+        .filter(p => p && p.name && queryWords.some(w => norm(p.name).includes(w)))
+        .slice(0, 8);
+
       const body = JSON.stringify({ ok: true, players });
       try {
         await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')

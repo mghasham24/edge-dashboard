@@ -3293,7 +3293,22 @@
         fetch('/api/real/otd?action=earnings&id=' + entry.id + '&sport=' + sport + '&season=' + season + '&level=' + level, { credentials: 'same-origin' })
             .then(function(r) { return r.json(); })
             .then(function(d) {
-                if (d.ok) { entry.earnings = d.earnings; renderOtdResults(); }
+                if (d.ok) {
+                    entry.earnings = d.earnings;
+                    // First player loaded: jump calendar to nearest upcoming claim
+                    var loadedCount = otdPlayers.filter(function(p) { return p.earnings && p.earnings.length; }).length;
+                    if (loadedCount === 1 && d.earnings && d.earnings.length) {
+                        var todayStr = new Date().toISOString().slice(0, 10);
+                        var sorted = d.earnings.map(function(e) { return (e.day || '').split('T')[0]; }).sort();
+                        var upcoming = sorted.filter(function(d) { return d >= todayStr; });
+                        var target = upcoming[0] || sorted[sorted.length - 1];
+                        if (target) {
+                            var tp = target.split('-');
+                            if (tp.length === 3) { otdCalYear = parseInt(tp[0], 10); otdCalMonth = parseInt(tp[1], 10) - 1; }
+                        }
+                    }
+                    renderOtdResults();
+                }
             })
             .catch(function() {});
     }
@@ -3337,8 +3352,13 @@
         otdPlayers.forEach(function(p) {
             if (!p.earnings) return;
             p.earnings.forEach(function(e) {
-                if (!dateMap[e.day]) { dateMap[e.day] = []; totalDates++; }
-                dateMap[e.day].push({ player: p, rax: e.atRarityEarnings });
+                // Strip any timestamp component and zero-pad month/day
+                var rawDay = (e.day || '').split('T')[0].trim();
+                var dp = rawDay.split('-');
+                var dayKey = dp.length === 3 ? (dp[0] + '-' + dp[1].padStart(2,'0') + '-' + dp[2].padStart(2,'0')) : rawDay;
+                if (!dayKey) return;
+                if (!dateMap[dayKey]) { dateMap[dayKey] = []; totalDates++; }
+                dateMap[dayKey].push({ player: p, rax: e.atRarityEarnings });
             });
         });
 
