@@ -195,7 +195,7 @@ export async function onRequestGet(context) {
 
     // Query by season only — no sport filter so RS returns all passes regardless of sport.
     // 5 seasons × 2 entity types = 10 parallel calls (vs 110 sport-filtered calls that RS rate-limits).
-    const cacheKey = `otd_passes_all_v3_${userId}`;
+    const cacheKey = `otd_passes_all_v4_${userId}`;
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
       if (cached && (now - cached.fetched_at) < 1800) {
@@ -204,7 +204,8 @@ export async function onRequestGet(context) {
     } catch(e) {}
 
     const yr = new Date().getFullYear();
-    const seasons = [yr, yr-1, yr-2, yr-3, yr-4];
+    const seasons = [];
+    for (let y = yr; y >= 2015; y--) seasons.push(y);
 
     function rarityToLevelAll(rarity, rarityLevel) {
       const r = (rarity || '').toLowerCase();
