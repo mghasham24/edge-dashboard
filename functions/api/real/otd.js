@@ -194,7 +194,7 @@ export async function onRequestGet(context) {
     const season = url.searchParams.get('season') || String(new Date().getFullYear());
     if (!userId) return fail(400, 'Missing userId');
 
-    const cacheKey = `otd_passes_${userId}_${sport}_${season}`;
+    const cacheKey = `otd_passes_v2_${userId}_${sport}_${season}`;
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
       if (cached && (now - cached.fetched_at) < 1800) {
@@ -220,7 +220,7 @@ export async function onRequestGet(context) {
         if (r === 'legendary') return 4 + rl;   // 5–9
         if (r === 'mystic')    return 9 + rl;   // 10–19
         if (r === 'iconic')    return 19 + rl;  // 20–39
-        return 1;
+        return 0;
       }
 
       const passes = raw.map(p => {
@@ -234,7 +234,7 @@ export async function onRequestGet(context) {
           : typeof p.collectingLevel === 'number' ? p.collectingLevel
           : rarityToLevel(p.rarity || p.rarityName, p.rarityLevel || p.subLevel);
         return { playerId, playerName, sport: p.sport || sport, season: p.season || season, level };
-      }).filter(p => p.playerId);
+      }).filter(p => p.playerId && p.level >= 3); // Rare (3) and above only
 
       const body = JSON.stringify({ ok: true, passes });
       try {
