@@ -3394,7 +3394,7 @@
         }, 400);
     }
 
-    var OTD_SPORTS = ['mlb', 'nba', 'nhl', 'nfl', 'wnba', 'soccer'];
+    var OTD_SPORTS = ['mlb', 'nba', 'wnba', 'nhl', 'nfl', 'soccer', 'ufc', 'cbb', 'cfb', 'golf'];
 
     function otdLoadUserPasses() {
         var errEl = document.getElementById('otd-search-err');
@@ -3445,11 +3445,13 @@
                                             var target = upcoming[0] || sorted[sorted.length - 1];
                                             if (target) { var tp = target.split('-'); if (tp.length === 3) { otdCalYear = parseInt(tp[0], 10); otdCalMonth = parseInt(tp[1], 10) - 1; } }
                                         }
-                                        renderOtdChips();
-                                        renderOtdResults();
+                                    } else {
+                                        entry.earnings = [];
                                     }
+                                    renderOtdChips();
+                                    renderOtdResults();
                                 })
-                                .catch(function() {});
+                                .catch(function() { entry.earnings = []; renderOtdChips(); renderOtdResults(); });
                         });
                     }
                     if (sportsRemaining === 0) {
@@ -3480,6 +3482,20 @@
         var el = document.getElementById('otd-chips');
         if (!el) return;
         if (!otdPlayers.length) { el.innerHTML = '<span style="font-size:12px;color:var(--muted2)">No players added yet. Search and add players above.</span>'; return; }
+
+        // Username mode: compact summary instead of individual chips
+        if (otdMode === 'username') {
+            var numLoading = otdPlayers.filter(function(p) { return p.earnings === null; }).length;
+            var sportCounts = {};
+            otdPlayers.forEach(function(p) { var k = p.sport.toUpperCase(); sportCounts[k] = (sportCounts[k] || 0) + 1; });
+            var sportSummary = Object.keys(sportCounts).sort().map(function(s) { return s + ' (' + sportCounts[s] + ')'; }).join(', ');
+            el.innerHTML = '<div style="font-size:12px;color:var(--muted2)">' +
+                '<strong style="color:var(--fg)">' + otdPlayers.length + ' passes</strong> (Rare+) across ' + sportSummary +
+                (numLoading > 0 ? ' · <span style="color:var(--accent)">loading ' + numLoading + '…</span>' : ' · <span style="color:var(--green,#4caf50)">all loaded</span>') +
+            '</div>';
+            return;
+        }
+
         el.innerHTML = otdPlayers.map(function(p, i) {
             return '<span style="display:inline-flex;align-items:center;gap:5px;background:' + p.color + '22;border:1px solid ' + p.color + '55;border-radius:20px;padding:4px 10px;font-size:12px;font-weight:600">' +
                 '<span style="width:8px;height:8px;border-radius:50%;background:' + p.color + ';flex-shrink:0"></span>' +
@@ -3497,8 +3513,9 @@
             el.innerHTML = '<div style="text-align:center;padding:40px 0;color:var(--muted2);font-size:13px">Add players above to see their OTD claimable dates</div>';
             return;
         }
-        var anyLoading = otdPlayers.some(function(p) { return p.earnings === null; });
-        if (anyLoading) {
+        var numLoading = otdPlayers.filter(function(p) { return p.earnings === null; }).length;
+        var anyLoaded = otdPlayers.some(function(p) { return p.earnings !== null; });
+        if (!anyLoaded) {
             el.innerHTML = '<div style="text-align:center;padding:20px 0;color:var(--muted2);font-size:13px">Loading earnings data…</div>';
             return;
         }
@@ -3573,7 +3590,8 @@
         Object.keys(dateMap).forEach(function(iso) { claimMonths[iso.slice(0,7)] = true; });
 
         el.innerHTML =
-            '<div style="font-size:11px;color:var(--muted2);margin-bottom:12px">' + totalDates + ' claimable dates · 2 free claims/sport/day (Pro: +1)</div>' +
+            '<div style="font-size:11px;color:var(--muted2);margin-bottom:6px">' + totalDates + ' claimable dates · 2 free claims/sport/day (Pro: +1)</div>' +
+            (numLoading > 0 ? '<div style="font-size:11px;color:var(--accent);margin-bottom:8px">Loading ' + numLoading + ' more pass' + (numLoading !== 1 ? 'es' : '') + '…</div>' : '') +
             '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">' +
                 '<button onclick="otdPrevMonth()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-size:16px;width:32px;height:32px;border-radius:6px;cursor:pointer;line-height:1">‹</button>' +
                 '<span style="font-size:15px;font-weight:700">' + MONTH_NAMES[otdCalMonth] + ' ' + otdCalYear + '</span>' +
