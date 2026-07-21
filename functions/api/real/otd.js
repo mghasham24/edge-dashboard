@@ -155,7 +155,7 @@ export async function onRequestGet(context) {
     const q = (url.searchParams.get('q') || '').trim();
     if (q.length < 2) return fail(400, 'Query too short');
 
-    const cacheKey = 'otd_usersearch_' + q.toLowerCase().replace(/[^a-z0-9_]/g, '_');
+    const cacheKey = 'otd_usersearch_v2_' + q.toLowerCase().replace(/[^a-z0-9_]/g, '_');
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
       if (cached && (now - cached.fetched_at) < 300) {
@@ -169,11 +169,11 @@ export async function onRequestGet(context) {
       const data = await res.json();
 
       const raw = Array.isArray(data) ? data : (data.users || data.results || []);
-      const users = raw.slice(0, 8).map(u => ({
+      const users = raw.slice(0, 10).map(u => ({
         id: u.id || u.userId,
-        username: u.username || u.handle || u.id,
-        displayName: u.displayName || ((u.firstName || '') + ' ' + (u.lastName || '')).trim() || u.username || u.id,
-        avatar: u.avatar
+        username: u.userName || u.username || u.handle || u.id,
+        displayName: null,
+        avatar: u.avatarKey || u.avatar
       })).filter(u => u.id);
 
       const body = JSON.stringify({ ok: true, users });
@@ -194,7 +194,7 @@ export async function onRequestGet(context) {
     const season = url.searchParams.get('season') || String(new Date().getFullYear());
     if (!userId) return fail(400, 'Missing userId');
 
-    const cacheKey = `otd_passes_v2_${userId}_${sport}_${season}`;
+    const cacheKey = `otd_passes_v3_${userId}_${sport}_${season}`;
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
       if (cached && (now - cached.fetched_at) < 1800) {
@@ -224,16 +224,17 @@ export async function onRequestGet(context) {
       }
 
       const passes = raw.map(p => {
-        const player = p.player || p.entity || {};
-        const playerId = p.entityId || p.playerId || player.id;
-        const playerName = player.firstName && player.lastName
-          ? (player.firstName + ' ' + player.lastName).trim()
-          : (player.displayName || player.name || null);
-        // Level: prefer numeric field, fall back to rarity string conversion
-        const level = typeof p.level === 'number' ? p.level
+        const entity = p.entity || p.player || {};
+        const playerId = p.entityId || p.playerId || entity.id;
+        const playerName = p.label
+          || (entity.firstName && entity.lastName ? (entity.firstName + ' ' + entity.lastName).trim() : null)
+          || entity.displayName || null;
+        // Level lives in boostInfo.level (confirmed from API response)
+        const level = (p.boostInfo && typeof p.boostInfo.level === 'number') ? p.boostInfo.level
+          : typeof p.level === 'number' ? p.level
           : typeof p.collectingLevel === 'number' ? p.collectingLevel
           : rarityToLevel(p.rarity || p.rarityName, p.rarityLevel || p.subLevel);
-        return { playerId, playerName, sport: p.sport || sport, season: p.season || season, level };
+        return { playerId, playerName, sport: p.sport || sport, season: String(p.season || season), level };
       }).filter(p => p.playerId && p.level >= 3); // Rare (3) and above only
 
       const body = JSON.stringify({ ok: true, passes });
