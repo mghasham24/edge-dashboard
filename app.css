@@ -1473,37 +1473,97 @@
         .otd-tooltip { display: none !important }
     }
 
-    .otd-tooltip {
-        display: none;
-        position: absolute;
-        z-index: 300;
-        bottom: calc(100% + 7px);
-        left: 50%;
-        transform: translateX(-50%);
+    .otd-cal-cell.otd-selected {
+        border-color: var(--accent) !important;
+        background: rgba(99,102,241,.1) !important;
+    }
+
+    /* Day detail panel */
+    .otd-day-panel {
+        margin-top: 12px;
         background: var(--bg2);
         border: 1px solid var(--border2);
-        border-radius: 8px;
-        padding: 8px 10px;
-        min-width: 170px;
-        white-space: nowrap;
-        box-shadow: 0 6px 24px rgba(0,0,0,.3);
-        pointer-events: none;
+        border-radius: 10px;
+        overflow: hidden;
     }
-    .otd-tooltip.otd-tip-left { left: 0; transform: none }
-    .otd-tooltip.otd-tip-right { left: auto; right: 0; transform: none }
-    .otd-cal-cell:hover .otd-tooltip { display: block }
-    .otd-tooltip-row {
+    .otd-day-panel-hdr {
         display: flex;
         align-items: center;
-        gap: 6px;
-        font-size: 11px;
-        padding: 3px 0;
-        color: var(--fg);
+        justify-content: space-between;
+        padding: 10px 14px 8px;
+        border-bottom: 1px solid var(--border);
     }
-    .otd-tooltip-row + .otd-tooltip-row { border-top: 1px solid var(--border) }
-    .otd-tooltip-name { flex: 1; font-weight: 600 }
-    .otd-tooltip-rax { font-family: var(--mono); font-size: 10px; font-weight: 700; color: var(--yellow); display: flex; align-items: center; gap: 2px }
-    .otd-tooltip-rax svg { width: 10px !important; height: 10px !important; flex-shrink: 0 }
+    .otd-day-tabs {
+        display: flex;
+        gap: 0;
+        border-bottom: 1px solid var(--border);
+        overflow-x: auto;
+        scrollbar-width: none;
+    }
+    .otd-day-tabs::-webkit-scrollbar { display: none }
+    .otd-day-tab {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+        padding: 10px 16px;
+        font-family: var(--sans);
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--muted);
+        background: none;
+        border: none;
+        border-bottom: 2px solid transparent;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: color .15s;
+    }
+    .otd-day-tab:hover { color: var(--fg) }
+    .otd-day-tab.active { color: var(--accent); border-bottom-color: var(--accent) }
+    .otd-day-tab-rax {
+        font-family: var(--mono);
+        font-size: 10px;
+        font-weight: 700;
+        color: var(--yellow);
+        display: flex;
+        align-items: center;
+        gap: 1px;
+    }
+    .otd-day-tab-rax svg { width: 9px !important; height: 9px !important }
+    .otd-day-entries { padding: 6px 0 }
+    .otd-day-entry {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 9px 14px;
+        font-size: 13px;
+        border-bottom: 1px solid var(--border);
+    }
+    .otd-day-entry:last-child { border-bottom: none }
+    .otd-day-entry-name { font-weight: 600; color: var(--fg) }
+    .otd-day-entry-rax {
+        font-family: var(--mono);
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--yellow);
+        display: flex;
+        align-items: center;
+        gap: 3px;
+    }
+    .otd-day-entry-rax svg { width: 11px !important; height: 11px !important }
+    .otd-day-total {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        padding: 8px 14px;
+        font-family: var(--mono);
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--yellow);
+        border-top: 1px solid var(--border);
+        background: rgba(0,0,0,.06);
+    }
+    .otd-day-total svg { width: 10px !important; height: 10px !important }
 
     .admin-stats {
         display: flex;

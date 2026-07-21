@@ -3140,18 +3140,35 @@
     var otdUserSearchTimer = null;
     var otdLoadingPasses = false;
     var otdClaimsView = 2; // 2 = default (free), 3 = Pro
+    var otdSelectedDay = null; // ISO date string of clicked cell
+    var otdSelectedDaySport = null; // active sport tab in day panel
 
     function otdPrevMonth() {
         if (otdCalMonth === 0) { otdCalMonth = 11; otdCalYear--; } else { otdCalMonth--; }
+        otdSelectedDay = null; otdSelectedDaySport = null;
         renderOtdResults();
     }
     function otdNextMonth() {
         if (otdCalMonth === 11) { otdCalMonth = 0; otdCalYear++; } else { otdCalMonth++; }
+        otdSelectedDay = null; otdSelectedDaySport = null;
         renderOtdResults();
     }
     function otdSetClaimsView(n) {
         if (n === 3 && !isPro()) return;
         otdClaimsView = n;
+        renderOtdResults();
+    }
+    function otdSelectDay(iso) {
+        otdSelectedDay = (otdSelectedDay === iso) ? null : iso;
+        otdSelectedDaySport = null;
+        renderOtdResults();
+    }
+    function otdCloseDay() {
+        otdSelectedDay = null; otdSelectedDaySport = null;
+        renderOtdResults();
+    }
+    function otdSelectDaySport(sport) {
+        otdSelectedDaySport = sport;
         renderOtdResults();
     }
 
@@ -3576,29 +3593,29 @@
             cells += '<div class="otd-cal-cell otd-other-month"><span class="otd-cal-day-num">' + prevDay + '</span></div>';
         }
 
+        // Monthly total for current month
+        var monthKey = otdCalYear + '-' + String(otdCalMonth + 1).padStart(2, '0');
+        var monthlyTotal = 0;
+        Object.keys(dateMap).forEach(function(dk) {
+            if (dk.startsWith(monthKey)) dateMap[dk].forEach(function(e) { monthlyTotal += (e.rax || 0); });
+        });
+
         // Current month cells
         for (var d = 1; d <= daysInMonth; d++) {
             var iso = otdCalYear + '-' + String(otdCalMonth + 1).padStart(2,'0') + '-' + String(d).padStart(2,'0');
             var entries = dateMap[iso] || [];
             var isToday = iso === todayISO;
             var hasClaim = entries.length > 0;
+            var isSelected = iso === otdSelectedDay;
             var totalRax = entries.reduce(function(s, e) { return s + (e.rax || 0); }, 0);
 
-            var cls = 'otd-cal-cell' + (hasClaim ? ' otd-has-claim' : '') + (isToday ? ' otd-today' : '');
+            var cls = 'otd-cal-cell' + (hasClaim ? ' otd-has-claim' : '') + (isToday ? ' otd-today' : '') + (isSelected ? ' otd-selected' : '');
             var raxLbl = hasClaim ? '<span class="otd-cal-rax">' + RAX_ICON + totalRax.toLocaleString() + '</span>' : '';
-            var colIdx = (firstDay + d - 1) % 7;
-            var tooltip = hasClaim ? '<div class="otd-tooltip' + (colIdx <= 1 ? ' otd-tip-left' : colIdx >= 5 ? ' otd-tip-right' : '') + '">' +
-                entries.map(function(e) {
-                    return '<div class="otd-tooltip-row">' +
-                        '<span class="otd-tooltip-name">' + escHtml(e.player.name) + '</span>' +
-                        '<span class="otd-tooltip-rax">' + RAX_ICON + (e.rax || 0).toLocaleString() + '</span>' +
-                    '</div>';
-                }).join('') +
-            '</div>' : '';
+            var clickAttr = hasClaim ? ' onclick="otdSelectDay(\'' + iso + '\')"' : '';
 
-            cells += '<div class="' + cls + '">' +
+            cells += '<div class="' + cls + '"' + clickAttr + '>' +
                 '<span class="otd-cal-day-num">' + d + '</span>' +
-                raxLbl + tooltip +
+                raxLbl +
             '</div>';
         }
 
@@ -3609,16 +3626,55 @@
             cells += '<div class="otd-cal-cell otd-other-month"><span class="otd-cal-day-num">' + t + '</span></div>';
         }
 
-        // Check if prev/next month have any claims
-        var claimMonths = {};
-        Object.keys(dateMap).forEach(function(iso) { claimMonths[iso.slice(0,7)] = true; });
+        // Day detail panel (shown below calendar when a day is clicked)
+        var dayPanel = '';
+        if (otdSelectedDay && dateMap[otdSelectedDay]) {
+            var selEntries = dateMap[otdSelectedDay];
+            // Group entries by sport, preserving insertion order
+            var sportOrder = [];
+            var sportGroups = {};
+            selEntries.forEach(function(e) {
+                var s = e.player.sport;
+                if (!sportGroups[s]) { sportGroups[s] = []; sportOrder.push(s); }
+                sportGroups[s].push(e);
+            });
+            var activeSport = (otdSelectedDaySport && sportGroups[otdSelectedDaySport]) ? otdSelectedDaySport : sportOrder[0];
+            var activeEntries = sportGroups[activeSport] || [];
+            var sportTotal = activeEntries.reduce(function(s, e) { return s + (e.rax || 0); }, 0);
+
+            var selDateObj = new Date(otdSelectedDay + 'T12:00:00');
+            var dateLabel = MONTH_NAMES[selDateObj.getMonth()] + ' ' + selDateObj.getDate();
+
+            var sportTabs = sportOrder.map(function(s) {
+                var isAct = s === activeSport;
+                var sTotal = sportGroups[s].reduce(function(x, e) { return x + (e.rax || 0); }, 0);
+                return '<button class="otd-day-tab' + (isAct ? ' active' : '') + '" onclick="otdSelectDaySport(\'' + s + '\')">' +
+                    s.toUpperCase() + '<span class="otd-day-tab-rax">' + RAX_ICON + sTotal.toLocaleString() + '</span>' +
+                '</button>';
+            }).join('');
+
+            var entryRows = activeEntries.map(function(e) {
+                return '<div class="otd-day-entry">' +
+                    '<span class="otd-day-entry-name">' + escHtml(e.player.name) + '</span>' +
+                    '<span class="otd-day-entry-rax">' + RAX_ICON + (e.rax || 0).toLocaleString() + '</span>' +
+                '</div>';
+            }).join('');
+
+            dayPanel = '<div class="otd-day-panel">' +
+                '<div class="otd-day-panel-hdr">' +
+                    '<span style="font-size:13px;font-weight:700">' + dateLabel + '</span>' +
+                    '<button onclick="otdCloseDay()" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;line-height:1;padding:0">×</button>' +
+                '</div>' +
+                '<div class="otd-day-tabs">' + sportTabs + '</div>' +
+                '<div class="otd-day-entries">' + entryRows + '</div>' +
+                '<div class="otd-day-total">' + RAX_ICON + sportTotal.toLocaleString() + ' from ' + activeSport.toUpperCase() + '</div>' +
+            '</div>';
+        }
 
         var pro = isPro();
         var btnBase = 'font-family:var(--sans);font-size:11px;font-weight:700;padding:4px 10px;border-radius:5px;cursor:pointer;border:1px solid ';
-        var btn2Active = otdClaimsView === 2;
-        var btn3Active = otdClaimsView === 3;
-        var btn2Style = btnBase + (btn2Active ? 'var(--accent);background:rgba(99,102,241,.12);color:var(--accent)' : 'var(--border2);background:var(--bg3);color:var(--muted)');
-        var btn3Style = btnBase + (btn3Active ? 'var(--accent);background:rgba(99,102,241,.12);color:var(--accent)' : 'var(--border2);background:var(--bg3);color:var(--muted)') + (pro ? '' : ';opacity:.45;cursor:not-allowed');
+        var btn2Style = btnBase + (otdClaimsView === 2 ? 'var(--accent);background:rgba(99,102,241,.12);color:var(--accent)' : 'var(--border2);background:var(--bg3);color:var(--muted)');
+        var btn3Style = btnBase + (otdClaimsView === 3 ? 'var(--accent);background:rgba(99,102,241,.12);color:var(--accent)' : 'var(--border2);background:var(--bg3);color:var(--muted)') + (pro ? '' : ';opacity:.45;cursor:not-allowed');
 
         el.innerHTML =
             '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">' +
@@ -3630,10 +3686,14 @@
             '</div>' +
             '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">' +
                 '<button onclick="otdPrevMonth()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-size:16px;width:32px;height:32px;border-radius:6px;cursor:pointer;line-height:1">‹</button>' +
-                '<span style="font-size:15px;font-weight:700">' + MONTH_NAMES[otdCalMonth] + ' ' + otdCalYear + '</span>' +
+                '<div style="text-align:center">' +
+                    '<div style="font-size:15px;font-weight:700">' + MONTH_NAMES[otdCalMonth] + ' ' + otdCalYear + '</div>' +
+                    (monthlyTotal > 0 ? '<div style="font-size:11px;font-family:var(--mono);font-weight:700;color:var(--yellow);display:flex;align-items:center;justify-content:center;gap:2px;margin-top:1px">' + RAX_ICON + monthlyTotal.toLocaleString() + '</div>' : '') +
+                '</div>' +
                 '<button onclick="otdNextMonth()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-size:16px;width:32px;height:32px;border-radius:6px;cursor:pointer;line-height:1">›</button>' +
             '</div>' +
-            '<div class="otd-cal-grid">' + cells + '</div>';
+            '<div class="otd-cal-grid">' + cells + '</div>' +
+            dayPanel;
     }
 
     // Compute EV for a sport's rows and cache+render immediately — safe to call in parallel
