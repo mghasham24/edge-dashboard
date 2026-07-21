@@ -10,9 +10,9 @@ function buildHeaders(env) {
     'Origin': 'https://www.realapp.com',
     'Referer': 'https://www.realapp.com/',
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5.2 Safari/605.1.15',
-    'real-auth-info': env.RS_REAL_AUTH_INFO || '',
-    'real-session-token': env.RS_REAL_SESSION_TOKEN || '',
-    'real-device-uuid': env.RS_REAL_DEVICE_UUID || '',
+    'real-auth-info': env.REAL_AUTH_TOKEN || '',
+    'real-session-token': env.REAL_SESSION_TOKEN || '',
+    'real-device-uuid': env.REAL_DEVICE_UUID || '',
     'real-device-name': '5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5.2 Safari/605.1.15',
     'real-device-type': 'desktop_web',
     'real-request-token': hashidsEncode(Date.now()),
@@ -35,8 +35,8 @@ export async function onRequestGet(context) {
   const action = url.searchParams.get('action');
   const now = Math.floor(Date.now() / 1000);
 
-  if (!env.RS_REAL_AUTH_INFO || !env.RS_REAL_SESSION_TOKEN) {
-    return fail(503, 'RS_REAL_AUTH_INFO or RS_REAL_SESSION_TOKEN not set');
+  if (!env.REAL_AUTH_TOKEN || !env.REAL_SESSION_TOKEN) {
+    return fail(503, 'REAL_AUTH_TOKEN or REAL_SESSION_TOKEN not set');
   }
 
   const headers = buildHeaders(env);
