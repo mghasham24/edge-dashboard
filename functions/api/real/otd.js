@@ -150,5 +150,102 @@ export async function onRequestGet(context) {
     }
   }
 
+  // Search RS users by username
+  if (action === 'search_users') {
+    const q = (url.searchParams.get('q') || '').trim();
+    if (q.length < 2) return fail(400, 'Query too short');
+
+    const cacheKey = 'otd_usersearch_' + q.toLowerCase().replace(/[^a-z0-9_]/g, '_');
+    try {
+      const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
+      if (cached && (now - cached.fetched_at) < 300) {
+        return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
+      }
+    } catch(e) {}
+
+    try {
+      const res = await fetch(`${RS_BASE}/searchusers?query=${encodeURIComponent(q)}`, { headers });
+      if (!res.ok) return fail(res.status, 'RS user search failed: ' + res.status);
+      const data = await res.json();
+
+      const raw = Array.isArray(data) ? data : (data.users || data.results || []);
+      const users = raw.slice(0, 8).map(u => ({
+        id: u.id || u.userId,
+        username: u.username || u.handle || u.id,
+        displayName: u.displayName || ((u.firstName || '') + ' ' + (u.lastName || '')).trim() || u.username || u.id,
+        avatar: u.avatar
+      })).filter(u => u.id);
+
+      const body = JSON.stringify({ ok: true, users });
+      try {
+        await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
+          .bind(cacheKey, body, now).run();
+      } catch(e) {}
+      return new Response(body, { headers: { 'Content-Type': 'application/json' } });
+    } catch(e) {
+      return fail(500, e.message);
+    }
+  }
+
+  // Fetch all passes for an RS user in a given sport + season
+  if (action === 'user_passes') {
+    const userId = url.searchParams.get('userId');
+    const sport  = url.searchParams.get('sport') || 'mlb';
+    const season = url.searchParams.get('season') || String(new Date().getFullYear());
+    if (!userId) return fail(400, 'Missing userId');
+
+    const cacheKey = `otd_passes_${userId}_${sport}_${season}`;
+    try {
+      const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
+      if (cached && (now - cached.fetched_at) < 1800) {
+        return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
+      }
+    } catch(e) {}
+
+    try {
+      const res = await fetch(`${RS_BASE}/userpasses/${encodeURIComponent(userId)}/passes?entityType=player&season=${season}&sport=${sport}`, { headers });
+      if (!res.ok) return fail(res.status, 'RS passes failed: ' + res.status);
+      const data = await res.json();
+
+      const raw = Array.isArray(data) ? data : (data.passes || data.items || data.collectingCards || []);
+
+      function rarityToLevel(rarity, rarityLevel) {
+        const r = (rarity || '').toLowerCase();
+        const rl = Math.max(1, parseInt(rarityLevel || 1, 10));
+        if (r === 'general')   return 0;
+        if (r === 'common')    return 1;
+        if (r === 'uncommon')  return 2;
+        if (r === 'rare')      return 3;
+        if (r === 'epic')      return 4;
+        if (r === 'legendary') return 4 + rl;   // 5–9
+        if (r === 'mystic')    return 9 + rl;   // 10–19
+        if (r === 'iconic')    return 19 + rl;  // 20–39
+        return 1;
+      }
+
+      const passes = raw.map(p => {
+        const player = p.player || p.entity || {};
+        const playerId = p.entityId || p.playerId || player.id;
+        const playerName = player.firstName && player.lastName
+          ? (player.firstName + ' ' + player.lastName).trim()
+          : (player.displayName || player.name || null);
+        // Level: prefer numeric field, fall back to rarity string conversion
+        const level = typeof p.level === 'number' ? p.level
+          : typeof p.collectingLevel === 'number' ? p.collectingLevel
+          : rarityToLevel(p.rarity || p.rarityName, p.rarityLevel || p.subLevel);
+        return { playerId, playerName, sport: p.sport || sport, season: p.season || season, level };
+      }).filter(p => p.playerId);
+
+      const body = JSON.stringify({ ok: true, passes });
+      try {
+        await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
+          .bind(cacheKey, body, now).run();
+      } catch(e) {}
+      return new Response(body, { headers: { 'Content-Type': 'application/json' } });
+    } catch(e) {
+      return fail(500, e.message);
+    }
+  }
+
   return fail(400, 'Unknown action');
 }

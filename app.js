@@ -3135,6 +3135,10 @@
     var otdColorIdx = 0;
     var otdCalYear = new Date().getFullYear();
     var otdCalMonth = new Date().getMonth(); // 0-indexed
+    var otdMode = 'player'; // 'player' | 'username'
+    var otdSelectedUser = null; // { id, username, displayName }
+    var otdUserSearchTimer = null;
+    var otdLoadingPasses = false;
 
     function otdPrevMonth() {
         if (otdCalMonth === 0) { otdCalMonth = 11; otdCalYear--; } else { otdCalMonth--; }
@@ -3194,23 +3198,50 @@
             return '<option value="' + y + '"' + (y === curYear ? ' selected' : '') + '>' + y + '</option>';
         }).join('');
 
+        var isUserMode = otdMode === 'username';
+        var tabStyle = function(active) {
+            return 'font-size:12px;font-weight:700;padding:6px 14px;border-radius:5px;cursor:pointer;border:1px solid ' +
+                (active ? 'var(--accent);background:rgba(99,102,241,.12);color:var(--accent)' : 'var(--border2);background:transparent;color:var(--muted)') +
+                ';font-family:var(--sans)';
+        };
+
         panel.innerHTML =
-            '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:18px">' +
+            '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">' +
                 '<div style="font-size:16px;font-weight:800;letter-spacing:.04em">🗓️ On This Day</div>' +
                 '<button onclick="document.getElementById(\'otd-tab-btn\').click()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:7px 14px;border-radius:6px;cursor:pointer">&larr; Back</button>' +
             '</div>' +
-            '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:14px">' +
-                '<div style="position:relative;flex:1;min-width:160px">' +
-                    '<input id="otd-search-input" type="text" placeholder="Search player name…" autocomplete="off" ' +
-                        'style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px 10px;border-radius:6px" ' +
-                        'oninput="otdOnSearchInput(this.value)" />' +
-                    '<div id="otd-autocomplete" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg2);border:1px solid var(--border2);border-radius:6px;z-index:200;margin-top:3px;overflow:hidden"></div>' +
-                '</div>' +
-                '<select id="otd-sport-sel" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px 8px;border-radius:6px">' + sportOpts + '</select>' +
-                '<select id="otd-season-sel" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px 8px;border-radius:6px">' + seasonOpts + '</select>' +
-                '<select id="otd-level-sel" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px 8px;border-radius:6px">' + levelOpts + '</select>' +
-                '<button onclick="otdAddPlayer()" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:13px;font-weight:700;padding:8px 16px;border-radius:6px;cursor:pointer;white-space:nowrap">+ Add</button>' +
+            // Mode toggle
+            '<div style="display:flex;gap:6px;margin-bottom:14px">' +
+                '<button style="' + tabStyle(!isUserMode) + '" onclick="otdSetMode(\'player\')">Search Player</button>' +
+                '<button style="' + tabStyle(isUserMode) + '" onclick="otdSetMode(\'username\')">By Username</button>' +
             '</div>' +
+            // Player search row
+            (!isUserMode ?
+                '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:14px">' +
+                    '<div style="position:relative;flex:1;min-width:160px">' +
+                        '<input id="otd-search-input" type="text" placeholder="Search player name…" autocomplete="off" ' +
+                            'style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px 10px;border-radius:6px" ' +
+                            'oninput="otdOnSearchInput(this.value)" />' +
+                        '<div id="otd-autocomplete" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg2);border:1px solid var(--border2);border-radius:6px;z-index:200;margin-top:3px;overflow:hidden"></div>' +
+                    '</div>' +
+                    '<select id="otd-sport-sel" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px 8px;border-radius:6px">' + sportOpts + '</select>' +
+                    '<select id="otd-season-sel" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px 8px;border-radius:6px">' + seasonOpts + '</select>' +
+                    '<select id="otd-level-sel" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px 8px;border-radius:6px">' + levelOpts + '</select>' +
+                    '<button onclick="otdAddPlayer()" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:13px;font-weight:700;padding:8px 16px;border-radius:6px;cursor:pointer;white-space:nowrap">+ Add</button>' +
+                '</div>'
+            :
+                // Username search row
+                '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:14px">' +
+                    '<div style="position:relative;flex:1;min-width:180px">' +
+                        '<input id="otd-user-input" type="text" placeholder="RS username…" autocomplete="off" ' +
+                            'style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px 10px;border-radius:6px" ' +
+                            'oninput="otdOnUserInput(this.value)" />' +
+                        '<div id="otd-user-autocomplete" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg2);border:1px solid var(--border2);border-radius:6px;z-index:200;margin-top:3px;overflow:hidden"></div>' +
+                    '</div>' +
+                    '<select id="otd-user-season-sel" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px 8px;border-radius:6px">' + seasonOpts + '</select>' +
+                    '<button onclick="otdLoadUserPasses()" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:13px;font-weight:700;padding:8px 16px;border-radius:6px;cursor:pointer;white-space:nowrap">' + (otdLoadingPasses ? 'Loading…' : 'Load Passes') + '</button>' +
+                '</div>'
+            ) +
             '<div id="otd-search-err" style="display:none;font-size:12px;color:#ef5350;margin-bottom:8px"></div>' +
             '<div id="otd-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px"></div>' +
             '<div id="otd-results"></div>';
@@ -3317,6 +3348,132 @@
         otdPlayers.splice(idx, 1);
         renderOtdChips();
         renderOtdResults();
+    }
+
+    function otdSetMode(mode) {
+        otdMode = mode;
+        otdPlayers = [];
+        otdColorIdx = 0;
+        otdSelectedPlayer = null;
+        otdSelectedUser = null;
+        otdLoadingPasses = false;
+        renderOtdPanel();
+    }
+
+    function otdOnUserInput(val) {
+        clearTimeout(otdUserSearchTimer);
+        var ac = document.getElementById('otd-user-autocomplete');
+        if (!ac) return;
+        if (!val || val.length < 2) { ac.style.display = 'none'; otdSelectedUser = null; return; }
+        otdUserSearchTimer = setTimeout(function() {
+            fetch('/api/real/otd?action=search_users&q=' + encodeURIComponent(val), { credentials: 'same-origin' })
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    ac = document.getElementById('otd-user-autocomplete');
+                    if (!ac) return;
+                    if (!d.ok || !d.users || !d.users.length) { ac.style.display = 'none'; return; }
+                    ac.innerHTML = '';
+                    d.users.forEach(function(u) {
+                        var row = document.createElement('div');
+                        row.style.cssText = 'padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)';
+                        row.textContent = u.username + (u.displayName && u.displayName !== u.username ? '  (' + u.displayName + ')' : '');
+                        row.onmousedown = function(e) { e.preventDefault(); };
+                        row.onclick = function() {
+                            otdSelectedUser = u;
+                            var inp = document.getElementById('otd-user-input');
+                            if (inp) inp.value = u.username;
+                            ac.style.display = 'none';
+                        };
+                        row.onmouseover = function() { this.style.background = 'var(--bg3)'; };
+                        row.onmouseout  = function() { this.style.background = ''; };
+                        ac.appendChild(row);
+                    });
+                    ac.style.display = '';
+                })
+                .catch(function() { var ac = document.getElementById('otd-user-autocomplete'); if (ac) ac.style.display = 'none'; });
+        }, 400);
+    }
+
+    var OTD_SPORTS = ['mlb', 'nba', 'nhl', 'nfl', 'wnba', 'soccer'];
+
+    function otdLoadUserPasses() {
+        var errEl = document.getElementById('otd-search-err');
+        if (!otdSelectedUser) {
+            if (errEl) { errEl.textContent = 'Search and select an RS username first'; errEl.style.display = ''; setTimeout(function() { if (errEl) errEl.style.display = 'none'; }, 3000); }
+            var inp = document.getElementById('otd-user-input');
+            if (inp) { inp.style.borderColor = 'var(--red,#ef5350)'; setTimeout(function() { if (inp) inp.style.borderColor = ''; }, 2000); }
+            return;
+        }
+        if (otdLoadingPasses) return;
+
+        var season = (document.getElementById('otd-user-season-sel') || {}).value || String(new Date().getFullYear());
+        otdPlayers = [];
+        otdColorIdx = 0;
+        otdLoadingPasses = true;
+        renderOtdPanel(); // re-render to show "Loading…" button state
+
+        var userId = otdSelectedUser.id;
+        var totalLoaded = 0;
+        var sportsRemaining = OTD_SPORTS.length;
+
+        OTD_SPORTS.forEach(function(sport) {
+            fetch('/api/real/otd?action=user_passes&userId=' + encodeURIComponent(userId) + '&sport=' + sport + '&season=' + season, { credentials: 'same-origin' })
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    sportsRemaining--;
+                    if (d.ok && d.passes && d.passes.length) {
+                        d.passes.forEach(function(pass) {
+                            var lbl = (OTD_LEVEL_OPTIONS.find(function(o) { return o.value === pass.level; }) || {}).label || 'Level ' + pass.level;
+                            var color = OTD_COLORS[otdColorIdx % OTD_COLORS.length];
+                            otdColorIdx++;
+                            var entry = { id: pass.playerId, name: pass.playerName || ('Player ' + pass.playerId), sport: pass.sport || sport, season: String(pass.season || season), level: pass.level || 0, levelLabel: lbl, color: color, earnings: null };
+                            otdPlayers.push(entry);
+                            totalLoaded++;
+
+                            // Fetch earnings for this pass
+                            fetch('/api/real/otd?action=earnings&id=' + entry.id + '&sport=' + entry.sport + '&season=' + entry.season + '&level=' + entry.level, { credentials: 'same-origin' })
+                                .then(function(r) { return r.json(); })
+                                .then(function(ed) {
+                                    if (ed.ok) {
+                                        entry.earnings = ed.earnings;
+                                        // First earnings loaded: jump to nearest upcoming claim
+                                        var nLoaded = otdPlayers.filter(function(p) { return p.earnings && p.earnings.length; }).length;
+                                        if (nLoaded === 1 && ed.earnings && ed.earnings.length) {
+                                            var todayStr = new Date().toISOString().slice(0, 10);
+                                            var sorted = ed.earnings.map(function(e) { return (e.day || '').split('T')[0]; }).sort();
+                                            var upcoming = sorted.filter(function(x) { return x >= todayStr; });
+                                            var target = upcoming[0] || sorted[sorted.length - 1];
+                                            if (target) { var tp = target.split('-'); if (tp.length === 3) { otdCalYear = parseInt(tp[0], 10); otdCalMonth = parseInt(tp[1], 10) - 1; } }
+                                        }
+                                        renderOtdChips();
+                                        renderOtdResults();
+                                    }
+                                })
+                                .catch(function() {});
+                        });
+                    }
+                    if (sportsRemaining === 0) {
+                        otdLoadingPasses = false;
+                        if (totalLoaded === 0) {
+                            var errEl2 = document.getElementById('otd-search-err');
+                            if (errEl2) { errEl2.textContent = 'No passes found for ' + otdSelectedUser.username + ' in ' + season; errEl2.style.display = ''; setTimeout(function() { if (errEl2) errEl2.style.display = 'none'; }, 4000); }
+                        }
+                        renderOtdChips();
+                        renderOtdResults();
+                        // Re-render panel to restore "Load Passes" button
+                        var btn = document.querySelector('[onclick="otdLoadUserPasses()"]');
+                        if (btn) btn.textContent = 'Load Passes';
+                    }
+                })
+                .catch(function() {
+                    sportsRemaining--;
+                    if (sportsRemaining === 0) {
+                        otdLoadingPasses = false;
+                        renderOtdChips();
+                        renderOtdResults();
+                    }
+                });
+        });
     }
 
     function renderOtdChips() {
