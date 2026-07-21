@@ -3458,25 +3458,11 @@
                     return;
                 }
 
-                // For each entity+sport, select the 2 most useful seasons:
-                // 1. Highest level (best earnings multiplier)
-                // 2. Most recent season (for best current-year game-date coverage)
-                var grouped = {};
-                d.passes.forEach(function(p) {
-                    var gk = p.playerId + '|' + p.sport;
-                    if (!grouped[gk]) grouped[gk] = [];
-                    grouped[gk].push(p);
-                });
-
-                var passesToFetch = [];
-                Object.keys(grouped).forEach(function(gk) {
-                    var arr = grouped[gk].sort(function(a, b) { return parseInt(b.season) - parseInt(a.season); });
-                    var best = arr.reduce(function(b, p) { return p.level > b.level ? p : b; }, arr[0]);
-                    passesToFetch.push(best);
-                    if (arr[0].season !== best.season) passesToFetch.push(arr[0]);
-                });
-
-                passesToFetch.forEach(function(pass) {
+                // Fetch earnings for every season we found — each season covers a different set of
+                // game dates (The Open 2024 is July 21, 2025 Open may be July 20, etc.) and we
+                // normalize all dates to the current year, so more seasons = better date coverage.
+                // D1 caches each (player, sport, season, level) combo for 12h so repeat loads are instant.
+                d.passes.forEach(function(pass) {
                     var lbl = (OTD_LEVEL_OPTIONS.find(function(o) { return o.value === pass.level; }) || {}).label || 'Level ' + pass.level;
                     var color = OTD_COLORS[otdColorIdx % OTD_COLORS.length];
                     otdColorIdx++;
@@ -3529,11 +3515,17 @@
         // Username mode: compact summary instead of individual chips
         if (otdMode === 'username') {
             var numLoading = otdPlayers.filter(function(p) { return p.earnings === null; }).length;
+            // Count unique entity+sport combos (not entries, which can repeat across seasons)
             var sportCounts = {};
-            otdPlayers.forEach(function(p) { var k = p.sport.toUpperCase(); sportCounts[k] = (sportCounts[k] || 0) + 1; });
+            var seenEntities = {};
+            otdPlayers.forEach(function(p) {
+                var ek = p.id + '|' + p.sport;
+                if (!seenEntities[ek]) { seenEntities[ek] = true; var k = p.sport.toUpperCase(); sportCounts[k] = (sportCounts[k] || 0) + 1; }
+            });
+            var uniquePasses = Object.keys(seenEntities).length;
             var sportSummary = Object.keys(sportCounts).sort().map(function(s) { return s + ' (' + sportCounts[s] + ')'; }).join(', ');
             el.innerHTML = '<div style="font-size:12px;color:var(--muted2)">' +
-                '<strong style="color:var(--fg)">' + otdPlayers.length + ' passes</strong> (Rare+) across ' + sportSummary +
+                '<strong style="color:var(--fg)">' + uniquePasses + ' passes</strong> (Rare+) across ' + sportSummary +
                 (numLoading > 0 ? ' · <span style="color:var(--accent)">loading ' + numLoading + '…</span>' : ' · <span style="color:var(--green,#4caf50)">all loaded</span>') +
             '</div>';
             return;
