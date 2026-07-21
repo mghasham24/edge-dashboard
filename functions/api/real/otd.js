@@ -63,48 +63,21 @@ export async function onRequestGet(context) {
       if (!res.ok) return fail(res.status, 'RS search failed: ' + res.status);
       const data = await res.json();
 
-      // Collect unique player IDs from search results (RS description may show batter, not the searched player)
-      const seen = new Set();
-      const playerIds = [];
+      // Each play has primaryPlayer (batter) and secondaryPlayer (pitcher) with names already included.
+      // Check both so pitchers show up when searched by name.
+      const playerMap = {};
       for (const play of (data.results && data.results.plays) || []) {
-        const pid = String(play.primaryPlayerId || '');
-        if (pid && !seen.has(pid)) { seen.add(pid); playerIds.push(pid); }
-        if (playerIds.length >= 12) break;
+        for (const pObj of [play.primaryPlayer, play.secondaryPlayer]) {
+          if (!pObj || !pObj.id || playerMap[pObj.id]) continue;
+          const name = ((pObj.firstName || '') + ' ' + (pObj.lastName || '')).trim();
+          if (!name) continue;
+          if (!queryWords.some(w => norm(name).includes(w))) continue;
+          playerMap[pObj.id] = { id: pObj.id, name, sport, teamId: pObj.teamId };
+        }
+        if (Object.keys(playerMap).length >= 8) break;
       }
 
-      if (!playerIds.length) {
-        return new Response(JSON.stringify({ ok: true, players: [] }), { headers: { 'Content-Type': 'application/json' } });
-      }
-
-      // Batch-fetch player profiles (24h-cached per player) to get accurate names
-      const profiles = await Promise.all(playerIds.map(async pid => {
-        const pKey = `otd_player_${sport}_${pid}`;
-        try {
-          const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(pKey).first();
-          if (cached && (now - cached.fetched_at) < 86400) {
-            const pd = JSON.parse(cached.data);
-            return pd.player || null;
-          }
-        } catch(e) {}
-        try {
-          const pr = await fetch(`${RS_BASE}/players/${pid}/sport/${sport}`, { headers });
-          if (!pr.ok) return null;
-          const pd = await pr.json();
-          const p = pd.player || {};
-          const playerObj = { id: p.id || pid, name: ((p.firstName || '') + ' ' + (p.lastName || '')).trim(), sport, teamId: p.teamId };
-          try {
-            await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
-              .bind(pKey, JSON.stringify({ ok: true, player: playerObj }), now).run();
-          } catch(e) {}
-          return playerObj;
-        } catch(e) { return null; }
-      }));
-
-      // Filter by query match on real player name
-      const players = profiles
-        .filter(p => p && p.name && queryWords.some(w => norm(p.name).includes(w)))
-        .slice(0, 8);
-
+      const players = Object.values(playerMap).slice(0, 8);
       const body = JSON.stringify({ ok: true, players });
       try {
         await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
