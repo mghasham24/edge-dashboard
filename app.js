@@ -3567,14 +3567,24 @@
 
             var cls = 'otd-cal-cell' + (hasClaim ? ' otd-has-claim' : '') + (isToday ? ' otd-today' : '');
             var dots = hasClaim ? '<div class="otd-cal-dots">' + entries.map(function(e) {
-                return '<span class="otd-cal-dot" style="background:' + e.player.color + '" title="' + escHtml(e.player.name) + '"></span>';
+                return '<span class="otd-cal-dot" style="background:' + e.player.color + '"></span>';
             }).join('') + '</div>' : '';
             var raxLbl = hasClaim ? '<span class="otd-cal-rax">' + totalRax.toLocaleString() + '</span>' : '';
             var overlapBadge = entries.length > 2 ? '<span style="position:absolute;top:3px;right:3px;font-size:8px;font-weight:800;color:#f44336;background:rgba(244,67,54,0.15);border-radius:3px;padding:1px 3px">+' + (entries.length - 2) + '</span>' : '';
+            var colIdx = (firstDay + d - 1) % 7;
+            var tooltip = hasClaim ? '<div class="otd-tooltip' + (colIdx <= 1 ? ' otd-tip-left' : colIdx >= 5 ? ' otd-tip-right' : '') + '">' +
+                entries.map(function(e) {
+                    return '<div class="otd-tooltip-row">' +
+                        '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:' + e.player.color + ';flex-shrink:0"></span>' +
+                        '<span class="otd-tooltip-name">' + escHtml(e.player.name) + '</span>' +
+                        '<span class="otd-tooltip-rax">' + (e.rax || 0).toLocaleString() + '</span>' +
+                    '</div>';
+                }).join('') +
+            '</div>' : '';
 
             cells += '<div class="' + cls + '">' + overlapBadge +
                 '<span class="otd-cal-day-num">' + d + '</span>' +
-                dots + raxLbl +
+                dots + raxLbl + tooltip +
             '</div>';
         }
 

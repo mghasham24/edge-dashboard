@@ -1480,7 +1480,39 @@
         .otd-cal-cell { min-height: 52px; padding: 3px }
         .otd-cal-rax { font-size: 9px }
         .otd-cal-dot { width: 5px; height: 5px }
+        .otd-tooltip { display: none !important }
     }
+
+    .otd-tooltip {
+        display: none;
+        position: absolute;
+        z-index: 300;
+        bottom: calc(100% + 7px);
+        left: 50%;
+        transform: translateX(-50%);
+        background: var(--bg2);
+        border: 1px solid var(--border2);
+        border-radius: 8px;
+        padding: 8px 10px;
+        min-width: 170px;
+        white-space: nowrap;
+        box-shadow: 0 6px 24px rgba(0,0,0,.3);
+        pointer-events: none;
+    }
+    .otd-tooltip.otd-tip-left { left: 0; transform: none }
+    .otd-tooltip.otd-tip-right { left: auto; right: 0; transform: none }
+    .otd-cal-cell:hover .otd-tooltip { display: block }
+    .otd-tooltip-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+        padding: 3px 0;
+        color: var(--fg);
+    }
+    .otd-tooltip-row + .otd-tooltip-row { border-top: 1px solid var(--border) }
+    .otd-tooltip-name { flex: 1; font-weight: 600 }
+    .otd-tooltip-rax { font-family: var(--mono); font-size: 10px; font-weight: 700; color: var(--yellow) }
 
     .admin-stats {
         display: flex;
