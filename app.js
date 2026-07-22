@@ -3375,21 +3375,30 @@
             totalDays++;
             var existingEntries = (otdDateMap[dayKey] || []).filter(function(entry) { return entry.player.sport === sport; });
             if (existingEntries.length > 0) {
+                var newRax = e.atRarityEarnings || 0;
                 var newTotal = existingEntries.length + 1;
-                var wasted = newTotal > limit;
+                var isOver = newTotal > limit;
+                var wasted = false;
+                if (isOver) {
+                    // Build sorted combined list to find highest-earning wasted card
+                    var combined = existingEntries.map(function(ent) { return ent.rax || 0; });
+                    combined.push(newRax);
+                    combined.sort(function(a, b) { return b - a; });
+                    // Only a real conflict if the best wasted card earns > 199 Rax
+                    wasted = combined[limit] > 199;
+                }
                 if (wasted) wastedCount++;
-                overlapDays.push({ day: dayKey, entries: existingEntries, total: newTotal, wasted: wasted, newRax: e.atRarityEarnings || 0 });
+                if (isOver) overlapDays.push({ day: dayKey, entries: existingEntries, total: newTotal, wasted: wasted, newRax: newRax });
             }
         });
 
         overlapDays.sort(function(a, b) { return a.day < b.day ? -1 : 1; });
 
-        var summaryColor = wastedCount > 0 ? '#ef5350' : (overlapDays.length > 0 ? '#f59e0b' : '#22c55e');
+        var realConflicts = overlapDays.filter(function(d) { return d.wasted; });
+        var summaryColor = wastedCount > 0 ? '#ef5350' : '#22c55e';
         var summaryText = wastedCount > 0
-            ? wastedCount + ' day' + (wastedCount > 1 ? 's' : '') + ' where this claim would be WASTED (over ' + limit + '-claim limit)'
-            : overlapDays.length > 0
-                ? overlapDays.length + ' overlapping day' + (overlapDays.length > 1 ? 's' : '') + ', none wasted — within the ' + limit + '-claim limit'
-                : 'No overlaps on any of the ' + totalDays + ' earning days — safe to buy';
+            ? wastedCount + ' day' + (wastedCount > 1 ? 's' : '') + ' with a wasted claim over 199 Rax'
+            : 'No significant conflicts — safe to buy (' + totalDays + ' earning days)';
 
         var html = '<div style="border-top:1px solid var(--border2);padding-top:10px">' +
             '<div style="font-size:12px;font-weight:700;color:' + summaryColor + ';margin-bottom:4px">' + summaryText + '</div>' +
@@ -3398,9 +3407,9 @@
                 ' · ' + totalDays + ' earning days this year · claim limit: ' + limit + '/sport/day' +
             '</div>';
 
-        if (overlapDays.length > 0) {
+        if (realConflicts.length > 0) {
             html += '<div style="display:flex;flex-direction:column;gap:8px;max-height:300px;overflow-y:auto">';
-            overlapDays.forEach(function(d) {
+            realConflicts.forEach(function(d) {
                 var parts = d.day.split('-');
                 var monthDay = parts.length === 3 ? (MONTH_NAMES[parseInt(parts[1], 10) - 1] + ' ' + parseInt(parts[2], 10)) : d.day;
                 // Build combined sorted list: existing entries + new card, sorted by Rax desc
