@@ -1620,8 +1620,8 @@
         font-style: italic;
     }
     @keyframes otd-icon-pulse {
-        0%, 100% { opacity: .45; transform: scale(.92); filter: drop-shadow(0 0 0px #4f6ef7); }
-        50%       { opacity: 1;   transform: scale(1.08); filter: drop-shadow(0 0 14px #4f6ef7cc); }
+        0%, 100% { transform: scale(.94); filter: drop-shadow(0 0 4px #4f6ef799); }
+        50%       { transform: scale(1.07); filter: drop-shadow(0 0 16px #4f6ef7dd); }
     }
 
     .admin-stats {
