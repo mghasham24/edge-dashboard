@@ -189,6 +189,35 @@ export async function onRequestGet(context) {
   }
 
   // Fetch ALL passes for an RS user across all sports and seasons — batched to avoid rate limiting
+  // Debug: return raw RS pass fields for a user to diagnose missing passes
+  if (action === 'debug_passes') {
+    const userId = url.searchParams.get('userId');
+    const season = url.searchParams.get('season') || String(new Date().getFullYear() - 1);
+    if (!userId) return fail(400, 'Missing userId');
+    try {
+      const [playerRes, teamRes] = await Promise.all([
+        fetch(`${RS_BASE}/userpasses/${encodeURIComponent(userId)}/passes?entityType=player&season=${season}`, { headers }),
+        fetch(`${RS_BASE}/userpasses/${encodeURIComponent(userId)}/passes?entityType=team&season=${season}`, { headers })
+      ]);
+      const playerData = playerRes.ok ? await playerRes.json() : { error: playerRes.status };
+      const teamData = teamRes.ok ? await teamRes.json() : { error: teamRes.status };
+      const playerRaw = Array.isArray(playerData) ? playerData : (playerData.passes || playerData.items || playerData.collectingCards || []);
+      const teamRaw = Array.isArray(teamData) ? teamData : (teamData.passes || teamData.items || teamData.collectingCards || []);
+      const summarize = (arr) => arr.slice(0, 30).map(p => ({
+        id: p.entityId || p.playerId || (p.entity||p.player||p.team||{}).id,
+        name: p.label || ((p.entity||p.player||p.team||{}).firstName ? ((p.entity||p.player||p.team||{}).firstName+' '+(p.entity||p.player||p.team||{}).lastName).trim() : (p.entity||p.player||p.team||{}).name),
+        sport: p.sport,
+        entitySport: (p.entity||p.player||p.team||{}).sport,
+        season: p.season,
+        rarity: p.rarity || p.rarityName,
+        boostLevel: p.boostInfo && p.boostInfo.level,
+        level: p.level,
+        collectingLevel: p.collectingLevel,
+      }));
+      return new Response(JSON.stringify({ playerCount: playerRaw.length, teamCount: teamRaw.length, players: summarize(playerRaw), teams: summarize(teamRaw) }, null, 2), { headers: { 'Content-Type': 'application/json' } });
+    } catch(e) { return fail(500, e.message); }
+  }
+
   if (action === 'user_passes_all') {
     const userId = url.searchParams.get('userId');
     if (!userId) return fail(400, 'Missing userId');
