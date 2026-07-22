@@ -49,7 +49,7 @@ export async function onRequestGet(context) {
     const sport = url.searchParams.get('sport') || 'mlb';
     if (q.length < 2) return fail(400, 'Query too short');
 
-    const cacheKey = 'otd_search_v4_' + sport + '_' + q.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    const cacheKey = 'otd_search_v5_' + q.toLowerCase().replace(/[^a-z0-9]/g, '_');
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
       if (cached && (now - cached.fetched_at) < 3600) {
@@ -61,30 +61,44 @@ export async function onRequestGet(context) {
     const queryWords = norm(q).split(/\s+/).filter(w => w.length > 1);
 
     try {
-      const res = await fetch(`${RS_BASE}/search?query=${encodeURIComponent(q)}&sport=${sport}`, { headers });
+      // Search without sport filter so pitchers/players with limited play history still appear.
+      // The sport param on our side tags which sport the user selected; RS search is global.
+      const res = await fetch(`${RS_BASE}/search?query=${encodeURIComponent(q)}`, { headers });
       if (!res.ok) return fail(res.status, 'RS search failed: ' + res.status);
       const data = await res.json();
 
-      // Each play has primaryPlayer (batter) and secondaryPlayer (pitcher) with names already included.
-      // Check both so pitchers show up when searched by name.
       const playerMap = {};
-      for (const play of (data.results && data.results.plays) || []) {
-        for (const pObj of [play.primaryPlayer, play.secondaryPlayer]) {
-          if (!pObj || !pObj.id || playerMap[pObj.id]) continue;
-          const name = ((pObj.firstName || '') + ' ' + (pObj.lastName || '')).trim();
-          if (!name) continue;
-          if (!queryWords.some(w => norm(name).includes(w))) continue;
-          playerMap[pObj.id] = { id: pObj.id, name, sport, teamId: pObj.teamId };
-        }
-        if (Object.keys(playerMap).length >= 8) break;
+      const addPlayer = (pObj) => {
+        if (!pObj || !pObj.id || playerMap[pObj.id]) return;
+        const name = ((pObj.firstName || '') + ' ' + (pObj.lastName || '')).trim();
+        if (!name) return;
+        if (!queryWords.some(w => norm(name).includes(w))) return;
+        playerMap[pObj.id] = { id: pObj.id, name, sport, teamId: pObj.teamId };
+      };
+
+      // Format 1: data.players or data.results.players (direct player list)
+      for (const pObj of (data.players || (data.results && data.results.players) || [])) {
+        addPlayer(pObj);
+      }
+      // Format 2: data.entities (another common RS response structure)
+      for (const e of (data.entities || (data.results && data.results.entities) || [])) {
+        addPlayer(e.player || e);
+      }
+      // Format 3: data.results.plays — each play has primaryPlayer / secondaryPlayer
+      for (const play of (data.results && data.results.plays) || (data.plays) || []) {
+        addPlayer(play.primaryPlayer);
+        addPlayer(play.secondaryPlayer);
       }
 
-      const players = Object.values(playerMap).slice(0, 8);
+      const players = Object.values(playerMap).slice(0, 15);
       const body = JSON.stringify({ ok: true, players });
-      try {
-        await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
-          .bind(cacheKey, body, now).run();
-      } catch(e) {}
+      // Only cache if we got results to avoid caching stale "no results"
+      if (players.length > 0) {
+        try {
+          await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
+            .bind(cacheKey, body, now).run();
+        } catch(e) {}
+      }
       return new Response(body, { headers: { 'Content-Type': 'application/json' } });
     } catch(e) {
       return fail(500, e.message);
