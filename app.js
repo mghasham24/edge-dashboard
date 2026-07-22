@@ -3620,7 +3620,28 @@
         var numLoading = otdPlayers.filter(function(p) { return p.earnings === null; }).length;
         var anyLoaded = otdPlayers.some(function(p) { return p.earnings !== null; });
         if (!anyLoaded) {
-            el.innerHTML = '<div style="text-align:center;padding:20px 0;color:var(--muted2);font-size:13px">Loading earnings data…</div>';
+            var OTD_TIPS = [
+                'RS lets you claim one pass per entity per day — stack your best cards for big OTD hauls.',
+                'Higher rarity passes earn significantly more Rax per claim.',
+                'Legendary and Mystic cards earn across multiple seasons simultaneously.',
+                'Cards only earn on the exact MM-DD of their original performance, every year.',
+                'Team cards cover every player on the roster — one card, many earners.',
+                'Epic cards earn roughly 4× more than Common on the same day.',
+                'The more seasons a player performed well, the more OTD days they unlock.',
+                'Iconic cards are the rarest on RS — a single claim can be worth thousands of Rax.',
+                'OTD earnings stack: hold cards for the same player across multiple seasons.',
+                'Pitchers and position players both earn — don\'t sleep on strong pitching performances.'
+            ];
+            var tip = OTD_TIPS[Math.floor(Date.now() / 3000) % OTD_TIPS.length];
+            var loadSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="72" height="72">'
+                + '<polygon points="256,48 464,256 256,464 48,256" fill="none" stroke="#4f6ef7" stroke-width="40"/>'
+                + '<polygon points="256,165 347,256 256,347 165,256" fill="#4f6ef7"/>'
+                + '</svg>';
+            el.innerHTML = '<div class="otd-loading">'
+                + '<div class="otd-loading-icon">' + loadSvg + '</div>'
+                + '<div class="otd-loading-label">Loading your cards…</div>'
+                + '<div class="otd-loading-tip">' + tip + '</div>'
+                + '</div>';
             return;
         }
 
@@ -3732,6 +3753,11 @@
                 var s = e.player.sport;
                 if (!sportGroups[s]) { sportGroups[s] = []; sportOrder.push(s); }
                 sportGroups[s].push(e);
+            });
+            sportOrder.sort(function(a, b) {
+                var aT = sportGroups[a].reduce(function(x, e) { return x + (e.rax || 0); }, 0);
+                var bT = sportGroups[b].reduce(function(x, e) { return x + (e.rax || 0); }, 0);
+                return bT - aT;
             });
             var activeSport = (otdSelectedDaySport && sportGroups[otdSelectedDaySport]) ? otdSelectedDaySport : sportOrder[0];
             var activeEntries = sportGroups[activeSport] || [];
