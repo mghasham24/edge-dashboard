@@ -3172,43 +3172,52 @@
         renderOtdResults();
     }
 
-    function otdOpenCardLink(entityId, sport, entityType, season) {
-        var url = '/api/real/otd?action=pass_url&id=' + encodeURIComponent(entityId) + '&sport=' + encodeURIComponent(sport) + '&entityType=' + encodeURIComponent(entityType) + '&season=' + encodeURIComponent(season);
-        fetch(url, { credentials: 'same-origin' })
-            .then(function(r) { return r.json(); })
-            .then(function(d) {
-                var pass = d.raw && (d.raw.pass || d.raw.userPass);
-                if (Array.isArray(pass)) pass = pass[0];
-                if (!pass) {
-                    var list = d.raw && (d.raw.userPasses || d.raw.passes || d.raw.collectingCards || d.raw.items || (Array.isArray(d.raw) ? d.raw : []));
-                    pass = Array.isArray(list) ? list[0] : list;
-                }
-                var slug = pass && (pass.hashId || pass.slug || pass.collectingCardHashId || pass.cardHashId);
-                if (slug && typeof slug === 'string' && /[a-zA-Z]/.test(slug)) {
-                    window.open('https://www.realapp.com/' + slug, '_blank');
-                } else if (pass && pass.id) {
-                    // No hashid field — try numeric pass ID directly (passes may differ from boxscores)
-                    window.open('https://www.realapp.com/' + pass.id, '_blank');
-                } else {
-                    window.open('https://www.realapp.com', '_blank');
-                }
-            })
-            .catch(function() { window.open('https://www.realapp.com', '_blank'); });
+    // RS URL hashids encoder: salt='routing', minLen=11. Encodes [routeType, sportCode, 0, entityId].
+    var RS_SPORT_CODE = {nba:1,nfl:2,ncaam:3,mlb:4,epl:5,ucl:6,nhl:7,mls:8,fifa:9,ufc:10,ncaaf:11,wnba:12,soccer:14,golf:15,ncaabb:16};
+    function rsUrlHash(a,b,c,d) {
+      var salt='routing'.split(''),minLen=11;
+      function shuf(x,s){var t=[].concat(x),v=0,p=0,int;for(var i=t.length-1;i>0;i--,v++){v%=s.length;p+=int=s[v].codePointAt(0);var j=(int+v+p)%i;var q=t[i];t[i]=t[j];t[j]=q;}return t;}
+      function enc(n,x){var r=[];do{r.unshift(x[n%x.length]);n=Math.floor(n/x.length);}while(n>0);return r;}
+      var al='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890'.split('');
+      var sp='cfhistuCFHISTU'.split('');
+      var uniq=Array.from(new Set(al));
+      al=uniq.filter(function(x){return sp.indexOf(x)<0;});
+      sp=shuf(sp.filter(function(x){return uniq.indexOf(x)>=0;}),salt);
+      if(!sp.length||al.length/sp.length>3.5){var sl=Math.ceil(al.length/3.5);if(sl>sp.length){sp=sp.concat(al.slice(0,sl-sp.length));al=al.slice(sl-sp.length);}}
+      al=shuf(al,salt);
+      var gc=Math.ceil(al.length/12),gd;
+      if(al.length<3){gd=sp.splice(0,gc);}else{gd=al.splice(0,gc);}
+      var nums=[a,b,c,d];
+      var nid=nums.reduce(function(s,n,i){return s+n%(i+100);},0);
+      var lot=[al[nid%al.length]];
+      var ret=lot.slice();
+      for(var i=0;i<nums.length;i++){
+        al=shuf(al.slice(),lot.concat(salt,al));
+        var en=enc(nums[i],al);
+        ret=ret.concat(en);
+        if(i+1<nums.length){var pp=en[0].codePointAt(0)+i;ret.push(sp[nums[i]%pp%sp.length]);}
+      }
+      if(ret.length<minLen)ret.unshift(gd[(nid+ret[0].codePointAt(0))%gd.length]);
+      if(ret.length<minLen)ret.push(gd[(nid+ret[2].codePointAt(0))%gd.length]);
+      var half=Math.floor(al.length/2);
+      while(ret.length<minLen){al=shuf(al.slice(),al);ret=al.slice(half).concat(ret).concat(al.slice(0,half));var ex=ret.length-minLen;if(ex>0)ret=ret.slice(Math.floor(ex/2),Math.floor(ex/2)+minLen);}
+      return ret.join('');
+    }
+    function rsEntityUrl(entityType, sport, entityId) {
+      return 'https://www.realapp.com/' + rsUrlHash((entityType === 'player') ? 2 : 3, RS_SPORT_CODE[sport] || 0, 0, entityId);
     }
 
-    function otdOpenPerfLink(entityId, sport, season, day, entityType) {
-        var url = '/api/real/otd?action=perf_url&id=' + encodeURIComponent(entityId) + '&sport=' + encodeURIComponent(sport) + '&season=' + encodeURIComponent(season) + '&day=' + encodeURIComponent(day) + '&entityType=' + encodeURIComponent(entityType);
+    // Opens the RS performance page for a player on a specific OTD day.
+    // calDay is the selected OTD calendar day (e.g. "2026-07-21"), used to look up boxscore IDs.
+    function otdOpenPerfLink(entityId, sport, entityType, calDay) {
+        var url = '/api/real/otd?action=day_earnings&day=' + encodeURIComponent(calDay);
         fetch(url, { credentials: 'same-origin' })
             .then(function(r) { return r.json(); })
             .then(function(d) {
-                console.log('[OTD perf] raw:', d.raw, '| debug:', d.debug);
-                var bs = d.raw;
-                var slug = bs && (bs.hashId || bs.slug);
-                if (slug && typeof slug === 'string' && /[a-zA-Z]/.test(slug)) {
-                    window.open('https://www.realapp.com/' + slug, '_blank');
-                } else {
-                    window.open('https://www.realapp.com', '_blank');
-                }
+                var entry = (d.entries || []).find(function(e) {
+                    return String(e.entityId) === String(entityId) && e.sport === sport && e.entityType === entityType;
+                });
+                window.open((entry && entry.perfUrl) || 'https://www.realapp.com', '_blank');
             })
             .catch(function() { window.open('https://www.realapp.com', '_blank'); });
     }
@@ -3745,15 +3754,14 @@
                 else if (lvl === 1) { rarBg = 'rgba(17,43,74,0.28)';    rarBorder = '#1e4d87'; }
                 else                { rarBg = 'transparent';             rarBorder = 'transparent'; }
                 var year2 = "'" + String(e.player.season).slice(2);
-                var actualDay = String(e.player.season) + otdSelectedDay.slice(4);
                 var eid = String(e.player.id);
                 var eet = e.player.entityType || 'player';
-                var eseas = String(e.player.season);
                 var badgeHtml = (lvl >= 1 && e.player.levelLabel)
                     ? '<span class="otd-rarity-badge" style="background:' + rarBorder + '">' + escHtml(e.player.levelLabel) + '</span>'
                     : '';
-                var cardBtn = '<button class="otd-link-btn" title="View card on RS" onclick="otdOpenCardLink(\'' + eid + '\',\'' + e.player.sport + '\',\'' + eet + '\',\'' + eseas + '\')">' + OTD_CARD_ICON + '</button>';
-                var perfBtn = '<button class="otd-link-btn" title="View performance on RS" onclick="otdOpenPerfLink(\'' + eid + '\',\'' + e.player.sport + '\',\'' + eseas + '\',\'' + actualDay + '\',\'' + eet + '\')">' + OTD_PERF_ICON + '</button>';
+                var cardUrl = rsEntityUrl(eet, e.player.sport, parseInt(eid, 10));
+                var cardBtn = '<button class="otd-link-btn" title="View card on RS" onclick="window.open(\'' + cardUrl + '\',\'_blank\')">' + OTD_CARD_ICON + '</button>';
+                var perfBtn = '<button class="otd-link-btn" title="View performance on RS" onclick="otdOpenPerfLink(\'' + eid + '\',\'' + e.player.sport + '\',\'' + eet + '\',\'' + otdSelectedDay + '\')">' + OTD_PERF_ICON + '</button>';
                 return '<div class="otd-day-entry" style="background:' + rarBg + ';border-left:3px solid ' + rarBorder + '">' +
                     '<span class="otd-day-entry-name">' + escHtml(e.player.name) + '<span class="otd-entry-year">' + escHtml(year2) + '</span>' + badgeHtml + '</span>' +
                     '<div class="otd-day-entry-right">' + cardBtn + perfBtn +

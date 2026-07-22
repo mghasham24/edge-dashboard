@@ -1,5 +1,7 @@
 import { getSessionOrCron } from '../../_lib/auth.js';
-import { hashidsEncode } from '../../_lib/hashids.js';
+import { hashidsEncode, rsUrlEncode } from '../../_lib/hashids.js';
+
+const RS_SPORT_CODE = {nba:1,nfl:2,ncaam:3,mlb:4,epl:5,ucl:6,nhl:7,mls:8,fifa:9,ufc:10,ncaaf:11,wnba:12,soccer:14,golf:15,ncaabb:16};
 
 const RS_BASE = 'https://web.realapp.com';
 
@@ -455,6 +457,53 @@ export async function onRequestGet(context) {
 
       const passes = [...playerPasses, ...teamPasses];
       const body = JSON.stringify({ ok: true, passes });
+      try {
+        await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
+          .bind(cacheKey, body, now).run();
+      } catch(e) {}
+      return new Response(body, { headers: { 'Content-Type': 'application/json' } });
+    } catch(e) {
+      return fail(500, e.message);
+    }
+  }
+
+  // All passes that earned on a given OTD day (MM-DD match across all years), with pre-computed RS URLs
+  if (action === 'day_earnings') {
+    const day = url.searchParams.get('day');
+    if (!day) return fail(400, 'Missing day');
+
+    const cacheKey = `otd_day_earns_v1_${day}`;
+    try {
+      const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
+      if (cached && (now - cached.fetched_at) < 300) {
+        return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
+      }
+    } catch(e) {}
+
+    try {
+      const res = await fetch(`${RS_BASE}/cardhistoricalearnings?day=${encodeURIComponent(day)}`, { headers });
+      if (!res.ok) return fail(res.status, 'RS day_earnings failed: ' + res.status);
+      const data = await res.json();
+
+      const entries = [];
+      for (const sg of (data.sportEarnings || [])) {
+        for (const p of (sg.passEarnings || [])) {
+          const routeType = p.entityType === 'player' ? 2 : 3;
+          const sportCode = RS_SPORT_CODE[p.sport] || 0;
+          const cardHash = rsUrlEncode(routeType, sportCode, 0, p.entityId);
+          const perfId = p.performances && p.performances[0];
+          const perfHash = perfId ? rsUrlEncode(14, 0, 0, perfId) : null;
+          entries.push({
+            entityId: p.entityId,
+            entityType: p.entityType,
+            sport: p.sport,
+            cardUrl: 'https://www.realapp.com/' + cardHash,
+            perfUrl: perfHash ? 'https://www.realapp.com/' + perfHash : null
+          });
+        }
+      }
+
+      const body = JSON.stringify({ ok: true, entries });
       try {
         await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
           .bind(cacheKey, body, now).run();
