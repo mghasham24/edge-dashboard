@@ -1635,6 +1635,44 @@
         50%       { transform: scale(1.07); filter: drop-shadow(0 0 16px #4f6ef7dd); }
     }
 
+    /* OTD mini card thumbnail in day panel entries */
+    .otd-mini-card {
+        flex-shrink: 0;
+        width: 48px;
+        height: 66px;
+        border-radius: 7px;
+        border: 1px solid var(--border2);
+        background-size: cover;
+        background-position: center;
+        position: relative;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-end;
+        padding-bottom: 3px;
+    }
+    .otd-mini-card-av {
+        position: absolute;
+        top: 6px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 1px solid rgba(255,255,255,0.3);
+    }
+    .otd-mini-card-serial {
+        position: relative;
+        font-size: 8px;
+        font-weight: 700;
+        font-family: var(--mono);
+        text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+        letter-spacing: .02em;
+        z-index: 1;
+    }
+
     /* OTD player cards grid */
     .otd-card-grid {
         display: grid;
@@ -1651,6 +1689,18 @@
         display: flex;
         flex-direction: column;
         gap: 4px;
+        overflow: hidden;
+    }
+    .otd-card-bg-overlay {
+        position: absolute;
+        inset: 0;
+        background: rgba(0,0,0,0.55);
+        border-radius: 12px;
+        pointer-events: none;
+    }
+    .otd-player-card > *:not(.otd-card-bg-overlay) {
+        position: relative;
+        z-index: 1;
     }
     .otd-card-rm {
         position: absolute;

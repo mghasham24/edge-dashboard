@@ -3932,7 +3932,7 @@
                     var lbl = (OTD_LEVEL_OPTIONS.find(function(o) { return o.value === pass.level; }) || {}).label || 'Level ' + pass.level;
                     var color = OTD_COLORS[otdColorIdx % OTD_COLORS.length];
                     otdColorIdx++;
-                    var entry = { id: pass.playerId, name: pass.playerName || ('Player ' + pass.playerId), sport: pass.sport, season: String(pass.season), level: pass.level, levelLabel: lbl, color: color, earnings: null, entityType: pass.entityType || 'player', passId: pass.passId || null, avatar: pass.avatar || '' };
+                    var entry = { id: pass.playerId, name: pass.playerName || ('Player ' + pass.playerId), sport: pass.sport, season: String(pass.season), level: pass.level, levelLabel: lbl, color: color, earnings: null, entityType: pass.entityType || 'player', passId: pass.passId || null, avatar: pass.entityAvatar || pass.avatar || '', backgroundSource: pass.backgroundSource || null, rarityColor: pass.rarityColor || null, serialNumber: pass.serialNumber || null, multiplier: pass.multiplier || null };
                     otdPlayers.push(entry);
                     earningsQueue.push(entry);
                 });
@@ -4014,15 +4014,17 @@
             var idx = otdPlayers.indexOf(p);
             var sport = p.sport || 'mlb';
             var emoji = OTD_SPORT_EMOJI[sport] || '🎴';
-            var rc = otdRarityColor(p.level);
+            var rc = p.rarityColor || otdRarityColor(p.level);
             var av = p.avatar || '';
+            var bgUrl = p.backgroundSource ? 'https://www.realapp.com/' + p.backgroundSource : '';
+            var borderCol = p.rarityColor || p.color;
             var photoHtml = '<div style="display:flex;justify-content:center;margin-bottom:8px">' +
                 (av
                     ? '<img src="https://static.realapp.com/avatars/' + av + '.jpg" ' +
-                      'style="width:64px;height:64px;border-radius:50%;object-fit:cover;border:2px solid ' + p.color + '" ' +
+                      'style="width:64px;height:64px;border-radius:50%;object-fit:cover;border:2px solid ' + borderCol + '" ' +
                       'onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' +
-                      '<div style="display:none;width:64px;height:64px;border-radius:50%;background:' + p.color + '22;border:2px solid ' + p.color + ';align-items:center;justify-content:center;font-size:26px">' + emoji + '</div>'
-                    : '<div style="display:flex;width:64px;height:64px;border-radius:50%;background:' + p.color + '22;border:2px solid ' + p.color + ';align-items:center;justify-content:center;font-size:26px">' + emoji + '</div>') +
+                      '<div style="display:none;width:64px;height:64px;border-radius:50%;background:' + borderCol + '22;border:2px solid ' + borderCol + ';align-items:center;justify-content:center;font-size:26px">' + emoji + '</div>'
+                    : '<div style="display:flex;width:64px;height:64px;border-radius:50%;background:' + borderCol + '22;border:2px solid ' + borderCol + ';align-items:center;justify-content:center;font-size:26px">' + emoji + '</div>') +
                 '</div>';
             var levelSel = '<select onchange="otdChangeLevel(' + idx + ',parseInt(this.value,10))" onclick="event.stopPropagation()" ' +
                 'style="background:transparent;border:none;color:' + rc + ';font-size:10px;font-weight:700;cursor:pointer;max-width:100%;font-family:var(--sans);text-align:center">' +
@@ -4030,12 +4032,16 @@
                     return '<option value="' + o.value + '"' + (o.value === p.level ? ' selected' : '') + '>' + escHtml(o.label) + '</option>';
                 }).join('') +
                 '</select>';
-            return '<div class="otd-player-card" style="border-color:' + p.color + '55">' +
+            var serialHtml = p.serialNumber ? '<div style="font-size:9px;color:var(--muted);font-family:var(--mono);margin-top:1px">#' + p.serialNumber + '</div>' : '';
+            var bgStyle = bgUrl ? 'background-image:url(' + bgUrl + ');background-size:cover;background-position:center;' : '';
+            return '<div class="otd-player-card" style="' + bgStyle + 'border-color:' + borderCol + '88">' +
+                (bgUrl ? '<div class="otd-card-bg-overlay"></div>' : '') +
                 (p.isAdded ? '<span class="otd-sim-badge">SIM</span>' : '') +
                 '<button onclick="otdRemovePlayer(' + idx + ')" class="otd-card-rm">×</button>' +
                 photoHtml +
                 '<div class="otd-card-name">' + escHtml(p.name) + '</div>' +
                 '<div class="otd-card-sport">' + sport.toUpperCase() + ' · ' + escHtml(p.season) + '</div>' +
+                serialHtml +
                 '<div class="otd-card-level" style="border-color:' + rc + '55;background:' + rc + '15">' + levelSel + '</div>' +
             '</div>';
         }).join('') + '</div>';
@@ -4229,26 +4235,33 @@
             var OTD_PERF_ICON = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>';
             var entryRows = activeEntries.map(function(e) {
                 var lvl = e.player.level || 0;
-                var rarBg, rarBorder;
-                if (lvl >= 20)      { rarBg = 'rgba(156,36,114,0.22)';  rarBorder = '#c42e90'; }
-                else if (lvl >= 10) { rarBg = 'rgba(158,123,37,0.22)';  rarBorder = '#c49a30'; }
-                else if (lvl >= 5)  { rarBg = 'rgba(30,26,92,0.32)';    rarBorder = '#4a44c8'; }
-                else if (lvl === 4) { rarBg = 'rgba(94,20,20,0.28)';    rarBorder = '#8b2020'; }
-                else if (lvl === 3) { rarBg = 'rgba(143,78,24,0.25)';   rarBorder = '#b86420'; }
-                else if (lvl === 2) { rarBg = 'rgba(14,64,26,0.28)';    rarBorder = '#1e7a32'; }
-                else if (lvl === 1) { rarBg = 'rgba(17,43,74,0.28)';    rarBorder = '#1e4d87'; }
-                else                { rarBg = 'transparent';             rarBorder = 'transparent'; }
+                var rc = e.player.rarityColor || otdRarityColor(lvl);
+                var rarBg = rc !== 'transparent' ? rc + '18' : 'transparent';
+                var rarBorder = rc;
                 var year2 = "'" + String(e.player.season).slice(2);
                 var eid = String(e.player.id);
                 var eet = e.player.entityType || 'player';
-                var badgeHtml = (lvl >= 1 && e.player.levelLabel)
-                    ? '<span class="otd-rarity-badge" style="background:' + rarBorder + '">' + escHtml(e.player.levelLabel) + '</span>'
-                    : '';
                 var pId = String(e.player.passId || '');
                 var cardBtn = '<button class="otd-link-btn" title="View card on RS" onclick="otdOpenCardLink(\'' + eid + '\',\'' + e.player.sport + '\',\'' + eet + '\',\'' + otdSelectedDay + '\',\'' + pId + '\')">' + OTD_CARD_ICON + '</button>';
                 var perfBtn = '<button class="otd-link-btn" title="View performance on RS" onclick="otdOpenPerfLink(\'' + eid + '\',\'' + e.player.sport + '\',\'' + eet + '\',\'' + otdSelectedDay + '\')">' + OTD_PERF_ICON + '</button>';
-                return '<div class="otd-day-entry" style="background:' + rarBg + ';border-left:3px solid ' + rarBorder + '">' +
-                    '<span class="otd-day-entry-name">' + escHtml(e.player.name) + '<span class="otd-entry-year">' + escHtml(year2) + '</span>' + badgeHtml + '</span>' +
+                // Mini card thumbnail (left side) using real RS card background + player avatar
+                var bgSrc = e.player.backgroundSource ? 'https://www.realapp.com/' + e.player.backgroundSource : '';
+                var avHash = e.player.avatar || '';
+                var miniCard = '<div class="otd-mini-card" style="' + (bgSrc ? 'background-image:url(' + bgSrc + ');' : 'background:' + rc + '22;') + 'border-color:' + rc + '88">' +
+                    (avHash
+                        ? '<img src="https://static.realapp.com/avatars/' + avHash + '.jpg" class="otd-mini-card-av" onerror="this.style.display=\'none\'">'
+                        : '') +
+                    '<div class="otd-mini-card-serial" style="color:' + rc + '">' + (e.player.serialNumber ? '#' + e.player.serialNumber : escHtml(year2)) + '</div>' +
+                '</div>';
+                return '<div class="otd-day-entry" style="background:' + rarBg + ';border-left:3px solid ' + rarBorder + ';gap:10px">' +
+                    miniCard +
+                    '<div style="flex:1;min-width:0">' +
+                        '<div class="otd-day-entry-name">' + escHtml(e.player.name) +
+                            '<span class="otd-entry-year">' + escHtml(year2) + '</span>' +
+                            (e.player.levelLabel ? '<span class="otd-rarity-badge" style="background:' + rc + '">' + escHtml(e.player.levelLabel) + '</span>' : '') +
+                        '</div>' +
+                        (e.player.multiplier ? '<div style="font-size:10px;color:var(--muted);margin-top:1px">' + escHtml(e.player.multiplier) + ' · ' + (e.player.serialNumber ? '#' + e.player.serialNumber : '') + '</div>' : '') +
+                    '</div>' +
                     '<div class="otd-day-entry-right">' + cardBtn + perfBtn +
                         '<span class="otd-day-entry-rax">' + RAX_ICON + (e.rax || 0).toLocaleString() + '</span>' +
                     '</div>' +
