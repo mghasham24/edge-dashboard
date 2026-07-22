@@ -3619,7 +3619,7 @@
         }
         var numLoading = otdPlayers.filter(function(p) { return p.earnings === null; }).length;
         var anyLoaded = otdPlayers.some(function(p) { return p.earnings !== null; });
-        if (!anyLoaded || otdLoadingPasses) {
+        if (otdLoadingPasses || numLoading > 0) {
             var OTD_TIPS = [
                 'RS lets you claim one pass per entity per day — stack your best cards for big OTD hauls.',
                 'Higher rarity passes earn significantly more Rax per claim.',
