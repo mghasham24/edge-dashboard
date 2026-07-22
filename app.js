@@ -4249,28 +4249,26 @@
                 var pId = String(e.player.passId || (passRef && passRef.passId) || '');
                 var cardBtn = '<button class="otd-link-btn" title="View card on RS" onclick="otdOpenCardLink(\'' + eid + '\',\'' + e.player.sport + '\',\'' + eet + '\',\'' + otdSelectedDay + '\',\'' + pId + '\')">' + OTD_CARD_ICON + '</button>';
                 var perfBtn = '<button class="otd-link-btn" title="View performance on RS" onclick="otdOpenPerfLink(\'' + eid + '\',\'' + e.player.sport + '\',\'' + eet + '\',\'' + otdSelectedDay + '\')">' + OTD_PERF_ICON + '</button>';
-                // Mini card thumbnail (left side) using real RS card background + player avatar
                 var bgSrc = bgSource ? '/api/real/otd?action=card_bg&src=' + encodeURIComponent(bgSource) : '';
-                var miniCard = '<div class="otd-mini-card" style="' + (bgSrc ? 'background-image:url(' + bgSrc + ');' : 'background:' + rc + '22;') + 'border-color:' + rc + '88">' +
-                    (avHash
-                        ? '<img src="https://media.realapp.com/assets/players/default/small/' + avHash + '.webp" class="otd-mini-card-av" onerror="this.style.display=\'none\'">'
-                        : '') +
-                    '<div class="otd-mini-card-serial" style="color:' + rc + '">' + (serial ? '#' + serial : escHtml(year2)) + '</div>' +
-                '</div>';
                 var multiplier = e.player.multiplier || (passRef && passRef.multiplier) || null;
-                return '<div class="otd-day-entry" style="background:' + rarBg + ';border-left:3px solid ' + rarBorder + ';gap:10px">' +
-                    miniCard +
-                    '<div style="flex:1;min-width:0">' +
-                        '<div class="otd-day-entry-name">' + escHtml(e.player.name) +
-                            '<span class="otd-entry-year">' + escHtml(year2) + '</span>' +
-                            (e.player.levelLabel ? '<span class="otd-rarity-badge" style="background:' + rc + '">' + escHtml(e.player.levelLabel) + '</span>' : '') +
-                        '</div>' +
-                        (multiplier ? '<div style="font-size:10px;color:var(--muted);margin-top:1px">' + escHtml(multiplier) + ' · ' + (serial ? '#' + serial : '') + '</div>' : '') +
-                    '</div>' +
-                    '<div class="otd-day-entry-right">' + cardBtn + perfBtn +
-                        '<span class="otd-day-entry-rax">' + RAX_ICON + (e.rax || 0).toLocaleString() + '</span>' +
-                    '</div>' +
+                var thumb = '<div class="otd-entry-thumb" style="' + (bgSrc ? 'background-image:url(' + bgSrc + ');' : 'background:' + rc + '22;') + 'border-bottom:2px solid ' + rc + '88">' +
+                    (bgSrc ? '<div class="otd-entry-thumb-overlay"></div>' : '') +
+                    (avHash ? '<img src="https://media.realapp.com/assets/players/default/small/' + avHash + '.webp" class="otd-mini-card-av" onerror="this.style.display=\'none\'">' : '') +
+                    '<div class="otd-mini-card-serial" style="color:' + rc + ';text-shadow:0 1px 3px rgba(0,0,0,.9)">' + (serial ? '#' + serial : escHtml(year2)) + '</div>' +
                 '</div>';
+                var body = '<div class="otd-entry-tile-body">' +
+                    '<div class="otd-entry-tile-name">' + escHtml(e.player.name) + '</div>' +
+                    '<div style="display:flex;align-items:center;gap:4px;margin-top:3px;flex-wrap:wrap">' +
+                        '<span style="font-size:9px;color:var(--muted);font-family:var(--mono)">' + escHtml(year2) + '</span>' +
+                        (e.player.levelLabel ? '<span class="otd-rarity-badge" style="background:' + rc + ';margin-left:0">' + escHtml(e.player.levelLabel) + '</span>' : '') +
+                    '</div>' +
+                    (multiplier ? '<div style="font-size:9px;color:var(--muted);margin-top:2px">' + escHtml(multiplier) + '</div>' : '') +
+                '</div>';
+                var footer = '<div class="otd-entry-tile-footer">' +
+                    '<span class="otd-day-entry-rax">' + RAX_ICON + (e.rax || 0).toLocaleString() + '</span>' +
+                    '<div style="display:flex;gap:1px">' + cardBtn + perfBtn + '</div>' +
+                '</div>';
+                return '<div class="otd-day-entry" style="border-color:' + rc + '55">' + thumb + body + footer + '</div>';
             }).join('');
 
             dayPanel = '<div class="otd-day-panel">' +

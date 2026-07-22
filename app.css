@@ -1541,16 +1541,55 @@
         gap: 1px;
     }
     .otd-day-tab-rax svg { width: 9px !important; height: 9px !important }
-    .otd-day-entries { padding: 6px 0 }
+    .otd-day-entries { display: flex; flex-wrap: wrap; gap: 10px; padding: 10px 14px }
     .otd-day-entry {
+        display: flex;
+        flex-direction: column;
+        width: 128px;
+        border-radius: 10px;
+        border: 1px solid var(--border2);
+        background: var(--bg2);
+        overflow: hidden;
+        flex-shrink: 0;
+    }
+    .otd-entry-thumb {
+        width: 100%;
+        height: 168px;
+        background-size: cover;
+        background-position: center;
+        position: relative;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-end;
+        padding-bottom: 6px;
+        flex-shrink: 0;
+    }
+    .otd-entry-thumb-overlay {
+        position: absolute;
+        inset: 0;
+        background: rgba(0,0,0,0.45);
+        pointer-events: none;
+    }
+    .otd-entry-tile-body { padding: 7px 8px 4px; flex: 1 }
+    .otd-entry-tile-name {
+        font-weight: 700;
+        font-size: 11px;
+        color: var(--fg);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        line-height: 1.3;
+    }
+    .otd-entry-tile-footer {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 9px 14px;
-        font-size: 13px;
-        border-bottom: 1px solid var(--border);
+        padding: 4px 6px 6px;
+        border-top: 1px solid var(--border);
+        margin-top: auto;
     }
-    .otd-day-entry:last-child { border-bottom: none }
     .otd-day-entry-name { font-weight: 600; color: var(--fg); display: flex; align-items: center; gap: 0; flex: 1; min-width: 0 }
     .otd-entry-year { font-size: 10px; color: var(--muted); font-weight: 500; margin-left: 4px; font-family: var(--mono); flex-shrink: 0 }
     .otd-day-entry-right { display: flex; align-items: center; gap: 4px; flex-shrink: 0; margin-left: 8px }
@@ -1636,41 +1675,26 @@
     }
 
     /* OTD mini card thumbnail in day panel entries */
-    .otd-mini-card {
-        flex-shrink: 0;
-        width: 48px;
-        height: 66px;
-        border-radius: 7px;
-        border: 1px solid var(--border2);
-        background-size: cover;
-        background-position: center;
-        position: relative;
-        overflow: hidden;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: flex-end;
-        padding-bottom: 3px;
-    }
     .otd-mini-card-av {
         position: absolute;
-        top: 6px;
+        top: 14px;
         left: 50%;
         transform: translateX(-50%);
-        width: 30px;
-        height: 30px;
+        width: 54px;
+        height: 54px;
         border-radius: 50%;
         object-fit: cover;
-        border: 1px solid rgba(255,255,255,0.3);
+        border: 2px solid rgba(255,255,255,0.4);
+        z-index: 2;
     }
     .otd-mini-card-serial {
         position: relative;
-        font-size: 8px;
+        font-size: 9px;
         font-weight: 700;
         font-family: var(--mono);
-        text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+        text-shadow: 0 1px 3px rgba(0,0,0,0.9);
         letter-spacing: .02em;
-        z-index: 1;
+        z-index: 2;
     }
 
     /* OTD player cards grid */
