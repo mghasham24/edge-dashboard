@@ -3460,7 +3460,7 @@
             return '<option value="' + s.key + '"' + (cp && cp.sport === s.key ? ' selected' : '') + '>' + s.label + '</option>';
         }).join('');
         var curYear = new Date().getFullYear();
-        var seasonOpts = [curYear, curYear - 1, curYear - 2].map(function(y) {
+        var seasonOpts = (function() { var a = []; for (var y = curYear; y >= 2015; y--) a.push(y); return a; }()).map(function(y) {
             return '<option value="' + y + '"' + (cp && cp.season === String(y) ? ' selected' : '') + '>' + y + '</option>';
         }).join('');
         var levelOpts = OTD_LEVEL_OPTIONS.map(function(o) {
@@ -3506,7 +3506,7 @@
         var sportOpts = OTD_SPORTS_LIST.map(function(s) {
             return '<option value="' + s.key + '"' + (fp && fp.sport === s.key ? ' selected' : '') + '>' + s.label + '</option>';
         }).join('');
-        var seasonOpts = [curYear, curYear - 1, curYear - 2].map(function(y) {
+        var seasonOpts = (function() { var a = []; for (var y = curYear; y >= 2015; y--) a.push(y); return a; }()).map(function(y) {
             return '<option value="' + y + '"' + (fp && fp.season === String(y) ? ' selected' : '') + '>' + y + '</option>';
         }).join('');
         var levelOpts = OTD_LEVEL_OPTIONS.map(function(o) {
@@ -3679,7 +3679,7 @@
             return '<option value="' + o.value + '"' + (o.value === 4 ? ' selected' : '') + '>' + escHtml(o.label) + '</option>';
         }).join('');
         var curYear = new Date().getFullYear();
-        var seasonOpts = [curYear, curYear - 1, curYear - 2].map(function(y) {
+        var seasonOpts = (function() { var a = []; for (var y = curYear; y >= 2015; y--) a.push(y); return a; }()).map(function(y) {
             return '<option value="' + y + '"' + (y === curYear ? ' selected' : '') + '>' + y + '</option>';
         }).join('');
 
