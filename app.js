@@ -3307,7 +3307,14 @@
     function renderOtdCheckWrap() {
         var el = document.getElementById('otd-check-wrap');
         if (!el) return;
-        if (!otdCheckMode) { el.innerHTML = ''; return; }
+        var canShow = otdMode === 'username' && otdPlayers.length > 0 && !otdLoadingPasses;
+        if (!canShow) { el.innerHTML = ''; return; }
+        if (!otdCheckMode) {
+            el.innerHTML = '<div style="margin-bottom:14px">' +
+                '<button onclick="otdToggleCheck()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:6px;cursor:pointer">⊕ Check Before You Buy</button>' +
+            '</div>';
+            return;
+        }
 
         var cp = otdCheckPlayer;
         var sportOpts = OTD_SPORTS_LIST.map(function(s) {
@@ -3505,13 +3512,6 @@
             ) +
             '<div id="otd-search-err" style="display:none;font-size:12px;color:#ef5350;margin-bottom:8px"></div>' +
             '<div id="otd-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px"></div>' +
-            (isUserMode && otdPlayers.length > 0 && !otdLoadingPasses ?
-                '<div style="margin-bottom:14px">' +
-                    '<button onclick="otdToggleCheck()" style="background:' + (otdCheckMode ? 'rgba(99,102,241,.12)' : 'var(--bg3)') + ';border:1px solid ' + (otdCheckMode ? 'var(--accent)' : 'var(--border2)') + ';color:' + (otdCheckMode ? 'var(--accent)' : 'var(--muted)') + ';font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:6px;cursor:pointer">' +
-                        (otdCheckMode ? '✕ Close Overlap Check' : '⊕ Check Before You Buy') +
-                    '</button>' +
-                '</div>'
-            : '') +
             '<div id="otd-check-wrap"></div>' +
             '<div id="otd-results"></div>';
 
@@ -4014,6 +4014,7 @@
             '</div>' +
             '<div class="otd-cal-grid">' + cells + '</div>' +
             dayPanel;
+        renderOtdCheckWrap();
     }
 
     // Compute EV for a sport's rows and cache+render immediately — safe to call in parallel
