@@ -472,7 +472,7 @@ export async function onRequestGet(context) {
     const day = url.searchParams.get('day');
     if (!day) return fail(400, 'Missing day');
 
-    const cacheKey = `otd_day_earns_v1_${day}`;
+    const cacheKey = `otd_day_earns_v2_${day}`;
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
       if (cached && (now - cached.fetched_at) < 300) {
@@ -488,16 +488,16 @@ export async function onRequestGet(context) {
       const entries = [];
       for (const sg of (data.sportEarnings || [])) {
         for (const p of (sg.passEarnings || [])) {
-          const routeType = p.entityType === 'player' ? 2 : 3;
           const sportCode = RS_SPORT_CODE[p.sport] || 0;
-          const cardHash = rsUrlEncode(routeType, sportCode, 0, p.entityId);
+          // routeType 18 = UserPass — encodes [18, sportCode, 0, passId] where passId = p.id
+          const cardHash = p.id ? rsUrlEncode(18, sportCode, 0, p.id) : null;
           const perfId = p.performances && p.performances[0];
           const perfHash = perfId ? rsUrlEncode(14, 0, 0, perfId) : null;
           entries.push({
             entityId: p.entityId,
             entityType: p.entityType,
             sport: p.sport,
-            cardUrl: 'https://www.realapp.com/' + cardHash,
+            cardUrl: cardHash ? 'https://www.realapp.com/' + cardHash : null,
             perfUrl: perfHash ? 'https://www.realapp.com/' + perfHash : null
           });
         }

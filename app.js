@@ -3207,18 +3207,26 @@
       return 'https://www.realapp.com/' + rsUrlHash((entityType === 'player') ? 2 : 3, RS_SPORT_CODE[sport] || 0, 0, entityId);
     }
 
-    // Opens the RS performance page for a player on a specific OTD day.
-    // calDay is the selected OTD calendar day (e.g. "2026-07-21"), used to look up boxscore IDs.
-    function otdOpenPerfLink(entityId, sport, entityType, calDay) {
+    function otdDayEarningsEntry(entityId, sport, entityType, calDay) {
         var url = '/api/real/otd?action=day_earnings&day=' + encodeURIComponent(calDay);
-        fetch(url, { credentials: 'same-origin' })
+        return fetch(url, { credentials: 'same-origin' })
             .then(function(r) { return r.json(); })
             .then(function(d) {
-                var entry = (d.entries || []).find(function(e) {
+                return (d.entries || []).find(function(e) {
                     return String(e.entityId) === String(entityId) && e.sport === sport && e.entityType === entityType;
-                });
-                window.open((entry && entry.perfUrl) || 'https://www.realapp.com', '_blank');
-            })
+                }) || null;
+            });
+    }
+
+    function otdOpenCardLink(entityId, sport, entityType, calDay) {
+        otdDayEarningsEntry(entityId, sport, entityType, calDay)
+            .then(function(entry) { window.open((entry && entry.cardUrl) || 'https://www.realapp.com', '_blank'); })
+            .catch(function() { window.open('https://www.realapp.com', '_blank'); });
+    }
+
+    function otdOpenPerfLink(entityId, sport, entityType, calDay) {
+        otdDayEarningsEntry(entityId, sport, entityType, calDay)
+            .then(function(entry) { window.open((entry && entry.perfUrl) || 'https://www.realapp.com', '_blank'); })
             .catch(function() { window.open('https://www.realapp.com', '_blank'); });
     }
 
@@ -3759,8 +3767,7 @@
                 var badgeHtml = (lvl >= 1 && e.player.levelLabel)
                     ? '<span class="otd-rarity-badge" style="background:' + rarBorder + '">' + escHtml(e.player.levelLabel) + '</span>'
                     : '';
-                var cardUrl = rsEntityUrl(eet, e.player.sport, parseInt(eid, 10));
-                var cardBtn = '<button class="otd-link-btn" title="View card on RS" onclick="window.open(\'' + cardUrl + '\',\'_blank\')">' + OTD_CARD_ICON + '</button>';
+                var cardBtn = '<button class="otd-link-btn" title="View card on RS" onclick="otdOpenCardLink(\'' + eid + '\',\'' + e.player.sport + '\',\'' + eet + '\',\'' + otdSelectedDay + '\')">' + OTD_CARD_ICON + '</button>';
                 var perfBtn = '<button class="otd-link-btn" title="View performance on RS" onclick="otdOpenPerfLink(\'' + eid + '\',\'' + e.player.sport + '\',\'' + eet + '\',\'' + otdSelectedDay + '\')">' + OTD_PERF_ICON + '</button>';
                 return '<div class="otd-day-entry" style="background:' + rarBg + ';border-left:3px solid ' + rarBorder + '">' +
                     '<span class="otd-day-entry-name">' + escHtml(e.player.name) + '<span class="otd-entry-year">' + escHtml(year2) + '</span>' + badgeHtml + '</span>' +
