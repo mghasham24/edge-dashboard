@@ -387,7 +387,7 @@ export async function onRequestGet(context) {
             if (e.message === '429') throw e;
           }
         }));
-        if (i + CHUNK < seasons.length) await new Promise(r => setTimeout(r, 150));
+        if (i + CHUNK < seasons.length) await new Promise(r => setTimeout(r, 400));
       }
 
       const passes = Object.values(passMap);
