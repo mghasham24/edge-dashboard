@@ -37,6 +37,22 @@ export async function onRequestGet(context) {
   const action = url.searchParams.get('action');
   const now = Math.floor(Date.now() / 1000);
 
+  // Proxy RS card background images so browser sends Referer: realapp.com (CDN requires it)
+  if (action === 'card_bg') {
+    const src = (url.searchParams.get('src') || '').replace(/\.\./g, '');
+    if (!/^assets\/cards\/bg\/[a-z0-9]+\.(png|jpg|webp)$/.test(src)) return fail(400, 'Invalid src');
+    const imgRes = await fetch(`https://media.realapp.com/${src}`, {
+      headers: { 'Referer': 'https://www.realapp.com/', 'Origin': 'https://www.realapp.com/' }
+    });
+    if (!imgRes.ok) return new Response('', { status: imgRes.status });
+    return new Response(imgRes.body, {
+      headers: {
+        'Content-Type': imgRes.headers.get('content-type') || 'image/png',
+        'Cache-Control': 'public, max-age=604800',
+      }
+    });
+  }
+
   if (!env.REAL_AUTH_TOKEN || !env.REAL_SESSION_TOKEN) {
     return fail(503, 'REAL_AUTH_TOKEN or REAL_SESSION_TOKEN not set');
   }

@@ -4016,7 +4016,7 @@
             var emoji = OTD_SPORT_EMOJI[sport] || '🎴';
             var rc = p.rarityColor || otdRarityColor(p.level);
             var av = p.avatar || '';
-            var bgUrl = p.backgroundSource ? 'https://media.realapp.com/' + p.backgroundSource : '';
+            var bgUrl = p.backgroundSource ? '/api/real/otd?action=card_bg&src=' + encodeURIComponent(p.backgroundSource) : '';
             var borderCol = p.rarityColor || p.color;
             var photoHtml = '<div style="display:flex;justify-content:center;margin-bottom:8px">' +
                 (av
@@ -4245,7 +4245,7 @@
                 var cardBtn = '<button class="otd-link-btn" title="View card on RS" onclick="otdOpenCardLink(\'' + eid + '\',\'' + e.player.sport + '\',\'' + eet + '\',\'' + otdSelectedDay + '\',\'' + pId + '\')">' + OTD_CARD_ICON + '</button>';
                 var perfBtn = '<button class="otd-link-btn" title="View performance on RS" onclick="otdOpenPerfLink(\'' + eid + '\',\'' + e.player.sport + '\',\'' + eet + '\',\'' + otdSelectedDay + '\')">' + OTD_PERF_ICON + '</button>';
                 // Mini card thumbnail (left side) using real RS card background + player avatar
-                var bgSrc = e.player.backgroundSource ? 'https://media.realapp.com/' + e.player.backgroundSource : '';
+                var bgSrc = e.player.backgroundSource ? '/api/real/otd?action=card_bg&src=' + encodeURIComponent(e.player.backgroundSource) : '';
                 var avHash = e.player.avatar || '';
                 var miniCard = '<div class="otd-mini-card" style="' + (bgSrc ? 'background-image:url(' + bgSrc + ');' : 'background:' + rc + '22;') + 'border-color:' + rc + '88">' +
                     (avHash
