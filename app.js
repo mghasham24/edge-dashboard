@@ -3399,25 +3399,28 @@
             '</div>';
 
         if (overlapDays.length > 0) {
-            html += '<div style="display:flex;flex-direction:column;gap:3px;max-height:260px;overflow-y:auto">';
+            html += '<div style="display:flex;flex-direction:column;gap:8px;max-height:300px;overflow-y:auto">';
             overlapDays.forEach(function(d) {
                 var parts = d.day.split('-');
                 var monthDay = parts.length === 3 ? (MONTH_NAMES[parseInt(parts[1], 10) - 1] + ' ' + parseInt(parts[2], 10)) : d.day;
-                var color = d.wasted ? '#ef5350' : '#f59e0b';
-                var conflictList = d.entries.map(function(ent) {
-                    return escHtml(ent.player.name) + ' <span style="font-family:var(--mono);color:var(--muted2)">' + escHtml(ent.player.levelLabel || '') + '</span>' +
-                        ' <span style="font-family:var(--mono);color:#22c55e">+' + (ent.rax || 0).toLocaleString() + '</span>';
-                }).join('<span style="color:var(--border2)"> · </span>');
-                var newRaxStr = d.newRax ? ' <span style="font-family:var(--mono);color:#22c55e">+' + d.newRax.toLocaleString() + '</span>' : '';
-                var statusStr = d.wasted
-                    ? '<span style="font-family:var(--mono);color:' + color + ';font-weight:700;margin-left:8px">OVER LIMIT</span>'
-                    : '<span style="font-family:var(--mono);color:' + color + ';margin-left:8px">' + d.total + '/' + limit + '</span>';
-                html += '<div style="padding:6px 8px;background:' + color + '12;border-left:2px solid ' + color + ';border-radius:3px;font-size:11px">' +
-                    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">' +
-                        '<span style="font-weight:700;color:var(--fg)">' + monthDay + statusStr + '</span>' +
-                        '<span style="color:var(--muted2)">new card' + newRaxStr + '</span>' +
-                    '</div>' +
-                    '<div style="color:var(--muted)">' + conflictList + '</div>' +
+                // Build combined sorted list: existing entries + new card, sorted by Rax desc
+                var allCards = d.entries.map(function(ent) {
+                    return { name: ent.player.name, rax: ent.rax || 0, level: ent.player.levelLabel || '', isNew: false };
+                });
+                allCards.push({ name: otdCheckPlayer.name, rax: d.newRax || 0, level: otdCheckPlayer.levelLabel || '', isNew: true });
+                allCards.sort(function(a, b) { return b.rax - a.rax; });
+                var cardRows = allCards.map(function(c, idx) {
+                    var claimed = idx < limit;
+                    var color = claimed ? '#22c55e' : '#ef5350';
+                    var nameStr = escHtml(c.name) + (c.isNew ? ' <span style="background:#4f6ef7;color:#fff;font-size:9px;font-weight:700;padding:1px 4px;border-radius:3px;vertical-align:middle">NEW</span>' : '');
+                    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid var(--border2)">' +
+                        '<span style="color:' + color + ';font-weight:' + (c.isNew ? '700' : '500') + '">' + nameStr + '</span>' +
+                        '<span style="font-family:var(--mono);color:' + color + '">' + (c.rax || 0).toLocaleString() + '</span>' +
+                    '</div>';
+                }).join('');
+                html += '<div style="background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:8px 10px;font-size:12px">' +
+                    '<div style="font-weight:700;color:var(--muted2);font-size:10px;letter-spacing:.06em;margin-bottom:6px">' + monthDay.toUpperCase() + '</div>' +
+                    cardRows +
                 '</div>';
             });
             html += '</div>';
