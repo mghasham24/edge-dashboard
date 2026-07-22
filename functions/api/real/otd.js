@@ -294,6 +294,20 @@ export async function onRequestGet(context) {
     }
   }
 
+  // Admin debug: dump first raw pass object in full so we can find card image URL fields
+  if (action === 'debug_raw_pass') {
+    if (!session.is_admin) return fail(403, 'Admin only');
+    const userId = url.searchParams.get('userId');
+    const season = url.searchParams.get('season') || String(new Date().getFullYear());
+    if (!userId) return fail(400, 'Missing userId');
+    const res = await fetch(`${RS_BASE}/userpasses/${encodeURIComponent(userId)}/passes?entityType=player&season=${season}`, { headers });
+    if (!res.ok) return fail(res.status, 'RS error');
+    const data = await res.json();
+    const raw = Array.isArray(data) ? data : (data.passes || data.items || data.collectingCards || []);
+    // Return first 2 passes in full — we're looking for any image/card/thumbnail URL fields
+    return new Response(JSON.stringify({ count: raw.length, passes: raw.slice(0, 2) }, null, 2), { headers: { 'Content-Type': 'application/json' } });
+  }
+
   // Fetch ALL passes for an RS user across all sports and seasons — batched to avoid rate limiting
   // Debug: return raw RS pass fields for a user to diagnose missing passes
   if (action === 'debug_passes') {
