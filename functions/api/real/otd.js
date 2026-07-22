@@ -141,7 +141,8 @@ export async function onRequestGet(context) {
 
     if (!bsList) {
       try {
-        const rsUrl = `${RS_BASE}/players/${encodeURIComponent(entityId)}/playerboxscores?season=${season}&sport=${sport}`;
+        // Try player boxscores endpoint (no sport filter — RS 400s when sport is passed)
+        const rsUrl = `${RS_BASE}/players/${encodeURIComponent(entityId)}/playerboxscores?season=${season}`;
         const res = await fetch(rsUrl, { headers });
         if (!res.ok) return fail(res.status, 'RS perf_url failed: ' + res.status);
         const data = await res.json();
