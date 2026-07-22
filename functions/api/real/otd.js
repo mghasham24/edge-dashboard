@@ -297,15 +297,23 @@ export async function onRequestGet(context) {
   // Admin debug: dump first raw pass object in full so we can find card image URL fields
   if (action === 'debug_raw_pass') {
     if (!session.is_admin) return fail(403, 'Admin only');
-    const userId = url.searchParams.get('userId');
+    let userId = url.searchParams.get('userId');
     const season = url.searchParams.get('season') || String(new Date().getFullYear());
     if (!userId) return fail(400, 'Missing userId');
+    // Resolve username → RS internal user ID (alphanumeric, e.g. "9JmLj7Rn")
+    const srRes = await fetch(`${RS_BASE}/searchusers?query=${encodeURIComponent(userId)}`, { headers });
+    if (srRes.ok) {
+      const srData = await srRes.json();
+      const srUsers = Array.isArray(srData) ? srData : (srData.users || srData.results || []);
+      const match = srUsers.find(u => (u.userName || u.username || '').toLowerCase() === userId.toLowerCase());
+      if (match) userId = match.id || match.userId || userId;
+    }
     const res = await fetch(`${RS_BASE}/userpasses/${encodeURIComponent(userId)}/passes?entityType=player&season=${season}`, { headers });
-    if (!res.ok) return fail(res.status, 'RS error');
+    if (!res.ok) return fail(res.status, `RS error ${res.status} userId=${userId}`);
     const data = await res.json();
     const raw = Array.isArray(data) ? data : (data.passes || data.items || data.collectingCards || []);
-    // Return first 2 passes in full — we're looking for any image/card/thumbnail URL fields
-    return new Response(JSON.stringify({ count: raw.length, passes: raw.slice(0, 2) }, null, 2), { headers: { 'Content-Type': 'application/json' } });
+    // Return first 2 passes in full — looking for any image/card/thumbnail URL fields
+    return new Response(JSON.stringify({ count: raw.length, resolvedUserId: userId, passes: raw.slice(0, 2) }, null, 2), { headers: { 'Content-Type': 'application/json' } });
   }
 
   // Fetch ALL passes for an RS user across all sports and seasons — batched to avoid rate limiting
