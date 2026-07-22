@@ -195,7 +195,7 @@ export async function onRequestGet(context) {
 
     // Query by season only — no sport filter so RS returns all passes regardless of sport.
     // 5 seasons × 2 entity types = 10 parallel calls (vs 110 sport-filtered calls that RS rate-limits).
-    const cacheKey = `otd_passes_all_v4_${userId}`;
+    const cacheKey = `otd_passes_all_v5_${userId}`;
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
       if (cached && (now - cached.fetched_at) < 1800) {
@@ -232,10 +232,14 @@ export async function onRequestGet(context) {
           || entity.name || entity.displayName || null;
         const sport = p.sport || entity.sport || null;
         const season = String(p.season || fallbackSeason);
-        const level = (p.boostInfo && typeof p.boostInfo.level === 'number') ? p.boostInfo.level
+        // boostInfo.level is 0 for Common cards (it tracks boost progress, not rarity).
+        // Always derive rarity level from the rarity string first; use boostInfo only for Rare+.
+        const rarityLevel = rarityToLevelAll(p.rarity || p.rarityName, p.rarityLevel || p.subLevel);
+        const level = rarityLevel > 0 ? rarityLevel
+          : (p.boostInfo && typeof p.boostInfo.level === 'number' && p.boostInfo.level > 0) ? p.boostInfo.level
           : typeof p.level === 'number' ? p.level
           : typeof p.collectingLevel === 'number' ? p.collectingLevel
-          : rarityToLevelAll(p.rarity || p.rarityName, p.rarityLevel || p.subLevel);
+          : 0;
         if (playerId && sport && level >= 1) {
           results.push({ playerId, playerName, sport, season, level, entityType });
         }
@@ -323,10 +327,12 @@ export async function onRequestGet(context) {
             const playerName = p.label
               || (entity.firstName && entity.lastName ? (entity.firstName + ' ' + entity.lastName).trim() : null)
               || entity.name || entity.displayName || null;
-            const level = (p.boostInfo && typeof p.boostInfo.level === 'number') ? p.boostInfo.level
+            const rl = rarityToLevel(p.rarity || p.rarityName, p.rarityLevel || p.subLevel);
+            const level = rl > 0 ? rl
+              : (p.boostInfo && typeof p.boostInfo.level === 'number' && p.boostInfo.level > 0) ? p.boostInfo.level
               : typeof p.level === 'number' ? p.level
               : typeof p.collectingLevel === 'number' ? p.collectingLevel
-              : rarityToLevel(p.rarity || p.rarityName, p.rarityLevel || p.subLevel);
+              : 0;
             return { playerId, playerName, sport: p.sport || sport, season: String(p.season || season), level, entityType };
           }).filter(p => p.playerId && p.level >= 1);
         }).catch(() => []);
