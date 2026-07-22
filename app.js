@@ -3748,8 +3748,8 @@
                 var badgeHtml = (lvl >= 1 && e.player.levelLabel)
                     ? '<span class="otd-rarity-badge" style="background:' + rarBorder + '">' + escHtml(e.player.levelLabel) + '</span>'
                     : '';
-                var cardBtn = '<button class="otd-link-btn" title="View card on RS" onclick="otdOpenCardLink(' + JSON.stringify(eid) + ',' + JSON.stringify(e.player.sport) + ',' + JSON.stringify(eet) + ',' + JSON.stringify(eseas) + ')">' + OTD_CARD_ICON + '</button>';
-                var perfBtn = '<button class="otd-link-btn" title="View performance on RS" onclick="otdOpenPerfLink(' + JSON.stringify(eid) + ',' + JSON.stringify(e.player.sport) + ',' + JSON.stringify(eseas) + ',' + JSON.stringify(actualDay) + ',' + JSON.stringify(eet) + ')">' + OTD_PERF_ICON + '</button>';
+                var cardBtn = '<button class="otd-link-btn" title="View card on RS" onclick="otdOpenCardLink(\'' + eid + '\',\'' + e.player.sport + '\',\'' + eet + '\',\'' + eseas + '\')">' + OTD_CARD_ICON + '</button>';
+                var perfBtn = '<button class="otd-link-btn" title="View performance on RS" onclick="otdOpenPerfLink(\'' + eid + '\',\'' + e.player.sport + '\',\'' + eseas + '\',\'' + actualDay + '\',\'' + eet + '\')">' + OTD_PERF_ICON + '</button>';
                 return '<div class="otd-day-entry" style="background:' + rarBg + ';border-left:3px solid ' + rarBorder + '">' +
                     '<span class="otd-day-entry-name">' + escHtml(e.player.name) + '<span class="otd-entry-year">' + escHtml(year2) + '</span>' + badgeHtml + '</span>' +
                     '<div class="otd-day-entry-right">' + cardBtn + perfBtn +
