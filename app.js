@@ -3311,30 +3311,31 @@
         if (otdPlayers.some(function(p) { return p.isAdded && p.id === cp.id && p.sport === cp.sport && p.season === cp.season; })) return;
         var color = OTD_COLORS[otdColorIdx % OTD_COLORS.length];
         otdColorIdx++;
-        var entry = { id: cp.id, name: cp.name, sport: cp.sport, season: cp.season, level: cp.level, levelLabel: cp.levelLabel, entityType: cp.entityType || 'player', color: color, earnings: null, isAdded: true };
-        otdPlayers.push(entry);
-        renderOtdChips();
-        renderOtdResults();
-        renderOtdCheckWrap();
         if (otdCheckEarnings !== null) {
-            entry.earnings = otdCheckEarnings;
+            // Earnings already fetched — set them on the entry before pushing so numLoading never increments
+            // and the loading screen never fires, even if other passes are still being loaded.
+            var entry = { id: cp.id, name: cp.name, sport: cp.sport, season: cp.season, level: cp.level, levelLabel: cp.levelLabel, entityType: cp.entityType || 'player', color: color, earnings: otdCheckEarnings, isAdded: true };
+            otdPlayers.push(entry);
             renderOtdChips();
             renderOtdResults();
             renderOtdCheckWrap();
         } else {
-            otdCheckLoading = true;
+            // No earnings yet — push with null (shows loading for this entry), then fetch
+            var entry = { id: cp.id, name: cp.name, sport: cp.sport, season: cp.season, level: cp.level, levelLabel: cp.levelLabel, entityType: cp.entityType || 'player', color: color, earnings: null, isAdded: true };
+            otdPlayers.push(entry);
+            renderOtdChips();
+            renderOtdResults();
             renderOtdCheckWrap();
             fetch('/api/real/otd?action=earnings&id=' + cp.id + '&sport=' + cp.sport + '&season=' + cp.season + '&level=' + cp.level + '&entityType=' + (cp.entityType || 'player'), { credentials: 'same-origin' })
                 .then(function(r) { return r.ok ? r.json() : { ok: false }; })
                 .then(function(d) {
-                    otdCheckLoading = false;
                     entry.earnings = (d.ok && d.earnings) ? d.earnings : [];
                     if (d.ok && d.earnings) otdCheckEarnings = d.earnings;
                     renderOtdChips();
                     renderOtdResults();
                     renderOtdCheckWrap();
                 })
-                .catch(function() { otdCheckLoading = false; entry.earnings = []; renderOtdChips(); renderOtdResults(); renderOtdCheckWrap(); });
+                .catch(function() { entry.earnings = []; renderOtdChips(); renderOtdResults(); renderOtdCheckWrap(); });
         }
     }
 
