@@ -1477,6 +1477,17 @@
         border-color: var(--accent) !important;
         background: rgba(99,102,241,.1) !important;
     }
+    .otd-cal-cell.otd-find-match {
+        border-color: #f59e0b !important;
+    }
+    .otd-find-dot {
+        position: absolute;
+        top: 3px;
+        right: 5px;
+        font-size: 9px;
+        color: #f59e0b;
+        line-height: 1;
+    }
 
     /* Day detail panel */
     .otd-day-panel {
