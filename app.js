@@ -3691,8 +3691,21 @@
             }).join('');
 
             var entryRows = activeEntries.map(function(e) {
-                return '<div class="otd-day-entry">' +
-                    '<span class="otd-day-entry-name">' + escHtml(e.player.name) + '</span>' +
+                var lvl = e.player.level || 0;
+                var rarBg, rarBorder;
+                if (lvl >= 20)      { rarBg = 'rgba(156,36,114,0.22)';  rarBorder = '#c42e90'; }
+                else if (lvl >= 10) { rarBg = 'rgba(158,123,37,0.22)';  rarBorder = '#c49a30'; }
+                else if (lvl >= 5)  { rarBg = 'rgba(30,26,92,0.32)';    rarBorder = '#4a44c8'; }
+                else if (lvl === 4) { rarBg = 'rgba(94,20,20,0.28)';    rarBorder = '#8b2020'; }
+                else if (lvl === 3) { rarBg = 'rgba(143,78,24,0.25)';   rarBorder = '#b86420'; }
+                else if (lvl === 2) { rarBg = 'rgba(14,64,26,0.28)';    rarBorder = '#1e7a32'; }
+                else if (lvl === 1) { rarBg = 'rgba(17,43,74,0.28)';    rarBorder = '#1e4d87'; }
+                else                { rarBg = 'transparent';             rarBorder = 'transparent'; }
+                var badgeHtml = (lvl >= 1 && e.player.levelLabel)
+                    ? '<span class="otd-rarity-badge" style="background:' + rarBorder + '">' + escHtml(e.player.levelLabel) + '</span>'
+                    : '';
+                return '<div class="otd-day-entry" style="background:' + rarBg + ';border-left:3px solid ' + rarBorder + '">' +
+                    '<span class="otd-day-entry-name">' + escHtml(e.player.name) + badgeHtml + '</span>' +
                     '<span class="otd-day-entry-rax">' + RAX_ICON + (e.rax || 0).toLocaleString() + '</span>' +
                 '</div>';
             }).join('');
