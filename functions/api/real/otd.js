@@ -89,6 +89,78 @@ export async function onRequestGet(context) {
     }
   }
 
+  // Card link: get the RS page hash for an owned pass (entity card URL)
+  if (action === 'pass_url') {
+    const entityId = url.searchParams.get('id');
+    const sport    = url.searchParams.get('sport');
+    const entityType = url.searchParams.get('entityType') || 'player';
+    const season   = url.searchParams.get('season');
+    if (!entityId || !sport || !season) return fail(400, 'Missing params');
+
+    const cacheKey = `otd_pass_url_v1_${sport}_${entityType}_${entityId}_${season}`;
+    try {
+      const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
+      if (cached && (now - cached.fetched_at) < 86400) {
+        return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
+      }
+    } catch(e) {}
+
+    try {
+      const rsUrl = `${RS_BASE}/userpasses/${encodeURIComponent(sport)}/type/${encodeURIComponent(entityType)}/entity/${encodeURIComponent(entityId)}/active?season=${season}`;
+      const res = await fetch(rsUrl, { headers });
+      if (!res.ok) return fail(res.status, 'RS pass_url failed: ' + res.status);
+      const data = await res.json();
+      const body = JSON.stringify({ ok: true, raw: data });
+      try {
+        await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
+          .bind(cacheKey, body, now).run();
+      } catch(e) {}
+      return new Response(body, { headers: { 'Content-Type': 'application/json' } });
+    } catch(e) {
+      return fail(500, e.message);
+    }
+  }
+
+  // Performance link: get the RS boxscore for a player on a specific date
+  if (action === 'perf_url') {
+    const entityId   = url.searchParams.get('id');
+    const sport      = url.searchParams.get('sport');
+    const season     = url.searchParams.get('season');
+    const day        = url.searchParams.get('day'); // YYYY-MM-DD original game date
+    const entityType = url.searchParams.get('entityType') || 'player';
+    if (!entityId || !sport || !season || !day) return fail(400, 'Missing params');
+
+    const cacheKey = `otd_perf_url_v1_${entityType}_${sport}_${entityId}_${season}`;
+    let bsList;
+    try {
+      const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
+      if (cached && (now - cached.fetched_at) < 86400) {
+        bsList = JSON.parse(cached.data);
+      }
+    } catch(e) {}
+
+    if (!bsList) {
+      try {
+        const rsUrl = `${RS_BASE}/players/${encodeURIComponent(entityId)}/playerboxscores?season=${season}&sport=${sport}`;
+        const res = await fetch(rsUrl, { headers });
+        if (!res.ok) return fail(res.status, 'RS perf_url failed: ' + res.status);
+        const data = await res.json();
+        bsList = data.playerBoxScores || data.boxScores || data.items || (Array.isArray(data) ? data : []);
+        try {
+          await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
+            .bind(cacheKey, JSON.stringify(bsList), now).run();
+        } catch(e) {}
+      } catch(e) {
+        return fail(500, e.message);
+      }
+    }
+
+    const match = bsList.find(function(b) { return (b.day || '').startsWith(day); });
+    return new Response(JSON.stringify({ ok: true, raw: match || null }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
   // Earnings: get all OTD claimable dates for a player/team at a rarity level
   if (action === 'earnings') {
     const id = url.searchParams.get('id');
