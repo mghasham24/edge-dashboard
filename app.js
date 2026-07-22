@@ -3373,12 +3373,12 @@
             if (origYear >= thisYear && otdCalYear <= origYear) return;
             var dayKey = String(otdCalYear) + '-' + dp[1].padStart(2,'0') + '-' + dp[2].padStart(2,'0');
             totalDays++;
-            var existing = (otdDateMap[dayKey] || []).filter(function(entry) { return entry.player.sport === sport; }).length;
-            if (existing > 0) {
-                var newTotal = existing + 1;
+            var existingEntries = (otdDateMap[dayKey] || []).filter(function(entry) { return entry.player.sport === sport; });
+            if (existingEntries.length > 0) {
+                var newTotal = existingEntries.length + 1;
                 var wasted = newTotal > limit;
                 if (wasted) wastedCount++;
-                overlapDays.push({ day: dayKey, existing: existing, total: newTotal, wasted: wasted });
+                overlapDays.push({ day: dayKey, entries: existingEntries, total: newTotal, wasted: wasted, newRax: e.atRarityEarnings || 0 });
             }
         });
 
@@ -3399,17 +3399,25 @@
             '</div>';
 
         if (overlapDays.length > 0) {
-            html += '<div style="display:flex;flex-direction:column;gap:3px;max-height:220px;overflow-y:auto">';
+            html += '<div style="display:flex;flex-direction:column;gap:3px;max-height:260px;overflow-y:auto">';
             overlapDays.forEach(function(d) {
                 var parts = d.day.split('-');
                 var monthDay = parts.length === 3 ? (MONTH_NAMES[parseInt(parts[1], 10) - 1] + ' ' + parseInt(parts[2], 10)) : d.day;
                 var color = d.wasted ? '#ef5350' : '#f59e0b';
-                var label = d.wasted
-                    ? d.existing + ' existing + this = ' + d.total + ' — OVER LIMIT'
-                    : d.existing + ' existing + this = ' + d.total;
-                html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 8px;background:' + color + '18;border-left:2px solid ' + color + ';border-radius:3px;font-size:11px">' +
-                    '<span style="font-weight:600;color:var(--fg)">' + monthDay + '</span>' +
-                    '<span style="color:' + color + ';font-family:var(--mono)">' + label + '</span>' +
+                var conflictList = d.entries.map(function(ent) {
+                    return escHtml(ent.player.name) + ' <span style="font-family:var(--mono);color:var(--muted2)">' + escHtml(ent.player.levelLabel || '') + '</span>' +
+                        ' <span style="font-family:var(--mono);color:#22c55e">+' + (ent.rax || 0).toLocaleString() + '</span>';
+                }).join('<span style="color:var(--border2)"> · </span>');
+                var newRaxStr = d.newRax ? ' <span style="font-family:var(--mono);color:#22c55e">+' + d.newRax.toLocaleString() + '</span>' : '';
+                var statusStr = d.wasted
+                    ? '<span style="font-family:var(--mono);color:' + color + ';font-weight:700;margin-left:8px">OVER LIMIT</span>'
+                    : '<span style="font-family:var(--mono);color:' + color + ';margin-left:8px">' + d.total + '/' + limit + '</span>';
+                html += '<div style="padding:6px 8px;background:' + color + '12;border-left:2px solid ' + color + ';border-radius:3px;font-size:11px">' +
+                    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">' +
+                        '<span style="font-weight:700;color:var(--fg)">' + monthDay + statusStr + '</span>' +
+                        '<span style="color:var(--muted2)">new card' + newRaxStr + '</span>' +
+                    '</div>' +
+                    '<div style="color:var(--muted)">' + conflictList + '</div>' +
                 '</div>';
             });
             html += '</div>';
