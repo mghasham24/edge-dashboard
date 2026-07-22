@@ -3304,6 +3304,40 @@
             .catch(function() { otdCheckLoading = false; otdCheckEarnings = []; renderOtdCheckWrap(); });
     }
 
+    function otdAddCheckPlayer() {
+        if (!otdCheckPlayer) return;
+        var cp = otdCheckPlayer;
+        // Already added this player+sport+season?
+        if (otdPlayers.some(function(p) { return p.isAdded && p.id === cp.id && p.sport === cp.sport && p.season === cp.season; })) return;
+        var color = OTD_COLORS[otdColorIdx % OTD_COLORS.length];
+        otdColorIdx++;
+        var entry = { id: cp.id, name: cp.name, sport: cp.sport, season: cp.season, level: cp.level, levelLabel: cp.levelLabel, entityType: cp.entityType || 'player', color: color, earnings: null, isAdded: true };
+        otdPlayers.push(entry);
+        renderOtdChips();
+        renderOtdResults();
+        renderOtdCheckWrap();
+        if (otdCheckEarnings !== null) {
+            entry.earnings = otdCheckEarnings;
+            renderOtdChips();
+            renderOtdResults();
+            renderOtdCheckWrap();
+        } else {
+            otdCheckLoading = true;
+            renderOtdCheckWrap();
+            fetch('/api/real/otd?action=earnings&id=' + cp.id + '&sport=' + cp.sport + '&season=' + cp.season + '&level=' + cp.level + '&entityType=' + (cp.entityType || 'player'), { credentials: 'same-origin' })
+                .then(function(r) { return r.ok ? r.json() : { ok: false }; })
+                .then(function(d) {
+                    otdCheckLoading = false;
+                    entry.earnings = (d.ok && d.earnings) ? d.earnings : [];
+                    if (d.ok && d.earnings) otdCheckEarnings = d.earnings;
+                    renderOtdChips();
+                    renderOtdResults();
+                    renderOtdCheckWrap();
+                })
+                .catch(function() { otdCheckLoading = false; entry.earnings = []; renderOtdChips(); renderOtdResults(); renderOtdCheckWrap(); });
+        }
+    }
+
     function renderOtdCheckWrap() {
         var el = document.getElementById('otd-check-wrap');
         if (!el) return;
@@ -3349,6 +3383,11 @@
                 '<select id="otd-check-season" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px;border-radius:6px">' + seasonOpts + '</select>' +
                 '<select id="otd-check-level" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px;border-radius:6px">' + levelOpts + '</select>' +
                 '<button onclick="otdRunCheck()" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:13px;font-weight:700;padding:8px 16px;border-radius:6px;cursor:pointer;' + (cp ? '' : 'opacity:.4;pointer-events:none;') + 'white-space:nowrap">Check</button>' +
+                (function() {
+                    var alreadyAdded = cp && otdPlayers.some(function(p) { return p.isAdded && p.id === cp.id && p.sport === cp.sport && p.season === cp.season; });
+                    if (alreadyAdded) return '<button disabled style="background:#22c55e;border:none;color:#fff;font-family:var(--sans);font-size:13px;font-weight:700;padding:8px 16px;border-radius:6px;white-space:nowrap;opacity:.7;cursor:default">Added ✓</button>';
+                    return '<button onclick="otdAddCheckPlayer()" style="background:#22c55e;border:none;color:#fff;font-family:var(--sans);font-size:13px;font-weight:700;padding:8px 16px;border-radius:6px;cursor:pointer;white-space:nowrap;' + (cp ? '' : 'opacity:.4;pointer-events:none;') + '">＋ Add</button>';
+                })() +
             '</div>' +
             resultsHtml +
         '</div>';
@@ -3791,7 +3830,20 @@
         if (!el) return;
         if (!otdPlayers.length) { el.innerHTML = '<span style="font-size:12px;color:var(--muted2)">No players added yet. Search and add players above.</span>'; return; }
 
-        if (otdMode === 'username') { el.innerHTML = ''; return; }
+        if (otdMode === 'username') {
+            var added = otdPlayers.filter(function(p) { return p.isAdded; });
+            if (!added.length) { el.innerHTML = ''; return; }
+            el.innerHTML = added.map(function(p) {
+                var idx = otdPlayers.indexOf(p);
+                return '<span style="display:inline-flex;align-items:center;gap:5px;background:' + p.color + '22;border:1px dashed ' + p.color + '88;border-radius:20px;padding:4px 10px;font-size:12px;font-weight:600">' +
+                    '<span style="width:8px;height:8px;border-radius:50%;background:' + p.color + ';flex-shrink:0"></span>' +
+                    escHtml(p.name) + ' · ' + p.sport.toUpperCase() + ' ' + p.season + ' · ' + escHtml(p.levelLabel) +
+                    ' <span style="font-size:9px;font-weight:700;background:rgba(99,102,241,.18);color:var(--accent);border-radius:3px;padding:1px 5px;letter-spacing:.04em">SIM</span>' +
+                    '<button onclick="otdRemovePlayer(' + idx + ')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:0;line-height:1;margin-left:2px">×</button>' +
+                '</span>';
+            }).join('');
+            return;
+        }
 
         el.innerHTML = otdPlayers.map(function(p, i) {
             return '<span style="display:inline-flex;align-items:center;gap:5px;background:' + p.color + '22;border:1px solid ' + p.color + '55;border-radius:20px;padding:4px 10px;font-size:12px;font-weight:600">' +
@@ -4016,7 +4068,20 @@
         var btn2Style = btnBase + (otdClaimsView === 2 ? 'var(--accent);background:rgba(99,102,241,.12);color:var(--accent)' : 'var(--border2);background:var(--bg3);color:var(--muted)');
         var btn3Style = btnBase + (otdClaimsView === 3 ? 'var(--accent);background:rgba(99,102,241,.12);color:var(--accent)' : 'var(--border2);background:var(--bg3);color:var(--muted)') + (pro ? '' : ';opacity:.45;cursor:not-allowed');
 
+        var addedPlayers = otdPlayers.filter(function(p) { return p.isAdded; });
+        var addedNote = addedPlayers.length ? (
+            '<div style="background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.3);border-radius:6px;padding:8px 12px;margin-bottom:10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12px">' +
+                '<span style="color:var(--muted2);font-weight:600;flex-shrink:0">Simulated:</span>' +
+                addedPlayers.map(function(p) {
+                    return '<span style="background:' + p.color + '22;border:1px solid ' + p.color + '55;border-radius:12px;padding:2px 8px;font-size:11px;font-weight:700">' +
+                        escHtml(p.name) + ' · ' + p.sport.toUpperCase() + ' ' + p.season + ' · ' + escHtml(p.levelLabel) +
+                    '</span>';
+                }).join('') +
+            '</div>'
+        ) : '';
+
         el.innerHTML =
+            addedNote +
             '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">' +
                 '<div style="font-size:11px;color:var(--muted2)">' + totalDates + ' claimable dates' + (numLoading > 0 ? ' · <span style="color:var(--accent)">loading ' + numLoading + '…</span>' : '') + '</div>' +
                 '<div style="display:flex;gap:4px;align-items:center">' +
