@@ -3458,45 +3458,56 @@
                     return;
                 }
 
-                // Fetch earnings for every season we found — each season covers a different set of
-                // game dates (The Open 2024 is July 21, 2025 Open may be July 20, etc.) and we
-                // normalize all dates to the current year, so more seasons = better date coverage.
-                // D1 caches each (player, sport, season, level) combo for 12h so repeat loads are instant.
+                // Build entry objects first, then batch-fetch earnings to avoid RS 429 rate limits.
+                // D1 caches each (player, sport, season, level) for 12h — only cold loads hit RS.
+                var earningsQueue = [];
                 d.passes.forEach(function(pass) {
                     var lbl = (OTD_LEVEL_OPTIONS.find(function(o) { return o.value === pass.level; }) || {}).label || 'Level ' + pass.level;
                     var color = OTD_COLORS[otdColorIdx % OTD_COLORS.length];
                     otdColorIdx++;
                     var entry = { id: pass.playerId, name: pass.playerName || ('Player ' + pass.playerId), sport: pass.sport, season: String(pass.season), level: pass.level, levelLabel: lbl, color: color, earnings: null, entityType: pass.entityType || 'player' };
                     otdPlayers.push(entry);
-
-                    fetch('/api/real/otd?action=earnings&id=' + entry.id + '&sport=' + entry.sport + '&season=' + entry.season + '&level=' + entry.level + '&entityType=' + entry.entityType, { credentials: 'same-origin' })
-                        .then(function(r) { return r.json(); })
-                        .then(function(ed) {
-                            if (ed.ok) {
-                                entry.earnings = ed.earnings;
-                                var nLoaded = otdPlayers.filter(function(p) { return p.earnings && p.earnings.length; }).length;
-                                if (nLoaded === 1 && ed.earnings && ed.earnings.length) {
-                                    var curYr2 = new Date().getFullYear();
-                                    var todayStr2 = new Date().toISOString().slice(0, 10);
-                                    var sorted2 = ed.earnings.map(function(e) {
-                                        var dp2 = (e.day || '').split('T')[0].split('-');
-                                        return dp2.length === 3 ? (curYr2 + '-' + dp2[1].padStart(2,'0') + '-' + dp2[2].padStart(2,'0')) : '';
-                                    }).filter(Boolean).sort();
-                                    var upcoming2 = sorted2.filter(function(x) { return x >= todayStr2; });
-                                    var target2 = upcoming2[0] || sorted2[sorted2.length - 1];
-                                    if (target2) { var tp2 = target2.split('-'); if (tp2.length === 3) { otdCalYear = parseInt(tp2[0], 10); otdCalMonth = parseInt(tp2[1], 10) - 1; } }
-                                }
-                            } else {
-                                entry.earnings = [];
-                            }
-                            renderOtdChips();
-                            renderOtdResults();
-                        })
-                        .catch(function() { entry.earnings = []; renderOtdChips(); renderOtdResults(); });
+                    earningsQueue.push(entry);
                 });
 
                 renderOtdChips();
                 renderOtdResults();
+
+                // Fetch earnings in batches of 6 with 400ms between batches
+                var BATCH_SIZE = 6;
+                var calJumped = false;
+                function fetchEarningsBatch() {
+                    var batch = earningsQueue.splice(0, BATCH_SIZE);
+                    if (!batch.length) return;
+                    batch.forEach(function(entry) {
+                        fetch('/api/real/otd?action=earnings&id=' + entry.id + '&sport=' + entry.sport + '&season=' + entry.season + '&level=' + entry.level + '&entityType=' + entry.entityType, { credentials: 'same-origin' })
+                            .then(function(r) { return r.ok ? r.json() : { ok: false }; })
+                            .then(function(ed) {
+                                if (ed.ok && ed.earnings) {
+                                    entry.earnings = ed.earnings;
+                                    if (!calJumped && ed.earnings.length) {
+                                        calJumped = true;
+                                        var curYr2 = new Date().getFullYear();
+                                        var todayStr2 = new Date().toISOString().slice(0, 10);
+                                        var sorted2 = ed.earnings.map(function(e) {
+                                            var dp2 = (e.day || '').split('T')[0].split('-');
+                                            return dp2.length === 3 ? (curYr2 + '-' + dp2[1].padStart(2,'0') + '-' + dp2[2].padStart(2,'0')) : '';
+                                        }).filter(Boolean).sort();
+                                        var upcoming2 = sorted2.filter(function(x) { return x >= todayStr2; });
+                                        var target2 = upcoming2[0] || sorted2[sorted2.length - 1];
+                                        if (target2) { var tp2 = target2.split('-'); if (tp2.length === 3) { otdCalYear = parseInt(tp2[0], 10); otdCalMonth = parseInt(tp2[1], 10) - 1; } }
+                                    }
+                                } else {
+                                    entry.earnings = [];
+                                }
+                                renderOtdChips();
+                                renderOtdResults();
+                            })
+                            .catch(function() { entry.earnings = []; renderOtdChips(); renderOtdResults(); });
+                    });
+                    if (earningsQueue.length > 0) setTimeout(fetchEarningsBatch, 400);
+                }
+                fetchEarningsBatch();
             })
             .catch(function() {
                 otdLoadingPasses = false;

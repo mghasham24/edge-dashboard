@@ -107,7 +107,13 @@ export async function onRequestGet(context) {
     } catch(e) {}
 
     try {
-      const res = await fetch(`${RS_BASE}/userpassearnings/${sport}/season/${season}/entity/${entityType}/${id}?level=${level}`, { headers });
+      const earningsUrl = `${RS_BASE}/userpassearnings/${sport}/season/${season}/entity/${entityType}/${id}?level=${level}`;
+      let res = await fetch(earningsUrl, { headers });
+      // Retry once on 429 after a short delay
+      if (res.status === 429) {
+        await new Promise(r => setTimeout(r, 1000));
+        res = await fetch(earningsUrl, { headers });
+      }
       if (!res.ok) return fail(res.status, 'RS earnings failed: ' + res.status);
       const data = await res.json();
       const body = JSON.stringify({ ok: true, earnings: data.earnings || [] });
