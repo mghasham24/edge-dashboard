@@ -3183,12 +3183,12 @@
                     var list = d.raw && (d.raw.userPasses || d.raw.passes || d.raw.collectingCards || d.raw.items || (Array.isArray(d.raw) ? d.raw : []));
                     pass = Array.isArray(list) ? list[0] : list;
                 }
-                // Log full pass + info so we can find the hashid field
-                try { console.log('[OTD card] pass JSON:', JSON.stringify(pass)); } catch(e) {}
-                try { console.log('[OTD card] info JSON:', JSON.stringify(d.raw && d.raw.info)); } catch(e) {}
                 var slug = pass && (pass.hashId || pass.slug || pass.collectingCardHashId || pass.cardHashId);
                 if (slug && typeof slug === 'string' && /[a-zA-Z]/.test(slug)) {
                     window.open('https://www.realapp.com/' + slug, '_blank');
+                } else if (pass && pass.id) {
+                    // No hashid field — try numeric pass ID directly (passes may differ from boxscores)
+                    window.open('https://www.realapp.com/' + pass.id, '_blank');
                 } else {
                     window.open('https://www.realapp.com', '_blank');
                 }
