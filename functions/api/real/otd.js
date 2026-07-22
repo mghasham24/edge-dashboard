@@ -78,9 +78,9 @@ export async function onRequestGet(context) {
       for (const pObj of (data.players || (data.results && data.results.players) || [])) {
         addPlayer(pObj);
       }
-      // Format 2: data.entities (another common RS response structure)
+      // Format 2: data.entities — RS returns { type, entity: { firstName, lastName, ... }, id }
       for (const e of (data.entities || (data.results && data.results.entities) || [])) {
-        addPlayer(e.player || e);
+        addPlayer(e.entity || e.player || e);
       }
       // Format 3: data.results.plays — each play has primaryPlayer / secondaryPlayer
       for (const play of (data.results && data.results.plays) || (data.plays) || []) {
