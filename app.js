@@ -3276,7 +3276,7 @@
                     if (!ac2) return;
                     var items = (d.players || []).map(function(p) {
                         return '<div style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border2)" ' +
-                            'onmousedown="otdCheckSelectPlayer(\'' + escHtml(String(p.id)) + '\',\'' + escHtml(p.name).replace(/'/g, '&#39;') + '\',\'' + sport + '\')">' +
+                            'onmousedown="otdCheckSelectPlayer(\'' + escHtml(String(p.id)) + '\',\'' + escHtml(p.name).replace(/'/g, '&#39;') + '\',\'' + sport + '\',\'' + escHtml(p.avatar || '') + '\')">' +
                             escHtml(p.name) + '</div>';
                     }).join('');
                     ac2.innerHTML = items || '<div style="padding:8px 12px;color:var(--muted);font-size:13px">No results</div>';
@@ -3285,7 +3285,7 @@
         }, 300);
     }
 
-    function otdCheckSelectPlayer(id, name, sport) {
+    function otdCheckSelectPlayer(id, name, sport, avatar) {
         var ac = document.getElementById('otd-check-ac');
         if (ac) ac.style.display = 'none';
         var inp = document.getElementById('otd-check-input');
@@ -3293,7 +3293,7 @@
         var season = String((document.getElementById('otd-check-season') || {}).value || new Date().getFullYear());
         var level = parseInt((document.getElementById('otd-check-level') || {}).value || '4', 10);
         var lbl = (OTD_LEVEL_OPTIONS.find(function(o) { return o.value === level; }) || {}).label || 'Level ' + level;
-        otdCheckPlayer = { id: String(id), name: name, sport: sport, season: season, level: level, levelLabel: lbl, entityType: 'player' };
+        otdCheckPlayer = { id: String(id), name: name, sport: sport, season: season, level: level, levelLabel: lbl, entityType: 'player', avatar: avatar || '' };
         otdCheckEarnings = null;
         renderOtdCheckWrap();
     }
@@ -3344,7 +3344,7 @@
                     if (!ac2) return;
                     var items = (d.players || []).map(function(p) {
                         return '<div style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border2)" ' +
-                            'onmousedown="otdFindSelectPlayer(\'' + escHtml(String(p.id)) + '\',\'' + escHtml(p.name).replace(/'/g, '&#39;') + '\',\'' + sport + '\')">' +
+                            'onmousedown="otdFindSelectPlayer(\'' + escHtml(String(p.id)) + '\',\'' + escHtml(p.name).replace(/'/g, '&#39;') + '\',\'' + sport + '\',\'' + escHtml(p.avatar || '') + '\')">' +
                             escHtml(p.name) + '</div>';
                     }).join('');
                     ac2.innerHTML = items || '<div style="padding:8px 12px;color:var(--muted);font-size:13px">No results</div>';
@@ -3353,7 +3353,7 @@
         }, 300);
     }
 
-    function otdFindSelectPlayer(id, name, sport) {
+    function otdFindSelectPlayer(id, name, sport, avatar) {
         var ac = document.getElementById('otd-find-ac');
         if (ac) ac.style.display = 'none';
         var inp = document.getElementById('otd-find-input');
@@ -3416,14 +3416,14 @@
         if (otdCheckEarnings !== null) {
             // Earnings already fetched — set them on the entry before pushing so numLoading never increments
             // and the loading screen never fires, even if other passes are still being loaded.
-            var entry = { id: cp.id, name: cp.name, sport: cp.sport, season: cp.season, level: cp.level, levelLabel: cp.levelLabel, entityType: cp.entityType || 'player', color: color, earnings: otdCheckEarnings, isAdded: true };
+            var entry = { id: cp.id, name: cp.name, sport: cp.sport, season: cp.season, level: cp.level, levelLabel: cp.levelLabel, entityType: cp.entityType || 'player', color: color, earnings: otdCheckEarnings, isAdded: true, avatar: cp.avatar || '' };
             otdPlayers.push(entry);
             renderOtdChips();
             renderOtdResults();
             renderOtdCheckWrap();
         } else {
             // No earnings yet — push with null (shows loading for this entry), then fetch
-            var entry = { id: cp.id, name: cp.name, sport: cp.sport, season: cp.season, level: cp.level, levelLabel: cp.levelLabel, entityType: cp.entityType || 'player', color: color, earnings: null, isAdded: true };
+            var entry = { id: cp.id, name: cp.name, sport: cp.sport, season: cp.season, level: cp.level, levelLabel: cp.levelLabel, entityType: cp.entityType || 'player', color: color, earnings: null, isAdded: true, avatar: cp.avatar || '' };
             otdPlayers.push(entry);
             renderOtdChips();
             renderOtdResults();
@@ -3730,7 +3730,7 @@
                 '</div>'
             ) +
             '<div id="otd-search-err" style="display:none;font-size:12px;color:#ef5350;margin-bottom:8px"></div>' +
-            '<div id="otd-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px"></div>' +
+            '<div id="otd-chips" style="margin-bottom:16px"></div>' +
             '<div id="otd-check-wrap"></div>' +
             '<div id="otd-results"></div>';
 
@@ -3796,7 +3796,7 @@
 
         var color  = OTD_COLORS[otdColorIdx % OTD_COLORS.length];
         otdColorIdx++;
-        var entry  = { id: otdSelectedPlayer.id, name: otdSelectedPlayer.name, sport: sport, season: season, level: level, levelLabel: lbl, color: color, earnings: null };
+        var entry  = { id: otdSelectedPlayer.id, name: otdSelectedPlayer.name, sport: sport, season: season, level: level, levelLabel: lbl, color: color, earnings: null, avatar: otdSelectedPlayer.avatar || '' };
         otdPlayers.push(entry);
 
         // Clear search
@@ -3932,7 +3932,7 @@
                     var lbl = (OTD_LEVEL_OPTIONS.find(function(o) { return o.value === pass.level; }) || {}).label || 'Level ' + pass.level;
                     var color = OTD_COLORS[otdColorIdx % OTD_COLORS.length];
                     otdColorIdx++;
-                    var entry = { id: pass.playerId, name: pass.playerName || ('Player ' + pass.playerId), sport: pass.sport, season: String(pass.season), level: pass.level, levelLabel: lbl, color: color, earnings: null, entityType: pass.entityType || 'player', passId: pass.passId || null };
+                    var entry = { id: pass.playerId, name: pass.playerName || ('Player ' + pass.playerId), sport: pass.sport, season: String(pass.season), level: pass.level, levelLabel: lbl, color: color, earnings: null, entityType: pass.entityType || 'player', passId: pass.passId || null, avatar: pass.avatar || '' };
                     otdPlayers.push(entry);
                     earningsQueue.push(entry);
                 });
@@ -3985,42 +3985,60 @@
             });
     }
 
+    var OTD_SPORT_EMOJI = {mlb:'⚾',nba:'🏀',nhl:'🏒',nfl:'🏈',wnba:'🏀',golf:'⛳',ufc:'🥊',ncaaf:'🏈',ncaabb:'🏀',epl:'⚽',ucl:'⚽',mls:'⚽',fifa:'⚽'};
+    function otdRarityColor(level) {
+        if (level <= 0)  return '#78909c';
+        if (level === 1) return '#607d8b';
+        if (level === 2) return '#43a047';
+        if (level === 3) return '#1e88e5';
+        if (level === 4) return '#8e24aa';
+        if (level <= 9)  return '#f57c00';
+        if (level <= 14) return '#d81b60';
+        return '#c8a000';
+    }
+
     function renderOtdChips() {
         var el = document.getElementById('otd-chips');
         if (!el) return;
-        if (!otdPlayers.length) { el.innerHTML = '<span style="font-size:12px;color:var(--muted2)">No players added yet. Search and add players above.</span>'; return; }
 
-        var levelSelStyle = 'background:transparent;border:none;color:inherit;font-family:var(--sans);font-size:11px;font-weight:600;cursor:pointer;padding:0 2px;margin-left:1px;max-width:90px';
-        function chipLevelSel(p, idx) {
-            return '<select onchange="otdChangeLevel(' + idx + ',parseInt(this.value,10))" style="' + levelSelStyle + '" onclick="event.stopPropagation()">' +
-                OTD_LEVEL_OPTIONS.map(function(o) {
-                    return '<option value="' + o.value + '"' + (o.value === p.level ? ' selected' : '') + '>' + escHtml(o.label) + '</option>';
-                }).join('') +
-            '</select>';
-        }
+        var players = (otdMode === 'username')
+            ? otdPlayers.filter(function(p) { return p.isAdded; })
+            : otdPlayers;
 
-        if (otdMode === 'username') {
-            var added = otdPlayers.filter(function(p) { return p.isAdded; });
-            if (!added.length) { el.innerHTML = ''; return; }
-            el.innerHTML = added.map(function(p) {
-                var idx = otdPlayers.indexOf(p);
-                return '<span style="display:inline-flex;align-items:center;gap:5px;background:' + p.color + '22;border:1px dashed ' + p.color + '88;border-radius:20px;padding:4px 10px;font-size:12px;font-weight:600">' +
-                    '<span style="width:8px;height:8px;border-radius:50%;background:' + p.color + ';flex-shrink:0"></span>' +
-                    escHtml(p.name) + ' · ' + p.sport.toUpperCase() + ' ' + p.season + ' ·' + chipLevelSel(p, idx) +
-                    ' <span style="font-size:9px;font-weight:700;background:rgba(99,102,241,.18);color:var(--accent);border-radius:3px;padding:1px 5px;letter-spacing:.04em">SIM</span>' +
-                    '<button onclick="otdRemovePlayer(' + idx + ')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:0;line-height:1;margin-left:2px">×</button>' +
-                '</span>';
-            }).join('');
+        if (!players.length) {
+            el.innerHTML = '<span style="font-size:12px;color:var(--muted2)">No players added yet. Search and add players above.</span>';
             return;
         }
 
-        el.innerHTML = otdPlayers.map(function(p, i) {
-            return '<span style="display:inline-flex;align-items:center;gap:5px;background:' + p.color + '22;border:1px solid ' + p.color + '55;border-radius:20px;padding:4px 10px;font-size:12px;font-weight:600">' +
-                '<span style="width:8px;height:8px;border-radius:50%;background:' + p.color + ';flex-shrink:0"></span>' +
-                escHtml(p.name) + ' · ' + p.sport.toUpperCase() + ' ' + p.season + ' ·' + chipLevelSel(p, i) +
-                '<button onclick="otdRemovePlayer(' + i + ')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:0;line-height:1;margin-left:2px">×</button>' +
-            '</span>';
-        }).join('');
+        el.innerHTML = '<div class="otd-card-grid">' + players.map(function(p) {
+            var idx = otdPlayers.indexOf(p);
+            var sport = p.sport || 'mlb';
+            var emoji = OTD_SPORT_EMOJI[sport] || '🎴';
+            var rc = otdRarityColor(p.level);
+            var av = p.avatar || '';
+            var photoHtml = '<div style="display:flex;justify-content:center;margin-bottom:8px">' +
+                (av
+                    ? '<img src="https://static.realapp.com/avatars/' + av + '.jpg" ' +
+                      'style="width:64px;height:64px;border-radius:50%;object-fit:cover;border:2px solid ' + p.color + '" ' +
+                      'onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' +
+                      '<div style="display:none;width:64px;height:64px;border-radius:50%;background:' + p.color + '22;border:2px solid ' + p.color + ';align-items:center;justify-content:center;font-size:26px">' + emoji + '</div>'
+                    : '<div style="display:flex;width:64px;height:64px;border-radius:50%;background:' + p.color + '22;border:2px solid ' + p.color + ';align-items:center;justify-content:center;font-size:26px">' + emoji + '</div>') +
+                '</div>';
+            var levelSel = '<select onchange="otdChangeLevel(' + idx + ',parseInt(this.value,10))" onclick="event.stopPropagation()" ' +
+                'style="background:transparent;border:none;color:' + rc + ';font-size:10px;font-weight:700;cursor:pointer;max-width:100%;font-family:var(--sans);text-align:center">' +
+                OTD_LEVEL_OPTIONS.map(function(o) {
+                    return '<option value="' + o.value + '"' + (o.value === p.level ? ' selected' : '') + '>' + escHtml(o.label) + '</option>';
+                }).join('') +
+                '</select>';
+            return '<div class="otd-player-card" style="border-color:' + p.color + '55">' +
+                (p.isAdded ? '<span class="otd-sim-badge">SIM</span>' : '') +
+                '<button onclick="otdRemovePlayer(' + idx + ')" class="otd-card-rm">×</button>' +
+                photoHtml +
+                '<div class="otd-card-name">' + escHtml(p.name) + '</div>' +
+                '<div class="otd-card-sport">' + sport.toUpperCase() + ' · ' + escHtml(p.season) + '</div>' +
+                '<div class="otd-card-level" style="border-color:' + rc + '55;background:' + rc + '15">' + levelSel + '</div>' +
+            '</div>';
+        }).join('') + '</div>';
     }
 
     function renderOtdResults() {

@@ -1635,6 +1635,71 @@
         50%       { transform: scale(1.07); filter: drop-shadow(0 0 16px #4f6ef7dd); }
     }
 
+    /* OTD player cards grid */
+    .otd-card-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+        gap: 10px;
+    }
+    .otd-player-card {
+        position: relative;
+        background: var(--bg2);
+        border: 1px solid var(--border2);
+        border-radius: 12px;
+        padding: 12px 10px 10px;
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+    .otd-card-rm {
+        position: absolute;
+        top: 6px;
+        right: 8px;
+        background: none;
+        border: none;
+        color: var(--muted);
+        cursor: pointer;
+        font-size: 14px;
+        line-height: 1;
+        padding: 0;
+        opacity: 0.6;
+    }
+    .otd-card-rm:hover { opacity: 1; color: var(--fg); }
+    .otd-sim-badge {
+        position: absolute;
+        top: 6px;
+        left: 8px;
+        font-size: 9px;
+        font-weight: 700;
+        background: rgba(99,102,241,.18);
+        color: var(--accent);
+        border-radius: 3px;
+        padding: 1px 5px;
+        letter-spacing: .04em;
+    }
+    .otd-card-name {
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--fg);
+        line-height: 1.3;
+        word-break: break-word;
+    }
+    .otd-card-sport {
+        font-size: 10px;
+        color: var(--muted);
+        font-weight: 500;
+        letter-spacing: .03em;
+    }
+    .otd-card-level {
+        margin-top: 4px;
+        border: 1px solid var(--border2);
+        border-radius: 5px;
+        padding: 2px 4px;
+        display: flex;
+        justify-content: center;
+    }
+
     .admin-stats {
         display: flex;
         gap: 16px;

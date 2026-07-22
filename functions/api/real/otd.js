@@ -71,7 +71,7 @@ export async function onRequestGet(context) {
         const name = ((pObj.firstName || '') + ' ' + (pObj.lastName || '')).trim();
         if (!name) return;
         if (!queryWords.some(w => norm(name).includes(w))) return;
-        playerMap[pObj.id] = { id: pObj.id, name, sport, teamId: pObj.teamId };
+        playerMap[pObj.id] = { id: pObj.id, name, sport, teamId: pObj.teamId, avatar: pObj.avatar || '' };
       };
 
       // Format 1: data.players or data.results.players (direct player list)
@@ -330,7 +330,7 @@ export async function onRequestGet(context) {
 
     // Query by season only — no sport filter so RS returns all passes regardless of sport.
     // 5 seasons × 2 entity types = 10 parallel calls (vs 110 sport-filtered calls that RS rate-limits).
-    const cacheKey = `otd_passes_all_v5_${userId}`;
+    const cacheKey = `otd_passes_all_v6_${userId}`;
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
       if (cached && (now - cached.fetched_at) < 7200) {
@@ -376,7 +376,7 @@ export async function onRequestGet(context) {
           : typeof p.collectingLevel === 'number' ? p.collectingLevel
           : 0;
         if (playerId && sport && level >= 1) {
-          results.push({ playerId, playerName, sport, season, level, entityType, passId: p.id || null });
+          results.push({ playerId, playerName, sport, season, level, entityType, passId: p.id || null, avatar: entity.avatar || null });
         }
       }
       return results;
