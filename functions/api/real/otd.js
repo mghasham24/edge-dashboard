@@ -362,24 +362,33 @@ export async function onRequestGet(context) {
     try {
       const passMap = {};
 
-      await Promise.all(seasons.map(async season => {
-        try {
-          const [playerRes, teamRes] = await Promise.all([
-            fetch(`${RS_BASE}/userpasses/${encodeURIComponent(userId)}/passes?entityType=player&season=${season}`, { headers }),
-            fetch(`${RS_BASE}/userpasses/${encodeURIComponent(userId)}/passes?entityType=team&season=${season}`, { headers })
-          ]);
-          for (const [res, entityType] of [[playerRes, 'player'], [teamRes, 'team']]) {
-            if (!res.ok) continue;
-            try {
-              const data = await res.json();
-              for (const pass of extractPasses(data, entityType, season)) {
-                const key = `${pass.playerId}|${pass.sport}|${pass.season}`;
-                passMap[key] = pass;
+      const CHUNK = 3;
+      for (let i = 0; i < seasons.length; i += CHUNK) {
+        await Promise.all(seasons.slice(i, i + CHUNK).map(async season => {
+          try {
+            const [playerRes, teamRes] = await Promise.all([
+              fetch(`${RS_BASE}/userpasses/${encodeURIComponent(userId)}/passes?entityType=player&season=${season}`, { headers }),
+              fetch(`${RS_BASE}/userpasses/${encodeURIComponent(userId)}/passes?entityType=team&season=${season}`, { headers })
+            ]);
+            for (const [res, entityType] of [[playerRes, 'player'], [teamRes, 'team']]) {
+              if (!res.ok) {
+                if (res.status === 429) throw new Error('429');
+                continue;
               }
-            } catch(e) {}
+              try {
+                const data = await res.json();
+                for (const pass of extractPasses(data, entityType, season)) {
+                  const key = `${pass.playerId}|${pass.sport}|${pass.season}`;
+                  passMap[key] = pass;
+                }
+              } catch(e) {}
+            }
+          } catch(e) {
+            if (e.message === '429') throw e;
           }
-        } catch(e) {}
-      }));
+        }));
+        if (i + CHUNK < seasons.length) await new Promise(r => setTimeout(r, 150));
+      }
 
       const passes = Object.values(passMap);
       const body = JSON.stringify({ ok: true, passes });
@@ -389,6 +398,10 @@ export async function onRequestGet(context) {
       } catch(e) {}
       return new Response(body, { headers: { 'Content-Type': 'application/json' } });
     } catch(e) {
+      if (e.message === '429') {
+        const partial = Object.values(passMap);
+        return new Response(JSON.stringify({ ok: true, passes: partial, partial: true }), { headers: { 'Content-Type': 'application/json' } });
+      }
       return fail(500, e.message);
     }
   }
