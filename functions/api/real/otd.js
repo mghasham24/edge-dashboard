@@ -310,7 +310,7 @@ export async function onRequestGet(context) {
     const cacheKey = `otd_passes_all_v5_${userId}`;
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
-      if (cached && (now - cached.fetched_at) < 1800) {
+      if (cached && (now - cached.fetched_at) < 7200) {
         return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
       }
     } catch(e) {}
@@ -416,7 +416,7 @@ export async function onRequestGet(context) {
     const cacheKey = `otd_passes_v6_${userId}_${sport}_${season}`;
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
-      if (cached && (now - cached.fetched_at) < 1800) {
+      if (cached && (now - cached.fetched_at) < 7200) {
         return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
       }
     } catch(e) {}
