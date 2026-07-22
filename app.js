@@ -4016,11 +4016,11 @@
             var emoji = OTD_SPORT_EMOJI[sport] || '🎴';
             var rc = p.rarityColor || otdRarityColor(p.level);
             var av = p.avatar || '';
-            var bgUrl = p.backgroundSource ? 'https://www.realapp.com/' + p.backgroundSource : '';
+            var bgUrl = p.backgroundSource ? 'https://media.realapp.com/' + p.backgroundSource : '';
             var borderCol = p.rarityColor || p.color;
             var photoHtml = '<div style="display:flex;justify-content:center;margin-bottom:8px">' +
                 (av
-                    ? '<img src="https://static.realapp.com/avatars/' + av + '.jpg" ' +
+                    ? '<img src="https://media.realapp.com/assets/players/default/small/' + av + '.webp" ' +
                       'style="width:64px;height:64px;border-radius:50%;object-fit:cover;border:2px solid ' + borderCol + '" ' +
                       'onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' +
                       '<div style="display:none;width:64px;height:64px;border-radius:50%;background:' + borderCol + '22;border:2px solid ' + borderCol + ';align-items:center;justify-content:center;font-size:26px">' + emoji + '</div>'
@@ -4245,11 +4245,11 @@
                 var cardBtn = '<button class="otd-link-btn" title="View card on RS" onclick="otdOpenCardLink(\'' + eid + '\',\'' + e.player.sport + '\',\'' + eet + '\',\'' + otdSelectedDay + '\',\'' + pId + '\')">' + OTD_CARD_ICON + '</button>';
                 var perfBtn = '<button class="otd-link-btn" title="View performance on RS" onclick="otdOpenPerfLink(\'' + eid + '\',\'' + e.player.sport + '\',\'' + eet + '\',\'' + otdSelectedDay + '\')">' + OTD_PERF_ICON + '</button>';
                 // Mini card thumbnail (left side) using real RS card background + player avatar
-                var bgSrc = e.player.backgroundSource ? 'https://www.realapp.com/' + e.player.backgroundSource : '';
+                var bgSrc = e.player.backgroundSource ? 'https://media.realapp.com/' + e.player.backgroundSource : '';
                 var avHash = e.player.avatar || '';
                 var miniCard = '<div class="otd-mini-card" style="' + (bgSrc ? 'background-image:url(' + bgSrc + ');' : 'background:' + rc + '22;') + 'border-color:' + rc + '88">' +
                     (avHash
-                        ? '<img src="https://static.realapp.com/avatars/' + avHash + '.jpg" class="otd-mini-card-av" onerror="this.style.display=\'none\'">'
+                        ? '<img src="https://media.realapp.com/assets/players/default/small/' + avHash + '.webp" class="otd-mini-card-av" onerror="this.style.display=\'none\'">'
                         : '') +
                     '<div class="otd-mini-card-serial" style="color:' + rc + '">' + (e.player.serialNumber ? '#' + e.player.serialNumber : escHtml(year2)) + '</div>' +
                 '</div>';
