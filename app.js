@@ -3613,13 +3613,13 @@
         var el = document.getElementById('otd-results');
         if (!el) return;
 
-        if (!otdPlayers.length) {
+        if (!otdPlayers.length && !otdLoadingPasses) {
             el.innerHTML = '<div style="text-align:center;padding:40px 0;color:var(--muted2);font-size:13px">Add players above to see their OTD claimable dates</div>';
             return;
         }
         var numLoading = otdPlayers.filter(function(p) { return p.earnings === null; }).length;
         var anyLoaded = otdPlayers.some(function(p) { return p.earnings !== null; });
-        if (!anyLoaded) {
+        if (!anyLoaded || otdLoadingPasses) {
             var OTD_TIPS = [
                 'RS lets you claim one pass per entity per day — stack your best cards for big OTD hauls.',
                 'Higher rarity passes earn significantly more Rax per claim.',
