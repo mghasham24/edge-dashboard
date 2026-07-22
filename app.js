@@ -3178,13 +3178,17 @@
             .then(function(r) { return r.json(); })
             .then(function(d) {
                 console.log('[OTD card] raw RS response:', d.raw);
-                var list = (d.raw && (d.raw.userPasses || d.raw.passes || d.raw.collectingCards || d.raw.items)) || (Array.isArray(d.raw) ? d.raw : []);
-                var pass = list && list[0];
+                // RS returns { pass: {…}, info: {…} } — check singular then array forms
+                var pass = d.raw && (d.raw.pass || d.raw.userPass);
+                if (!pass) {
+                    var list = d.raw && (d.raw.userPasses || d.raw.passes || d.raw.collectingCards || d.raw.items || (Array.isArray(d.raw) ? d.raw : []));
+                    pass = list && list[0];
+                }
                 var slug = pass && (pass.hashId || pass.slug || pass.collectingCardHashId);
+                console.log('[OTD card] pass obj:', pass, '| slug:', slug);
                 if (slug && typeof slug === 'string' && /[a-zA-Z]/.test(slug)) {
                     window.open('https://www.realapp.com/' + slug, '_blank');
                 } else {
-                    console.log('[OTD card] hashid not found in:', d.raw);
                     window.open('https://www.realapp.com', '_blank');
                 }
             })
@@ -3196,13 +3200,12 @@
         fetch(url, { credentials: 'same-origin' })
             .then(function(r) { return r.json(); })
             .then(function(d) {
-                console.log('[OTD perf] raw RS response:', d.raw);
+                console.log('[OTD perf] raw:', d.raw, '| debug:', d.debug);
                 var bs = d.raw;
                 var slug = bs && (bs.hashId || bs.slug);
                 if (slug && typeof slug === 'string' && /[a-zA-Z]/.test(slug)) {
                     window.open('https://www.realapp.com/' + slug, '_blank');
                 } else {
-                    console.log('[OTD perf] hashid not found. Data:', bs);
                     window.open('https://www.realapp.com', '_blank');
                 }
             })

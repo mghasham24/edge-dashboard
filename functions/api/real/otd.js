@@ -97,7 +97,7 @@ export async function onRequestGet(context) {
     const season   = url.searchParams.get('season');
     if (!entityId || !sport || !season) return fail(400, 'Missing params');
 
-    const cacheKey = `otd_pass_url_v1_${sport}_${entityType}_${entityId}_${season}`;
+    const cacheKey = `otd_pass_url_v2_${sport}_${entityType}_${entityId}_${season}`;
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
       if (cached && (now - cached.fetched_at) < 86400) {
@@ -156,9 +156,11 @@ export async function onRequestGet(context) {
     }
 
     const match = bsList.find(function(b) { return (b.day || '').startsWith(day); });
-    return new Response(JSON.stringify({ ok: true, raw: match || null }), {
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return new Response(JSON.stringify({
+      ok: true,
+      raw: match || null,
+      debug: { bsCount: bsList.length, sample: bsList[0] || null, day }
+    }), { headers: { 'Content-Type': 'application/json' } });
   }
 
   // Earnings: get all OTD claimable dates for a player/team at a rarity level
