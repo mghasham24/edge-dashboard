@@ -4235,24 +4235,29 @@
             var OTD_PERF_ICON = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>';
             var entryRows = activeEntries.map(function(e) {
                 var lvl = e.player.level || 0;
-                var rc = e.player.rarityColor || otdRarityColor(lvl);
+                // Cross-reference against loaded passes to fill in missing card visuals (manually-added checks lack these)
+                var passRef = otdPlayers.find(function(p) { return String(p.id) === String(e.player.id) && p.sport === e.player.sport; });
+                var bgSource = e.player.backgroundSource || (passRef && passRef.backgroundSource) || null;
+                var avHash = e.player.avatar || (passRef && passRef.avatar) || '';
+                var serial = e.player.serialNumber || (passRef && passRef.serialNumber) || null;
+                var rc = e.player.rarityColor || (passRef && passRef.rarityColor) || otdRarityColor(lvl);
                 var rarBg = rc !== 'transparent' ? rc + '18' : 'transparent';
                 var rarBorder = rc;
                 var year2 = "'" + String(e.player.season).slice(2);
                 var eid = String(e.player.id);
                 var eet = e.player.entityType || 'player';
-                var pId = String(e.player.passId || '');
+                var pId = String(e.player.passId || (passRef && passRef.passId) || '');
                 var cardBtn = '<button class="otd-link-btn" title="View card on RS" onclick="otdOpenCardLink(\'' + eid + '\',\'' + e.player.sport + '\',\'' + eet + '\',\'' + otdSelectedDay + '\',\'' + pId + '\')">' + OTD_CARD_ICON + '</button>';
                 var perfBtn = '<button class="otd-link-btn" title="View performance on RS" onclick="otdOpenPerfLink(\'' + eid + '\',\'' + e.player.sport + '\',\'' + eet + '\',\'' + otdSelectedDay + '\')">' + OTD_PERF_ICON + '</button>';
                 // Mini card thumbnail (left side) using real RS card background + player avatar
-                var bgSrc = e.player.backgroundSource ? '/api/real/otd?action=card_bg&src=' + encodeURIComponent(e.player.backgroundSource) : '';
-                var avHash = e.player.avatar || '';
+                var bgSrc = bgSource ? '/api/real/otd?action=card_bg&src=' + encodeURIComponent(bgSource) : '';
                 var miniCard = '<div class="otd-mini-card" style="' + (bgSrc ? 'background-image:url(' + bgSrc + ');' : 'background:' + rc + '22;') + 'border-color:' + rc + '88">' +
                     (avHash
                         ? '<img src="https://media.realapp.com/assets/players/default/small/' + avHash + '.webp" class="otd-mini-card-av" onerror="this.style.display=\'none\'">'
                         : '') +
-                    '<div class="otd-mini-card-serial" style="color:' + rc + '">' + (e.player.serialNumber ? '#' + e.player.serialNumber : escHtml(year2)) + '</div>' +
+                    '<div class="otd-mini-card-serial" style="color:' + rc + '">' + (serial ? '#' + serial : escHtml(year2)) + '</div>' +
                 '</div>';
+                var multiplier = e.player.multiplier || (passRef && passRef.multiplier) || null;
                 return '<div class="otd-day-entry" style="background:' + rarBg + ';border-left:3px solid ' + rarBorder + ';gap:10px">' +
                     miniCard +
                     '<div style="flex:1;min-width:0">' +
@@ -4260,7 +4265,7 @@
                             '<span class="otd-entry-year">' + escHtml(year2) + '</span>' +
                             (e.player.levelLabel ? '<span class="otd-rarity-badge" style="background:' + rc + '">' + escHtml(e.player.levelLabel) + '</span>' : '') +
                         '</div>' +
-                        (e.player.multiplier ? '<div style="font-size:10px;color:var(--muted);margin-top:1px">' + escHtml(e.player.multiplier) + ' · ' + (e.player.serialNumber ? '#' + e.player.serialNumber : '') + '</div>' : '') +
+                        (multiplier ? '<div style="font-size:10px;color:var(--muted);margin-top:1px">' + escHtml(multiplier) + ' · ' + (serial ? '#' + serial : '') + '</div>' : '') +
                     '</div>' +
                     '<div class="otd-day-entry-right">' + cardBtn + perfBtn +
                         '<span class="otd-day-entry-rax">' + RAX_ICON + (e.rax || 0).toLocaleString() + '</span>' +
