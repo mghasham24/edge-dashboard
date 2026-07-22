@@ -61,9 +61,7 @@ export async function onRequestGet(context) {
     const queryWords = norm(q).split(/\s+/).filter(w => w.length > 1);
 
     try {
-      // Search without sport filter so pitchers/players with limited play history still appear.
-      // The sport param on our side tags which sport the user selected; RS search is global.
-      const res = await fetch(`${RS_BASE}/search?query=${encodeURIComponent(q)}`, { headers });
+      const res = await fetch(`${RS_BASE}/search?query=${encodeURIComponent(q)}&sport=${sport}`, { headers });
       if (!res.ok) return fail(res.status, 'RS search failed: ' + res.status);
       const data = await res.json();
 
@@ -103,6 +101,17 @@ export async function onRequestGet(context) {
     } catch(e) {
       return fail(500, e.message);
     }
+  }
+
+  // Admin debug: returns raw RS search response so we can see actual format
+  if (action === 'search_raw') {
+    if (!session.is_admin) return fail(403, 'Admin only');
+    const q = (url.searchParams.get('q') || '').trim();
+    const sport = url.searchParams.get('sport') || 'mlb';
+    if (!q) return fail(400, 'Missing q');
+    const res = await fetch(`${RS_BASE}/search?query=${encodeURIComponent(q)}&sport=${sport}`, { headers });
+    const text = await res.text();
+    return new Response(text, { headers: { 'Content-Type': 'application/json' } });
   }
 
   // Card link: get the RS page hash for an owned pass (entity card URL)
