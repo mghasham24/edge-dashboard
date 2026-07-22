@@ -353,7 +353,7 @@ export async function onRequestGet(context) {
           : typeof p.collectingLevel === 'number' ? p.collectingLevel
           : 0;
         if (playerId && sport && level >= 1) {
-          results.push({ playerId, playerName, sport, season, level, entityType });
+          results.push({ playerId, playerName, sport, season, level, entityType, passId: p.id || null });
         }
       }
       return results;
@@ -458,7 +458,7 @@ export async function onRequestGet(context) {
               : typeof p.level === 'number' ? p.level
               : typeof p.collectingLevel === 'number' ? p.collectingLevel
               : 0;
-            return { playerId, playerName, sport: p.sport || sport, season: String(p.season || season), level, entityType };
+            return { playerId, playerName, sport: p.sport || sport, season: String(p.season || season), level, entityType, passId: p.id || null };
           }).filter(p => p.playerId && p.level >= 1);
         }).catch(() => []);
       }
