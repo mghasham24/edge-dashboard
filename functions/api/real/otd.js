@@ -274,7 +274,7 @@ export async function onRequestGet(context) {
     const entityType = url.searchParams.get('entityType') || 'player';
     if (!id) return fail(400, 'Missing id');
 
-    const cacheKey = `otd_earnings_v3_${entityType}_${sport}_${season}_${id}_l${level}`;
+    const cacheKey = `otd_earnings_v4_${entityType}_${sport}_${season}_${id}_l${level}`;
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
       if (cached && (now - cached.fetched_at) < 43200) {
@@ -292,12 +292,20 @@ export async function onRequestGet(context) {
       }
       if (!res.ok) return fail(res.status, 'RS earnings failed: ' + res.status);
       const data = await res.json();
-      // rawSample: first entry with all fields — lets us discover if RS includes boxscore IDs
-      const body = JSON.stringify({ ok: true, earnings: data.earnings || [], rawSample: (data.earnings || [])[0] || null });
-      try {
-        await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
-          .bind(cacheKey, body, now).run();
-      } catch(e) {}
+      // RS may return earnings under different field names depending on sport/context
+      const earnings = data.earnings || data.events || data.performances || data.playerEarnings || data.earningDays || [];
+      // rawSample: first entry with all fields — lets us discover if RS includes boxscore IDs.
+      // _rawKeys: top-level keys from RS response when empty — helps diagnose field name mismatches.
+      const rawSample = earnings[0] || null;
+      const rawKeys = earnings.length === 0 ? Object.keys(data) : undefined;
+      const body = JSON.stringify({ ok: true, earnings, rawSample, rawKeys });
+      // Only cache non-empty results — empty may mean wrong entity ID or transient RS issue
+      if (earnings.length > 0) {
+        try {
+          await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
+            .bind(cacheKey, body, now).run();
+        } catch(e) {}
+      }
       return new Response(body, { headers: { 'Content-Type': 'application/json' } });
     } catch(e) {
       return fail(500, e.message);

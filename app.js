@@ -3504,8 +3504,8 @@
                 (String(p.id) === String(cp2.id) || p.name.toLowerCase() === cp2.name.toLowerCase());
         });
         // If a matching pass already has earnings loaded at this exact level, use them directly.
-        // This avoids a redundant API call and handles the case where search vs. pass IDs differ.
-        if (rsMatchForCheck && rsMatchForCheck.earnings && rsMatchForCheck.level === cp2.level) {
+        // Must check .length > 0 — empty array is truthy and would short-circuit to "no earnings".
+        if (rsMatchForCheck && rsMatchForCheck.earnings && rsMatchForCheck.earnings.length > 0 && rsMatchForCheck.level === cp2.level) {
             otdCheckLoading = false;
             otdCheckEarnings = rsMatchForCheck.earnings;
             renderOtdCheckWrap();
