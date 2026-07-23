@@ -3809,11 +3809,12 @@
             totalDays++;
             // Exclude the check player itself from existing entries — same card can't conflict with itself.
             // Uses both ID and name comparison since search/passes APIs may return different entity IDs.
+            var checkCp = otdCheckPlayer;
             var existingEntries = (otdDateMap[dayKey] || []).filter(function(entry) {
                 if (entry.player.sport !== sport) return false;
-                if (entry.player.season !== cp.season) return true;
-                if (String(entry.player.id) === String(cp.id)) return false;
-                if (entry.player.name.toLowerCase() === cp.name.toLowerCase()) return false;
+                if (!checkCp || entry.player.season !== checkCp.season) return true;
+                if (String(entry.player.id) === String(checkCp.id)) return false;
+                if (entry.player.name.toLowerCase() === checkCp.name.toLowerCase()) return false;
                 return true;
             });
             if (existingEntries.length > 0) {
