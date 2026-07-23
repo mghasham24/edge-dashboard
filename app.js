@@ -3278,14 +3278,10 @@
 
     function otdOpenPerfLink(entityId, sport, entityType, calDay, season) {
         var fallback = rsEntityUrl(entityType, sport, parseInt(entityId, 10));
-        if (!season || !entityId) { window.open(fallback, '_blank'); return; }
-        fetch('/api/real/otd?action=perf_url&id=' + encodeURIComponent(entityId) +
-            '&sport=' + encodeURIComponent(sport) +
-            '&entityType=' + encodeURIComponent(entityType || 'player') +
-            '&season=' + encodeURIComponent(season) +
-            '&day=' + encodeURIComponent(calDay), { credentials: 'same-origin' })
-            .then(function(r) { return r.json(); })
-            .then(function(d) { window.open((d.ok && d.url) || fallback, '_blank'); })
+        if (!entityId || !calDay) { window.open(fallback, '_blank'); return; }
+        // day_earnings now uses the user's own RS token → returns their personal card performances
+        otdDayEarningsEntry(entityId, sport, entityType, calDay)
+            .then(function(entry) { window.open((entry && entry.perfUrl) || fallback, '_blank'); })
             .catch(function() { window.open(fallback, '_blank'); });
     }
 

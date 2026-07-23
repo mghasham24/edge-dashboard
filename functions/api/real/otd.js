@@ -575,12 +575,27 @@ export async function onRequestGet(context) {
     }
   }
 
-  // All passes that earned on a given OTD day (MM-DD match across all years), with pre-computed RS URLs
+  // All passes that earned on a given OTD day — uses the requesting user's own RS token
+  // so cardhistoricalearnings returns their personal card collection, not the shared token's
   if (action === 'day_earnings') {
     const day = url.searchParams.get('day');
     if (!day) return fail(400, 'Missing day');
 
-    const cacheKey = `otd_day_earns_v2_${day}`;
+    // Build headers with user's own RS token if they've connected their account
+    let dayHeaders = { ...buildHeaders(env) };
+    const userId = session.user_id;
+    const cacheUserKey = userId ? String(userId) : 'shared';
+    if (userId) {
+      try {
+        const userAuth = await env.DB.prepare('SELECT auth_token FROM real_auth WHERE user_id=?').bind(userId).first();
+        if (userAuth && userAuth.auth_token) {
+          dayHeaders['real-auth-info'] = userAuth.auth_token;
+        }
+      } catch(e) {}
+    }
+
+    // Cache per user so different users' card collections don't collide
+    const cacheKey = `otd_day_earns_v3_${cacheUserKey}_${day}`;
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
       if (cached && (now - cached.fetched_at) < 300) {
@@ -589,7 +604,7 @@ export async function onRequestGet(context) {
     } catch(e) {}
 
     try {
-      const res = await fetch(`${RS_BASE}/cardhistoricalearnings?day=${encodeURIComponent(day)}`, { headers });
+      const res = await fetch(`${RS_BASE}/cardhistoricalearnings?day=${encodeURIComponent(day)}`, { headers: dayHeaders });
       if (!res.ok) return fail(res.status, 'RS day_earnings failed: ' + res.status);
       const data = await res.json();
 
@@ -597,7 +612,6 @@ export async function onRequestGet(context) {
       for (const sg of (data.sportEarnings || [])) {
         for (const p of (sg.passEarnings || [])) {
           const sportCode = RS_SPORT_CODE[p.sport] || 0;
-          // routeType 18 = UserPass — encodes [18, sportCode, 0, passId] where passId = p.id
           const cardHash = p.id ? rsUrlEncode(18, sportCode, 0, p.id) : null;
           const perfId = p.performances && p.performances[0];
           const perfHash = perfId ? rsUrlEncode(14, 0, 0, perfId) : null;
