@@ -3201,6 +3201,8 @@
     var otdFindLoading = false;
     var otdFindSearchTimer = null;
     var otdFindExpandedMonths = {}; // { monthIndex: true } — which months are expanded in More Info
+    var otdPassesOpen = false;
+    var otdPassesSearch = '';
 
     function otdPrevMonth() {
         if (otdCalMonth === 0) { otdCalMonth = 11; otdCalYear--; } else { otdCalMonth--; }
@@ -3489,6 +3491,84 @@
             .catch(function() { otdFindLoading = false; otdFindEarnings = []; renderOtdCheckWrap(); renderOtdResults(); });
     }
 
+    function otdTogglePasses() {
+        otdPassesOpen = !otdPassesOpen;
+        if (!otdPassesOpen) otdPassesSearch = '';
+        renderOtdCheckWrap();
+        renderOtdResults();
+    }
+
+    function otdPassesSearchInput(val) {
+        otdPassesSearch = val;
+        var listEl = document.getElementById('otd-passes-list');
+        if (listEl) listEl.innerHTML = buildOtdPassesList();
+    }
+
+    function buildOtdPassesList() {
+        var q = otdPassesSearch.toLowerCase();
+        var thisYear = new Date().getFullYear();
+        var items = otdPlayers
+            .filter(function(p) {
+                if (!q) return true;
+                return p.name.toLowerCase().indexOf(q) >= 0 || p.sport.toLowerCase().indexOf(q) >= 0;
+            })
+            .map(function(p) {
+                var total = 0;
+                if (p.earnings) {
+                    p.earnings.forEach(function(e) {
+                        var dp = (e.day || '').split('T')[0].split('-');
+                        var oy = parseInt(dp[0], 10);
+                        if (oy >= thisYear && otdCalYear <= oy) return;
+                        total += e.atRarityEarnings || 0;
+                    });
+                }
+                return { p: p, total: total };
+            })
+            .sort(function(a, b) { return b.total - a.total; });
+
+        if (!items.length) {
+            return '<div style="text-align:center;padding:20px 0;color:var(--muted2);font-size:12px">' + (q ? 'No passes match your search' : 'No passes loaded') + '</div>';
+        }
+
+        return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;padding-bottom:6px">' +
+            items.map(function(item) {
+                var p = item.p;
+                var rc = p.rarityColor || otdRarityColor(p.level);
+                var av = p.avatar || '';
+                var emoji = OTD_SPORT_EMOJI[p.sport] || '🎴';
+                var seasonFmt = otdFormatSeason(p.sport, p.season);
+                var isLoading = p.earnings === null;
+                return '<div style="background:' + rc + '0e;border:1px solid ' + rc + '44;border-radius:8px;padding:8px 6px;text-align:center">' +
+                    '<div style="display:flex;justify-content:center;margin-bottom:5px">' +
+                        (av
+                            ? '<img src="https://media.realapp.com/assets/players/default/small/' + av + '.webp" style="width:40px;height:40px;border-radius:50%;object-fit:cover;border:2px solid ' + rc + '66" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' +
+                              '<div style="display:none;width:40px;height:40px;border-radius:50%;background:' + rc + '22;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">' + emoji + '</div>'
+                            : '<div style="display:flex;width:40px;height:40px;border-radius:50%;background:' + rc + '22;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">' + emoji + '</div>') +
+                    '</div>' +
+                    '<div style="font-size:10px;font-weight:700;color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2">' + escHtml(p.name) + '</div>' +
+                    '<div style="font-size:8px;color:var(--muted2);margin-top:2px">' + p.sport.toUpperCase() + ' · ' + escHtml(seasonFmt) + '</div>' +
+                    '<div style="margin-top:3px"><span style="font-size:8px;font-weight:700;color:#fff;background:' + rc + ';border-radius:3px;padding:1px 5px">' + escHtml(p.levelLabel || ('L' + p.level)) + '</span></div>' +
+                    '<div style="font-family:var(--mono);font-size:11px;font-weight:700;color:' + (isLoading ? 'var(--muted2)' : 'var(--accent)') + ';margin-top:4px">' + (isLoading ? '…' : RAX_ICON + item.total.toLocaleString()) + '</div>' +
+                '</div>';
+            }).join('') +
+        '</div>';
+    }
+
+    function renderOtdPassesPanel() {
+        var el = document.getElementById('otd-passes-panel-wrap');
+        if (!el) return;
+        var sorted = otdPlayers.slice().filter(function(p) { return p.earnings !== null; });
+        el.innerHTML =
+            '<div style="font-size:13px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between">' +
+                '<span>Passes</span>' +
+                '<span style="font-size:11px;font-weight:400;color:var(--muted2)">' + otdPlayers.length + ' total</span>' +
+            '</div>' +
+            '<input id="otd-passes-search" type="text" placeholder="Search passes…" value="' + escHtml(otdPassesSearch) + '" autocomplete="off" ' +
+                'oninput="otdPassesSearchInput(this.value)" ' +
+                'style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;padding:7px 10px;border-radius:6px;margin-bottom:10px">' +
+            '<div id="otd-passes-list" style="overflow-y:auto;max-height:calc(100vh - 220px);padding-right:2px">' + buildOtdPassesList() + '</div>';
+    }
+
     function otdRunCheck() {
         if (!otdCheckPlayer) return;
         var season = String((document.getElementById('otd-check-season') || {}).value || otdCheckPlayer.season);
@@ -3587,7 +3667,7 @@
         if (!otdCheckMode && !otdFindMode) {
             el.innerHTML = '<div style="margin-bottom:14px;display:flex;flex-wrap:wrap;gap:8px">' +
                 '<button onclick="otdToggleCheck()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:6px;cursor:pointer">⊕ Check Before You Buy</button>' +
-                '<button onclick="otdToggleFind()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:6px;cursor:pointer">🔍 Find Player</button>' +
+                '<button onclick="otdTogglePasses()" style="background:' + (otdPassesOpen ? 'rgba(99,102,241,.1)' : 'var(--bg3)') + ';border:1px solid ' + (otdPassesOpen ? 'var(--accent)' : 'var(--border2)') + ';color:' + (otdPassesOpen ? 'var(--accent)' : 'var(--muted)') + ';font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:6px;cursor:pointer">☰ Passes</button>' +
             '</div>';
             return;
         }
@@ -4683,7 +4763,7 @@
             overlapPanel = '<div style="background:var(--bg2);border:1px solid var(--border2);border-radius:8px;margin-bottom:10px;padding:12px 14px;font-size:12px;color:var(--muted2)">No overlapping claims above 199 Rax — your collection is clean.</div>';
         }
 
-        el.innerHTML =
+        var calHtml =
             addedNote +
             '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">' +
                 '<div style="font-size:11px;color:var(--muted2)">' + totalDates + ' claimable dates' + (numLoading > 0 ? ' · <span style="color:var(--accent)">loading ' + numLoading + '…</span>' : '') + '</div>' +
@@ -4704,6 +4784,17 @@
             '</div>' +
             '<div class="otd-cal-grid">' + cells + '</div>' +
             dayPanel;
+
+        if (otdPassesOpen) {
+            el.innerHTML =
+                '<div style="display:flex;gap:16px;align-items:flex-start">' +
+                    '<div style="flex:1;min-width:0">' + calHtml + '</div>' +
+                    '<div id="otd-passes-panel-wrap" style="width:290px;flex-shrink:0;background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:14px;position:sticky;top:72px"></div>' +
+                '</div>';
+            renderOtdPassesPanel();
+        } else {
+            el.innerHTML = calHtml;
+        }
         renderOtdCheckWrap();
     }
 
