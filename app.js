@@ -3152,6 +3152,24 @@
         return String(yr).slice(-2);
     }
 
+    function otdSeasonOpts(sport, selected) {
+        var curYear = new Date().getFullYear();
+        var years = [];
+        for (var y = curYear; y >= 2015; y--) years.push(y);
+        return years.map(function(y) {
+            var label = otdFormatSeason(sport, y);
+            var sel = selected && String(selected) === String(y) ? ' selected' : (!selected && y === curYear ? ' selected' : '');
+            return '<option value="' + y + '"' + sel + '>' + label + '</option>';
+        }).join('');
+    }
+
+    function otdUpdateSeasonOpts(sport) {
+        var sel = document.getElementById('otd-season-sel');
+        if (!sel) return;
+        var cur = sel.value;
+        sel.innerHTML = otdSeasonOpts(sport, cur);
+    }
+
     var otdVisible = false;
     var otdPlayers = []; // { id, name, sport, season, level, levelLabel, color, earnings }
     var otdSearchTimer = null;
@@ -3549,9 +3567,6 @@
             return '<option value="' + s.key + '"' + (s.key === curCheckSport ? ' selected' : '') + '>' + s.label + '</option>';
         }).join('');
         var curYear = new Date().getFullYear();
-        var seasonOpts = (function() { var a = []; for (var y = curYear; y >= 2015; y--) a.push(y); return a; }()).map(function(y) {
-            return '<option value="' + y + '"' + (cp && cp.season === String(y) ? ' selected' : '') + '>' + y + '</option>';
-        }).join('');
         var levelOpts = OTD_LEVEL_OPTIONS.map(function(o) {
             return '<option value="' + o.value + '"' + (cp && cp.level === o.value ? ' selected' : '') + '>' + escHtml(o.label) + '</option>';
         }).join('');
@@ -3577,8 +3592,8 @@
                     '<div id="otd-check-ac" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg2);border:1px solid var(--border2);border-radius:6px;z-index:200;margin-top:3px;overflow:hidden"></div>' +
                 '</div>' +
                 '<select id="otd-check-sport" onchange="otdCheckSportChange(this.value)" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px;border-radius:6px">' + sportOpts + '</select>' +
-                '<select id="otd-check-season" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px;border-radius:6px">' + seasonOpts + '</select>' +
-                '<select id="otd-check-level" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px;border-radius:6px">' + levelOpts + '</select>' +
+                '<select id="otd-check-season" onchange="if(otdCheckPlayer){otdCheckPlayer.season=this.value;}" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px;border-radius:6px">' + otdSeasonOpts(curCheckSport, cp && cp.season) + '</select>' +
+                '<select id="otd-check-level" onchange="if(otdCheckPlayer){var lv=parseInt(this.value,10);var lb=(OTD_LEVEL_OPTIONS.find(function(o){return o.value===lv;})||{}).label||\'Level \'+lv;otdCheckPlayer.level=lv;otdCheckPlayer.levelLabel=lb;}" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px;border-radius:6px">' + levelOpts + '</select>' +
                 '<button onclick="otdRunCheck()" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:13px;font-weight:700;padding:8px 16px;border-radius:6px;cursor:pointer;' + (cp ? '' : 'opacity:.4;pointer-events:none;') + 'white-space:nowrap">Check</button>' +
                 (function() {
                     var alreadyAdded = cp && otdPlayers.some(function(p) { return p.isAdded && p.id === cp.id && p.sport === cp.sport && p.season === cp.season; });
@@ -3597,9 +3612,6 @@
         var curYear = new Date().getFullYear();
         var sportOpts = OTD_SPORTS_LIST.map(function(s) {
             return '<option value="' + s.key + '"' + (fp && fp.sport === s.key ? ' selected' : '') + '>' + s.label + '</option>';
-        }).join('');
-        var seasonOpts = (function() { var a = []; for (var y = curYear; y >= 2015; y--) a.push(y); return a; }()).map(function(y) {
-            return '<option value="' + y + '"' + (fp && fp.season === String(y) ? ' selected' : '') + '>' + y + '</option>';
         }).join('');
 
         var infoHtml = '';
@@ -3622,7 +3634,7 @@
                     '<div id="otd-find-ac" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg2);border:1px solid var(--border2);border-radius:6px;z-index:200;margin-top:3px;overflow:hidden"></div>' +
                 '</div>' +
                 '<select id="otd-find-sport" onchange="if(otdFindPlayer){otdFindPlayer.sport=this.value;otdFindEarnings=null;renderOtdCheckWrap();}var fi=document.getElementById(\'otd-find-input\');if(fi&&fi.value&&fi.value.length>=2)otdFindSearchInput(fi.value);" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px;border-radius:6px">' + sportOpts + '</select>' +
-                '<select id="otd-find-season" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px;border-radius:6px">' + seasonOpts + '</select>' +
+                '<select id="otd-find-season" onchange="if(otdFindPlayer){otdFindPlayer.season=this.value;}" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px;border-radius:6px">' + otdSeasonOpts(fp && fp.sport || 'mlb', fp && fp.season) + '</select>' +
                 '<button onclick="otdRunFind()" style="background:#f59e0b;border:none;color:#000;font-family:var(--sans);font-size:13px;font-weight:700;padding:8px 16px;border-radius:6px;cursor:pointer;' + (fp ? '' : 'opacity:.4;pointer-events:none;') + 'white-space:nowrap">More Info</button>' +
             '</div>' +
             (infoHtml ? '<div style="margin-top:10px">' + infoHtml + '</div>' : '') +
@@ -3836,9 +3848,6 @@
             return '<option value="' + o.value + '"' + (o.value === 4 ? ' selected' : '') + '>' + escHtml(o.label) + '</option>';
         }).join('');
         var curYear = new Date().getFullYear();
-        var seasonOpts = (function() { var a = []; for (var y = curYear; y >= 2015; y--) a.push(y); return a; }()).map(function(y) {
-            return '<option value="' + y + '"' + (y === curYear ? ' selected' : '') + '>' + y + '</option>';
-        }).join('');
 
         var isUserMode = otdMode === 'username';
         var tabStyle = function(active) {
@@ -3868,8 +3877,8 @@
                             'oninput="otdOnSearchInput(this.value)" />' +
                         '<div id="otd-autocomplete" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg2);border:1px solid var(--border2);border-radius:6px;z-index:200;margin-top:3px;overflow:hidden"></div>' +
                     '</div>' +
-                    '<select id="otd-sport-sel" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px 8px;border-radius:6px">' + sportOpts + '</select>' +
-                    '<select id="otd-season-sel" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px 8px;border-radius:6px">' + seasonOpts + '</select>' +
+                    '<select id="otd-sport-sel" onchange="otdUpdateSeasonOpts(this.value)" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px 8px;border-radius:6px">' + sportOpts + '</select>' +
+                    '<select id="otd-season-sel" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px 8px;border-radius:6px">' + otdSeasonOpts('mlb', curYear) + '</select>' +
                     '<select id="otd-level-sel" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px 8px;border-radius:6px">' + levelOpts + '</select>' +
                     '<button onclick="otdAddPlayer()" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:13px;font-weight:700;padding:8px 16px;border-radius:6px;cursor:pointer;white-space:nowrap">+ Add</button>' +
                 '</div>'
@@ -4213,7 +4222,8 @@
         }
         var numLoading = otdPlayers.filter(function(p) { return p.earnings === null; }).length;
         var anyLoaded = otdPlayers.some(function(p) { return p.earnings !== null; });
-        if (otdLoadingPasses || numLoading > 0) {
+        // Only block with full loading screen if nothing is loaded yet; otherwise render calendar with what we have
+        if (otdLoadingPasses || (numLoading > 0 && !anyLoaded)) {
             var OTD_TIPS = [
                 'You get 2 claims per sport per day — and 1 bonus claim for the single best card across all sports.',
                 'Holding the same player across multiple seasons means separate claims each day.',
