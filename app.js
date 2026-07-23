@@ -3643,8 +3643,8 @@
                 (bgUrl ? '<img src="' + bgUrl + '" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;z-index:0" onerror="this.style.display=\'none\'">' : '') +
                 // Emoji watermark when no card art
                 (!bgUrl ? '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:48px;opacity:.2;z-index:0">' + emoji + '</div>' : '') +
-                // Player headshot — uncircled, large, covers upper 58% of card
-                (headshot ? '<img src="' + headshot + '" style="position:absolute;top:0;left:0;right:0;width:100%;height:58%;object-fit:cover;object-position:top center;z-index:1" onerror="this.style.display=\'none\'">' : '') +
+                // Player headshot — transparent cutout composited over card background
+                (headshot ? '<img src="' + headshot + '" style="position:absolute;top:2px;left:0;right:0;width:100%;height:62%;object-fit:contain;object-position:bottom center;z-index:1" onerror="this.style.display=\'none\'">' : '') +
                 // Dark gradient overlay for text legibility
                 '<div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.05) 0%,rgba(0,0,0,.15) 40%,rgba(0,0,0,.82) 68%,rgba(0,0,0,.92) 100%);z-index:2"></div>' +
                 // Top row: sport left, year right
