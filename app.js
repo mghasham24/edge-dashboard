@@ -3193,6 +3193,7 @@
     var otdCheckPlayer = null; // { id, name, sport, season, level, levelLabel, entityType }
     var otdCheckEarnings = null;
     var otdCheckLoading = false;
+    var otdCheckDebug = null;
     var otdCheckSearchTimer = null;
     var otdFindMode = false;
     var otdFindPlayer = null; // { id, name, sport, season, level, levelLabel }
@@ -3516,13 +3517,15 @@
         otdCheckEarnings = null;
         renderOtdCheckWrap();
         fetch('/api/real/otd?action=earnings&id=' + checkId + '&sport=' + cp2.sport + '&season=' + cp2.season + '&level=' + cp2.level + '&entityType=' + cp2.entityType + '&force=1', { credentials: 'same-origin' })
-            .then(function(r) { return r.ok ? r.json() : { ok: false }; })
+            .then(function(r) { return r.ok ? r.json() : r.json().catch(function() { return { ok: false, _status: r.status }; }); })
             .then(function(d) {
+                console.log('[OTD Check] earnings response:', JSON.stringify(d).slice(0, 500));
                 otdCheckLoading = false;
-                otdCheckEarnings = (d.ok && d.earnings) ? d.earnings : [];
+                otdCheckEarnings = (d.ok && d.earnings && d.earnings.length > 0) ? d.earnings : [];
+                otdCheckDebug = d.ok ? null : (d.error || d._status || 'empty');
                 renderOtdCheckWrap();
             })
-            .catch(function() { otdCheckLoading = false; otdCheckEarnings = []; renderOtdCheckWrap(); });
+            .catch(function(e) { console.error('[OTD Check] fetch error:', e); otdCheckLoading = false; otdCheckEarnings = []; otdCheckDebug = 'fetch-error'; renderOtdCheckWrap(); });
     }
 
     function otdAddCheckPlayer() {
@@ -3787,7 +3790,7 @@
 
     function renderOtdCheckResults() {
         if (!otdCheckEarnings.length) {
-            return '<div style="font-size:12px;color:var(--muted);padding:6px 0">No earnings found for this player/season/level.</div>';
+            return '<div style="font-size:12px;color:var(--muted);padding:6px 0">No earnings found for this player/season/level.' + (otdCheckDebug ? ' [debug: ' + otdCheckDebug + ']' : '') + '</div>';
         }
         var thisYear = new Date().getFullYear();
         var sport = otdCheckPlayer.sport;
