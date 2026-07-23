@@ -3367,11 +3367,22 @@
         var lbl = (OTD_LEVEL_OPTIONS.find(function(o) { return o.value === newLevel; }) || {}).label || 'Level ' + newLevel;
         p.level = newLevel; p.levelLabel = lbl; p.earnings = null;
         p.rarityColor = otdRarityColor(newLevel); p.backgroundSource = null;
-        renderOtdChips(); renderOtdResults();
+        // If Find Player More Info is showing this player, sync level and clear stale earnings
+        if (otdFindPlayer && String(otdFindPlayer.id) === String(p.id) && otdFindPlayer.sport === p.sport) {
+            otdFindPlayer.level = newLevel; otdFindPlayer.levelLabel = lbl; otdFindEarnings = null;
+        }
+        renderOtdChips(); renderOtdResults(); renderOtdCheckWrap();
         fetch('/api/real/otd?action=earnings&id=' + p.id + '&sport=' + p.sport + '&season=' + p.season + '&level=' + p.level + '&entityType=' + (p.entityType || 'player'), { credentials: 'same-origin' })
             .then(function(r) { return r.ok ? r.json() : { ok: false }; })
-            .then(function(d) { p.earnings = (d.ok && d.earnings) ? d.earnings : []; renderOtdChips(); renderOtdResults(); })
-            .catch(function() { p.earnings = []; renderOtdChips(); renderOtdResults(); });
+            .then(function(d) {
+                p.earnings = (d.ok && d.earnings) ? d.earnings : [];
+                // Feed results into Find Player panel if it's still showing this player at this level
+                if (otdFindPlayer && String(otdFindPlayer.id) === String(p.id) && otdFindPlayer.sport === p.sport && otdFindPlayer.level === newLevel) {
+                    otdFindEarnings = p.earnings;
+                }
+                renderOtdChips(); renderOtdResults(); renderOtdCheckWrap();
+            })
+            .catch(function() { p.earnings = []; renderOtdChips(); renderOtdResults(); renderOtdCheckWrap(); });
     }
 
     function otdToggleFind() {
@@ -3461,6 +3472,11 @@
     function otdAddCheckPlayer() {
         if (!otdCheckPlayer) return;
         var cp = otdCheckPlayer;
+        // Read dropdown values — user may have changed them without pressing Check
+        var season = String((document.getElementById('otd-check-season') || {}).value || cp.season);
+        var level = parseInt((document.getElementById('otd-check-level') || {}).value || String(cp.level), 10);
+        var lbl = (OTD_LEVEL_OPTIONS.find(function(o) { return o.value === level; }) || {}).label || 'Level ' + level;
+        cp.season = season; cp.level = level; cp.levelLabel = lbl;
         // Already added this player+sport+season?
         if (otdPlayers.some(function(p) { return p.isAdded && p.id === cp.id && p.sport === cp.sport && p.season === cp.season; })) return;
         var color = OTD_COLORS[otdColorIdx % OTD_COLORS.length];
