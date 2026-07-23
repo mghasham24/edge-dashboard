@@ -3132,10 +3132,7 @@
         { key: 'ufc',    label: 'UFC / MMA' },
         { key: 'ncaaf',  label: 'CFB' },
         { key: 'ncaabb', label: 'CBB' },
-        { key: 'epl',    label: 'Soccer – EPL' },
-        { key: 'ucl',    label: 'Soccer – UCL' },
-        { key: 'mls',    label: 'Soccer – MLS' },
-        { key: 'fifa',   label: 'Soccer – FIFA' },
+        { key: 'soccer', label: 'Soccer' },
     ];
 
     // Cross-year sports: season N = "N-(N+1)" display. Single-year: just "N" abbreviated.
@@ -3163,6 +3160,8 @@
     var otdSelectedDay = null; // ISO date string of clicked cell
     var otdSelectedDaySport = null; // active sport tab in day panel
     var otdDateMap = {}; // built by renderOtdResults, used by overlap check
+    var otdOverlapMap = {}; // dayKey → [{sport, wasted:[{player,rax}]}] — entries past claim limit >199 Rax
+    var otdShowOverlaps = false;
     var otdCheckMode = false;
     var otdCheckSport = 'mlb'; // persists sport selection even before a player is picked
     var otdCheckPlayer = null; // { id, name, sport, season, level, levelLabel, entityType }
@@ -3188,6 +3187,10 @@
     function otdSetClaimsView(n) {
         if (n === 3 && !isPro()) return;
         otdClaimsView = n;
+        renderOtdResults();
+    }
+    function otdToggleOverlaps() {
+        otdShowOverlaps = !otdShowOverlaps;
         renderOtdResults();
     }
     function otdSelectDay(iso) {
@@ -3315,11 +3318,13 @@
 
     function otdCheckSportChange(sport) {
         otdCheckSport = sport;
-        if (otdCheckPlayer) { otdCheckPlayer.sport = sport; otdCheckEarnings = null; }
+        otdCheckPlayer = null; otdCheckEarnings = null;
         renderOtdCheckWrap();
-        // Re-run search with new sport so results match
+        // Clear the input and autocomplete after re-render
         var inp = document.getElementById('otd-check-input');
-        if (inp && inp.value && inp.value.length >= 2) otdCheckSearchInput(inp.value);
+        if (inp) inp.value = '';
+        var ac = document.getElementById('otd-check-ac');
+        if (ac) ac.style.display = 'none';
     }
 
     function otdClear() {
@@ -4053,7 +4058,7 @@
                 }).join('') +
                 '</select>';
             var serialHtml = p.serialNumber ? '<div style="font-size:9px;color:var(--muted);font-family:var(--mono);margin-top:1px">#' + p.serialNumber + '</div>' : '';
-            var bgStyle = bgUrl ? 'background-image:url(' + bgUrl + ');background-size:cover;background-position:center;' : '';
+            var bgStyle = 'background-color:' + borderCol + '11;' + (bgUrl ? 'background-image:url(' + bgUrl + ');background-size:cover;background-position:center;' : '');
             return '<div class="otd-player-card" style="' + bgStyle + 'border-color:' + borderCol + '88">' +
                 (bgUrl ? '<div class="otd-card-bg-overlay"></div>' : '') +
                 (p.isAdded ? '<span class="otd-sim-badge">SIM</span>' : '') +
@@ -4148,6 +4153,7 @@
         var dateMap = {};
         var totalDates = 0;
         var thirdCandidates = {}; // dayKey → [3rd-slot entries from each sport]
+        var overlapMap = {}; // dayKey → [{sport, wasted}]
         Object.keys(rawDateMap).forEach(function(dayKey) {
             Object.keys(rawDateMap[dayKey]).forEach(function(sport) {
                 var entityBest = {};
@@ -4165,14 +4171,28 @@
                     if (!thirdCandidates[dayKey]) thirdCandidates[dayKey] = [];
                     thirdCandidates[dayKey].push(sorted[2]);
                 }
+                // Overlap: entries past claim limit with >199 Rax are wasted
+                var wastedStart = topN + (otdClaimsView >= 3 ? 1 : 0);
+                var wasted = sorted.slice(wastedStart).filter(function(e) { return (e.rax || 0) >= 200; });
+                if (wasted.length) {
+                    if (!overlapMap[dayKey]) overlapMap[dayKey] = [];
+                    overlapMap[dayKey].push({ sport: sport, wasted: wasted });
+                }
             });
             if (otdClaimsView >= 3 && thirdCandidates[dayKey] && thirdCandidates[dayKey].length) {
                 var best3rd = thirdCandidates[dayKey].slice().sort(function(a, b) { return (b.rax || 0) - (a.rax || 0); })[0];
                 if (!dateMap[dayKey]) { dateMap[dayKey] = []; totalDates++; }
                 dateMap[dayKey].push(best3rd);
+                // Also mark best3rd's sport's 3rd-slot losers as overlap
+                var losers = thirdCandidates[dayKey].filter(function(c) { return c !== best3rd && (c.rax||0) >= 200; });
+                if (losers.length) {
+                    if (!overlapMap[dayKey]) overlapMap[dayKey] = [];
+                    overlapMap[dayKey].push({ sport: 'cross-sport', wasted: losers });
+                }
             }
         });
         otdDateMap = dateMap;
+        otdOverlapMap = overlapMap;
 
         var MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
         var DAY_HDRS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -4283,7 +4303,7 @@
                 var multiplier = e.player.multiplier || (passRef && passRef.multiplier) || null;
                 var multNum = multiplier ? parseInt(multiplier, 10) : 0;
                 var baseRax = (multNum > 1 && e.rax) ? Math.round(e.rax / multNum) : 0;
-                var thumb = '<div class="otd-entry-thumb" style="' + (bgSrc ? 'background-image:url(' + bgSrc + ');' : 'background:' + rc + '22;') + '">' +
+                var thumb = '<div class="otd-entry-thumb" style="background:' + rc + '22;' + (bgSrc ? 'background-image:url(' + bgSrc + ');' : '') + '">' +
                     (bgSrc ? '<div class="otd-entry-thumb-overlay"></div>' : '') +
                     '<div class="otd-thumb-topbar">' +
                         (e.player.levelLabel ? '<span class="otd-rarity-badge" style="background:' + rc + ';margin:0;font-size:8px;padding:1px 4px">' + escHtml(e.player.levelLabel) + '</span>' : '<span></span>') +
@@ -4340,6 +4360,50 @@
             '</div>'
         ) : '';
 
+        // Overlap panel
+        var overlapKeys = Object.keys(otdOverlapMap).sort(function(a, b) {
+            var at = otdOverlapMap[a].reduce(function(s, g) { return s + g.wasted.reduce(function(x, e) { return x + (e.rax||0); }, 0); }, 0);
+            var bt = otdOverlapMap[b].reduce(function(s, g) { return s + g.wasted.reduce(function(x, e) { return x + (e.rax||0); }, 0); }, 0);
+            return bt - at;
+        });
+        var overlapCount = overlapKeys.length;
+        var overlapBtnStyle = btnBase + (otdShowOverlaps ? 'var(--accent);background:rgba(99,102,241,.12);color:var(--accent)' : 'var(--border2);background:var(--bg3);color:var(--muted)');
+        var overlapPanel = '';
+        if (otdShowOverlaps && overlapCount > 0) {
+            var MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            var overlapRows = overlapKeys.slice(0, 60).map(function(dk) {
+                var parts = dk.split('-');
+                var dateStr = MONTH_SHORT[parseInt(parts[1],10)-1] + ' ' + parseInt(parts[2],10);
+                var groups = otdOverlapMap[dk];
+                return groups.map(function(g) {
+                    return g.wasted.map(function(w) {
+                        var lbl = (OTD_LEVEL_OPTIONS.find(function(o){return o.value===w.player.level;})||{}).label || '';
+                        return '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;border-bottom:1px solid var(--border);font-size:12px">' +
+                            '<div>' +
+                                '<span style="font-family:var(--mono);font-size:10px;color:var(--muted);min-width:44px;display:inline-block">' + escHtml(dateStr) + '</span>' +
+                                '<span style="font-weight:600;color:var(--fg)">' + escHtml(w.player.name) + '</span>' +
+                                (lbl ? '<span style="font-size:9px;background:' + (w.player.rarityColor||'var(--muted)')+';color:#fff;border-radius:3px;padding:1px 4px;margin-left:5px;font-weight:700">' + escHtml(lbl) + '</span>' : '') +
+                                '<span style="font-size:10px;color:var(--muted);margin-left:5px">' + g.sport.toUpperCase() + '</span>' +
+                            '</div>' +
+                            '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:#ef5350">' + RAX_ICON + (w.rax||0).toLocaleString() + ' lost</span>' +
+                        '</div>';
+                    }).join('');
+                }).join('');
+            }).join('');
+            var overlapTotal = overlapKeys.reduce(function(s, dk) {
+                return s + otdOverlapMap[dk].reduce(function(a, g) { return a + g.wasted.reduce(function(x, e) { return x + (e.rax||0); }, 0); }, 0);
+            }, 0);
+            overlapPanel = '<div style="background:var(--bg2);border:1px solid var(--border2);border-radius:8px;margin-bottom:10px;overflow:hidden">' +
+                '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-bottom:1px solid var(--border)">' +
+                    '<span style="font-size:12px;font-weight:700;color:var(--fg)">' + overlapCount + ' days with overlapping claims</span>' +
+                    '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:#ef5350">' + RAX_ICON + overlapTotal.toLocaleString() + ' lost</span>' +
+                '</div>' +
+                '<div style="max-height:260px;overflow-y:auto">' + overlapRows + '</div>' +
+            '</div>';
+        } else if (otdShowOverlaps && overlapCount === 0) {
+            overlapPanel = '<div style="background:var(--bg2);border:1px solid var(--border2);border-radius:8px;margin-bottom:10px;padding:12px 14px;font-size:12px;color:var(--muted2)">No overlapping claims above 199 Rax — your collection is clean.</div>';
+        }
+
         el.innerHTML =
             addedNote +
             '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">' +
@@ -4347,8 +4411,10 @@
                 '<div style="display:flex;gap:4px;align-items:center">' +
                     '<button style="' + btn2Style + '" onclick="otdSetClaimsView(2)">2 claims</button>' +
                     '<button style="' + btn3Style + '" onclick="otdSetClaimsView(3)" title="' + (pro ? '3 claims/sport' : 'Pro required') + '">3 claims' + (pro ? '' : ' 🔒') + '</button>' +
+                    (overlapCount > 0 ? '<button style="' + overlapBtnStyle + '" onclick="otdToggleOverlaps()" title="Days where you have more cards than claim slots">⚠ Overlaps' + (overlapCount ? ' ' + overlapCount : '') + '</button>' : '') +
                 '</div>' +
             '</div>' +
+            overlapPanel +
             '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">' +
                 '<button onclick="otdPrevMonth()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-size:16px;width:32px;height:32px;border-radius:6px;cursor:pointer;line-height:1">‹</button>' +
                 '<div style="text-align:center">' +
