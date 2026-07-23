@@ -3515,9 +3515,14 @@
         var level = parseInt((document.getElementById('otd-check-level') || {}).value || String(cp.level), 10);
         var lbl = (OTD_LEVEL_OPTIONS.find(function(o) { return o.value === level; }) || {}).label || 'Level ' + level;
         cp.season = season; cp.level = level; cp.levelLabel = lbl;
-        // Same player+sport+season already present — update rarity instead of adding a duplicate
+        // Same player+sport+season already present — update rarity instead of adding a duplicate.
+        // Use name as fallback in case search API returns a different entity ID than the passes API.
         var existingIdx2 = -1;
-        otdPlayers.forEach(function(p, i) { if (String(p.id) === String(cp.id) && p.sport === cp.sport && p.season === cp.season) existingIdx2 = i; });
+        otdPlayers.forEach(function(p, i) {
+            if (p.sport === cp.sport && p.season === cp.season &&
+                (String(p.id) === String(cp.id) || p.name.toLowerCase() === cp.name.toLowerCase()))
+                existingIdx2 = i;
+        });
         if (existingIdx2 >= 0) {
             otdChangeLevel(existingIdx2, cp.level);
             renderOtdCheckWrap();
@@ -3781,7 +3786,15 @@
             if (origYear >= thisYear && otdCalYear <= origYear) return;
             var dayKey = String(otdCalYear) + '-' + dp[1].padStart(2,'0') + '-' + dp[2].padStart(2,'0');
             totalDays++;
-            var existingEntries = (otdDateMap[dayKey] || []).filter(function(entry) { return entry.player.sport === sport; });
+            // Exclude the check player itself from existing entries — same card can't conflict with itself.
+            // Uses both ID and name comparison since search/passes APIs may return different entity IDs.
+            var existingEntries = (otdDateMap[dayKey] || []).filter(function(entry) {
+                if (entry.player.sport !== sport) return false;
+                if (entry.player.season !== cp.season) return true;
+                if (String(entry.player.id) === String(cp.id)) return false;
+                if (entry.player.name.toLowerCase() === cp.name.toLowerCase()) return false;
+                return true;
+            });
             if (existingEntries.length > 0) {
                 var newRax = e.atRarityEarnings || 0;
                 var newTotal = existingEntries.length + 1;
