@@ -3608,7 +3608,7 @@
                     p.earnings.forEach(function(e) {
                         var dp = (e.day || '').split('T')[0].split('-');
                         var oy = parseInt(dp[0], 10);
-                        if (oy >= thisYear && otdCalYear <= oy) return;
+                        if (oy >= otdCalYear) return;
                         total += e.atRarityEarnings || 0;
                     });
                 }
@@ -3828,7 +3828,7 @@
                     var dp = (e.day || '').split('T')[0].split('-');
                     if (dp.length !== 3) return;
                     var origYear = parseInt(dp[0], 10);
-                    if (origYear >= infoThisYear && otdCalYear <= origYear) return;
+                    if (origYear >= otdCalYear) return;
                     earnTotal += e.atRarityEarnings || 0;
                     earnDays++;
                 });
@@ -3928,7 +3928,7 @@
             var dp = (e.day || '').split('T')[0].split('-');
             if (dp.length !== 3) return;
             var origYear = parseInt(dp[0], 10);
-            if (origYear >= thisYear && otdCalYear <= origYear) return;
+            if (origYear >= otdCalYear) return;
             var m = parseInt(dp[1], 10) - 1;
             var d = parseInt(dp[2], 10);
             var rax = e.atRarityEarnings || 0;
@@ -4009,7 +4009,7 @@
             var dp = (e.day || '').split('T')[0].split('-');
             if (dp.length !== 3) return;
             var origYear = parseInt(dp[0], 10);
-            if (origYear >= thisYear && otdCalYear <= origYear) return;
+            if (origYear >= otdCalYear) return;
             var dayKey = String(otdCalYear) + '-' + dp[1].padStart(2,'0') + '-' + dp[2].padStart(2,'0');
             totalDays++;
             // Exclude the check player itself from existing entries — same card can't conflict with itself.
@@ -4576,7 +4576,7 @@
                 var dp = (e.day || '').split('T')[0].split('-');
                 if (dp.length !== 3) return;
                 var oy = parseInt(dp[0], 10);
-                if (oy >= thisYear && otdCalYear <= oy) return;
+                if (oy >= otdCalYear) return;
                 findDateSet[String(otdCalYear) + '-' + dp[1].padStart(2,'0') + '-' + dp[2].padStart(2,'0')] = true;
             });
         }
@@ -4588,7 +4588,7 @@
                 if (dp.length !== 3) return;
                 var origYear = parseInt(dp[0], 10);
                 // Current/future season: first OTD year is origYear+1; skip if viewing year is earlier
-                if (origYear >= thisYear && otdCalYear <= origYear) return;
+                if (origYear >= otdCalYear) return;
                 var dayKey = String(otdCalYear) + '-' + dp[1].padStart(2,'0') + '-' + dp[2].padStart(2,'0');
                 if (!rawDateMap[dayKey]) rawDateMap[dayKey] = {};
                 var SOCCER_SK = { epl:1, ucl:1, mls:1, fc:1, fifa:1, soccer:1 };
