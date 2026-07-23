@@ -3494,10 +3494,16 @@
         otdCheckPlayer.season = season;
         otdCheckPlayer.level = level;
         otdCheckPlayer.levelLabel = lbl;
+        // Prefer the RS pass ID over the search result ID — they may differ between APIs.
+        var rsMatchForCheck = otdPlayers.find(function(p) {
+            return p.sport === otdCheckPlayer.sport && p.season === otdCheckPlayer.season &&
+                (String(p.id) === String(otdCheckPlayer.id) || p.name.toLowerCase() === otdCheckPlayer.name.toLowerCase());
+        });
+        var checkId = (rsMatchForCheck && rsMatchForCheck.id) ? rsMatchForCheck.id : otdCheckPlayer.id;
         otdCheckLoading = true;
         otdCheckEarnings = null;
         renderOtdCheckWrap();
-        fetch('/api/real/otd?action=earnings&id=' + otdCheckPlayer.id + '&sport=' + otdCheckPlayer.sport + '&season=' + otdCheckPlayer.season + '&level=' + otdCheckPlayer.level + '&entityType=' + otdCheckPlayer.entityType, { credentials: 'same-origin' })
+        fetch('/api/real/otd?action=earnings&id=' + checkId + '&sport=' + otdCheckPlayer.sport + '&season=' + otdCheckPlayer.season + '&level=' + otdCheckPlayer.level + '&entityType=' + otdCheckPlayer.entityType, { credentials: 'same-origin' })
             .then(function(r) { return r.ok ? r.json() : { ok: false }; })
             .then(function(d) {
                 otdCheckLoading = false;
