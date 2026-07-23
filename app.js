@@ -3566,7 +3566,7 @@
         }).join('');
         var claimsHtml = '';
         if (otdSelectedPassMonth && monthMap[otdSelectedPassMonth]) {
-            var entries = monthMap[otdSelectedPassMonth].slice().sort(function(a, b) { return b.rax - a.rax; });
+            var entries = monthMap[otdSelectedPassMonth].slice().sort(function(a, b) { return a.origDay < b.origDay ? -1 : a.origDay > b.origDay ? 1 : 0; });
             claimsHtml = '<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px">' +
                 '<div style="font-size:10px;font-weight:700;color:var(--muted2);margin-bottom:5px">' + MONTH_SHORT[parseInt(otdSelectedPassMonth.split('-')[1], 10) - 1] + ' claims</div>' +
                 '<div>' +
@@ -3643,8 +3643,11 @@
                 (bgUrl ? '<img src="' + bgUrl + '" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;z-index:0" onerror="this.style.display=\'none\'">' : '') +
                 // Emoji watermark when no card art
                 (!bgUrl ? '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:48px;opacity:.2;z-index:0">' + emoji + '</div>' : '') +
-                // Player headshot — transparent cutout composited over card background
-                (headshot ? '<img src="' + headshot + '" style="position:absolute;top:2px;left:0;right:0;width:100%;height:62%;object-fit:contain;object-position:bottom center;z-index:1" onerror="this.style.display=\'none\'">' : '') +
+                // Player headshot — transparent cutout; falls back to sport emoji on error
+                (headshot
+                    ? '<img src="' + headshot + '" style="position:absolute;top:2px;left:0;right:0;width:100%;height:62%;object-fit:contain;object-position:bottom center;z-index:1" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' +
+                      '<div style="display:none;position:absolute;top:0;left:0;right:0;height:62%;align-items:center;justify-content:center;font-size:40px;z-index:1">' + emoji + '</div>'
+                    : '<div style="position:absolute;top:0;left:0;right:0;height:62%;display:flex;align-items:center;justify-content:center;font-size:40px;z-index:1">' + emoji + '</div>') +
                 // Dark gradient overlay for text legibility
                 '<div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.05) 0%,rgba(0,0,0,.15) 40%,rgba(0,0,0,.82) 68%,rgba(0,0,0,.92) 100%);z-index:2"></div>' +
                 // Top row: sport left, year right
