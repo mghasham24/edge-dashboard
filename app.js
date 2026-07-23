@@ -3390,7 +3390,9 @@
         if (otdFindPlayer && String(otdFindPlayer.id) === String(p.id) && otdFindPlayer.sport === p.sport) {
             otdFindPlayer.level = newLevel; otdFindPlayer.levelLabel = lbl; otdFindEarnings = null;
         }
-        renderOtdChips(); renderOtdResults(); renderOtdCheckWrap();
+        // Don't call renderOtdResults here — wiping earnings would trigger the loading screen.
+        // Calendar updates when the fetch below completes.
+        renderOtdChips(); renderOtdCheckWrap();
         fetch('/api/real/otd?action=earnings&id=' + p.id + '&sport=' + p.sport + '&season=' + p.season + '&level=' + p.level + '&entityType=' + (p.entityType || 'player'), { credentials: 'same-origin' })
             .then(function(r) { return r.ok ? r.json() : { ok: false }; })
             .then(function(d) {
@@ -3494,16 +3496,26 @@
         otdCheckPlayer.season = season;
         otdCheckPlayer.level = level;
         otdCheckPlayer.levelLabel = lbl;
-        // Prefer the RS pass ID over the search result ID — they may differ between APIs.
+        // Find matching pass already in otdPlayers (RS account or SIM) by ID or name.
+        // Search API and passes API can return different entity IDs for the same player.
+        var cp2 = otdCheckPlayer;
         var rsMatchForCheck = otdPlayers.find(function(p) {
-            return p.sport === otdCheckPlayer.sport && p.season === otdCheckPlayer.season &&
-                (String(p.id) === String(otdCheckPlayer.id) || p.name.toLowerCase() === otdCheckPlayer.name.toLowerCase());
+            return p.sport === cp2.sport && p.season === cp2.season &&
+                (String(p.id) === String(cp2.id) || p.name.toLowerCase() === cp2.name.toLowerCase());
         });
-        var checkId = (rsMatchForCheck && rsMatchForCheck.id) ? rsMatchForCheck.id : otdCheckPlayer.id;
+        // If a matching pass already has earnings loaded at this exact level, use them directly.
+        // This avoids a redundant API call and handles the case where search vs. pass IDs differ.
+        if (rsMatchForCheck && rsMatchForCheck.earnings && rsMatchForCheck.level === cp2.level) {
+            otdCheckLoading = false;
+            otdCheckEarnings = rsMatchForCheck.earnings;
+            renderOtdCheckWrap();
+            return;
+        }
+        var checkId = (rsMatchForCheck && rsMatchForCheck.id) ? rsMatchForCheck.id : cp2.id;
         otdCheckLoading = true;
         otdCheckEarnings = null;
         renderOtdCheckWrap();
-        fetch('/api/real/otd?action=earnings&id=' + checkId + '&sport=' + otdCheckPlayer.sport + '&season=' + otdCheckPlayer.season + '&level=' + otdCheckPlayer.level + '&entityType=' + otdCheckPlayer.entityType, { credentials: 'same-origin' })
+        fetch('/api/real/otd?action=earnings&id=' + checkId + '&sport=' + cp2.sport + '&season=' + cp2.season + '&level=' + cp2.level + '&entityType=' + cp2.entityType, { credentials: 'same-origin' })
             .then(function(r) { return r.ok ? r.json() : { ok: false }; })
             .then(function(d) {
                 otdCheckLoading = false;
