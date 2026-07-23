@@ -3162,6 +3162,7 @@
     var otdDateMap = {}; // built by renderOtdResults, used by overlap check
     var otdOverlapMap = {}; // dayKey → [{sport, wasted:[{player,rax}]}] — entries past claim limit >199 Rax
     var otdShowOverlaps = false;
+    var otdOverlapSort = 'rax-desc'; // 'rax-desc' | 'rax-asc' | 'date-asc' | 'date-desc'
     var otdCheckMode = false;
     var otdCheckSport = 'mlb'; // persists sport selection even before a player is picked
     var otdCheckPlayer = null; // { id, name, sport, season, level, levelLabel, entityType }
@@ -3191,6 +3192,10 @@
     }
     function otdToggleOverlaps() {
         otdShowOverlaps = !otdShowOverlaps;
+        renderOtdResults();
+    }
+    function otdSetOverlapSort(mode) {
+        otdOverlapSort = mode;
         renderOtdResults();
     }
     function otdSelectDay(iso) {
@@ -3265,9 +3270,10 @@
     }
 
     function otdOpenPerfLink(entityId, sport, entityType, calDay) {
+        var fallback = rsEntityUrl(entityType, sport, parseInt(entityId, 10));
         otdDayEarningsEntry(entityId, sport, entityType, calDay)
-            .then(function(entry) { window.open((entry && entry.perfUrl) || 'https://www.realapp.com', '_blank'); })
-            .catch(function() { window.open('https://www.realapp.com', '_blank'); });
+            .then(function(entry) { window.open((entry && entry.perfUrl) || fallback, '_blank'); })
+            .catch(function() { window.open(fallback, '_blank'); });
     }
 
     function otdToggleCheck() {
@@ -4417,9 +4423,11 @@
 
         // Overlap panel
         var overlapKeys = Object.keys(otdOverlapMap).sort(function(a, b) {
+            if (otdOverlapSort === 'date-asc') return a < b ? -1 : a > b ? 1 : 0;
+            if (otdOverlapSort === 'date-desc') return a > b ? -1 : a < b ? 1 : 0;
             var at = otdOverlapMap[a].reduce(function(s, g) { return s + g.wasted.reduce(function(x, e) { return x + (e.rax||0); }, 0); }, 0);
             var bt = otdOverlapMap[b].reduce(function(s, g) { return s + g.wasted.reduce(function(x, e) { return x + (e.rax||0); }, 0); }, 0);
-            return bt - at;
+            return otdOverlapSort === 'rax-asc' ? at - bt : bt - at;
         });
         var overlapCount = overlapKeys.length;
         var overlapBtnStyle = btnBase + (otdShowOverlaps ? 'var(--accent);background:rgba(99,102,241,.12);color:var(--accent)' : 'var(--border2);background:var(--bg3);color:var(--muted)');
@@ -4464,10 +4472,22 @@
             var overlapTotal = overlapKeys.reduce(function(s, dk) {
                 return s + otdOverlapMap[dk].reduce(function(a, g) { return a + g.wasted.reduce(function(x, e) { return x + (e.rax||0); }, 0); }, 0);
             }, 0);
+            var ovlSortBase = 'font-family:var(--sans);font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;cursor:pointer;border:1px solid ';
+            var ovlSortBtn = function(mode, label) {
+                var active = otdOverlapSort === mode;
+                return '<button onclick="otdSetOverlapSort(\'' + mode + '\')" style="' + ovlSortBase + (active ? 'var(--accent);background:rgba(99,102,241,.15);color:var(--accent)' : 'var(--border2);background:var(--bg3);color:var(--muted)') + '">' + label + '</button>';
+            };
             overlapPanel = '<div style="background:var(--bg2);border:1px solid var(--border2);border-radius:8px;margin-bottom:10px;overflow:hidden">' +
-                '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-bottom:1px solid var(--border)">' +
+                '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:6px">' +
                     '<span style="font-size:12px;font-weight:700;color:var(--fg)">' + overlapCount + ' days with overlapping claims</span>' +
-                    '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:#ef5350">' + RAX_ICON + overlapTotal.toLocaleString() + ' lost</span>' +
+                    '<div style="display:flex;align-items:center;gap:4px">' +
+                        '<span style="font-size:10px;color:var(--muted2);margin-right:2px">Sort:</span>' +
+                        ovlSortBtn('date-asc', 'Date ↑') +
+                        ovlSortBtn('date-desc', 'Date ↓') +
+                        ovlSortBtn('rax-desc', 'Rax ↓') +
+                        ovlSortBtn('rax-asc', 'Rax ↑') +
+                        '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:#ef5350;margin-left:6px">' + RAX_ICON + overlapTotal.toLocaleString() + '</span>' +
+                    '</div>' +
                 '</div>' +
                 '<div style="max-height:260px;overflow-y:auto">' + overlapRows + '</div>' +
             '</div>';
