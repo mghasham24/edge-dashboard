@@ -3447,7 +3447,7 @@
         var lbl = (OTD_LEVEL_OPTIONS.find(function(o) { return o.value === level; }) || {}).label || 'Epic';
         otdFindPlayer = { id: String(id), name: name, sport: sport, season: season, level: level, levelLabel: lbl };
         otdFindEarnings = null; otdFindExpandedMonths = {};
-        renderOtdCheckWrap();
+        otdRunFind();
     }
 
     function otdFindToggleMonth(m) {
@@ -3479,7 +3479,7 @@
         fp.season = season; fp.level = level; fp.levelLabel = lbl;
         otdFindLoading = true; otdFindEarnings = null; otdFindExpandedMonths = {};
         renderOtdCheckWrap();
-        fetch('/api/real/otd?action=earnings&id=' + fp.id + '&sport=' + fp.sport + '&season=' + fp.season + '&level=' + fp.level + '&entityType=player', { credentials: 'same-origin' })
+        fetch('/api/real/otd?action=earnings&id=' + fp.id + '&sport=' + fp.sport + '&season=' + fp.season + '&level=' + fp.level + '&entityType=player&force=1', { credentials: 'same-origin' })
             .then(function(r) { return r.ok ? r.json() : { ok: false }; })
             .then(function(d) {
                 otdFindLoading = false;
@@ -3554,14 +3554,14 @@
         if (otdCheckEarnings !== null) {
             // Earnings already fetched — set them on the entry before pushing so numLoading never increments
             // and the loading screen never fires, even if other passes are still being loaded.
-            var entry = { id: cp.id, name: cp.name, sport: cp.sport, season: cp.season, level: cp.level, levelLabel: cp.levelLabel, entityType: cp.entityType || 'player', color: color, earnings: otdCheckEarnings, isAdded: true, avatar: cp.avatar || '' };
+            var entry = { id: cp.id, name: cp.name, sport: cp.sport, season: cp.season, level: cp.level, levelLabel: cp.levelLabel, entityType: cp.entityType || 'player', color: color, rarityColor: otdRarityColor(cp.level), earnings: otdCheckEarnings, isAdded: true, avatar: cp.avatar || '' };
             otdPlayers.push(entry);
             renderOtdChips();
             renderOtdResults();
             renderOtdCheckWrap();
         } else {
             // No earnings yet — push with null (shows loading for this entry), then fetch
-            var entry = { id: cp.id, name: cp.name, sport: cp.sport, season: cp.season, level: cp.level, levelLabel: cp.levelLabel, entityType: cp.entityType || 'player', color: color, earnings: null, isAdded: true, avatar: cp.avatar || '' };
+            var entry = { id: cp.id, name: cp.name, sport: cp.sport, season: cp.season, level: cp.level, levelLabel: cp.levelLabel, entityType: cp.entityType || 'player', color: color, rarityColor: otdRarityColor(cp.level), earnings: null, isAdded: true, avatar: cp.avatar || '' };
             otdPlayers.push(entry);
             renderOtdChips();
             renderOtdResults();
@@ -4267,6 +4267,35 @@
             var av = p.avatar || '';
             var bgUrl = p.backgroundSource ? '/api/real/otd?action=card_bg&src=' + encodeURIComponent(p.backgroundSource) : '';
             var borderCol = p.rarityColor || p.color;
+            var levelSel = '<select onchange="otdChangeLevel(' + idx + ',parseInt(this.value,10))" onclick="event.stopPropagation()" ' +
+                'style="background:transparent;border:none;color:' + rc + ';font-size:10px;font-weight:700;cursor:pointer;max-width:100%;font-family:var(--sans);text-align:center">' +
+                OTD_LEVEL_OPTIONS.map(function(o) {
+                    return '<option value="' + o.value + '"' + (o.value === p.level ? ' selected' : '') + '>' + escHtml(o.label) + '</option>';
+                }).join('') +
+                '</select>';
+            if (p.isAdded) {
+                var simBg = bgUrl
+                    ? 'background-image:url(' + bgUrl + ');background-size:cover;background-position:top center;'
+                    : 'background:linear-gradient(160deg,' + rc + '22 0%,' + rc + '08 100%);';
+                return '<div class="otd-player-card" style="' + simBg + 'border-color:' + rc + '66;padding:0;overflow:hidden">' +
+                    (bgUrl ? '<div class="otd-card-bg-overlay"></div>' : '') +
+                    '<div style="position:relative;display:flex;align-items:center;justify-content:center;background:rgba(79,110,247,.82);padding:5px 8px;min-height:24px">' +
+                        '<button onclick="otdRemovePlayer(' + idx + ')" style="position:absolute;left:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:rgba(255,255,255,.85);font-size:16px;line-height:1;cursor:pointer;padding:0;font-family:var(--sans)">×</button>' +
+                        '<span style="font-size:8px;font-weight:800;color:#fff;letter-spacing:.08em">SIM</span>' +
+                    '</div>' +
+                    '<div style="display:flex;justify-content:center;padding:8px 4px 4px;position:relative;z-index:1">' +
+                        (av
+                            ? '<img src="https://media.realapp.com/assets/players/default/small/' + av + '.webp" style="width:72px;height:72px;object-fit:cover;object-position:top center;border-radius:4px" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' +
+                              '<div style="display:none;width:72px;height:72px;border-radius:4px;background:' + rc + '22;align-items:center;justify-content:center;font-size:28px">' + emoji + '</div>'
+                            : '<div style="display:flex;width:72px;height:72px;border-radius:4px;background:' + rc + '22;align-items:center;justify-content:center;font-size:28px">' + emoji + '</div>') +
+                    '</div>' +
+                    '<div style="padding:0 8px 8px;position:relative;z-index:1">' +
+                        '<div class="otd-card-name">' + escHtml(p.name) + '</div>' +
+                        '<div class="otd-card-sport">' + sport.toUpperCase() + ' · ' + escHtml(otdFormatSeason(sport, p.season)) + '</div>' +
+                        '<div class="otd-card-level" style="margin-top:4px;border-color:' + rc + '55;background:' + rc + '15">' + levelSel + '</div>' +
+                    '</div>' +
+                '</div>';
+            }
             var photoHtml = '<div style="display:flex;justify-content:center;margin-bottom:8px">' +
                 (av
                     ? '<img src="https://media.realapp.com/assets/players/default/small/' + av + '.webp" ' +
@@ -4275,17 +4304,10 @@
                       '<div style="display:none;width:64px;height:64px;border-radius:50%;background:' + borderCol + '22;border:2px solid ' + borderCol + ';align-items:center;justify-content:center;font-size:26px">' + emoji + '</div>'
                     : '<div style="display:flex;width:64px;height:64px;border-radius:50%;background:' + borderCol + '22;border:2px solid ' + borderCol + ';align-items:center;justify-content:center;font-size:26px">' + emoji + '</div>') +
                 '</div>';
-            var levelSel = '<select onchange="otdChangeLevel(' + idx + ',parseInt(this.value,10))" onclick="event.stopPropagation()" ' +
-                'style="background:transparent;border:none;color:' + rc + ';font-size:10px;font-weight:700;cursor:pointer;max-width:100%;font-family:var(--sans);text-align:center">' +
-                OTD_LEVEL_OPTIONS.map(function(o) {
-                    return '<option value="' + o.value + '"' + (o.value === p.level ? ' selected' : '') + '>' + escHtml(o.label) + '</option>';
-                }).join('') +
-                '</select>';
             var serialHtml = p.serialNumber ? '<div style="font-size:9px;color:var(--muted);font-family:var(--mono);margin-top:1px">#' + p.serialNumber + '</div>' : '';
             var bgStyle = 'background-color:' + borderCol + '11;' + (bgUrl ? 'background-image:url(' + bgUrl + ');background-size:cover;background-position:center;' : '');
             return '<div class="otd-player-card" style="' + bgStyle + 'border-color:' + borderCol + '88">' +
                 (bgUrl ? '<div class="otd-card-bg-overlay"></div>' : '') +
-                (p.isAdded ? '<span class="otd-sim-badge">SIM</span>' : '') +
                 '<button onclick="otdRemovePlayer(' + idx + ')" class="otd-card-rm">×</button>' +
                 photoHtml +
                 '<div class="otd-card-name">' + escHtml(p.name) + '</div>' +
@@ -4306,8 +4328,7 @@
         }
         var numLoading = otdPlayers.filter(function(p) { return p.earnings === null; }).length;
         var anyLoaded = otdPlayers.some(function(p) { return p.earnings !== null; });
-        // Only block with full loading screen if nothing is loaded yet; otherwise render calendar with what we have
-        if (otdLoadingPasses || (numLoading > 0 && !anyLoaded)) {
+        if (otdLoadingPasses || numLoading > 0) {
             var OTD_TIPS = [
                 'You get 2 claims per sport per day — and 1 bonus claim for the single best card across all sports.',
                 'Holding the same player across multiple seasons means separate claims each day.',
