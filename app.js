@@ -3203,6 +3203,8 @@
     var otdFindExpandedMonths = {}; // { monthIndex: true } — which months are expanded in More Info
     var otdPassesOpen = false;
     var otdPassesSearch = '';
+    var otdSelectedPass = null;
+    var otdSelectedPassMonth = null;
 
     function otdPrevMonth() {
         if (otdCalMonth === 0) { otdCalMonth = 11; otdCalYear--; } else { otdCalMonth--; }
@@ -3493,15 +3495,97 @@
 
     function otdTogglePasses() {
         otdPassesOpen = !otdPassesOpen;
-        if (!otdPassesOpen) otdPassesSearch = '';
+        if (!otdPassesOpen) {
+            otdPassesSearch = '';
+            otdSelectedPass = null;
+            otdSelectedPassMonth = null;
+            otdFindEarnings = null;
+            otdFindPlayer = null;
+        }
         renderOtdCheckWrap();
         renderOtdResults();
+    }
+
+    function otdSelectPass(playerIdx) {
+        var p = otdPlayers[playerIdx];
+        if (!p) return;
+        if (otdSelectedPass === p) {
+            otdSelectedPass = null;
+            otdSelectedPassMonth = null;
+            otdFindEarnings = null;
+            otdFindPlayer = null;
+        } else {
+            otdSelectedPass = p;
+            otdSelectedPassMonth = null;
+            otdFindEarnings = p.earnings;
+            otdFindPlayer = { id: p.id, name: p.name, sport: p.sport, season: p.season, level: p.level || 4, levelLabel: p.levelLabel || '' };
+        }
+        renderOtdResults();
+    }
+
+    function otdSelectPassMonth(mk) {
+        otdSelectedPassMonth = (otdSelectedPassMonth === mk) ? null : mk;
+        var listEl = document.getElementById('otd-passes-list');
+        if (listEl) listEl.innerHTML = buildOtdPassesList();
     }
 
     function otdPassesSearchInput(val) {
         otdPassesSearch = val;
         var listEl = document.getElementById('otd-passes-list');
         if (listEl) listEl.innerHTML = buildOtdPassesList();
+    }
+
+    function buildBreakdownCard(p) {
+        if (!p || !p.earnings) return '';
+        var MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        var thisYear = new Date().getFullYear();
+        var rc = p.rarityColor || otdRarityColor(p.level);
+        var monthMap = {};
+        p.earnings.forEach(function(e) {
+            var dp = (e.day || '').split('T')[0].split('-');
+            if (dp.length !== 3) return;
+            var oy = parseInt(dp[0], 10);
+            if (oy >= thisYear && otdCalYear <= oy) return;
+            var mk = String(otdCalYear) + '-' + dp[1].padStart(2, '0');
+            if (!monthMap[mk]) monthMap[mk] = [];
+            monthMap[mk].push({ rax: e.atRarityEarnings || 0, origDay: (e.day || '').split('T')[0] });
+        });
+        var months = Object.keys(monthMap).sort();
+        if (!months.length) return '';
+        var monthBtns = months.map(function(mk) {
+            var mi = parseInt(mk.split('-')[1], 10) - 1;
+            var total = monthMap[mk].reduce(function(s, e) { return s + e.rax; }, 0);
+            var isAct = otdSelectedPassMonth === mk;
+            return '<button onclick="otdSelectPassMonth(\'' + mk + '\')" style="background:' + (isAct ? rc + '33' : rc + '11') + ';border:1px solid ' + (isAct ? rc + '99' : rc + '33') + ';border-radius:6px;padding:5px 4px;cursor:pointer;text-align:center;font-family:var(--sans);width:100%">' +
+                '<div style="font-size:9px;font-weight:700;color:' + (isAct ? 'var(--fg)' : 'var(--muted2)') + '">' + MONTH_SHORT[mi] + '</div>' +
+                '<div style="font-size:10px;font-weight:700;font-family:var(--mono);color:' + (isAct ? rc : 'var(--accent)') + ';margin-top:1px">' + total.toLocaleString() + '</div>' +
+            '</button>';
+        }).join('');
+        var claimsHtml = '';
+        if (otdSelectedPassMonth && monthMap[otdSelectedPassMonth]) {
+            var entries = monthMap[otdSelectedPassMonth].slice().sort(function(a, b) { return b.rax - a.rax; });
+            claimsHtml = '<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px">' +
+                '<div style="font-size:10px;font-weight:700;color:var(--muted2);margin-bottom:5px">' + MONTH_SHORT[parseInt(otdSelectedPassMonth.split('-')[1], 10) - 1] + ' claims</div>' +
+                '<div>' +
+                entries.map(function(e) {
+                    var dp2 = e.origDay.split('-');
+                    var dayLbl = dp2.length === 3 ? MONTH_SHORT[parseInt(dp2[1], 10) - 1] + ' ' + parseInt(dp2[2], 10) : e.origDay;
+                    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);font-size:11px">' +
+                        '<span style="color:var(--muted2);font-family:var(--mono);font-size:10px">' + escHtml(dayLbl) + '</span>' +
+                        '<span style="font-weight:700;font-family:var(--mono);color:var(--accent)">' + RAX_ICON + e.rax.toLocaleString() + '</span>' +
+                    '</div>';
+                }).join('') +
+                '</div></div>';
+        }
+        return '<div style="grid-column:1/-1;background:var(--bg2);border:1px solid ' + rc + '66;border-radius:10px;padding:10px;margin:2px 0 4px">' +
+            '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">' +
+                '<span style="font-size:12px;font-weight:700;color:var(--fg)">' + escHtml(p.name) + '</span>' +
+                '<span style="font-size:8px;font-weight:700;color:#fff;background:' + rc + ';border-radius:3px;padding:1px 5px">' + escHtml(p.levelLabel || ('L' + p.level)) + '</span>' +
+                '<span style="font-size:9px;color:var(--muted2)">' + p.sport.toUpperCase() + ' · ' + escHtml(otdFormatSeason(p.sport, p.season)) + '</span>' +
+            '</div>' +
+            '<div style="display:grid;grid-template-columns:repeat(' + Math.min(months.length, 4) + ',1fr);gap:4px">' + monthBtns + '</div>' +
+            claimsHtml +
+        '</div>';
     }
 
     function buildOtdPassesList() {
@@ -3530,34 +3614,64 @@
             return '<div style="text-align:center;padding:20px 0;color:var(--muted2);font-size:12px">' + (q ? 'No passes match your search' : 'No passes loaded') + '</div>';
         }
 
-        return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;padding-bottom:6px">' +
-            items.map(function(item) {
-                var p = item.p;
-                var rc = p.rarityColor || otdRarityColor(p.level);
-                var av = p.avatar || '';
-                var emoji = OTD_SPORT_EMOJI[p.sport] || '🎴';
-                var seasonFmt = otdFormatSeason(p.sport, p.season);
-                var isLoading = p.earnings === null;
-                return '<div style="background:' + rc + '0e;border:1px solid ' + rc + '44;border-radius:8px;padding:8px 6px;text-align:center">' +
-                    '<div style="display:flex;justify-content:center;margin-bottom:5px">' +
-                        (av
-                            ? '<img src="https://media.realapp.com/assets/players/default/small/' + av + '.webp" style="width:40px;height:40px;border-radius:50%;object-fit:cover;border:2px solid ' + rc + '66" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' +
-                              '<div style="display:none;width:40px;height:40px;border-radius:50%;background:' + rc + '22;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">' + emoji + '</div>'
-                            : '<div style="display:flex;width:40px;height:40px;border-radius:50%;background:' + rc + '22;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">' + emoji + '</div>') +
+        var selectedItemIdx = -1;
+        if (otdSelectedPass) {
+            items.forEach(function(item, i) { if (item.p === otdSelectedPass) selectedItemIdx = i; });
+        }
+
+        var cardHtmls = items.map(function(item, i) {
+            var p = item.p;
+            var playerIdx = otdPlayers.indexOf(p);
+            var rc = p.rarityColor || otdRarityColor(p.level);
+            var av = p.avatar || '';
+            var emoji = OTD_SPORT_EMOJI[p.sport] || '🎴';
+            var seasonFmt = otdFormatSeason(p.sport, p.season);
+            var isLoading = p.earnings === null;
+            var isSelected = p === otdSelectedPass;
+            var bgUrl = p.backgroundSource ? '/api/real/otd?action=card_bg&src=' + encodeURIComponent(p.backgroundSource) : '';
+            var headshot = av ? 'https://media.realapp.com/assets/players/default/small/' + av + '.webp' : '';
+
+            return '<div onclick="otdSelectPass(' + playerIdx + ')" style="position:relative;border-radius:10px;overflow:hidden;height:155px;cursor:pointer;background:linear-gradient(160deg,' + rc + '44 0%,' + rc + '18 100%);border:' + (isSelected ? '2px solid ' + rc : '1px solid ' + rc + '55') + ';box-shadow:' + (isSelected ? '0 0 0 1px ' + rc + '66' : 'none') + '">' +
+                // Card art background
+                (bgUrl ? '<img src="' + bgUrl + '" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center" onerror="this.style.display=\'none\'">' : '') +
+                // Dark gradient overlay
+                '<div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.1) 0%,rgba(0,0,0,.45) 45%,rgba(0,0,0,.85) 100%)"></div>' +
+                // Top row: sport left, year right
+                '<div style="position:absolute;top:6px;left:6px;right:6px;display:flex;justify-content:space-between;z-index:2">' +
+                    '<span style="font-size:8px;font-weight:800;color:#fff;background:rgba(0,0,0,.55);padding:2px 5px;border-radius:3px;letter-spacing:.03em">' + p.sport.toUpperCase() + '</span>' +
+                    '<span style="font-size:8px;font-weight:600;color:rgba(255,255,255,.85);background:rgba(0,0,0,.55);padding:2px 5px;border-radius:3px">' + escHtml(seasonFmt) + '</span>' +
+                '</div>' +
+                // Player headshot
+                '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-62%);z-index:2;width:50px;height:50px">' +
+                    (headshot
+                        ? '<img src="' + headshot + '" style="width:50px;height:50px;border-radius:50%;object-fit:cover;object-position:top center;border:2px solid rgba(255,255,255,.7)" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' +
+                          '<div style="display:none;width:50px;height:50px;border-radius:50%;background:' + rc + '44;align-items:center;justify-content:center;font-size:22px">' + emoji + '</div>'
+                        : '<div style="display:flex;width:50px;height:50px;border-radius:50%;background:' + rc + '44;align-items:center;justify-content:center;font-size:22px">' + emoji + '</div>') +
+                '</div>' +
+                // Bottom info
+                '<div style="position:absolute;bottom:0;left:0;right:0;padding:5px 7px;z-index:2">' +
+                    '<div style="font-size:10px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2;text-shadow:0 1px 3px rgba(0,0,0,.8)">' + escHtml(p.name) + '</div>' +
+                    '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:3px">' +
+                        '<span style="font-size:8px;font-weight:700;color:#fff;background:' + rc + ';border-radius:3px;padding:1px 5px">' + escHtml(p.levelLabel || ('L' + p.level)) + '</span>' +
+                        '<span style="font-size:10px;font-weight:700;font-family:var(--mono);color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.8)">' + (isLoading ? '…' : RAX_ICON + item.total.toLocaleString()) + '</span>' +
                     '</div>' +
-                    '<div style="font-size:10px;font-weight:700;color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2">' + escHtml(p.name) + '</div>' +
-                    '<div style="font-size:8px;color:var(--muted2);margin-top:2px">' + p.sport.toUpperCase() + ' · ' + escHtml(seasonFmt) + '</div>' +
-                    '<div style="margin-top:3px"><span style="font-size:8px;font-weight:700;color:#fff;background:' + rc + ';border-radius:3px;padding:1px 5px">' + escHtml(p.levelLabel || ('L' + p.level)) + '</span></div>' +
-                    '<div style="font-family:var(--mono);font-size:11px;font-weight:700;color:' + (isLoading ? 'var(--muted2)' : 'var(--accent)') + ';margin-top:4px">' + (isLoading ? '…' : RAX_ICON + item.total.toLocaleString()) + '</div>' +
-                '</div>';
-            }).join('') +
-        '</div>';
+                '</div>' +
+            '</div>';
+        });
+
+        // Splice breakdown card (spans both columns) right after the row of the selected card
+        if (selectedItemIdx >= 0) {
+            var insertAfter = Math.floor(selectedItemIdx / 2) * 2 + 2; // end of the row + 1
+            var breakdownHtml = buildBreakdownCard(otdSelectedPass);
+            if (breakdownHtml) cardHtmls.splice(Math.min(insertAfter, cardHtmls.length), 0, breakdownHtml);
+        }
+
+        return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;padding-bottom:6px">' + cardHtmls.join('') + '</div>';
     }
 
     function renderOtdPassesPanel() {
         var el = document.getElementById('otd-passes-panel-wrap');
         if (!el) return;
-        var sorted = otdPlayers.slice().filter(function(p) { return p.earnings !== null; });
         el.innerHTML =
             '<div style="font-size:13px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between">' +
                 '<span>Passes</span>' +
