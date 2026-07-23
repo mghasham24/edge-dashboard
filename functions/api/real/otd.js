@@ -193,7 +193,7 @@ export async function onRequestGet(context) {
     const entityType = url.searchParams.get('entityType') || 'player';
     if (!entityId || !sport || !season || !day) return fail(400, 'Missing params');
 
-    const cacheKey = `otd_perf_url_v3_${entityType}_${sport}_${entityId}_${season}`;
+    const cacheKey = `otd_perf_url_v4_${entityType}_${sport}_${entityId}_${season}`;
     let bsList;
     let triedUrls = [];
     try {
@@ -205,12 +205,17 @@ export async function onRequestGet(context) {
 
     if (!bsList) {
       // Try multiple RS endpoint patterns — stop at first 200
+      // RS API convention: sport often in path, e.g. /players/{id}/sport/{sport}/...
       const endpointsToTry = [
+        `${RS_BASE}/players/${encodeURIComponent(entityId)}/sport/${encodeURIComponent(sport)}/playerboxscores?season=${encodeURIComponent(season)}`,
+        `${RS_BASE}/players/${encodeURIComponent(entityId)}/sport/${encodeURIComponent(sport)}/playerboxscores`,
+        `${RS_BASE}/players/${encodeURIComponent(entityId)}/playerboxscores?sport=${encodeURIComponent(sport)}&season=${encodeURIComponent(season)}`,
+        `${RS_BASE}/players/${encodeURIComponent(entityId)}/playerboxscores?version=2`,
         `${RS_BASE}/players/${encodeURIComponent(entityId)}/playerboxscores`,
-        `${RS_BASE}/players/${encodeURIComponent(entityId)}/playerboxscores?season=${encodeURIComponent(season)}`,
-        `${RS_BASE}/playerboxscores?entityId=${encodeURIComponent(entityId)}&season=${encodeURIComponent(season)}`,
-        `${RS_BASE}/playerboxscores?playerId=${encodeURIComponent(entityId)}&season=${encodeURIComponent(season)}`,
-        `${RS_BASE}/players/${encodeURIComponent(entityId)}/boxscores?season=${encodeURIComponent(season)}`,
+        `${RS_BASE}/players/${encodeURIComponent(entityId)}/gamelog?sport=${encodeURIComponent(sport)}&season=${encodeURIComponent(season)}`,
+        `${RS_BASE}/players/${encodeURIComponent(entityId)}/gamelogs?sport=${encodeURIComponent(sport)}&season=${encodeURIComponent(season)}`,
+        `${RS_BASE}/playerboxscores?entityId=${encodeURIComponent(entityId)}&entityType=player&sport=${encodeURIComponent(sport)}&season=${encodeURIComponent(season)}`,
+        `${RS_BASE}/entities/player/${encodeURIComponent(entityId)}/playerboxscores?season=${encodeURIComponent(season)}`,
         `${RS_BASE}/players/${encodeURIComponent(entityId)}/performances?season=${encodeURIComponent(season)}`,
       ];
       for (const rsUrl of endpointsToTry) {
