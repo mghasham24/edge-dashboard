@@ -193,8 +193,9 @@ export async function onRequestGet(context) {
     const entityType = url.searchParams.get('entityType') || 'player';
     if (!entityId || !sport || !season || !day) return fail(400, 'Missing params');
 
-    const cacheKey = `otd_perf_url_v2_${entityType}_${sport}_${entityId}_${season}`;
+    const cacheKey = `otd_perf_url_v3_${entityType}_${sport}_${entityId}_${season}`;
     let bsList;
+    let triedUrls = [];
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
       if (cached && (now - cached.fetched_at) < 86400) {
@@ -203,20 +204,39 @@ export async function onRequestGet(context) {
     } catch(e) {}
 
     if (!bsList) {
-      try {
-        // Try player boxscores endpoint (no sport filter — RS 400s when sport is passed)
-        const rsUrl = `${RS_BASE}/players/${encodeURIComponent(entityId)}/playerboxscores?season=${season}`;
-        const res = await fetch(rsUrl, { headers });
-        if (!res.ok) return fail(res.status, 'RS perf_url failed: ' + res.status);
-        const data = await res.json();
-        bsList = data.playerBoxScores || data.boxScores || data.items || (Array.isArray(data) ? data : []);
+      // Try multiple RS endpoint patterns — stop at first 200
+      const endpointsToTry = [
+        `${RS_BASE}/players/${encodeURIComponent(entityId)}/playerboxscores`,
+        `${RS_BASE}/players/${encodeURIComponent(entityId)}/playerboxscores?season=${encodeURIComponent(season)}`,
+        `${RS_BASE}/playerboxscores?entityId=${encodeURIComponent(entityId)}&season=${encodeURIComponent(season)}`,
+        `${RS_BASE}/playerboxscores?playerId=${encodeURIComponent(entityId)}&season=${encodeURIComponent(season)}`,
+        `${RS_BASE}/players/${encodeURIComponent(entityId)}/boxscores?season=${encodeURIComponent(season)}`,
+        `${RS_BASE}/players/${encodeURIComponent(entityId)}/performances?season=${encodeURIComponent(season)}`,
+      ];
+      for (const rsUrl of endpointsToTry) {
         try {
-          await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
-            .bind(cacheKey, JSON.stringify(bsList), now).run();
-        } catch(e) {}
-      } catch(e) {
-        return fail(500, e.message);
+          const res = await fetch(rsUrl, { headers });
+          const shortUrl = rsUrl.replace(RS_BASE, '');
+          triedUrls.push({ url: shortUrl, status: res.status });
+          if (res.ok) {
+            const data = await res.json();
+            bsList = data.playerBoxScores || data.boxScores || data.performances || data.items || (Array.isArray(data) ? data : []);
+            try {
+              await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
+                .bind(cacheKey, JSON.stringify(bsList), now).run();
+            } catch(e) {}
+            break;
+          }
+        } catch(e) {
+          triedUrls.push({ url: rsUrl.replace(RS_BASE, ''), error: e.message });
+        }
       }
+    }
+
+    if (!bsList || bsList.length === 0) {
+      return new Response(JSON.stringify({ ok: false, url: null, debug: { tried: triedUrls, entityId, sport, season, day } }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
 
     const match = bsList.find(function(b) {
@@ -236,7 +256,7 @@ export async function onRequestGet(context) {
     return new Response(JSON.stringify({
       ok: true,
       url: perfHash ? 'https://www.realapp.com/' + perfHash : null,
-      debug: { bsCount: bsList.length, day, perfId, sampleKeys: match ? Object.keys(match) : (bsList[0] ? Object.keys(bsList[0]) : []), sample: bsList[0] || null }
+      debug: { tried: triedUrls, bsCount: bsList.length, day, perfId, sampleKeys: match ? Object.keys(match) : (bsList[0] ? Object.keys(bsList[0]) : []), sample: bsList[0] || null }
     }), { headers: { 'Content-Type': 'application/json' } });
   }
 
@@ -249,7 +269,7 @@ export async function onRequestGet(context) {
     const entityType = url.searchParams.get('entityType') || 'player';
     if (!id) return fail(400, 'Missing id');
 
-    const cacheKey = `otd_earnings_v2_${entityType}_${sport}_${season}_${id}_l${level}`;
+    const cacheKey = `otd_earnings_v3_${entityType}_${sport}_${season}_${id}_l${level}`;
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
       if (cached && (now - cached.fetched_at) < 43200) {
@@ -267,7 +287,8 @@ export async function onRequestGet(context) {
       }
       if (!res.ok) return fail(res.status, 'RS earnings failed: ' + res.status);
       const data = await res.json();
-      const body = JSON.stringify({ ok: true, earnings: data.earnings || [] });
+      // rawSample: first entry with all fields — lets us discover if RS includes boxscore IDs
+      const body = JSON.stringify({ ok: true, earnings: data.earnings || [], rawSample: (data.earnings || [])[0] || null });
       try {
         await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
           .bind(cacheKey, body, now).run();

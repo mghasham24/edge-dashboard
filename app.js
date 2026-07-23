@@ -3276,8 +3276,14 @@
             .catch(function() { window.open('https://www.realapp.com', '_blank'); });
     }
 
-    function otdOpenPerfLink(entityId, sport, entityType, calDay, season) {
+    function otdOpenPerfLink(entityId, sport, entityType, calDay, season, bsId) {
         var fallback = rsEntityUrl(entityType, sport, parseInt(entityId, 10));
+        // Fast path: boxscore ID already in earnings data — build URL directly, no API call
+        var bsIdNum = bsId ? parseInt(bsId, 10) : 0;
+        if (bsIdNum > 0) {
+            window.open('https://www.realapp.com/' + rsUrlHash(14, 0, 0, bsIdNum), '_blank');
+            return;
+        }
         if (!entityId || !calDay || !season) { window.open(fallback, '_blank'); return; }
         fetch('/api/real/otd?action=perf_url&id=' + encodeURIComponent(entityId) +
             '&sport=' + encodeURIComponent(sport) +
@@ -4216,7 +4222,7 @@
                 var SOCCER_SK = { epl:1, ucl:1, mls:1, fc:1, fifa:1, soccer:1 };
                 var sk = SOCCER_SK[p.sport] ? 'soccer' : p.sport;
                 if (!rawDateMap[dayKey][sk]) rawDateMap[dayKey][sk] = [];
-                rawDateMap[dayKey][sk].push({ player: p, rax: e.atRarityEarnings || 0, origDay: (e.day || '').split('T')[0].trim() });
+                rawDateMap[dayKey][sk].push({ player: p, rax: e.atRarityEarnings || 0, origDay: (e.day || '').split('T')[0].trim(), bsId: e.playerBoxScoreId || e.boxScoreId || e.boxscoreId || e.performanceId || e.gameId || null });
             });
         });
 
@@ -4372,7 +4378,7 @@
                 var pId = String(e.player.passId || (passRef && passRef.passId) || '');
                 var linkDay = e.origDay || otdSelectedDay;
                 var cardBtn = '<button class="otd-link-btn" title="View card on RS" onclick="otdOpenCardLink(\'' + eid + '\',\'' + e.player.sport + '\',\'' + eet + '\',\'' + linkDay + '\',\'' + pId + '\')">' + OTD_CARD_ICON + '</button>';
-                var perfBtn = '<button class="otd-link-btn" title="View performance on RS" onclick="otdOpenPerfLink(\'' + eid + '\',\'' + e.player.sport + '\',\'' + eet + '\',\'' + linkDay + '\',\'' + (e.player.season||'') + '\')">' + OTD_PERF_ICON + '</button>';
+                var perfBtn = '<button class="otd-link-btn" title="View performance on RS" onclick="otdOpenPerfLink(\'' + eid + '\',\'' + e.player.sport + '\',\'' + eet + '\',\'' + linkDay + '\',\'' + (e.player.season||'') + '\',\'' + (e.bsId||'') + '\')">' + OTD_PERF_ICON + '</button>';
                 var bgSrc = bgSource ? '/api/real/otd?action=card_bg&src=' + encodeURIComponent(bgSource) : '';
                 var multiplier = e.player.multiplier || (passRef && passRef.multiplier) || null;
                 var multNum = multiplier ? parseInt(multiplier, 10) : 0;
@@ -4465,7 +4471,7 @@
                         var eet = w.player.entityType || 'player';
                         var sp = w.player.sport || '';
                         var cBtn = eid ? '<button class="otd-link-btn" style="padding:2px 4px" title="View card" onclick="otdOpenCardLink(\'' + eid + '\',\'' + sp + '\',\'' + eet + '\',\'' + linkDay + '\',\'' + pid + '\')">' + OVL_CARD_ICON + '</button>' : '';
-                        var pBtn = eid ? '<button class="otd-link-btn" style="padding:2px 4px" title="View performance" onclick="otdOpenPerfLink(\'' + eid + '\',\'' + sp + '\',\'' + eet + '\',\'' + linkDay + '\',\'' + (w.player.season||'') + '\')">' + OVL_PERF_ICON + '</button>' : '';
+                        var pBtn = eid ? '<button class="otd-link-btn" style="padding:2px 4px" title="View performance" onclick="otdOpenPerfLink(\'' + eid + '\',\'' + sp + '\',\'' + eet + '\',\'' + linkDay + '\',\'' + (w.player.season||'') + '\',\'' + (w.bsId||'') + '\')">' + OVL_PERF_ICON + '</button>' : '';
                         return '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;border-bottom:1px solid var(--border);font-size:12px;gap:6px">' +
                             '<div style="flex:1;min-width:0">' +
                                 '<span style="font-family:var(--mono);font-size:10px;color:var(--muted);white-space:nowrap;margin-right:6px">' + escHtml(dateStr) + '</span>' +
