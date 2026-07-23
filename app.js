@@ -4576,10 +4576,8 @@
                 var dp = (e.day || '').split('T')[0].split('-');
                 if (dp.length !== 3) return;
                 var oy = parseInt(dp[0], 10);
-                // Past-year earnings: remap to otdCalYear (show OTD claim date in current year view)
-                // Current-year earnings: use actual date (they appear on their real calendar day)
-                var yr = oy < thisYear ? String(otdCalYear) : dp[0];
-                findDateSet[yr + '-' + dp[1].padStart(2,'0') + '-' + dp[2].padStart(2,'0')] = true;
+                if (oy >= thisYear && otdCalYear <= oy) return;
+                findDateSet[String(otdCalYear) + '-' + dp[1].padStart(2,'0') + '-' + dp[2].padStart(2,'0')] = true;
             });
         }
         var rawDateMap = {};
