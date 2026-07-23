@@ -3593,6 +3593,13 @@
 
         var months = Object.keys(monthMap).map(Number).sort(function(a, b) { return a - b; });
         if (!months.length) {
+            var yr = parseInt(fp.season, 10);
+            if (yr >= thisYear) {
+                return '<div style="font-size:12px;color:var(--muted2);line-height:1.5">' +
+                    '<strong style="color:var(--fg)">' + yr + ' card — OTD starts in ' + (yr + 1) + '.</strong><br>' +
+                    'Games from the current season aren\'t claimable as OTD until the following year. Switch the calendar to ' + (yr + 1) + ' to see earning dates.' +
+                '</div>';
+            }
             return '<div style="font-size:12px;color:var(--muted)">No earning days found for this player/season.</div>';
         }
 
@@ -4190,7 +4197,7 @@
                 var SOCCER_SK = { epl:1, ucl:1, mls:1, fc:1, fifa:1, soccer:1 };
                 var sk = SOCCER_SK[p.sport] ? 'soccer' : p.sport;
                 if (!rawDateMap[dayKey][sk]) rawDateMap[dayKey][sk] = [];
-                rawDateMap[dayKey][sk].push({ player: p, rax: e.atRarityEarnings || 0 });
+                rawDateMap[dayKey][sk].push({ player: p, rax: e.atRarityEarnings || 0, origDay: (e.day || '').split('T')[0].trim() });
             });
         });
 
@@ -4234,7 +4241,7 @@
                 var losers = thirdCandidates[dayKey].filter(function(c) { return c !== best3rd && (c.rax||0) >= 200; });
                 if (losers.length) {
                     if (!overlapMap[dayKey]) overlapMap[dayKey] = [];
-                    overlapMap[dayKey].push({ sport: 'cross-sport', wasted: losers });
+                    overlapMap[dayKey].push({ sport: '3rd-slot', wasted: losers });
                 }
             }
         });
@@ -4344,8 +4351,9 @@
                 var eid = String(e.player.id);
                 var eet = e.player.entityType || 'player';
                 var pId = String(e.player.passId || (passRef && passRef.passId) || '');
-                var cardBtn = '<button class="otd-link-btn" title="View card on RS" onclick="otdOpenCardLink(\'' + eid + '\',\'' + e.player.sport + '\',\'' + eet + '\',\'' + otdSelectedDay + '\',\'' + pId + '\')">' + OTD_CARD_ICON + '</button>';
-                var perfBtn = '<button class="otd-link-btn" title="View performance on RS" onclick="otdOpenPerfLink(\'' + eid + '\',\'' + e.player.sport + '\',\'' + eet + '\',\'' + otdSelectedDay + '\')">' + OTD_PERF_ICON + '</button>';
+                var linkDay = e.origDay || otdSelectedDay;
+                var cardBtn = '<button class="otd-link-btn" title="View card on RS" onclick="otdOpenCardLink(\'' + eid + '\',\'' + e.player.sport + '\',\'' + eet + '\',\'' + linkDay + '\',\'' + pId + '\')">' + OTD_CARD_ICON + '</button>';
+                var perfBtn = '<button class="otd-link-btn" title="View performance on RS" onclick="otdOpenPerfLink(\'' + eid + '\',\'' + e.player.sport + '\',\'' + eet + '\',\'' + linkDay + '\')">' + OTD_PERF_ICON + '</button>';
                 var bgSrc = bgSource ? '/api/real/otd?action=card_bg&src=' + encodeURIComponent(bgSource) : '';
                 var multiplier = e.player.multiplier || (passRef && passRef.multiplier) || null;
                 var multNum = multiplier ? parseInt(multiplier, 10) : 0;
@@ -4418,21 +4426,37 @@
         var overlapPanel = '';
         if (otdShowOverlaps && overlapCount > 0) {
             var MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            var OVL_CARD_ICON = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>';
+            var OVL_PERF_ICON = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>';
             var overlapRows = overlapKeys.slice(0, 60).map(function(dk) {
                 var parts = dk.split('-');
                 var dateStr = MONTH_SHORT[parseInt(parts[1],10)-1] + ' ' + parseInt(parts[2],10);
                 var groups = otdOverlapMap[dk];
                 return groups.map(function(g) {
+                    var sportLabel = g.sport === '3rd-slot' ? '3rd slot beaten' : g.sport.toUpperCase();
+                    var sportColor = g.sport === '3rd-slot' ? '#9c27b0' : 'var(--muted)';
                     return g.wasted.map(function(w) {
                         var lbl = (OTD_LEVEL_OPTIONS.find(function(o){return o.value===w.player.level;})||{}).label || '';
-                        return '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;border-bottom:1px solid var(--border);font-size:12px">' +
-                            '<div>' +
-                                '<span style="font-family:var(--mono);font-size:10px;color:var(--muted);min-width:44px;display:inline-block">' + escHtml(dateStr) + '</span>' +
+                        var yr = escHtml(otdFormatSeason(w.player.sport, w.player.season));
+                        var linkDay = w.origDay || dk;
+                        var pid = w.player.passId || '';
+                        var eid = String(w.player.id || '');
+                        var eet = w.player.entityType || 'player';
+                        var sp = w.player.sport || '';
+                        var cBtn = eid ? '<button class="otd-link-btn" style="padding:2px 4px" title="View card" onclick="otdOpenCardLink(\'' + eid + '\',\'' + sp + '\',\'' + eet + '\',\'' + linkDay + '\',\'' + pid + '\')">' + OVL_CARD_ICON + '</button>' : '';
+                        var pBtn = eid ? '<button class="otd-link-btn" style="padding:2px 4px" title="View performance" onclick="otdOpenPerfLink(\'' + eid + '\',\'' + sp + '\',\'' + eet + '\',\'' + linkDay + '\')">' + OVL_PERF_ICON + '</button>' : '';
+                        return '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;border-bottom:1px solid var(--border);font-size:12px;gap:6px">' +
+                            '<div style="flex:1;min-width:0">' +
+                                '<span style="font-family:var(--mono);font-size:10px;color:var(--muted);white-space:nowrap;margin-right:6px">' + escHtml(dateStr) + '</span>' +
                                 '<span style="font-weight:600;color:var(--fg)">' + escHtml(w.player.name) + '</span>' +
                                 (lbl ? '<span style="font-size:9px;background:' + (w.player.rarityColor||'var(--muted)')+';color:#fff;border-radius:3px;padding:1px 4px;margin-left:5px;font-weight:700">' + escHtml(lbl) + '</span>' : '') +
-                                '<span style="font-size:10px;color:var(--muted);margin-left:5px">' + g.sport.toUpperCase() + '</span>' +
+                                '<span style="font-size:10px;color:var(--muted);margin-left:5px">' + yr + '</span>' +
+                                '<span style="font-size:9px;color:' + sportColor + ';margin-left:5px;font-weight:600">' + escHtml(sportLabel) + '</span>' +
                             '</div>' +
-                            '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:#ef5350">' + RAX_ICON + (w.rax||0).toLocaleString() + ' lost</span>' +
+                            '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0">' +
+                                '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:#ef5350">' + RAX_ICON + (w.rax||0).toLocaleString() + '</span>' +
+                                cBtn + pBtn +
+                            '</div>' +
                         '</div>';
                     }).join('');
                 }).join('');
