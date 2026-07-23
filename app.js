@@ -3130,8 +3130,8 @@
         { key: 'wnba',   label: 'WNBA' },
         { key: 'golf',   label: 'Golf' },
         { key: 'ufc',    label: 'UFC / MMA' },
-        { key: 'ncaaf',  label: 'CFB (NCAAF)' },
-        { key: 'ncaabb', label: 'CBB (NCAAB)' },
+        { key: 'ncaaf',  label: 'CFB' },
+        { key: 'ncaabb', label: 'CBB' },
         { key: 'epl',    label: 'Soccer – EPL' },
         { key: 'ucl',    label: 'Soccer – UCL' },
         { key: 'mls',    label: 'Soccer – MLS' },
@@ -3139,7 +3139,7 @@
     ];
 
     // Cross-year sports: season N = "N-(N+1)" display. Single-year: just "N" abbreviated.
-    var OTD_CROSS_YEAR_SPORTS = { nfl:1, nba:1, nhl:1, ncaaf:1, ncaam:1, ncaab:1, ncaabb:1, epl:1, ucl:1, soccer:1, fc:1 };
+    var OTD_CROSS_YEAR_SPORTS = { nfl:1, nba:1, nhl:1, ncaaf:1, ncaam:1, ncaab:1, ncaabb:1, epl:1, ucl:1, soccer:1, fc:1, mls:1, fifa:1 };
     function otdFormatSeason(sport, season) {
         var yr = parseInt(season, 10);
         if (!yr) return String(season);
@@ -3277,7 +3277,11 @@
         clearTimeout(otdCheckSearchTimer);
         var ac = document.getElementById('otd-check-ac');
         if (!ac) return;
-        if (!val || val.length < 2) { ac.style.display = 'none'; return; }
+        if (!val || val.length < 2) {
+            ac.style.display = 'none';
+            if (!val) { otdCheckPlayer = null; otdCheckEarnings = null; renderOtdCheckWrap(); }
+            return;
+        }
         var sport = (document.getElementById('otd-check-sport') || {}).value || 'mlb';
         otdCheckSearchTimer = setTimeout(function() {
             fetch('/api/real/otd?action=search&q=' + encodeURIComponent(val) + '&sport=' + sport, { credentials: 'same-origin' })
@@ -4001,7 +4005,7 @@
             });
     }
 
-    var OTD_SPORT_EMOJI = {mlb:'⚾',nba:'🏀',nhl:'🏒',nfl:'🏈',wnba:'🏀',golf:'⛳',ufc:'🥊',ncaaf:'🏈',ncaabb:'🏀',epl:'⚽',ucl:'⚽',mls:'⚽',fifa:'⚽'};
+    var OTD_SPORT_EMOJI = {mlb:'⚾',nba:'🏀',nhl:'🏒',nfl:'🏈',wnba:'🏀',golf:'⛳',ufc:'🥊',ncaaf:'🏈',ncaabb:'🏀',ncaam:'🏀',epl:'⚽',ucl:'⚽',mls:'⚽',fifa:'⚽',soccer:'⚽',fc:'⚽'};
     function otdRarityColor(level) {
         if (level <= 0)  return '#78909c';
         if (level === 1) return '#607d8b';
@@ -4131,7 +4135,8 @@
                 if (origYear >= thisYear && otdCalYear <= origYear) return;
                 var dayKey = String(otdCalYear) + '-' + dp[1].padStart(2,'0') + '-' + dp[2].padStart(2,'0');
                 if (!rawDateMap[dayKey]) rawDateMap[dayKey] = {};
-                var sk = p.sport;
+                var SOCCER_SK = { epl:1, ucl:1, mls:1, fc:1, fifa:1, soccer:1 };
+                var sk = SOCCER_SK[p.sport] ? 'soccer' : p.sport;
                 if (!rawDateMap[dayKey][sk]) rawDateMap[dayKey][sk] = [];
                 rawDateMap[dayKey][sk].push({ player: p, rax: e.atRarityEarnings || 0 });
             });
@@ -4285,25 +4290,26 @@
                         '<span class="otd-thumb-year">' + escHtml(yearFmt) + '</span>' +
                     '</div>' +
                     (avHash ? '<img src="https://media.realapp.com/assets/players/default/small/' + avHash + '.webp" class="otd-mini-card-av" onerror="this.style.display=\'none\'">' : '') +
-                    '<div class="otd-thumb-bottom">' +
-                        (serial ? '<div class="otd-mini-card-serial" style="color:' + rc + '">#' + serial + '</div>' : '') +
-                    '</div>' +
+                    '<div class="otd-thumb-bottom"></div>' +
                 '</div>';
                 var playerIdx = otdPlayers.indexOf(e.player);
                 var rarSel = playerIdx >= 0 ? '<select class="otd-level-sel" style="color:' + rc + '" onchange="otdChangeLevel(' + playerIdx + ',parseInt(this.value,10))" title="Change rarity">' +
                     OTD_LEVEL_OPTIONS.map(function(o) { return '<option value="' + o.value + '"' + (o.value === lvl ? ' selected' : '') + '>' + escHtml(o.label) + '</option>'; }).join('') +
                     '</select>' : '';
-                var body = '<div class="otd-entry-tile-body">' +
-                    '<div class="otd-entry-tile-name">' + escHtml(e.player.name) + '</div>' +
-                '</div>';
-                var footer = '<div class="otd-entry-tile-footer">' +
-                    '<div>' +
-                        '<span class="otd-day-entry-rax">' + RAX_ICON + (e.rax || 0).toLocaleString() + '</span>' +
-                        (baseRax ? '<div style="font-size:8px;color:var(--muted);font-family:var(--mono);margin-top:1px">' + baseRax.toLocaleString() + ' × ' + multNum + 'x</div>' : '') +
+                var tile = '<div class="otd-day-entry" style="border-color:' + rc + '55">' +
+                    thumb +
+                    '<div class="otd-entry-tile-body">' +
+                        '<div class="otd-entry-tile-name">' + escHtml(e.player.name) + '</div>' +
+                        '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">' +
+                            '<span class="otd-day-entry-rax">' + RAX_ICON + (e.rax || 0).toLocaleString() + '</span>' +
+                            (baseRax ? '<span style="font-size:8px;color:var(--muted);font-family:var(--mono)">' + baseRax.toLocaleString() + '×' + multNum + 'x</span>' : '') +
+                        '</div>' +
                     '</div>' +
-                    '<div style="display:flex;align-items:center;gap:1px">' + rarSel + cardBtn + perfBtn + '</div>' +
                 '</div>';
-                return '<div class="otd-day-entry" style="border-color:' + rc + '55">' + thumb + body + footer + '</div>';
+                var actions = '<div class="otd-entry-actions">' +
+                    rarSel + cardBtn + perfBtn +
+                '</div>';
+                return '<div class="otd-entry-wrap">' + tile + actions + '</div>';
             }).join('');
 
             dayPanel = '<div class="otd-day-panel">' +

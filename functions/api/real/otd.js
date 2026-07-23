@@ -76,10 +76,26 @@ export async function onRequestGet(context) {
     const norm = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
     const queryWords = norm(q).split(/\s+/).filter(w => w.length > 1);
 
+    // RS search sport key aliases — some sport codes need a different string for the search endpoint
+    const SEARCH_SPORT_ALIAS = { ncaabb: 'ncaab', ufc: 'mma', ncaam: 'ncaab' };
+    const searchSport = SEARCH_SPORT_ALIAS[sport] || sport;
+
     try {
-      const res = await fetch(`${RS_BASE}/search?query=${encodeURIComponent(q)}&sport=${sport}`, { headers });
-      if (!res.ok) return fail(res.status, 'RS search failed: ' + res.status);
-      const data = await res.json();
+      // Try primary search sport; if no results, retry with alias or vice versa
+      const trySearch = async (sp) => {
+        const r = await fetch(`${RS_BASE}/search?query=${encodeURIComponent(q)}&sport=${sp}`, { headers });
+        if (!r.ok) return null;
+        return r.json();
+      };
+      let data = await trySearch(searchSport);
+      // If the alias was different and returned nothing, also try the original key
+      if (data && searchSport !== sport) {
+        const hasResults = (data.players || []).length || (data.entities || []).length ||
+          ((data.results && data.results.plays) || []).length || ((data.results && data.results.entities) || []).length;
+        if (!hasResults) { const d2 = await trySearch(sport); if (d2) data = d2; }
+      }
+      if (!data) return fail(500, 'RS search failed');
+
 
       const playerMap = {};
       const addPlayer = (pObj) => {
