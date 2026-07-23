@@ -3515,7 +3515,7 @@
         otdCheckLoading = true;
         otdCheckEarnings = null;
         renderOtdCheckWrap();
-        fetch('/api/real/otd?action=earnings&id=' + checkId + '&sport=' + cp2.sport + '&season=' + cp2.season + '&level=' + cp2.level + '&entityType=' + cp2.entityType, { credentials: 'same-origin' })
+        fetch('/api/real/otd?action=earnings&id=' + checkId + '&sport=' + cp2.sport + '&season=' + cp2.season + '&level=' + cp2.level + '&entityType=' + cp2.entityType + '&force=1', { credentials: 'same-origin' })
             .then(function(r) { return r.ok ? r.json() : { ok: false }; })
             .then(function(d) {
                 otdCheckLoading = false;

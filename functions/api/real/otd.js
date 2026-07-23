@@ -289,13 +289,16 @@ export async function onRequestGet(context) {
     const entityType = url.searchParams.get('entityType') || 'player';
     if (!id) return fail(400, 'Missing id');
 
-    const cacheKey = `otd_earnings_v4_${entityType}_${sport}_${season}_${id}_l${level}`;
-    try {
-      const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
-      if (cached && (now - cached.fetched_at) < 43200) {
-        return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
-      }
-    } catch(e) {}
+    const force = url.searchParams.get('force') === '1';
+    const cacheKey = `otd_earnings_v5_${entityType}_${sport}_${season}_${id}_l${level}`;
+    if (!force) {
+      try {
+        const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
+        if (cached && (now - cached.fetched_at) < 43200) {
+          return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
+        }
+      } catch(e) {}
+    }
 
     try {
       const earningsUrl = `${RS_BASE}/userpassearnings/${sport}/season/${season}/entity/${entityType}/${id}?level=${level}`;
