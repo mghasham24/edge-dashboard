@@ -3509,6 +3509,7 @@
     function otdSelectPass(playerIdx) {
         var p = otdPlayers[playerIdx];
         if (!p) return;
+        var savedScroll = (document.getElementById('otd-passes-list') || {}).scrollTop || 0;
         if (otdSelectedPass === p) {
             otdSelectedPass = null;
             otdSelectedPassMonth = null;
@@ -3521,6 +3522,8 @@
             otdFindPlayer = { id: p.id, name: p.name, sport: p.sport, season: p.season, level: p.level || 4, levelLabel: p.levelLabel || '' };
         }
         renderOtdResults();
+        var listEl = document.getElementById('otd-passes-list');
+        if (listEl && savedScroll) listEl.scrollTop = savedScroll;
     }
 
     function otdSelectPassMonth(mk) {
@@ -3629,31 +3632,30 @@
             var isLoading = p.earnings === null;
             var isSelected = p === otdSelectedPass;
             var bgUrl = p.backgroundSource ? '/api/real/otd?action=card_bg&src=' + encodeURIComponent(p.backgroundSource) : '';
-            var headshot = av ? 'https://media.realapp.com/assets/players/default/small/' + av + '.webp' : '';
+            var eid = String(p.id || '');
+            var eet = p.entityType || 'player';
+            var pId = String(p.passId || '');
+            var CARD_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>';
 
-            return '<div onclick="otdSelectPass(' + playerIdx + ')" style="position:relative;border-radius:10px;overflow:hidden;height:155px;cursor:pointer;background:linear-gradient(160deg,' + rc + '44 0%,' + rc + '18 100%);border:' + (isSelected ? '2px solid ' + rc : '1px solid ' + rc + '55') + ';box-shadow:' + (isSelected ? '0 0 0 1px ' + rc + '66' : 'none') + '">' +
-                // Card art background
-                (bgUrl ? '<img src="' + bgUrl + '" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center" onerror="this.style.display=\'none\'">' : '') +
-                // Dark gradient overlay
-                '<div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.1) 0%,rgba(0,0,0,.45) 45%,rgba(0,0,0,.85) 100%)"></div>' +
+            return '<div onclick="otdSelectPass(' + playerIdx + ')" style="position:relative;border-radius:10px;overflow:hidden;height:180px;cursor:pointer;background:linear-gradient(160deg,' + rc + '55 0%,' + rc + '22 100%);border:' + (isSelected ? '2px solid ' + rc : '1px solid ' + rc + '55') + ';box-shadow:' + (isSelected ? '0 0 0 1px ' + rc + '66,0 0 12px ' + rc + '33' : 'none') + '">' +
+                // Card art background — player image is embedded in the card art
+                (bgUrl
+                    ? '<img src="' + bgUrl + '" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:top center" onerror="this.style.display=\'none\'">'
+                    : '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:40px;opacity:.35">' + emoji + '</div>') +
+                // Dark gradient overlay — heavier at bottom for text
+                '<div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.05) 0%,rgba(0,0,0,.3) 50%,rgba(0,0,0,.88) 100%)"></div>' +
                 // Top row: sport left, year right
-                '<div style="position:absolute;top:6px;left:6px;right:6px;display:flex;justify-content:space-between;z-index:2">' +
-                    '<span style="font-size:8px;font-weight:800;color:#fff;background:rgba(0,0,0,.55);padding:2px 5px;border-radius:3px;letter-spacing:.03em">' + p.sport.toUpperCase() + '</span>' +
-                    '<span style="font-size:8px;font-weight:600;color:rgba(255,255,255,.85);background:rgba(0,0,0,.55);padding:2px 5px;border-radius:3px">' + escHtml(seasonFmt) + '</span>' +
-                '</div>' +
-                // Player headshot
-                '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-62%);z-index:2;width:50px;height:50px">' +
-                    (headshot
-                        ? '<img src="' + headshot + '" style="width:50px;height:50px;border-radius:50%;object-fit:cover;object-position:top center;border:2px solid rgba(255,255,255,.7)" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' +
-                          '<div style="display:none;width:50px;height:50px;border-radius:50%;background:' + rc + '44;align-items:center;justify-content:center;font-size:22px">' + emoji + '</div>'
-                        : '<div style="display:flex;width:50px;height:50px;border-radius:50%;background:' + rc + '44;align-items:center;justify-content:center;font-size:22px">' + emoji + '</div>') +
+                '<div style="position:absolute;top:6px;left:6px;right:6px;display:flex;justify-content:space-between;align-items:center;z-index:2">' +
+                    '<span style="font-size:8px;font-weight:800;color:#fff;background:rgba(0,0,0,.6);padding:2px 6px;border-radius:3px;letter-spacing:.04em">' + p.sport.toUpperCase() + '</span>' +
+                    '<span style="font-size:8px;font-weight:600;color:rgba(255,255,255,.9);background:rgba(0,0,0,.6);padding:2px 6px;border-radius:3px">' + escHtml(seasonFmt) + '</span>' +
                 '</div>' +
                 // Bottom info
-                '<div style="position:absolute;bottom:0;left:0;right:0;padding:5px 7px;z-index:2">' +
-                    '<div style="font-size:10px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2;text-shadow:0 1px 3px rgba(0,0,0,.8)">' + escHtml(p.name) + '</div>' +
-                    '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:3px">' +
-                        '<span style="font-size:8px;font-weight:700;color:#fff;background:' + rc + ';border-radius:3px;padding:1px 5px">' + escHtml(p.levelLabel || ('L' + p.level)) + '</span>' +
-                        '<span style="font-size:10px;font-weight:700;font-family:var(--mono);color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.8)">' + (isLoading ? '…' : RAX_ICON + item.total.toLocaleString()) + '</span>' +
+                '<div style="position:absolute;bottom:0;left:0;right:0;padding:6px 7px 7px;z-index:2">' +
+                    '<div style="font-size:10px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3;text-shadow:0 1px 4px rgba(0,0,0,.9)">' + escHtml(p.name) + '</div>' +
+                    '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:3px;gap:4px">' +
+                        '<span style="font-size:8px;font-weight:700;color:#fff;background:' + rc + ';border-radius:3px;padding:1px 5px;flex-shrink:0">' + escHtml(p.levelLabel || ('L' + p.level)) + '</span>' +
+                        '<span style="font-size:10px;font-weight:700;font-family:var(--mono);color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.9);flex:1;text-align:right">' + (isLoading ? '…' : RAX_ICON + item.total.toLocaleString()) + '</span>' +
+                        (eid ? '<button onclick="event.stopPropagation();otdOpenCardLink(\'' + eid + '\',\'' + p.sport + '\',\'' + eet + '\',\'\',\'' + pId + '\')" title="View card on RS" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:4px;color:#fff;padding:2px 5px;cursor:pointer;display:flex;align-items:center;flex-shrink:0">' + CARD_SVG + '</button>' : '') +
                     '</div>' +
                 '</div>' +
             '</div>';
