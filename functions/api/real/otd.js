@@ -219,11 +219,14 @@ export async function onRequestGet(context) {
       }
     }
 
-    const match = bsList.find(function(b) { return (b.day || '').startsWith(day); });
+    const match = bsList.find(function(b) { return (b.day || b.date || '').startsWith(day); });
+    // Performance ID field name varies by RS API version — try all known variants
+    const perfId = match && (match.id || match.performanceId || match.boxScoreId || match.gameId);
+    const perfHash = perfId ? rsUrlEncode(14, 0, 0, typeof perfId === 'number' ? perfId : parseInt(perfId, 10)) : null;
     return new Response(JSON.stringify({
       ok: true,
-      raw: match || null,
-      debug: { bsCount: bsList.length, sample: bsList[0] || null, day }
+      url: perfHash ? 'https://www.realapp.com/' + perfHash : null,
+      debug: { bsCount: bsList.length, sample: bsList[0] || null, day, perfId }
     }), { headers: { 'Content-Type': 'application/json' } });
   }
 

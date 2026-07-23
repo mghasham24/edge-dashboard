@@ -3137,12 +3137,19 @@
 
     // Cross-year sports: season N = "N-(N+1)" display. Single-year: just "N" abbreviated.
     var OTD_CROSS_YEAR_SPORTS = { nfl:1, nba:1, nhl:1, ncaaf:1, ncaam:1, ncaab:1, ncaabb:1, epl:1, ucl:1, soccer:1, fc:1, mls:1, fifa:1 };
+    // RS stores these sports' seasons by ENDING year (e.g. NBA season=2026 = the 2025-26 season)
+    var OTD_ENDING_YEAR_SPORTS = { nba:1, nhl:1, ncaab:1, ncaabb:1, ncaam:1 };
     function otdFormatSeason(sport, season) {
         var yr = parseInt(season, 10);
         if (!yr) return String(season);
-        var y1 = String(yr).slice(-2);
-        if (OTD_CROSS_YEAR_SPORTS[sport]) return y1 + '-' + String(yr + 1).slice(-2);
-        return y1;
+        if (OTD_CROSS_YEAR_SPORTS[sport]) {
+            if (OTD_ENDING_YEAR_SPORTS[sport]) {
+                // season=2026 means the 2025-26 season
+                return String(yr - 1).slice(-2) + '-' + String(yr).slice(-2);
+            }
+            return String(yr).slice(-2) + '-' + String(yr + 1).slice(-2);
+        }
+        return String(yr).slice(-2);
     }
 
     var otdVisible = false;
@@ -3269,10 +3276,16 @@
             .catch(function() { window.open('https://www.realapp.com', '_blank'); });
     }
 
-    function otdOpenPerfLink(entityId, sport, entityType, calDay) {
+    function otdOpenPerfLink(entityId, sport, entityType, calDay, season) {
         var fallback = rsEntityUrl(entityType, sport, parseInt(entityId, 10));
-        otdDayEarningsEntry(entityId, sport, entityType, calDay)
-            .then(function(entry) { window.open((entry && entry.perfUrl) || fallback, '_blank'); })
+        if (!season || !entityId) { window.open(fallback, '_blank'); return; }
+        fetch('/api/real/otd?action=perf_url&id=' + encodeURIComponent(entityId) +
+            '&sport=' + encodeURIComponent(sport) +
+            '&entityType=' + encodeURIComponent(entityType || 'player') +
+            '&season=' + encodeURIComponent(season) +
+            '&day=' + encodeURIComponent(calDay), { credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(d) { window.open((d.ok && d.url) || fallback, '_blank'); })
             .catch(function() { window.open(fallback, '_blank'); });
     }
 
@@ -4359,7 +4372,7 @@
                 var pId = String(e.player.passId || (passRef && passRef.passId) || '');
                 var linkDay = e.origDay || otdSelectedDay;
                 var cardBtn = '<button class="otd-link-btn" title="View card on RS" onclick="otdOpenCardLink(\'' + eid + '\',\'' + e.player.sport + '\',\'' + eet + '\',\'' + linkDay + '\',\'' + pId + '\')">' + OTD_CARD_ICON + '</button>';
-                var perfBtn = '<button class="otd-link-btn" title="View performance on RS" onclick="otdOpenPerfLink(\'' + eid + '\',\'' + e.player.sport + '\',\'' + eet + '\',\'' + linkDay + '\')">' + OTD_PERF_ICON + '</button>';
+                var perfBtn = '<button class="otd-link-btn" title="View performance on RS" onclick="otdOpenPerfLink(\'' + eid + '\',\'' + e.player.sport + '\',\'' + eet + '\',\'' + linkDay + '\',\'' + (e.player.season||'') + '\')">' + OTD_PERF_ICON + '</button>';
                 var bgSrc = bgSource ? '/api/real/otd?action=card_bg&src=' + encodeURIComponent(bgSource) : '';
                 var multiplier = e.player.multiplier || (passRef && passRef.multiplier) || null;
                 var multNum = multiplier ? parseInt(multiplier, 10) : 0;
@@ -4452,7 +4465,7 @@
                         var eet = w.player.entityType || 'player';
                         var sp = w.player.sport || '';
                         var cBtn = eid ? '<button class="otd-link-btn" style="padding:2px 4px" title="View card" onclick="otdOpenCardLink(\'' + eid + '\',\'' + sp + '\',\'' + eet + '\',\'' + linkDay + '\',\'' + pid + '\')">' + OVL_CARD_ICON + '</button>' : '';
-                        var pBtn = eid ? '<button class="otd-link-btn" style="padding:2px 4px" title="View performance" onclick="otdOpenPerfLink(\'' + eid + '\',\'' + sp + '\',\'' + eet + '\',\'' + linkDay + '\')">' + OVL_PERF_ICON + '</button>' : '';
+                        var pBtn = eid ? '<button class="otd-link-btn" style="padding:2px 4px" title="View performance" onclick="otdOpenPerfLink(\'' + eid + '\',\'' + sp + '\',\'' + eet + '\',\'' + linkDay + '\',\'' + (w.player.season||'') + '\')">' + OVL_PERF_ICON + '</button>' : '';
                         return '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;border-bottom:1px solid var(--border);font-size:12px;gap:6px">' +
                             '<div style="flex:1;min-width:0">' +
                                 '<span style="font-family:var(--mono);font-size:10px;color:var(--muted);white-space:nowrap;margin-right:6px">' + escHtml(dateStr) + '</span>' +
