@@ -152,6 +152,21 @@ export async function onRequestGet(context) {
     return new Response(text, { headers: { 'Content-Type': 'application/json' } });
   }
 
+  // Admin debug: returns raw RS earnings response — shows exact field names and structure
+  if (action === 'earnings_raw') {
+    if (!session.is_admin) return fail(403, 'Admin only');
+    const id = url.searchParams.get('id');
+    const sport = url.searchParams.get('sport') || 'mlb';
+    const season = url.searchParams.get('season') || '2025';
+    const level = url.searchParams.get('level') || '1';
+    const entityType = url.searchParams.get('entityType') || 'player';
+    if (!id) return fail(400, 'Missing id');
+    const earningsUrl = `${RS_BASE}/userpassearnings/${sport}/season/${season}/entity/${entityType}/${id}?level=${level}`;
+    const res = await fetch(earningsUrl, { headers });
+    const text = await res.text();
+    return new Response(JSON.stringify({ status: res.status, url: earningsUrl.replace(RS_BASE, ''), body: JSON.parse(text) }, null, 2), { headers: { 'Content-Type': 'application/json' } });
+  }
+
   // Card link: get the RS page hash for an owned pass (entity card URL)
   if (action === 'pass_url') {
     const entityId = url.searchParams.get('id');
