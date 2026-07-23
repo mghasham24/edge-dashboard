@@ -76,31 +76,37 @@ export async function onRequestGet(context) {
     const norm = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
     const queryWords = norm(q).split(/\s+/).filter(w => w.length > 1);
 
-    // RS search sport key aliases — some sport codes need a different string for the search endpoint
+    // RS search sport key aliases — try alternate keys when primary returns nothing
     const SEARCH_SPORT_ALIAS = { ncaabb: 'ncaab', ufc: 'mma', ncaam: 'ncaab' };
     const searchSport = SEARCH_SPORT_ALIAS[sport] || sport;
 
     try {
-      // Try primary search sport; if no results, retry with alias or vice versa
       const trySearch = async (sp) => {
-        const r = await fetch(`${RS_BASE}/search?query=${encodeURIComponent(q)}&sport=${sp}`, { headers });
+        const sportParam = sp ? `&sport=${sp}` : '';
+        const r = await fetch(`${RS_BASE}/search?query=${encodeURIComponent(q)}${sportParam}`, { headers });
         if (!r.ok) return null;
         return r.json();
       };
+      const countResults = (d) => (d.players || []).length + (d.entities || []).length +
+        ((d.results && d.results.plays) || []).length + ((d.results && d.results.entities) || []).length +
+        ((d.results && d.results.players) || []).length;
+
       let data = await trySearch(searchSport);
-      // If the alias was different and returned nothing, also try the original key
-      if (data && searchSport !== sport) {
-        const hasResults = (data.players || []).length || (data.entities || []).length ||
-          ((data.results && data.results.plays) || []).length || ((data.results && data.results.entities) || []).length;
-        if (!hasResults) { const d2 = await trySearch(sport); if (d2) data = d2; }
+      // Try alias key if primary returned nothing
+      if (data && searchSport !== sport && countResults(data) === 0) {
+        const d2 = await trySearch(sport); if (d2) data = d2;
+      }
+      // Final fallback: search without sport filter (catches UFC fighters / CBB players)
+      if (data && countResults(data) === 0) {
+        const d3 = await trySearch(null); if (d3) data = d3;
       }
       if (!data) return fail(500, 'RS search failed');
-
 
       const playerMap = {};
       const addPlayer = (pObj) => {
         if (!pObj || !pObj.id || playerMap[pObj.id]) return;
-        const name = ((pObj.firstName || '') + ' ' + (pObj.lastName || '')).trim();
+        // RS returns firstName+lastName for most sports; name field for some (e.g. UFC fighters)
+        const name = (pObj.name || ((pObj.firstName || '') + ' ' + (pObj.lastName || '')).trim()).trim();
         if (!name) return;
         if (!queryWords.some(w => norm(name).includes(w))) return;
         playerMap[pObj.id] = { id: pObj.id, name, sport, teamId: pObj.teamId, avatar: pObj.avatar || '' };
