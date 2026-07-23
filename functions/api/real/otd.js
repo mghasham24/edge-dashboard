@@ -193,7 +193,7 @@ export async function onRequestGet(context) {
     const entityType = url.searchParams.get('entityType') || 'player';
     if (!entityId || !sport || !season || !day) return fail(400, 'Missing params');
 
-    const cacheKey = `otd_perf_url_v1_${entityType}_${sport}_${entityId}_${season}`;
+    const cacheKey = `otd_perf_url_v2_${entityType}_${sport}_${entityId}_${season}`;
     let bsList;
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
@@ -219,14 +219,24 @@ export async function onRequestGet(context) {
       }
     }
 
-    const match = bsList.find(function(b) { return (b.day || b.date || '').startsWith(day); });
-    // Performance ID field name varies by RS API version — try all known variants
-    const perfId = match && (match.id || match.performanceId || match.boxScoreId || match.gameId);
-    const perfHash = perfId ? rsUrlEncode(14, 0, 0, typeof perfId === 'number' ? perfId : parseInt(perfId, 10)) : null;
+    const match = bsList.find(function(b) {
+      const d = b.day || b.date || b.gameDate || b.scheduledAt || b.startTime || '';
+      return d.startsWith(day) || d.replace('T', ' ').startsWith(day);
+    });
+    // Try every plausible field name RS might use for the boxscore entity ID
+    const perfId = match && (
+      match.playerBoxScoreId || match.playerBoxscoreId ||
+      match.boxScoreId       || match.boxscoreId       ||
+      match.id               || match.entityId          ||
+      match.performanceId    || match.gameId            ||
+      match.bsId             || match.recordId
+    );
+    const numPerfId = perfId ? (typeof perfId === 'number' ? perfId : parseInt(perfId, 10)) : null;
+    const perfHash = numPerfId ? rsUrlEncode(14, 0, 0, numPerfId) : null;
     return new Response(JSON.stringify({
       ok: true,
       url: perfHash ? 'https://www.realapp.com/' + perfHash : null,
-      debug: { bsCount: bsList.length, sample: bsList[0] || null, day, perfId }
+      debug: { bsCount: bsList.length, day, perfId, sampleKeys: match ? Object.keys(match) : (bsList[0] ? Object.keys(bsList[0]) : []), sample: bsList[0] || null }
     }), { headers: { 'Content-Type': 'application/json' } });
   }
 
