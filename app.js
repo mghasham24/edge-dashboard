@@ -3138,6 +3138,16 @@
         { key: 'fifa',   label: 'Soccer – FIFA' },
     ];
 
+    // Cross-year sports: season N = "N-(N+1)" display. Single-year: just "N" abbreviated.
+    var OTD_CROSS_YEAR_SPORTS = { nfl:1, nba:1, nhl:1, ncaaf:1, ncaam:1, ncaab:1, ncaabb:1, epl:1, ucl:1, soccer:1, fc:1 };
+    function otdFormatSeason(sport, season) {
+        var yr = parseInt(season, 10);
+        if (!yr) return String(season);
+        var y1 = String(yr).slice(-2);
+        if (OTD_CROSS_YEAR_SPORTS[sport]) return y1 + '-' + String(yr + 1).slice(-2);
+        return y1;
+    }
+
     var otdVisible = false;
     var otdPlayers = []; // { id, name, sport, season, level, levelLabel, color, earnings }
     var otdSearchTimer = null;
@@ -3301,6 +3311,9 @@
     function otdCheckSportChange(sport) {
         if (otdCheckPlayer) { otdCheckPlayer.sport = sport; otdCheckEarnings = null; }
         renderOtdCheckWrap();
+        // Re-run search with new sport so results match
+        var inp = document.getElementById('otd-check-input');
+        if (inp && inp.value && inp.value.length >= 2) otdCheckSearchInput(inp.value);
     }
 
     function otdClear() {
@@ -3541,7 +3554,7 @@
                         'oninput="otdFindSearchInput(this.value)" />' +
                     '<div id="otd-find-ac" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg2);border:1px solid var(--border2);border-radius:6px;z-index:200;margin-top:3px;overflow:hidden"></div>' +
                 '</div>' +
-                '<select id="otd-find-sport" onchange="if(otdFindPlayer){otdFindPlayer.sport=this.value;otdFindEarnings=null;renderOtdCheckWrap();}" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px;border-radius:6px">' + sportOpts + '</select>' +
+                '<select id="otd-find-sport" onchange="if(otdFindPlayer){otdFindPlayer.sport=this.value;otdFindEarnings=null;renderOtdCheckWrap();}var fi=document.getElementById(\'otd-find-input\');if(fi&&fi.value&&fi.value.length>=2)otdFindSearchInput(fi.value);" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px;border-radius:6px">' + sportOpts + '</select>' +
                 '<select id="otd-find-season" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px;border-radius:6px">' + seasonOpts + '</select>' +
                 '<select id="otd-find-level" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px;border-radius:6px">' + levelOpts + '</select>' +
                 '<button onclick="otdRunFind()" style="background:#f59e0b;border:none;color:#000;font-family:var(--sans);font-size:13px;font-weight:700;padding:8px 16px;border-radius:6px;cursor:pointer;' + (fp ? '' : 'opacity:.4;pointer-events:none;') + 'white-space:nowrap">Highlight</button>' +
@@ -3599,7 +3612,7 @@
         var html = '<div style="border-top:1px solid var(--border2);padding-top:10px">' +
             '<div style="font-size:12px;font-weight:700;color:' + summaryColor + ';margin-bottom:4px">' + summaryText + '</div>' +
             '<div style="font-size:11px;color:var(--muted2);margin-bottom:10px">' +
-                escHtml(otdCheckPlayer.name) + ' · ' + sport.toUpperCase() + ' ' + otdCheckPlayer.season + ' ' + escHtml(otdCheckPlayer.levelLabel) +
+                escHtml(otdCheckPlayer.name) + ' · ' + sport.toUpperCase() + ' ' + otdFormatSeason(sport, otdCheckPlayer.season) + ' ' + escHtml(otdCheckPlayer.levelLabel) +
                 ' · ' + totalDays + ' earning days this year · claim limit: ' + limit + '/sport/day' +
             '</div>';
 
@@ -4040,7 +4053,7 @@
                 '<button onclick="otdRemovePlayer(' + idx + ')" class="otd-card-rm">×</button>' +
                 photoHtml +
                 '<div class="otd-card-name">' + escHtml(p.name) + '</div>' +
-                '<div class="otd-card-sport">' + sport.toUpperCase() + ' · ' + escHtml(p.season) + '</div>' +
+                '<div class="otd-card-sport">' + sport.toUpperCase() + ' · ' + escHtml(otdFormatSeason(sport, p.season)) + '</div>' +
                 serialHtml +
                 '<div class="otd-card-level" style="border-color:' + rc + '55;background:' + rc + '15">' + levelSel + '</div>' +
             '</div>';
@@ -4059,16 +4072,16 @@
         var anyLoaded = otdPlayers.some(function(p) { return p.earnings !== null; });
         if (otdLoadingPasses || numLoading > 0) {
             var OTD_TIPS = [
-                'RS lets you claim one pass per entity per day — stack your best cards for big OTD hauls.',
-                'Higher rarity passes earn significantly more Rax per claim.',
-                'Legendary and Mystic cards earn across multiple seasons simultaneously.',
-                'Cards only earn on the exact MM-DD of their original performance, every year.',
-                'Team cards cover every player on the roster — one card, many earners.',
-                'Epic cards earn roughly 4× more than Common on the same day.',
-                'The more seasons a player performed well, the more OTD days they unlock.',
-                'Iconic cards are the rarest on RS — a single claim can be worth thousands of Rax.',
-                'OTD earnings stack: hold cards for the same player across multiple seasons.',
-                'Pitchers and position players both earn — don\'t sleep on strong pitching performances.'
+                'You get 2 claims per sport per day — and 1 bonus claim for the single best card across all sports.',
+                'Holding the same player across multiple seasons means separate claims each day.',
+                'Platinum and Pinnacle cards can earn 100x+ more Rax than a Common on the same performance.',
+                'A player\'s worst game still earns — any game that hits the OTD threshold counts.',
+                'Check the "Check Before You Buy" tool before buying a card to see its exact OTD calendar.',
+                'Your 3rd daily claim goes to the highest-earning card across all your sports combined.',
+                'Stacking the same player across NFL, NBA, and baseball seasons maximizes daily claim volume.',
+                'Team cards earn on every game in a season — they compound fast on playoff runs.',
+                'The Find Player tool lets you preview any card\'s OTD calendar before adding it to your account.',
+                'Common cards are cheap entry points — but the jump to Rare is worth it if you hold long-term.'
             ];
             var tip = OTD_TIPS[Math.floor(Date.now() / 3000) % OTD_TIPS.length];
             var loadSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="72" height="72">'
@@ -4121,24 +4134,35 @@
             });
         });
 
-        // Step 2: flatten — deduplicate same entity per sport per day (keep highest Rax season),
-        // then take top otdClaimsView per sport (RS allows 1 claim per entity per day regardless of seasons held)
+        // Step 2: flatten — deduplicate same entity+season per sport per day (keep highest Rax entry).
+        // Same player in different seasons = separate claims (e.g. Ohtani '24 and '25 both count).
+        // Claims 1-2: top 2 per sport. Claim 3 (Pro): single best 3rd-slot across ALL sports.
         var dateMap = {};
         var totalDates = 0;
+        var thirdCandidates = {}; // dayKey → [3rd-slot entries from each sport]
         Object.keys(rawDateMap).forEach(function(dayKey) {
             Object.keys(rawDateMap[dayKey]).forEach(function(sport) {
-                // Deduplicate: same entity (id+sport) → keep highest Rax entry
                 var entityBest = {};
                 rawDateMap[dayKey][sport].forEach(function(e) {
-                    var ek = e.player.id + '|' + e.player.sport;
+                    var ek = e.player.id + '|' + e.player.sport + '|' + e.player.season;
                     if (!entityBest[ek] || (e.rax || 0) > (entityBest[ek].rax || 0)) entityBest[ek] = e;
                 });
                 var sorted = Object.values(entityBest).sort(function(a, b) { return (b.rax || 0) - (a.rax || 0); });
-                sorted.slice(0, otdClaimsView).forEach(function(entry) {
+                var topN = Math.min(2, otdClaimsView);
+                sorted.slice(0, topN).forEach(function(entry) {
                     if (!dateMap[dayKey]) { dateMap[dayKey] = []; totalDates++; }
                     dateMap[dayKey].push(entry);
                 });
+                if (otdClaimsView >= 3 && sorted.length > 2) {
+                    if (!thirdCandidates[dayKey]) thirdCandidates[dayKey] = [];
+                    thirdCandidates[dayKey].push(sorted[2]);
+                }
             });
+            if (otdClaimsView >= 3 && thirdCandidates[dayKey] && thirdCandidates[dayKey].length) {
+                var best3rd = thirdCandidates[dayKey].slice().sort(function(a, b) { return (b.rax || 0) - (a.rax || 0); })[0];
+                if (!dateMap[dayKey]) { dateMap[dayKey] = []; totalDates++; }
+                dateMap[dayKey].push(best3rd);
+            }
         });
         otdDateMap = dateMap;
 
@@ -4241,9 +4265,7 @@
                 var avHash = e.player.avatar || (passRef && passRef.avatar) || '';
                 var serial = e.player.serialNumber || (passRef && passRef.serialNumber) || null;
                 var rc = e.player.rarityColor || (passRef && passRef.rarityColor) || otdRarityColor(lvl);
-                var rarBg = rc !== 'transparent' ? rc + '18' : 'transparent';
-                var rarBorder = rc;
-                var year2 = "'" + String(e.player.season).slice(2);
+                var yearFmt = otdFormatSeason(e.player.sport, e.player.season);
                 var eid = String(e.player.id);
                 var eet = e.player.entityType || 'player';
                 var pId = String(e.player.passId || (passRef && passRef.passId) || '');
@@ -4251,22 +4273,33 @@
                 var perfBtn = '<button class="otd-link-btn" title="View performance on RS" onclick="otdOpenPerfLink(\'' + eid + '\',\'' + e.player.sport + '\',\'' + eet + '\',\'' + otdSelectedDay + '\')">' + OTD_PERF_ICON + '</button>';
                 var bgSrc = bgSource ? '/api/real/otd?action=card_bg&src=' + encodeURIComponent(bgSource) : '';
                 var multiplier = e.player.multiplier || (passRef && passRef.multiplier) || null;
-                var thumb = '<div class="otd-entry-thumb" style="' + (bgSrc ? 'background-image:url(' + bgSrc + ');' : 'background:' + rc + '22;') + 'border-bottom:2px solid ' + rc + '88">' +
+                var multNum = multiplier ? parseInt(multiplier, 10) : 0;
+                var baseRax = (multNum > 1 && e.rax) ? Math.round(e.rax / multNum) : 0;
+                var calcHtml = (multNum > 1 && baseRax) ?
+                    '<div class="otd-thumb-calc">' + baseRax.toLocaleString() + ' × ' + multNum + 'x = ' + (e.rax||0).toLocaleString() + '</div>' : '';
+                var thumb = '<div class="otd-entry-thumb" style="' + (bgSrc ? 'background-image:url(' + bgSrc + ');' : 'background:' + rc + '22;') + '">' +
                     (bgSrc ? '<div class="otd-entry-thumb-overlay"></div>' : '') +
+                    '<div class="otd-thumb-topbar">' +
+                        (e.player.levelLabel ? '<span class="otd-rarity-badge" style="background:' + rc + ';margin:0;font-size:8px;padding:1px 4px">' + escHtml(e.player.levelLabel) + '</span>' : '<span></span>') +
+                        '<span class="otd-thumb-year">' + escHtml(yearFmt) + '</span>' +
+                    '</div>' +
                     (avHash ? '<img src="https://media.realapp.com/assets/players/default/small/' + avHash + '.webp" class="otd-mini-card-av" onerror="this.style.display=\'none\'">' : '') +
-                    '<div class="otd-mini-card-serial" style="color:' + rc + ';text-shadow:0 1px 3px rgba(0,0,0,.9)">' + (serial ? '#' + serial : escHtml(year2)) + '</div>' +
+                    '<div class="otd-thumb-bottom">' +
+                        (serial ? '<div class="otd-mini-card-serial" style="color:' + rc + '">#' + serial + '</div>' : '') +
+                        calcHtml +
+                    '</div>' +
                 '</div>';
+                var playerIdx = otdPlayers.indexOf(e.player);
+                var rarSel = playerIdx >= 0 ? '<select class="otd-level-sel" style="color:' + rc + '" onchange="otdChangeLevel(' + playerIdx + ',parseInt(this.value,10))" title="Change rarity">' +
+                    OTD_LEVEL_OPTIONS.map(function(o) { return '<option value="' + o.value + '"' + (o.value === lvl ? ' selected' : '') + '>' + escHtml(o.label) + '</option>'; }).join('') +
+                    '</select>' : '';
                 var body = '<div class="otd-entry-tile-body">' +
                     '<div class="otd-entry-tile-name">' + escHtml(e.player.name) + '</div>' +
-                    '<div style="display:flex;align-items:center;gap:4px;margin-top:3px;flex-wrap:wrap">' +
-                        '<span style="font-size:9px;color:var(--muted);font-family:var(--mono)">' + escHtml(year2) + '</span>' +
-                        (e.player.levelLabel ? '<span class="otd-rarity-badge" style="background:' + rc + ';margin-left:0">' + escHtml(e.player.levelLabel) + '</span>' : '') +
-                    '</div>' +
-                    (multiplier ? '<div style="font-size:9px;color:var(--muted);margin-top:2px">' + escHtml(multiplier) + '</div>' : '') +
+                    (multiplier ? '<div style="font-size:9px;color:var(--muted);margin-top:2px;font-family:var(--mono)">' + escHtml(multiplier) + '</div>' : '') +
                 '</div>';
                 var footer = '<div class="otd-entry-tile-footer">' +
                     '<span class="otd-day-entry-rax">' + RAX_ICON + (e.rax || 0).toLocaleString() + '</span>' +
-                    '<div style="display:flex;gap:1px">' + cardBtn + perfBtn + '</div>' +
+                    '<div style="display:flex;align-items:center;gap:1px">' + (rarSel ? '<span title="Change rarity" style="font-size:11px;line-height:1">⭐</span>' + rarSel : '') + cardBtn + perfBtn + '</div>' +
                 '</div>';
                 return '<div class="otd-day-entry" style="border-color:' + rc + '55">' + thumb + body + footer + '</div>';
             }).join('');
@@ -4293,7 +4326,7 @@
                 '<span style="color:var(--muted2);font-weight:600;flex-shrink:0">Simulated:</span>' +
                 addedPlayers.map(function(p) {
                     return '<span style="background:' + p.color + '22;border:1px solid ' + p.color + '55;border-radius:12px;padding:2px 8px;font-size:11px;font-weight:700">' +
-                        escHtml(p.name) + ' · ' + p.sport.toUpperCase() + ' ' + p.season + ' · ' + escHtml(p.levelLabel) +
+                        escHtml(p.name) + ' · ' + p.sport.toUpperCase() + ' ' + otdFormatSeason(p.sport, p.season) + ' · ' + escHtml(p.levelLabel) +
                     '</span>';
                 }).join('') +
             '</div>'
