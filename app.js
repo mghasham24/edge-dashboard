@@ -3541,34 +3541,37 @@
     function buildBreakdownCard(p) {
         if (!p || !p.earnings) return '';
         var MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-        var thisYear = new Date().getFullYear();
         var rc = p.rarityColor || otdRarityColor(p.level);
         var monthMap = {};
         p.earnings.forEach(function(e) {
             var dp = (e.day || '').split('T')[0].split('-');
             if (dp.length !== 3) return;
-            var oy = parseInt(dp[0], 10);
-            if (oy >= thisYear && otdCalYear <= oy) return;
-            var mk = String(otdCalYear) + '-' + dp[1].padStart(2, '0');
+            var mk = dp[0] + '-' + dp[1].padStart(2, '0');
             if (!monthMap[mk]) monthMap[mk] = [];
             monthMap[mk].push({ rax: e.atRarityEarnings || 0, origDay: (e.day || '').split('T')[0] });
         });
         var months = Object.keys(monthMap).sort();
         if (!months.length) return '';
+        var monthYears = months.map(function(mk) { return mk.split('-')[0]; });
+        var multiYear = monthYears[0] !== monthYears[monthYears.length - 1];
         var monthBtns = months.map(function(mk) {
-            var mi = parseInt(mk.split('-')[1], 10) - 1;
+            var parts = mk.split('-');
+            var mi = parseInt(parts[1], 10) - 1;
             var total = monthMap[mk].reduce(function(s, e) { return s + e.rax; }, 0);
             var isAct = otdSelectedPassMonth === mk;
+            var lbl = MONTH_SHORT[mi] + (multiYear ? ' \'' + parts[0].slice(2) : '');
             return '<button onclick="otdSelectPassMonth(\'' + mk + '\')" style="background:' + (isAct ? rc + '33' : rc + '11') + ';border:1px solid ' + (isAct ? rc + '99' : rc + '33') + ';border-radius:6px;padding:5px 4px;cursor:pointer;text-align:center;font-family:var(--sans);width:100%">' +
-                '<div style="font-size:9px;font-weight:700;color:' + (isAct ? 'var(--fg)' : 'var(--muted2)') + '">' + MONTH_SHORT[mi] + '</div>' +
+                '<div style="font-size:9px;font-weight:700;color:' + (isAct ? 'var(--fg)' : 'var(--muted2)') + '">' + lbl + '</div>' +
                 '<div style="font-size:10px;font-weight:700;font-family:var(--mono);color:' + (isAct ? rc : 'var(--accent)') + ';margin-top:1px">' + total.toLocaleString() + '</div>' +
             '</button>';
         }).join('');
         var claimsHtml = '';
         if (otdSelectedPassMonth && monthMap[otdSelectedPassMonth]) {
             var entries = monthMap[otdSelectedPassMonth].slice().sort(function(a, b) { return a.origDay < b.origDay ? -1 : a.origDay > b.origDay ? 1 : 0; });
+            var selParts = otdSelectedPassMonth.split('-');
+            var claimsLbl = MONTH_SHORT[parseInt(selParts[1], 10) - 1] + (multiYear ? ' \'' + selParts[0].slice(2) : '') + ' claims';
             claimsHtml = '<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px">' +
-                '<div style="font-size:10px;font-weight:700;color:var(--muted2);margin-bottom:5px">' + MONTH_SHORT[parseInt(otdSelectedPassMonth.split('-')[1], 10) - 1] + ' claims</div>' +
+                '<div style="font-size:10px;font-weight:700;color:var(--muted2);margin-bottom:5px">' + claimsLbl + '</div>' +
                 '<div>' +
                 entries.map(function(e) {
                     var dp2 = e.origDay.split('-');
@@ -3645,9 +3648,9 @@
                 (!bgUrl ? '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:48px;opacity:.2;z-index:0">' + emoji + '</div>' : '') +
                 // Player headshot — transparent cutout; falls back to sport emoji on error
                 (headshot
-                    ? '<img src="' + headshot + '" style="position:absolute;top:2px;left:0;right:0;width:100%;height:62%;object-fit:contain;object-position:bottom center;z-index:1" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' +
-                      '<div style="display:none;position:absolute;top:0;left:0;right:0;height:62%;align-items:center;justify-content:center;font-size:40px;z-index:1">' + emoji + '</div>'
-                    : '<div style="position:absolute;top:0;left:0;right:0;height:62%;display:flex;align-items:center;justify-content:center;font-size:40px;z-index:1">' + emoji + '</div>') +
+                    ? '<img src="' + headshot + '" style="position:absolute;top:2px;left:0;right:0;width:100%;height:52%;object-fit:contain;object-position:bottom center;z-index:1" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' +
+                      '<div style="display:none;position:absolute;top:0;left:0;right:0;height:52%;align-items:center;justify-content:center;font-size:40px;z-index:1">' + emoji + '</div>'
+                    : '<div style="position:absolute;top:0;left:0;right:0;height:52%;display:flex;align-items:center;justify-content:center;font-size:40px;z-index:1">' + emoji + '</div>') +
                 // Dark gradient overlay for text legibility
                 '<div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.05) 0%,rgba(0,0,0,.15) 40%,rgba(0,0,0,.82) 68%,rgba(0,0,0,.92) 100%);z-index:2"></div>' +
                 // Top row: sport left, year right
