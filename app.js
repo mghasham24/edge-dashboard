@@ -3614,19 +3614,9 @@
                     '<span style="font-size:10px;font-weight:700;color:#fff;background:' + infoRc + ';padding:3px 8px;border-radius:4px;white-space:nowrap">' + escHtml(cp.levelLabel || 'Level ' + cp.level) + '</span>' +
                 '</div>' +
                 (otdCheckEarnings !== null && !otdCheckLoading && otdCheckEarnings.length > 0 ?
-                    '<div style="display:flex;gap:18px;margin-top:9px;padding-top:8px;border-top:1px solid ' + infoRc + '33">' +
-                        '<div>' +
-                            '<div style="font-size:13px;font-weight:700;font-family:var(--mono);color:var(--accent)">' + earnTotal.toLocaleString() + '</div>' +
-                            '<div style="font-size:9px;color:var(--muted2);text-transform:uppercase;letter-spacing:.4px;margin-top:1px">Total Rax</div>' +
-                        '</div>' +
-                        '<div>' +
-                            '<div style="font-size:13px;font-weight:700;font-family:var(--mono);color:var(--fg)">' + earnDays + '</div>' +
-                            '<div style="font-size:9px;color:var(--muted2);text-transform:uppercase;letter-spacing:.4px;margin-top:1px">Earning Days</div>' +
-                        '</div>' +
-                        (earnDays > 0 ? '<div>' +
-                            '<div style="font-size:13px;font-weight:700;font-family:var(--mono);color:var(--fg)">' + Math.round(earnTotal / earnDays).toLocaleString() + '</div>' +
-                            '<div style="font-size:9px;color:var(--muted2);text-transform:uppercase;letter-spacing:.4px;margin-top:1px">Avg / Game</div>' +
-                        '</div>' : '') +
+                    '<div style="margin-top:9px;padding-top:8px;border-top:1px solid ' + infoRc + '33;display:flex;align-items:baseline;gap:6px">' +
+                        '<span style="font-size:18px;font-weight:700;font-family:var(--mono);color:var(--accent)">' + earnTotal.toLocaleString() + '</span>' +
+                        '<span style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.4px">Rax / Year</span>' +
                     '</div>' : '') +
             '</div>';
         }
@@ -4211,14 +4201,14 @@
 
     var OTD_SPORT_EMOJI = {mlb:'⚾',nba:'🏀',nhl:'🏒',nfl:'🏈',wnba:'🏀',golf:'⛳',ufc:'🥊',ncaaf:'🏈',ncaabb:'🏀',ncaam:'🏀',epl:'⚽',ucl:'⚽',mls:'⚽',fifa:'⚽',soccer:'⚽',fc:'⚽'};
     function otdRarityColor(level) {
-        if (level <= 0)  return '#78909c';
-        if (level === 1) return '#607d8b';
-        if (level === 2) return '#43a047';
-        if (level === 3) return '#1e88e5';
-        if (level === 4) return '#8e24aa';
-        if (level <= 9)  return '#f57c00';
-        if (level <= 14) return '#d81b60';
-        return '#c8a000';
+        if (level <= 0)  return '#78909c'; // General — gray
+        if (level === 1) return '#2196f3'; // Common — blue
+        if (level === 2) return '#43a047'; // Uncommon — green
+        if (level === 3) return '#f57c00'; // Rare — orange
+        if (level === 4) return '#e53935'; // Epic — red
+        if (level <= 9)  return '#8e24aa'; // Legendary — purple
+        if (level <= 19) return '#d4a800'; // Mystic — yellow
+        return '#e91e8c';                  // Iconic — pink
     }
 
     function renderOtdChips() {
