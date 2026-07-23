@@ -3181,6 +3181,7 @@
     var otdFindEarnings = null;
     var otdFindLoading = false;
     var otdFindSearchTimer = null;
+    var otdFindExpandedMonths = {}; // { monthIndex: true } — which months are expanded in More Info
 
     function otdPrevMonth() {
         if (otdCalMonth === 0) { otdCalMonth = 11; otdCalYear--; } else { otdCalMonth--; }
@@ -3424,8 +3425,27 @@
         var level = existing ? existing.level : 4;
         var lbl = (OTD_LEVEL_OPTIONS.find(function(o) { return o.value === level; }) || {}).label || 'Epic';
         otdFindPlayer = { id: String(id), name: name, sport: sport, season: season, level: level, levelLabel: lbl };
-        otdFindEarnings = null;
+        otdFindEarnings = null; otdFindExpandedMonths = {};
         renderOtdCheckWrap();
+    }
+
+    function otdFindToggleMonth(m) {
+        otdFindExpandedMonths[m] = !otdFindExpandedMonths[m];
+        renderOtdCheckWrap();
+    }
+
+    function otdFindChangeRarity(newLevel) {
+        if (!otdFindPlayer) return;
+        var lbl = (OTD_LEVEL_OPTIONS.find(function(o) { return o.value === newLevel; }) || {}).label || 'Level ' + newLevel;
+        var chipIdx = -1;
+        otdPlayers.forEach(function(p, i) { if (String(p.id) === String(otdFindPlayer.id) && p.sport === otdFindPlayer.sport) chipIdx = i; });
+        if (chipIdx >= 0) {
+            otdChangeLevel(chipIdx, newLevel); // syncs otdFindPlayer level + re-fetches via otdChangeLevel
+            return;
+        }
+        otdFindPlayer.level = newLevel; otdFindPlayer.levelLabel = lbl;
+        otdFindEarnings = null; otdFindExpandedMonths = {};
+        otdRunFind();
     }
 
     function otdRunFind() {
@@ -3436,7 +3456,7 @@
         var level = existing ? existing.level : (fp.level || 4);
         var lbl = (OTD_LEVEL_OPTIONS.find(function(o) { return o.value === level; }) || {}).label || 'Epic';
         fp.season = season; fp.level = level; fp.levelLabel = lbl;
-        otdFindLoading = true; otdFindEarnings = null;
+        otdFindLoading = true; otdFindEarnings = null; otdFindExpandedMonths = {};
         renderOtdCheckWrap();
         fetch('/api/real/otd?action=earnings&id=' + fp.id + '&sport=' + fp.sport + '&season=' + fp.season + '&level=' + fp.level + '&entityType=player', { credentials: 'same-origin' })
             .then(function(r) { return r.ok ? r.json() : { ok: false }; })
@@ -3616,7 +3636,6 @@
         var MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
         var thisYear = new Date().getFullYear();
 
-        // Group earnings into months (normalized to otdCalYear)
         var monthMap = {};
         var totalRax = 0; var totalDays = 0;
         otdFindEarnings.forEach(function(e) {
@@ -3644,27 +3663,44 @@
             return '<div style="font-size:12px;color:var(--muted)">No earning days found for this player/season.</div>';
         }
 
+        var rc = otdRarityColor(fp.level);
+        var levelOpts = OTD_LEVEL_OPTIONS.map(function(o) {
+            return '<option value="' + o.value + '"' + (o.value === fp.level ? ' selected' : '') + '>' + escHtml(o.label) + '</option>';
+        }).join('');
+
         var rows = months.map(function(m) {
             var entries = monthMap[m].slice().sort(function(a, b) { return a.d - b.d; });
             var mTotal = entries.reduce(function(s, e) { return s + e.rax; }, 0);
-            var dates = entries.map(function(e) {
-                return '<span style="white-space:nowrap;font-size:11px">' + MONTH_SHORT[m] + ' ' + e.d +
-                    ' <span style="font-family:var(--mono);color:var(--accent)">' + e.rax.toLocaleString() + '</span></span>';
-            }).join('<span style="color:var(--muted2);margin:0 2px">·</span>');
-            return '<div style="display:grid;grid-template-columns:80px 1fr auto;gap:6px 10px;align-items:baseline;padding:5px 0;border-bottom:1px solid var(--border)">' +
-                '<span style="font-size:11px;font-weight:700;color:var(--muted2)">' + MONTH_FULL[m] + '</span>' +
-                '<div style="display:flex;flex-wrap:wrap;gap:3px">' + dates + '</div>' +
-                '<span style="font-size:11px;font-family:var(--mono);font-weight:700;color:var(--fg);white-space:nowrap">' + mTotal.toLocaleString() + '</span>' +
+            var isExpanded = !!otdFindExpandedMonths[m];
+            var datesHtml = isExpanded ?
+                '<div style="padding:6px 12px 8px;display:flex;flex-wrap:wrap;gap:4px;background:var(--bg3)">' +
+                entries.map(function(e) {
+                    return '<span style="white-space:nowrap;font-size:11px;padding:2px 6px;background:var(--bg2);border:1px solid var(--border);border-radius:4px">' +
+                        MONTH_SHORT[m] + ' ' + e.d +
+                        ' <span style="font-family:var(--mono);color:var(--accent);font-weight:600">' + e.rax.toLocaleString() + '</span>' +
+                    '</span>';
+                }).join('') +
+                '</div>' : '';
+            return '<div>' +
+                '<div onclick="otdFindToggleMonth(' + m + ')" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid var(--border);user-select:none;transition:background .1s" onmouseenter="this.style.background=\'var(--bg3)\'" onmouseleave="this.style.background=\'\'">' +
+                    '<div style="display:flex;align-items:center;gap:8px">' +
+                        '<span style="font-size:9px;color:var(--muted2)">' + (isExpanded ? '▼' : '▶') + '</span>' +
+                        '<span style="font-size:12px;font-weight:700;color:var(--fg);min-width:70px">' + MONTH_FULL[m] + '</span>' +
+                        '<span style="font-size:10px;color:var(--muted2)">' + entries.length + ' game' + (entries.length !== 1 ? 's' : '') + '</span>' +
+                    '</div>' +
+                    '<span style="font-size:11px;font-family:var(--mono);font-weight:700;color:var(--accent)">' + mTotal.toLocaleString() + ' Rax</span>' +
+                '</div>' +
+                datesHtml +
             '</div>';
         }).join('');
 
         return '<div style="border:1px solid var(--border2);border-radius:6px;overflow:hidden">' +
-            '<div style="padding:7px 10px;background:var(--bg3);border-bottom:1px solid var(--border2);display:flex;justify-content:space-between;align-items:center">' +
+            '<div style="padding:7px 12px;background:var(--bg3);border-bottom:1px solid var(--border2);display:flex;justify-content:space-between;align-items:center;gap:8px">' +
                 '<span style="font-size:11px;font-weight:700;color:var(--fg)">' + escHtml(fp.name) + ' · ' + fp.sport.toUpperCase() + ' ' + escHtml(otdFormatSeason(fp.sport, fp.season)) + '</span>' +
-                '<span style="font-size:10px;background:' + otdRarityColor(fp.level) + ';color:#fff;border-radius:3px;padding:1px 5px;font-weight:700">' + escHtml(fp.levelLabel) + '</span>' +
+                '<select onchange="otdFindChangeRarity(parseInt(this.value,10))" style="background:' + rc + ';border:none;color:#fff;font-family:var(--sans);font-size:10px;font-weight:700;padding:2px 4px;border-radius:3px;cursor:pointer;outline:none">' + levelOpts + '</select>' +
             '</div>' +
-            '<div style="padding:4px 10px;max-height:260px;overflow-y:auto">' + rows + '</div>' +
-            '<div style="padding:7px 10px;background:var(--bg3);border-top:1px solid var(--border2);display:flex;justify-content:space-between;align-items:center">' +
+            '<div style="max-height:320px;overflow-y:auto">' + rows + '</div>' +
+            '<div style="padding:7px 12px;background:var(--bg3);border-top:1px solid var(--border2);display:flex;justify-content:space-between;align-items:center">' +
                 '<span style="font-size:11px;color:var(--muted2)">★ ' + totalDays + ' earning day' + (totalDays !== 1 ? 's' : '') + ' highlighted on calendar</span>' +
                 '<span style="font-size:12px;font-family:var(--mono);font-weight:700;color:var(--accent)">' + RAX_ICON + totalRax.toLocaleString() + ' total</span>' +
             '</div>' +
