@@ -3164,6 +3164,7 @@
     var otdSelectedDaySport = null; // active sport tab in day panel
     var otdDateMap = {}; // built by renderOtdResults, used by overlap check
     var otdCheckMode = false;
+    var otdCheckSport = 'mlb'; // persists sport selection even before a player is picked
     var otdCheckPlayer = null; // { id, name, sport, season, level, levelLabel, entityType }
     var otdCheckEarnings = null;
     var otdCheckLoading = false;
@@ -3309,6 +3310,7 @@
     }
 
     function otdCheckSportChange(sport) {
+        otdCheckSport = sport;
         if (otdCheckPlayer) { otdCheckPlayer.sport = sport; otdCheckEarnings = null; }
         renderOtdCheckWrap();
         // Re-run search with new sport so results match
@@ -3469,8 +3471,9 @@
         if (otdFindMode) { renderOtdFindWrap(); return; }
 
         var cp = otdCheckPlayer;
+        var curCheckSport = (cp && cp.sport) || otdCheckSport;
         var sportOpts = OTD_SPORTS_LIST.map(function(s) {
-            return '<option value="' + s.key + '"' + (cp && cp.sport === s.key ? ' selected' : '') + '>' + s.label + '</option>';
+            return '<option value="' + s.key + '"' + (s.key === curCheckSport ? ' selected' : '') + '>' + s.label + '</option>';
         }).join('');
         var curYear = new Date().getFullYear();
         var seasonOpts = (function() { var a = []; for (var y = curYear; y >= 2015; y--) a.push(y); return a; }()).map(function(y) {
@@ -4275,8 +4278,6 @@
                 var multiplier = e.player.multiplier || (passRef && passRef.multiplier) || null;
                 var multNum = multiplier ? parseInt(multiplier, 10) : 0;
                 var baseRax = (multNum > 1 && e.rax) ? Math.round(e.rax / multNum) : 0;
-                var calcHtml = (multNum > 1 && baseRax) ?
-                    '<div class="otd-thumb-calc">' + baseRax.toLocaleString() + ' × ' + multNum + 'x = ' + (e.rax||0).toLocaleString() + '</div>' : '';
                 var thumb = '<div class="otd-entry-thumb" style="' + (bgSrc ? 'background-image:url(' + bgSrc + ');' : 'background:' + rc + '22;') + '">' +
                     (bgSrc ? '<div class="otd-entry-thumb-overlay"></div>' : '') +
                     '<div class="otd-thumb-topbar">' +
@@ -4286,7 +4287,6 @@
                     (avHash ? '<img src="https://media.realapp.com/assets/players/default/small/' + avHash + '.webp" class="otd-mini-card-av" onerror="this.style.display=\'none\'">' : '') +
                     '<div class="otd-thumb-bottom">' +
                         (serial ? '<div class="otd-mini-card-serial" style="color:' + rc + '">#' + serial + '</div>' : '') +
-                        calcHtml +
                     '</div>' +
                 '</div>';
                 var playerIdx = otdPlayers.indexOf(e.player);
@@ -4295,11 +4295,13 @@
                     '</select>' : '';
                 var body = '<div class="otd-entry-tile-body">' +
                     '<div class="otd-entry-tile-name">' + escHtml(e.player.name) + '</div>' +
-                    (multiplier ? '<div style="font-size:9px;color:var(--muted);margin-top:2px;font-family:var(--mono)">' + escHtml(multiplier) + '</div>' : '') +
                 '</div>';
                 var footer = '<div class="otd-entry-tile-footer">' +
-                    '<span class="otd-day-entry-rax">' + RAX_ICON + (e.rax || 0).toLocaleString() + '</span>' +
-                    '<div style="display:flex;align-items:center;gap:1px">' + (rarSel ? '<span title="Change rarity" style="font-size:11px;line-height:1">⭐</span>' + rarSel : '') + cardBtn + perfBtn + '</div>' +
+                    '<div>' +
+                        '<span class="otd-day-entry-rax">' + RAX_ICON + (e.rax || 0).toLocaleString() + '</span>' +
+                        (baseRax ? '<div style="font-size:8px;color:var(--muted);font-family:var(--mono);margin-top:1px">' + baseRax.toLocaleString() + ' × ' + multNum + 'x</div>' : '') +
+                    '</div>' +
+                    '<div style="display:flex;align-items:center;gap:1px">' + rarSel + cardBtn + perfBtn + '</div>' +
                 '</div>';
                 return '<div class="otd-day-entry" style="border-color:' + rc + '55">' + thumb + body + footer + '</div>';
             }).join('');
