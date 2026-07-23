@@ -3515,8 +3515,14 @@
         var level = parseInt((document.getElementById('otd-check-level') || {}).value || String(cp.level), 10);
         var lbl = (OTD_LEVEL_OPTIONS.find(function(o) { return o.value === level; }) || {}).label || 'Level ' + level;
         cp.season = season; cp.level = level; cp.levelLabel = lbl;
-        // Already added this player+sport+season?
-        if (otdPlayers.some(function(p) { return p.isAdded && p.id === cp.id && p.sport === cp.sport && p.season === cp.season; })) return;
+        // Same player+sport+season already present — update rarity instead of adding a duplicate
+        var existingIdx2 = -1;
+        otdPlayers.forEach(function(p, i) { if (String(p.id) === String(cp.id) && p.sport === cp.sport && p.season === cp.season) existingIdx2 = i; });
+        if (existingIdx2 >= 0) {
+            otdChangeLevel(existingIdx2, cp.level);
+            renderOtdCheckWrap();
+            return;
+        }
         var color = OTD_COLORS[otdColorIdx % OTD_COLORS.length];
         otdColorIdx++;
         if (otdCheckEarnings !== null) {
@@ -3579,12 +3585,58 @@
             resultsHtml = renderOtdCheckResults();
         }
 
+        var infoCard = '';
+        if (cp) {
+            var infoRc = otdRarityColor(cp.level);
+            var infoSportLabel = (OTD_SPORTS_LIST.find(function(s) { return s.key === cp.sport; }) || {}).label || cp.sport.toUpperCase();
+            var infoSeasonFmt = otdFormatSeason(cp.sport, cp.season);
+            var earnTotal = 0; var earnDays = 0;
+            if (otdCheckEarnings && otdCheckEarnings.length) {
+                var infoThisYear = new Date().getFullYear();
+                otdCheckEarnings.forEach(function(e) {
+                    var dp = (e.day || '').split('T')[0].split('-');
+                    if (dp.length !== 3) return;
+                    var origYear = parseInt(dp[0], 10);
+                    if (origYear >= infoThisYear && otdCalYear <= origYear) return;
+                    earnTotal += e.atRarityEarnings || 0;
+                    earnDays++;
+                });
+            }
+            infoCard = '<div style="background:' + infoRc + '18;border:1px solid ' + infoRc + '44;border-radius:8px;padding:11px 13px;margin-bottom:10px">' +
+                '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">' +
+                    '<div style="display:flex;align-items:center;gap:9px">' +
+                        (cp.avatar ? '<img src="https://media.realapp.com/assets/players/default/small/' + cp.avatar + '.webp" style="width:34px;height:34px;border-radius:50%;object-fit:cover;border:2px solid ' + infoRc + '66" onerror="this.style.display=\'none\'">' : '') +
+                        '<div>' +
+                            '<div style="font-size:13px;font-weight:700;color:var(--fg)">' + escHtml(cp.name) + '</div>' +
+                            '<div style="font-size:11px;color:var(--muted2);margin-top:1px">' + escHtml(infoSportLabel) + ' · ' + escHtml(infoSeasonFmt) + '</div>' +
+                        '</div>' +
+                    '</div>' +
+                    '<span style="font-size:10px;font-weight:700;color:#fff;background:' + infoRc + ';padding:3px 8px;border-radius:4px;white-space:nowrap">' + escHtml(cp.levelLabel || 'Level ' + cp.level) + '</span>' +
+                '</div>' +
+                (otdCheckEarnings !== null && !otdCheckLoading && otdCheckEarnings.length > 0 ?
+                    '<div style="display:flex;gap:18px;margin-top:9px;padding-top:8px;border-top:1px solid ' + infoRc + '33">' +
+                        '<div>' +
+                            '<div style="font-size:13px;font-weight:700;font-family:var(--mono);color:var(--accent)">' + earnTotal.toLocaleString() + '</div>' +
+                            '<div style="font-size:9px;color:var(--muted2);text-transform:uppercase;letter-spacing:.4px;margin-top:1px">Total Rax</div>' +
+                        '</div>' +
+                        '<div>' +
+                            '<div style="font-size:13px;font-weight:700;font-family:var(--mono);color:var(--fg)">' + earnDays + '</div>' +
+                            '<div style="font-size:9px;color:var(--muted2);text-transform:uppercase;letter-spacing:.4px;margin-top:1px">Earning Days</div>' +
+                        '</div>' +
+                        (earnDays > 0 ? '<div>' +
+                            '<div style="font-size:13px;font-weight:700;font-family:var(--mono);color:var(--fg)">' + Math.round(earnTotal / earnDays).toLocaleString() + '</div>' +
+                            '<div style="font-size:9px;color:var(--muted2);text-transform:uppercase;letter-spacing:.4px;margin-top:1px">Avg / Game</div>' +
+                        '</div>' : '') +
+                    '</div>' : '') +
+            '</div>';
+        }
+
         el.innerHTML = '<div style="background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:14px;margin-bottom:14px">' +
             '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">' +
                 '<span style="font-size:13px;font-weight:700">Check Before You Buy</span>' +
                 '<button onclick="otdToggleCheck()" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;line-height:1;padding:0">×</button>' +
             '</div>' +
-            '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:' + (resultsHtml ? '12px' : '0') + '">' +
+            '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:' + (infoCard || resultsHtml ? '12px' : '0') + '">' +
                 '<div style="position:relative;flex:1;min-width:160px">' +
                     '<input id="otd-check-input" type="text" placeholder="Search player name…" value="' + inputVal + '" autocomplete="off" ' +
                         'style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px 10px;border-radius:6px" ' +
@@ -3601,6 +3653,7 @@
                     return '<button onclick="otdAddCheckPlayer()" style="background:#22c55e;border:none;color:#fff;font-family:var(--sans);font-size:13px;font-weight:700;padding:8px 16px;border-radius:6px;cursor:pointer;white-space:nowrap;' + (cp ? '' : 'opacity:.4;pointer-events:none;') + '">＋ Add</button>';
                 })() +
             '</div>' +
+            infoCard +
             resultsHtml +
         '</div>';
     }
@@ -3952,10 +4005,16 @@
         var level  = parseInt((document.getElementById('otd-level-sel') || {}).value || '4', 10);
         var lbl    = (OTD_LEVEL_OPTIONS.find(function(o) { return o.value === level; }) || {}).label || 'Level ' + level;
 
-        var exists = otdPlayers.some(function(p) { return p.id === otdSelectedPlayer.id && p.sport === sport && p.season === season; });
-        if (exists) {
-            var errEl = document.getElementById('otd-search-err');
-            if (errEl) { errEl.textContent = 'Already added for that sport + season'; errEl.style.display = ''; setTimeout(function() { if (errEl) errEl.style.display = 'none'; }, 3000); }
+        var existingIdx = -1;
+        otdPlayers.forEach(function(p, i) { if (String(p.id) === String(otdSelectedPlayer.id) && p.sport === sport && p.season === season) existingIdx = i; });
+        if (existingIdx >= 0) {
+            // Same player+sport+season — update rarity instead of adding a duplicate
+            var inpClear = document.getElementById('otd-search-input');
+            if (inpClear) inpClear.value = '';
+            var acClear = document.getElementById('otd-autocomplete');
+            if (acClear) acClear.style.display = 'none';
+            otdSelectedPlayer = null;
+            otdChangeLevel(existingIdx, level);
             return;
         }
 
@@ -4458,10 +4517,12 @@
                 var rarSel = playerIdx >= 0 ? '<select class="otd-level-sel" style="color:' + rc + '" onchange="otdChangeLevel(' + playerIdx + ',parseInt(this.value,10))" title="Change rarity">' +
                     OTD_LEVEL_OPTIONS.map(function(o) { return '<option value="' + o.value + '"' + (o.value === lvl ? ' selected' : '') + '>' + escHtml(o.label) + '</option>'; }).join('') +
                     '</select>' : '';
+                var isSimPass = !!(e.player.isAdded);
+                var simBadge = isSimPass ? '<span style="display:inline-block;font-size:8px;font-weight:700;color:#fff;background:#7c3aed;padding:1px 5px;border-radius:3px;letter-spacing:.4px;margin-left:4px;vertical-align:middle">SIM</span>' : '';
                 var tile = '<div class="otd-day-entry" style="border-color:' + rc + '55">' +
                     thumb +
                     '<div class="otd-entry-tile-body">' +
-                        '<div class="otd-entry-tile-name">' + escHtml(e.player.name) + '</div>' +
+                        '<div class="otd-entry-tile-name">' + escHtml(e.player.name) + simBadge + '</div>' +
                         '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">' +
                             '<span class="otd-day-entry-rax">' + RAX_ICON + (e.rax || 0).toLocaleString() + '</span>' +
                             (baseRax ? '<span style="font-size:8px;color:var(--muted);font-family:var(--mono)">' + baseRax.toLocaleString() + '×' + multNum + 'x</span>' : '') +
