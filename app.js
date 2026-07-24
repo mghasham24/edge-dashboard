@@ -3171,13 +3171,17 @@
         return String(yr).slice(-2);
     }
 
+    // Sports where the current calendar year is a future season (26-27 doesn't exist yet)
+    var OTD_SKIP_CURRENT_YEAR_SPORTS = { nhl:1, nfl:1, soccer:1, ncaaf:1, epl:1, ucl:1, mls:1, fifa:1, fc:1 };
     function otdSeasonOpts(sport, selected) {
+        if (sport === 'ufc') return '<option value="2025" selected>All-time</option>';
         var curYear = new Date().getFullYear();
+        var startYear = OTD_SKIP_CURRENT_YEAR_SPORTS[sport] ? curYear - 1 : curYear;
         var years = [];
-        for (var y = curYear; y >= 2015; y--) years.push(y);
+        for (var y = startYear; y >= 2015; y--) years.push(y);
         return years.map(function(y) {
             var label = otdFormatSeason(sport, y);
-            var sel = selected && String(selected) === String(y) ? ' selected' : (!selected && y === curYear ? ' selected' : '');
+            var sel = selected && String(selected) === String(y) ? ' selected' : (!selected && y === startYear ? ' selected' : '');
             return '<option value="' + y + '"' + sel + '>' + label + '</option>';
         }).join('');
     }
@@ -4033,7 +4037,7 @@
 
     function otdRunCheck() {
         if (!otdCheckPlayer) return;
-        var season = String((document.getElementById('otd-check-season') || {}).value || otdCheckPlayer.season);
+        var season = otdCheckPlayer.sport === 'ufc' ? '2025' : String((document.getElementById('otd-check-season') || {}).value || otdCheckPlayer.season);
         var level = parseInt((document.getElementById('otd-check-level') || {}).value || String(otdCheckPlayer.level), 10);
         var lbl = (OTD_LEVEL_OPTIONS.find(function(o) { return o.value === level; }) || {}).label || 'Level ' + level;
         otdCheckPlayer.season = season;
@@ -4216,7 +4220,7 @@
                     '<div id="otd-check-ac" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg2);border:1px solid var(--border2);border-radius:6px;z-index:200;margin-top:3px;overflow:hidden"></div>' +
                 '</div>' +
                 '<select id="otd-check-sport" onchange="otdCheckSportChange(this.value)" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px;border-radius:6px">' + sportOpts + '</select>' +
-                '<select id="otd-check-season" onchange="if(otdCheckPlayer){otdCheckPlayer.season=this.value;otdRunCheck();}" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px;border-radius:6px">' + otdSeasonOpts(curCheckSport, cp && cp.season) + '</select>' +
+                (curCheckSport === 'ufc' ? '' : '<select id="otd-check-season" onchange="if(otdCheckPlayer){otdCheckPlayer.season=this.value;otdRunCheck();}" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px;border-radius:6px">' + otdSeasonOpts(curCheckSport, cp && cp.season) + '</select>') +
                 '<select id="otd-check-level" onchange="if(otdCheckPlayer){var lv=parseInt(this.value,10);var lb=(OTD_LEVEL_OPTIONS.find(function(o){return o.value===lv;})||{}).label||\'Level \'+lv;otdCheckPlayer.level=lv;otdCheckPlayer.levelLabel=lb;otdRunCheck();}" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px;border-radius:6px">' + levelOpts + '</select>' +
                 '<button onclick="otdRunCheck()" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:13px;font-weight:700;padding:8px 16px;border-radius:6px;cursor:pointer;' + (cp ? '' : 'opacity:.4;pointer-events:none;') + 'white-space:nowrap">Check</button>' +
                 (function() {
