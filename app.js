@@ -3495,6 +3495,11 @@
     }
 
     function otdTogglePasses() {
+        if (window.innerWidth <= 768) {
+            var carEl = document.getElementById('otd-pass-carousel');
+            if (carEl) carEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            return;
+        }
         otdPassesOpen = !otdPassesOpen;
         if (!otdPassesOpen) {
             otdPassesSearch = '';
@@ -3855,7 +3860,7 @@
         if (!otdCheckMode && !otdFindMode) {
             el.innerHTML = '<div style="margin-bottom:14px;display:flex;flex-wrap:wrap;gap:8px">' +
                 '<button onclick="otdToggleCheck()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:6px;cursor:pointer">⊕ Check Before You Buy</button>' +
-                (window.innerWidth > 768 ? '<button onclick="otdTogglePasses()" style="background:' + (otdPassesOpen ? 'rgba(99,102,241,.1)' : 'var(--bg3)') + ';border:1px solid ' + (otdPassesOpen ? 'var(--accent)' : 'var(--border2)') + ';color:' + (otdPassesOpen ? 'var(--accent)' : 'var(--muted)') + ';font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:6px;cursor:pointer">☰ Passes</button>' : '') +
+                '<button onclick="otdTogglePasses()" style="background:' + (otdPassesOpen ? 'rgba(99,102,241,.1)' : 'var(--bg3)') + ';border:1px solid ' + (otdPassesOpen ? 'var(--accent)' : 'var(--border2)') + ';color:' + (otdPassesOpen ? 'var(--accent)' : 'var(--muted)') + ';font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:6px;cursor:pointer">☰ Passes</button>' +
             '</div>';
             return;
         }
