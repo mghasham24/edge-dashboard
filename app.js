@@ -3214,6 +3214,7 @@
     var otdCheckLoading = false;
     var otdCheckDebug = null;
     var otdCheckSearchTimer = null;
+    var otdCheckPlayerSelected = false; // true only when a name was picked from the dropdown
     var otdFindMode = false;
     var otdFindPlayer = null; // { id, name, sport, season, level, levelLabel }
     var otdFindEarnings = null;
@@ -3485,6 +3486,7 @@
     }
 
     function otdCheckSearchInput(val) {
+        otdCheckPlayerSelected = false;
         clearTimeout(otdCheckSearchTimer);
         var ac = document.getElementById('otd-check-ac');
         if (!ac) return;
@@ -3521,17 +3523,18 @@
         var level = parseInt((document.getElementById('otd-check-level') || {}).value || '4', 10);
         var lbl = (OTD_LEVEL_OPTIONS.find(function(o) { return o.value === level; }) || {}).label || 'Level ' + level;
         otdCheckPlayer = { id: String(id), name: name, sport: sport, season: season, level: level, levelLabel: lbl, entityType: 'player', avatar: avatar || '' };
+        otdCheckPlayerSelected = true;
         otdCheckEarnings = null;
         renderOtdCheckWrap();
     }
 
     function otdCheckSportChange(sport) {
+        var wasSelected = otdCheckPlayerSelected;
         otdCheckSport = sport;
-        otdCheckPlayer = null; otdCheckEarnings = null;
+        otdCheckPlayer = null; otdCheckEarnings = null; otdCheckPlayerSelected = false;
         renderOtdCheckWrap();
-        // Clear the input and autocomplete after re-render
         var inp = document.getElementById('otd-check-input');
-        if (inp) inp.value = '';
+        if (inp && wasSelected) inp.value = '';
         var ac = document.getElementById('otd-check-ac');
         if (ac) ac.style.display = 'none';
     }
