@@ -4353,13 +4353,139 @@
             '<div id="otd-pass-carousel" style="margin-bottom:6px"></div>' +
             '<div id="otd-carousel-breakdown"></div>' +
             '<div id="otd-check-wrap"></div>' +
-            '<div id="otd-results"></div>';
+            '<div id="otd-results"></div>' +
+            (currentUser && currentUser.is_admin ? '<div id="otd-prewarm-wrap" style="margin-top:24px;border-top:1px solid var(--border2);padding-top:16px"></div>' : '');
 
         renderOtdChips();
         renderOtdCarousel();
         renderOtdCheckWrap();
         renderOtdResults();
+        if (currentUser && currentUser.is_admin) renderOtdPrewarm();
     }
+
+    // ---- OTD Admin Pre-warm ----
+    var otdPrewarmState = { running: false, discovering: false, queue: [], done: 0, total: 0, log: [] };
+
+    var OTD_PREWARM_SPORTS = [
+      ['mlb','MLB'],['nba','NBA'],['nhl','NHL'],['wnba','WNBA'],['nfl','NFL'],
+      ['ncaaf','NCAAF'],['ncaam','NCAAM'],['ufc','UFC'],['golf','Golf'],['soccer','Soccer'],
+    ];
+
+    function renderOtdPrewarm() {
+        var wrap = document.getElementById('otd-prewarm-wrap');
+        if (!wrap) return;
+        var st = otdPrewarmState;
+        var yr = new Date().getFullYear();
+        var seasonOpts = '';
+        for (var y = yr; y >= 2015; y--) seasonOpts += '<option value="' + y + '">' + y + '</option>';
+        var sportOpts = OTD_PREWARM_SPORTS.map(function(s) { return '<option value="' + s[0] + '">' + s[1] + '</option>'; }).join('');
+
+        var progressHtml = '';
+        if (st.total > 0) {
+            var pct = Math.round(st.done / st.total * 100);
+            progressHtml = '<div style="margin-top:10px">' +
+                '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:4px">' +
+                    '<span>' + (st.running ? 'Caching…' : st.done >= st.total ? 'Done' : 'Paused') + '</span>' +
+                    '<span>' + st.done + ' / ' + st.total + ' (' + pct + '%)</span>' +
+                '</div>' +
+                '<div style="height:6px;background:var(--bg3);border-radius:3px;overflow:hidden">' +
+                    '<div style="height:100%;width:' + pct + '%;background:var(--accent);border-radius:3px;transition:width .3s"></div>' +
+                '</div>' +
+            '</div>';
+        }
+        var logHtml = '';
+        if (st.log.length) {
+            logHtml = '<div style="margin-top:8px;max-height:80px;overflow-y:auto;font-size:10px;color:var(--muted);font-family:monospace">' +
+                st.log.slice(-12).map(function(l) { return '<div>' + escHtml(l) + '</div>'; }).join('') +
+            '</div>';
+        }
+
+        wrap.innerHTML =
+            '<div style="font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.06em;margin-bottom:10px">CACHE PRE-WARM</div>' +
+            '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">' +
+                '<select id="prewarm-sport" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;padding:6px 8px;border-radius:6px">' + sportOpts + '</select>' +
+                '<select id="prewarm-season" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;padding:6px 8px;border-radius:6px">' + seasonOpts + '</select>' +
+                '<select id="prewarm-entity" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;padding:6px 8px;border-radius:6px">' +
+                    '<option value="player">Player</option><option value="team">Team</option>' +
+                '</select>' +
+                '<button onclick="otdPrewarmDiscover()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:6px;cursor:pointer">' +
+                    (st.discovering ? 'Discovering…' : 'Discover') +
+                '</button>' +
+                (st.queue.length && !st.running ? '<button onclick="otdPrewarmStart()" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:12px;font-weight:700;padding:6px 14px;border-radius:6px;cursor:pointer">▶ Start (' + st.queue.length + ')</button>' : '') +
+                (st.running ? '<button onclick="otdPrewarmStop()" style="background:var(--bg3);border:1px solid var(--border2);color:#ef5350;font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:6px;cursor:pointer">⏸ Pause</button>' : '') +
+            '</div>' +
+            progressHtml +
+            logHtml;
+    }
+
+    function otdPrewarmDiscover() {
+        var sport  = (document.getElementById('prewarm-sport') || {}).value || 'mlb';
+        var season = (document.getElementById('prewarm-season') || {}).value || String(new Date().getFullYear());
+        var entity = (document.getElementById('prewarm-entity') || {}).value || 'player';
+        otdPrewarmState.discovering = true;
+        otdPrewarmState.log = [];
+        renderOtdPrewarm();
+        fetch('/api/real/otd?action=discover_all&sport=' + sport + '&season=' + season + '&entity=' + entity + '&max_pages=30', { credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                otdPrewarmState.discovering = false;
+                if (!d.ok) { otdPrewarmState.log.push('Error: ' + (d.error || 'unknown')); renderOtdPrewarm(); return; }
+                otdPrewarmState.queue = d.uncached || [];
+                otdPrewarmState.done = 0;
+                otdPrewarmState.total = d.uncached_count || 0;
+                otdPrewarmState.log.push('Found ' + d.total + ' total, ' + d.uncached_count + ' uncached (' + d.pages + ' pages)');
+                renderOtdPrewarm();
+            })
+            .catch(function(e) { otdPrewarmState.discovering = false; otdPrewarmState.log.push('Discover error: ' + e.message); renderOtdPrewarm(); });
+    }
+
+    function otdPrewarmStart() {
+        if (otdPrewarmState.running) return;
+        otdPrewarmState.running = true;
+        renderOtdPrewarm();
+        otdPrewarmNext();
+    }
+
+    function otdPrewarmStop() {
+        otdPrewarmState.running = false;
+        renderOtdPrewarm();
+    }
+
+    function otdPrewarmNext() {
+        if (!otdPrewarmState.running) return;
+        if (!otdPrewarmState.queue.length) {
+            otdPrewarmState.running = false;
+            otdPrewarmState.log.push('Complete — all ' + otdPrewarmState.done + ' entries cached');
+            renderOtdPrewarm();
+            return;
+        }
+        var card = otdPrewarmState.queue.shift();
+        var url = '/api/real/otd?action=earnings' +
+            '&id=' + encodeURIComponent(card.id) +
+            '&sport=' + encodeURIComponent(card.sport) +
+            '&season=' + encodeURIComponent(card.season) +
+            '&level=' + card.level +
+            '&entityType=' + encodeURIComponent(card.entityType);
+        fetch(url, { credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                otdPrewarmState.done++;
+                var label = card.sport + ' ' + card.season + ' ' + card.id + ' L' + card.level;
+                if (d.ok && d.earnings && d.earnings.length) {
+                    otdPrewarmState.log.push('✓ ' + label + ' (' + d.earnings.length + ' events)');
+                } else {
+                    otdPrewarmState.log.push('– ' + label + ' (empty)');
+                }
+                if (otdPrewarmState.done % 5 === 0) renderOtdPrewarm();
+                setTimeout(function() { otdPrewarmNext(); }, 700);
+            })
+            .catch(function(e) {
+                otdPrewarmState.done++;
+                otdPrewarmState.log.push('✗ ' + card.id + ': ' + e.message);
+                setTimeout(function() { otdPrewarmNext(); }, 1200);
+            });
+    }
+    // ---- end OTD Admin Pre-warm ----
 
     function otdOnSearchInput(val) {
         clearTimeout(otdSearchTimer);
