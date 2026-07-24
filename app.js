@@ -3211,6 +3211,9 @@
     var OTD_OVERLAPS_PER_PAGE = 50;
     var otdOverlapPanelCache = null; // { key, html } — avoid rebuilding on every calendar tap
     var otdOverlapSportFilter = null; // null = all sports
+    var otdAllOverlapsView = false; // true → dedicated full-screen overlaps tab
+    var otdAllOverlapsPage = 0;
+    var OTD_ALL_OVERLAPS_PER_PAGE = 150;
 
     var otdCheckMode = false;
     var otdCheckSport = 'mlb'; // persists sport selection even before a player is picked
@@ -3373,6 +3376,7 @@
     function otdToggleOverlaps() {
         otdShowOverlaps = !otdShowOverlaps;
         otdOverlapPanelCache = null;
+        if (!otdShowOverlaps) otdAllOverlapsView = false;
         renderOtdResults();
     }
     function otdSetOverlapSort(axis) {
@@ -3386,7 +3390,22 @@
     }
     function otdSetOverlapSportFilter(sport) {
         otdOverlapSportFilter = (otdOverlapSportFilter === sport) ? null : sport;
-        otdOverlapPage = 0; otdOverlapPanelCache = null;
+        otdOverlapPage = 0; otdAllOverlapsPage = 0; otdOverlapPanelCache = null;
+        renderOtdResults();
+    }
+    function otdShowAllOverlapsView() {
+        otdAllOverlapsView = true;
+        otdAllOverlapsPage = 0;
+        renderOtdResults();
+        var el = document.getElementById('otd-results');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    function otdBackFromAllOverlaps() {
+        otdAllOverlapsView = false;
+        renderOtdResults();
+    }
+    function otdAllOverlapsShowMore() {
+        otdAllOverlapsPage++;
         renderOtdResults();
     }
     function otdSelectDay(iso) {
@@ -3403,6 +3422,7 @@
         renderOtdResults();
     }
     function otdJumpToDay(isoKey, sport) {
+        otdAllOverlapsView = false;
         var parts = isoKey.split('-');
         var mo = parseInt(parts[1], 10) - 1;
         if (mo >= 0 && mo <= 11) otdCalMonth = mo;
@@ -5166,12 +5186,115 @@
             otdDateMapDirty = false;
             otdOverlapPanelCache = null; // data changed — overlap panel must rebuild
             otdOverlapPage = 0;
+            otdAllOverlapsPage = 0;
         } else {
             dateMap = otdDateMapCached.dm;
             overlapMap = otdDateMapCached.om;
         }
         otdDateMap = dateMap;
         otdOverlapMap = overlapMap;
+
+        // ── All Overlaps full-screen view ─────────────────────────────────────
+        if (otdAllOverlapsView) {
+            var aoKeys = Object.keys(otdOverlapMap).sort(function(a, b) {
+                if (otdOverlapSort === 'date-asc') return a < b ? -1 : a > b ? 1 : 0;
+                if (otdOverlapSort === 'date-desc') return a > b ? -1 : a < b ? 1 : 0;
+                return a < b ? -1 : a > b ? 1 : 0;
+            });
+            var aoFlat = [];
+            aoKeys.forEach(function(dk) {
+                otdOverlapMap[dk].forEach(function(g) {
+                    g.wasted.forEach(function(w) { aoFlat.push({ dk: dk, g: g, w: w }); });
+                });
+            });
+            if (otdOverlapSort === 'rax-desc') aoFlat.sort(function(a, b) { return (b.w.rax||0) - (a.w.rax||0); });
+            if (otdOverlapSort === 'rax-asc')  aoFlat.sort(function(a, b) { return (a.w.rax||0) - (b.w.rax||0); });
+
+            // Sport filter chips
+            var aoSportsSet = {};
+            aoFlat.forEach(function(e) { if (e.w.player.sport) aoSportsSet[e.w.player.sport] = true; });
+            var aoSports = Object.keys(aoSportsSet).sort();
+            var aoChips = aoSports.length > 1 ? aoSports.map(function(sp) {
+                var active = otdOverlapSportFilter === sp;
+                var label = (OTD_SPORTS_LIST.find(function(s) { return s.key === sp; }) || {}).label || sp.toUpperCase();
+                return '<button onclick="otdSetOverlapSportFilter(\'' + sp + '\')" style="font-family:var(--sans);font-size:11px;font-weight:600;padding:3px 10px;border-radius:4px;cursor:pointer;border:1px solid ' + (active ? 'var(--accent);background:rgba(99,102,241,.15);color:var(--accent)' : 'var(--border2);background:var(--bg3);color:var(--muted)') + '">' + escHtml(label) + '</button>';
+            }).join('') : '';
+
+            var aoFiltered = otdOverlapSportFilter
+                ? aoFlat.filter(function(e) { return e.w.player.sport === otdOverlapSportFilter; })
+                : aoFlat;
+            var aoVisible = aoFiltered.slice(0, (otdAllOverlapsPage + 1) * OTD_ALL_OVERLAPS_PER_PAGE);
+            var aoRemaining = aoFiltered.length - aoVisible.length;
+
+            var AO_MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            var AO_NAV_ICON  = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
+            var AO_CARD_ICON = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>';
+            var AO_PERF_ICON = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>';
+            var aoSortBase = 'font-family:var(--sans);font-size:10px;font-weight:600;padding:2px 9px;border-radius:4px;cursor:pointer;border:1px solid ';
+            var aoSortBtn = function(axis, label) {
+                var cur = otdOverlapSort || '';
+                var active = cur.startsWith(axis);
+                var arrow = cur === axis + '-asc' ? ' ↑' : cur === axis + '-desc' ? ' ↓' : '';
+                return '<button onclick="otdSetOverlapSort(\'' + axis + '\')" style="' + aoSortBase + (active ? 'var(--accent);background:rgba(99,102,241,.15);color:var(--accent)' : 'var(--border2);background:var(--bg3);color:var(--muted)') + '">' + label + arrow + '</button>';
+            };
+            var aoTotalRax = aoFlat.reduce(function(s, e) { return s + (e.w.rax||0); }, 0);
+
+            var aoRows = aoVisible.map(function(entry) {
+                var dk = entry.dk; var g = entry.g; var w = entry.w;
+                var parts2 = dk.split('-');
+                var dateStr = AO_MONTH_SHORT[parseInt(parts2[1],10)-1] + ' ' + parseInt(parts2[2],10) + ', ' + parts2[0];
+                var sportLabel = g.sport === '3rd-slot' ? '3rd slot beaten' : ((OTD_SPORTS_LIST.find(function(s){return s.key===g.sport;})||{}).label || g.sport.toUpperCase());
+                var sportColor = g.sport === '3rd-slot' ? '#9c27b0' : 'var(--muted)';
+                var lbl = (OTD_LEVEL_OPTIONS.find(function(o){return o.value===w.player.level;})||{}).label || '';
+                var yr = escHtml(otdFormatSeason(w.player.sport, w.player.season));
+                var linkDay = w.origDay || dk;
+                var pid = w.player.passId || '';
+                var eid = String(w.player.id || '');
+                var eet = w.player.entityType || 'player';
+                var sp = w.player.sport || '';
+                var cBtn = eid ? '<button class="otd-link-btn" style="padding:2px 4px" title="View card" onclick="otdOpenCardLink(\'' + eid + '\',\'' + sp + '\',\'' + eet + '\',\'' + linkDay + '\',\'' + pid + '\')">' + AO_CARD_ICON + '</button>' : '';
+                var pBtn = eid ? '<button class="otd-link-btn" style="padding:2px 4px" title="View performance" onclick="otdOpenPerfLink(\'' + eid + '\',\'' + sp + '\',\'' + eet + '\',\'' + linkDay + '\',\'' + (w.player.season||'') + '\',\'' + (w.bsId||'') + '\')">' + AO_PERF_ICON + '</button>' : '';
+                var navBtn = '<button class="otd-link-btn" style="padding:2px 4px" title="Go to this day on calendar" onclick="otdJumpToDay(\'' + dk + '\',\'' + g.sport + '\')">' + AO_NAV_ICON + '</button>';
+                return '<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 12px;border-bottom:1px solid var(--border);font-size:12px;gap:6px">' +
+                    '<div style="flex:1;min-width:0">' +
+                        '<span style="font-family:var(--mono);font-size:10px;color:var(--muted);white-space:nowrap;margin-right:6px">' + escHtml(dateStr) + '</span>' +
+                        '<span style="font-weight:600;color:var(--fg)">' + escHtml(w.player.name) + '</span>' +
+                        (lbl ? '<span style="font-size:9px;background:' + (w.player.rarityColor||'var(--muted)')+';color:#fff;border-radius:3px;padding:1px 4px;margin-left:5px;font-weight:700">' + escHtml(lbl) + '</span>' : '') +
+                        '<span style="font-size:10px;color:var(--muted);margin-left:5px">' + yr + '</span>' +
+                        '<span style="font-size:9px;color:' + sportColor + ';margin-left:5px;font-weight:600">' + escHtml(sportLabel) + '</span>' +
+                    '</div>' +
+                    '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0">' +
+                        '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:#ef5350">' + RAX_ICON + (w.rax||0).toLocaleString() + '</span>' +
+                        navBtn + cBtn + pBtn +
+                    '</div>' +
+                '</div>';
+            }).join('');
+
+            var aoMoreBtn = aoRemaining > 0
+                ? '<div style="padding:10px;text-align:center"><button onclick="otdAllOverlapsShowMore()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:11px;font-weight:600;padding:5px 16px;border-radius:6px;cursor:pointer">Show ' + aoRemaining + ' more</button></div>'
+                : '';
+
+            el.innerHTML =
+                '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:8px;flex-wrap:wrap">' +
+                    '<div style="display:flex;align-items:center;gap:10px">' +
+                        '<button onclick="otdBackFromAllOverlaps()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:5px 12px;border-radius:6px;cursor:pointer">← Calendar</button>' +
+                        '<span style="font-size:14px;font-weight:800">All Overlapping Claims</span>' +
+                    '</div>' +
+                    '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">' +
+                        aoSortBtn('date', 'Date') +
+                        aoSortBtn('rax', 'Rax') +
+                        '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:#ef5350;margin-left:2px">' + RAX_ICON + aoTotalRax.toLocaleString() + ' wasted</span>' +
+                    '</div>' +
+                '</div>' +
+                (aoChips ? '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">' + aoChips + '</div>' : '') +
+                '<div style="font-size:11px;color:var(--muted2);margin-bottom:8px">' + aoFiltered.length + ' overlap' + (aoFiltered.length !== 1 ? 's' : '') + (otdOverlapSportFilter ? ' in this sport' : ' across all sports') + ' — tap ' + AO_NAV_ICON + ' to jump to that day on the calendar</div>' +
+                '<div style="background:var(--bg2);border:1px solid var(--border2);border-radius:8px;overflow:hidden">' +
+                    aoRows +
+                    aoMoreBtn +
+                '</div>';
+            return;
+        }
+        // ─────────────────────────────────────────────────────────────────────
 
         var MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
         var DAY_HDRS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -5436,6 +5559,7 @@
                             ovlSortBtn('date', 'Date') +
                             ovlSortBtn('rax', 'Rax') +
                             '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:#ef5350;margin-left:6px">' + RAX_ICON + overlapTotal.toLocaleString() + '</span>' +
+                            '<button onclick="otdShowAllOverlapsView()" style="' + ovlSortBase + 'var(--border2);background:var(--bg3);color:var(--muted);margin-left:4px">Show All →</button>' +
                         '</div>' +
                     '</div>' +
                     (sportChips ? '<div style="display:flex;align-items:center;gap:4px;padding:6px 10px;border-bottom:1px solid var(--border);overflow-x:auto;white-space:nowrap">' + sportChips + '</div>' : '') +
