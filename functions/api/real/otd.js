@@ -58,19 +58,21 @@ export async function onRequestGet(context) {
   }
 
   // Build token pool from env vars RS_POOL_1, RS_POOL_2, ... + main token
-  // Add tokens via Cloudflare dashboard → Settings → Environment Variables
-  const poolTokens = [env.REAL_AUTH_TOKEN];
+  // Each pool entry: { auth: RS_POOL_N, session: RS_POOL_SESSION_N (optional) }
+  const poolTokens = [{ auth: env.REAL_AUTH_TOKEN, session: env.REAL_SESSION_TOKEN }];
   for (let i = 1; i <= 20; i++) {
-    const t = env[`RS_POOL_${i}`];
-    if (t) poolTokens.push(t); else break;
+    const auth = env[`RS_POOL_${i}`];
+    if (!auth) break;
+    poolTokens.push({ auth, session: env[`RS_POOL_SESSION_${i}`] || '' });
   }
 
-  function buildHeadersWithToken(authToken) {
-    const parts = authToken.split('!');
+  function buildHeadersWithToken({ auth, session }) {
+    const parts = auth.split('!');
     const deviceUuid = parts.length >= 2 ? parts[1] : (env.REAL_DEVICE_UUID || '');
     return {
       ...buildHeaders(env),
-      'real-auth-info': authToken,
+      'real-auth-info': auth,
+      'real-session-token': session || '',
       'real-device-uuid': deviceUuid,
     };
   }
@@ -161,17 +163,18 @@ export async function onRequestGet(context) {
   // Admin: test all pool tokens — hits RS with each and reports which work
   if (action === 'token_pool_test') {
     if (!session.is_admin) return fail(403, 'Admin only');
-    const results = await Promise.all(poolTokens.map(async (token, i) => {
+    const results = await Promise.all(poolTokens.map(async ({ auth, session }, i) => {
       const label = i === 0 ? 'REAL_AUTH_TOKEN' : `RS_POOL_${i}`;
-      const prefix = token.slice(0, 12) + '…';
+      const prefix = auth.slice(0, 12) + '…';
+      const hasSession = !!session;
       try {
         const res = await fetch(`${RS_BASE}/home/nba/next?cohort=0`, {
-          headers: buildHeadersWithToken(token),
+          headers: buildHeadersWithToken({ auth, session }),
           signal: AbortSignal.timeout(5000),
         });
-        return { label, prefix, status: res.status, ok: res.ok };
+        return { label, prefix, hasSession, status: res.status, ok: res.ok };
       } catch(e) {
-        return { label, prefix, status: 0, ok: false, error: e.message };
+        return { label, prefix, hasSession, status: 0, ok: false, error: e.message };
       }
     }));
     return new Response(JSON.stringify({ ok: true, pool_size: poolTokens.length, max_rs_slots: poolTokens.length * 8, results }, null, 2), { headers: { 'Content-Type': 'application/json' } });
