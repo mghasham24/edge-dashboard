@@ -390,7 +390,7 @@ export async function onRequestGet(context) {
 
     // Global rate limiter — cap concurrent RS calls across all CF worker instances.
     // Scales with pool size: each token supports ~8 concurrent RS calls.
-    const MAX_RS = poolTokens.length * 8;
+    const MAX_RS = poolTokens.length * 3;
     const RATE_KEY = 'rs_rate_active';
     try { await env.DB.prepare(`INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES (?,?,0)`).bind(RATE_KEY, '0').run(); } catch(e) {}
     // Reset leaked slots: if counter > 0 but no claim has landed in >60s, a CF worker crashed
