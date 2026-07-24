@@ -3211,6 +3211,7 @@
     var otdCheckSport = 'mlb'; // persists sport selection even before a player is picked
     var otdCheckPlayer = null; // { id, name, sport, season, level, levelLabel, entityType }
     var otdCheckEarnings = null;
+    var otdCheckBaseTotal = null; // RS-authoritative season base total (no multiplier)
     var otdCheckLoading = false;
     var otdCheckDebug = null;
     var otdCheckSearchTimer = null;
@@ -3480,7 +3481,7 @@
 
     function otdToggleCheck() {
         otdCheckMode = !otdCheckMode;
-        if (!otdCheckMode) { otdCheckPlayer = null; otdCheckEarnings = null; otdCheckLoading = false; }
+        if (!otdCheckMode) { otdCheckPlayer = null; otdCheckEarnings = null; otdCheckBaseTotal = null; otdCheckLoading = false; }
         if (otdCheckMode && otdCarouselOpen) { otdCarouselOpen = false; renderOtdCarousel(); }
         renderOtdPanel();
     }
@@ -3492,7 +3493,7 @@
         if (!ac) return;
         if (!val || val.length < 2) {
             ac.style.display = 'none';
-            if (!val) { otdCheckPlayer = null; otdCheckEarnings = null; renderOtdCheckWrap(); }
+            if (!val) { otdCheckPlayer = null; otdCheckEarnings = null; otdCheckBaseTotal = null; renderOtdCheckWrap(); }
             return;
         }
         var sport = (document.getElementById('otd-check-sport') || {}).value || 'mlb';
@@ -3524,7 +3525,7 @@
         var lbl = (OTD_LEVEL_OPTIONS.find(function(o) { return o.value === level; }) || {}).label || 'Level ' + level;
         otdCheckPlayer = { id: String(id), name: name, sport: sport, season: season, level: level, levelLabel: lbl, entityType: 'player', avatar: avatar || '' };
         otdCheckPlayerSelected = true;
-        otdCheckEarnings = null;
+        otdCheckEarnings = null; otdCheckBaseTotal = null;
         renderOtdCheckWrap();
     }
 
@@ -3533,7 +3534,7 @@
         var prevInp = document.getElementById('otd-check-input');
         var savedVal = (!wasSelected && prevInp) ? prevInp.value : '';
         otdCheckSport = sport;
-        otdCheckPlayer = null; otdCheckEarnings = null; otdCheckPlayerSelected = false;
+        otdCheckPlayer = null; otdCheckEarnings = null; otdCheckBaseTotal = null; otdCheckPlayerSelected = false;
         renderOtdCheckWrap();
         var inp = document.getElementById('otd-check-input');
         if (inp && savedVal) { inp.value = savedVal; otdCheckSearchInput(savedVal); }
@@ -3544,7 +3545,7 @@
     function otdClear() {
         otdPlayers = []; otdColorIdx = 0;
         otdSelectedPlayer = null; otdSelectedUser = null;
-        otdCheckMode = false; otdCheckPlayer = null; otdCheckEarnings = null; otdCheckLoading = false;
+        otdCheckMode = false; otdCheckPlayer = null; otdCheckEarnings = null; otdCheckBaseTotal = null; otdCheckLoading = false;
         otdFindMode = false; otdFindPlayer = null; otdFindEarnings = null; otdFindLoading = false;
         otdSelectedDay = null; otdSelectedDaySport = null; otdLoadingPasses = false;
         otdCarouselOpen = false; otdPassesOpen = false; otdCarouselSearch = '';
@@ -3667,7 +3668,7 @@
             if (otdCarouselOpen) {
                 otdCheckMode = false;
                 otdCheckPlayer = null;
-                otdCheckEarnings = null;
+                otdCheckEarnings = null; otdCheckBaseTotal = null;
                 otdCheckLoading = false;
             }
             renderOtdCarousel();
@@ -4001,34 +4002,38 @@
         otdCheckPlayer.level = level;
         otdCheckPlayer.levelLabel = lbl;
         // Find matching pass already in otdPlayers (RS account or SIM) by ID or name.
-        // Search API and passes API can return different entity IDs for the same player.
+        // ncaabb and ncaam are the same sport on RS — treat as aliases.
+        var OTD_SPORT_ALIAS = { ncaabb: 'ncaam', ncaam: 'ncaabb' };
         var cp2 = otdCheckPlayer;
         var rsMatchForCheck = otdPlayers.find(function(p) {
-            return p.sport === cp2.sport && p.season === cp2.season &&
+            var sportMatch = p.sport === cp2.sport || p.sport === OTD_SPORT_ALIAS[cp2.sport];
+            return sportMatch && p.season === cp2.season &&
                 (String(p.id) === String(cp2.id) || p.name.toLowerCase() === cp2.name.toLowerCase());
         });
-        // If a matching pass already has earnings loaded at this exact level, use them directly.
-        // Must check .length > 0 — empty array is truthy and would short-circuit to "no earnings".
-        if (rsMatchForCheck && rsMatchForCheck.earnings && rsMatchForCheck.earnings.length > 0 && rsMatchForCheck.level === cp2.level) {
+        // If a matching pass already has earnings + baseTotal, use them directly (no RS call).
+        if (rsMatchForCheck && rsMatchForCheck.earnings && rsMatchForCheck.earnings.length > 0) {
             otdCheckLoading = false;
             otdCheckEarnings = rsMatchForCheck.earnings;
+            otdCheckBaseTotal = rsMatchForCheck.baseTotal || null;
             renderOtdCheckWrap();
             return;
         }
         var checkId = (rsMatchForCheck && rsMatchForCheck.id) ? rsMatchForCheck.id : cp2.id;
         otdCheckLoading = true;
         otdCheckEarnings = null;
+        otdCheckBaseTotal = null;
         renderOtdCheckWrap();
-        fetch('/api/real/otd?action=earnings&id=' + checkId + '&sport=' + cp2.sport + '&season=' + cp2.season + '&level=' + cp2.level + '&entityType=' + cp2.entityType + '&force=1', { credentials: 'same-origin' })
+        // No force=1 — use D1 cache (warm-up data) before hitting RS
+        fetch('/api/real/otd?action=earnings&id=' + checkId + '&sport=' + cp2.sport + '&season=' + cp2.season + '&level=' + cp2.level + '&entityType=' + cp2.entityType, { credentials: 'same-origin' })
             .then(function(r) { return r.ok ? r.json() : r.json().catch(function() { return { ok: false, _status: r.status }; }); })
             .then(function(d) {
-                console.log('[OTD Check] earnings response:', JSON.stringify(d).slice(0, 500));
                 otdCheckLoading = false;
                 otdCheckEarnings = (d.ok && d.earnings && d.earnings.length > 0) ? d.earnings : [];
+                otdCheckBaseTotal = (d.ok && d.baseTotal != null) ? d.baseTotal : null;
                 otdCheckDebug = d.ok ? null : (d.error || d._status || 'empty');
                 renderOtdCheckWrap();
             })
-            .catch(function(e) { console.error('[OTD Check] fetch error:', e); otdCheckLoading = false; otdCheckEarnings = []; otdCheckDebug = 'fetch-error'; renderOtdCheckWrap(); });
+            .catch(function(e) { console.error('[OTD Check] fetch error:', e); otdCheckLoading = false; otdCheckEarnings = []; otdCheckBaseTotal = null; otdCheckDebug = 'fetch-error'; renderOtdCheckWrap(); });
     }
 
     function otdAddCheckPlayer() {
@@ -4121,13 +4126,18 @@
             var infoSeasonFmt = otdFormatSeason(cp.sport, cp.season);
             var earnTotal = 0; var earnDays = 0;
             if (otdCheckEarnings && otdCheckEarnings.length) {
-                var infoThisYear = new Date().getFullYear();
+                // Use D1 baseTotal (RS season total) × level multiplier for accuracy.
+                // Summing events misses current-year events due to the OTD year filter.
+                if (otdCheckBaseTotal != null) {
+                    var mult = OTD_LEVEL_MULTIPLIERS[cp.level] || 1;
+                    earnTotal = Math.round(otdCheckBaseTotal * mult);
+                }
                 otdCheckEarnings.forEach(function(e) {
                     var dp = (e.day || '').split('T')[0].split('-');
                     if (dp.length !== 3) return;
                     var origYear = parseInt(dp[0], 10);
                     if (origYear >= otdCalYear) return;
-                    earnTotal += e.atRarityEarnings || 0;
+                    if (!otdCheckBaseTotal) earnTotal += e.atRarityEarnings || 0;
                     earnDays++;
                 });
             }
