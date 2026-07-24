@@ -5110,7 +5110,9 @@
                 'DM @moe_ with any questions!',
                 'Use the share button to share your monthly OTD earnings with the community!'
             ];
-            var tip = OTD_TIPS[Math.floor(Date.now() / 3000) % OTD_TIPS.length];
+            var tipIdx = Math.floor(Date.now() / 3000) % OTD_TIPS.length;
+            var tip1 = OTD_TIPS[tipIdx];
+            var tip2 = OTD_TIPS[(tipIdx + 1) % OTD_TIPS.length];
             var loadSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="72" height="72">'
                 + '<polygon points="256,48 464,256 256,464 48,256" fill="none" stroke="#4f6ef7" stroke-width="40"/>'
                 + '<polygon points="256,165 347,256 256,347 165,256" fill="#4f6ef7"/>'
@@ -5121,7 +5123,10 @@
             el.innerHTML = '<div class="otd-loading">'
                 + '<div class="otd-loading-icon">' + loadSvg + '</div>'
                 + '<div class="otd-loading-label">Loading your cards…' + countStr + '</div>'
-                + '<div class="otd-loading-tip">' + tip + '</div>'
+                + '<div class="otd-loading-tips">'
+                + '<div class="otd-loading-tip">💡 ' + tip1 + '</div>'
+                + '<div class="otd-loading-tip">💡 ' + tip2 + '</div>'
+                + '</div>'
                 + '</div>';
             return;
         }

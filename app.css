@@ -1669,13 +1669,25 @@
         color: var(--muted);
         letter-spacing: .04em;
     }
+    .otd-loading-tips {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        max-width: 320px;
+        width: 100%;
+    }
     .otd-loading-tip {
-        font-size: 11px;
-        color: var(--muted2);
+        font-size: 13px;
+        color: var(--text);
         text-align: center;
-        max-width: 260px;
         line-height: 1.5;
-        font-style: italic;
+        background: var(--bg3);
+        border: 1px solid var(--border2);
+        border-radius: 8px;
+        padding: 10px 14px;
+    }
+    .otd-loading-tip strong {
+        color: var(--accent);
     }
     @keyframes otd-icon-pulse {
         0%, 100% { transform: scale(.94); filter: drop-shadow(0 0 4px #4f6ef799); }
