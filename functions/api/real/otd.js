@@ -461,7 +461,11 @@ export async function onRequestGet(context) {
       if (!res.ok) return fail(res.status, 'RS earnings failed: ' + res.status);
 
       const data = await res.json();
-      const earnings = data.earnings || data.events || data.performances || data.playerEarnings || data.earningDays || [];
+      const earnings = data.earnings || data.events || data.performances || data.playerEarnings || data.earningDays ||
+        (Array.isArray(data.data) ? data.data : null) ||
+        (Array.isArray(data.results) ? data.results : null) ||
+        (Array.isArray(data.items) ? data.items : null) ||
+        (Array.isArray(data) ? data : []);
 
       // RS returns info.total = "This season" base earnings (raw points, no multiplier)
       const baseTotal = (data.info && typeof data.info.total === 'number') ? data.info.total : null;
