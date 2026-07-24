@@ -642,41 +642,45 @@ export async function onRequestGet(context) {
     try {
       const passMap = {};
 
+      // Fetch one season at a time newest→oldest; stop when a season returns 0 new passes.
+      // Most users have passes concentrated in recent seasons, so early exit saves most calls.
       const fetchSeasons = async (seasonList, sportFilter) => {
-        const CHUNK = 3;
-        for (let i = 0; i < seasonList.length; i += CHUNK) {
-          await Promise.all(seasonList.slice(i, i + CHUNK).map(async season => {
-            try {
-              const sportParam = sportFilter ? `&sport=${sportFilter}` : '';
-              const [playerRes, teamRes] = sportFilter
-                ? [await fetch(`${RS_BASE}/userpasses/${encodeURIComponent(userId)}/passes?entityType=player&season=${season}${sportParam}`, { headers }), { ok: false }]
-                : await Promise.all([
-                    fetch(`${RS_BASE}/userpasses/${encodeURIComponent(userId)}/passes?entityType=player&season=${season}`, { headers }),
-                    fetch(`${RS_BASE}/userpasses/${encodeURIComponent(userId)}/passes?entityType=team&season=${season}`, { headers })
-                  ]);
-              for (const [res, entityType] of [[playerRes, 'player'], [teamRes, 'team']]) {
-                if (!res.ok) {
-                  if (res.status === 429) throw new Error('429');
-                  continue;
-                }
-                try {
-                  const data = await res.json();
-                  for (const pass of extractPasses(data, entityType, season)) {
-                    const key = `${pass.playerId}|${pass.sport}|${pass.season}`;
-                    passMap[key] = pass;
-                  }
-                } catch(e) {}
+        for (const season of seasonList) {
+          const sizeBefore = Object.keys(passMap).length;
+          try {
+            const sportParam = sportFilter ? `&sport=${sportFilter}` : '';
+            const fetches = sportFilter
+              ? [fetch(`${RS_BASE}/userpasses/${encodeURIComponent(userId)}/passes?entityType=player&season=${season}${sportParam}`, { headers })]
+              : [
+                  fetch(`${RS_BASE}/userpasses/${encodeURIComponent(userId)}/passes?entityType=player&season=${season}`, { headers }),
+                  fetch(`${RS_BASE}/userpasses/${encodeURIComponent(userId)}/passes?entityType=team&season=${season}`, { headers })
+                ];
+            const entityTypes = sportFilter ? ['player'] : ['player', 'team'];
+            const responses = await Promise.all(fetches);
+            for (let j = 0; j < responses.length; j++) {
+              const res = responses[j];
+              if (!res.ok) {
+                if (res.status === 429) throw new Error('429');
+                continue;
               }
-            } catch(e) {
-              if (e.message === '429') throw e;
+              try {
+                const data = await res.json();
+                for (const pass of extractPasses(data, entityTypes[j], season)) {
+                  const key = `${pass.playerId}|${pass.sport}|${pass.season}`;
+                  passMap[key] = pass;
+                }
+              } catch(e) {}
             }
-          }));
-          if (i + CHUNK < seasonList.length) await new Promise(r => setTimeout(r, 400));
+          } catch(e) {
+            if (e.message === '429') throw e;
+          }
+          if (Object.keys(passMap).length === sizeBefore) break; // no new passes — stop going back
+          await new Promise(r => setTimeout(r, 400));
         }
       };
 
-      await fetchSeasons(seasons, null);         // 2022–now, all sports, player + team
-      await fetchSeasons(golfSeasons, 'golf');   // 2015–2021, golf only, player only
+      await fetchSeasons(seasons, null);         // 2022–now newest→oldest, stops on first empty season
+      await fetchSeasons(golfSeasons, 'golf');   // 2015–2021 golf only, stops on first empty season
 
       const passes = Object.values(passMap);
       const body = JSON.stringify({ ok: true, passes });
