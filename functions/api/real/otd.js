@@ -57,23 +57,21 @@ export async function onRequestGet(context) {
     return fail(503, 'REAL_AUTH_TOKEN or REAL_SESSION_TOKEN not set');
   }
 
-  // Build token pool from env vars RS_POOL_1, RS_POOL_2, ... + main token
-  // Each pool entry: { auth: RS_POOL_N, session: RS_POOL_SESSION_N (optional) }
-  const poolTokens = [{ auth: env.REAL_AUTH_TOKEN, session: env.REAL_SESSION_TOKEN }];
+  // Build token pool from env vars RS_POOL_1..N + main token
+  // Per account: RS_POOL_N (real-auth-info), RS_POOL_SESSION_N (real-session-token), REAL_DEVICE_UUID_N (real-device-uuid)
+  const poolTokens = [{ auth: env.REAL_AUTH_TOKEN, session: env.REAL_SESSION_TOKEN, uuid: env.REAL_DEVICE_UUID }];
   for (let i = 1; i <= 20; i++) {
     const auth = env[`RS_POOL_${i}`];
     if (!auth) break;
-    poolTokens.push({ auth, session: env[`RS_POOL_SESSION_${i}`] || '' });
+    poolTokens.push({ auth, session: env[`RS_POOL_SESSION_${i}`] || '', uuid: env[`REAL_DEVICE_UUID_${i}`] || env.REAL_DEVICE_UUID });
   }
 
-  function buildHeadersWithToken({ auth, session }) {
-    const parts = auth.split('!');
-    const deviceUuid = parts.length >= 2 ? parts[1] : (env.REAL_DEVICE_UUID || '');
+  function buildHeadersWithToken({ auth, session, uuid }) {
     return {
       ...buildHeaders(env),
       'real-auth-info': auth,
       'real-session-token': session || '',
-      'real-device-uuid': deviceUuid,
+      'real-device-uuid': uuid || env.REAL_DEVICE_UUID || '',
     };
   }
   function pickToken() { return poolTokens[Math.floor(Math.random() * poolTokens.length)]; }
