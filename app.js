@@ -4568,8 +4568,8 @@
                 renderOtdChips();
                 renderOtdResults();
 
-                // Fetch earnings in batches of 6 with 400ms between batches
-                var BATCH_SIZE = 6;
+                // Fetch earnings in batches of 2 with 800ms between batches to avoid RS 429s
+                var BATCH_SIZE = 2;
                 var calJumped = false;
                 function fetchEarningsBatch() {
                     var batch = earningsQueue.splice(0, BATCH_SIZE);
@@ -4610,7 +4610,7 @@
                             })
                             .catch(function() { entry.earnings = []; renderOtdChips(); renderOtdResults(); });
                     });
-                    if (earningsQueue.length > 0) setTimeout(fetchEarningsBatch, 400);
+                    if (earningsQueue.length > 0) setTimeout(fetchEarningsBatch, 800);
                 }
                 fetchEarningsBatch();
             })
