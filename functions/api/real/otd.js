@@ -65,7 +65,7 @@ export async function onRequestGet(context) {
     const sport = url.searchParams.get('sport') || 'mlb';
     if (q.length < 2) return fail(400, 'Query too short');
 
-    const cacheKey = 'otd_search_v6_' + sport + '_' + q.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    const cacheKey = 'otd_search_v7_' + sport + '_' + q.toLowerCase().replace(/[^a-z0-9]/g, '_');
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
       if (cached && (now - cached.fetched_at) < 3600) {
@@ -91,17 +91,6 @@ export async function onRequestGet(context) {
         ((d.results && d.results.plays) || []).length + ((d.results && d.results.entities) || []).length +
         ((d.results && d.results.players) || []).length;
 
-      let data = await trySearch(searchSport);
-      // Try alias key if primary returned nothing
-      if (data && searchSport !== sport && countResults(data) === 0) {
-        const d2 = await trySearch(sport); if (d2) data = d2;
-      }
-      // Final fallback: search without sport filter (catches UFC fighters / CBB players)
-      if (data && countResults(data) === 0) {
-        const d3 = await trySearch(null); if (d3) data = d3;
-      }
-      if (!data) return fail(500, 'RS search failed');
-
       const playerMap = {};
       const addPlayer = (pObj) => {
         if (!pObj || !pObj.id || playerMap[pObj.id]) return;
@@ -111,19 +100,28 @@ export async function onRequestGet(context) {
         if (!queryWords.some(w => norm(name).includes(w))) return;
         playerMap[pObj.id] = { id: pObj.id, name, sport, teamId: pObj.teamId, avatar: pObj.entityAvatar || pObj.avatar || '', entityAvatar: pObj.entityAvatar || '' };
       };
+      const extractPlayers = (data) => {
+        if (!data) return;
+        // Format 1: data.players or data.results.players (direct player list)
+        for (const pObj of (data.players || (data.results && data.results.players) || [])) addPlayer(pObj);
+        // Format 2: data.entities — RS returns { type, entity: { firstName, lastName, ... }, id }
+        for (const e of (data.entities || (data.results && data.results.entities) || [])) addPlayer(e.entity || e.player || e);
+        // Format 3: data.results.plays — each play has primaryPlayer / secondaryPlayer
+        for (const play of (data.results && data.results.plays) || (data.plays) || []) {
+          addPlayer(play.primaryPlayer); addPlayer(play.secondaryPlayer);
+        }
+      };
 
-      // Format 1: data.players or data.results.players (direct player list)
-      for (const pObj of (data.players || (data.results && data.results.players) || [])) {
-        addPlayer(pObj);
+      // Try sport alias, then original key, then no filter — fall through if no matching players found after each
+      let data = await trySearch(searchSport);
+      extractPlayers(data);
+      if (!Object.keys(playerMap).length && searchSport !== sport) {
+        const d2 = await trySearch(sport);
+        extractPlayers(d2);
       }
-      // Format 2: data.entities — RS returns { type, entity: { firstName, lastName, ... }, id }
-      for (const e of (data.entities || (data.results && data.results.entities) || [])) {
-        addPlayer(e.entity || e.player || e);
-      }
-      // Format 3: data.results.plays — each play has primaryPlayer / secondaryPlayer
-      for (const play of (data.results && data.results.plays) || (data.plays) || []) {
-        addPlayer(play.primaryPlayer);
-        addPlayer(play.secondaryPlayer);
+      if (!Object.keys(playerMap).length) {
+        const d3 = await trySearch(null);
+        extractPlayers(d3);
       }
 
       const players = Object.values(playerMap).slice(0, 15);
