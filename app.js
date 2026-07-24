@@ -3255,6 +3255,34 @@
     // Passes list pagination
     var otdPassesPage = 0;
     var OTD_PASSES_PER_PAGE = 30;
+    // Loading tips
+    var otdTipTimer = null;
+    var OTD_TIPS = [
+        'Iconic 20 is a whopping 40,000 player rating with a multiplier of 250x!',
+        'You get 2 claims per sport per day, with Pro you receive a bonus claim for the third best claim.',
+        'A player\'s worst game still earns — any game that makes at least 1 Rax counts.',
+        'Check the "Check Before You Buy" tool before buying a card to see its exact OTD calendar and to see if there are any overlaps!',
+        'Playoff games earn 2x the Rax!',
+        'Press "Passes" for a list of all your passes, including simulated ones!',
+        'You can change the rarity of your passes in the passes tab by clicking on the rarity badge!',
+        'Upgrading from Common to Epic does increase the multi, but the jump from Epic to Legendary makes it worth it!',
+        'The more overlaps you have, the more Rax you waste a year.',
+        'EV betting is the only way to guarantee profit with predictions, use RaxEdge to help you with it!',
+        'Join the group "RaxEdge" for updates!',
+        'DM @moe_ with any questions!',
+        'Use the share button to share your monthly OTD earnings with the community!'
+    ];
+    function otdStartTipCycle() {
+        if (otdTipTimer) return;
+        otdTipTimer = setInterval(function() {
+            var t1 = document.getElementById('otd-tip-1');
+            var t2 = document.getElementById('otd-tip-2');
+            if (!t1 || !t2) { clearInterval(otdTipTimer); otdTipTimer = null; return; }
+            var idx = Math.floor(Date.now() / 3000) % OTD_TIPS.length;
+            t1.textContent = '💡 ' + OTD_TIPS[idx];
+            t2.textContent = '💡 ' + OTD_TIPS[(idx + 1) % OTD_TIPS.length];
+        }, 500);
+    }
 
     function otdPrevMonth() {
         if (otdCalMonth === 0) { otdCalMonth = 11; otdCalYear--; } else { otdCalMonth--; }
@@ -5118,24 +5146,6 @@
         var numLoading = otdPlayers.filter(function(p) { return p.earnings === null; }).length;
         var anyLoaded = otdPlayers.some(function(p) { return p.earnings !== null; });
         if (otdLoadingPasses || numLoading > 0) {
-            var OTD_TIPS = [
-                'Iconic 20 is a whopping 40,000 player rating with a multiplier of 250x!',
-                'You get 2 claims per sport per day, with Pro you receive a bonus claim for the third best claim.',
-                'A player\'s worst game still earns — any game that makes at least 1 Rax counts.',
-                'Check the "Check Before You Buy" tool before buying a card to see its exact OTD calendar and to see if there are any overlaps!',
-                'Playoff games earn 2x the Rax!',
-                'Press "Passes" for a list of all your passes, including simulated ones!',
-                'You can change the rarity of your passes in the passes tab by clicking on the rarity badge!',
-                'Upgrading from Common to Epic does increase the multi, but the jump from Epic to Legendary makes it worth it!',
-                'The more overlaps you have, the more Rax you waste a year.',
-                'EV betting is the only way to guarantee profit with predictions, use RaxEdge to help you with it!',
-                'Join the group "RaxEdge" for updates!',
-                'DM @moe_ with any questions!',
-                'Use the share button to share your monthly OTD earnings with the community!'
-            ];
-            var tipIdx = Math.floor(Date.now() / 3000) % OTD_TIPS.length;
-            var tip1 = OTD_TIPS[tipIdx];
-            var tip2 = OTD_TIPS[(tipIdx + 1) % OTD_TIPS.length];
             var loadSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="72" height="72">'
                 + '<polygon points="256,48 464,256 256,464 48,256" fill="none" stroke="#4f6ef7" stroke-width="40"/>'
                 + '<polygon points="256,165 347,256 256,347 165,256" fill="#4f6ef7"/>'
@@ -5143,14 +5153,16 @@
             var loaded = otdPlayers.filter(function(p) { return p.earnings !== null; }).length;
             var total = otdPlayers.length;
             var countStr = total > 0 ? ' <span style="font-family:var(--mono);font-size:11px;color:var(--muted2)">(' + loaded + '/' + total + ')</span>' : '';
+            var tipIdx = Math.floor(Date.now() / 3000) % OTD_TIPS.length;
             el.innerHTML = '<div class="otd-loading">'
                 + '<div class="otd-loading-icon">' + loadSvg + '</div>'
                 + '<div class="otd-loading-label">Loading your cards…' + countStr + '</div>'
                 + '<div class="otd-loading-tips">'
-                + '<div class="otd-loading-tip">💡 ' + tip1 + '</div>'
-                + '<div class="otd-loading-tip">💡 ' + tip2 + '</div>'
+                + '<div class="otd-loading-tip" id="otd-tip-1">💡 ' + OTD_TIPS[tipIdx] + '</div>'
+                + '<div class="otd-loading-tip" id="otd-tip-2">💡 ' + OTD_TIPS[(tipIdx + 1) % OTD_TIPS.length] + '</div>'
                 + '</div>'
                 + '</div>';
+            otdStartTipCycle();
             return;
         }
 
