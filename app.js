@@ -3202,6 +3202,7 @@
     var otdFindSearchTimer = null;
     var otdFindExpandedMonths = {}; // { monthIndex: true } — which months are expanded in More Info
     var otdPassesOpen = false;
+    var otdCarouselOpen = false;
     var otdPassesSearch = '';
     var otdSelectedPass = null;
     var otdSelectedPassMonth = null;
@@ -3322,6 +3323,7 @@
     function otdToggleCheck() {
         otdCheckMode = !otdCheckMode;
         if (!otdCheckMode) { otdCheckPlayer = null; otdCheckEarnings = null; otdCheckLoading = false; }
+        if (otdCheckMode && otdCarouselOpen) { otdCarouselOpen = false; renderOtdCarousel(); }
         renderOtdPanel();
     }
 
@@ -3383,6 +3385,7 @@
         otdCheckMode = false; otdCheckPlayer = null; otdCheckEarnings = null; otdCheckLoading = false;
         otdFindMode = false; otdFindPlayer = null; otdFindEarnings = null; otdFindLoading = false;
         otdSelectedDay = null; otdSelectedDaySport = null; otdLoadingPasses = false;
+        otdCarouselOpen = false; otdPassesOpen = false;
         renderOtdPanel();
     }
 
@@ -3496,8 +3499,15 @@
 
     function otdTogglePasses() {
         if (window.innerWidth <= 768) {
-            var carEl = document.getElementById('otd-pass-carousel');
-            if (carEl) carEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            otdCarouselOpen = !otdCarouselOpen;
+            if (otdCarouselOpen) {
+                otdCheckMode = false;
+                otdCheckPlayer = null;
+                otdCheckEarnings = null;
+                otdCheckLoading = false;
+            }
+            renderOtdCarousel();
+            renderOtdCheckWrap();
             return;
         }
         otdPassesOpen = !otdPassesOpen;
@@ -3860,7 +3870,7 @@
         if (!otdCheckMode && !otdFindMode) {
             el.innerHTML = '<div style="margin-bottom:14px;display:flex;flex-wrap:wrap;gap:8px">' +
                 '<button onclick="otdToggleCheck()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:6px;cursor:pointer">⊕ Check Before You Buy</button>' +
-                '<button onclick="otdTogglePasses()" style="background:' + (otdPassesOpen ? 'rgba(99,102,241,.1)' : 'var(--bg3)') + ';border:1px solid ' + (otdPassesOpen ? 'var(--accent)' : 'var(--border2)') + ';color:' + (otdPassesOpen ? 'var(--accent)' : 'var(--muted)') + ';font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:6px;cursor:pointer">☰ Passes</button>' +
+                (function() { var po = window.innerWidth <= 768 ? otdCarouselOpen : otdPassesOpen; return '<button onclick="otdTogglePasses()" style="background:' + (po ? 'rgba(99,102,241,.1)' : 'var(--bg3)') + ';border:1px solid ' + (po ? 'var(--accent)' : 'var(--border2)') + ';color:' + (po ? 'var(--accent)' : 'var(--muted)') + ';font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:6px;cursor:pointer">☰ Passes</button>'; })() +
             '</div>';
             return;
         }
@@ -4192,12 +4202,20 @@
         var el = document.getElementById('otd-pass-carousel');
         var bdEl = document.getElementById('otd-carousel-breakdown');
         if (!el) return;
-        if (!otdPlayers.length || otdLoadingPasses) { el.innerHTML = ''; if (bdEl) bdEl.innerHTML = ''; return; }
+        if (!otdCarouselOpen || !otdPlayers.length || otdLoadingPasses) { el.innerHTML = ''; if (bdEl) bdEl.innerHTML = ''; return; }
 
         var CW = 128, CH = 140;
         var CARD_SVG = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>';
 
-        var cards = otdPlayers.map(function(p, idx) {
+        var sorted = otdPlayers.slice().sort(function(a, b) {
+            var ta = 0, tb = 0;
+            if (a.earnings) a.earnings.forEach(function(e) { ta += e.atRarityEarnings || 0; });
+            if (b.earnings) b.earnings.forEach(function(e) { tb += e.atRarityEarnings || 0; });
+            return tb - ta;
+        });
+
+        var cards = sorted.map(function(p) {
+            var idx = otdPlayers.indexOf(p);
             var rc = p.rarityColor || otdRarityColor(p.level);
             var av = p.avatar || '';
             var emoji = OTD_SPORT_EMOJI[p.sport] || '🎴';
