@@ -3636,16 +3636,9 @@
                 return p.name.toLowerCase().indexOf(q) >= 0 || p.sport.toLowerCase().indexOf(q) >= 0;
             })
             .map(function(p) {
-                // Total = lifetime OTD Rax (all games from any past year — OTD claims exist in year+1)
-                // Calendar year filtering is handled by the calendar view, not the passes list
                 var total = 0;
                 if (p.earnings) {
-                    p.earnings.forEach(function(e) {
-                        var dp = (e.day || '').split('T')[0].split('-');
-                        var oy = parseInt(dp[0], 10);
-                        if (oy >= curYear) return; // Only count games already in the past
-                        total += e.atRarityEarnings || 0;
-                    });
+                    p.earnings.forEach(function(e) { total += e.atRarityEarnings || 0; });
                 }
                 return { p: p, total: total };
             })
