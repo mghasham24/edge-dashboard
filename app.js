@@ -4793,7 +4793,7 @@
                 return;
             }
             // Look up the typed username directly without requiring dropdown selection
-            fetch('/api/real/otd?action=user_search&q=' + encodeURIComponent(typed), { credentials: 'same-origin' })
+            fetch('/api/real/otd?action=search_users&q=' + encodeURIComponent(typed), { credentials: 'same-origin' })
                 .then(function(r) { return r.json(); })
                 .then(function(d) {
                     var match = d.users && d.users[0];
