@@ -3855,7 +3855,7 @@
         if (!otdCheckMode && !otdFindMode) {
             el.innerHTML = '<div style="margin-bottom:14px;display:flex;flex-wrap:wrap;gap:8px">' +
                 '<button onclick="otdToggleCheck()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:6px;cursor:pointer">⊕ Check Before You Buy</button>' +
-                '<button onclick="otdTogglePasses()" style="background:' + (otdPassesOpen ? 'rgba(99,102,241,.1)' : 'var(--bg3)') + ';border:1px solid ' + (otdPassesOpen ? 'var(--accent)' : 'var(--border2)') + ';color:' + (otdPassesOpen ? 'var(--accent)' : 'var(--muted)') + ';font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:6px;cursor:pointer">☰ Passes</button>' +
+                (window.innerWidth > 768 ? '<button onclick="otdTogglePasses()" style="background:' + (otdPassesOpen ? 'rgba(99,102,241,.1)' : 'var(--bg3)') + ';border:1px solid ' + (otdPassesOpen ? 'var(--accent)' : 'var(--border2)') + ';color:' + (otdPassesOpen ? 'var(--accent)' : 'var(--muted)') + ';font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:6px;cursor:pointer">☰ Passes</button>' : '') +
             '</div>';
             return;
         }
@@ -5024,7 +5024,7 @@
             '<div class="otd-cal-grid">' + cells + '</div>' +
             dayPanel;
 
-        if (otdPassesOpen) {
+        if (otdPassesOpen && window.innerWidth > 768) {
             el.innerHTML =
                 '<div style="display:flex;gap:16px;align-items:flex-start">' +
                     '<div style="flex:1;min-width:0">' + calHtml + '</div>' +
