@@ -4050,7 +4050,9 @@
         var cp2 = otdCheckPlayer;
         var rsMatchForCheck = otdPlayers.find(function(p) {
             var sportMatch = p.sport === cp2.sport || p.sport === OTD_SPORT_ALIAS[cp2.sport];
-            return sportMatch && p.season === cp2.season &&
+            // UFC is all-time — ignore season when matching
+            var seasonMatch = cp2.sport === 'ufc' || p.season === cp2.season;
+            return sportMatch && seasonMatch &&
                 (String(p.id) === String(cp2.id) || p.name.toLowerCase() === cp2.name.toLowerCase());
         });
         // If a matching pass already has earnings + baseTotal, use them directly (no RS call).
@@ -4062,12 +4064,14 @@
             return;
         }
         var checkId = (rsMatchForCheck && rsMatchForCheck.id) ? rsMatchForCheck.id : cp2.id;
+        var checkSeason = (rsMatchForCheck && rsMatchForCheck.season) ? rsMatchForCheck.season : cp2.season;
+        var checkEntityType = (rsMatchForCheck && rsMatchForCheck.entityType) ? rsMatchForCheck.entityType : cp2.entityType;
         otdCheckLoading = true;
         otdCheckEarnings = null;
         otdCheckBaseTotal = null;
         renderOtdCheckWrap();
         // No force=1 — use D1 cache (warm-up data) before hitting RS
-        fetch('/api/real/otd?action=earnings&id=' + checkId + '&sport=' + cp2.sport + '&season=' + cp2.season + '&level=' + cp2.level + '&entityType=' + cp2.entityType, { credentials: 'same-origin' })
+        fetch('/api/real/otd?action=earnings&id=' + checkId + '&sport=' + cp2.sport + '&season=' + checkSeason + '&level=' + cp2.level + '&entityType=' + checkEntityType, { credentials: 'same-origin' })
             .then(function(r) { return r.ok ? r.json() : r.json().catch(function() { return { ok: false, _status: r.status }; }); })
             .then(function(d) {
                 otdCheckLoading = false;

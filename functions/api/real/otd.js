@@ -114,7 +114,7 @@ export async function onRequestGet(context) {
               if (p.sport !== 'ufc' || ufcMap[p.playerId]) continue;
               const normName = norm(p.playerName || '');
               if (queryWords.some(w => normName.includes(w))) {
-                ufcMap[p.playerId] = { id: p.playerId, name: p.playerName, sport: 'ufc', avatar: p.entityAvatar || p.avatar || '', entityAvatar: p.entityAvatar || '', entityType: 'team' };
+                ufcMap[p.playerId] = { id: p.playerId, name: p.playerName, sport: 'ufc', season: p.season || '2025', avatar: p.entityAvatar || p.avatar || '', entityAvatar: p.entityAvatar || '', entityType: 'team' };
               }
             }
           } catch(e) {}
