@@ -280,6 +280,63 @@ export async function onRequestGet(context) {
     }), { headers: { 'Content-Type': 'application/json' } });
   }
 
+  // Bundle: return all D1-cached earnings for a user's passes in one response (avoids 600 individual fetches on reload)
+  if (action === 'earnings_bundle') {
+    const userId = url.searchParams.get('userId');
+    if (!userId) return fail(400, 'Missing userId');
+
+    let passes = [];
+    try {
+      const passesRow = await env.DB.prepare('SELECT data FROM odds_cache WHERE cache_key=?')
+        .bind(`otd_passes_all_v8_${userId}`).first();
+      if (passesRow) {
+        const pd = JSON.parse(passesRow.data);
+        passes = pd.passes || [];
+      }
+    } catch(e) {}
+
+    if (!passes.length) {
+      return new Response(JSON.stringify({ ok: true, earnings: {}, cached: 0, total: 0 }), { headers: { 'Content-Type': 'application/json' } });
+    }
+
+    // Map cache key → frontend bundle key (playerId|sport|season|level|entityType)
+    const keyToId = {};
+    for (const p of passes) {
+      const cacheKey = `otd_earnings_v9_${p.entityType || 'player'}_${p.sport}_${p.season}_${p.playerId}_l${p.level}`;
+      keyToId[cacheKey] = `${p.playerId}|${p.sport}|${p.season}|${p.level}|${p.entityType || 'player'}`;
+    }
+    const cacheKeys = Object.keys(keyToId);
+
+    // Batch query D1 in chunks of 100 (SQLite bind param limit)
+    const earningsMap = {};
+    const CHUNK = 100;
+    for (let i = 0; i < cacheKeys.length; i += CHUNK) {
+      const chunk = cacheKeys.slice(i, i + CHUNK);
+      try {
+        const placeholders = chunk.map(() => '?').join(',');
+        const rows = await env.DB.prepare(
+          `SELECT cache_key, data FROM odds_cache WHERE cache_key IN (${placeholders})`
+        ).bind(...chunk).all();
+        for (const row of (rows.results || [])) {
+          const id = keyToId[row.cache_key];
+          if (id) {
+            try {
+              const data = JSON.parse(row.data);
+              earningsMap[id] = { earnings: data.earnings || [], baseTotal: data.baseTotal ?? null };
+            } catch(e) {}
+          }
+        }
+      } catch(e) {}
+    }
+
+    return new Response(JSON.stringify({
+      ok: true,
+      earnings: earningsMap,
+      cached: Object.keys(earningsMap).length,
+      total: cacheKeys.length
+    }), { headers: { 'Content-Type': 'application/json' } });
+  }
+
   // Earnings: get all OTD claimable dates for a player/team at a rarity level
   if (action === 'earnings') {
     const id = url.searchParams.get('id');
