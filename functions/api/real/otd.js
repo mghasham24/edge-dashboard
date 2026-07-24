@@ -155,6 +155,25 @@ export async function onRequestGet(context) {
     }
   }
 
+  // Admin: test all pool tokens — hits RS with each and reports which work
+  if (action === 'token_pool_test') {
+    if (!session.is_admin) return fail(403, 'Admin only');
+    const results = await Promise.all(poolTokens.map(async (token, i) => {
+      const label = i === 0 ? 'REAL_AUTH_TOKEN' : `RS_POOL_${i}`;
+      const prefix = token.slice(0, 12) + '…';
+      try {
+        const res = await fetch(`${RS_BASE}/home/nba/next?cohort=0`, {
+          headers: { ...buildHeaders(env), 'real-auth-info': token },
+          signal: AbortSignal.timeout(5000),
+        });
+        return { label, prefix, status: res.status, ok: res.ok };
+      } catch(e) {
+        return { label, prefix, status: 0, ok: false, error: e.message };
+      }
+    }));
+    return new Response(JSON.stringify({ ok: true, pool_size: poolTokens.length, max_rs_slots: poolTokens.length * 8, results }, null, 2), { headers: { 'Content-Type': 'application/json' } });
+  }
+
   // Admin debug: returns raw RS search response so we can see actual format
   if (action === 'search_raw') {
     if (!session.is_admin) return fail(403, 'Admin only');
