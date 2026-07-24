@@ -393,6 +393,11 @@ export async function onRequestGet(context) {
     const MAX_RS = poolTokens.length * 8;
     const RATE_KEY = 'rs_rate_active';
     try { await env.DB.prepare(`INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES (?,?,0)`).bind(RATE_KEY, '0').run(); } catch(e) {}
+    // Reset leaked slots: if counter > 0 but no claim has landed in >60s, a CF worker crashed
+    // without releasing. Reset to 0 so new requests can proceed.
+    await env.DB.prepare(
+      `UPDATE odds_cache SET data='0' WHERE cache_key=? AND CAST(data AS INTEGER)>0 AND fetched_at<?`
+    ).bind(RATE_KEY, now - 60).run().catch(() => {});
     const rateClaim = await env.DB.prepare(
       `UPDATE odds_cache SET data=CAST(CAST(data AS INTEGER)+1 AS TEXT),fetched_at=? WHERE cache_key=? AND CAST(data AS INTEGER)<${MAX_RS}`
     ).bind(now, RATE_KEY).run();
@@ -400,13 +405,22 @@ export async function onRequestGet(context) {
 
     try {
       const earningsUrl = `${RS_BASE}/userpassearnings/${sport}/season/${season}/entity/${entityType}/${id}?level=${level}`;
-      let res = await fetch(earningsUrl, { headers });
+      const controller = new AbortController();
+      const abortTimer = setTimeout(() => controller.abort(), 8000);
+      let res;
+      try {
+        res = await fetch(earningsUrl, { headers, signal: controller.signal });
+      } finally {
+        clearTimeout(abortTimer);
+      }
 
       // Retry up to 3 times with exponential backoff on 429
       const retryDelays = [500, 1500, 3000];
       for (let i = 0; i < retryDelays.length && res.status === 429; i++) {
         await new Promise(r => setTimeout(r, retryDelays[i]));
-        res = await fetch(earningsUrl, { headers });
+        const c2 = new AbortController();
+        const t2 = setTimeout(() => c2.abort(), 8000);
+        try { res = await fetch(earningsUrl, { headers, signal: c2.signal }); } finally { clearTimeout(t2); }
       }
       if (!res.ok) return fail(res.status, 'RS earnings failed: ' + res.status);
 

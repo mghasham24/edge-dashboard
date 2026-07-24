@@ -4604,6 +4604,7 @@
                         while (active < CONCURRENCY && queue.length) {
                             active++;
                             (function(entry) {
+                                entry._retries = (entry._retries || 0);
                                 fetch('/api/real/otd?action=earnings&id=' + entry.id + '&sport=' + entry.sport + '&season=' + entry.season + '&level=' + entry.level + '&entityType=' + entry.entityType, { credentials: 'same-origin' })
                                     .then(function(r) {
                                         if (r.status === 429) return { ok: false, rateLimited: true };
@@ -4611,9 +4612,19 @@
                                     })
                                     .then(function(ed) {
                                         if (ed && ed.rateLimited) {
-                                            // Global RS slot full — re-queue with random delay and try again
+                                            entry._retries++;
+                                            if (entry._retries > 8) {
+                                                // Give up after 8 retries — mark empty so UI doesn't stall
+                                                entry.earnings = [];
+                                                renderOtdChips(); renderOtdResults();
+                                                active--;
+                                                next();
+                                                return;
+                                            }
+                                            // Exponential backoff: 2s, 4s, 6s… up to 12s
+                                            var delay = Math.min(2000 * entry._retries, 12000) + Math.random() * 1000;
                                             active--;
-                                            setTimeout(function() { queue.push(entry); next(); }, 1500 + Math.random() * 1500);
+                                            setTimeout(function() { queue.push(entry); next(); }, delay);
                                             return;
                                         }
                                         if (ed && ed.ok && ed.earnings) {
