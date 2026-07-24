@@ -355,9 +355,11 @@ export async function onRequestGet(context) {
     }
 
     // Map cache key → array of bundle keys (one cache entry serves all levels of same player+sport+season)
+    const RS_SEASON_NORMALIZE_BUNDLE = { ufc: 'alltime' };
     const keyToIds = {};
     for (const p of passes) {
-      const cacheKey = `otd_earnings_v10_${p.entityType || 'player'}_${p.sport}_${p.season}_${p.playerId}`;
+      const seasonKey = RS_SEASON_NORMALIZE_BUNDLE[p.sport] || p.season;
+      const cacheKey = `otd_earnings_v10_${p.entityType || 'player'}_${p.sport}_${seasonKey}_${p.playerId}`;
       const bundleKey = `${p.playerId}|${p.sport}|${p.season}|${p.level}|${p.entityType || 'player'}`;
       if (!keyToIds[cacheKey]) keyToIds[cacheKey] = [];
       keyToIds[cacheKey].push(bundleKey);
@@ -406,8 +408,11 @@ export async function onRequestGet(context) {
 
     const force = url.searchParams.get('force') === '1';
     const RS_SPORT_ALIAS = { ncaabb: 'ncaam' };
+    // UFC is all-time — normalize season in cache key so all seasons converge to one entry
+    const RS_SEASON_NORMALIZE = { ufc: 'alltime' };
     const sportKey = RS_SPORT_ALIAS[sport] || sport;
-    const cacheKey = `otd_earnings_v10_${entityType}_${sportKey}_${season}_${id}`;
+    const seasonKey = RS_SEASON_NORMALIZE[sport] || season;
+    const cacheKey = `otd_earnings_v10_${entityType}_${sportKey}_${seasonKey}_${id}`;
     if (!force) {
       try {
         const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
