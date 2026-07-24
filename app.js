@@ -5487,6 +5487,9 @@
                 var rarSel = playerIdx >= 0 ? '<select class="otd-level-sel" style="color:' + rc + '" onchange="otdChangeLevel(' + playerIdx + ',parseInt(this.value,10))" title="Change rarity">' +
                     OTD_LEVEL_OPTIONS.map(function(o) { return '<option value="' + o.value + '"' + (o.value === lvl ? ' selected' : '') + '>' + escHtml(o.label) + '</option>'; }).join('') +
                     '</select>' : '';
+                var rarWrap = rarSel
+                    ? '<span style="display:inline-flex;align-items:center;gap:1px;cursor:pointer" title="Change rarity">' + rarSel + '<span style="font-size:9px;color:rgba(255,255,255,.75);line-height:1;pointer-events:none;user-select:none">↕</span></span>'
+                    : '';
                 var isSimPass = !!(e.player.isAdded);
                 var simBadge = isSimPass ? '<span style="display:inline-block;font-size:8px;font-weight:700;color:#fff;background:#7c3aed;padding:1px 5px;border-radius:3px;letter-spacing:.4px;margin-left:4px;vertical-align:middle">SIM</span>' : '';
                 var tile = '<div class="otd-day-entry" style="border-color:' + rc + '55">' +
@@ -5500,7 +5503,7 @@
                     '</div>' +
                 '</div>';
                 var actions = '<div class="otd-entry-actions">' +
-                    rarSel + cardBtn + perfBtn +
+                    rarWrap + cardBtn + perfBtn +
                 '</div>';
                 return '<div class="otd-entry-wrap">' + tile + actions + '</div>';
             }).join('');
