@@ -3251,7 +3251,7 @@
         var MN = ['January','February','March','April','May','June','July','August','September','October','November','December'];
         var SL = { mlb:'MLB', nba:'NBA', nhl:'NHL', nfl:'NFL', wnba:'WNBA', golf:'Golf', ufc:'UFC', ncaaf:'CFB', ncaam:'CBB', ncaabb:'CBB', soccer:'Soccer', fc:'Soccer', ucl:'UCL', epl:'EPL' };
         var monthKey = otdCalYear + '-' + String(otdCalMonth + 1).padStart(2, '0');
-        var totalRax = 0, claimDays = 0, sportTotals = {}, playerTotals = {};
+        var totalRax = 0, claimDays = 0, sportTotals = {}, playerTotals = {}, playerBestEntry = {};
         Object.keys(otdDateMap).forEach(function(dk) {
             if (!dk.startsWith(monthKey + '-')) return;
             var entries = otdDateMap[dk];
@@ -3264,6 +3264,7 @@
                 sportTotals[sp] = (sportTotals[sp] || 0) + rax;
                 var pk = ((e.player && e.player.id) || '?') + '|' + sp + '|' + ((e.player && e.player.name) || '?');
                 playerTotals[pk] = (playerTotals[pk] || 0) + rax;
+                if (!playerBestEntry[pk] || rax > (playerBestEntry[pk].rax || 0)) playerBestEntry[pk] = e;
             });
         });
         if (!totalRax) { otdCopyToast('No earnings this month'); return; }
@@ -3291,7 +3292,21 @@
             'Sports Breakdown',
             sportLines,
         ];
-        if (topParts.length === 3) lines.push('🏆 ' + topParts[2] + ' (' + (SL[topParts[1]] || topParts[1]) + ') — ' + playerTotals[topKey].toLocaleString() + ' Rax');
+        if (topParts.length === 3) {
+            lines.push('🏆 ' + topParts[2] + ' (' + (SL[topParts[1]] || topParts[1]) + ') — ' + playerTotals[topKey].toLocaleString() + ' Rax');
+            var topEntry = playerBestEntry[topKey];
+            var topId = parseInt(topParts[0], 10);
+            var topSport = topParts[1];
+            var topEt = (topEntry && topEntry.player && topEntry.player.entityType) || 'player';
+            var topPassId = topEntry && topEntry.player && topEntry.player.passId ? parseInt(topEntry.player.passId, 10) : 0;
+            var cardUrl = topPassId
+                ? 'https://www.realapp.com/' + rsUrlHash(18, RS_SPORT_CODE[topSport] || 0, 0, topPassId)
+                : rsEntityUrl(topEt, topSport, topId);
+            var bsIdNum = topEntry && topEntry.bsId ? parseInt(topEntry.bsId, 10) : 0;
+            var perfUrl = bsIdNum > 0 ? 'https://www.realapp.com/' + rsUrlHash(14, 0, 0, bsIdNum) : '';
+            lines.push('🃏 ' + cardUrl);
+            if (perfUrl) lines.push('📈 ' + perfUrl);
+        }
         if (username) lines.push('🔗 raxedge.com/otd/' + username);
         var msg = lines.join('\n');
         navigator.clipboard.writeText(msg).then(function() { otdCopyToast('Copied!'); }).catch(function() {
