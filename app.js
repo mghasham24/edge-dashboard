@@ -3138,7 +3138,7 @@
     // Cross-year sports: season N = "N-(N+1)" display. Single-year: just "N" abbreviated.
     var OTD_CROSS_YEAR_SPORTS = { nfl:1, nba:1, nhl:1, ncaaf:1, ncaam:1, ncaab:1, ncaabb:1, epl:1, ucl:1, soccer:1, fc:1, mls:1, fifa:1 };
     // RS stores these sports' seasons by ENDING year (e.g. NBA season=2026 = the 2025-26 season)
-    var OTD_ENDING_YEAR_SPORTS = { nba:1, nhl:1, ncaab:1, ncaabb:1, ncaam:1 };
+    var OTD_ENDING_YEAR_SPORTS = {}; // RS always uses start year (2025 = "25-26")
     function otdFormatSeason(sport, season) {
         var yr = parseInt(season, 10);
         if (!yr) return String(season);
@@ -3533,6 +3533,28 @@
         if (listEl) listEl.innerHTML = buildOtdPassesList();
     }
 
+    function otdPassLevelChange(idx, level) {
+        var p = otdPlayers[idx];
+        if (!p) return;
+        p.level = level;
+        var lbl = (OTD_LEVEL_OPTIONS.find(function(o) { return o.value === level; }) || {}).label || 'Level ' + level;
+        p.levelLabel = lbl;
+        p.rarityColor = otdRarityColor(level);
+        p.earnings = null;
+        var listEl = document.getElementById('otd-passes-list');
+        if (listEl) listEl.innerHTML = buildOtdPassesList();
+        fetch('/api/real/otd?action=earnings&id=' + p.id + '&sport=' + p.sport + '&season=' + p.season + '&level=' + level + '&entityType=' + (p.entityType || 'player'), { credentials: 'same-origin' })
+            .then(function(r) { return r.ok ? r.json() : { ok: false }; })
+            .then(function(ed) {
+                p.earnings = (ed.ok && ed.earnings) ? ed.earnings : [];
+                renderOtdChips();
+                renderOtdResults();
+                var l2 = document.getElementById('otd-passes-list');
+                if (l2) l2.innerHTML = buildOtdPassesList();
+            })
+            .catch(function() { p.earnings = []; renderOtdChips(); renderOtdResults(); });
+    }
+
     function otdPassesSearchInput(val) {
         otdPassesSearch = val;
         var listEl = document.getElementById('otd-passes-list');
@@ -3663,14 +3685,27 @@
                     '</div>' +
                 '</div>' +
                 // Bottom info
-                '<div style="position:absolute;bottom:0;left:0;right:0;padding:6px 7px 7px;z-index:3">' +
-                    '<div style="font-size:10px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3;text-shadow:0 1px 4px rgba(0,0,0,.9)">' + escHtml(p.name) + '</div>' +
-                    '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:3px;gap:4px">' +
-                        '<span style="font-size:8px;font-weight:700;color:#fff;background:' + rc + ';border-radius:3px;padding:1px 5px;flex-shrink:0">' + escHtml(p.levelLabel || ('L' + p.level)) + '</span>' +
-                        '<span style="font-size:10px;font-weight:700;font-family:var(--mono);color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.9);flex:1;text-align:right">' + (isLoading ? '…' : RAX_ICON + item.total.toLocaleString()) + '</span>' +
-                        (eid ? '<button onclick="event.stopPropagation();otdOpenCardLink(\'' + eid + '\',\'' + p.sport + '\',\'' + eet + '\',\'\',\'' + pId + '\')" title="View card on RS" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:4px;color:#fff;padding:2px 5px;cursor:pointer;display:flex;align-items:center;flex-shrink:0">' + CARD_SVG + '</button>' : '') +
-                    '</div>' +
-                '</div>' +
+                (function() {
+                    var levelOpts = OTD_LEVEL_OPTIONS.filter(function(o) { return o.value >= 1; }).map(function(o) {
+                        return '<option value="' + o.value + '"' + (o.value === p.level ? ' selected' : '') + '>' + escHtml(o.label) + '</option>';
+                    }).join('');
+                    var earnCount = p.earnings ? p.earnings.filter(function(e) { var dp = (e.day||'').split('T')[0].split('-'); return dp.length === 3 && parseInt(dp[0],10) < otdCalYear; }).length : 0;
+                    var avgRax = (!isLoading && earnCount > 0) ? Math.round(item.total / earnCount) : 0;
+                    return '<div style="position:absolute;bottom:0;left:0;right:0;padding:5px 7px 6px;z-index:3">' +
+                        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">' +
+                            '<select onclick="event.stopPropagation()" onchange="event.stopPropagation();otdPassLevelChange(' + playerIdx + ',parseInt(this.value,10))" ' +
+                                'style="background:' + rc + ';border:none;border-radius:3px;color:#fff;font-size:8px;font-weight:700;padding:1px 3px;cursor:pointer;outline:none;-webkit-appearance:none;-moz-appearance:none;appearance:none;font-family:var(--sans)">' +
+                                levelOpts +
+                            '</select>' +
+                            (!isLoading && earnCount > 0 ? '<span style="font-size:8px;color:rgba(255,255,255,.7);font-family:var(--mono)">' + RAX_ICON + avgRax.toLocaleString() + ' avg</span>' : '') +
+                        '</div>' +
+                        '<div style="font-size:10px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3;text-shadow:0 1px 4px rgba(0,0,0,.9)">' + escHtml(p.name) + '</div>' +
+                        '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:2px;gap:4px">' +
+                            '<span style="font-size:10px;font-weight:700;font-family:var(--mono);color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.9);flex:1">' + (isLoading ? '…' : RAX_ICON + item.total.toLocaleString()) + '</span>' +
+                            (eid ? '<button onclick="event.stopPropagation();otdOpenCardLink(\'' + eid + '\',\'' + p.sport + '\',\'' + eet + '\',\'\',\'' + pId + '\')" title="View card on RS" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:4px;color:#fff;padding:2px 5px;cursor:pointer;display:flex;align-items:center;flex-shrink:0">' + CARD_SVG + '</button>' : '') +
+                        '</div>' +
+                    '</div>';
+                })() +
             '</div>';
         });
 
