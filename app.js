@@ -3218,7 +3218,8 @@
     var otdOverlapPage = 0;
     var OTD_OVERLAPS_PER_PAGE = 50;
     var otdOverlapPanelCache = null; // { key, html } — avoid rebuilding on every calendar tap
-    var otdOverlapSportFilter = null; // null = all sports
+    var otdOverlapSportFilter = null; // null = all sports, or object {sport: true} for multi-select
+    var otdOverlapSportDropdownOpen = false;
     var otdAllOverlapsView = false; // true → dedicated full-screen overlaps tab
     var otdAllOverlapsPage = 0;
     var OTD_ALL_OVERLAPS_PER_PAGE = 150;
@@ -3384,7 +3385,7 @@
     function otdToggleOverlaps() {
         otdShowOverlaps = !otdShowOverlaps;
         otdOverlapPanelCache = null;
-        if (!otdShowOverlaps) otdAllOverlapsView = false;
+        if (!otdShowOverlaps) { otdAllOverlapsView = false; otdOverlapSportDropdownOpen = false; }
         renderOtdResults();
     }
     function otdSetOverlapSort(axis) {
@@ -3396,9 +3397,20 @@
         otdOverlapPage = 0; otdOverlapPanelCache = null;
         renderOtdResults();
     }
-    function otdSetOverlapSportFilter(sport) {
-        otdOverlapSportFilter = (otdOverlapSportFilter === sport) ? null : sport;
+    function otdToggleOverlapSport(sport) {
+        if (!otdOverlapSportFilter) otdOverlapSportFilter = {};
+        if (otdOverlapSportFilter[sport]) {
+            delete otdOverlapSportFilter[sport];
+            if (Object.keys(otdOverlapSportFilter).length === 0) otdOverlapSportFilter = null;
+        } else {
+            otdOverlapSportFilter[sport] = true;
+        }
         otdOverlapPage = 0; otdAllOverlapsPage = 0; otdOverlapPanelCache = null;
+        renderOtdResults();
+    }
+    function otdToggleOverlapSportDropdown() {
+        otdOverlapSportDropdownOpen = !otdOverlapSportDropdownOpen;
+        otdOverlapPanelCache = null;
         renderOtdResults();
     }
     function otdShowAllOverlapsView() {
@@ -5251,18 +5263,28 @@
             if (otdOverlapSort === 'rax-desc') aoFlat.sort(function(a, b) { return (b.w.rax||0) - (a.w.rax||0); });
             if (otdOverlapSort === 'rax-asc')  aoFlat.sort(function(a, b) { return (a.w.rax||0) - (b.w.rax||0); });
 
-            // Sport filter chips
+            // Sport filter
             var aoSportsSet = {};
             aoFlat.forEach(function(e) { if (e.w.player.sport) aoSportsSet[e.w.player.sport] = true; });
             var aoSports = Object.keys(aoSportsSet).sort();
-            var aoChips = aoSports.length > 1 ? aoSports.map(function(sp) {
-                var active = otdOverlapSportFilter === sp;
-                var label = (OTD_SPORTS_LIST.find(function(s) { return s.key === sp; }) || {}).label || sp.toUpperCase();
-                return '<button onclick="otdSetOverlapSportFilter(\'' + sp + '\')" style="font-family:var(--sans);font-size:11px;font-weight:600;padding:3px 10px;border-radius:4px;cursor:pointer;border:1px solid ' + (active ? 'var(--accent);background:rgba(99,102,241,.15);color:var(--accent)' : 'var(--border2);background:var(--bg3);color:var(--muted)') + '">' + escHtml(label) + '</button>';
-            }).join('') : '';
+            var aoSelectedCount = otdOverlapSportFilter ? Object.keys(otdOverlapSportFilter).length : 0;
+            var aoSportsBtnLabel = 'Sports' + (aoSelectedCount > 0 ? ' (' + aoSelectedCount + ')' : '') + ' ▾';
+            var aoSportsBtn = aoSports.length > 1
+                ? '<button onclick="otdToggleOverlapSportDropdown()" style="font-family:var(--sans);font-size:11px;font-weight:600;padding:3px 10px;border-radius:4px;cursor:pointer;border:1px solid ' + (aoSelectedCount > 0 ? 'var(--accent);background:rgba(99,102,241,.15);color:var(--accent)' : 'var(--border2);background:var(--bg3);color:var(--muted)') + '">' + aoSportsBtnLabel + '</button>'
+                : '';
+            var aoSportsDropdown = '';
+            if (otdOverlapSportDropdownOpen && aoSports.length > 1) {
+                aoSportsDropdown = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">' +
+                    aoSports.map(function(sp) {
+                        var checked = otdOverlapSportFilter && otdOverlapSportFilter[sp];
+                        var label = (OTD_SPORTS_LIST.find(function(s) { return s.key === sp; }) || {}).label || sp.toUpperCase();
+                        return '<button onclick="otdToggleOverlapSport(\'' + sp + '\')" style="font-family:var(--sans);font-size:11px;font-weight:600;padding:3px 10px;border-radius:4px;cursor:pointer;border:1px solid ' + (checked ? 'var(--accent);background:rgba(99,102,241,.15);color:var(--accent)' : 'var(--border2);background:var(--bg3);color:var(--muted)') + '">' + (checked ? '✓ ' : '') + escHtml(label) + '</button>';
+                    }).join('') +
+                '</div>';
+            }
 
             var aoFiltered = otdOverlapSportFilter
-                ? aoFlat.filter(function(e) { return e.w.player.sport === otdOverlapSportFilter; })
+                ? aoFlat.filter(function(e) { return otdOverlapSportFilter[e.w.player.sport]; })
                 : aoFlat;
             var aoVisible = aoFiltered.slice(0, (otdAllOverlapsPage + 1) * OTD_ALL_OVERLAPS_PER_PAGE);
             var aoRemaining = aoFiltered.length - aoVisible.length;
@@ -5316,19 +5338,24 @@
                 : '';
 
             el.innerHTML =
-                '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:8px;flex-wrap:wrap">' +
-                    '<div style="display:flex;align-items:center;gap:10px">' +
-                        '<button onclick="otdBackFromAllOverlaps()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:5px 12px;border-radius:6px;cursor:pointer">← Calendar</button>' +
-                        '<span style="font-size:14px;font-weight:800">All Overlapping Claims</span>' +
+                '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;gap:8px">' +
+                    '<div>' +
+                        '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">' +
+                            '<button onclick="otdBackFromAllOverlaps()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:5px 12px;border-radius:6px;cursor:pointer">← Calendar</button>' +
+                            '<span style="font-size:14px;font-weight:800">All Overlapping Claims</span>' +
+                        '</div>' +
+                        '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">' +
+                            aoSortBtn('date', 'Date') +
+                            aoSortBtn('rax', 'Rax') +
+                            aoSportsBtn +
+                        '</div>' +
                     '</div>' +
-                    '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">' +
-                        aoSortBtn('date', 'Date') +
-                        aoSortBtn('rax', 'Rax') +
-                        '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:#ef5350;margin-left:2px">' + RAX_ICON + aoTotalRax.toLocaleString() + ' wasted</span>' +
+                    '<div style="text-align:right;flex-shrink:0">' +
+                        '<div style="font-family:var(--mono);font-size:13px;font-weight:700;color:#ef5350">' + RAX_ICON + aoTotalRax.toLocaleString() + ' wasted</div>' +
                     '</div>' +
                 '</div>' +
-                (aoChips ? '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">' + aoChips + '</div>' : '') +
-                '<div style="font-size:11px;color:var(--muted2);margin-bottom:8px">' + aoFiltered.length + ' overlap' + (aoFiltered.length !== 1 ? 's' : '') + (otdOverlapSportFilter ? ' in this sport' : ' across all sports') + ' — tap ' + AO_NAV_ICON + ' to jump to that day on the calendar</div>' +
+                aoSportsDropdown +
+                '<div style="font-size:11px;color:var(--muted2);margin-bottom:8px">' + aoFiltered.length + ' overlap' + (aoFiltered.length !== 1 ? 's' : '') + (otdOverlapSportFilter ? ' in ' + Object.keys(otdOverlapSportFilter).length + ' sport' + (Object.keys(otdOverlapSportFilter).length > 1 ? 's' : '') : ' across all sports') + ' — tap ' + AO_NAV_ICON + ' to jump to that day on the calendar</div>' +
                 '<div style="background:var(--bg2);border:1px solid var(--border2);border-radius:8px;overflow:hidden">' +
                     aoRows +
                     aoMoreBtn +
@@ -5527,7 +5554,8 @@
         if (otdShowOverlaps && overlapCount > 0) {
             // Cache the panel HTML — rebuilding 200+ rows on every calendar tap crashes mobile.
             // Cache is keyed by sort order + page + sport filter; invalidated when data rebuilds.
-            var ovlCacheKey = (otdOverlapSort || '') + '|' + otdOverlapPage + '|' + (otdOverlapSportFilter || '');
+            var sportFilterKey = otdOverlapSportFilter ? Object.keys(otdOverlapSportFilter).sort().join(',') : '';
+            var ovlCacheKey = (otdOverlapSort || '') + '|' + otdOverlapPage + '|' + sportFilterKey + '|' + (otdOverlapSportDropdownOpen ? '1' : '0');
             if (otdOverlapPanelCache && otdOverlapPanelCache.key === ovlCacheKey) {
                 overlapPanel = otdOverlapPanelCache.html;
             } else {
@@ -5535,18 +5563,28 @@
                 var OVL_CARD_ICON = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>';
                 var OVL_PERF_ICON = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>';
                 var OVL_NAV_ICON  = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
-                // Collect unique sports for filter chips
+                // Collect unique sports for filter button
                 var ovlSportsSet = {};
                 overlapFlat.forEach(function(e) { if (e.w.player.sport) ovlSportsSet[e.w.player.sport] = true; });
                 var ovlSports = Object.keys(ovlSportsSet).sort();
-                var sportChips = ovlSports.length > 1 ? ovlSports.map(function(sp) {
-                    var active = otdOverlapSportFilter === sp;
-                    var label = (OTD_SPORTS_LIST.find(function(s) { return s.key === sp; }) || {}).label || sp.toUpperCase();
-                    return '<button onclick="otdSetOverlapSportFilter(\'' + sp + '\')" style="font-family:var(--sans);font-size:10px;font-weight:600;padding:2px 8px;border-radius:4px;cursor:pointer;border:1px solid ' + (active ? 'var(--accent);background:rgba(99,102,241,.15);color:var(--accent)' : 'var(--border2);background:var(--bg3);color:var(--muted)') + '">' + escHtml(label) + '</button>';
-                }).join('') : '';
+                var ovlSelectedCount = otdOverlapSportFilter ? Object.keys(otdOverlapSportFilter).length : 0;
+                var ovlSportsBtnLabel = 'Sports' + (ovlSelectedCount > 0 ? ' (' + ovlSelectedCount + ')' : '') + ' ▾';
+                var ovlSportsBtn = ovlSports.length > 1
+                    ? '<button onclick="otdToggleOverlapSportDropdown()" style="' + ovlSortBase + (ovlSelectedCount > 0 ? 'var(--accent);background:rgba(99,102,241,.15);color:var(--accent)' : 'var(--border2);background:var(--bg3);color:var(--muted)') + '">' + ovlSportsBtnLabel + '</button>'
+                    : '';
+                var ovlSportsDropdown = '';
+                if (otdOverlapSportDropdownOpen && ovlSports.length > 1) {
+                    ovlSportsDropdown = '<div style="display:flex;align-items:center;gap:4px;padding:6px 10px;border-bottom:1px solid var(--border);overflow-x:auto;white-space:nowrap;flex-wrap:wrap">' +
+                        ovlSports.map(function(sp) {
+                            var checked = otdOverlapSportFilter && otdOverlapSportFilter[sp];
+                            var label = (OTD_SPORTS_LIST.find(function(s) { return s.key === sp; }) || {}).label || sp.toUpperCase();
+                            return '<button onclick="otdToggleOverlapSport(\'' + sp + '\')" style="font-family:var(--sans);font-size:10px;font-weight:600;padding:2px 8px;border-radius:4px;cursor:pointer;border:1px solid ' + (checked ? 'var(--accent);background:rgba(99,102,241,.15);color:var(--accent)' : 'var(--border2);background:var(--bg3);color:var(--muted)') + '">' + (checked ? '✓ ' : '') + escHtml(label) + '</button>';
+                        }).join('') +
+                    '</div>';
+                }
                 // Apply sport filter then paginate
                 var filteredFlat = otdOverlapSportFilter
-                    ? overlapFlat.filter(function(e) { return e.w.player.sport === otdOverlapSportFilter; })
+                    ? overlapFlat.filter(function(e) { return otdOverlapSportFilter[e.w.player.sport]; })
                     : overlapFlat;
                 var visibleFlat = filteredFlat.slice(0, (otdOverlapPage + 1) * OTD_OVERLAPS_PER_PAGE);
                 var overlapRows = visibleFlat.map(function(entry) {
@@ -5594,16 +5632,21 @@
                     return '<button onclick="otdSetOverlapSort(\'' + axis + '\')" style="' + ovlSortBase + (active ? 'var(--accent);background:rgba(99,102,241,.15);color:var(--accent)' : 'var(--border2);background:var(--bg3);color:var(--muted)') + '">' + label + arrow + '</button>';
                 };
                 overlapPanel = '<div style="background:var(--bg2);border:1px solid var(--border2);border-radius:8px;margin-bottom:10px;overflow:hidden">' +
-                    '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-bottom:1px solid ' + (sportChips ? 'transparent' : 'var(--border)') + ';flex-wrap:wrap;gap:6px">' +
-                        '<span style="font-size:12px;font-weight:700;color:var(--fg)">' + overlapCount + ' days with overlapping claims</span>' +
-                        '<div style="display:flex;align-items:center;gap:4px">' +
-                            ovlSortBtn('date', 'Date') +
-                            ovlSortBtn('rax', 'Rax') +
-                            '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:#ef5350;margin-left:6px">' + RAX_ICON + overlapTotal.toLocaleString() + '</span>' +
-                            '<button onclick="otdShowAllOverlapsView()" style="' + ovlSortBase + 'var(--border2);background:var(--bg3);color:var(--muted);margin-left:4px">Show All →</button>' +
+                    '<div style="display:flex;align-items:flex-start;justify-content:space-between;padding:8px 10px;border-bottom:1px solid var(--border);gap:6px">' +
+                        '<div>' +
+                            '<div style="font-size:12px;font-weight:700;color:var(--fg);margin-bottom:6px">' + overlapCount + ' days with overlapping claims</div>' +
+                            '<div style="display:flex;align-items:center;gap:4px">' +
+                                ovlSortBtn('date', 'Date') +
+                                ovlSortBtn('rax', 'Rax') +
+                                ovlSportsBtn +
+                            '</div>' +
+                        '</div>' +
+                        '<div style="text-align:right;flex-shrink:0">' +
+                            '<div style="font-family:var(--mono);font-size:12px;font-weight:700;color:#ef5350;margin-bottom:4px">' + RAX_ICON + overlapTotal.toLocaleString() + '</div>' +
+                            '<button onclick="otdShowAllOverlapsView()" style="font-family:var(--sans);font-size:9px;font-weight:600;padding:1px 6px;border-radius:4px;cursor:pointer;border:1px solid var(--border2);background:var(--bg3);color:var(--muted)">Show All →</button>' +
                         '</div>' +
                     '</div>' +
-                    (sportChips ? '<div style="display:flex;align-items:center;gap:4px;padding:6px 10px;border-bottom:1px solid var(--border);overflow-x:auto;white-space:nowrap">' + sportChips + '</div>' : '') +
+                    ovlSportsDropdown +
                     '<div style="max-height:260px;overflow-y:auto">' + overlapRows + moreBtn + '</div>' +
                 '</div>';
                 otdOverlapPanelCache = { key: ovlCacheKey, html: overlapPanel };
