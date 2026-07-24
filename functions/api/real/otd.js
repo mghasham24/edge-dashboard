@@ -413,7 +413,9 @@ export async function onRequestGet(context) {
     if (!rateClaim.meta.changes) return fail(429, 'RS rate limit: try again shortly');
 
     try {
-      const earningsUrl = `${RS_BASE}/userpassearnings/${sport}/season/${season}/entity/${entityType}/${id}?level=1`;
+      const RS_EARN_SPORT_MAP = { ncaabb: 'ncaam' };
+      const rsSport = RS_EARN_SPORT_MAP[sport] || sport;
+      const earningsUrl = `${RS_BASE}/userpassearnings/${rsSport}/season/${season}/entity/${entityType}/${id}?level=1`;
       const controller = new AbortController();
       const abortTimer = setTimeout(() => controller.abort(), 8000);
       let res;
