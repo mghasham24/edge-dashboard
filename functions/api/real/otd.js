@@ -565,13 +565,16 @@ export async function onRequestGet(context) {
 
     // Query by season only — no sport filter so RS returns all passes regardless of sport.
     // 5 seasons × 2 entity types = 10 parallel calls (vs 110 sport-filtered calls that RS rate-limits).
+    const force = url.searchParams.get('force') === '1';
     const cacheKey = `otd_passes_all_v8_${userId}`;
-    try {
-      const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
-      if (cached && (now - cached.fetched_at) < 7200) {
-        return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
-      }
-    } catch(e) {}
+    if (!force) {
+      try {
+        const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
+        if (cached && (now - cached.fetched_at) < 7200) {
+          return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
+        }
+      } catch(e) {}
+    }
 
     const yr = new Date().getFullYear();
     const seasons = [];
@@ -659,10 +662,12 @@ export async function onRequestGet(context) {
 
       const passes = Object.values(passMap);
       const body = JSON.stringify({ ok: true, passes });
-      try {
-        await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
-          .bind(cacheKey, body, now).run();
-      } catch(e) {}
+      if (passes.length > 0) {
+        try {
+          await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
+            .bind(cacheKey, body, now).run();
+        } catch(e) {}
+      }
       return new Response(body, { headers: { 'Content-Type': 'application/json' } });
     } catch(e) {
       if (e.message === '429') {

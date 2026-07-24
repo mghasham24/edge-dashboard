@@ -4345,7 +4345,7 @@
                         'oninput="otdOnUserInput(this.value)" />' +
                     '<div id="otd-user-autocomplete" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg2);border:1px solid var(--border2);border-radius:6px;z-index:200;margin-top:3px;overflow:hidden"></div>' +
                 '</div>' +
-                '<button onclick="otdLoadUserPasses()" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:13px;font-weight:700;padding:8px 16px;border-radius:6px;cursor:pointer;white-space:nowrap">' + (otdLoadingPasses ? 'Loading…' : 'Load Passes') + '</button>' +
+                '<button data-action="otd-load-passes" onclick="otdLoadUserPasses()" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:13px;font-weight:700;padding:8px 16px;border-radius:6px;cursor:pointer;white-space:nowrap">' + (otdLoadingPasses ? 'Loading…' : 'Load Passes') + '</button>' +
             '</div>' +
             '<div id="otd-search-err" style="display:none;font-size:12px;color:#ef5350;margin-bottom:8px"></div>' +
             '<div id="otd-chips" style="margin-bottom:8px"></div>' +
@@ -4520,7 +4520,7 @@
         var y = new Date().getFullYear(); return [y, y-1, y-2, y-3, y-4];
     })();
 
-    function otdLoadUserPasses() {
+    function otdLoadUserPasses(force) {
         var errEl = document.getElementById('otd-search-err');
         if (!otdSelectedUser) {
             if (errEl) { errEl.textContent = 'Search and select an RS username first'; errEl.style.display = ''; setTimeout(function() { if (errEl) errEl.style.display = 'none'; }, 3000); }
@@ -4536,18 +4536,22 @@
         renderOtdPanel();
 
         var userId = otdSelectedUser.id;
+        var forceParam = force ? '&force=1' : '';
 
         // Single consolidated fetch — backend batches all sports×seasons to avoid RS rate limiting
-        fetch('/api/real/otd?action=user_passes_all&userId=' + encodeURIComponent(userId), { credentials: 'same-origin' })
+        fetch('/api/real/otd?action=user_passes_all&userId=' + encodeURIComponent(userId) + forceParam, { credentials: 'same-origin' })
             .then(function(r) { return r.json(); })
             .then(function(d) {
                 otdLoadingPasses = false;
-                var btn = document.querySelector('[onclick="otdLoadUserPasses()"]');
+                var btn = document.querySelector('[data-action="otd-load-passes"]');
                 if (btn) btn.textContent = 'Load Passes';
 
                 if (!d.ok || !d.passes || !d.passes.length) {
                     var errEl2 = document.getElementById('otd-search-err');
-                    if (errEl2) { errEl2.textContent = 'No Rare+ passes found for ' + otdSelectedUser.username; errEl2.style.display = ''; setTimeout(function() { if (errEl2) errEl2.style.display = 'none'; }, 4000); }
+                    if (errEl2) {
+                        errEl2.innerHTML = 'No passes found for ' + escHtml(otdSelectedUser.username) + ' &nbsp;<button onclick="otdLoadUserPasses(true)" style="background:none;border:1px solid #ef5350;color:#ef5350;font-size:11px;padding:2px 7px;border-radius:4px;cursor:pointer;font-family:var(--sans)">↻ Retry Fresh</button>';
+                        errEl2.style.display = '';
+                    }
                     renderOtdChips();
                     renderOtdResults();
                     return;
@@ -4660,7 +4664,7 @@
             })
             .catch(function() {
                 otdLoadingPasses = false;
-                var btn = document.querySelector('[onclick="otdLoadUserPasses()"]');
+                var btn = document.querySelector('[data-action="otd-load-passes"]');
                 if (btn) btn.textContent = 'Load Passes';
                 renderOtdChips();
                 renderOtdResults();
