@@ -3204,6 +3204,7 @@
     var otdPassesOpen = false;
     var otdCarouselOpen = false;
     var otdPassesSearch = '';
+    var otdCarouselSearch = '';
     var otdSelectedPass = null;
     var otdSelectedPassMonth = null;
 
@@ -3385,7 +3386,7 @@
         otdCheckMode = false; otdCheckPlayer = null; otdCheckEarnings = null; otdCheckLoading = false;
         otdFindMode = false; otdFindPlayer = null; otdFindEarnings = null; otdFindLoading = false;
         otdSelectedDay = null; otdSelectedDaySport = null; otdLoadingPasses = false;
-        otdCarouselOpen = false; otdPassesOpen = false;
+        otdCarouselOpen = false; otdPassesOpen = false; otdCarouselSearch = '';
         renderOtdPanel();
     }
 
@@ -3548,6 +3549,21 @@
         var savedScroll = listEl ? listEl.scrollTop : 0;
         otdSelectedPassMonth = (otdSelectedPassMonth === mk) ? null : mk;
         if (listEl) { listEl.innerHTML = buildOtdPassesList(); listEl.scrollTop = savedScroll; }
+        var bdEl = document.getElementById('otd-carousel-breakdown');
+        if (bdEl && otdSelectedPass) bdEl.innerHTML = buildBreakdownCard(otdSelectedPass);
+    }
+
+    function otdClearPassMonth() {
+        otdSelectedPassMonth = null;
+        var listEl = document.getElementById('otd-passes-list');
+        if (listEl) listEl.innerHTML = buildOtdPassesList();
+        var bdEl = document.getElementById('otd-carousel-breakdown');
+        if (bdEl && otdSelectedPass) bdEl.innerHTML = buildBreakdownCard(otdSelectedPass);
+    }
+
+    function otdCarouselSearchInput(val) {
+        otdCarouselSearch = val;
+        renderOtdCarousel();
     }
 
     function otdGoToMonth(monthIdx) {
@@ -3610,53 +3626,62 @@
         });
         var months = Object.keys(monthMap).sort();
         if (!months.length) return '';
-        var monthBtns = months.map(function(mk) {
-            var parts = mk.split('-');
-            var mi = parseInt(parts[1], 10) - 1;
-            var total = monthMap[mk].reduce(function(s, e) { return s + e.rax; }, 0);
-            var isAct = otdSelectedPassMonth === mk;
-            return '<button onclick="otdSelectPassMonth(\'' + mk + '\')" style="background:' + (isAct ? rc + '33' : rc + '11') + ';border:1px solid ' + (isAct ? rc + '99' : rc + '33') + ';border-radius:6px;padding:5px 4px;cursor:pointer;text-align:center;font-family:var(--sans);width:100%">' +
-                '<div style="font-size:9px;font-weight:700;color:' + (isAct ? 'var(--fg)' : 'var(--muted2)') + '">' + MONTH_SHORT[mi] + '</div>' +
-                '<div style="font-size:10px;font-weight:700;font-family:var(--mono);color:' + (isAct ? rc : 'var(--accent)') + ';margin-top:1px">' + total.toLocaleString() + '</div>' +
-            '</button>';
-        }).join('');
-        var claimsHtml = '';
+
+        var headerHtml = '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">' +
+            '<span style="font-size:12px;font-weight:700;color:var(--fg)">' + escHtml(p.name) + '</span>' +
+            '<span style="font-size:8px;font-weight:700;color:#fff;background:' + rc + ';border-radius:3px;padding:1px 5px">' + escHtml(p.levelLabel || ('L' + p.level)) + '</span>' +
+            '<span style="font-size:9px;color:var(--muted2)">' + p.sport.toUpperCase() + ' · ' + escHtml(otdFormatSeason(p.sport, p.season)) + '</span>' +
+        '</div>';
+
+        // Daily view — flipped open for a specific month
         if (otdSelectedPassMonth && monthMap[otdSelectedPassMonth]) {
-            var entries = monthMap[otdSelectedPassMonth].slice().sort(function(a, b) { return a.origDay < b.origDay ? -1 : a.origDay > b.origDay ? 1 : 0; });
+            var entries = monthMap[otdSelectedPassMonth].slice().sort(function(a, b) { return a.origDay < b.origDay ? -1 : 1; });
             var selParts = otdSelectedPassMonth.split('-');
             var selMonthIdx = parseInt(selParts[1], 10) - 1;
-            var claimsLbl = MONTH_SHORT[selMonthIdx] + ' claims';
+            var selMonthLbl = MONTH_SHORT[selMonthIdx] + ' ' + selParts[0];
             var pid = String(p.id || '');
             var psp = p.sport || '';
             var pet = p.entityType || 'player';
             var pse = p.season || '';
-            claimsHtml = '<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px">' +
-                '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">' +
-                    '<span style="font-size:10px;font-weight:700;color:var(--muted2)">' + claimsLbl + '</span>' +
-                    '<button onclick="otdGoToMonth(' + selMonthIdx + ')" style="font-size:9px;font-weight:600;background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--accent);padding:2px 7px;cursor:pointer;font-family:var(--sans)">go to month</button>' +
+            var monthTotal = entries.reduce(function(s, e) { return s + e.rax; }, 0);
+            return '<div style="background:var(--bg2);border:1px solid ' + rc + '66;border-radius:10px;padding:10px;margin:4px 0">' +
+                '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">' +
+                    '<button onclick="otdClearPassMonth()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:5px;color:var(--fg);font-family:var(--sans);font-size:11px;font-weight:600;padding:4px 9px;cursor:pointer">← Months</button>' +
+                    '<div style="text-align:right">' +
+                        '<div style="font-size:11px;font-weight:700;color:var(--fg)">' + escHtml(selMonthLbl) + '</div>' +
+                        '<div style="font-size:10px;font-family:var(--mono);color:' + rc + ';font-weight:700">' + RAX_ICON + monthTotal.toLocaleString() + '</div>' +
+                    '</div>' +
                 '</div>' +
-                '<div>' +
+                '<div style="max-height:240px;overflow-y:auto">' +
                 entries.map(function(e) {
                     var dp2 = e.origDay.split('-');
                     var dayLbl = dp2.length === 3 ? MONTH_SHORT[parseInt(dp2[1], 10) - 1] + ' ' + parseInt(dp2[2], 10) : e.origDay;
                     var bsStr = e.bsId ? String(e.bsId) : '';
-                    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);font-size:11px">' +
-                        '<span style="color:var(--muted2);font-family:var(--mono);font-size:10px">' + escHtml(dayLbl) + '</span>' +
+                    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border)">' +
+                        '<span style="color:var(--muted2);font-size:11px">' + escHtml(dayLbl) + '</span>' +
                         (bsStr
-                            ? '<button onclick="otdOpenPerfLink(\'' + pid + '\',\'' + psp + '\',\'' + pet + '\',\'' + escHtml(e.origDay) + '\',\'' + pse + '\',\'' + bsStr + '\')" style="font-weight:700;font-family:var(--mono);color:var(--accent);background:none;border:none;cursor:pointer;padding:0;font-size:11px">' + RAX_ICON + e.rax.toLocaleString() + '</button>'
-                            : '<span style="font-weight:700;font-family:var(--mono);color:var(--accent)">' + RAX_ICON + e.rax.toLocaleString() + '</span>') +
+                            ? '<button onclick="otdOpenPerfLink(\'' + pid + '\',\'' + psp + '\',\'' + pet + '\',\'' + escHtml(e.origDay) + '\',\'' + pse + '\',\'' + bsStr + '\')" style="font-weight:700;font-family:var(--mono);color:var(--accent);background:none;border:none;cursor:pointer;padding:0;font-size:11px;display:flex;align-items:center;gap:2px">' + RAX_ICON + e.rax.toLocaleString() + '</button>'
+                            : '<span style="font-weight:700;font-family:var(--mono);color:var(--accent);font-size:11px;display:flex;align-items:center;gap:2px">' + RAX_ICON + e.rax.toLocaleString() + '</span>') +
                     '</div>';
                 }).join('') +
-                '</div></div>';
+                '</div>' +
+            '</div>';
         }
-        return '<div style="grid-column:1/-1;background:var(--bg2);border:1px solid ' + rc + '66;border-radius:10px;padding:10px;margin:2px 0 4px">' +
-            '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">' +
-                '<span style="font-size:12px;font-weight:700;color:var(--fg)">' + escHtml(p.name) + '</span>' +
-                '<span style="font-size:8px;font-weight:700;color:#fff;background:' + rc + ';border-radius:3px;padding:1px 5px">' + escHtml(p.levelLabel || ('L' + p.level)) + '</span>' +
-                '<span style="font-size:9px;color:var(--muted2)">' + p.sport.toUpperCase() + ' · ' + escHtml(otdFormatSeason(p.sport, p.season)) + '</span>' +
-            '</div>' +
+
+        // Month grid view (default)
+        var monthBtns = months.map(function(mk) {
+            var parts = mk.split('-');
+            var mi = parseInt(parts[1], 10) - 1;
+            var total = monthMap[mk].reduce(function(s, e) { return s + e.rax; }, 0);
+            return '<button onclick="otdSelectPassMonth(\'' + mk + '\')" style="background:' + rc + '11;border:1px solid ' + rc + '33;border-radius:6px;padding:5px 4px;cursor:pointer;text-align:center;font-family:var(--sans);width:100%">' +
+                '<div style="font-size:9px;font-weight:700;color:var(--muted2)">' + MONTH_SHORT[mi] + '</div>' +
+                '<div style="font-size:10px;font-weight:700;font-family:var(--mono);color:var(--accent);margin-top:1px">' + total.toLocaleString() + '</div>' +
+            '</button>';
+        }).join('');
+
+        return '<div style="background:var(--bg2);border:1px solid ' + rc + '66;border-radius:10px;padding:10px;margin:4px 0">' +
+            headerHtml +
             '<div style="display:grid;grid-template-columns:repeat(' + Math.min(months.length, 4) + ',1fr);gap:4px">' + monthBtns + '</div>' +
-            claimsHtml +
         '</div>';
     }
 
@@ -4207,11 +4232,15 @@
         var CW = 128, CH = 140;
         var CARD_SVG = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>';
 
+        var q = otdCarouselSearch.toLowerCase();
         var sorted = otdPlayers.slice().sort(function(a, b) {
             var ta = 0, tb = 0;
             if (a.earnings) a.earnings.forEach(function(e) { ta += e.atRarityEarnings || 0; });
             if (b.earnings) b.earnings.forEach(function(e) { tb += e.atRarityEarnings || 0; });
             return tb - ta;
+        }).filter(function(p) {
+            if (!q) return true;
+            return p.name.toLowerCase().indexOf(q) >= 0 || (p.sport || '').toLowerCase().indexOf(q) >= 0;
         });
 
         var cards = sorted.map(function(p) {
@@ -4260,10 +4289,13 @@
         }).join('');
 
         el.innerHTML =
+            '<input type="text" placeholder="Search passes…" value="' + escHtml(otdCarouselSearch) + '" autocomplete="off" ' +
+                'oninput="otdCarouselSearchInput(this.value)" ' +
+                'style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;padding:7px 10px;border-radius:6px;margin-bottom:8px">' +
             '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;margin:0 -12px;padding:0 12px 4px">' +
                 '<style>.otd-carousel-scroll::-webkit-scrollbar{display:none}</style>' +
                 '<div class="otd-carousel-scroll" style="display:grid;grid-template-rows:' + CH + 'px ' + CH + 'px;grid-auto-flow:column;grid-auto-columns:' + CW + 'px;gap:6px;width:max-content;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding:0 12px 4px;box-sizing:border-box">' +
-                    cards +
+                    (cards || '<div style="font-size:12px;color:var(--muted2);padding:20px 0">No passes match</div>') +
                 '</div>' +
             '</div>';
 
