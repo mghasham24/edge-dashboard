@@ -290,7 +290,7 @@ export async function onRequestGet(context) {
     if (!id) return fail(400, 'Missing id');
 
     const force = url.searchParams.get('force') === '1';
-    const cacheKey = `otd_earnings_v6_${entityType}_${sport}_${season}_${id}_l${level}`;
+    const cacheKey = `otd_earnings_v7_${entityType}_${sport}_${season}_${id}_l${level}`;
     if (!force) {
       try {
         const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
@@ -302,7 +302,7 @@ export async function onRequestGet(context) {
 
     try {
       const earningsUrl = `${RS_BASE}/userpassearnings/${sport}/season/${season}/entity/${entityType}/${id}?level=${level}`;
-      const baseUrl    = level > 1 ? `${RS_BASE}/userpassearnings/${sport}/season/${season}/entity/${entityType}/${id}?level=1` : null;
+      const baseUrl    = level > 0 ? `${RS_BASE}/userpassearnings/${sport}/season/${season}/entity/${entityType}/${id}?level=0` : null;
 
       let [res, baseRes] = await Promise.all([
         fetch(earningsUrl, { headers }),

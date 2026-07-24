@@ -3686,13 +3686,18 @@
                     : '<div style="position:absolute;top:10%;left:0;right:0;height:52%;display:flex;align-items:center;justify-content:center;font-size:40px;z-index:1">' + emoji + '</div>') +
                 // Dark gradient overlay for text legibility
                 '<div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.05) 0%,rgba(0,0,0,.15) 40%,rgba(0,0,0,.82) 68%,rgba(0,0,0,.92) 100%);z-index:2"></div>' +
-                // Top row: sport left, year right (+ SIM badge for added players)
-                '<div style="position:absolute;top:6px;left:6px;right:6px;display:flex;justify-content:space-between;align-items:center;z-index:3">' +
+                // Top-left: sport badge + card button below it
+                '<div style="position:absolute;top:6px;left:6px;z-index:3;display:flex;flex-direction:column;align-items:flex-start;gap:3px">' +
                     '<span style="font-size:8px;font-weight:800;color:#fff;background:rgba(0,0,0,.55);padding:2px 6px;border-radius:3px;letter-spacing:.04em">' + p.sport.toUpperCase() + '</span>' +
+                    (eid ? '<button onclick="event.stopPropagation();otdOpenCardLink(\'' + eid + '\',\'' + p.sport + '\',\'' + eet + '\',\'\',\'' + pId + '\')" title="View card on RS" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:4px;color:#fff;padding:2px 5px;cursor:pointer;display:flex;align-items:center">' + CARD_SVG + '</button>' : '') +
+                '</div>' +
+                // Top-right: season badge + × below it
+                '<div style="position:absolute;top:6px;right:6px;z-index:3;display:flex;flex-direction:column;align-items:flex-end;gap:3px">' +
                     '<div style="display:flex;align-items:center;gap:3px">' +
                         (p.isAdded ? '<span style="font-size:7px;font-weight:800;color:#fff;background:rgba(251,146,60,.85);padding:2px 5px;border-radius:3px;letter-spacing:.04em">SIM</span>' : '') +
                         '<span style="font-size:8px;font-weight:600;color:rgba(255,255,255,.9);background:rgba(0,0,0,.55);padding:2px 6px;border-radius:3px">' + escHtml(seasonFmt) + '</span>' +
                     '</div>' +
+                    '<button onclick="event.stopPropagation();otdRemovePass(' + playerIdx + ')" title="Remove pass" style="background:rgba(0,0,0,.45);border:none;border-radius:3px;color:rgba(255,255,255,.7);font-size:10px;line-height:1;padding:1px 5px;cursor:pointer;align-self:flex-end">×</button>' +
                 '</div>' +
                 // Bottom info
                 (function() {
@@ -3701,18 +3706,14 @@
                     }).join('');
                     var baseEarnings = (!isLoading && p.baseTotal !== null && p.baseTotal !== undefined) ? p.baseTotal : null;
                     return '<div style="position:absolute;bottom:0;left:0;right:0;padding:5px 7px 6px;z-index:3">' +
-                        '<div style="display:flex;align-items:center;gap:5px;margin-bottom:3px">' +
-                            '<select onclick="event.stopPropagation()" onchange="event.stopPropagation();otdPassLevelChange(' + playerIdx + ',parseInt(this.value,10))" ' +
-                                'style="background:' + rc + ';border:none;border-radius:3px;color:#fff;font-size:8px;font-weight:700;padding:1px 3px;cursor:pointer;outline:none;-webkit-appearance:none;-moz-appearance:none;appearance:none;font-family:var(--sans)">' +
-                                levelOpts +
-                            '</select>' +
-                            (baseEarnings !== null ? '<span style="font-size:8px;color:rgba(255,255,255,.75);font-family:var(--mono)">' + RAX_ICON + Math.round(baseEarnings).toLocaleString() + ' base</span>' : '') +
-                            '<button onclick="event.stopPropagation();otdRemovePass(' + playerIdx + ')" title="Remove pass" style="margin-left:auto;background:rgba(0,0,0,.45);border:none;border-radius:3px;color:rgba(255,255,255,.7);font-size:10px;line-height:1;padding:1px 4px;cursor:pointer">×</button>' +
-                        '</div>' +
+                        '<select onclick="event.stopPropagation()" onchange="event.stopPropagation();otdPassLevelChange(' + playerIdx + ',parseInt(this.value,10))" ' +
+                            'style="background:' + rc + ';border:none;border-radius:3px;color:#fff;font-size:8px;font-weight:700;padding:1px 3px;cursor:pointer;outline:none;-webkit-appearance:none;-moz-appearance:none;appearance:none;font-family:var(--sans);margin-bottom:3px">' +
+                            levelOpts +
+                        '</select>' +
                         '<div style="font-size:10px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3;text-shadow:0 1px 4px rgba(0,0,0,.9)">' + escHtml(p.name) + '</div>' +
                         '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:2px;gap:4px">' +
-                            '<span style="font-size:10px;font-weight:700;font-family:var(--mono);color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.9);flex:1">' + (isLoading ? '…' : RAX_ICON + item.total.toLocaleString()) + '</span>' +
-                            (eid ? '<button onclick="event.stopPropagation();otdOpenCardLink(\'' + eid + '\',\'' + p.sport + '\',\'' + eet + '\',\'\',\'' + pId + '\')" title="View card on RS" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:4px;color:#fff;padding:2px 5px;cursor:pointer;display:flex;align-items:center;flex-shrink:0">' + CARD_SVG + '</button>' : '') +
+                            '<span style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,.7)">' + (baseEarnings !== null ? RAX_ICON + Math.round(baseEarnings).toLocaleString() + ' base' : '') + '</span>' +
+                            '<span style="font-size:10px;font-weight:700;font-family:var(--mono);color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.9)">' + (isLoading ? '…' : RAX_ICON + item.total.toLocaleString()) + '</span>' +
                         '</div>' +
                     '</div>';
                 })() +
