@@ -66,9 +66,12 @@ export async function onRequestGet(context) {
   }
 
   function buildHeadersWithToken(authToken) {
+    const parts = authToken.split('!');
+    const deviceUuid = parts.length >= 2 ? parts[1] : (env.REAL_DEVICE_UUID || '');
     return {
       ...buildHeaders(env),
       'real-auth-info': authToken,
+      'real-device-uuid': deviceUuid,
     };
   }
   function pickToken() { return poolTokens[Math.floor(Math.random() * poolTokens.length)]; }
@@ -163,7 +166,7 @@ export async function onRequestGet(context) {
       const prefix = token.slice(0, 12) + '…';
       try {
         const res = await fetch(`${RS_BASE}/home/nba/next?cohort=0`, {
-          headers: { ...buildHeaders(env), 'real-auth-info': token },
+          headers: buildHeadersWithToken(token),
           signal: AbortSignal.timeout(5000),
         });
         return { label, prefix, status: res.status, ok: res.ok };
