@@ -4645,10 +4645,8 @@
                     .then(function(r) { return r.ok ? r.json() : { ok: false, earnings: {} }; })
                     .then(function(bundle) {
                         var bundleEarnings = (bundle.ok && bundle.earnings) ? bundle.earnings : {};
-                        var currentSeasonStr = String(new Date().getFullYear());
                         var queue = [];
                         otdPlayers.forEach(function(entry) {
-                            if (entry.season === currentSeasonStr) return; // season still active — not OTD yet
                             var bk = entry.id + '|' + entry.sport + '|' + entry.season + '|' + entry.level + '|' + entry.entityType;
                             var cached = bundleEarnings[bk];
                             if (cached) {
@@ -4661,8 +4659,7 @@
                         startEarningsQueue(queue);
                     })
                     .catch(function() {
-                        var currentSeasonStr = String(new Date().getFullYear());
-                        startEarningsQueue(otdPlayers.filter(function(e) { return e.season !== currentSeasonStr; }));
+                        startEarningsQueue(otdPlayers.slice());
                     });
             })
             .catch(function() {
