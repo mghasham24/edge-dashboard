@@ -3177,7 +3177,7 @@
     var otdColorIdx = 0;
     var otdCalYear = new Date().getFullYear();
     var otdCalMonth = new Date().getMonth(); // 0-indexed
-    var otdMode = 'player'; // 'player' | 'username'
+    var otdMode = 'username'; // 'player' | 'username'
     var otdSelectedUser = null; // { id, username, displayName }
     var otdUserSearchTimer = null;
     var otdLoadingPasses = false;

@@ -455,7 +455,7 @@ export async function onRequestGet(context) {
 
     // Query by season only — no sport filter so RS returns all passes regardless of sport.
     // 5 seasons × 2 entity types = 10 parallel calls (vs 110 sport-filtered calls that RS rate-limits).
-    const cacheKey = `otd_passes_all_v7_${userId}`;
+    const cacheKey = `otd_passes_all_v8_${userId}`;
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
       if (cached && (now - cached.fetched_at) < 7200) {
@@ -505,7 +505,7 @@ export async function onRequestGet(context) {
             playerId, playerName, sport, season, level, entityType,
             passId:           p.id || null,
             avatar:           entity.avatar || null,
-            entityAvatar:     p.entityAvatar || null,
+            entityAvatar:     p.entityAvatar || entity.entityAvatar || null,
             backgroundSource: p.backgroundSource || null,
             rarityColor:      (p.boostInfo && p.boostInfo.rarityColor) || null,
             serialNumber:     p.serialNumber || null,
