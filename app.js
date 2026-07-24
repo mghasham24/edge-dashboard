@@ -3278,7 +3278,7 @@
             'RaxEdge:  ' + MN[otdCalMonth] + ' ' + otdCalYear + ' - OTD Recap',
             '-',
             '💰 Total Rax: ' + totalRax.toLocaleString(),
-            '📊 Avg/day: ' + avg.toLocaleString() + ' Rax (' + claimDays + ' claim days)',
+            '📊 Avg/day: ' + avg.toLocaleString() + ' Rax',
             '-',
             'Sports Breakdown',
             sportLines,
