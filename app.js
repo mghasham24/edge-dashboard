@@ -4579,7 +4579,16 @@
                             .then(function(r) { return r.ok ? r.json() : { ok: false }; })
                             .then(function(ed) {
                                 if (ed.ok && ed.earnings) {
-                                    entry.earnings = ed.earnings;
+                                    // Normalize earnings entries — RS uses atRarityEarnings; log first entry of any 0-total pass so we can see all field names
+                                    entry.earnings = ed.earnings.map(function(e) {
+                                        if (!e.atRarityEarnings && e.atRarityEarnings !== undefined) {
+                                            var alt = e.raxEarnings || e.earnedRax || e.rax || e.points || e.totalEarnings || 0;
+                                            if (alt) return Object.assign({}, e, { atRarityEarnings: alt });
+                                        }
+                                        return e;
+                                    });
+                                    var earningsSum = entry.earnings.reduce(function(s, e) { return s + (e.atRarityEarnings || 0); }, 0);
+                                    if (!earningsSum && ed.earnings.length > 0) console.log('[OTD 0-earn]', entry.name, entry.sport, entry.season, 'l' + entry.level, 'sample:', ed.earnings[0]);
                                     if (ed.baseTotal !== null && ed.baseTotal !== undefined) entry.baseTotal = ed.baseTotal;
                                     if (!calJumped && ed.earnings.length) {
                                         calJumped = true;
