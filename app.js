@@ -5096,16 +5096,19 @@
         var anyLoaded = otdPlayers.some(function(p) { return p.earnings !== null; });
         if (otdLoadingPasses || numLoading > 0) {
             var OTD_TIPS = [
-                'You get 2 claims per sport per day — and 1 bonus claim for the single best card across all sports.',
-                'Holding the same player across multiple seasons means separate claims each day.',
-                'Platinum and Pinnacle cards can earn 100x+ more Rax than a Common on the same performance.',
-                'A player\'s worst game still earns — any game that hits the OTD threshold counts.',
-                'Check the "Check Before You Buy" tool before buying a card to see its exact OTD calendar.',
-                'Your 3rd daily claim goes to the highest-earning card across all your sports combined.',
-                'Stacking the same player across NFL, NBA, and baseball seasons maximizes daily claim volume.',
-                'Team cards earn on every game in a season — they compound fast on playoff runs.',
-                'The Find Player tool lets you preview any card\'s OTD calendar before adding it to your account.',
-                'Common cards are cheap entry points — but the jump to Rare is worth it if you hold long-term.'
+                'Iconic 20 is a whopping 40,000 player rating with a multiplier of 250x!',
+                'You get 2 claims per sport per day, with Pro you receive a bonus claim for the third best claim.',
+                'A player\'s worst game still earns — any game that makes at least 1 Rax counts.',
+                'Check the "Check Before You Buy" tool before buying a card to see its exact OTD calendar and to see if there are any overlaps!',
+                'Playoff games earn 2x the Rax!',
+                'Press "Passes" for a list of all your passes, including simulated ones!',
+                'You can change the rarity of your passes in the passes tab by clicking on the rarity badge!',
+                'Upgrading from Common to Epic does increase the multi, but the jump from Epic to Legendary makes it worth it!',
+                'The more overlaps you have, the more Rax you waste a year.',
+                'EV betting is the only way to guarantee profit with predictions, use RaxEdge to help you with it!',
+                'Join the group "RaxEdge" for updates!',
+                'DM @moe_ with any questions!',
+                'Use the share button to share your monthly OTD earnings with the community!'
             ];
             var tip = OTD_TIPS[Math.floor(Date.now() / 3000) % OTD_TIPS.length];
             var loadSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="72" height="72">'
