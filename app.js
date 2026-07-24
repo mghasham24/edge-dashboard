@@ -3537,7 +3537,7 @@
         otdCheckPlayer = null; otdCheckEarnings = null; otdCheckBaseTotal = null; otdCheckPlayerSelected = false;
         renderOtdCheckWrap();
         var inp = document.getElementById('otd-check-input');
-        if (inp && savedVal) { inp.value = savedVal; otdCheckSearchInput(savedVal); }
+        if (inp && savedVal) { inp.value = savedVal; setTimeout(function() { otdCheckSearchInput(savedVal); }, 50); }
         var ac = document.getElementById('otd-check-ac');
         if (ac && !savedVal) ac.style.display = 'none';
     }
@@ -4318,6 +4318,7 @@
         var overlapDays = [];
         var wastedCount = 0;
 
+        var checkMult = OTD_LEVEL_MULTIPLIERS[otdCheckPlayer.level] || 1;
         otdCheckEarnings.forEach(function(e) {
             var dp = (e.day || '').split('T')[0].split('-');
             if (dp.length !== 3) return;
@@ -4336,7 +4337,9 @@
                 return true;
             });
             if (existingEntries.length > 0) {
-                var newRax = e.atRarityEarnings || 0;
+                // Compute event rax from base earnings × selected multiplier so it stays in sync
+                // with the annual total and updates when rarity dropdown changes.
+                var newRax = Math.round((e.earnings || 0) * checkMult) || (e.atRarityEarnings || 0);
                 var newTotal = existingEntries.length + 1;
                 var isOver = newTotal > limit;
                 var wasted = false;
