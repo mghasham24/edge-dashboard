@@ -3541,8 +3541,9 @@
                     if (!ac2) return;
                     var items = (d.players || []).map(function(p) {
                         var av = escHtml(p.entityAvatar || p.avatar || '');
+                        var et = p.entityType || 'player';
                         return '<div style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border2)" ' +
-                            'onmousedown="otdCheckSelectPlayer(\'' + escHtml(String(p.id)) + '\',\'' + escHtml(p.name).replace(/'/g, '&#39;') + '\',\'' + sport + '\',\'' + av + '\')">' +
+                            'onmousedown="otdCheckSelectPlayer(\'' + escHtml(String(p.id)) + '\',\'' + escHtml(p.name).replace(/'/g, '&#39;') + '\',\'' + sport + '\',\'' + av + '\',\'' + et + '\')">' +
                             escHtml(p.name) + '</div>';
                     }).join('');
                     ac2.innerHTML = items || '<div style="padding:8px 12px;color:var(--muted);font-size:13px">No results</div>';
@@ -3551,7 +3552,7 @@
         }, 300);
     }
 
-    function otdCheckSelectPlayer(id, name, sport, avatar) {
+    function otdCheckSelectPlayer(id, name, sport, avatar, entityType) {
         var ac = document.getElementById('otd-check-ac');
         if (ac) ac.style.display = 'none';
         var inp = document.getElementById('otd-check-input');
@@ -3559,7 +3560,7 @@
         var season = String((document.getElementById('otd-check-season') || {}).value || new Date().getFullYear());
         var level = parseInt((document.getElementById('otd-check-level') || {}).value || '4', 10);
         var lbl = (OTD_LEVEL_OPTIONS.find(function(o) { return o.value === level; }) || {}).label || 'Level ' + level;
-        otdCheckPlayer = { id: String(id), name: name, sport: sport, season: season, level: level, levelLabel: lbl, entityType: 'player', avatar: avatar || '' };
+        otdCheckPlayer = { id: String(id), name: name, sport: sport, season: season, level: level, levelLabel: lbl, entityType: entityType || 'player', avatar: avatar || '' };
         otdCheckPlayerSelected = true;
         otdCheckEarnings = null; otdCheckBaseTotal = null;
         renderOtdCheckWrap();

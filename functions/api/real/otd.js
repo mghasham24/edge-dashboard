@@ -99,6 +99,33 @@ export async function onRequestGet(context) {
     const norm = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
     const queryWords = norm(q).split(/\s+/).filter(w => w.length > 1);
 
+    // UFC: RS search never returns fighters (they are entityType=team, not player).
+    // Search our D1 passes cache instead — fighters already owned by any user are indexed there.
+    if (sport === 'ufc') {
+      try {
+        const passRows = await env.DB.prepare(
+          "SELECT data FROM odds_cache WHERE cache_key LIKE 'otd_passes_all_v8_%' ORDER BY fetched_at DESC LIMIT 60"
+        ).all();
+        const ufcMap = {};
+        for (const row of (passRows.results || [])) {
+          try {
+            const pd = JSON.parse(row.data);
+            for (const p of (pd.passes || [])) {
+              if (p.sport !== 'ufc' || ufcMap[p.playerId]) continue;
+              const normName = norm(p.playerName || '');
+              if (queryWords.some(w => normName.includes(w))) {
+                ufcMap[p.playerId] = { id: p.playerId, name: p.playerName, sport: 'ufc', avatar: p.entityAvatar || p.avatar || '', entityAvatar: p.entityAvatar || '', entityType: 'team' };
+              }
+            }
+          } catch(e) {}
+        }
+        const players = Object.values(ufcMap).slice(0, 15);
+        return new Response(JSON.stringify({ ok: true, players }), { headers: { 'Content-Type': 'application/json' } });
+      } catch(e) {
+        return fail(500, e.message);
+      }
+    }
+
     // RS search API uses different slugs than our internal sport keys
     const RS_SEARCH_SPORT_MAP = { ncaabb: 'ncaam', ncaaf: 'ncaaf' };
     const searchSport = RS_SEARCH_SPORT_MAP[sport] || sport;
@@ -110,14 +137,10 @@ export async function onRequestGet(context) {
         if (!r.ok) return null;
         return r.json();
       };
-      const countResults = (d) => (d.players || []).length + (d.entities || []).length +
-        ((d.results && d.results.plays) || []).length + ((d.results && d.results.entities) || []).length +
-        ((d.results && d.results.players) || []).length;
 
       const playerMap = {};
       const addPlayer = (pObj) => {
         if (!pObj || !pObj.id || playerMap[pObj.id]) return;
-        // RS returns firstName+lastName for most sports; name field for some (e.g. UFC fighters)
         const name = (pObj.name || ((pObj.firstName || '') + ' ' + (pObj.lastName || '')).trim()).trim();
         if (!name) return;
         if (!queryWords.some(w => norm(name).includes(w))) return;
@@ -125,30 +148,22 @@ export async function onRequestGet(context) {
       };
       const extractPlayers = (data) => {
         if (!data) return;
-        // Format 1: data.players or data.results.players (direct player list)
         for (const pObj of (data.players || (data.results && data.results.players) || [])) addPlayer(pObj);
-        // Format 2: data.entities — RS returns { type, entity: { firstName, lastName, ... }, id }
         for (const e of (data.entities || (data.results && data.results.entities) || [])) addPlayer(e.entity || e.player || e);
-        // Format 3: data.results.plays — each play has primaryPlayer / secondaryPlayer
         for (const play of (data.results && data.results.plays) || (data.plays) || []) {
           addPlayer(play.primaryPlayer); addPlayer(play.secondaryPlayer);
         }
       };
 
-      // UFC: fighters are stored as "teams" in RS plays — sport=ufc returns plays with null
-      // primaryPlayer. Try sport=mma, then no filter, to find fighter entities by name.
-      const searchQueue = sport === 'ufc'
-        ? ['mma', null, 'ufc']
-        : [searchSport, null];
-      for (const sp of searchQueue) {
-        if (Object.keys(playerMap).length) break;
-        const d = await trySearch(sp);
-        extractPlayers(d);
+      let data = await trySearch(searchSport);
+      extractPlayers(data);
+      if (!Object.keys(playerMap).length) {
+        const d2 = await trySearch(null);
+        extractPlayers(d2);
       }
 
       const players = Object.values(playerMap).slice(0, 15);
       const body = JSON.stringify({ ok: true, players });
-      // Only cache if we got results to avoid caching stale "no results"
       if (players.length > 0) {
         try {
           await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
