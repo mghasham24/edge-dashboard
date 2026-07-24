@@ -523,6 +523,19 @@ export async function onRequestGet(context) {
     return new Response(JSON.stringify({ count: raw.length, resolvedUserId: userId, passes: raw.slice(0, 2) }, null, 2), { headers: { 'Content-Type': 'application/json' } });
   }
 
+  // Debug: test whether RS accepts comma-separated seasons in one call
+  if (action === 'debug_multi_season') {
+    if (!session.is_admin) return fail(403, 'Admin only');
+    const userId = url.searchParams.get('userId');
+    const seasonParam = url.searchParams.get('seasons') || '2022,2023';
+    if (!userId) return fail(400, 'Missing userId');
+    const res = await fetch(`${RS_BASE}/userpasses/${encodeURIComponent(userId)}/passes?entityType=player&season=${encodeURIComponent(seasonParam)}`, { headers });
+    const text = await res.text();
+    let parsed; try { parsed = JSON.parse(text); } catch(e) { parsed = text; }
+    const count = Array.isArray(parsed) ? parsed.length : (parsed.passes || parsed.items || []).length;
+    return new Response(JSON.stringify({ status: res.status, seasonParam, count, sample: Array.isArray(parsed) ? parsed.slice(0,2) : (parsed.passes||parsed.items||[]).slice(0,2) }, null, 2), { headers: { 'Content-Type': 'application/json' } });
+  }
+
   // Fetch ALL passes for an RS user across all sports and seasons — batched to avoid rate limiting
   // Debug: return raw RS pass fields for a user to diagnose missing passes
   if (action === 'debug_passes') {
