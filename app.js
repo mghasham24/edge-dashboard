@@ -3533,6 +3533,15 @@
         if (listEl) listEl.innerHTML = buildOtdPassesList();
     }
 
+    function otdRemovePass(idx) {
+        otdPlayers.splice(idx, 1);
+        if (otdSelectedPass && otdPlayers.indexOf(otdSelectedPass) === -1) otdSelectedPass = null;
+        renderOtdChips();
+        renderOtdResults();
+        var listEl = document.getElementById('otd-passes-list');
+        if (listEl) listEl.innerHTML = buildOtdPassesList();
+    }
+
     function otdPassLevelChange(idx, level) {
         var p = otdPlayers[idx];
         if (!p) return;
@@ -3547,6 +3556,7 @@
             .then(function(r) { return r.ok ? r.json() : { ok: false }; })
             .then(function(ed) {
                 p.earnings = (ed.ok && ed.earnings) ? ed.earnings : [];
+                if (ed.baseTotal !== null && ed.baseTotal !== undefined) p.baseTotal = ed.baseTotal;
                 renderOtdChips();
                 renderOtdResults();
                 var l2 = document.getElementById('otd-passes-list');
@@ -3689,15 +3699,15 @@
                     var levelOpts = OTD_LEVEL_OPTIONS.filter(function(o) { return o.value >= 1; }).map(function(o) {
                         return '<option value="' + o.value + '"' + (o.value === p.level ? ' selected' : '') + '>' + escHtml(o.label) + '</option>';
                     }).join('');
-                    var mult = p.multiplier ? parseInt(p.multiplier, 10) : 0;
-                    var baseEarnings = (!isLoading && mult > 1 && item.total > 0) ? Math.round(item.total / mult) : 0;
+                    var baseEarnings = (!isLoading && p.baseTotal !== null && p.baseTotal !== undefined) ? p.baseTotal : null;
                     return '<div style="position:absolute;bottom:0;left:0;right:0;padding:5px 7px 6px;z-index:3">' +
                         '<div style="display:flex;align-items:center;gap:5px;margin-bottom:3px">' +
                             '<select onclick="event.stopPropagation()" onchange="event.stopPropagation();otdPassLevelChange(' + playerIdx + ',parseInt(this.value,10))" ' +
                                 'style="background:' + rc + ';border:none;border-radius:3px;color:#fff;font-size:8px;font-weight:700;padding:1px 3px;cursor:pointer;outline:none;-webkit-appearance:none;-moz-appearance:none;appearance:none;font-family:var(--sans)">' +
                                 levelOpts +
                             '</select>' +
-                            (baseEarnings > 0 ? '<span style="font-size:8px;color:rgba(255,255,255,.75);font-family:var(--mono)">' + RAX_ICON + baseEarnings.toLocaleString() + ' base</span>' : '') +
+                            (baseEarnings !== null ? '<span style="font-size:8px;color:rgba(255,255,255,.75);font-family:var(--mono)">' + RAX_ICON + Math.round(baseEarnings).toLocaleString() + ' base</span>' : '') +
+                            '<button onclick="event.stopPropagation();otdRemovePass(' + playerIdx + ')" title="Remove pass" style="margin-left:auto;background:rgba(0,0,0,.45);border:none;border-radius:3px;color:rgba(255,255,255,.7);font-size:10px;line-height:1;padding:1px 4px;cursor:pointer">×</button>' +
                         '</div>' +
                         '<div style="font-size:10px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3;text-shadow:0 1px 4px rgba(0,0,0,.9)">' + escHtml(p.name) + '</div>' +
                         '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:2px;gap:4px">' +
@@ -4404,7 +4414,7 @@
                     var lbl = (OTD_LEVEL_OPTIONS.find(function(o) { return o.value === pass.level; }) || {}).label || 'Level ' + pass.level;
                     var color = OTD_COLORS[otdColorIdx % OTD_COLORS.length];
                     otdColorIdx++;
-                    var entry = { id: pass.playerId, name: pass.playerName || ('Player ' + pass.playerId), sport: pass.sport, season: String(pass.season), level: pass.level, levelLabel: lbl, color: color, earnings: null, entityType: pass.entityType || 'player', passId: pass.passId || null, avatar: pass.avatar || pass.entityAvatar || '', backgroundSource: pass.backgroundSource || null, rarityColor: pass.rarityColor || null, serialNumber: pass.serialNumber || null, multiplier: pass.multiplier || null };
+                    var entry = { id: pass.playerId, name: pass.playerName || ('Player ' + pass.playerId), sport: pass.sport, season: String(pass.season), level: pass.level, levelLabel: lbl, color: color, earnings: null, baseTotal: null, entityType: pass.entityType || 'player', passId: pass.passId || null, avatar: pass.avatar || pass.entityAvatar || '', backgroundSource: pass.backgroundSource || null, rarityColor: pass.rarityColor || null, serialNumber: pass.serialNumber || null, multiplier: pass.multiplier || null };
                     otdPlayers.push(entry);
                     earningsQueue.push(entry);
                 });
@@ -4424,6 +4434,7 @@
                             .then(function(ed) {
                                 if (ed.ok && ed.earnings) {
                                     entry.earnings = ed.earnings;
+                                    if (ed.baseTotal !== null && ed.baseTotal !== undefined) entry.baseTotal = ed.baseTotal;
                                     if (!calJumped && ed.earnings.length) {
                                         calJumped = true;
                                         var curYr2 = new Date().getFullYear();

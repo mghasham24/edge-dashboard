@@ -290,7 +290,7 @@ export async function onRequestGet(context) {
     if (!id) return fail(400, 'Missing id');
 
     const force = url.searchParams.get('force') === '1';
-    const cacheKey = `otd_earnings_v5_${entityType}_${sport}_${season}_${id}_l${level}`;
+    const cacheKey = `otd_earnings_v6_${entityType}_${sport}_${season}_${id}_l${level}`;
     if (!force) {
       try {
         const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
@@ -302,22 +302,36 @@ export async function onRequestGet(context) {
 
     try {
       const earningsUrl = `${RS_BASE}/userpassearnings/${sport}/season/${season}/entity/${entityType}/${id}?level=${level}`;
-      let res = await fetch(earningsUrl, { headers });
-      // Retry once on 429 after a short delay
+      const baseUrl    = level > 1 ? `${RS_BASE}/userpassearnings/${sport}/season/${season}/entity/${entityType}/${id}?level=1` : null;
+
+      let [res, baseRes] = await Promise.all([
+        fetch(earningsUrl, { headers }),
+        baseUrl ? fetch(baseUrl, { headers }) : Promise.resolve(null),
+      ]);
+
+      // Retry main on 429
       if (res.status === 429) {
         await new Promise(r => setTimeout(r, 1000));
         res = await fetch(earningsUrl, { headers });
       }
       if (!res.ok) return fail(res.status, 'RS earnings failed: ' + res.status);
+
       const data = await res.json();
-      // RS may return earnings under different field names depending on sport/context
       const earnings = data.earnings || data.events || data.performances || data.playerEarnings || data.earningDays || [];
-      // rawSample: first entry with all fields — lets us discover if RS includes boxscore IDs.
-      // _rawKeys: top-level keys from RS response when empty — helps diagnose field name mismatches.
+
+      // Base total: sum atRarityEarnings at level 1 (the "This season" number RS shows)
+      let baseTotal = null;
+      if (baseRes && baseRes.ok) {
+        try {
+          const baseData = await baseRes.json();
+          const baseEarnings = baseData.earnings || baseData.events || baseData.performances || baseData.playerEarnings || baseData.earningDays || [];
+          baseTotal = baseEarnings.reduce(function(s, e) { return s + (e.atRarityEarnings || 0); }, 0);
+        } catch(e) {}
+      }
+
       const rawSample = earnings[0] || null;
       const rawKeys = earnings.length === 0 ? Object.keys(data) : undefined;
-      const body = JSON.stringify({ ok: true, earnings, rawSample, rawKeys });
-      // Only cache non-empty results — empty may mean wrong entity ID or transient RS issue
+      const body = JSON.stringify({ ok: true, earnings, baseTotal, rawSample, rawKeys });
       if (earnings.length > 0) {
         try {
           await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
