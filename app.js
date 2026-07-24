@@ -3228,6 +3228,14 @@
     var otdSelectedPassMonth = null;
     var otdLastRenderMs = 0;
     var otdRenderQueued = false;
+    // Date-map cache — skip expensive O(players×earnings) rebuild unless data changed
+    var otdDateMapDirty = true;
+    var otdDateMapCached = null;   // { dm: dateMap, om: overlapMap }
+    var otdDateMapCachedYear = -1;
+    var otdDateMapCachedCV = -1;   // cached claimsView
+    // Passes list pagination
+    var otdPassesPage = 0;
+    var OTD_PASSES_PER_PAGE = 30;
 
     function otdPrevMonth() {
         if (otdCalMonth === 0) { otdCalMonth = 11; otdCalYear--; } else { otdCalMonth--; }
@@ -3500,13 +3508,14 @@
             .then(function(d) {
                 if (OTD_LEVEL_MULTIPLIERS[newLevel]) p.multiplier = OTD_LEVEL_MULTIPLIERS[newLevel] + 'x';
                 p.earnings = (d.ok && d.earnings) ? otdApplyMultiplier(d.earnings, newLevel) : [];
+                otdDateMapDirty = true;
                 // Feed results into Find Player panel if it's still showing this player at this level
                 if (otdFindPlayer && String(otdFindPlayer.id) === String(p.id) && otdFindPlayer.sport === p.sport && otdFindPlayer.level === newLevel) {
                     otdFindEarnings = p.earnings;
                 }
                 renderOtdChips(); renderOtdResults(); renderOtdCheckWrap();
             })
-            .catch(function() { p.earnings = []; renderOtdChips(); renderOtdResults(); renderOtdCheckWrap(); });
+            .catch(function() { p.earnings = []; otdDateMapDirty = true; renderOtdChips(); renderOtdResults(); renderOtdCheckWrap(); });
     }
 
     function otdToggleFind() {
@@ -3619,7 +3628,8 @@
     function otdSelectPass(playerIdx) {
         var p = otdPlayers[playerIdx];
         if (!p) return;
-        var savedScroll = (document.getElementById('otd-passes-list') || {}).scrollTop || 0;
+        var listEl = document.getElementById('otd-passes-list');
+        var savedScroll = listEl ? listEl.scrollTop : 0;
         if (otdSelectedPass === p) {
             otdSelectedPass = null;
             otdSelectedPassMonth = null;
@@ -3631,9 +3641,10 @@
             otdFindEarnings = p.earnings;
             otdFindPlayer = { id: p.id, name: p.name, sport: p.sport, season: p.season, level: p.level || 4, levelLabel: p.levelLabel || '' };
         }
+        // dateMap is cached — renderOtdResults is fast (just calendar HTML, no recompute).
+        // Skip renderOtdCarousel — it's expensive and selection state isn't shown there.
         renderOtdResults();
-        renderOtdCarousel();
-        var listEl = document.getElementById('otd-passes-list');
+        if (listEl) listEl.innerHTML = buildOtdPassesList();
         if (listEl && savedScroll) listEl.scrollTop = savedScroll;
     }
 
@@ -3667,6 +3678,7 @@
 
     function otdRemovePass(idx) {
         otdPlayers.splice(idx, 1);
+        otdDateMapDirty = true;
         if (otdSelectedPass && otdPlayers.indexOf(otdSelectedPass) === -1) otdSelectedPass = null;
         renderOtdChips();
         renderOtdResults();
@@ -3691,6 +3703,7 @@
             .then(function(ed) {
                 if (OTD_LEVEL_MULTIPLIERS[level]) p.multiplier = OTD_LEVEL_MULTIPLIERS[level] + 'x';
                 p.earnings = (ed.ok && ed.earnings) ? otdApplyMultiplier(ed.earnings, level) : [];
+                otdDateMapDirty = true;
                 if (ed.baseTotal !== null && ed.baseTotal !== undefined) p.baseTotal = ed.baseTotal;
                 renderOtdChips();
                 renderOtdResults();
@@ -3698,11 +3711,12 @@
                 var l2 = document.getElementById('otd-passes-list');
                 if (l2) l2.innerHTML = buildOtdPassesList();
             })
-            .catch(function() { p.earnings = []; renderOtdChips(); renderOtdResults(); renderOtdCarousel(); });
+            .catch(function() { p.earnings = []; otdDateMapDirty = true; renderOtdChips(); renderOtdResults(); renderOtdCarousel(); });
     }
 
     function otdPassesSearchInput(val) {
         otdPassesSearch = val;
+        otdPassesPage = 0;
         var listEl = document.getElementById('otd-passes-list');
         if (listEl) listEl.innerHTML = buildOtdPassesList();
     }
@@ -3807,6 +3821,15 @@
             items.forEach(function(item, i) { if (item.p === otdSelectedPass) selectedItemIdx = i; });
         }
 
+        // Pagination: show OTD_PASSES_PER_PAGE items per page.
+        // Always expand the visible window to include the selected pass.
+        var allItems = items;
+        var visibleCount = (otdPassesPage + 1) * OTD_PASSES_PER_PAGE;
+        if (selectedItemIdx >= visibleCount) visibleCount = selectedItemIdx + 2; // extend to include its row
+        items = allItems.slice(0, visibleCount);
+        // Recalculate selectedItemIdx after slice (it can only be within visible items or -1)
+        if (selectedItemIdx >= items.length) selectedItemIdx = -1;
+
         var cardHtmls = items.map(function(item, i) {
             var p = item.p;
             var playerIdx = otdPlayers.indexOf(p);
@@ -3876,7 +3899,22 @@
             if (breakdownHtml) cardHtmls.splice(Math.min(insertAfter, cardHtmls.length), 0, '<div style="grid-column:1/-1">' + breakdownHtml + '</div>');
         }
 
-        return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;padding-bottom:6px">' + cardHtmls.join('') + '</div>';
+        var remaining = allItems.length - items.length;
+        var moreBtn = remaining > 0
+            ? '<div style="grid-column:1/-1;text-align:center;padding:10px 0 4px">' +
+                '<button onclick="otdShowMorePasses()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:7px 20px;border-radius:6px;cursor:pointer">Show ' + remaining + ' more</button>' +
+              '</div>'
+            : '';
+
+        return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;padding-bottom:6px">' + cardHtmls.join('') + moreBtn + '</div>';
+    }
+
+    function otdShowMorePasses() {
+        otdPassesPage++;
+        var listEl = document.getElementById('otd-passes-list');
+        var savedScroll = listEl ? listEl.scrollTop : 0;
+        if (listEl) listEl.innerHTML = buildOtdPassesList();
+        if (listEl && savedScroll) listEl.scrollTop = savedScroll;
     }
 
     function renderOtdPassesPanel() {
@@ -4562,6 +4600,7 @@
 
     function otdRemovePlayer(idx) {
         otdPlayers.splice(idx, 1);
+        otdDateMapDirty = true;
         renderOtdChips();
         renderOtdResults();
     }
@@ -4569,6 +4608,7 @@
     function otdSetMode(mode) {
         otdMode = mode;
         otdPlayers = [];
+        otdDateMapDirty = true; otdPassesPage = 0;
         otdColorIdx = 0;
         otdSelectedPlayer = null;
         otdSelectedUser = null;
@@ -4627,6 +4667,7 @@
 
         otdPlayers = [];
         otdColorIdx = 0;
+        otdDateMapDirty = true; otdPassesPage = 0;
         otdLoadingPasses = true;
         renderOtdPanel();
 
@@ -4757,6 +4798,7 @@
                                         } else {
                                             entry.earnings = [];
                                         }
+                                        otdDateMapDirty = true;
                                         // If this is the last pending pass, force a final render immediately.
                                         var stillPending = otdPlayers.filter(function(p) { return p.earnings === null; }).length;
                                         if (stillPending === 0) {
@@ -4796,6 +4838,7 @@
                                 queue.push(entry);
                             }
                         });
+                        otdDateMapDirty = true;
                         // Split the initial render across two frames so the browser can paint in between.
                         otdLastRenderMs = 0; otdRenderQueued = false;
                         renderOtdChips(); renderOtdResults();
@@ -4959,68 +5002,75 @@
                 findDateSet[String(otdCalYear) + '-' + dp[1].padStart(2,'0') + '-' + dp[2].padStart(2,'0')] = true;
             });
         }
-        var rawDateMap = {};
-        otdPlayers.forEach(function(p) {
-            if (!p.earnings) return;
-            p.earnings.forEach(function(e) {
-                var dp = (e.day || '').split('T')[0].trim().split('-');
-                if (dp.length !== 3) return;
-                var origYear = parseInt(dp[0], 10);
-                // Current/future season: first OTD year is origYear+1; skip if viewing year is earlier
-                if (origYear >= otdCalYear) return;
-                var dayKey = String(otdCalYear) + '-' + dp[1].padStart(2,'0') + '-' + dp[2].padStart(2,'0');
-                if (!rawDateMap[dayKey]) rawDateMap[dayKey] = {};
-                var SOCCER_SK = { epl:1, ucl:1, mls:1, fc:1, fifa:1, soccer:1 };
-                var sk = SOCCER_SK[p.sport] ? 'soccer' : p.sport;
-                if (!rawDateMap[dayKey][sk]) rawDateMap[dayKey][sk] = [];
-                rawDateMap[dayKey][sk].push({ player: p, rax: e.atRarityEarnings || 0, origDay: (e.day || '').split('T')[0].trim(), bsId: (e.playerBoxScoreIds && e.playerBoxScoreIds[0]) || e.playerBoxScoreId || e.boxScoreId || e.boxscoreId || e.performanceId || e.gameId || null });
-            });
-        });
-
-        // Step 2: flatten — deduplicate same entity+season per sport per day (keep highest Rax entry).
-        // Same player in different seasons = separate claims (e.g. Ohtani '24 and '25 both count).
-        // Claims 1-2: top 2 per sport. Claim 3 (Pro): single best 3rd-slot across ALL sports.
-        var dateMap = {};
-        var totalDates = 0;
-        var thirdCandidates = {}; // dayKey → [3rd-slot entries from each sport]
-        var overlapMap = {}; // dayKey → [{sport, wasted}]
-        Object.keys(rawDateMap).forEach(function(dayKey) {
-            Object.keys(rawDateMap[dayKey]).forEach(function(sport) {
-                var entityBest = {};
-                rawDateMap[dayKey][sport].forEach(function(e) {
-                    var ek = e.player.id + '|' + e.player.sport + '|' + e.player.season;
-                    if (!entityBest[ek] || (e.rax || 0) > (entityBest[ek].rax || 0)) entityBest[ek] = e;
+        // Expensive O(players×earnings) computation — cached until data changes.
+        // Invalidated by otdDateMapDirty=true (set by any earnings/player mutation).
+        var dateMap, overlapMap;
+        var needsRebuild = otdDateMapDirty || !otdDateMapCached ||
+                           otdDateMapCachedYear !== otdCalYear || otdDateMapCachedCV !== otdClaimsView;
+        if (needsRebuild) {
+            var rawDateMap = {};
+            otdPlayers.forEach(function(p) {
+                if (!p.earnings) return;
+                p.earnings.forEach(function(e) {
+                    var dp = (e.day || '').split('T')[0].trim().split('-');
+                    if (dp.length !== 3) return;
+                    var origYear = parseInt(dp[0], 10);
+                    if (origYear >= otdCalYear) return;
+                    var dayKey = String(otdCalYear) + '-' + dp[1].padStart(2,'0') + '-' + dp[2].padStart(2,'0');
+                    if (!rawDateMap[dayKey]) rawDateMap[dayKey] = {};
+                    var SOCCER_SK = { epl:1, ucl:1, mls:1, fc:1, fifa:1, soccer:1 };
+                    var sk = SOCCER_SK[p.sport] ? 'soccer' : p.sport;
+                    if (!rawDateMap[dayKey][sk]) rawDateMap[dayKey][sk] = [];
+                    rawDateMap[dayKey][sk].push({ player: p, rax: e.atRarityEarnings || 0, origDay: (e.day || '').split('T')[0].trim(), bsId: (e.playerBoxScoreIds && e.playerBoxScoreIds[0]) || e.playerBoxScoreId || e.boxScoreId || e.boxscoreId || e.performanceId || e.gameId || null });
                 });
-                var sorted = Object.values(entityBest).sort(function(a, b) { return (b.rax || 0) - (a.rax || 0); });
-                var topN = Math.min(2, otdClaimsView);
-                sorted.slice(0, topN).forEach(function(entry) {
+            });
+            dateMap = {};
+            var totalDates = 0;
+            var thirdCandidates = {};
+            overlapMap = {};
+            Object.keys(rawDateMap).forEach(function(dayKey) {
+                Object.keys(rawDateMap[dayKey]).forEach(function(sport) {
+                    var entityBest = {};
+                    rawDateMap[dayKey][sport].forEach(function(e) {
+                        var ek = e.player.id + '|' + e.player.sport + '|' + e.player.season;
+                        if (!entityBest[ek] || (e.rax || 0) > (entityBest[ek].rax || 0)) entityBest[ek] = e;
+                    });
+                    var sorted = Object.values(entityBest).sort(function(a, b) { return (b.rax || 0) - (a.rax || 0); });
+                    var topN = Math.min(2, otdClaimsView);
+                    sorted.slice(0, topN).forEach(function(entry) {
+                        if (!dateMap[dayKey]) { dateMap[dayKey] = []; totalDates++; }
+                        dateMap[dayKey].push(entry);
+                    });
+                    if (otdClaimsView >= 3 && sorted.length > 2) {
+                        if (!thirdCandidates[dayKey]) thirdCandidates[dayKey] = [];
+                        thirdCandidates[dayKey].push(sorted[2]);
+                    }
+                    var wastedStart = topN + (otdClaimsView >= 3 ? 1 : 0);
+                    var wasted = sorted.slice(wastedStart).filter(function(e) { return (e.rax || 0) >= 200; });
+                    if (wasted.length) {
+                        if (!overlapMap[dayKey]) overlapMap[dayKey] = [];
+                        overlapMap[dayKey].push({ sport: sport, wasted: wasted });
+                    }
+                });
+                if (otdClaimsView >= 3 && thirdCandidates[dayKey] && thirdCandidates[dayKey].length) {
+                    var best3rd = thirdCandidates[dayKey].slice().sort(function(a, b) { return (b.rax || 0) - (a.rax || 0); })[0];
                     if (!dateMap[dayKey]) { dateMap[dayKey] = []; totalDates++; }
-                    dateMap[dayKey].push(entry);
-                });
-                if (otdClaimsView >= 3 && sorted.length > 2) {
-                    if (!thirdCandidates[dayKey]) thirdCandidates[dayKey] = [];
-                    thirdCandidates[dayKey].push(sorted[2]);
-                }
-                // Overlap: entries past claim limit with >199 Rax are wasted
-                var wastedStart = topN + (otdClaimsView >= 3 ? 1 : 0);
-                var wasted = sorted.slice(wastedStart).filter(function(e) { return (e.rax || 0) >= 200; });
-                if (wasted.length) {
-                    if (!overlapMap[dayKey]) overlapMap[dayKey] = [];
-                    overlapMap[dayKey].push({ sport: sport, wasted: wasted });
+                    dateMap[dayKey].push(best3rd);
+                    var losers = thirdCandidates[dayKey].filter(function(c) { return c !== best3rd && (c.rax||0) >= 200; });
+                    if (losers.length) {
+                        if (!overlapMap[dayKey]) overlapMap[dayKey] = [];
+                        overlapMap[dayKey].push({ sport: '3rd-slot', wasted: losers });
+                    }
                 }
             });
-            if (otdClaimsView >= 3 && thirdCandidates[dayKey] && thirdCandidates[dayKey].length) {
-                var best3rd = thirdCandidates[dayKey].slice().sort(function(a, b) { return (b.rax || 0) - (a.rax || 0); })[0];
-                if (!dateMap[dayKey]) { dateMap[dayKey] = []; totalDates++; }
-                dateMap[dayKey].push(best3rd);
-                // Also mark best3rd's sport's 3rd-slot losers as overlap
-                var losers = thirdCandidates[dayKey].filter(function(c) { return c !== best3rd && (c.rax||0) >= 200; });
-                if (losers.length) {
-                    if (!overlapMap[dayKey]) overlapMap[dayKey] = [];
-                    overlapMap[dayKey].push({ sport: '3rd-slot', wasted: losers });
-                }
-            }
-        });
+            otdDateMapCached = { dm: dateMap, om: overlapMap };
+            otdDateMapCachedYear = otdCalYear;
+            otdDateMapCachedCV = otdClaimsView;
+            otdDateMapDirty = false;
+        } else {
+            dateMap = otdDateMapCached.dm;
+            overlapMap = otdDateMapCached.om;
+        }
         otdDateMap = dateMap;
         otdOverlapMap = overlapMap;
 
