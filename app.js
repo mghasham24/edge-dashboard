@@ -4624,7 +4624,7 @@
                 var SOCCER_SK = { epl:1, ucl:1, mls:1, fc:1, fifa:1, soccer:1 };
                 var sk = SOCCER_SK[p.sport] ? 'soccer' : p.sport;
                 if (!rawDateMap[dayKey][sk]) rawDateMap[dayKey][sk] = [];
-                rawDateMap[dayKey][sk].push({ player: p, rax: e.atRarityEarnings || 0, origDay: (e.day || '').split('T')[0].trim(), bsId: e.playerBoxScoreId || e.boxScoreId || e.boxscoreId || e.performanceId || e.gameId || null });
+                rawDateMap[dayKey][sk].push({ player: p, rax: e.atRarityEarnings || 0, origDay: (e.day || '').split('T')[0].trim(), bsId: (e.playerBoxScoreIds && e.playerBoxScoreIds[0]) || e.playerBoxScoreId || e.boxScoreId || e.boxscoreId || e.performanceId || e.gameId || null });
             });
         });
 
