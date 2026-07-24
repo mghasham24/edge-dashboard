@@ -4284,9 +4284,7 @@
         otdVisible = true;
         renderOtdPanel();
         // Auto-load from URL deeplink (e.g. /otd/username) or sessionStorage on first visit
-        var otdPathUser = (function() { var m = window.location.pathname.match(/^\/otd\/([^\/]+)/); return m ? decodeURIComponent(m[1]) : null; })()
-            || sessionStorage.getItem('otd_deeplink_user');
-        sessionStorage.removeItem('otd_deeplink_user');
+        var otdPathUser = (function() { var m = window.location.pathname.match(/^\/otd\/([^\/]+)/); return m ? decodeURIComponent(m[1]) : null; })();
         if (otdPathUser && !otdSelectedUser && !otdLoadingPasses) { otdAutoLoadFromUrl(otdPathUser); }
     }
 
@@ -7987,6 +7985,19 @@
                 wcNav.style.display = 'flex';
             } else {
                 wcNav.style.display = 'none';
+            }
+        }
+
+        // Auto-open OTD tab if user arrived via /otd/username deeplink
+        var pendingOtdUser = sessionStorage.getItem('otd_deeplink_user');
+        if (pendingOtdUser) {
+            var otdBtn = document.getElementById('otd-tab-btn');
+            if (otdBtn && !otdBtn.classList.contains('active')) {
+                sessionStorage.removeItem('otd_deeplink_user');
+                document.querySelectorAll('.sport-tab,.feature-tab').forEach(function(t) { t.classList.remove('active'); });
+                otdBtn.classList.add('active');
+                otdBtn.textContent = '<- Dashboard';
+                showOtdTab();
             }
         }
     }
