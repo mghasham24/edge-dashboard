@@ -3226,6 +3226,8 @@
     var otdCarouselSearch = '';
     var otdSelectedPass = null;
     var otdSelectedPassMonth = null;
+    var otdLastRenderMs = 0;
+    var otdRenderQueued = false;
 
     function otdPrevMonth() {
         if (otdCalMonth === 0) { otdCalMonth = 11; otdCalYear--; } else { otdCalMonth--; }
@@ -3265,15 +3267,16 @@
         }).join('\n');
         var username = otdSelectedUser ? otdSelectedUser.username : '';
         var lines = [
-            'RaxEdge 📅 ' + MN[otdCalMonth] + ' ' + otdCalYear + ' OTD Recap',
-            '',
+            'RaxEdge:  ' + MN[otdCalMonth] + ' ' + otdCalYear + ' - OTD Recap',
+            '-',
             '💰 Total Rax: ' + totalRax.toLocaleString(),
             '📊 Avg/day: ' + avg.toLocaleString() + ' Rax (' + claimDays + ' claim days)',
-            '',
+            '-',
+            'Sports Breakdown',
             sportLines,
         ];
-        if (topParts.length === 3) lines.push('', '🏆 ' + topParts[2] + ' (' + (SL[topParts[1]] || topParts[1]) + ') — ' + playerTotals[topKey].toLocaleString() + ' Rax');
-        if (username) lines.push('', '🔗 raxedge.com/otd/' + username);
+        if (topParts.length === 3) lines.push('🏆 ' + topParts[2] + ' (' + (SL[topParts[1]] || topParts[1]) + ') — ' + playerTotals[topKey].toLocaleString() + ' Rax');
+        if (username) lines.push('🔗 raxedge.com/otd/' + username);
         var msg = lines.join('\n');
         navigator.clipboard.writeText(msg).then(function() { otdCopyToast('Copied!'); }).catch(function() {
             var ta = document.createElement('textarea'); ta.value = msg; ta.style.cssText = 'position:fixed;opacity:0';
@@ -3679,6 +3682,7 @@
         var lbl = (OTD_LEVEL_OPTIONS.find(function(o) { return o.value === level; }) || {}).label || 'Level ' + level;
         p.levelLabel = lbl;
         p.rarityColor = otdRarityColor(level);
+        p.backgroundSource = null;
         p.earnings = null;
         var listEl = document.getElementById('otd-passes-list');
         if (listEl) listEl.innerHTML = buildOtdPassesList();
@@ -4693,6 +4697,26 @@
                     }
                 }
 
+                // Throttled render: at most one heavy render per 1.2s during queue loading.
+                // Calendar shows loading screen (cheap) while any pass has null earnings.
+                // Carousel rebuild is skipped until the throttle window opens.
+                function otdThrottledRender() {
+                    var now = Date.now();
+                    if (now - otdLastRenderMs < 1200) {
+                        if (!otdRenderQueued) {
+                            otdRenderQueued = true;
+                            setTimeout(function() {
+                                otdRenderQueued = false;
+                                otdLastRenderMs = Date.now();
+                                renderOtdChips(); renderOtdResults(); renderOtdCarousel();
+                            }, 1200 - (now - otdLastRenderMs));
+                        }
+                        return;
+                    }
+                    otdLastRenderMs = now;
+                    renderOtdChips(); renderOtdResults(); renderOtdCarousel();
+                }
+
                 // Concurrency pool: 4 slots run in parallel, each slot picks the next entry as soon as it finishes.
                 // CF handles RS 429s internally with exponential backoff, so the frontend never sees them.
                 function startEarningsQueue(queue) {
@@ -4715,7 +4739,7 @@
                                             if (entry._retries > 8) {
                                                 // Give up after 8 retries — mark empty so UI doesn't stall
                                                 entry.earnings = [];
-                                                renderOtdChips(); renderOtdResults();
+                                                otdThrottledRender();
                                                 active--;
                                                 next();
                                                 return;
@@ -4733,13 +4757,20 @@
                                         } else {
                                             entry.earnings = [];
                                         }
-                                        renderOtdChips(); renderOtdResults(); renderOtdCarousel();
+                                        // If this is the last pending pass, force a final render immediately.
+                                        var stillPending = otdPlayers.filter(function(p) { return p.earnings === null; }).length;
+                                        if (stillPending === 0) {
+                                            otdLastRenderMs = 0; otdRenderQueued = false;
+                                            renderOtdChips(); renderOtdResults(); renderOtdCarousel();
+                                        } else {
+                                            otdThrottledRender();
+                                        }
                                         active--;
                                         setTimeout(next, 600);
                                     })
                                     .catch(function() {
                                         entry.earnings = [];
-                                        renderOtdChips(); renderOtdResults();
+                                        otdThrottledRender();
                                         active--;
                                         next();
                                     });
@@ -4765,8 +4796,13 @@
                                 queue.push(entry);
                             }
                         });
-                        renderOtdChips(); renderOtdResults(); renderOtdCarousel();
-                        startEarningsQueue(queue);
+                        // Split the initial render across two frames so the browser can paint in between.
+                        otdLastRenderMs = 0; otdRenderQueued = false;
+                        renderOtdChips(); renderOtdResults();
+                        requestAnimationFrame(function() {
+                            renderOtdCarousel();
+                            startEarningsQueue(queue);
+                        });
                     })
                     .catch(function() {
                         startEarningsQueue(otdPlayers.slice());
