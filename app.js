@@ -4340,7 +4340,7 @@
             // Username search row
             '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:14px">' +
                 '<div style="position:relative;flex:1;min-width:180px">' +
-                    '<input id="otd-user-input" type="text" placeholder="RS username…" autocomplete="off" ' +
+                    '<input id="otd-user-input" type="text" placeholder="' + (otdSelectedUser ? '@' + escHtml(otdSelectedUser.username) : 'RS username…') + '" autocomplete="off" ' +
                         'style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px 10px;border-radius:6px" ' +
                         'oninput="otdOnUserInput(this.value)" />' +
                     '<div id="otd-user-autocomplete" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg2);border:1px solid var(--border2);border-radius:6px;z-index:200;margin-top:3px;overflow:hidden"></div>' +
