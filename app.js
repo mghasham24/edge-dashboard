@@ -3523,6 +3523,7 @@
             otdFindPlayer = { id: p.id, name: p.name, sport: p.sport, season: p.season, level: p.level || 4, levelLabel: p.levelLabel || '' };
         }
         renderOtdResults();
+        renderOtdCarousel();
         var listEl = document.getElementById('otd-passes-list');
         if (listEl && savedScroll) listEl.scrollTop = savedScroll;
     }
@@ -3545,6 +3546,7 @@
         if (otdSelectedPass && otdPlayers.indexOf(otdSelectedPass) === -1) otdSelectedPass = null;
         renderOtdChips();
         renderOtdResults();
+        renderOtdCarousel();
         var listEl = document.getElementById('otd-passes-list');
         if (listEl) listEl.innerHTML = buildOtdPassesList();
     }
@@ -3566,10 +3568,11 @@
                 if (ed.baseTotal !== null && ed.baseTotal !== undefined) p.baseTotal = ed.baseTotal;
                 renderOtdChips();
                 renderOtdResults();
+                renderOtdCarousel();
                 var l2 = document.getElementById('otd-passes-list');
                 if (l2) l2.innerHTML = buildOtdPassesList();
             })
-            .catch(function() { p.earnings = []; renderOtdChips(); renderOtdResults(); });
+            .catch(function() { p.earnings = []; renderOtdChips(); renderOtdResults(); renderOtdCarousel(); });
     }
 
     function otdPassesSearchInput(val) {
@@ -4180,6 +4183,70 @@
         otdVisible = false;
     }
 
+    function renderOtdCarousel() {
+        var el = document.getElementById('otd-pass-carousel');
+        var bdEl = document.getElementById('otd-carousel-breakdown');
+        if (!el) return;
+        if (!otdPlayers.length || otdLoadingPasses) { el.innerHTML = ''; if (bdEl) bdEl.innerHTML = ''; return; }
+
+        var CW = 128, CH = 140;
+        var CARD_SVG = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>';
+
+        var cards = otdPlayers.map(function(p, idx) {
+            var rc = p.rarityColor || otdRarityColor(p.level);
+            var av = p.avatar || '';
+            var emoji = OTD_SPORT_EMOJI[p.sport] || '🎴';
+            var seasonFmt = otdFormatSeason(p.sport, p.season);
+            var isSelected = p === otdSelectedPass;
+            var bgUrl = p.backgroundSource ? '/api/real/otd?action=card_bg&src=' + encodeURIComponent(p.backgroundSource) : '';
+            var headshot = av ? 'https://media.realapp.com/assets/players/default/small/' + av + '.webp' : '';
+            var total = 0;
+            if (p.earnings) p.earnings.forEach(function(e) { total += e.atRarityEarnings || 0; });
+            var isLoading = p.earnings === null;
+            var baseEarnings = (!isLoading && p.baseTotal != null) ? p.baseTotal : null;
+            var levelOpts = OTD_LEVEL_OPTIONS.filter(function(o) { return o.value >= 1; }).map(function(o) {
+                return '<option value="' + o.value + '"' + (o.value === p.level ? ' selected' : '') + '>' + escHtml(o.label) + '</option>';
+            }).join('');
+            var eid = String(p.id || ''), eet = p.entityType || 'player', pId = String(p.passId || '');
+
+            return '<div onclick="otdSelectPass(' + idx + ')" style="position:relative;width:' + CW + 'px;height:' + CH + 'px;border-radius:8px;overflow:hidden;cursor:pointer;flex-shrink:0;background:linear-gradient(160deg,' + rc + '55 0%,' + rc + '22 100%);border:' + (isSelected ? '2px solid ' + rc : '1px solid ' + rc + '44') + ';box-shadow:' + (isSelected ? '0 0 0 1px ' + rc + '55,0 0 10px ' + rc + '33' : 'none') + '">' +
+                (bgUrl ? '<img src="' + bgUrl + '" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0" onerror="this.style.display=\'none\'">' : '') +
+                (!bgUrl ? '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:34px;opacity:.15;z-index:0">' + emoji + '</div>' : '') +
+                (headshot ? '<img src="' + headshot + '" style="position:absolute;top:5%;left:0;right:0;width:100%;height:46%;object-fit:contain;object-position:bottom center;z-index:1" onerror="this.style.display=\'none\'">' : '') +
+                '<div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.05) 0%,rgba(0,0,0,.1) 32%,rgba(0,0,0,.8) 60%,rgba(0,0,0,.92) 100%);z-index:2"></div>' +
+                // Top-left: sport + card btn
+                '<div style="position:absolute;top:4px;left:4px;z-index:3;display:flex;flex-direction:column;align-items:flex-start;gap:2px">' +
+                    '<span style="font-size:7px;font-weight:800;color:#fff;background:rgba(0,0,0,.55);padding:1px 5px;border-radius:3px;letter-spacing:.04em">' + p.sport.toUpperCase() + '</span>' +
+                    (eid ? '<button onclick="event.stopPropagation();otdOpenCardLink(\'' + eid + '\',\'' + p.sport + '\',\'' + eet + '\',\'\',\'' + pId + '\')" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);border-radius:3px;color:#fff;padding:2px 4px;cursor:pointer;display:flex;align-items:center">' + CARD_SVG + '</button>' : '') +
+                '</div>' +
+                // Top-right: season + ×
+                '<div style="position:absolute;top:4px;right:4px;z-index:3;display:flex;flex-direction:column;align-items:flex-end;gap:2px">' +
+                    '<span style="font-size:7px;font-weight:600;color:rgba(255,255,255,.9);background:rgba(0,0,0,.55);padding:1px 5px;border-radius:3px">' + escHtml(seasonFmt) + '</span>' +
+                    '<button onclick="event.stopPropagation();otdRemovePass(' + idx + ')" style="background:rgba(0,0,0,.4);border:none;border-radius:3px;color:rgba(255,255,255,.65);font-size:9px;line-height:1;padding:1px 4px;cursor:pointer">×</button>' +
+                '</div>' +
+                // Bottom
+                '<div style="position:absolute;bottom:0;left:0;right:0;padding:3px 5px 4px;z-index:3">' +
+                    '<select onclick="event.stopPropagation()" onchange="event.stopPropagation();otdPassLevelChange(' + idx + ',parseInt(this.value,10))" style="background:' + rc + ';border:none;border-radius:3px;color:#fff;font-size:7px;font-weight:700;padding:1px 3px;cursor:pointer;outline:none;-webkit-appearance:none;appearance:none;font-family:var(--sans);margin-bottom:2px">' + levelOpts + '</select>' +
+                    '<div style="font-size:9px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 3px rgba(0,0,0,.9);line-height:1.2">' + escHtml(p.name) + '</div>' +
+                    '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:2px">' +
+                        '<span style="font-size:7px;color:rgba(255,255,255,.6);font-family:var(--mono)">' + (baseEarnings !== null ? RAX_ICON + Math.round(baseEarnings).toLocaleString() + ' base' : '') + '</span>' +
+                        '<span style="font-size:9px;font-weight:700;font-family:var(--mono);color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.8)">' + (isLoading ? '…' : RAX_ICON + total.toLocaleString()) + '</span>' +
+                    '</div>' +
+                '</div>' +
+            '</div>';
+        }).join('');
+
+        el.innerHTML =
+            '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;margin:0 -12px;padding:0 12px 4px">' +
+                '<style>.otd-carousel-scroll::-webkit-scrollbar{display:none}</style>' +
+                '<div class="otd-carousel-scroll" style="display:grid;grid-template-rows:' + CH + 'px ' + CH + 'px;grid-auto-flow:column;grid-auto-columns:' + CW + 'px;gap:6px;width:max-content;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding:0 12px 4px;box-sizing:border-box">' +
+                    cards +
+                '</div>' +
+            '</div>';
+
+        if (bdEl) bdEl.innerHTML = otdSelectedPass ? buildBreakdownCard(otdSelectedPass) : '';
+    }
+
     function renderOtdPanel() {
         var panel = document.getElementById('otd-panel');
         if (!panel) return;
@@ -4217,11 +4284,14 @@
                 '<button onclick="otdLoadUserPasses()" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:13px;font-weight:700;padding:8px 16px;border-radius:6px;cursor:pointer;white-space:nowrap">' + (otdLoadingPasses ? 'Loading…' : 'Load Passes') + '</button>' +
             '</div>' +
             '<div id="otd-search-err" style="display:none;font-size:12px;color:#ef5350;margin-bottom:8px"></div>' +
-            '<div id="otd-chips" style="margin-bottom:16px"></div>' +
+            '<div id="otd-chips" style="margin-bottom:8px"></div>' +
+            '<div id="otd-pass-carousel" style="margin-bottom:6px"></div>' +
+            '<div id="otd-carousel-breakdown"></div>' +
             '<div id="otd-check-wrap"></div>' +
             '<div id="otd-results"></div>';
 
         renderOtdChips();
+        renderOtdCarousel();
         renderOtdCheckWrap();
         renderOtdResults();
     }
@@ -4561,6 +4631,7 @@
                 '<div class="otd-card-level" style="border-color:' + rc + '55;background:' + rc + '15">' + levelSel + '</div>' +
             '</div>';
         }).join('') + '</div>';
+        renderOtdCarousel();
     }
 
     function renderOtdResults() {
