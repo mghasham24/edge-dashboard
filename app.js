@@ -3268,6 +3268,13 @@
         });
         if (!totalRax) { otdCopyToast('No earnings this month'); return; }
         var avg = claimDays > 0 ? Math.round(totalRax / claimDays) : 0;
+        // Yearly total — sum all entries in otdCalYear across all months
+        var yearlyTotal = 0;
+        var yearPrefix = String(otdCalYear) + '-';
+        Object.keys(otdDateMap).forEach(function(dk) {
+            if (!dk.startsWith(yearPrefix)) return;
+            otdDateMap[dk].forEach(function(e) { yearlyTotal += e.rax || 0; });
+        });
         var topKey = Object.keys(playerTotals).sort(function(a, b) { return playerTotals[b] - playerTotals[a]; })[0];
         var topParts = topKey ? topKey.split('|') : [];
         var sportLines = Object.keys(sportTotals).sort(function(a, b) { return sportTotals[b] - sportTotals[a]; }).map(function(s) {
@@ -3279,6 +3286,7 @@
             '-',
             '💰 Total Rax: ' + totalRax.toLocaleString(),
             '📊 Avg/day: ' + avg.toLocaleString() + ' Rax',
+            '📅 ' + otdCalYear + ' Total: ' + yearlyTotal.toLocaleString() + ' Rax',
             '-',
             'Sports Breakdown',
             sportLines,
