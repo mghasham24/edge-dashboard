@@ -290,7 +290,7 @@ export async function onRequestGet(context) {
     if (!id) return fail(400, 'Missing id');
 
     const force = url.searchParams.get('force') === '1';
-    const cacheKey = `otd_earnings_v7_${entityType}_${sport}_${season}_${id}_l${level}`;
+    const cacheKey = `otd_earnings_v8_${entityType}_${sport}_${season}_${id}_l${level}`;
     if (!force) {
       try {
         const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
@@ -302,11 +302,10 @@ export async function onRequestGet(context) {
 
     try {
       const earningsUrl = `${RS_BASE}/userpassearnings/${sport}/season/${season}/entity/${entityType}/${id}?level=${level}`;
-      const baseUrl    = level > 0 ? `${RS_BASE}/userpassearnings/${sport}/season/${season}/entity/${entityType}/${id}?level=0` : null;
-
-      let [res, baseRes] = await Promise.all([
+      let [res, baseRes0, baseRes1] = await Promise.all([
         fetch(earningsUrl, { headers }),
-        baseUrl ? fetch(baseUrl, { headers }) : Promise.resolve(null),
+        level > 0 ? fetch(`${RS_BASE}/userpassearnings/${sport}/season/${season}/entity/${entityType}/${id}?level=0`, { headers }) : Promise.resolve(null),
+        level > 1 ? fetch(`${RS_BASE}/userpassearnings/${sport}/season/${season}/entity/${entityType}/${id}?level=1`, { headers }) : Promise.resolve(null),
       ]);
 
       // Retry main on 429
@@ -319,15 +318,27 @@ export async function onRequestGet(context) {
       const data = await res.json();
       const earnings = data.earnings || data.events || data.performances || data.playerEarnings || data.earningDays || [];
 
-      // Base total: sum atRarityEarnings at level 1 (the "This season" number RS shows)
+      // Base total: "This season" raw points. Try level=0 first; fall back to level=1 if 0
+      // (NBA/NFL General cards earn 0, so level=0 returns 0 — level=1 Common is the true base)
       let baseTotal = null;
-      if (baseRes && baseRes.ok) {
-        try {
-          const baseData = await baseRes.json();
-          const baseEarnings = baseData.earnings || baseData.events || baseData.performances || baseData.playerEarnings || baseData.earningDays || [];
-          baseTotal = baseEarnings.reduce(function(s, e) { return s + (e.atRarityEarnings || 0); }, 0);
-        } catch(e) {}
+      function sumEarnings(r) {
+        if (!r || !r.ok) return 0;
+        return r.json().then(function(d) {
+          const arr = d.earnings || d.events || d.performances || d.playerEarnings || d.earningDays || [];
+          return arr.reduce(function(s, e) { return s + (e.atRarityEarnings || 0); }, 0);
+        }).catch(function() { return 0; });
       }
+      try {
+        const t0 = await sumEarnings(baseRes0);
+        if (t0 > 0) {
+          baseTotal = t0;
+        } else if (baseRes1) {
+          const t1 = await sumEarnings(baseRes1);
+          baseTotal = t1 > 0 ? t1 : 0;
+        } else {
+          baseTotal = t0;
+        }
+      } catch(e) {}
 
       const rawSample = earnings[0] || null;
       const rawKeys = earnings.length === 0 ? Object.keys(data) : undefined;
