@@ -4540,7 +4540,10 @@
             return '<div onclick="otdSelectPass(' + idx + ')" style="position:relative;width:' + CW + 'px;height:' + CH + 'px;border-radius:8px;overflow:hidden;cursor:pointer;flex-shrink:0;background:linear-gradient(160deg,' + rc + '55 0%,' + rc + '22 100%);border:' + (isSelected ? '2px solid ' + rc : '1px solid ' + rc + '44') + ';box-shadow:' + (isSelected ? '0 0 0 1px ' + rc + '55,0 0 10px ' + rc + '33' : 'none') + '">' +
                 (bgUrl ? '<img src="' + bgUrl + '" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0" onerror="this.style.display=\'none\'">' : '') +
                 (!bgUrl ? '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:34px;opacity:.15;z-index:0">' + emoji + '</div>' : '') +
-                (headshot ? '<img src="' + headshot + '" style="position:absolute;top:5%;left:0;right:0;width:100%;height:46%;object-fit:contain;object-position:bottom center;z-index:1" onerror="this.style.display=\'none\'">' : '') +
+                (headshot
+                    ? '<img src="' + headshot + '" style="position:absolute;top:5%;left:0;right:0;width:100%;height:46%;object-fit:contain;object-position:bottom center;z-index:1" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' +
+                      '<div style="display:none;position:absolute;top:5%;left:0;right:0;height:46%;align-items:center;justify-content:center;font-size:30px;z-index:1">' + emoji + '</div>'
+                    : '<div style="position:absolute;top:5%;left:0;right:0;height:46%;display:flex;align-items:center;justify-content:center;font-size:30px;z-index:1">' + emoji + '</div>') +
                 '<div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.05) 0%,rgba(0,0,0,.1) 32%,rgba(0,0,0,.8) 60%,rgba(0,0,0,.92) 100%);z-index:2"></div>' +
                 // Top-left: sport + card btn
                 '<div style="position:absolute;top:4px;left:4px;z-index:3;display:flex;flex-direction:column;align-items:flex-start;gap:2px">' +
