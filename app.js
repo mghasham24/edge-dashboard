@@ -3289,7 +3289,7 @@
             '📊 Avg/day: ' + avg.toLocaleString() + ' Rax',
             '📅 ' + otdCalYear + ' Total: ' + yearlyTotal.toLocaleString() + ' Rax',
             '-',
-            'Sports Breakdown',
+            'Sports Breakdown:',
             sportLines,
         ];
         if (topParts.length === 3) {
@@ -3304,10 +3304,10 @@
                 : rsEntityUrl(topEt, topSport, topId);
             var bsIdNum = topEntry && topEntry.bsId ? parseInt(topEntry.bsId, 10) : 0;
             var perfUrl = bsIdNum > 0 ? 'https://www.realapp.com/' + rsUrlHash(14, 0, 0, bsIdNum) : '';
-            lines.push('🃏 ' + cardUrl);
-            if (perfUrl) lines.push('📈 ' + perfUrl);
+            lines.push('🃏 ' + cardUrl + (perfUrl ? ' 📈 ' + perfUrl : ''));
         }
-        if (username) lines.push('🔗 raxedge.com/otd/' + username);
+        lines.push('-');
+        if (username) lines.push('🔗 https://raxedge.com/otd/' + username);
         var msg = lines.join('\n');
         navigator.clipboard.writeText(msg).then(function() { otdCopyToast('Copied!'); }).catch(function() {
             var ta = document.createElement('textarea'); ta.value = msg; ta.style.cssText = 'position:fixed;opacity:0';
