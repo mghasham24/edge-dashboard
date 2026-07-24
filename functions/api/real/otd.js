@@ -656,11 +656,8 @@ export async function onRequestGet(context) {
     try {
       const passMap = {};
 
-      // Fetch one season at a time newest→oldest; stop when a season returns 0 new passes.
-      // Most users have passes concentrated in recent seasons, so early exit saves most calls.
       const fetchSeasons = async (seasonList, sportFilter) => {
         for (const season of seasonList) {
-          const sizeBefore = Object.keys(passMap).length;
           try {
             const sportParam = sportFilter ? `&sport=${sportFilter}` : '';
             const fetches = sportFilter
@@ -688,7 +685,6 @@ export async function onRequestGet(context) {
           } catch(e) {
             if (e.message === '429') throw e;
           }
-          if (Object.keys(passMap).length === sizeBefore) break; // no new passes — stop going back
           await new Promise(r => setTimeout(r, 400));
         }
       };
