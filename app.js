@@ -3256,16 +3256,27 @@
             if (!dk.startsWith(monthKey + '-')) return;
             var entries = otdDateMap[dk];
             if (!entries.length) return;
-            claimDays++;
+            var dayHadRealClaim = false;
             entries.forEach(function(e) {
+                var pl = e.player;
+                if (!pl || pl.isAdded) return; // skip simulated passes
                 var rax = e.rax || 0;
+                // If the user changed rarity, recalculate rax using the original multiplier
+                if (pl._origLevel !== undefined && pl._origLevel !== pl.level) {
+                    var currMult = pl.multiplier ? parseFloat(pl.multiplier) : 0;
+                    var origMult = pl._origMultiplier ? parseFloat(pl._origMultiplier) : currMult;
+                    rax = (currMult > 0) ? Math.round(rax / currMult * origMult) : rax;
+                }
+                if (!rax) return;
+                dayHadRealClaim = true;
                 totalRax += rax;
-                var sp = (e.player && e.player.sport) || 'unknown';
+                var sp = pl.sport || 'unknown';
                 sportTotals[sp] = (sportTotals[sp] || 0) + rax;
-                var pk = ((e.player && e.player.id) || '?') + '|' + sp + '|' + ((e.player && e.player.name) || '?');
+                var pk = (pl.id || '?') + '|' + sp + '|' + (pl.name || '?');
                 playerTotals[pk] = (playerTotals[pk] || 0) + rax;
                 if (!playerBestEntry[pk] || rax > (playerBestEntry[pk].rax || 0)) playerBestEntry[pk] = e;
             });
+            if (dayHadRealClaim) claimDays++;
         });
         if (!totalRax) { otdCopyToast('No earnings this month'); return; }
         var avg = claimDays > 0 ? Math.round(totalRax / claimDays) : 0;
@@ -3274,7 +3285,17 @@
         var yearPrefix = String(otdCalYear) + '-';
         Object.keys(otdDateMap).forEach(function(dk) {
             if (!dk.startsWith(yearPrefix)) return;
-            otdDateMap[dk].forEach(function(e) { yearlyTotal += e.rax || 0; });
+            otdDateMap[dk].forEach(function(e) {
+                var pl = e.player;
+                if (!pl || pl.isAdded) return;
+                var rax = e.rax || 0;
+                if (pl._origLevel !== undefined && pl._origLevel !== pl.level) {
+                    var cm = pl.multiplier ? parseFloat(pl.multiplier) : 0;
+                    var om = pl._origMultiplier ? parseFloat(pl._origMultiplier) : cm;
+                    rax = cm > 0 ? Math.round(rax / cm * om) : rax;
+                }
+                yearlyTotal += rax;
+            });
         });
         var topKey = Object.keys(playerTotals).sort(function(a, b) { return playerTotals[b] - playerTotals[a]; })[0];
         var topParts = topKey ? topKey.split('|') : [];
@@ -4726,7 +4747,7 @@
                     var lbl = (OTD_LEVEL_OPTIONS.find(function(o) { return o.value === pass.level; }) || {}).label || 'Level ' + pass.level;
                     var color = OTD_COLORS[otdColorIdx % OTD_COLORS.length];
                     otdColorIdx++;
-                    var entry = { id: pass.playerId, name: pass.playerName || ('Player ' + pass.playerId), sport: pass.sport, season: String(pass.season), level: pass.level, levelLabel: lbl, color: color, earnings: null, baseTotal: null, entityType: pass.entityType || 'player', passId: pass.passId || null, avatar: pass.avatar || pass.entityAvatar || '', backgroundSource: pass.backgroundSource || null, rarityColor: pass.rarityColor || null, serialNumber: pass.serialNumber || null, multiplier: pass.multiplier || null };
+                    var entry = { id: pass.playerId, name: pass.playerName || ('Player ' + pass.playerId), sport: pass.sport, season: String(pass.season), level: pass.level, levelLabel: lbl, color: color, earnings: null, baseTotal: null, entityType: pass.entityType || 'player', passId: pass.passId || null, avatar: pass.avatar || pass.entityAvatar || '', backgroundSource: pass.backgroundSource || null, rarityColor: pass.rarityColor || null, serialNumber: pass.serialNumber || null, multiplier: pass.multiplier || null, _origLevel: pass.level, _origMultiplier: pass.multiplier || null };
                     otdPlayers.push(entry);
                 });
 
