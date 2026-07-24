@@ -4599,27 +4599,37 @@
                     function next() {
                         while (active < CONCURRENCY && queue.length) {
                             active++;
-                            var entry = queue.shift();
-                            fetch('/api/real/otd?action=earnings&id=' + entry.id + '&sport=' + entry.sport + '&season=' + entry.season + '&level=' + entry.level + '&entityType=' + entry.entityType, { credentials: 'same-origin' })
-                                .then(function(r) { return r.ok ? r.json() : { ok: false }; })
-                                .then(function(ed) {
-                                    if (ed.ok && ed.earnings) {
-                                        applyEarningsEntry(entry, ed.earnings, ed.baseTotal);
-                                        var earningsSum = entry.earnings.reduce(function(s, e) { return s + (e.atRarityEarnings || 0); }, 0);
-                                        if (!earningsSum && ed.earnings.length > 0) console.log('[OTD 0-earn]', entry.name, entry.sport, entry.season, 'l' + entry.level, 'sample:', ed.earnings[0]);
-                                    } else {
+                            (function(entry) {
+                                fetch('/api/real/otd?action=earnings&id=' + entry.id + '&sport=' + entry.sport + '&season=' + entry.season + '&level=' + entry.level + '&entityType=' + entry.entityType, { credentials: 'same-origin' })
+                                    .then(function(r) {
+                                        if (r.status === 429) return { ok: false, rateLimited: true };
+                                        return r.ok ? r.json() : { ok: false };
+                                    })
+                                    .then(function(ed) {
+                                        if (ed && ed.rateLimited) {
+                                            // Global RS slot full — re-queue with random delay and try again
+                                            active--;
+                                            setTimeout(function() { queue.push(entry); next(); }, 1500 + Math.random() * 1500);
+                                            return;
+                                        }
+                                        if (ed && ed.ok && ed.earnings) {
+                                            applyEarningsEntry(entry, ed.earnings, ed.baseTotal);
+                                            var earningsSum = entry.earnings.reduce(function(s, e) { return s + (e.atRarityEarnings || 0); }, 0);
+                                            if (!earningsSum && ed.earnings.length > 0) console.log('[OTD 0-earn]', entry.name, entry.sport, entry.season, 'l' + entry.level, 'sample:', ed.earnings[0]);
+                                        } else {
+                                            entry.earnings = [];
+                                        }
+                                        renderOtdChips(); renderOtdResults(); renderOtdCarousel();
+                                        active--;
+                                        next();
+                                    })
+                                    .catch(function() {
                                         entry.earnings = [];
-                                    }
-                                    renderOtdChips(); renderOtdResults(); renderOtdCarousel();
-                                    active--;
-                                    next();
-                                })
-                                .catch(function() {
-                                    entry.earnings = [];
-                                    renderOtdChips(); renderOtdResults();
-                                    active--;
-                                    next();
-                                });
+                                        renderOtdChips(); renderOtdResults();
+                                        active--;
+                                        next();
+                                    });
+                            })(queue.shift());
                         }
                     }
                     next();

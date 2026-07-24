@@ -355,6 +355,16 @@ export async function onRequestGet(context) {
       } catch(e) {}
     }
 
+    // Global rate limiter — cap concurrent RS calls across all CF worker instances.
+    // Uses D1 atomic UPDATE with WHERE guard so only MAX_RS slots can be held at once.
+    const MAX_RS = 8;
+    const RATE_KEY = 'rs_rate_active';
+    try { await env.DB.prepare(`INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES (?,?,0)`).bind(RATE_KEY, '0').run(); } catch(e) {}
+    const rateClaim = await env.DB.prepare(
+      `UPDATE odds_cache SET data=CAST(CAST(data AS INTEGER)+1 AS TEXT),fetched_at=? WHERE cache_key=? AND CAST(data AS INTEGER)<${MAX_RS}`
+    ).bind(now, RATE_KEY).run();
+    if (!rateClaim.meta.changes) return fail(429, 'RS rate limit: try again shortly');
+
     try {
       const earningsUrl = `${RS_BASE}/userpassearnings/${sport}/season/${season}/entity/${entityType}/${id}?level=${level}`;
       let res = await fetch(earningsUrl, { headers });
@@ -383,8 +393,11 @@ export async function onRequestGet(context) {
         } catch(e) {}
       }
       return new Response(body, { headers: { 'Content-Type': 'application/json' } });
-    } catch(e) {
-      return fail(500, e.message);
+    } finally {
+      // Release slot — MAX(0,...) prevents counter going negative if a worker crashed
+      await env.DB.prepare(
+        `UPDATE odds_cache SET data=CAST(MAX(0,CAST(data AS INTEGER)-1) AS TEXT) WHERE cache_key=?`
+      ).bind(RATE_KEY).run().catch(() => {});
     }
   }
 
