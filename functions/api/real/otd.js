@@ -435,6 +435,18 @@ export async function onRequestGet(context) {
         const t2 = setTimeout(() => c2.abort(), 8000);
         try { res = await fetch(earningsUrl, { headers, signal: c2.signal }); } finally { clearTimeout(t2); }
       }
+      // On 401, try each other token in the pool — one may still be valid
+      if (res.status === 401 && poolTokens.length > 1) {
+        const usedAuth = headers['real-auth-info'];
+        for (const alt of poolTokens) {
+          if (alt.auth === usedAuth) continue;
+          const altHeaders = buildHeadersWithToken(alt);
+          const c2 = new AbortController();
+          const t2 = setTimeout(() => c2.abort(), 8000);
+          try { res = await fetch(earningsUrl, { headers: altHeaders, signal: c2.signal }); } finally { clearTimeout(t2); }
+          if (res.status !== 401) break;
+        }
+      }
       if (!res.ok) return fail(res.status, 'RS earnings failed: ' + res.status);
 
       const data = await res.json();
