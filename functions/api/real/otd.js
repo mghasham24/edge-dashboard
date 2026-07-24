@@ -351,7 +351,7 @@ export async function onRequestGet(context) {
     if (!force) {
       try {
         const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
-        if (cached && (now - cached.fetched_at) < 43200) {
+        if (cached && (now - cached.fetched_at) < 604800) {
           return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
         }
       } catch(e) {}
