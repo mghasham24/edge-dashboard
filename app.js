@@ -4572,7 +4572,10 @@
                 // Normalize + apply earnings to one entry; jump calendar to first upcoming date on first hit
                 var calJumped = false;
                 function applyEarningsEntry(entry, earningsArr, baseTotal) {
+                    var multNum = entry.multiplier ? parseInt(entry.multiplier, 10) : 0;
                     entry.earnings = earningsArr.map(function(e) {
+                        var base = e.earnings || 0;
+                        if (multNum && base) return Object.assign({}, e, { atRarityEarnings: base * multNum });
                         if (!e.atRarityEarnings && e.atRarityEarnings !== undefined) {
                             var alt = e.raxEarnings || e.earnedRax || e.rax || e.points || e.totalEarnings || 0;
                             if (alt) return Object.assign({}, e, { atRarityEarnings: alt });

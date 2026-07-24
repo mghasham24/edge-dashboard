@@ -334,13 +334,15 @@ export async function onRequestGet(context) {
       return new Response(JSON.stringify({ ok: true, earnings: {}, cached: 0, total: 0 }), { headers: { 'Content-Type': 'application/json' } });
     }
 
-    // Map cache key → frontend bundle key (playerId|sport|season|level|entityType)
-    const keyToId = {};
+    // Map cache key → array of bundle keys (one cache entry serves all levels of same player+sport+season)
+    const keyToIds = {};
     for (const p of passes) {
-      const cacheKey = `otd_earnings_v9_${p.entityType || 'player'}_${p.sport}_${p.season}_${p.playerId}_l${p.level}`;
-      keyToId[cacheKey] = `${p.playerId}|${p.sport}|${p.season}|${p.level}|${p.entityType || 'player'}`;
+      const cacheKey = `otd_earnings_v10_${p.entityType || 'player'}_${p.sport}_${p.season}_${p.playerId}`;
+      const bundleKey = `${p.playerId}|${p.sport}|${p.season}|${p.level}|${p.entityType || 'player'}`;
+      if (!keyToIds[cacheKey]) keyToIds[cacheKey] = [];
+      keyToIds[cacheKey].push(bundleKey);
     }
-    const cacheKeys = Object.keys(keyToId);
+    const cacheKeys = Object.keys(keyToIds);
 
     // Batch query D1 in chunks of 100 (SQLite bind param limit)
     const earningsMap = {};
@@ -353,11 +355,12 @@ export async function onRequestGet(context) {
           `SELECT cache_key, data FROM odds_cache WHERE cache_key IN (${placeholders})`
         ).bind(...chunk).all();
         for (const row of (rows.results || [])) {
-          const id = keyToId[row.cache_key];
-          if (id) {
+          const ids = keyToIds[row.cache_key];
+          if (ids) {
             try {
               const data = JSON.parse(row.data);
-              earningsMap[id] = { earnings: data.earnings || [], baseTotal: data.baseTotal ?? null };
+              const cached = { earnings: data.earnings || [], baseTotal: data.baseTotal ?? null };
+              for (const id of ids) earningsMap[id] = cached;
             } catch(e) {}
           }
         }
@@ -382,7 +385,7 @@ export async function onRequestGet(context) {
     if (!id) return fail(400, 'Missing id');
 
     const force = url.searchParams.get('force') === '1';
-    const cacheKey = `otd_earnings_v9_${entityType}_${sport}_${season}_${id}_l${level}`;
+    const cacheKey = `otd_earnings_v10_${entityType}_${sport}_${season}_${id}`;
     if (!force) {
       try {
         const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
@@ -408,7 +411,7 @@ export async function onRequestGet(context) {
     if (!rateClaim.meta.changes) return fail(429, 'RS rate limit: try again shortly');
 
     try {
-      const earningsUrl = `${RS_BASE}/userpassearnings/${sport}/season/${season}/entity/${entityType}/${id}?level=${level}`;
+      const earningsUrl = `${RS_BASE}/userpassearnings/${sport}/season/${season}/entity/${entityType}/${id}?level=1`;
       const controller = new AbortController();
       const abortTimer = setTimeout(() => controller.abort(), 8000);
       let res;
