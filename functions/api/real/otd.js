@@ -387,7 +387,9 @@ export async function onRequestGet(context) {
     if (!id) return fail(400, 'Missing id');
 
     const force = url.searchParams.get('force') === '1';
-    const cacheKey = `otd_earnings_v10_${entityType}_${sport}_${season}_${id}`;
+    const RS_SPORT_ALIAS = { ncaabb: 'ncaam' };
+    const sportKey = RS_SPORT_ALIAS[sport] || sport;
+    const cacheKey = `otd_earnings_v10_${entityType}_${sportKey}_${season}_${id}`;
     if (!force) {
       try {
         const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
