@@ -3158,6 +3158,10 @@
     var OTD_CROSS_YEAR_SPORTS = { nfl:1, nba:1, nhl:1, ncaaf:1, ncaam:1, ncaab:1, ncaabb:1, epl:1, ucl:1, soccer:1, fc:1, mls:1, fifa:1 };
     // RS stores these sports' seasons by ENDING year (e.g. NBA season=2026 = the 2025-26 season)
     var OTD_ENDING_YEAR_SPORTS = { nba:1, ncaab:1, ncaabb:1, ncaam:1 }; // RS sends ending year for NBA/CBB; start year for NHL/NFL
+    function otdFmtRax(n) {
+        if (n >= 1000 && window.innerWidth < 640) return (Math.round(n / 100) / 10) + 'k';
+        return n.toLocaleString();
+    }
     function otdFormatSeason(sport, season) {
         var yr = parseInt(season, 10);
         if (!yr) return String(season);
@@ -5369,7 +5373,7 @@
 
             var isFindMatch = !!findDateSet[iso];
             var cls = 'otd-cal-cell' + (hasClaim ? ' otd-has-claim' : '') + (isToday ? ' otd-today' : '') + (isSelected ? ' otd-selected' : '') + (isFindMatch ? ' otd-find-match' : '');
-            var raxLbl = hasClaim ? '<span class="otd-cal-rax">' + RAX_ICON + totalRax.toLocaleString() + '</span>' : '';
+            var raxLbl = hasClaim ? '<span class="otd-cal-rax">' + RAX_ICON + otdFmtRax(totalRax) + '</span>' : '';
             var findDot = isFindMatch ? '<span class="otd-find-dot">★</span>' : '';
             var clickAttr = hasClaim ? ' onclick="otdSelectDay(\'' + iso + '\')"' : '';
 
