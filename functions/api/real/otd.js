@@ -379,10 +379,12 @@ export async function onRequestGet(context) {
 
     const force = url.searchParams.get('force') === '1';
     const cacheKey = `otd_earnings_v9_${entityType}_${sport}_${season}_${id}_l${level}`;
+    const currentYear = new Date().getFullYear();
+    const earningsTTL = parseInt(season, 10) < currentYear ? 365 * 86400 : 604800; // past seasons: 1 year; current: 7 days
     if (!force) {
       try {
         const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
-        if (cached && (now - cached.fetched_at) < 604800) {
+        if (cached && (now - cached.fetched_at) < earningsTTL) {
           return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
         }
       } catch(e) {}
