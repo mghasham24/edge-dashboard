@@ -3530,11 +3530,13 @@
 
     function otdCheckSportChange(sport) {
         var wasSelected = otdCheckPlayerSelected;
+        var prevInp = document.getElementById('otd-check-input');
+        var savedVal = (!wasSelected && prevInp) ? prevInp.value : '';
         otdCheckSport = sport;
         otdCheckPlayer = null; otdCheckEarnings = null; otdCheckPlayerSelected = false;
         renderOtdCheckWrap();
         var inp = document.getElementById('otd-check-input');
-        if (inp && wasSelected) inp.value = '';
+        if (inp && savedVal) inp.value = savedVal;
         var ac = document.getElementById('otd-check-ac');
         if (ac) ac.style.display = 'none';
     }
