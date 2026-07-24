@@ -3342,8 +3342,9 @@
                     var ac2 = document.getElementById('otd-check-ac');
                     if (!ac2) return;
                     var items = (d.players || []).map(function(p) {
+                        var av = escHtml(p.entityAvatar || p.avatar || '');
                         return '<div style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border2)" ' +
-                            'onmousedown="otdCheckSelectPlayer(\'' + escHtml(String(p.id)) + '\',\'' + escHtml(p.name).replace(/'/g, '&#39;') + '\',\'' + sport + '\',\'' + escHtml(p.avatar || '') + '\')">' +
+                            'onmousedown="otdCheckSelectPlayer(\'' + escHtml(String(p.id)) + '\',\'' + escHtml(p.name).replace(/'/g, '&#39;') + '\',\'' + sport + '\',\'' + av + '\')">' +
                             escHtml(p.name) + '</div>';
                     }).join('');
                     ac2.innerHTML = items || '<div style="padding:8px 12px;color:var(--muted);font-size:13px">No results</div>';
@@ -3653,10 +3654,13 @@
                     : '<div style="position:absolute;top:10%;left:0;right:0;height:52%;display:flex;align-items:center;justify-content:center;font-size:40px;z-index:1">' + emoji + '</div>') +
                 // Dark gradient overlay for text legibility
                 '<div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.05) 0%,rgba(0,0,0,.15) 40%,rgba(0,0,0,.82) 68%,rgba(0,0,0,.92) 100%);z-index:2"></div>' +
-                // Top row: sport left, year right
+                // Top row: sport left, year right (+ SIM badge for added players)
                 '<div style="position:absolute;top:6px;left:6px;right:6px;display:flex;justify-content:space-between;align-items:center;z-index:3">' +
                     '<span style="font-size:8px;font-weight:800;color:#fff;background:rgba(0,0,0,.55);padding:2px 6px;border-radius:3px;letter-spacing:.04em">' + p.sport.toUpperCase() + '</span>' +
-                    '<span style="font-size:8px;font-weight:600;color:rgba(255,255,255,.9);background:rgba(0,0,0,.55);padding:2px 6px;border-radius:3px">' + escHtml(seasonFmt) + '</span>' +
+                    '<div style="display:flex;align-items:center;gap:3px">' +
+                        (p.isAdded ? '<span style="font-size:7px;font-weight:800;color:#fff;background:rgba(251,146,60,.85);padding:2px 5px;border-radius:3px;letter-spacing:.04em">SIM</span>' : '') +
+                        '<span style="font-size:8px;font-weight:600;color:rgba(255,255,255,.9);background:rgba(0,0,0,.55);padding:2px 6px;border-radius:3px">' + escHtml(seasonFmt) + '</span>' +
+                    '</div>' +
                 '</div>' +
                 // Bottom info
                 '<div style="position:absolute;bottom:0;left:0;right:0;padding:6px 7px 7px;z-index:3">' +
@@ -3787,7 +3791,7 @@
     function renderOtdCheckWrap() {
         var el = document.getElementById('otd-check-wrap');
         if (!el) return;
-        var canShow = otdMode === 'username' && otdPlayers.length > 0 && !otdLoadingPasses;
+        var canShow = otdPlayers.length > 0 && !otdLoadingPasses;
         if (!canShow) { el.innerHTML = ''; return; }
         if (!otdCheckMode && !otdFindMode) {
             el.innerHTML = '<div style="margin-bottom:14px;display:flex;flex-wrap:wrap;gap:8px">' +
@@ -3865,8 +3869,8 @@
                     '<div id="otd-check-ac" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg2);border:1px solid var(--border2);border-radius:6px;z-index:200;margin-top:3px;overflow:hidden"></div>' +
                 '</div>' +
                 '<select id="otd-check-sport" onchange="otdCheckSportChange(this.value)" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px;border-radius:6px">' + sportOpts + '</select>' +
-                '<select id="otd-check-season" onchange="if(otdCheckPlayer){otdCheckPlayer.season=this.value;}" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px;border-radius:6px">' + otdSeasonOpts(curCheckSport, cp && cp.season) + '</select>' +
-                '<select id="otd-check-level" onchange="if(otdCheckPlayer){var lv=parseInt(this.value,10);var lb=(OTD_LEVEL_OPTIONS.find(function(o){return o.value===lv;})||{}).label||\'Level \'+lv;otdCheckPlayer.level=lv;otdCheckPlayer.levelLabel=lb;}" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px;border-radius:6px">' + levelOpts + '</select>' +
+                '<select id="otd-check-season" onchange="if(otdCheckPlayer){otdCheckPlayer.season=this.value;otdRunCheck();}" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px;border-radius:6px">' + otdSeasonOpts(curCheckSport, cp && cp.season) + '</select>' +
+                '<select id="otd-check-level" onchange="if(otdCheckPlayer){var lv=parseInt(this.value,10);var lb=(OTD_LEVEL_OPTIONS.find(function(o){return o.value===lv;})||{}).label||\'Level \'+lv;otdCheckPlayer.level=lv;otdCheckPlayer.levelLabel=lb;otdRunCheck();}" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px;border-radius:6px">' + levelOpts + '</select>' +
                 '<button onclick="otdRunCheck()" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:13px;font-weight:700;padding:8px 16px;border-radius:6px;cursor:pointer;' + (cp ? '' : 'opacity:.4;pointer-events:none;') + 'white-space:nowrap">Check</button>' +
                 (function() {
                     var alreadyAdded = cp && otdPlayers.some(function(p) { return p.isAdded && p.id === cp.id && p.sport === cp.sport && p.season === cp.season; });
@@ -4132,51 +4136,30 @@
         }).join('');
         var curYear = new Date().getFullYear();
 
-        var isUserMode = otdMode === 'username';
-        var tabStyle = function(active) {
-            return 'font-size:12px;font-weight:700;padding:6px 14px;border-radius:5px;cursor:pointer;border:1px solid ' +
-                (active ? 'var(--accent);background:rgba(99,102,241,.12);color:var(--accent)' : 'var(--border2);background:transparent;color:var(--muted)') +
-                ';font-family:var(--sans)';
-        };
+        var loadedChip = (otdSelectedUser && otdPlayers.length > 0 && !otdLoadingPasses)
+            ? '<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:var(--accent);background:rgba(99,102,241,.12);border:1px solid rgba(99,102,241,.3);border-radius:20px;padding:3px 10px;white-space:nowrap">✓ ' + escHtml(otdSelectedUser.username) + '</span>'
+            : '';
 
         panel.innerHTML =
             '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">' +
-                '<div style="font-size:16px;font-weight:800;letter-spacing:.04em">🗓️ On This Day</div>' +
+                '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">' +
+                    '<div style="font-size:16px;font-weight:800;letter-spacing:.04em">🗓️ On This Day</div>' +
+                    loadedChip +
+                '</div>' +
                 '<div style="display:flex;gap:6px">' +
                     '<button onclick="document.getElementById(\'otd-tab-btn\').click()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:7px 14px;border-radius:6px;cursor:pointer">&larr; Back</button>' +
                 '</div>' +
             '</div>' +
-            // Mode toggle
-            '<div style="display:flex;gap:6px;margin-bottom:14px">' +
-                '<button style="' + tabStyle(!isUserMode) + '" onclick="otdSetMode(\'player\')">Search Player</button>' +
-                '<button style="' + tabStyle(isUserMode) + '" onclick="otdSetMode(\'username\')">By Username</button>' +
+            // Username search row
+            '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:14px">' +
+                '<div style="position:relative;flex:1;min-width:180px">' +
+                    '<input id="otd-user-input" type="text" placeholder="RS username…" autocomplete="off" ' +
+                        'style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px 10px;border-radius:6px" ' +
+                        'oninput="otdOnUserInput(this.value)" />' +
+                    '<div id="otd-user-autocomplete" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg2);border:1px solid var(--border2);border-radius:6px;z-index:200;margin-top:3px;overflow:hidden"></div>' +
+                '</div>' +
+                '<button onclick="otdLoadUserPasses()" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:13px;font-weight:700;padding:8px 16px;border-radius:6px;cursor:pointer;white-space:nowrap">' + (otdLoadingPasses ? 'Loading…' : 'Load Passes') + '</button>' +
             '</div>' +
-            // Player search row
-            (!isUserMode ?
-                '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:14px">' +
-                    '<div style="position:relative;flex:1;min-width:160px">' +
-                        '<input id="otd-search-input" type="text" placeholder="Search player name…" autocomplete="off" ' +
-                            'style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px 10px;border-radius:6px" ' +
-                            'oninput="otdOnSearchInput(this.value)" />' +
-                        '<div id="otd-autocomplete" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg2);border:1px solid var(--border2);border-radius:6px;z-index:200;margin-top:3px;overflow:hidden"></div>' +
-                    '</div>' +
-                    '<select id="otd-sport-sel" onchange="otdUpdateSeasonOpts(this.value)" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px 8px;border-radius:6px">' + sportOpts + '</select>' +
-                    '<select id="otd-season-sel" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px 8px;border-radius:6px">' + otdSeasonOpts('mlb', curYear) + '</select>' +
-                    '<select id="otd-level-sel" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px 8px;border-radius:6px">' + levelOpts + '</select>' +
-                    '<button onclick="otdAddPlayer()" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:13px;font-weight:700;padding:8px 16px;border-radius:6px;cursor:pointer;white-space:nowrap">+ Add</button>' +
-                '</div>'
-            :
-                // Username search row — seasons scanned automatically (2022–current)
-                '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:14px">' +
-                    '<div style="position:relative;flex:1;min-width:180px">' +
-                        '<input id="otd-user-input" type="text" placeholder="RS username…" autocomplete="off" ' +
-                            'style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px 10px;border-radius:6px" ' +
-                            'oninput="otdOnUserInput(this.value)" />' +
-                        '<div id="otd-user-autocomplete" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg2);border:1px solid var(--border2);border-radius:6px;z-index:200;margin-top:3px;overflow:hidden"></div>' +
-                    '</div>' +
-                    '<button onclick="otdLoadUserPasses()" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:13px;font-weight:700;padding:8px 16px;border-radius:6px;cursor:pointer;white-space:nowrap">' + (otdLoadingPasses ? 'Loading…' : 'Load Passes') + '</button>' +
-                '</div>'
-            ) +
             '<div id="otd-search-err" style="display:none;font-size:12px;color:#ef5350;margin-bottom:8px"></div>' +
             '<div id="otd-chips" style="margin-bottom:16px"></div>' +
             '<div id="otd-check-wrap"></div>' +
@@ -4818,10 +4801,17 @@
         var overlapKeys = Object.keys(otdOverlapMap).sort(function(a, b) {
             if (otdOverlapSort === 'date-asc') return a < b ? -1 : a > b ? 1 : 0;
             if (otdOverlapSort === 'date-desc') return a > b ? -1 : a < b ? 1 : 0;
-            var at = otdOverlapMap[a].reduce(function(s, g) { return s + g.wasted.reduce(function(x, e) { return x + (e.rax||0); }, 0); }, 0);
-            var bt = otdOverlapMap[b].reduce(function(s, g) { return s + g.wasted.reduce(function(x, e) { return x + (e.rax||0); }, 0); }, 0);
-            return otdOverlapSort === 'rax-asc' ? at - bt : bt - at;
+            return a < b ? -1 : a > b ? 1 : 0; // date-asc base for rax sorts (flattened below)
         });
+        // Flat list of all wasted entries — used for rax sorts so individual rows are ordered by rax
+        var overlapFlat = [];
+        overlapKeys.forEach(function(dk) {
+            otdOverlapMap[dk].forEach(function(g) {
+                g.wasted.forEach(function(w) { overlapFlat.push({ dk: dk, g: g, w: w }); });
+            });
+        });
+        if (otdOverlapSort === 'rax-desc') overlapFlat.sort(function(a, b) { return (b.w.rax||0) - (a.w.rax||0); });
+        if (otdOverlapSort === 'rax-asc')  overlapFlat.sort(function(a, b) { return (a.w.rax||0) - (b.w.rax||0); });
         var overlapCount = overlapKeys.length;
         var overlapBtnStyle = btnBase + (otdShowOverlaps ? 'var(--accent);background:rgba(99,102,241,.12);color:var(--accent)' : 'var(--border2);background:var(--bg3);color:var(--muted)');
         var overlapPanel = '';
@@ -4829,38 +4819,34 @@
             var MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
             var OVL_CARD_ICON = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>';
             var OVL_PERF_ICON = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>';
-            var overlapRows = overlapKeys.slice(0, 60).map(function(dk) {
+            var overlapRows = overlapFlat.slice(0, 60).map(function(entry) {
+                var dk = entry.dk; var g = entry.g; var w = entry.w;
                 var parts = dk.split('-');
                 var dateStr = MONTH_SHORT[parseInt(parts[1],10)-1] + ' ' + parseInt(parts[2],10);
-                var groups = otdOverlapMap[dk];
-                return groups.map(function(g) {
-                    var sportLabel = g.sport === '3rd-slot' ? '3rd slot beaten' : g.sport.toUpperCase();
-                    var sportColor = g.sport === '3rd-slot' ? '#9c27b0' : 'var(--muted)';
-                    return g.wasted.map(function(w) {
-                        var lbl = (OTD_LEVEL_OPTIONS.find(function(o){return o.value===w.player.level;})||{}).label || '';
-                        var yr = escHtml(otdFormatSeason(w.player.sport, w.player.season));
-                        var linkDay = w.origDay || dk;
-                        var pid = w.player.passId || '';
-                        var eid = String(w.player.id || '');
-                        var eet = w.player.entityType || 'player';
-                        var sp = w.player.sport || '';
-                        var cBtn = eid ? '<button class="otd-link-btn" style="padding:2px 4px" title="View card" onclick="otdOpenCardLink(\'' + eid + '\',\'' + sp + '\',\'' + eet + '\',\'' + linkDay + '\',\'' + pid + '\')">' + OVL_CARD_ICON + '</button>' : '';
-                        var pBtn = eid ? '<button class="otd-link-btn" style="padding:2px 4px" title="View performance" onclick="otdOpenPerfLink(\'' + eid + '\',\'' + sp + '\',\'' + eet + '\',\'' + linkDay + '\',\'' + (w.player.season||'') + '\',\'' + (w.bsId||'') + '\')">' + OVL_PERF_ICON + '</button>' : '';
-                        return '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;border-bottom:1px solid var(--border);font-size:12px;gap:6px">' +
-                            '<div style="flex:1;min-width:0">' +
-                                '<span style="font-family:var(--mono);font-size:10px;color:var(--muted);white-space:nowrap;margin-right:6px">' + escHtml(dateStr) + '</span>' +
-                                '<span style="font-weight:600;color:var(--fg)">' + escHtml(w.player.name) + '</span>' +
-                                (lbl ? '<span style="font-size:9px;background:' + (w.player.rarityColor||'var(--muted)')+';color:#fff;border-radius:3px;padding:1px 4px;margin-left:5px;font-weight:700">' + escHtml(lbl) + '</span>' : '') +
-                                '<span style="font-size:10px;color:var(--muted);margin-left:5px">' + yr + '</span>' +
-                                '<span style="font-size:9px;color:' + sportColor + ';margin-left:5px;font-weight:600">' + escHtml(sportLabel) + '</span>' +
-                            '</div>' +
-                            '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0">' +
-                                '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:#ef5350">' + RAX_ICON + (w.rax||0).toLocaleString() + '</span>' +
-                                cBtn + pBtn +
-                            '</div>' +
-                        '</div>';
-                    }).join('');
-                }).join('');
+                var sportLabel = g.sport === '3rd-slot' ? '3rd slot beaten' : g.sport.toUpperCase();
+                var sportColor = g.sport === '3rd-slot' ? '#9c27b0' : 'var(--muted)';
+                var lbl = (OTD_LEVEL_OPTIONS.find(function(o){return o.value===w.player.level;})||{}).label || '';
+                var yr = escHtml(otdFormatSeason(w.player.sport, w.player.season));
+                var linkDay = w.origDay || dk;
+                var pid = w.player.passId || '';
+                var eid = String(w.player.id || '');
+                var eet = w.player.entityType || 'player';
+                var sp = w.player.sport || '';
+                var cBtn = eid ? '<button class="otd-link-btn" style="padding:2px 4px" title="View card" onclick="otdOpenCardLink(\'' + eid + '\',\'' + sp + '\',\'' + eet + '\',\'' + linkDay + '\',\'' + pid + '\')">' + OVL_CARD_ICON + '</button>' : '';
+                var pBtn = eid ? '<button class="otd-link-btn" style="padding:2px 4px" title="View performance" onclick="otdOpenPerfLink(\'' + eid + '\',\'' + sp + '\',\'' + eet + '\',\'' + linkDay + '\',\'' + (w.player.season||'') + '\',\'' + (w.bsId||'') + '\')">' + OVL_PERF_ICON + '</button>' : '';
+                return '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;border-bottom:1px solid var(--border);font-size:12px;gap:6px">' +
+                    '<div style="flex:1;min-width:0">' +
+                        '<span style="font-family:var(--mono);font-size:10px;color:var(--muted);white-space:nowrap;margin-right:6px">' + escHtml(dateStr) + '</span>' +
+                        '<span style="font-weight:600;color:var(--fg)">' + escHtml(w.player.name) + '</span>' +
+                        (lbl ? '<span style="font-size:9px;background:' + (w.player.rarityColor||'var(--muted)')+';color:#fff;border-radius:3px;padding:1px 4px;margin-left:5px;font-weight:700">' + escHtml(lbl) + '</span>' : '') +
+                        '<span style="font-size:10px;color:var(--muted);margin-left:5px">' + yr + '</span>' +
+                        '<span style="font-size:9px;color:' + sportColor + ';margin-left:5px;font-weight:600">' + escHtml(sportLabel) + '</span>' +
+                    '</div>' +
+                    '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0">' +
+                        '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:#ef5350">' + RAX_ICON + (w.rax||0).toLocaleString() + '</span>' +
+                        cBtn + pBtn +
+                    '</div>' +
+                '</div>';
             }).join('');
             var overlapTotal = overlapKeys.reduce(function(s, dk) {
                 return s + otdOverlapMap[dk].reduce(function(a, g) { return a + g.wasted.reduce(function(x, e) { return x + (e.rax||0); }, 0); }, 0);

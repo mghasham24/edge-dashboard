@@ -77,7 +77,7 @@ export async function onRequestGet(context) {
     const queryWords = norm(q).split(/\s+/).filter(w => w.length > 1);
 
     // RS search sport key aliases — try alternate keys when primary returns nothing
-    const SEARCH_SPORT_ALIAS = { ncaabb: 'ncaab', ufc: 'mma', ncaam: 'ncaab' };
+    const SEARCH_SPORT_ALIAS = { ncaabb: 'cbb', ufc: 'mma', ncaam: 'ncaab' };
     const searchSport = SEARCH_SPORT_ALIAS[sport] || sport;
 
     try {
@@ -109,7 +109,7 @@ export async function onRequestGet(context) {
         const name = (pObj.name || ((pObj.firstName || '') + ' ' + (pObj.lastName || '')).trim()).trim();
         if (!name) return;
         if (!queryWords.some(w => norm(name).includes(w))) return;
-        playerMap[pObj.id] = { id: pObj.id, name, sport, teamId: pObj.teamId, avatar: pObj.avatar || '' };
+        playerMap[pObj.id] = { id: pObj.id, name, sport, teamId: pObj.teamId, avatar: pObj.entityAvatar || pObj.avatar || '', entityAvatar: pObj.entityAvatar || '' };
       };
 
       // Format 1: data.players or data.results.players (direct player list)
