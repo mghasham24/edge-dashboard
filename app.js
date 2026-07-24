@@ -4792,11 +4792,15 @@
                 if (inp) { inp.style.borderColor = 'var(--red,#ef5350)'; setTimeout(function() { if (inp) inp.style.borderColor = ''; }, 2000); }
                 return;
             }
-            // Look up the typed username directly without requiring dropdown selection
-            fetch('/api/real/otd?action=search_users&q=' + encodeURIComponent(typed), { credentials: 'same-origin' })
+            // Look up the typed username — RS search chokes on trailing underscores so strip them for the query
+            // but still exact-match on the full typed value in the results
+            var searchQ = typed.replace(/_+$/, '') || typed;
+            fetch('/api/real/otd?action=search_users&q=' + encodeURIComponent(searchQ), { credentials: 'same-origin' })
                 .then(function(r) { return r.json(); })
                 .then(function(d) {
-                    var match = d.users && d.users[0];
+                    var users = d.users || [];
+                    // Prefer exact username match, fall back to first result
+                    var match = users.find(function(u) { return u.username.toLowerCase() === typed.toLowerCase(); }) || users[0];
                     if (!match) {
                         if (errEl) { errEl.textContent = 'User "' + escHtml(typed) + '" not found'; errEl.style.display = ''; setTimeout(function() { if (errEl) errEl.style.display = 'none'; }, 3000); }
                         return;
