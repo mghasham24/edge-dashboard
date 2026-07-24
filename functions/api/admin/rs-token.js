@@ -37,6 +37,14 @@ export async function onRequestPost({ request, env }) {
     "INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES ('meta:rs_auth_token',?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at"
   ).bind(data, now).run();
 
+  // If pool_id provided, also store in token pool for multi-token RS rate limit scaling
+  const poolId = (new URL(request.url).searchParams.get('pool_id') || '').replace(/[^a-z0-9_-]/gi, '').slice(0, 32);
+  if (poolId) {
+    await env.DB.prepare(
+      "INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at"
+    ).bind(`rs_pool_token_${poolId}`, token, now).run();
+  }
+
   // Also save to real_auth for the admin user so giveaway counter can use it
   try {
     const admin = await env.DB.prepare('SELECT id FROM users WHERE is_admin=1 LIMIT 1').first();

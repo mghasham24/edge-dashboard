@@ -57,7 +57,27 @@ export async function onRequestGet(context) {
     return fail(503, 'REAL_AUTH_TOKEN or REAL_SESSION_TOKEN not set');
   }
 
-  const headers = buildHeaders(env);
+  // Build token pool: fresh pool tokens (pushed within last 10 min) + env fallback
+  let poolTokens = [env.REAL_AUTH_TOKEN];
+  try {
+    const poolRows = await env.DB.prepare(
+      `SELECT data FROM odds_cache WHERE cache_key LIKE 'rs_pool_token_%' AND fetched_at > ?`
+    ).bind(now - 600).all();
+    if (poolRows.results && poolRows.results.length) {
+      poolTokens = poolRows.results.map(r => r.data);
+      poolTokens.push(env.REAL_AUTH_TOKEN);
+    }
+  } catch(e) {}
+
+  function buildHeadersWithToken(authToken) {
+    return {
+      ...buildHeaders(env),
+      'real-auth-info': authToken,
+    };
+  }
+  function pickToken() { return poolTokens[Math.floor(Math.random() * poolTokens.length)]; }
+
+  const headers = buildHeadersWithToken(pickToken());
 
   // Search: find players by name
   if (action === 'search') {
@@ -356,8 +376,8 @@ export async function onRequestGet(context) {
     }
 
     // Global rate limiter — cap concurrent RS calls across all CF worker instances.
-    // Uses D1 atomic UPDATE with WHERE guard so only MAX_RS slots can be held at once.
-    const MAX_RS = 8;
+    // Scales with pool size: each token supports ~8 concurrent RS calls.
+    const MAX_RS = poolTokens.length * 8;
     const RATE_KEY = 'rs_rate_active';
     try { await env.DB.prepare(`INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES (?,?,0)`).bind(RATE_KEY, '0').run(); } catch(e) {}
     const rateClaim = await env.DB.prepare(

@@ -16,7 +16,12 @@
 (function() {
   'use strict';
 
-  var TOKEN_URL = 'https://raxedge.com/api/admin/rs-token?key=rax-bridge-9w2k5j7n';
+  // For alt accounts: set POOL_ID to a unique identifier (e.g. 'alt1', 'alt2').
+  // Leave empty for the main account. Set SKIP_SYNC=true for alt accounts to skip market sync.
+  var POOL_ID   = '';
+  var SKIP_SYNC = false;
+
+  var TOKEN_URL = 'https://raxedge.com/api/admin/rs-token?key=rax-bridge-9w2k5j7n' + (POOL_ID ? '&pool_id=' + POOL_ID : '');
   var SYNC_URL  = 'https://raxedge.com/api/real/sync?_tm_key=rax-bridge-9w2k5j7n';
   var RS_BASE   = 'https://web.realapp.com';
 
@@ -235,7 +240,9 @@
   pushToken();
   setInterval(pushToken, 30000);
 
-  pushMarkets();
-  setInterval(pushMarkets, 90 * 1000);
+  if (!SKIP_SYNC) {
+    pushMarkets();
+    setInterval(pushMarkets, 90 * 1000);
+  }
 
 })();
