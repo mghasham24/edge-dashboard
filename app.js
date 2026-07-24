@@ -4062,15 +4062,17 @@
         if (otdCheckEarnings !== null) {
             // Earnings already fetched — set them on the entry before pushing so numLoading never increments
             // and the loading screen never fires, even if other passes are still being loaded.
-            var entry = { id: cp.id, name: cp.name, sport: cp.sport, season: cp.season, level: cp.level, levelLabel: cp.levelLabel, entityType: cp.entityType || 'player', color: color, rarityColor: otdRarityColor(cp.level), earnings: otdCheckEarnings, isAdded: true, avatar: cp.avatar || '' };
+            var entry = { id: cp.id, name: cp.name, sport: cp.sport, season: cp.season, level: cp.level, levelLabel: cp.levelLabel, entityType: cp.entityType || 'player', color: color, rarityColor: otdRarityColor(cp.level), earnings: otdCheckEarnings, baseTotal: otdCheckBaseTotal, isAdded: true, avatar: cp.avatar || '' };
             otdPlayers.push(entry);
+            otdDateMapDirty = true;
             renderOtdChips();
             renderOtdResults();
             renderOtdCheckWrap();
         } else {
             // No earnings yet — push with null (shows loading for this entry), then fetch
-            var entry = { id: cp.id, name: cp.name, sport: cp.sport, season: cp.season, level: cp.level, levelLabel: cp.levelLabel, entityType: cp.entityType || 'player', color: color, rarityColor: otdRarityColor(cp.level), earnings: null, isAdded: true, avatar: cp.avatar || '' };
+            var entry = { id: cp.id, name: cp.name, sport: cp.sport, season: cp.season, level: cp.level, levelLabel: cp.levelLabel, entityType: cp.entityType || 'player', color: color, rarityColor: otdRarityColor(cp.level), earnings: null, baseTotal: null, isAdded: true, avatar: cp.avatar || '' };
             otdPlayers.push(entry);
+            otdDateMapDirty = true;
             renderOtdChips();
             renderOtdResults();
             renderOtdCheckWrap();
@@ -4078,12 +4080,15 @@
                 .then(function(r) { return r.ok ? r.json() : { ok: false }; })
                 .then(function(d) {
                     entry.earnings = (d.ok && d.earnings) ? d.earnings : [];
+                    entry.baseTotal = (d.ok && d.baseTotal != null) ? d.baseTotal : null;
                     if (d.ok && d.earnings) otdCheckEarnings = d.earnings;
+                    if (d.ok && d.baseTotal != null) otdCheckBaseTotal = d.baseTotal;
+                    otdDateMapDirty = true;
                     renderOtdChips();
                     renderOtdResults();
                     renderOtdCheckWrap();
                 })
-                .catch(function() { entry.earnings = []; renderOtdChips(); renderOtdResults(); renderOtdCheckWrap(); });
+                .catch(function() { entry.earnings = []; otdDateMapDirty = true; renderOtdChips(); renderOtdResults(); renderOtdCheckWrap(); });
         }
     }
 
