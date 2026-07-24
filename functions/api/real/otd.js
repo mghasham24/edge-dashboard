@@ -88,7 +88,7 @@ export async function onRequestGet(context) {
     const sport = url.searchParams.get('sport') || 'mlb';
     if (q.length < 2) return fail(400, 'Query too short');
 
-    const cacheKey = 'otd_search_v7_' + sport + '_' + q.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    const cacheKey = (sport === 'ufc' ? 'otd_search_v8_' : 'otd_search_v7_') + sport + '_' + q.toLowerCase().replace(/[^a-z0-9]/g, '_');
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
       if (cached && (now - cached.fetched_at) < 3600) {
@@ -135,12 +135,15 @@ export async function onRequestGet(context) {
         }
       };
 
-      // Try with sport filter first, then no filter if no matching players found
-      let data = await trySearch(searchSport);
-      extractPlayers(data);
-      if (!Object.keys(playerMap).length) {
-        const d2 = await trySearch(null);
-        extractPlayers(d2);
+      // UFC: fighters are stored as "teams" in RS plays — sport=ufc returns plays with null
+      // primaryPlayer. Try sport=mma, then no filter, to find fighter entities by name.
+      const searchQueue = sport === 'ufc'
+        ? ['mma', null, 'ufc']
+        : [searchSport, null];
+      for (const sp of searchQueue) {
+        if (Object.keys(playerMap).length) break;
+        const d = await trySearch(sp);
+        extractPlayers(d);
       }
 
       const players = Object.values(playerMap).slice(0, 15);
