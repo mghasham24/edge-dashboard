@@ -95,9 +95,7 @@ export async function onRequestGet(context) {
     const norm = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
     const queryWords = norm(q).split(/\s+/).filter(w => w.length > 1);
 
-    // RS search sport key aliases — try alternate keys when primary returns nothing
-    const SEARCH_SPORT_ALIAS = { ncaabb: 'cbb', ufc: 'mma', ncaam: 'ncaab' };
-    const searchSport = SEARCH_SPORT_ALIAS[sport] || sport;
+    const searchSport = sport;
 
     try {
       const trySearch = async (sp) => {
@@ -131,16 +129,12 @@ export async function onRequestGet(context) {
         }
       };
 
-      // Try sport alias, then original key, then no filter — fall through if no matching players found after each
+      // Try with sport filter first, then no filter if no matching players found
       let data = await trySearch(searchSport);
       extractPlayers(data);
-      if (!Object.keys(playerMap).length && searchSport !== sport) {
-        const d2 = await trySearch(sport);
-        extractPlayers(d2);
-      }
       if (!Object.keys(playerMap).length) {
-        const d3 = await trySearch(null);
-        extractPlayers(d3);
+        const d2 = await trySearch(null);
+        extractPlayers(d2);
       }
 
       const players = Object.values(playerMap).slice(0, 15);
