@@ -3388,6 +3388,18 @@
         otdSelectedDaySport = sport;
         renderOtdResults();
     }
+    function otdJumpToDay(isoKey, sport) {
+        var parts = isoKey.split('-');
+        var mo = parseInt(parts[1], 10) - 1;
+        if (mo >= 0 && mo <= 11) otdCalMonth = mo;
+        otdSelectedDay = isoKey;
+        otdSelectedDaySport = (sport && sport !== '3rd-slot') ? sport : null;
+        renderOtdResults();
+        requestAnimationFrame(function() {
+            var dp = document.querySelector('.otd-day-panel');
+            if (dp) dp.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        });
+    }
 
     // RS URL hashids encoder: salt='routing', minLen=11. Encodes [routeType, sportCode, 0, entityId].
     var RS_SPORT_CODE = {nba:1,nfl:2,ncaam:3,mlb:4,epl:5,ucl:6,nhl:7,mls:8,fifa:9,ufc:10,ncaaf:11,wnba:12,soccer:14,golf:15,ncaabb:16};
@@ -5309,6 +5321,7 @@
             var MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
             var OVL_CARD_ICON = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>';
             var OVL_PERF_ICON = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>';
+            var OVL_NAV_ICON  = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
             var overlapRows = overlapFlat.map(function(entry) {
                 var dk = entry.dk; var g = entry.g; var w = entry.w;
                 var parts = dk.split('-');
@@ -5324,6 +5337,7 @@
                 var sp = w.player.sport || '';
                 var cBtn = eid ? '<button class="otd-link-btn" style="padding:2px 4px" title="View card" onclick="otdOpenCardLink(\'' + eid + '\',\'' + sp + '\',\'' + eet + '\',\'' + linkDay + '\',\'' + pid + '\')">' + OVL_CARD_ICON + '</button>' : '';
                 var pBtn = eid ? '<button class="otd-link-btn" style="padding:2px 4px" title="View performance" onclick="otdOpenPerfLink(\'' + eid + '\',\'' + sp + '\',\'' + eet + '\',\'' + linkDay + '\',\'' + (w.player.season||'') + '\',\'' + (w.bsId||'') + '\')">' + OVL_PERF_ICON + '</button>' : '';
+                var navBtn = '<button class="otd-link-btn" style="padding:2px 4px" title="Go to this day" onclick="otdJumpToDay(\'' + dk + '\',\'' + g.sport + '\')">' + OVL_NAV_ICON + '</button>';
                 return '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;border-bottom:1px solid var(--border);font-size:12px;gap:6px">' +
                     '<div style="flex:1;min-width:0">' +
                         '<span style="font-family:var(--mono);font-size:10px;color:var(--muted);white-space:nowrap;margin-right:6px">' + escHtml(dateStr) + '</span>' +
@@ -5334,7 +5348,7 @@
                     '</div>' +
                     '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0">' +
                         '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:#ef5350">' + RAX_ICON + (w.rax||0).toLocaleString() + '</span>' +
-                        cBtn + pBtn +
+                        navBtn + cBtn + pBtn +
                     '</div>' +
                 '</div>';
             }).join('');
