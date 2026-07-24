@@ -3187,7 +3187,7 @@
     var otdDateMap = {}; // built by renderOtdResults, used by overlap check
     var otdOverlapMap = {}; // dayKey → [{sport, wasted:[{player,rax}]}] — entries past claim limit >199 Rax
     var otdShowOverlaps = false;
-    var otdOverlapSort = 'rax-desc'; // 'rax-desc' | 'rax-asc' | 'date-asc' | 'date-desc'
+    var otdOverlapSort = 'date-asc'; // 'date-asc' | 'date-desc' | 'rax-desc' | 'rax-asc' | null
     var otdCheckMode = false;
     var otdCheckSport = 'mlb'; // persists sport selection even before a player is picked
     var otdCheckPlayer = null; // { id, name, sport, season, level, levelLabel, entityType }
@@ -3227,8 +3227,12 @@
         otdShowOverlaps = !otdShowOverlaps;
         renderOtdResults();
     }
-    function otdSetOverlapSort(mode) {
-        otdOverlapSort = mode;
+    function otdSetOverlapSort(axis) {
+        if (axis === 'date') {
+            otdOverlapSort = otdOverlapSort === 'date-asc' ? 'date-desc' : otdOverlapSort === 'date-desc' ? null : 'date-asc';
+        } else {
+            otdOverlapSort = otdOverlapSort === 'rax-desc' ? 'rax-asc' : otdOverlapSort === 'rax-asc' ? null : 'rax-desc';
+        }
         renderOtdResults();
     }
     function otdSelectDay(iso) {
@@ -5008,7 +5012,7 @@
             var MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
             var OVL_CARD_ICON = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>';
             var OVL_PERF_ICON = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>';
-            var overlapRows = overlapFlat.slice(0, 60).map(function(entry) {
+            var overlapRows = overlapFlat.map(function(entry) {
                 var dk = entry.dk; var g = entry.g; var w = entry.w;
                 var parts = dk.split('-');
                 var dateStr = MONTH_SHORT[parseInt(parts[1],10)-1] + ' ' + parseInt(parts[2],10);
@@ -5040,20 +5044,19 @@
             var overlapTotal = overlapKeys.reduce(function(s, dk) {
                 return s + otdOverlapMap[dk].reduce(function(a, g) { return a + g.wasted.reduce(function(x, e) { return x + (e.rax||0); }, 0); }, 0);
             }, 0);
-            var ovlSortBase = 'font-family:var(--sans);font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;cursor:pointer;border:1px solid ';
-            var ovlSortBtn = function(mode, label) {
-                var active = otdOverlapSort === mode;
-                return '<button onclick="otdSetOverlapSort(\'' + mode + '\')" style="' + ovlSortBase + (active ? 'var(--accent);background:rgba(99,102,241,.15);color:var(--accent)' : 'var(--border2);background:var(--bg3);color:var(--muted)') + '">' + label + '</button>';
+            var ovlSortBase = 'font-family:var(--sans);font-size:10px;font-weight:600;padding:2px 9px;border-radius:4px;cursor:pointer;border:1px solid ';
+            var ovlSortBtn = function(axis, label) {
+                var cur = otdOverlapSort || '';
+                var active = cur.startsWith(axis);
+                var arrow = cur === axis + '-asc' ? ' ↑' : cur === axis + '-desc' ? ' ↓' : '';
+                return '<button onclick="otdSetOverlapSort(\'' + axis + '\')" style="' + ovlSortBase + (active ? 'var(--accent);background:rgba(99,102,241,.15);color:var(--accent)' : 'var(--border2);background:var(--bg3);color:var(--muted)') + '">' + label + arrow + '</button>';
             };
             overlapPanel = '<div style="background:var(--bg2);border:1px solid var(--border2);border-radius:8px;margin-bottom:10px;overflow:hidden">' +
                 '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:6px">' +
                     '<span style="font-size:12px;font-weight:700;color:var(--fg)">' + overlapCount + ' days with overlapping claims</span>' +
                     '<div style="display:flex;align-items:center;gap:4px">' +
-                        '<span style="font-size:10px;color:var(--muted2);margin-right:2px">Sort:</span>' +
-                        ovlSortBtn('date-asc', 'Date ↑') +
-                        ovlSortBtn('date-desc', 'Date ↓') +
-                        ovlSortBtn('rax-desc', 'Rax ↓') +
-                        ovlSortBtn('rax-asc', 'Rax ↑') +
+                        ovlSortBtn('date', 'Date') +
+                        ovlSortBtn('rax', 'Rax') +
                         '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:#ef5350;margin-left:6px">' + RAX_ICON + overlapTotal.toLocaleString() + '</span>' +
                     '</div>' +
                 '</div>' +
