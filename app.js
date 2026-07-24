@@ -4894,15 +4894,7 @@
                                     .then(function(ed) {
                                         if (ed && ed.rateLimited) {
                                             entry._retries++;
-                                            if (entry._retries > 8) {
-                                                // Give up after 8 retries — mark empty so UI doesn't stall
-                                                entry.earnings = [];
-                                                otdThrottledRender();
-                                                active--;
-                                                next();
-                                                return;
-                                            }
-                                            // Exponential backoff: 2s, 4s, 6s… up to 12s
+                                            // Retry indefinitely — cap delay at 12s so it keeps making progress
                                             var delay = Math.min(2000 * entry._retries, 12000) + Math.random() * 1000;
                                             active--;
                                             setTimeout(function() { queue.push(entry); next(); }, delay);
