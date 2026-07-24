@@ -59,11 +59,15 @@ export async function onRequestGet(context) {
 
   // Build token pool from env vars RS_POOL_1..N + main token
   // Per account: RS_POOL_N (real-auth-info), RS_POOL_SESSION_N (real-session-token), REAL_DEVICE_UUID_N (real-device-uuid)
-  const poolTokens = [{ auth: env.REAL_AUTH_TOKEN, session: env.REAL_SESSION_TOKEN, uuid: env.REAL_DEVICE_UUID }];
+  const poolTokens = [];
+  if (env.REAL_AUTH_TOKEN && env.REAL_SESSION_TOKEN) {
+    poolTokens.push({ auth: env.REAL_AUTH_TOKEN, session: env.REAL_SESSION_TOKEN, uuid: env.REAL_DEVICE_UUID });
+  }
   for (let i = 1; i <= 20; i++) {
     const auth = env[`RS_POOL_${i}`];
+    const session = env[`RS_POOL_SESSION_${i}`];
     if (!auth) break;
-    poolTokens.push({ auth, session: env[`RS_POOL_SESSION_${i}`] || '', uuid: env[`REAL_DEVICE_UUID_${i}`] || env.REAL_DEVICE_UUID });
+    if (session) poolTokens.push({ auth, session, uuid: env[`REAL_DEVICE_UUID_${i}`] || env.REAL_DEVICE_UUID });
   }
 
   function buildHeadersWithToken({ auth, session, uuid }) {
