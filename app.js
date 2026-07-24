@@ -4163,8 +4163,8 @@
         if (!canShow) { el.innerHTML = ''; return; }
         if (!otdCheckMode && !otdFindMode) {
             el.innerHTML = '<div style="margin-bottom:14px;display:flex;flex-wrap:wrap;gap:8px">' +
-                '<button onclick="otdToggleCheck()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:6px;cursor:pointer">⊕ Check Before You Buy</button>' +
-                (function() { var po = window.innerWidth <= 768 ? otdCarouselOpen : otdPassesOpen; return '<button onclick="otdTogglePasses()" style="background:' + (po ? 'rgba(99,102,241,.1)' : 'var(--bg3)') + ';border:1px solid ' + (po ? 'var(--accent)' : 'var(--border2)') + ';color:' + (po ? 'var(--accent)' : 'var(--muted)') + ';font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:6px;cursor:pointer">☰ Passes</button>'; })() +
+                '<button onclick="otdToggleCheck()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:6px;cursor:pointer">✅ Check Before You Buy</button>' +
+                (function() { var po = window.innerWidth <= 768 ? otdCarouselOpen : otdPassesOpen; var PASS_CARD_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-1px"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="9" y1="7" x2="15" y2="7"/><line x1="9" y1="11" x2="15" y2="11"/><line x1="9" y1="15" x2="13" y2="15"/></svg>'; return '<button onclick="otdTogglePasses()" style="background:' + (po ? 'rgba(99,102,241,.1)' : 'var(--bg3)') + ';border:1px solid ' + (po ? 'var(--accent)' : 'var(--border2)') + ';color:' + (po ? 'var(--accent)' : 'var(--muted)') + ';font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:6px;cursor:pointer;display:inline-flex;align-items:center;gap:5px">' + PASS_CARD_SVG + ' Passes</button>'; })() +
             '</div>';
             return;
         }
@@ -5488,7 +5488,7 @@
                     OTD_LEVEL_OPTIONS.map(function(o) { return '<option value="' + o.value + '"' + (o.value === lvl ? ' selected' : '') + '>' + escHtml(o.label) + '</option>'; }).join('') +
                     '</select>' : '';
                 var rarWrap = rarSel
-                    ? '<span style="display:inline-flex;align-items:center;gap:1px;cursor:pointer" title="Change rarity">' + rarSel + '<span style="font-size:9px;color:rgba(255,255,255,.75);line-height:1;pointer-events:none;user-select:none">↕</span></span>'
+                    ? '<span style="display:inline-flex;align-items:center;gap:0;cursor:pointer" title="Change rarity">' + rarSel + '<span style="font-size:8px;color:rgba(255,255,255,.75);line-height:1;pointer-events:none;user-select:none;margin-left:1px">↕</span></span>'
                     : '';
                 var isSimPass = !!(e.player.isAdded);
                 var simBadge = isSimPass ? '<span style="display:inline-block;font-size:8px;font-weight:700;color:#fff;background:#7c3aed;padding:1px 5px;border-radius:3px;letter-spacing:.4px;margin-left:4px;vertical-align:middle">SIM</span>' : '';
@@ -5566,6 +5566,7 @@
                 var OVL_CARD_ICON = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>';
                 var OVL_PERF_ICON = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>';
                 var OVL_NAV_ICON  = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
+                var ovlSortBase = 'font-family:var(--sans);font-size:10px;font-weight:600;padding:2px 9px;border-radius:4px;cursor:pointer;border:1px solid ';
                 // Collect unique sports for filter button
                 var ovlSportsSet = {};
                 overlapFlat.forEach(function(e) { if (e.w.player.sport) ovlSportsSet[e.w.player.sport] = true; });
@@ -5627,7 +5628,6 @@
                 var overlapTotal = overlapKeys.reduce(function(s, dk) {
                     return s + otdOverlapMap[dk].reduce(function(a, g) { return a + g.wasted.reduce(function(x, e) { return x + (e.rax||0); }, 0); }, 0);
                 }, 0);
-                var ovlSortBase = 'font-family:var(--sans);font-size:10px;font-weight:600;padding:2px 9px;border-radius:4px;cursor:pointer;border:1px solid ';
                 var ovlSortBtn = function(axis, label) {
                     var cur = otdOverlapSort || '';
                     var active = cur.startsWith(axis);
