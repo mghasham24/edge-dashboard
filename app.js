@@ -3652,17 +3652,18 @@
                         '<div style="font-size:10px;font-family:var(--mono);color:' + rc + ';font-weight:700">' + RAX_ICON + monthTotal.toLocaleString() + '</div>' +
                     '</div>' +
                 '</div>' +
-                '<div style="max-height:240px;overflow-y:auto">' +
+                '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;max-height:280px;overflow-y:auto;padding:2px">' +
                 entries.map(function(e) {
                     var dp2 = e.origDay.split('-');
                     var dayLbl = dp2.length === 3 ? MONTH_SHORT[parseInt(dp2[1], 10) - 1] + ' ' + parseInt(dp2[2], 10) : e.origDay;
                     var bsStr = e.bsId ? String(e.bsId) : '';
-                    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border)">' +
-                        '<span style="color:var(--muted2);font-size:11px">' + escHtml(dayLbl) + '</span>' +
-                        (bsStr
-                            ? '<button onclick="otdOpenPerfLink(\'' + pid + '\',\'' + psp + '\',\'' + pet + '\',\'' + escHtml(e.origDay) + '\',\'' + pse + '\',\'' + bsStr + '\')" style="font-weight:700;font-family:var(--mono);color:var(--accent);background:none;border:none;cursor:pointer;padding:0;font-size:11px;display:flex;align-items:center;gap:2px">' + RAX_ICON + e.rax.toLocaleString() + '</button>'
-                            : '<span style="font-weight:700;font-family:var(--mono);color:var(--accent);font-size:11px;display:flex;align-items:center;gap:2px">' + RAX_ICON + e.rax.toLocaleString() + '</span>') +
-                    '</div>';
+                    var cardInner =
+                        '<div style="font-size:10px;color:var(--muted2);margin-bottom:6px;font-weight:600">' + escHtml(dayLbl) + '</div>' +
+                        '<div style="font-size:13px;font-weight:800;font-family:var(--mono);color:' + rc + ';display:flex;align-items:center;justify-content:center;gap:2px">' + RAX_ICON + e.rax.toLocaleString() + '</div>';
+                    var cardStyle = 'background:' + rc + '11;border:1px solid ' + rc + '33;border-radius:8px;padding:10px 6px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:64px;';
+                    return bsStr
+                        ? '<button onclick="otdOpenPerfLink(\'' + pid + '\',\'' + psp + '\',\'' + pet + '\',\'' + escHtml(e.origDay) + '\',\'' + pse + '\',\'' + bsStr + '\')" style="' + cardStyle + 'cursor:pointer;font-family:var(--sans);width:100%">' + cardInner + '</button>'
+                        : '<div style="' + cardStyle + '">' + cardInner + '</div>';
                 }).join('') +
                 '</div>' +
             '</div>';
