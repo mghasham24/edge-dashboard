@@ -571,8 +571,11 @@ export async function onRequestGet(context) {
     }
 
     const yr = new Date().getFullYear();
+    // All sports only go back to 2022. Golf goes back to 2015 but is fetched separately below.
     const seasons = [];
-    for (let y = yr; y >= 2015; y--) seasons.push(y);
+    for (let y = yr; y >= 2022; y--) seasons.push(y);
+    const golfSeasons = [];
+    for (let y = 2021; y >= 2015; y--) golfSeasons.push(y);
 
     function rarityToLevelAll(rarity, rarityLevel) {
       const r = (rarity || '').toLowerCase();
@@ -626,33 +629,41 @@ export async function onRequestGet(context) {
     try {
       const passMap = {};
 
-      const CHUNK = 3;
-      for (let i = 0; i < seasons.length; i += CHUNK) {
-        await Promise.all(seasons.slice(i, i + CHUNK).map(async season => {
-          try {
-            const [playerRes, teamRes] = await Promise.all([
-              fetch(`${RS_BASE}/userpasses/${encodeURIComponent(userId)}/passes?entityType=player&season=${season}`, { headers }),
-              fetch(`${RS_BASE}/userpasses/${encodeURIComponent(userId)}/passes?entityType=team&season=${season}`, { headers })
-            ]);
-            for (const [res, entityType] of [[playerRes, 'player'], [teamRes, 'team']]) {
-              if (!res.ok) {
-                if (res.status === 429) throw new Error('429');
-                continue;
-              }
-              try {
-                const data = await res.json();
-                for (const pass of extractPasses(data, entityType, season)) {
-                  const key = `${pass.playerId}|${pass.sport}|${pass.season}`;
-                  passMap[key] = pass;
+      const fetchSeasons = async (seasonList, sportFilter) => {
+        const CHUNK = 3;
+        for (let i = 0; i < seasonList.length; i += CHUNK) {
+          await Promise.all(seasonList.slice(i, i + CHUNK).map(async season => {
+            try {
+              const sportParam = sportFilter ? `&sport=${sportFilter}` : '';
+              const [playerRes, teamRes] = sportFilter
+                ? [await fetch(`${RS_BASE}/userpasses/${encodeURIComponent(userId)}/passes?entityType=player&season=${season}${sportParam}`, { headers }), { ok: false }]
+                : await Promise.all([
+                    fetch(`${RS_BASE}/userpasses/${encodeURIComponent(userId)}/passes?entityType=player&season=${season}`, { headers }),
+                    fetch(`${RS_BASE}/userpasses/${encodeURIComponent(userId)}/passes?entityType=team&season=${season}`, { headers })
+                  ]);
+              for (const [res, entityType] of [[playerRes, 'player'], [teamRes, 'team']]) {
+                if (!res.ok) {
+                  if (res.status === 429) throw new Error('429');
+                  continue;
                 }
-              } catch(e) {}
+                try {
+                  const data = await res.json();
+                  for (const pass of extractPasses(data, entityType, season)) {
+                    const key = `${pass.playerId}|${pass.sport}|${pass.season}`;
+                    passMap[key] = pass;
+                  }
+                } catch(e) {}
+              }
+            } catch(e) {
+              if (e.message === '429') throw e;
             }
-          } catch(e) {
-            if (e.message === '429') throw e;
-          }
-        }));
-        if (i + CHUNK < seasons.length) await new Promise(r => setTimeout(r, 400));
-      }
+          }));
+          if (i + CHUNK < seasonList.length) await new Promise(r => setTimeout(r, 400));
+        }
+      };
+
+      await fetchSeasons(seasons, null);         // 2022–now, all sports, player + team
+      await fetchSeasons(golfSeasons, 'golf');   // 2015–2021, golf only, player only
 
       const passes = Object.values(passMap);
       const body = JSON.stringify({ ok: true, passes });
