@@ -3207,6 +3207,10 @@
     var otdOverlapMap = {}; // dayKey → [{sport, wasted:[{player,rax}]}] — entries past claim limit >199 Rax
     var otdShowOverlaps = false;
     var otdOverlapSort = 'date-asc'; // 'date-asc' | 'date-desc' | 'rax-desc' | 'rax-asc' | null
+    var otdOverlapPage = 0;
+    var OTD_OVERLAPS_PER_PAGE = 50;
+    var otdOverlapPanelCache = null; // { key, html } — avoid rebuilding on every calendar tap
+
     var otdCheckMode = false;
     var otdCheckSport = 'mlb'; // persists sport selection even before a player is picked
     var otdCheckPlayer = null; // { id, name, sport, season, level, levelLabel, entityType }
@@ -3367,6 +3371,7 @@
     }
     function otdToggleOverlaps() {
         otdShowOverlaps = !otdShowOverlaps;
+        otdOverlapPanelCache = null;
         renderOtdResults();
     }
     function otdSetOverlapSort(axis) {
@@ -3375,6 +3380,7 @@
         } else {
             otdOverlapSort = otdOverlapSort === 'rax-desc' ? 'rax-asc' : otdOverlapSort === 'rax-asc' ? null : 'rax-desc';
         }
+        otdOverlapPage = 0; otdOverlapPanelCache = null;
         renderOtdResults();
     }
     function otdSelectDay(iso) {
@@ -3969,6 +3975,12 @@
             : '';
 
         return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;padding-bottom:6px">' + cardHtmls.join('') + moreBtn + '</div>';
+    }
+
+    function otdShowMoreOverlaps() {
+        otdOverlapPage++;
+        otdOverlapPanelCache = null;
+        renderOtdResults();
     }
 
     function otdShowMorePasses() {
@@ -5146,6 +5158,8 @@
             otdDateMapCachedYear = otdCalYear;
             otdDateMapCachedCV = otdClaimsView;
             otdDateMapDirty = false;
+            otdOverlapPanelCache = null; // data changed — overlap panel must rebuild
+            otdOverlapPage = 0;
         } else {
             dateMap = otdDateMapCached.dm;
             overlapMap = otdDateMapCached.om;
@@ -5341,61 +5355,74 @@
         var overlapBtnStyle = btnBase + (otdShowOverlaps ? 'var(--accent);background:rgba(99,102,241,.12);color:var(--accent)' : 'var(--border2);background:var(--bg3);color:var(--muted)');
         var overlapPanel = '';
         if (otdShowOverlaps && overlapCount > 0) {
-            var MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-            var OVL_CARD_ICON = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>';
-            var OVL_PERF_ICON = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>';
-            var OVL_NAV_ICON  = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
-            var overlapRows = overlapFlat.map(function(entry) {
-                var dk = entry.dk; var g = entry.g; var w = entry.w;
-                var parts = dk.split('-');
-                var dateStr = MONTH_SHORT[parseInt(parts[1],10)-1] + ' ' + parseInt(parts[2],10);
-                var sportLabel = g.sport === '3rd-slot' ? '3rd slot beaten' : g.sport.toUpperCase();
-                var sportColor = g.sport === '3rd-slot' ? '#9c27b0' : 'var(--muted)';
-                var lbl = (OTD_LEVEL_OPTIONS.find(function(o){return o.value===w.player.level;})||{}).label || '';
-                var yr = escHtml(otdFormatSeason(w.player.sport, w.player.season));
-                var linkDay = w.origDay || dk;
-                var pid = w.player.passId || '';
-                var eid = String(w.player.id || '');
-                var eet = w.player.entityType || 'player';
-                var sp = w.player.sport || '';
-                var cBtn = eid ? '<button class="otd-link-btn" style="padding:2px 4px" title="View card" onclick="otdOpenCardLink(\'' + eid + '\',\'' + sp + '\',\'' + eet + '\',\'' + linkDay + '\',\'' + pid + '\')">' + OVL_CARD_ICON + '</button>' : '';
-                var pBtn = eid ? '<button class="otd-link-btn" style="padding:2px 4px" title="View performance" onclick="otdOpenPerfLink(\'' + eid + '\',\'' + sp + '\',\'' + eet + '\',\'' + linkDay + '\',\'' + (w.player.season||'') + '\',\'' + (w.bsId||'') + '\')">' + OVL_PERF_ICON + '</button>' : '';
-                var navBtn = '<button class="otd-link-btn" style="padding:2px 4px" title="Go to this day" onclick="otdJumpToDay(\'' + dk + '\',\'' + g.sport + '\')">' + OVL_NAV_ICON + '</button>';
-                return '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;border-bottom:1px solid var(--border);font-size:12px;gap:6px">' +
-                    '<div style="flex:1;min-width:0">' +
-                        '<span style="font-family:var(--mono);font-size:10px;color:var(--muted);white-space:nowrap;margin-right:6px">' + escHtml(dateStr) + '</span>' +
-                        '<span style="font-weight:600;color:var(--fg)">' + escHtml(w.player.name) + '</span>' +
-                        (lbl ? '<span style="font-size:9px;background:' + (w.player.rarityColor||'var(--muted)')+';color:#fff;border-radius:3px;padding:1px 4px;margin-left:5px;font-weight:700">' + escHtml(lbl) + '</span>' : '') +
-                        '<span style="font-size:10px;color:var(--muted);margin-left:5px">' + yr + '</span>' +
-                        '<span style="font-size:9px;color:' + sportColor + ';margin-left:5px;font-weight:600">' + escHtml(sportLabel) + '</span>' +
+            // Cache the panel HTML — rebuilding 200+ rows on every calendar tap crashes mobile.
+            // Cache is keyed by sort order + page; invalidated when data rebuilds (otdOverlapPanelCache=null).
+            var ovlCacheKey = (otdOverlapSort || '') + '|' + otdOverlapPage;
+            if (otdOverlapPanelCache && otdOverlapPanelCache.key === ovlCacheKey) {
+                overlapPanel = otdOverlapPanelCache.html;
+            } else {
+                var MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                var OVL_CARD_ICON = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>';
+                var OVL_PERF_ICON = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>';
+                var OVL_NAV_ICON  = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
+                var visibleFlat = overlapFlat.slice(0, (otdOverlapPage + 1) * OTD_OVERLAPS_PER_PAGE);
+                var overlapRows = visibleFlat.map(function(entry) {
+                    var dk = entry.dk; var g = entry.g; var w = entry.w;
+                    var parts = dk.split('-');
+                    var dateStr = MONTH_SHORT[parseInt(parts[1],10)-1] + ' ' + parseInt(parts[2],10);
+                    var sportLabel = g.sport === '3rd-slot' ? '3rd slot beaten' : g.sport.toUpperCase();
+                    var sportColor = g.sport === '3rd-slot' ? '#9c27b0' : 'var(--muted)';
+                    var lbl = (OTD_LEVEL_OPTIONS.find(function(o){return o.value===w.player.level;})||{}).label || '';
+                    var yr = escHtml(otdFormatSeason(w.player.sport, w.player.season));
+                    var linkDay = w.origDay || dk;
+                    var pid = w.player.passId || '';
+                    var eid = String(w.player.id || '');
+                    var eet = w.player.entityType || 'player';
+                    var sp = w.player.sport || '';
+                    var cBtn = eid ? '<button class="otd-link-btn" style="padding:2px 4px" title="View card" onclick="otdOpenCardLink(\'' + eid + '\',\'' + sp + '\',\'' + eet + '\',\'' + linkDay + '\',\'' + pid + '\')">' + OVL_CARD_ICON + '</button>' : '';
+                    var pBtn = eid ? '<button class="otd-link-btn" style="padding:2px 4px" title="View performance" onclick="otdOpenPerfLink(\'' + eid + '\',\'' + sp + '\',\'' + eet + '\',\'' + linkDay + '\',\'' + (w.player.season||'') + '\',\'' + (w.bsId||'') + '\')">' + OVL_PERF_ICON + '</button>' : '';
+                    var navBtn = '<button class="otd-link-btn" style="padding:2px 4px" title="Go to this day" onclick="otdJumpToDay(\'' + dk + '\',\'' + g.sport + '\')">' + OVL_NAV_ICON + '</button>';
+                    return '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;border-bottom:1px solid var(--border);font-size:12px;gap:6px">' +
+                        '<div style="flex:1;min-width:0">' +
+                            '<span style="font-family:var(--mono);font-size:10px;color:var(--muted);white-space:nowrap;margin-right:6px">' + escHtml(dateStr) + '</span>' +
+                            '<span style="font-weight:600;color:var(--fg)">' + escHtml(w.player.name) + '</span>' +
+                            (lbl ? '<span style="font-size:9px;background:' + (w.player.rarityColor||'var(--muted)')+';color:#fff;border-radius:3px;padding:1px 4px;margin-left:5px;font-weight:700">' + escHtml(lbl) + '</span>' : '') +
+                            '<span style="font-size:10px;color:var(--muted);margin-left:5px">' + yr + '</span>' +
+                            '<span style="font-size:9px;color:' + sportColor + ';margin-left:5px;font-weight:600">' + escHtml(sportLabel) + '</span>' +
+                        '</div>' +
+                        '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0">' +
+                            '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:#ef5350">' + RAX_ICON + (w.rax||0).toLocaleString() + '</span>' +
+                            navBtn + cBtn + pBtn +
+                        '</div>' +
+                    '</div>';
+                }).join('');
+                var remaining = overlapFlat.length - visibleFlat.length;
+                var moreBtn = remaining > 0
+                    ? '<div style="padding:8px 10px;text-align:center"><button onclick="otdShowMoreOverlaps()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:11px;font-weight:600;padding:4px 14px;border-radius:6px;cursor:pointer">Show ' + remaining + ' more</button></div>'
+                    : '';
+                var overlapTotal = overlapKeys.reduce(function(s, dk) {
+                    return s + otdOverlapMap[dk].reduce(function(a, g) { return a + g.wasted.reduce(function(x, e) { return x + (e.rax||0); }, 0); }, 0);
+                }, 0);
+                var ovlSortBase = 'font-family:var(--sans);font-size:10px;font-weight:600;padding:2px 9px;border-radius:4px;cursor:pointer;border:1px solid ';
+                var ovlSortBtn = function(axis, label) {
+                    var cur = otdOverlapSort || '';
+                    var active = cur.startsWith(axis);
+                    var arrow = cur === axis + '-asc' ? ' ↑' : cur === axis + '-desc' ? ' ↓' : '';
+                    return '<button onclick="otdSetOverlapSort(\'' + axis + '\')" style="' + ovlSortBase + (active ? 'var(--accent);background:rgba(99,102,241,.15);color:var(--accent)' : 'var(--border2);background:var(--bg3);color:var(--muted)') + '">' + label + arrow + '</button>';
+                };
+                overlapPanel = '<div style="background:var(--bg2);border:1px solid var(--border2);border-radius:8px;margin-bottom:10px;overflow:hidden">' +
+                    '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:6px">' +
+                        '<span style="font-size:12px;font-weight:700;color:var(--fg)">' + overlapCount + ' days with overlapping claims</span>' +
+                        '<div style="display:flex;align-items:center;gap:4px">' +
+                            ovlSortBtn('date', 'Date') +
+                            ovlSortBtn('rax', 'Rax') +
+                            '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:#ef5350;margin-left:6px">' + RAX_ICON + overlapTotal.toLocaleString() + '</span>' +
+                        '</div>' +
                     '</div>' +
-                    '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0">' +
-                        '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:#ef5350">' + RAX_ICON + (w.rax||0).toLocaleString() + '</span>' +
-                        navBtn + cBtn + pBtn +
-                    '</div>' +
+                    '<div style="max-height:260px;overflow-y:auto">' + overlapRows + moreBtn + '</div>' +
                 '</div>';
-            }).join('');
-            var overlapTotal = overlapKeys.reduce(function(s, dk) {
-                return s + otdOverlapMap[dk].reduce(function(a, g) { return a + g.wasted.reduce(function(x, e) { return x + (e.rax||0); }, 0); }, 0);
-            }, 0);
-            var ovlSortBase = 'font-family:var(--sans);font-size:10px;font-weight:600;padding:2px 9px;border-radius:4px;cursor:pointer;border:1px solid ';
-            var ovlSortBtn = function(axis, label) {
-                var cur = otdOverlapSort || '';
-                var active = cur.startsWith(axis);
-                var arrow = cur === axis + '-asc' ? ' ↑' : cur === axis + '-desc' ? ' ↓' : '';
-                return '<button onclick="otdSetOverlapSort(\'' + axis + '\')" style="' + ovlSortBase + (active ? 'var(--accent);background:rgba(99,102,241,.15);color:var(--accent)' : 'var(--border2);background:var(--bg3);color:var(--muted)') + '">' + label + arrow + '</button>';
-            };
-            overlapPanel = '<div style="background:var(--bg2);border:1px solid var(--border2);border-radius:8px;margin-bottom:10px;overflow:hidden">' +
-                '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:6px">' +
-                    '<span style="font-size:12px;font-weight:700;color:var(--fg)">' + overlapCount + ' days with overlapping claims</span>' +
-                    '<div style="display:flex;align-items:center;gap:4px">' +
-                        ovlSortBtn('date', 'Date') +
-                        ovlSortBtn('rax', 'Rax') +
-                        '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:#ef5350;margin-left:6px">' + RAX_ICON + overlapTotal.toLocaleString() + '</span>' +
-                    '</div>' +
-                '</div>' +
-                '<div style="max-height:260px;overflow-y:auto">' + overlapRows + '</div>' +
-            '</div>';
+                otdOverlapPanelCache = { key: ovlCacheKey, html: overlapPanel };
+            }
         } else if (otdShowOverlaps && overlapCount === 0) {
             overlapPanel = '<div style="background:var(--bg2);border:1px solid var(--border2);border-radius:8px;margin-bottom:10px;padding:12px 14px;font-size:12px;color:var(--muted2)">No overlapping claims above 199 Rax — your collection is clean.</div>';
         }
