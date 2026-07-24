@@ -355,11 +355,13 @@ export async function onRequestGet(context) {
     }
 
     // Map cache key → array of bundle keys (one cache entry serves all levels of same player+sport+season)
-    const RS_SEASON_NORMALIZE_BUNDLE = { ufc: 'alltime' };
+    const RS_SEASON_NORMALIZE_BUNDLE = { ufc: 'alltime', mma: 'alltime' };
+    const RS_SPORT_ALIAS_BUNDLE = { mma: 'ufc' };
     const keyToIds = {};
     for (const p of passes) {
       const seasonKey = RS_SEASON_NORMALIZE_BUNDLE[p.sport] || p.season;
-      const cacheKey = `otd_earnings_v10_${p.entityType || 'player'}_${p.sport}_${seasonKey}_${p.playerId}`;
+      const sportKey = RS_SPORT_ALIAS_BUNDLE[p.sport] || p.sport;
+      const cacheKey = `otd_earnings_v10_${p.entityType || 'player'}_${sportKey}_${seasonKey}_${p.playerId}`;
       const bundleKey = `${p.playerId}|${p.sport}|${p.season}|${p.level}|${p.entityType || 'player'}`;
       if (!keyToIds[cacheKey]) keyToIds[cacheKey] = [];
       keyToIds[cacheKey].push(bundleKey);
@@ -407,7 +409,7 @@ export async function onRequestGet(context) {
     if (!id) return fail(400, 'Missing id');
 
     const force = url.searchParams.get('force') === '1';
-    const RS_SPORT_ALIAS = { ncaabb: 'ncaam' };
+    const RS_SPORT_ALIAS = { ncaabb: 'ncaam', mma: 'ufc' };
     // UFC is all-time — normalize season in cache key so all seasons converge to one entry
     const RS_SEASON_NORMALIZE = { ufc: 'alltime' };
     const sportKey = RS_SPORT_ALIAS[sport] || sport;
@@ -438,7 +440,7 @@ export async function onRequestGet(context) {
     if (!rateClaim.meta.changes) return fail(429, 'RS rate limit: try again shortly');
 
     try {
-      const RS_EARN_SPORT_MAP = { ncaabb: 'ncaam' };
+      const RS_EARN_SPORT_MAP = { ncaabb: 'ncaam', mma: 'ufc' };
       const rsSport = RS_EARN_SPORT_MAP[sport] || sport;
       const earningsUrl = `${RS_BASE}/userpassearnings/${rsSport}/season/${season}/entity/${entityType}/${id}?level=1`;
       const controller = new AbortController();
