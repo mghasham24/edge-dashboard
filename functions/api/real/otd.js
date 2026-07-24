@@ -57,17 +57,13 @@ export async function onRequestGet(context) {
     return fail(503, 'REAL_AUTH_TOKEN or REAL_SESSION_TOKEN not set');
   }
 
-  // Build token pool: fresh pool tokens (pushed within last 10 min) + env fallback
-  let poolTokens = [env.REAL_AUTH_TOKEN];
-  try {
-    const poolRows = await env.DB.prepare(
-      `SELECT data FROM odds_cache WHERE cache_key LIKE 'rs_pool_token_%' AND fetched_at > ?`
-    ).bind(now - 600).all();
-    if (poolRows.results && poolRows.results.length) {
-      poolTokens = poolRows.results.map(r => r.data);
-      poolTokens.push(env.REAL_AUTH_TOKEN);
-    }
-  } catch(e) {}
+  // Build token pool from env vars RS_POOL_1, RS_POOL_2, ... + main token
+  // Add tokens via Cloudflare dashboard → Settings → Environment Variables
+  const poolTokens = [env.REAL_AUTH_TOKEN];
+  for (let i = 1; i <= 20; i++) {
+    const t = env[`RS_POOL_${i}`];
+    if (t) poolTokens.push(t); else break;
+  }
 
   function buildHeadersWithToken(authToken) {
     return {
