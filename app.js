@@ -3115,6 +3115,21 @@
         { key: 'nhl', label: 'NHL' }, { key: 'nfl', label: 'NFL' },
         { key: 'nba', label: 'NBA' }
     ];
+    var OTD_LEVEL_MULTIPLIERS = {
+        0:1, 1:2, 2:3, 3:4, 4:10,
+        5:25, 6:28, 7:32, 8:35, 9:40,
+        10:75, 11:79, 12:83, 13:87, 14:91, 15:95, 16:98, 17:101, 18:103, 19:105,
+        20:150, 21:153, 22:156, 23:159, 24:163, 25:167, 26:171, 27:175, 28:180,
+        29:185, 30:190, 31:196, 32:202, 33:208, 34:214, 35:220, 36:226, 37:233,
+        38:240, 39:250
+    };
+    function otdApplyMultiplier(earningsArr, level) {
+        var mult = OTD_LEVEL_MULTIPLIERS[level] || 0;
+        return earningsArr.map(function(e) {
+            var base = e.earnings || 0;
+            return (mult && base) ? Object.assign({}, e, { atRarityEarnings: Math.round(base * mult) }) : e;
+        });
+    }
     var OTD_LEVEL_OPTIONS = (function() {
         var opts = [
             { value: 0, label: 'General' }, { value: 1, label: 'Common' },
@@ -3480,7 +3495,8 @@
         fetch('/api/real/otd?action=earnings&id=' + p.id + '&sport=' + p.sport + '&season=' + p.season + '&level=' + p.level + '&entityType=' + (p.entityType || 'player'), { credentials: 'same-origin' })
             .then(function(r) { return r.ok ? r.json() : { ok: false }; })
             .then(function(d) {
-                p.earnings = (d.ok && d.earnings) ? d.earnings : [];
+                if (OTD_LEVEL_MULTIPLIERS[newLevel]) p.multiplier = OTD_LEVEL_MULTIPLIERS[newLevel] + 'x';
+                p.earnings = (d.ok && d.earnings) ? otdApplyMultiplier(d.earnings, newLevel) : [];
                 // Feed results into Find Player panel if it's still showing this player at this level
                 if (otdFindPlayer && String(otdFindPlayer.id) === String(p.id) && otdFindPlayer.sport === p.sport && otdFindPlayer.level === newLevel) {
                     otdFindEarnings = p.earnings;
@@ -3669,7 +3685,8 @@
         fetch('/api/real/otd?action=earnings&id=' + p.id + '&sport=' + p.sport + '&season=' + p.season + '&level=' + level + '&entityType=' + (p.entityType || 'player'), { credentials: 'same-origin' })
             .then(function(r) { return r.ok ? r.json() : { ok: false }; })
             .then(function(ed) {
-                p.earnings = (ed.ok && ed.earnings) ? ed.earnings : [];
+                if (OTD_LEVEL_MULTIPLIERS[level]) p.multiplier = OTD_LEVEL_MULTIPLIERS[level] + 'x';
+                p.earnings = (ed.ok && ed.earnings) ? otdApplyMultiplier(ed.earnings, level) : [];
                 if (ed.baseTotal !== null && ed.baseTotal !== undefined) p.baseTotal = ed.baseTotal;
                 renderOtdChips();
                 renderOtdResults();
@@ -3852,7 +3869,7 @@
         if (selectedItemIdx >= 0) {
             var insertAfter = Math.floor(selectedItemIdx / 2) * 2 + 2; // end of the row + 1
             var breakdownHtml = buildBreakdownCard(otdSelectedPass);
-            if (breakdownHtml) cardHtmls.splice(Math.min(insertAfter, cardHtmls.length), 0, breakdownHtml);
+            if (breakdownHtml) cardHtmls.splice(Math.min(insertAfter, cardHtmls.length), 0, '<div style="grid-column:1/-1">' + breakdownHtml + '</div>');
         }
 
         return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;padding-bottom:6px">' + cardHtmls.join('') + '</div>';
