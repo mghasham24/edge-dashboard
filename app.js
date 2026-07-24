@@ -4365,12 +4365,11 @@
                 // Build entry objects first, then batch-fetch earnings to avoid RS 429 rate limits.
                 // D1 caches each (player, sport, season, level) for 12h — only cold loads hit RS.
                 var earningsQueue = [];
-                if (d.passes.length > 0) console.log('[OTD] first pass raw:', JSON.stringify(d.passes[0]));
                 d.passes.forEach(function(pass) {
                     var lbl = (OTD_LEVEL_OPTIONS.find(function(o) { return o.value === pass.level; }) || {}).label || 'Level ' + pass.level;
                     var color = OTD_COLORS[otdColorIdx % OTD_COLORS.length];
                     otdColorIdx++;
-                    var entry = { id: pass.playerId, name: pass.playerName || ('Player ' + pass.playerId), sport: pass.sport, season: String(pass.season), level: pass.level, levelLabel: lbl, color: color, earnings: null, entityType: pass.entityType || 'player', passId: pass.passId || null, avatar: pass.entityAvatar || pass.avatar || '', backgroundSource: pass.backgroundSource || null, rarityColor: pass.rarityColor || null, serialNumber: pass.serialNumber || null, multiplier: pass.multiplier || null };
+                    var entry = { id: pass.playerId, name: pass.playerName || ('Player ' + pass.playerId), sport: pass.sport, season: String(pass.season), level: pass.level, levelLabel: lbl, color: color, earnings: null, entityType: pass.entityType || 'player', passId: pass.passId || null, avatar: pass.avatar || pass.entityAvatar || '', backgroundSource: pass.backgroundSource || null, rarityColor: pass.rarityColor || null, serialNumber: pass.serialNumber || null, multiplier: pass.multiplier || null };
                     otdPlayers.push(entry);
                     earningsQueue.push(entry);
                 });

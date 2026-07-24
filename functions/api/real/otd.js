@@ -510,7 +510,6 @@ export async function onRequestGet(context) {
             rarityColor:      (p.boostInfo && p.boostInfo.rarityColor) || null,
             serialNumber:     p.serialNumber || null,
             multiplier:       (p.boostInfo && p.boostInfo.multiplier) || null,
-            _dbg:             { pKeys: Object.keys(p), eKeys: Object.keys(entity), boostKeys: p.boostInfo ? Object.keys(p.boostInfo) : [] },
           });
         }
       }
