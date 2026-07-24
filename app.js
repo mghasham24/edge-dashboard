@@ -4227,7 +4227,14 @@
         var el = document.getElementById('otd-pass-carousel');
         var bdEl = document.getElementById('otd-carousel-breakdown');
         if (!el) return;
-        if (!otdCarouselOpen || !otdPlayers.length || otdLoadingPasses) { el.innerHTML = ''; if (bdEl) bdEl.innerHTML = ''; return; }
+        var srchEl = document.getElementById('otd-carousel-search');
+        if (!otdCarouselOpen || !otdPlayers.length || otdLoadingPasses) { el.innerHTML = ''; if (bdEl) bdEl.innerHTML = ''; if (srchEl) srchEl.innerHTML = ''; return; }
+        if (srchEl && !srchEl.querySelector('input')) {
+            srchEl.innerHTML = '<input type="text" id="otd-carousel-search-input" placeholder="Search passes…" autocomplete="off" ' +
+                'oninput="otdCarouselSearchInput(this.value)" ' +
+                'style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;padding:7px 10px;border-radius:6px;margin-bottom:8px">';
+        }
+        if (srchEl) { var inp = srchEl.querySelector('input'); if (inp && inp.value !== otdCarouselSearch) inp.value = otdCarouselSearch; }
 
         var CW = 128, CH = 140;
         var CARD_SVG = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>';
@@ -4289,9 +4296,6 @@
         }).join('');
 
         el.innerHTML =
-            '<input type="text" placeholder="Search passes…" value="' + escHtml(otdCarouselSearch) + '" autocomplete="off" ' +
-                'oninput="otdCarouselSearchInput(this.value)" ' +
-                'style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;padding:7px 10px;border-radius:6px;margin-bottom:8px">' +
             '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;margin:0 -12px;padding:0 12px 4px">' +
                 '<style>.otd-carousel-scroll::-webkit-scrollbar{display:none}</style>' +
                 '<div class="otd-carousel-scroll" style="display:grid;grid-template-rows:' + CH + 'px ' + CH + 'px;grid-auto-flow:column;grid-auto-columns:' + CW + 'px;gap:6px;width:max-content;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding:0 12px 4px;box-sizing:border-box">' +
@@ -4340,6 +4344,7 @@
             '</div>' +
             '<div id="otd-search-err" style="display:none;font-size:12px;color:#ef5350;margin-bottom:8px"></div>' +
             '<div id="otd-chips" style="margin-bottom:8px"></div>' +
+            '<div id="otd-carousel-search"></div>' +
             '<div id="otd-pass-carousel" style="margin-bottom:6px"></div>' +
             '<div id="otd-carousel-breakdown"></div>' +
             '<div id="otd-check-wrap"></div>' +
