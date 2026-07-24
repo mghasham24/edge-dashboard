@@ -4785,9 +4785,29 @@
     function otdLoadUserPasses(force) {
         var errEl = document.getElementById('otd-search-err');
         if (!otdSelectedUser) {
-            if (errEl) { errEl.textContent = 'Search and select an RS username first'; errEl.style.display = ''; setTimeout(function() { if (errEl) errEl.style.display = 'none'; }, 3000); }
             var inp = document.getElementById('otd-user-input');
-            if (inp) { inp.style.borderColor = 'var(--red,#ef5350)'; setTimeout(function() { if (inp) inp.style.borderColor = ''; }, 2000); }
+            var typed = (inp ? inp.value : '').trim();
+            if (!typed) {
+                if (errEl) { errEl.textContent = 'Enter an RS username first'; errEl.style.display = ''; setTimeout(function() { if (errEl) errEl.style.display = 'none'; }, 3000); }
+                if (inp) { inp.style.borderColor = 'var(--red,#ef5350)'; setTimeout(function() { if (inp) inp.style.borderColor = ''; }, 2000); }
+                return;
+            }
+            // Look up the typed username directly without requiring dropdown selection
+            fetch('/api/real/otd?action=user_search&q=' + encodeURIComponent(typed), { credentials: 'same-origin' })
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    var match = d.users && d.users[0];
+                    if (!match) {
+                        if (errEl) { errEl.textContent = 'User "' + escHtml(typed) + '" not found'; errEl.style.display = ''; setTimeout(function() { if (errEl) errEl.style.display = 'none'; }, 3000); }
+                        return;
+                    }
+                    otdSelectedUser = match;
+                    if (inp) inp.value = match.username;
+                    otdLoadUserPasses(force);
+                })
+                .catch(function() {
+                    if (errEl) { errEl.textContent = 'Could not find user — try again'; errEl.style.display = ''; setTimeout(function() { if (errEl) errEl.style.display = 'none'; }, 3000); }
+                });
             return;
         }
         if (otdLoadingPasses) return;
