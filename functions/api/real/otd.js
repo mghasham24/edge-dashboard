@@ -304,9 +304,10 @@ export async function onRequestGet(context) {
       const earningsUrl = `${RS_BASE}/userpassearnings/${sport}/season/${season}/entity/${entityType}/${id}?level=${level}`;
       let res = await fetch(earningsUrl, { headers });
 
-      // Retry main on 429
-      if (res.status === 429) {
-        await new Promise(r => setTimeout(r, 1000));
+      // Retry up to 3 times with exponential backoff on 429
+      const retryDelays = [500, 1500, 3000];
+      for (let i = 0; i < retryDelays.length && res.status === 429; i++) {
+        await new Promise(r => setTimeout(r, retryDelays[i]));
         res = await fetch(earningsUrl, { headers });
       }
       if (!res.ok) return fail(res.status, 'RS earnings failed: ' + res.status);
