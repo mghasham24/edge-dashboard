@@ -99,7 +99,9 @@ export async function onRequestGet(context) {
     const norm = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
     const queryWords = norm(q).split(/\s+/).filter(w => w.length > 1);
 
-    const searchSport = sport;
+    // RS search API uses different slugs than our internal sport keys
+    const RS_SEARCH_SPORT_MAP = { ncaabb: 'ncaam', ncaaf: 'ncaaf' };
+    const searchSport = RS_SEARCH_SPORT_MAP[sport] || sport;
 
     try {
       const trySearch = async (sp) => {

@@ -3536,9 +3536,9 @@
         otdCheckPlayer = null; otdCheckEarnings = null; otdCheckPlayerSelected = false;
         renderOtdCheckWrap();
         var inp = document.getElementById('otd-check-input');
-        if (inp && savedVal) inp.value = savedVal;
+        if (inp && savedVal) { inp.value = savedVal; otdCheckSearchInput(savedVal); }
         var ac = document.getElementById('otd-check-ac');
-        if (ac) ac.style.display = 'none';
+        if (ac && !savedVal) ac.style.display = 'none';
     }
 
     function otdClear() {
