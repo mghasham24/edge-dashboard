@@ -3528,9 +3528,16 @@
     }
 
     function otdSelectPassMonth(mk) {
-        otdSelectedPassMonth = (otdSelectedPassMonth === mk) ? null : mk;
         var listEl = document.getElementById('otd-passes-list');
-        if (listEl) listEl.innerHTML = buildOtdPassesList();
+        var savedScroll = listEl ? listEl.scrollTop : 0;
+        otdSelectedPassMonth = (otdSelectedPassMonth === mk) ? null : mk;
+        if (listEl) { listEl.innerHTML = buildOtdPassesList(); listEl.scrollTop = savedScroll; }
+    }
+
+    function otdGoToMonth(monthIdx) {
+        otdCalMonth = monthIdx;
+        otdSelectedDay = null; otdSelectedDaySport = null;
+        renderOtdResults();
     }
 
     function otdRemovePass(idx) {
@@ -3581,20 +3588,17 @@
             if (dp.length !== 3) return;
             var mk = dp[0] + '-' + dp[1].padStart(2, '0');
             if (!monthMap[mk]) monthMap[mk] = [];
-            monthMap[mk].push({ rax: e.atRarityEarnings || 0, origDay: (e.day || '').split('T')[0] });
+            monthMap[mk].push({ rax: e.atRarityEarnings || 0, origDay: (e.day || '').split('T')[0], bsId: (e.playerBoxScoreIds && e.playerBoxScoreIds[0]) || null });
         });
         var months = Object.keys(monthMap).sort();
         if (!months.length) return '';
-        var monthYears = months.map(function(mk) { return mk.split('-')[0]; });
-        var multiYear = monthYears[0] !== monthYears[monthYears.length - 1];
         var monthBtns = months.map(function(mk) {
             var parts = mk.split('-');
             var mi = parseInt(parts[1], 10) - 1;
             var total = monthMap[mk].reduce(function(s, e) { return s + e.rax; }, 0);
             var isAct = otdSelectedPassMonth === mk;
-            var lbl = MONTH_SHORT[mi] + (multiYear ? ' \'' + parts[0].slice(2) : '');
             return '<button onclick="otdSelectPassMonth(\'' + mk + '\')" style="background:' + (isAct ? rc + '33' : rc + '11') + ';border:1px solid ' + (isAct ? rc + '99' : rc + '33') + ';border-radius:6px;padding:5px 4px;cursor:pointer;text-align:center;font-family:var(--sans);width:100%">' +
-                '<div style="font-size:9px;font-weight:700;color:' + (isAct ? 'var(--fg)' : 'var(--muted2)') + '">' + lbl + '</div>' +
+                '<div style="font-size:9px;font-weight:700;color:' + (isAct ? 'var(--fg)' : 'var(--muted2)') + '">' + MONTH_SHORT[mi] + '</div>' +
                 '<div style="font-size:10px;font-weight:700;font-family:var(--mono);color:' + (isAct ? rc : 'var(--accent)') + ';margin-top:1px">' + total.toLocaleString() + '</div>' +
             '</button>';
         }).join('');
@@ -3602,16 +3606,27 @@
         if (otdSelectedPassMonth && monthMap[otdSelectedPassMonth]) {
             var entries = monthMap[otdSelectedPassMonth].slice().sort(function(a, b) { return a.origDay < b.origDay ? -1 : a.origDay > b.origDay ? 1 : 0; });
             var selParts = otdSelectedPassMonth.split('-');
-            var claimsLbl = MONTH_SHORT[parseInt(selParts[1], 10) - 1] + (multiYear ? ' \'' + selParts[0].slice(2) : '') + ' claims';
+            var selMonthIdx = parseInt(selParts[1], 10) - 1;
+            var claimsLbl = MONTH_SHORT[selMonthIdx] + ' claims';
+            var pid = String(p.id || '');
+            var psp = p.sport || '';
+            var pet = p.entityType || 'player';
+            var pse = p.season || '';
             claimsHtml = '<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px">' +
-                '<div style="font-size:10px;font-weight:700;color:var(--muted2);margin-bottom:5px">' + claimsLbl + '</div>' +
+                '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">' +
+                    '<span style="font-size:10px;font-weight:700;color:var(--muted2)">' + claimsLbl + '</span>' +
+                    '<button onclick="otdGoToMonth(' + selMonthIdx + ')" style="font-size:9px;font-weight:600;background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--accent);padding:2px 7px;cursor:pointer;font-family:var(--sans)">go to month</button>' +
+                '</div>' +
                 '<div>' +
                 entries.map(function(e) {
                     var dp2 = e.origDay.split('-');
                     var dayLbl = dp2.length === 3 ? MONTH_SHORT[parseInt(dp2[1], 10) - 1] + ' ' + parseInt(dp2[2], 10) : e.origDay;
+                    var bsStr = e.bsId ? String(e.bsId) : '';
                     return '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);font-size:11px">' +
                         '<span style="color:var(--muted2);font-family:var(--mono);font-size:10px">' + escHtml(dayLbl) + '</span>' +
-                        '<span style="font-weight:700;font-family:var(--mono);color:var(--accent)">' + RAX_ICON + e.rax.toLocaleString() + '</span>' +
+                        (bsStr
+                            ? '<button onclick="otdOpenPerfLink(\'' + pid + '\',\'' + psp + '\',\'' + pet + '\',\'' + escHtml(e.origDay) + '\',\'' + pse + '\',\'' + bsStr + '\')" style="font-weight:700;font-family:var(--mono);color:var(--accent);background:none;border:none;cursor:pointer;padding:0;font-size:11px">' + RAX_ICON + e.rax.toLocaleString() + '</button>'
+                            : '<span style="font-weight:700;font-family:var(--mono);color:var(--accent)">' + RAX_ICON + e.rax.toLocaleString() + '</span>') +
                     '</div>';
                 }).join('') +
                 '</div></div>';
