@@ -3689,15 +3689,15 @@
                     var levelOpts = OTD_LEVEL_OPTIONS.filter(function(o) { return o.value >= 1; }).map(function(o) {
                         return '<option value="' + o.value + '"' + (o.value === p.level ? ' selected' : '') + '>' + escHtml(o.label) + '</option>';
                     }).join('');
-                    var earnCount = p.earnings ? p.earnings.filter(function(e) { var dp = (e.day||'').split('T')[0].split('-'); return dp.length === 3 && parseInt(dp[0],10) < otdCalYear; }).length : 0;
-                    var avgRax = (!isLoading && earnCount > 0) ? Math.round(item.total / earnCount) : 0;
+                    var mult = p.multiplier ? parseInt(p.multiplier, 10) : 0;
+                    var baseEarnings = (!isLoading && mult > 1 && item.total > 0) ? Math.round(item.total / mult) : 0;
                     return '<div style="position:absolute;bottom:0;left:0;right:0;padding:5px 7px 6px;z-index:3">' +
-                        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">' +
+                        '<div style="display:flex;align-items:center;gap:5px;margin-bottom:3px">' +
                             '<select onclick="event.stopPropagation()" onchange="event.stopPropagation();otdPassLevelChange(' + playerIdx + ',parseInt(this.value,10))" ' +
                                 'style="background:' + rc + ';border:none;border-radius:3px;color:#fff;font-size:8px;font-weight:700;padding:1px 3px;cursor:pointer;outline:none;-webkit-appearance:none;-moz-appearance:none;appearance:none;font-family:var(--sans)">' +
                                 levelOpts +
                             '</select>' +
-                            (!isLoading && earnCount > 0 ? '<span style="font-size:8px;color:rgba(255,255,255,.7);font-family:var(--mono)">' + RAX_ICON + avgRax.toLocaleString() + ' avg</span>' : '') +
+                            (baseEarnings > 0 ? '<span style="font-size:8px;color:rgba(255,255,255,.75);font-family:var(--mono)">' + RAX_ICON + baseEarnings.toLocaleString() + ' base</span>' : '') +
                         '</div>' +
                         '<div style="font-size:10px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3;text-shadow:0 1px 4px rgba(0,0,0,.9)">' + escHtml(p.name) + '</div>' +
                         '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:2px;gap:4px">' +
