@@ -3138,7 +3138,7 @@
     // Cross-year sports: season N = "N-(N+1)" display. Single-year: just "N" abbreviated.
     var OTD_CROSS_YEAR_SPORTS = { nfl:1, nba:1, nhl:1, ncaaf:1, ncaam:1, ncaab:1, ncaabb:1, epl:1, ucl:1, soccer:1, fc:1, mls:1, fifa:1 };
     // RS stores these sports' seasons by ENDING year (e.g. NBA season=2026 = the 2025-26 season)
-    var OTD_ENDING_YEAR_SPORTS = {}; // RS always uses start year (2025 = "25-26")
+    var OTD_ENDING_YEAR_SPORTS = { nba:1, ncaab:1, ncaabb:1, ncaam:1 }; // RS sends ending year for NBA/CBB; start year for NHL/NFL
     function otdFormatSeason(sport, season) {
         var yr = parseInt(season, 10);
         if (!yr) return String(season);
