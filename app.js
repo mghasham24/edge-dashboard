@@ -1365,6 +1365,10 @@
             });
         });
 
+        // Store OTD deeplink username so showOtdTab can auto-load it after auth
+        var otdDeepLinkPending = (function() { var m = window.location.pathname.match(/^\/otd\/([^\/]+)/); return m ? decodeURIComponent(m[1]) : null; })();
+        if (otdDeepLinkPending) sessionStorage.setItem('otd_deeplink_user', otdDeepLinkPending);
+
         // Handle ?rs_token=...&rs_uuid=... redirect from bookmarklet
         var urlParams = new URLSearchParams(window.location.search);
         var rsToken = urlParams.get('rs_token');
@@ -3218,6 +3222,72 @@
         otdSelectedDay = null; otdSelectedDaySport = null;
         renderOtdResults();
     }
+    function otdShareMonth() {
+        var MN = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+        var SL = { mlb:'MLB', nba:'NBA', nhl:'NHL', nfl:'NFL', wnba:'WNBA', golf:'Golf', ufc:'UFC', ncaaf:'CFB', ncaam:'CBB', ncaabb:'CBB', soccer:'Soccer', fc:'Soccer', ucl:'UCL', epl:'EPL' };
+        var monthKey = otdCalYear + '-' + String(otdCalMonth + 1).padStart(2, '0');
+        var totalRax = 0, claimDays = 0, sportTotals = {}, playerTotals = {};
+        Object.keys(otdDateMap).forEach(function(dk) {
+            if (!dk.startsWith(monthKey + '-')) return;
+            var entries = otdDateMap[dk];
+            if (!entries.length) return;
+            claimDays++;
+            entries.forEach(function(e) {
+                var rax = e.rax || 0;
+                totalRax += rax;
+                var sp = (e.player && e.player.sport) || 'unknown';
+                sportTotals[sp] = (sportTotals[sp] || 0) + rax;
+                var pk = ((e.player && e.player.id) || '?') + '|' + sp + '|' + ((e.player && e.player.name) || '?');
+                playerTotals[pk] = (playerTotals[pk] || 0) + rax;
+            });
+        });
+        if (!totalRax) { otdCopyToast('No earnings this month'); return; }
+        var avg = claimDays > 0 ? Math.round(totalRax / claimDays) : 0;
+        var topKey = Object.keys(playerTotals).sort(function(a, b) { return playerTotals[b] - playerTotals[a]; })[0];
+        var topParts = topKey ? topKey.split('|') : [];
+        var sportLines = Object.keys(sportTotals).sort(function(a, b) { return sportTotals[b] - sportTotals[a]; }).map(function(s) {
+            return (OTD_SPORT_EMOJI[s] || '🎴') + ' ' + (SL[s] || s.toUpperCase()) + ': ' + sportTotals[s].toLocaleString() + ' Rax';
+        }).join('\n');
+        var username = otdSelectedUser ? otdSelectedUser.username : '';
+        var lines = [
+            'RaxEdge 📅 ' + MN[otdCalMonth] + ' ' + otdCalYear + ' OTD Recap',
+            '',
+            '💰 Total Rax: ' + totalRax.toLocaleString(),
+            '📊 Avg/day: ' + avg.toLocaleString() + ' Rax (' + claimDays + ' claim days)',
+            '',
+            sportLines,
+        ];
+        if (topParts.length === 3) lines.push('', '🏆 ' + topParts[2] + ' (' + (SL[topParts[1]] || topParts[1]) + ') — ' + playerTotals[topKey].toLocaleString() + ' Rax');
+        if (username) lines.push('', '🔗 raxedge.com/otd/' + username);
+        var msg = lines.join('\n');
+        navigator.clipboard.writeText(msg).then(function() { otdCopyToast('Copied!'); }).catch(function() {
+            var ta = document.createElement('textarea'); ta.value = msg; ta.style.cssText = 'position:fixed;opacity:0';
+            document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+            otdCopyToast('Copied!');
+        });
+    }
+    function otdCopyToast(msg) {
+        var el = document.getElementById('otd-copy-toast');
+        if (!el) {
+            el = document.createElement('div'); el.id = 'otd-copy-toast';
+            el.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#22c55e;color:#fff;font-size:13px;font-weight:700;padding:8px 20px;border-radius:20px;z-index:9999;pointer-events:none;font-family:var(--sans);transition:opacity .3s';
+            document.body.appendChild(el);
+        }
+        el.textContent = msg; el.style.opacity = '1';
+        clearTimeout(el._t); el._t = setTimeout(function() { el.style.opacity = '0'; }, 2000);
+    }
+    function otdAutoLoadFromUrl(username) {
+        fetch('/api/real/otd?action=search_users&q=' + encodeURIComponent(username), { credentials: 'same-origin' })
+            .then(function(r) { return r.ok ? r.json() : { ok: false }; })
+            .then(function(d) {
+                if (!d.ok || !d.users || !d.users.length) return;
+                var match = d.users.find(function(u) { return u.username.toLowerCase() === username.toLowerCase(); }) || d.users[0];
+                otdSelectedUser = match;
+                var inp = document.getElementById('otd-user-input');
+                if (inp) inp.value = match.username;
+                otdLoadUserPasses();
+            }).catch(function() {});
+    }
     function otdSetClaimsView(n) {
         if (n === 3 && !isPro()) return;
         otdClaimsView = n;
@@ -4213,6 +4283,11 @@
         document.getElementById('otd-panel').classList.add('visible');
         otdVisible = true;
         renderOtdPanel();
+        // Auto-load from URL deeplink (e.g. /otd/username) or sessionStorage on first visit
+        var otdPathUser = (function() { var m = window.location.pathname.match(/^\/otd\/([^\/]+)/); return m ? decodeURIComponent(m[1]) : null; })()
+            || sessionStorage.getItem('otd_deeplink_user');
+        sessionStorage.removeItem('otd_deeplink_user');
+        if (otdPathUser && !otdSelectedUser && !otdLoadingPasses) { otdAutoLoadFromUrl(otdPathUser); }
     }
 
     function hideOtdTab() {
@@ -4226,6 +4301,7 @@
         document.getElementById('refresh-btn').style.display = '';
         document.getElementById('otd-panel').classList.remove('visible');
         otdVisible = false;
+        try { if (window.location.pathname.startsWith('/otd/')) history.pushState(null, '', '/'); } catch(e) {}
     }
 
     function renderOtdCarousel() {
@@ -4555,6 +4631,11 @@
                     renderOtdChips();
                     renderOtdResults();
                     return;
+                }
+
+                // Update URL to reflect the loaded user
+                if (otdSelectedUser && otdSelectedUser.username) {
+                    try { history.pushState(null, '', '/otd/' + encodeURIComponent(otdSelectedUser.username)); } catch(e) {}
                 }
 
                 // Build entry objects
@@ -5152,11 +5233,12 @@
                 '<button onclick="otdPrevMonth()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-size:16px;width:32px;height:32px;border-radius:6px;cursor:pointer;line-height:1">‹</button>' +
                 '<div style="text-align:center">' +
                     '<div style="font-size:15px;font-weight:700">' + MONTH_NAMES[otdCalMonth] + ' ' + otdCalYear + '</div>' +
-                    (monthlyTotal > 0 ? '<div style="font-size:11px;font-family:var(--mono);font-weight:700;color:#22c55e;display:flex;align-items:center;justify-content:center;gap:2px;margin-top:1px">' + RAX_ICON + monthlyTotal.toLocaleString() + '</div>' : '') +
+                    (monthlyTotal > 0 ? '<div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-top:2px"><div style="font-size:11px;font-family:var(--mono);font-weight:700;color:#22c55e;display:flex;align-items:center;gap:2px">' + RAX_ICON + monthlyTotal.toLocaleString() + '</div><button onclick="otdShareMonth()" title="Share month recap" style="background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.3);color:var(--accent);font-size:11px;font-weight:700;padding:2px 8px;border-radius:12px;cursor:pointer;font-family:var(--sans)">⬆ Share</button></div>' : '') +
                 '</div>' +
                 '<button onclick="otdNextMonth()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-size:16px;width:32px;height:32px;border-radius:6px;cursor:pointer;line-height:1">›</button>' +
             '</div>' +
             '<div class="otd-cal-grid">' + cells + '</div>' +
+            (otdSelectedUser ? '<div style="text-align:center;margin-top:8px"><a href="/otd/' + encodeURIComponent(otdSelectedUser.username) + '" onclick="event.preventDefault();navigator.clipboard.writeText(\'raxedge.com/otd/\'+\'' + encodeURIComponent(otdSelectedUser.username) + '\').then(function(){otdCopyToast(\'Link copied!\');})" style="font-size:11px;color:var(--muted2);text-decoration:none;font-family:var(--mono)" title="Click to copy link">🔗 raxedge.com/otd/' + escHtml(otdSelectedUser.username) + '</a></div>' : '') +
             dayPanel;
 
         if (otdPassesOpen && window.innerWidth > 768) {
