@@ -3263,7 +3263,7 @@
     }
     function otdShareMonth() {
         var MN = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-        var SL = { mlb:'MLB', nba:'NBA', nhl:'NHL', nfl:'NFL', wnba:'WNBA', golf:'Golf', ufc:'UFC', ncaaf:'CFB', ncaam:'CBB', ncaabb:'CBB', soccer:'Soccer', fc:'Soccer', ucl:'UCL', epl:'EPL' };
+        var SL = { mlb:'MLB', nba:'NBA', nhl:'NHL', nfl:'NFL', wnba:'WNBA', golf:'Golf', ufc:'UFC', mma:'UFC', ncaaf:'CFB', ncaam:'CBB', ncaabb:'CBB', soccer:'Soccer', fc:'Soccer', ucl:'UCL', epl:'EPL' };
         var monthKey = otdCalYear + '-' + String(otdCalMonth + 1).padStart(2, '0');
         var totalRax = 0, claimDays = 0, sportTotals = {}, playerTotals = {}, playerBestEntry = {};
         Object.keys(otdDateMap).forEach(function(dk) {
