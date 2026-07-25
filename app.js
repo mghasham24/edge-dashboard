@@ -3997,10 +3997,9 @@
             .map(function(p) {
                 var total = 0;
                 if (p.baseTotal != null) {
-                    var flr = OTD_LEVEL_MULTIPLIERS[p.level] || 1;
-                    var bMult = (p.level === p._origLevel && parseFloat(p._origMultiplier) >= flr)
-                        ? parseFloat(p._origMultiplier)
-                        : (p.sport === 'ufc' ? (UFC_LEVEL_MULTIPLIERS[p.level] || flr) : flr);
+                    var bMult = p.sport === 'ufc'
+                        ? (UFC_LEVEL_MULTIPLIERS[p.level] || OTD_LEVEL_MULTIPLIERS[p.level] || 1)
+                        : (OTD_LEVEL_MULTIPLIERS[p.level] || 1);
                     total = Math.round(p.baseTotal * bMult);
                 } else if (p.earnings) {
                     p.earnings.forEach(function(e) { total += e.atRarityEarnings || 0; });
@@ -4668,10 +4667,9 @@
             var total = 0;
             if (!isLoading) {
                 if (p.baseTotal != null) {
-                    var cFlr = OTD_LEVEL_MULTIPLIERS[p.level] || 1;
-                    var cardMult = (p.level === p._origLevel && parseFloat(p._origMultiplier) >= cFlr)
-                        ? parseFloat(p._origMultiplier)
-                        : (p.sport === 'ufc' ? (UFC_LEVEL_MULTIPLIERS[p.level] || cFlr) : cFlr);
+                    var cardMult = p.sport === 'ufc'
+                        ? (UFC_LEVEL_MULTIPLIERS[p.level] || OTD_LEVEL_MULTIPLIERS[p.level] || 1)
+                        : (OTD_LEVEL_MULTIPLIERS[p.level] || 1);
                     total = Math.round(p.baseTotal * cardMult);
                 } else if (p.earnings) {
                     p.earnings.forEach(function(e) { total += e.atRarityEarnings || 0; });
