@@ -3609,6 +3609,7 @@
         otdCheckPlayerSelected = true;
         otdCheckEarnings = null; otdCheckBaseTotal = null;
         renderOtdCheckWrap();
+        setTimeout(otdRunCheck, 0);
     }
 
     function otdCheckSportChange(sport) {
