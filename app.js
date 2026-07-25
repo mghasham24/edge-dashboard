@@ -4653,10 +4653,19 @@
             var isSelected = p === otdSelectedPass;
             var bgUrl = p.backgroundSource ? '/api/real/otd?action=card_bg&src=' + encodeURIComponent(p.backgroundSource) : '';
             var headshot = av ? 'https://media.realapp.com/assets/players/default/small/' + av + '.webp' : '';
-            var total = 0;
-            if (p.earnings) p.earnings.forEach(function(e) { total += e.atRarityEarnings || 0; });
             var isLoading = p.earnings === null;
             var baseEarnings = (!isLoading && p.baseTotal != null) ? p.baseTotal : null;
+            // Show projected annual earnings (baseTotal × mult) so the number is consistent with
+            // CBUYB and reflects the new rarity immediately after a boost.
+            var total = 0;
+            if (!isLoading) {
+                if (p.baseTotal != null) {
+                    var cardMult = otdGetDerivedMult(p.sport, p.level) || (p.multiplier ? parseFloat(p.multiplier) : 0) || OTD_LEVEL_MULTIPLIERS[p.level] || 1;
+                    total = Math.round(p.baseTotal * cardMult);
+                } else if (p.earnings) {
+                    p.earnings.forEach(function(e) { total += e.atRarityEarnings || 0; });
+                }
+            }
             var levelOpts = OTD_LEVEL_OPTIONS.filter(function(o) { return o.value >= 1; }).map(function(o) {
                 return '<option value="' + o.value + '"' + (o.value === p.level ? ' selected' : '') + '>' + escHtml(o.label) + '</option>';
             }).join('');
