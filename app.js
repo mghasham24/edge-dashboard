@@ -3132,16 +3132,17 @@
         20:20, 21:20.3, 22:20.6, 23:20.9, 24:21.2, 25:21.5, 26:21.8, 27:22.1, 28:22.4, 29:22.7,
         30:23, 31:23.3, 32:23.6, 33:23.9, 34:24.2, 35:24.5
     };
-    // Returns the exact RS multiplier for a sport+level pair.
-    // Priority: 1) D1-probed table (exact)  2) loaded real pass (_origMultiplier)
-    //           3) UFC hardcoded table  4) NBA/NHL fallback table
+    // Returns the RS multiplier for a sport+level pair.
+    // Priority: 1) loaded real pass (_origMultiplier, sanity-checked)
+    //           2) UFC hardcoded table  3) NBA/NHL fallback table
+    // D1 probe removed — it had corrupt entries (e.g. mlb:5 = 2.52).
     function otdGetDerivedMult(sport, level) {
-        var dbKey = sport + ':' + level;
-        if (otdSportMultipliers[dbKey]) return otdSportMultipliers[dbKey];
+        var floorMult = OTD_LEVEL_MULTIPLIERS[level] || 1;
         for (var i = 0; i < otdPlayers.length; i++) {
             var p = otdPlayers[i];
             if (!p.isAdded && p.sport === sport && p._origLevel === level && p._origMultiplier) {
-                return parseFloat(p._origMultiplier);
+                var m = parseFloat(p._origMultiplier);
+                if (m >= floorMult) return m; // sanity check: must be at least the OTD table value
             }
         }
         if (sport === 'ufc') return UFC_LEVEL_MULTIPLIERS[level] || 0;
@@ -3996,7 +3997,10 @@
             .map(function(p) {
                 var total = 0;
                 if (p.baseTotal != null) {
-                    var bMult = otdGetDerivedMult(p.sport, p.level) || OTD_LEVEL_MULTIPLIERS[p.level] || 1;
+                    var flr = OTD_LEVEL_MULTIPLIERS[p.level] || 1;
+                    var bMult = (p.level === p._origLevel && parseFloat(p._origMultiplier) >= flr)
+                        ? parseFloat(p._origMultiplier)
+                        : (p.sport === 'ufc' ? (UFC_LEVEL_MULTIPLIERS[p.level] || flr) : flr);
                     total = Math.round(p.baseTotal * bMult);
                 } else if (p.earnings) {
                     p.earnings.forEach(function(e) { total += e.atRarityEarnings || 0; });
@@ -4664,7 +4668,10 @@
             var total = 0;
             if (!isLoading) {
                 if (p.baseTotal != null) {
-                    var cardMult = otdGetDerivedMult(p.sport, p.level) || (p.multiplier ? parseFloat(p.multiplier) : 0) || OTD_LEVEL_MULTIPLIERS[p.level] || 1;
+                    var cFlr = OTD_LEVEL_MULTIPLIERS[p.level] || 1;
+                    var cardMult = (p.level === p._origLevel && parseFloat(p._origMultiplier) >= cFlr)
+                        ? parseFloat(p._origMultiplier)
+                        : (p.sport === 'ufc' ? (UFC_LEVEL_MULTIPLIERS[p.level] || cFlr) : cFlr);
                     total = Math.round(p.baseTotal * cardMult);
                 } else if (p.earnings) {
                     p.earnings.forEach(function(e) { total += e.atRarityEarnings || 0; });
