@@ -4725,17 +4725,56 @@
         var panel = document.getElementById('otd-panel');
         if (!panel) return;
 
-        var sportOpts = OTD_SPORTS_LIST.map(function(s) {
-            return '<option value="' + s.key + '">' + s.label + '</option>';
-        }).join('');
-        var levelOpts = OTD_LEVEL_OPTIONS.map(function(o) {
-            return '<option value="' + o.value + '"' + (o.value === 4 ? ' selected' : '') + '>' + escHtml(o.label) + '</option>';
-        }).join('');
-        var curYear = new Date().getFullYear();
-
-        var loadedChip = (otdSelectedUser && otdPlayers.length > 0 && !otdLoadingPasses)
+        var loadedChip = (otdMode === 'username' && otdSelectedUser && otdPlayers.length > 0 && !otdLoadingPasses)
             ? '<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:var(--accent);background:rgba(99,102,241,.12);border:1px solid rgba(99,102,241,.3);border-radius:20px;padding:3px 10px;white-space:nowrap">✓ ' + escHtml(otdSelectedUser.username) + '</span>'
             : '';
+
+        var tabBase = 'border:none;font-family:var(--sans);font-size:12px;font-weight:700;padding:6px 16px;border-radius:5px;cursor:pointer';
+        var tabActive = tabBase + ';background:var(--accent);color:#fff';
+        var tabInactive = tabBase + ';background:transparent;color:var(--muted)';
+
+        // Input section changes based on mode
+        var inputSection;
+        if (otdMode === 'username') {
+            inputSection =
+                '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:10px">' +
+                    '<div style="position:relative;flex:1;min-width:180px">' +
+                        '<input id="otd-user-input" type="text" placeholder="' + (otdSelectedUser ? '@' + escHtml(otdSelectedUser.username) : 'RS username…') + '" autocomplete="off" ' +
+                            'style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px 10px;border-radius:6px" ' +
+                            'oninput="otdOnUserInput(this.value)" />' +
+                        '<div id="otd-user-autocomplete" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg2);border:1px solid var(--border2);border-radius:6px;z-index:200;margin-top:3px;overflow:hidden"></div>' +
+                    '</div>' +
+                    '<button data-action="otd-load-passes" onclick="otdLoadUserPasses()" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:13px;font-weight:700;padding:8px 16px;border-radius:6px;cursor:pointer;white-space:nowrap">' + (otdLoadingPasses ? 'Loading…' : 'Load Passes') + '</button>' +
+                '</div>';
+        } else {
+            var defaultSport = 'mlb';
+            var sportOpts = OTD_SPORTS_LIST.map(function(s) {
+                return '<option value="' + s.key + '">' + s.label + '</option>';
+            }).join('');
+            var levelOpts = OTD_LEVEL_OPTIONS.map(function(o) {
+                return '<option value="' + o.value + '"' + (o.value === 4 ? ' selected' : '') + '>' + escHtml(o.label) + '</option>';
+            }).join('');
+            inputSection =
+                '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:10px">' +
+                    '<div style="position:relative;flex:1;min-width:160px">' +
+                        '<input id="otd-search-input" type="text" placeholder="Search player or team…" autocomplete="off" ' +
+                            'style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px 10px;border-radius:6px" ' +
+                            'oninput="otdOnSearchInput(this.value)" />' +
+                        '<div id="otd-autocomplete" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg2);border:1px solid var(--border2);border-radius:6px;z-index:200;margin-top:3px;overflow:hidden;max-height:220px;overflow-y:auto"></div>' +
+                    '</div>' +
+                    '<select id="otd-sport-sel" onchange="otdUpdateSeasonOpts(this.value)" ' +
+                        'style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;padding:8px 6px;border-radius:6px;cursor:pointer">' +
+                        sportOpts + '</select>' +
+                    '<select id="otd-season-sel" ' +
+                        'style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;padding:8px 6px;border-radius:6px;cursor:pointer">' +
+                        otdSeasonOpts(defaultSport) + '</select>' +
+                    '<select id="otd-level-sel" ' +
+                        'style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;padding:8px 6px;border-radius:6px;cursor:pointer">' +
+                        levelOpts + '</select>' +
+                    '<button onclick="otdAddPlayer()" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:13px;font-weight:700;padding:8px 16px;border-radius:6px;cursor:pointer;white-space:nowrap">+ Add</button>' +
+                    (otdPlayers.length > 0 ? '<button onclick="otdClearAll()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;padding:8px 12px;border-radius:6px;cursor:pointer">Clear All</button>' : '') +
+                '</div>';
+        }
 
         panel.innerHTML =
             '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">' +
@@ -4743,20 +4782,13 @@
                     '<div style="font-size:16px;font-weight:800;letter-spacing:.04em">🗓️ On This Day</div>' +
                     loadedChip +
                 '</div>' +
-                '<div style="display:flex;gap:6px">' +
-                    '<button onclick="document.getElementById(\'otd-tab-btn\').click()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:7px 14px;border-radius:6px;cursor:pointer">&larr; Back</button>' +
-                '</div>' +
+                '<button onclick="document.getElementById(\'otd-tab-btn\').click()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:7px 14px;border-radius:6px;cursor:pointer">&larr; Back</button>' +
             '</div>' +
-            // Username search row
-            '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:14px">' +
-                '<div style="position:relative;flex:1;min-width:180px">' +
-                    '<input id="otd-user-input" type="text" placeholder="' + (otdSelectedUser ? '@' + escHtml(otdSelectedUser.username) : 'RS username…') + '" autocomplete="off" ' +
-                        'style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px 10px;border-radius:6px" ' +
-                        'oninput="otdOnUserInput(this.value)" />' +
-                    '<div id="otd-user-autocomplete" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg2);border:1px solid var(--border2);border-radius:6px;z-index:200;margin-top:3px;overflow:hidden"></div>' +
-                '</div>' +
-                '<button data-action="otd-load-passes" onclick="otdLoadUserPasses()" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:13px;font-weight:700;padding:8px 16px;border-radius:6px;cursor:pointer;white-space:nowrap">' + (otdLoadingPasses ? 'Loading…' : 'Load Passes') + '</button>' +
+            '<div style="display:flex;gap:3px;margin-bottom:14px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:3px;width:fit-content">' +
+                '<button onclick="otdSetMode(\'username\')" style="' + (otdMode === 'username' ? tabActive : tabInactive) + '">My RS Passes</button>' +
+                '<button onclick="otdSetMode(\'player\')" style="' + (otdMode === 'player' ? tabActive : tabInactive) + '">Search Players</button>' +
             '</div>' +
+            inputSection +
             '<div id="otd-search-err" style="display:none;font-size:12px;color:#ef5350;margin-bottom:8px"></div>' +
             '<div id="otd-chips" style="margin-bottom:8px"></div>' +
             '<div id="otd-carousel-search"></div>' +
@@ -4787,8 +4819,14 @@
                     ac.innerHTML = '';
                     d.players.forEach(function(p) {
                         var row = document.createElement('div');
-                        row.style.cssText = 'padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)';
-                        row.textContent = p.name + ' (' + p.sport.toUpperCase() + ')';
+                        row.style.cssText = 'padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:8px';
+                        var label = document.createElement('span');
+                        label.textContent = p.name;
+                        var badge = document.createElement('span');
+                        badge.style.cssText = 'font-size:10px;font-weight:700;color:var(--muted);background:var(--bg3);padding:2px 6px;border-radius:4px;white-space:nowrap;flex-shrink:0';
+                        badge.textContent = p.sport.toUpperCase() + (p.entityType === 'team' ? ' · Team' : '');
+                        row.appendChild(label);
+                        row.appendChild(badge);
                         row.onmousedown = function(e) { e.preventDefault(); };
                         row.onclick = function() {
                             otdSelectedPlayer = p;
@@ -4818,11 +4856,11 @@
         var season = (document.getElementById('otd-season-sel') || {}).value || String(new Date().getFullYear());
         var level  = parseInt((document.getElementById('otd-level-sel') || {}).value || '4', 10);
         var lbl    = (OTD_LEVEL_OPTIONS.find(function(o) { return o.value === level; }) || {}).label || 'Level ' + level;
+        var et     = otdSelectedPlayer.entityType || 'player';
 
         var existingIdx = -1;
         otdPlayers.forEach(function(p, i) { if (String(p.id) === String(otdSelectedPlayer.id) && p.sport === sport && p.season === season) existingIdx = i; });
         if (existingIdx >= 0) {
-            // Same player+sport+season — update rarity instead of adding a duplicate
             var inpClear = document.getElementById('otd-search-input');
             if (inpClear) inpClear.value = '';
             var acClear = document.getElementById('otd-autocomplete');
@@ -4832,12 +4870,17 @@
             return;
         }
 
-        var color  = OTD_COLORS[otdColorIdx % OTD_COLORS.length];
+        var color = OTD_COLORS[otdColorIdx % OTD_COLORS.length];
         otdColorIdx++;
-        var entry  = { id: otdSelectedPlayer.id, name: otdSelectedPlayer.name, sport: sport, season: season, level: level, levelLabel: lbl, color: color, earnings: null, avatar: otdSelectedPlayer.avatar || '' };
+        var entry = {
+            id: otdSelectedPlayer.id, name: otdSelectedPlayer.name,
+            sport: sport, season: season, level: level, levelLabel: lbl, color: color,
+            earnings: null, baseTotal: null, entityType: et,
+            avatar: otdSelectedPlayer.avatar || '', rarityColor: otdRarityColor(level),
+            backgroundSource: null, _origLevel: level, _origMultiplier: null
+        };
         otdPlayers.push(entry);
 
-        // Clear search
         var inp = document.getElementById('otd-search-input');
         if (inp) inp.value = '';
         otdSelectedPlayer = null;
@@ -4847,32 +4890,31 @@
         renderOtdChips();
         renderOtdResults();
 
-        // Fetch earnings in background
-        fetch('/api/real/otd?action=earnings&id=' + entry.id + '&sport=' + sport + '&season=' + season + '&level=' + level, { credentials: 'same-origin' })
-            .then(function(r) { return r.json(); })
+        fetch('/api/real/otd?action=earnings&id=' + encodeURIComponent(entry.id) + '&sport=' + encodeURIComponent(sport) + '&season=' + encodeURIComponent(season) + '&level=' + level + '&entityType=' + encodeURIComponent(et), { credentials: 'same-origin' })
+            .then(function(r) { return r.ok ? r.json() : { ok: false }; })
             .then(function(d) {
-                if (d.ok) {
-                    entry.earnings = d.earnings;
-                    // First player loaded: jump calendar to nearest upcoming claim (normalize to current year)
-                    var loadedCount = otdPlayers.filter(function(p) { return p.earnings && p.earnings.length; }).length;
-                    if (loadedCount === 1 && d.earnings && d.earnings.length) {
-                        var curYr = new Date().getFullYear();
-                        var todayStr = new Date().toISOString().slice(0, 10);
-                        var sorted = d.earnings.map(function(e) {
-                            var dp2 = (e.day || '').split('T')[0].split('-');
-                            return dp2.length === 3 ? (curYr + '-' + dp2[1].padStart(2,'0') + '-' + dp2[2].padStart(2,'0')) : '';
-                        }).filter(Boolean).sort();
-                        var upcoming = sorted.filter(function(x) { return x >= todayStr; });
-                        var target = upcoming[0] || sorted[sorted.length - 1];
-                        if (target) {
-                            var tp = target.split('-');
-                            if (tp.length === 3) { otdCalYear = parseInt(tp[0], 10); otdCalMonth = parseInt(tp[1], 10) - 1; }
-                        }
+                if (!d.ok) { entry.earnings = []; otdDateMapDirty = true; renderOtdChips(); renderOtdResults(); return; }
+                if (entry.baseTotal === null && d.baseTotal != null) entry.baseTotal = d.baseTotal;
+                entry.earnings = otdApplyMultiplier(d.earnings || [], level, sport);
+                otdDateMapDirty = true;
+                // First player loaded: jump calendar to nearest upcoming claim date
+                var loadedCount = otdPlayers.filter(function(p) { return p.earnings && p.earnings.length; }).length;
+                if (loadedCount === 1 && entry.earnings.length) {
+                    var curYr = new Date().getFullYear();
+                    var todayStr = new Date().toISOString().slice(0, 10);
+                    var dates = entry.earnings.map(function(e) {
+                        var dp2 = (e.day || '').split('T')[0].split('-');
+                        return dp2.length === 3 ? (curYr + '-' + dp2[1].padStart(2,'0') + '-' + dp2[2].padStart(2,'0')) : '';
+                    }).filter(Boolean).sort();
+                    var target = dates.filter(function(x) { return x >= todayStr; })[0] || dates[dates.length - 1];
+                    if (target) {
+                        var tp = target.split('-');
+                        if (tp.length === 3) { otdCalYear = parseInt(tp[0], 10); otdCalMonth = parseInt(tp[1], 10) - 1; }
                     }
-                    renderOtdResults();
                 }
+                renderOtdChips(); renderOtdResults();
             })
-            .catch(function() {});
+            .catch(function() { entry.earnings = []; otdDateMapDirty = true; renderOtdChips(); renderOtdResults(); });
     }
 
     function otdRemovePlayer(idx) {
@@ -4890,6 +4932,13 @@
         otdSelectedPlayer = null;
         otdSelectedUser = null;
         otdLoadingPasses = false;
+        renderOtdPanel();
+    }
+
+    function otdClearAll() {
+        otdPlayers = [];
+        otdColorIdx = 0;
+        otdDateMapDirty = true;
         renderOtdPanel();
     }
 
