@@ -3995,7 +3995,10 @@
             })
             .map(function(p) {
                 var total = 0;
-                if (p.earnings) {
+                if (p.baseTotal != null) {
+                    var bMult = otdGetDerivedMult(p.sport, p.level) || OTD_LEVEL_MULTIPLIERS[p.level] || 1;
+                    total = Math.round(p.baseTotal * bMult);
+                } else if (p.earnings) {
                     p.earnings.forEach(function(e) { total += e.atRarityEarnings || 0; });
                 }
                 return { p: p, total: total };
@@ -4635,9 +4638,10 @@
 
         var q = otdCarouselSearch.toLowerCase();
         var sorted = otdPlayers.slice().sort(function(a, b) {
-            var ta = 0, tb = 0;
-            if (a.earnings) a.earnings.forEach(function(e) { ta += e.atRarityEarnings || 0; });
-            if (b.earnings) b.earnings.forEach(function(e) { tb += e.atRarityEarnings || 0; });
+            var ta = a.baseTotal != null ? Math.round(a.baseTotal * (otdGetDerivedMult(a.sport, a.level) || OTD_LEVEL_MULTIPLIERS[a.level] || 1)) : 0;
+            var tb = b.baseTotal != null ? Math.round(b.baseTotal * (otdGetDerivedMult(b.sport, b.level) || OTD_LEVEL_MULTIPLIERS[b.level] || 1)) : 0;
+            if (!ta && a.earnings) a.earnings.forEach(function(e) { ta += e.atRarityEarnings || 0; });
+            if (!tb && b.earnings) b.earnings.forEach(function(e) { tb += e.atRarityEarnings || 0; });
             return tb - ta;
         }).filter(function(p) {
             if (!q) return true;
