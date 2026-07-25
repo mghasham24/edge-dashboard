@@ -3894,7 +3894,7 @@
                 if (OTD_LEVEL_MULTIPLIERS[level]) p.multiplier = OTD_LEVEL_MULTIPLIERS[level] + 'x';
                 p.earnings = (ed.ok && ed.earnings) ? otdApplyMultiplier(ed.earnings, level, p.sport) : [];
                 otdDateMapDirty = true;
-                if (ed.baseTotal !== null && ed.baseTotal !== undefined) p.baseTotal = ed.baseTotal;
+                if ((p.baseTotal === null || p.baseTotal === undefined) && ed.baseTotal !== null && ed.baseTotal !== undefined) p.baseTotal = ed.baseTotal;
                 renderOtdChips();
                 renderOtdResults();
                 renderOtdCarousel();
