@@ -4412,19 +4412,34 @@
         var firstEvDp = (otdCheckEarnings[0] && otdCheckEarnings[0].day || '').split('T')[0].split('-');
         var checkEarnYear = firstEvDp.length === 3 ? parseInt(firstEvDp[0], 10) + 1 : otdCalYear;
 
+        // Build a conflict date map from all loaded passes using their actual earning year (origYear+1).
+        // This is independent of otdCalYear so checking a 2026 card correctly finds 2027 conflicts
+        // even while the calendar is still showing 2026.
+        var checkDateMap = {};
+        otdPlayers.forEach(function(p) {
+            if (!p.earnings) return;
+            p.earnings.forEach(function(ev) {
+                var edp = (ev.day || '').split('T')[0].split('-');
+                if (edp.length !== 3) return;
+                var ey = parseInt(edp[0], 10) + 1;
+                var dk = String(ey) + '-' + edp[1].padStart(2,'0') + '-' + edp[2].padStart(2,'0');
+                if (!checkDateMap[dk]) checkDateMap[dk] = [];
+                checkDateMap[dk].push({ player: p, rax: Math.round((ev.earnings || 0) * (OTD_LEVEL_MULTIPLIERS[p.level] || 1)) || (ev.atRarityEarnings || 0) });
+            });
+        });
+
         var checkMult = OTD_LEVEL_MULTIPLIERS[otdCheckPlayer.level] || 1;
         otdCheckEarnings.forEach(function(e) {
             var dp = (e.day || '').split('T')[0].split('-');
             if (dp.length !== 3) return;
             var origYear = parseInt(dp[0], 10);
-            // Events earn OTD on the anniversary one year later
             var earnYear = origYear + 1;
             var dayKey = String(earnYear) + '-' + dp[1].padStart(2,'0') + '-' + dp[2].padStart(2,'0');
             totalDays++;
             // Exclude the check player itself from existing entries — same card can't conflict with itself.
             // Uses both ID and name comparison since search/passes APIs may return different entity IDs.
             var checkCp = otdCheckPlayer;
-            var existingEntries = (otdDateMap[dayKey] || []).filter(function(entry) {
+            var existingEntries = (checkDateMap[dayKey] || []).filter(function(entry) {
                 if (entry.player.sport !== sport) return false;
                 if (!checkCp || entry.player.season !== checkCp.season) return true;
                 if (String(entry.player.id) === String(checkCp.id)) return false;
