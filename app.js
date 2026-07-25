@@ -4507,9 +4507,9 @@
                 var monthDay = parts.length === 3 ? (MONTH_NAMES[parseInt(parts[1], 10) - 1] + ' ' + parseInt(parts[2], 10)) : d.day;
                 // Build combined sorted list: existing entries + new card, sorted by Rax desc
                 var allCards = d.entries.map(function(ent) {
-                    return { name: ent.player.name, rax: ent.rax || 0, level: ent.player.levelLabel || '', isNew: false, id: String(ent.player.id || ''), sport: ent.player.sport || sport, entityType: ent.player.entityType || 'player', season: ent.player.season || '' };
+                    return { name: ent.player.name, rax: ent.rax || 0, level: ent.player.levelLabel || '', isNew: false, id: String(ent.player.id || ''), sport: ent.player.sport || sport, entityType: ent.player.entityType || 'player', season: ent.player.season || '', passId: String(ent.player.passId || '') };
                 });
-                allCards.push({ name: otdCheckPlayer.name, rax: d.newRax || 0, level: otdCheckPlayer.levelLabel || '', isNew: true, id: String(otdCheckPlayer.id || ''), sport: otdCheckPlayer.sport, entityType: otdCheckPlayer.entityType || 'player', season: otdCheckPlayer.season || '' });
+                allCards.push({ name: otdCheckPlayer.name, rax: d.newRax || 0, level: otdCheckPlayer.levelLabel || '', isNew: true, id: String(otdCheckPlayer.id || ''), sport: otdCheckPlayer.sport, entityType: otdCheckPlayer.entityType || 'player', season: otdCheckPlayer.season || '', passId: '' });
                 allCards.sort(function(a, b) { return b.rax - a.rax; });
                 allCards = allCards.filter(function(c, idx) { return idx < limit || c.rax >= 200 || c.isNew; });
                 var cardRows = allCards.map(function(c, idx) {
@@ -4517,7 +4517,7 @@
                     var color = claimed ? '#22c55e' : '#ef5350';
                     var newBadge = c.isNew ? ' <span style="background:#4f6ef7;color:#fff;font-size:9px;font-weight:700;padding:1px 4px;border-radius:3px;vertical-align:middle">NEW</span>' : '';
                     var nameEl = (c.id && !c.isNew)
-                        ? '<button onclick="otdOpenCardLink(\'' + c.id + '\',\'' + c.sport + '\',\'' + c.entityType + '\',\'\',\'\')" class="otd-link-btn" style="color:' + color + ';font-weight:500;font-size:12px;padding:0;text-align:left">' + escHtml(c.name) + '</button>'
+                        ? '<button onclick="otdOpenCardLink(\'' + c.id + '\',\'' + c.sport + '\',\'' + c.entityType + '\',\'\',\'' + c.passId + '\')" class="otd-link-btn" style="color:' + color + ';font-weight:500;font-size:12px;padding:0;text-align:left">' + escHtml(c.name) + '</button>'
                         : '<span style="color:' + color + ';font-weight:700">' + escHtml(c.name) + newBadge + '</span>';
                     var raxEl = '<button onclick="otdOpenPerfLink(\'' + c.id + '\',\'' + c.sport + '\',\'' + c.entityType + '\',\'\',\'' + c.season + '\',\'\')" class="otd-link-btn" style="color:' + color + ';font-family:var(--mono);font-size:12px">' + (c.rax || 0).toLocaleString() + '</button>';
                     return '<div style="display:flex;justify-content:space-between;align-items:center;padding:2px 0;border-bottom:1px solid var(--border2)">' +
