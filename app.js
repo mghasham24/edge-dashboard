@@ -3813,16 +3813,21 @@
         var savedScroll = listEl ? listEl.scrollTop : 0;
         otdSelectedPassMonth = (otdSelectedPassMonth === mk) ? null : mk;
         if (listEl) { listEl.innerHTML = buildOtdPassesList(); listEl.scrollTop = savedScroll; }
-        var bdEl = document.getElementById('otd-carousel-breakdown');
-        if (bdEl && otdSelectedPass) bdEl.innerHTML = buildBreakdownCard(otdSelectedPass);
+        // Carousel breakdown only applies on mobile — desktop shows it inline in the passes grid
+        if (otdCarouselOpen) {
+            var bdEl = document.getElementById('otd-carousel-breakdown');
+            if (bdEl && otdSelectedPass) bdEl.innerHTML = buildBreakdownCard(otdSelectedPass);
+        }
     }
 
     function otdClearPassMonth() {
         otdSelectedPassMonth = null;
         var listEl = document.getElementById('otd-passes-list');
         if (listEl) listEl.innerHTML = buildOtdPassesList();
-        var bdEl = document.getElementById('otd-carousel-breakdown');
-        if (bdEl && otdSelectedPass) bdEl.innerHTML = buildBreakdownCard(otdSelectedPass);
+        if (otdCarouselOpen) {
+            var bdEl = document.getElementById('otd-carousel-breakdown');
+            if (bdEl && otdSelectedPass) bdEl.innerHTML = buildBreakdownCard(otdSelectedPass);
+        }
     }
 
     function otdCarouselSearchInput(val) {
