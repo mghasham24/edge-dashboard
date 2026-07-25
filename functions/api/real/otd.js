@@ -906,9 +906,11 @@ export async function onRequestGet(context) {
   }
 
   // Admin: probe the exact RS multiplier for every sport+level combo found in D1 pass caches.
-  // Reads all otd_passes_all_v8_* rows, picks one representative pass per sport:level,
-  // fetches RS earnings at that actual level, computes atRarityEarnings/earnings,
-  // and stores the complete table in D1 as meta:otd_sport_multipliers.
+  // Pass 1: extract multipliers directly from pass data (p.multiplier = boostInfo.multiplier).
+  //         Works for all sports including UFC without hitting RS earnings API.
+  // Pass 2: for any combos still missing a multiplier, fetch RS earnings at that level
+  //         and compute atRarityEarnings/earnings. (UFC RS earnings returns 500 — skipped.)
+  // Stores the complete table in D1 as meta:otd_sport_multipliers.
   if (action === 'probe_multipliers') {
     if (!session.is_admin) return fail(403, 'Admin only');
 
@@ -934,9 +936,17 @@ export async function onRequestGet(context) {
 
     const results = {};
     const errors = {};
-    const combos = Object.entries(comboMap);
 
-    for (const [key, p] of combos) {
+    // Pass 1: extract multiplier directly from pass data (p.multiplier = boostInfo.multiplier).
+    // This covers all sports without an RS API call — UFC included.
+    for (const [key, p] of Object.entries(comboMap)) {
+      const m = parseFloat(p.multiplier);
+      if (m > 0) results[key] = Math.round(m * 100) / 100;
+    }
+
+    // Pass 2: for combos where pass.multiplier was missing, derive from RS earnings API.
+    const needsEarnings = Object.entries(comboMap).filter(([k]) => !results[k]);
+    for (const [key, p] of needsEarnings) {
       const rsSport = RS_EARN_SPORT_MAP[p.sport] || p.sport;
       const rsSeason = RS_SEASON_NORM[p.sport] || p.season;
       const entityType = p.entityType || 'player';
@@ -971,7 +981,6 @@ export async function onRequestGet(context) {
         errors[key] = e.message;
       }
 
-      // Pace RS requests to avoid rate limiting
       await new Promise(r => setTimeout(r, 200));
     }
 
