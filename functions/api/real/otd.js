@@ -37,6 +37,15 @@ export async function onRequestGet(context) {
   const action = url.searchParams.get('action');
   const now = Math.floor(Date.now() / 1000);
 
+  // No RS token required — reads from D1 only
+  if (action === 'get_multipliers') {
+    const row = await env.DB.prepare(
+      "SELECT data FROM odds_cache WHERE cache_key='meta:otd_sport_multipliers'"
+    ).first();
+    if (!row) return new Response(JSON.stringify({ ok: false, error: 'not probed yet' }), { headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ ok: true, multipliers: JSON.parse(row.data) }), { headers: { 'Content-Type': 'application/json' } });
+  }
+
   // Proxy RS card background images so browser sends Referer: realapp.com (CDN requires it)
   if (action === 'card_bg') {
     const src = (url.searchParams.get('src') || '').replace(/\.\./g, '');
@@ -894,15 +903,6 @@ export async function onRequestGet(context) {
     } catch(e) {
       return fail(500, e.message);
     }
-  }
-
-  // Serve the stored sport multiplier table (built by probe_multipliers)
-  if (action === 'get_multipliers') {
-    const row = await env.DB.prepare(
-      "SELECT data FROM odds_cache WHERE cache_key='meta:otd_sport_multipliers'"
-    ).first();
-    if (!row) return new Response(JSON.stringify({ ok: false, error: 'not probed yet' }), { headers: { 'Content-Type': 'application/json' } });
-    return new Response(JSON.stringify({ ok: true, multipliers: JSON.parse(row.data) }), { headers: { 'Content-Type': 'application/json' } });
   }
 
   // Admin: probe the exact RS multiplier for every sport+level combo found in D1 pass caches.
