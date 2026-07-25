@@ -4520,15 +4520,16 @@
                 var cardRows = allCards.map(function(c, idx) {
                     var claimed = idx < limit;
                     var color = claimed ? '#22c55e' : '#ef5350';
-                    var newBadge = c.isNew ? ' <span style="background:#4f6ef7;color:#fff;font-size:9px;font-weight:700;padding:1px 4px;border-radius:3px;vertical-align:middle">NEW</span>' : '';
-                    var simBadge = c.isSim ? '<span style="display:inline-block;font-size:8px;font-weight:700;color:#fff;background:#f97316;padding:1px 4px;border-radius:3px;letter-spacing:.4px;margin-left:4px;vertical-align:middle">SIM</span>' : '';
-                    var seasonTag = c.season ? '<span style="font-size:9px;color:var(--muted2);margin-left:4px">' + escHtml(otdFormatSeason(c.sport, c.season)) + '</span>' : '';
-                    var nameEl = (c.id && !c.isNew)
-                        ? '<button onclick="otdOpenCardLink(\'' + c.id + '\',\'' + c.sport + '\',\'' + c.entityType + '\',\'\',\'' + c.passId + '\')" class="otd-link-btn" style="color:' + color + ';font-weight:500;font-size:12px;padding:0;text-align:left">' + escHtml(c.name) + '</button>' + simBadge + seasonTag
-                        : '<span style="color:' + color + ';font-weight:700">' + escHtml(c.name) + newBadge + '</span>' + simBadge + seasonTag;
+                    var newBadge = c.isNew ? '<span style="background:#4f6ef7;color:#fff;font-size:9px;font-weight:700;padding:1px 4px;border-radius:3px;vertical-align:middle">NEW</span>' : '';
+                    var simBadge = c.isSim ? '<span style="display:inline-block;font-size:8px;font-weight:700;color:#fff;background:#f97316;padding:1px 4px;border-radius:3px;letter-spacing:.4px;vertical-align:middle">SIM</span>' : '';
+                    var seasonTag = c.season ? '<span style="font-size:9px;color:var(--muted2)">' + escHtml(otdFormatSeason(c.sport, c.season)) + '</span>' : '';
+                    var nameCore = (c.id && !c.isNew)
+                        ? '<button onclick="otdOpenCardLink(\'' + c.id + '\',\'' + c.sport + '\',\'' + c.entityType + '\',\'\',\'' + c.passId + '\')" class="otd-link-btn" style="color:' + color + ';font-weight:500;font-size:12px;padding:0;text-align:left">' + escHtml(c.name) + '</button>'
+                        : '<span style="color:' + color + ';font-weight:700;font-size:12px">' + escHtml(c.name) + '</span>';
+                    var nameEl = '<span style="display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap">' + nameCore + seasonTag + newBadge + simBadge + '</span>';
                     var raxEl = '<button onclick="otdOpenPerfLink(\'' + c.id + '\',\'' + c.sport + '\',\'' + c.entityType + '\',\'\',\'' + c.season + '\',\'\')" class="otd-link-btn" style="color:' + color + ';font-family:var(--mono);font-size:12px">' + (c.rax || 0).toLocaleString() + '</button>';
                     return '<div style="display:flex;justify-content:space-between;align-items:center;padding:2px 0;border-bottom:1px solid var(--border2)">' +
-                        nameEl + (c.isNew ? newBadge : '') +
+                        nameEl +
                         raxEl +
                     '</div>';
                 }).join('');
