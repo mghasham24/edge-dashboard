@@ -4125,7 +4125,7 @@
         // If a matching pass already has earnings + baseTotal, use them directly (no RS call).
         if (rsMatchForCheck && rsMatchForCheck.earnings && rsMatchForCheck.earnings.length > 0) {
             otdCheckLoading = false;
-            otdCheckEarnings = rsMatchForCheck.earnings;
+            otdCheckEarnings = otdApplyMultiplier(rsMatchForCheck.earnings, cp2.level);
             otdCheckBaseTotal = rsMatchForCheck.baseTotal || null;
             renderOtdCheckWrap();
             return;
@@ -4142,7 +4142,7 @@
             .then(function(r) { return r.ok ? r.json() : r.json().catch(function() { return { ok: false, _status: r.status }; }); })
             .then(function(d) {
                 otdCheckLoading = false;
-                otdCheckEarnings = (d.ok && d.earnings && d.earnings.length > 0) ? d.earnings : [];
+                otdCheckEarnings = (d.ok && d.earnings && d.earnings.length > 0) ? otdApplyMultiplier(d.earnings, cp2.level) : [];
                 otdCheckBaseTotal = (d.ok && d.baseTotal != null) ? d.baseTotal : null;
                 otdCheckDebug = d.ok ? null : (d.error || d._status || 'empty');
                 renderOtdCheckWrap();
@@ -4193,9 +4193,9 @@
             fetch('/api/real/otd?action=earnings&id=' + cp.id + '&sport=' + cp.sport + '&season=' + cp.season + '&level=' + cp.level + '&entityType=' + (cp.entityType || 'player'), { credentials: 'same-origin' })
                 .then(function(r) { return r.ok ? r.json() : { ok: false }; })
                 .then(function(d) {
-                    entry.earnings = (d.ok && d.earnings) ? d.earnings : [];
+                    entry.earnings = (d.ok && d.earnings) ? otdApplyMultiplier(d.earnings, cp.level) : [];
                     entry.baseTotal = (d.ok && d.baseTotal != null) ? d.baseTotal : null;
-                    if (d.ok && d.earnings) otdCheckEarnings = d.earnings;
+                    if (d.ok && d.earnings) otdCheckEarnings = otdApplyMultiplier(d.earnings, cp.level);
                     if (d.ok && d.baseTotal != null) otdCheckBaseTotal = d.baseTotal;
                     otdDateMapDirty = true;
                     renderOtdChips();
