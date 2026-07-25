@@ -4263,8 +4263,8 @@
                     '<div style="display:flex;align-items:center;gap:9px">' +
                         (cp.avatar ? '<img src="https://media.realapp.com/assets/players/default/small/' + cp.avatar + '.webp" style="width:34px;height:34px;border-radius:50%;object-fit:cover;border:2px solid ' + infoRc + '66" onerror="this.style.display=\'none\'">' : '') +
                         '<div>' +
-                            '<div style="font-size:13px;font-weight:700;color:var(--fg)">' + escHtml(cp.name) + '</div>' +
-                            '<div style="font-size:11px;color:var(--muted2);margin-top:1px">' + escHtml(infoSportLabel) + ' · ' + escHtml(infoSeasonFmt) + '</div>' +
+                            '<div style="font-size:13px;font-weight:700;color:var(--fg)">' + escHtml(cp.name) + '<span style="font-size:11px;font-weight:400;color:var(--muted2);margin-left:6px">' + escHtml(infoSeasonFmt) + '</span></div>' +
+                            '<div style="font-size:11px;color:var(--muted2);margin-top:1px">' + escHtml(infoSportLabel) + '</div>' +
                         '</div>' +
                     '</div>' +
                     '<span style="font-size:10px;font-weight:700;color:#fff;background:' + infoRc + ';padding:3px 8px;border-radius:4px;white-space:nowrap">' + escHtml(cp.levelLabel || 'Level ' + cp.level) + '</span>' +
@@ -4273,6 +4273,7 @@
                     '<div style="margin-top:9px;padding-top:8px;border-top:1px solid ' + infoRc + '33;display:flex;align-items:baseline;gap:6px">' +
                         '<span style="font-size:18px;font-weight:700;font-family:var(--mono);color:var(--accent)">' + earnTotal.toLocaleString() + '</span>' +
                         '<span style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.4px">Rax / Year</span>' +
+                        (otdCheckBaseTotal != null ? '<span style="font-size:10px;color:var(--muted2);margin-left:4px">· ' + Math.round(otdCheckBaseTotal).toLocaleString() + ' base</span>' : '') +
                     '</div>' : '') +
             '</div>';
         }
