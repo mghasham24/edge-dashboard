@@ -3472,7 +3472,9 @@
     function otdJumpToDay(isoKey, sport) {
         otdAllOverlapsView = false;
         var parts = isoKey.split('-');
+        var yr = parseInt(parts[0], 10);
         var mo = parseInt(parts[1], 10) - 1;
+        if (!isNaN(yr)) otdCalYear = yr;
         if (mo >= 0 && mo <= 11) otdCalMonth = mo;
         otdSelectedDay = isoKey;
         otdSelectedDaySport = (sport && sport !== '3rd-slot') ? sport : null;
@@ -4505,22 +4507,28 @@
                 var monthDay = parts.length === 3 ? (MONTH_NAMES[parseInt(parts[1], 10) - 1] + ' ' + parseInt(parts[2], 10)) : d.day;
                 // Build combined sorted list: existing entries + new card, sorted by Rax desc
                 var allCards = d.entries.map(function(ent) {
-                    return { name: ent.player.name, rax: ent.rax || 0, level: ent.player.levelLabel || '', isNew: false };
+                    return { name: ent.player.name, rax: ent.rax || 0, level: ent.player.levelLabel || '', isNew: false, id: String(ent.player.id || ''), sport: ent.player.sport || sport, entityType: ent.player.entityType || 'player', season: ent.player.season || '' };
                 });
-                allCards.push({ name: otdCheckPlayer.name, rax: d.newRax || 0, level: otdCheckPlayer.levelLabel || '', isNew: true });
+                allCards.push({ name: otdCheckPlayer.name, rax: d.newRax || 0, level: otdCheckPlayer.levelLabel || '', isNew: true, id: String(otdCheckPlayer.id || ''), sport: otdCheckPlayer.sport, entityType: otdCheckPlayer.entityType || 'player', season: otdCheckPlayer.season || '' });
                 allCards.sort(function(a, b) { return b.rax - a.rax; });
                 allCards = allCards.filter(function(c, idx) { return idx < limit || c.rax >= 200 || c.isNew; });
                 var cardRows = allCards.map(function(c, idx) {
                     var claimed = idx < limit;
                     var color = claimed ? '#22c55e' : '#ef5350';
-                    var nameStr = escHtml(c.name) + (c.isNew ? ' <span style="background:#4f6ef7;color:#fff;font-size:9px;font-weight:700;padding:1px 4px;border-radius:3px;vertical-align:middle">NEW</span>' : '');
-                    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid var(--border2)">' +
-                        '<span style="color:' + color + ';font-weight:' + (c.isNew ? '700' : '500') + '">' + nameStr + '</span>' +
-                        '<span style="font-family:var(--mono);color:' + color + '">' + (c.rax || 0).toLocaleString() + '</span>' +
+                    var newBadge = c.isNew ? ' <span style="background:#4f6ef7;color:#fff;font-size:9px;font-weight:700;padding:1px 4px;border-radius:3px;vertical-align:middle">NEW</span>' : '';
+                    var nameEl = (c.id && !c.isNew)
+                        ? '<button onclick="otdOpenCardLink(\'' + c.id + '\',\'' + c.sport + '\',\'' + c.entityType + '\',\'\',\'\')" class="otd-link-btn" style="color:' + color + ';font-weight:500;font-size:12px;padding:0;text-align:left">' + escHtml(c.name) + '</button>'
+                        : '<span style="color:' + color + ';font-weight:700">' + escHtml(c.name) + newBadge + '</span>';
+                    var raxEl = '<button onclick="otdOpenPerfLink(\'' + c.id + '\',\'' + c.sport + '\',\'' + c.entityType + '\',\'\',\'' + c.season + '\',\'\')" class="otd-link-btn" style="color:' + color + ';font-family:var(--mono);font-size:12px">' + (c.rax || 0).toLocaleString() + '</button>';
+                    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:2px 0;border-bottom:1px solid var(--border2)">' +
+                        nameEl + (c.isNew ? newBadge : '') +
+                        raxEl +
                     '</div>';
                 }).join('');
                 html += '<div style="background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:8px 10px;font-size:12px">' +
-                    '<div style="font-weight:700;color:var(--muted2);font-size:10px;letter-spacing:.06em;margin-bottom:6px">' + monthDay.toUpperCase() + '</div>' +
+                    '<div style="font-weight:700;color:var(--muted2);font-size:10px;letter-spacing:.06em;margin-bottom:6px">' +
+                        '<button onclick="otdJumpToDay(\'' + d.day + '\',\'' + sport + '\')" class="otd-link-btn" style="font-size:10px;font-weight:700;letter-spacing:.06em;padding:0;color:var(--muted2)" title="Go to this day on calendar">' + monthDay.toUpperCase() + '</button>' +
+                    '</div>' +
                     cardRows +
                 '</div>';
             });
