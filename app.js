@@ -4492,6 +4492,7 @@
                 });
                 allCards.push({ name: otdCheckPlayer.name, rax: d.newRax || 0, level: otdCheckPlayer.levelLabel || '', isNew: true });
                 allCards.sort(function(a, b) { return b.rax - a.rax; });
+                allCards = allCards.filter(function(c, idx) { return idx < limit || c.rax >= 200; });
                 var cardRows = allCards.map(function(c, idx) {
                     var claimed = idx < limit;
                     var color = claimed ? '#22c55e' : '#ef5350';
