@@ -4960,7 +4960,7 @@
                 // CF handles RS 429s internally with exponential backoff, so the frontend never sees them.
                 function startEarningsQueue(queue) {
                     if (!queue.length) return;
-                    var CONCURRENCY = 1;
+                    var CONCURRENCY = 2;
                     var active = 0;
                     function next() {
                         while (active < CONCURRENCY && queue.length) {
