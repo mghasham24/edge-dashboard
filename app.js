@@ -4442,10 +4442,11 @@
             p.earnings.forEach(function(ev) {
                 var edp = (ev.day || '').split('T')[0].split('-');
                 if (edp.length !== 3) return;
-                var ey = parseInt(edp[0], 10) + 1;
-                var dk = String(ey) + '-' + edp[1].padStart(2,'0') + '-' + edp[2].padStart(2,'0');
+                // Normalize all passes to otdCalYear so cross-season conflicts are detected.
+                // OTD earns on the anniversary date every year — season year is irrelevant for slot collision.
+                var dk = String(otdCalYear) + '-' + edp[1].padStart(2,'0') + '-' + edp[2].padStart(2,'0');
                 if (!checkDateMap[dk]) checkDateMap[dk] = [];
-                checkDateMap[dk].push({ player: p, rax: Math.round((ev.earnings || 0) * (OTD_LEVEL_MULTIPLIERS[p.level] || 1)) || (ev.atRarityEarnings || 0) });
+                checkDateMap[dk].push({ player: p, rax: (ev.atRarityEarnings || 0) || Math.round((ev.earnings || 0) * (OTD_LEVEL_MULTIPLIERS[p.level] || 1)) });
             });
         });
 
@@ -4453,9 +4454,7 @@
         otdCheckEarnings.forEach(function(e) {
             var dp = (e.day || '').split('T')[0].split('-');
             if (dp.length !== 3) return;
-            var origYear = parseInt(dp[0], 10);
-            var earnYear = origYear + 1;
-            var dayKey = String(earnYear) + '-' + dp[1].padStart(2,'0') + '-' + dp[2].padStart(2,'0');
+            var dayKey = String(otdCalYear) + '-' + dp[1].padStart(2,'0') + '-' + dp[2].padStart(2,'0');
             totalDays++;
             // Exclude the check player itself from existing entries — same card can't conflict with itself.
             // Uses both ID and name comparison since search/passes APIs may return different entity IDs.
@@ -4521,9 +4520,10 @@
                     var claimed = idx < limit;
                     var color = claimed ? '#22c55e' : '#ef5350';
                     var newBadge = c.isNew ? ' <span style="background:#4f6ef7;color:#fff;font-size:9px;font-weight:700;padding:1px 4px;border-radius:3px;vertical-align:middle">NEW</span>' : '';
+                    var seasonTag = c.season ? '<span style="font-size:9px;color:var(--muted2);margin-left:4px">' + escHtml(otdFormatSeason(c.sport, c.season)) + '</span>' : '';
                     var nameEl = (c.id && !c.isNew)
-                        ? '<button onclick="otdOpenCardLink(\'' + c.id + '\',\'' + c.sport + '\',\'' + c.entityType + '\',\'\',\'' + c.passId + '\')" class="otd-link-btn" style="color:' + color + ';font-weight:500;font-size:12px;padding:0;text-align:left">' + escHtml(c.name) + '</button>'
-                        : '<span style="color:' + color + ';font-weight:700">' + escHtml(c.name) + newBadge + '</span>';
+                        ? '<button onclick="otdOpenCardLink(\'' + c.id + '\',\'' + c.sport + '\',\'' + c.entityType + '\',\'\',\'' + c.passId + '\')" class="otd-link-btn" style="color:' + color + ';font-weight:500;font-size:12px;padding:0;text-align:left">' + escHtml(c.name) + '</button>' + seasonTag
+                        : '<span style="color:' + color + ';font-weight:700">' + escHtml(c.name) + newBadge + '</span>' + seasonTag;
                     var raxEl = '<button onclick="otdOpenPerfLink(\'' + c.id + '\',\'' + c.sport + '\',\'' + c.entityType + '\',\'\',\'' + c.season + '\',\'\')" class="otd-link-btn" style="color:' + color + ';font-family:var(--mono);font-size:12px">' + (c.rax || 0).toLocaleString() + '</button>';
                     return '<div style="display:flex;justify-content:space-between;align-items:center;padding:2px 0;border-bottom:1px solid var(--border2)">' +
                         nameEl + (c.isNew ? newBadge : '') +
@@ -5698,7 +5698,7 @@
                 overlapPanel = '<div style="background:var(--bg2);border:1px solid var(--border2);border-radius:8px;margin-bottom:10px;overflow:hidden">' +
                     '<div style="display:flex;align-items:flex-start;justify-content:space-between;padding:8px 10px;border-bottom:1px solid var(--border);gap:6px">' +
                         '<div>' +
-                            '<div style="font-size:12px;font-weight:700;color:var(--fg);margin-bottom:6px">' + overlapCount + ' days with overlapping claims</div>' +
+                            '<div style="font-size:12px;font-weight:700;color:var(--fg);margin-bottom:6px">' + overlapCount + ' days with overlapping claims for ' + otdCalYear + '</div>' +
                             '<div style="display:flex;align-items:center;gap:4px">' +
                                 ovlSortBtn('date', 'Date') +
                                 ovlSortBtn('rax', 'Rax') +
@@ -5721,13 +5721,11 @@
 
         var calHtml =
             addedNote +
-            '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">' +
-                '<div style="font-size:11px;color:var(--muted2)">' + totalDates + ' claimable dates' + (numLoading > 0 ? ' · <span style="color:var(--accent)">loading ' + numLoading + '…</span>' : '') + '</div>' +
-                '<div style="display:flex;gap:4px;align-items:center">' +
-                    '<button style="' + btn2Style + '" onclick="otdSetClaimsView(2)">2 claims</button>' +
-                    '<button style="' + btn3Style + '" onclick="otdSetClaimsView(3)" title="' + (pro ? '3 claims/sport' : 'Pro required') + '">3 claims' + (pro ? '' : ' 🔒') + '</button>' +
-                    (overlapCount > 0 ? '<button style="' + overlapBtnStyle + '" onclick="otdToggleOverlaps()" title="Days where you have more cards than claim slots">⚠ Overlaps' + (overlapCount ? ' ' + overlapCount : '') + '</button>' : '') +
-                '</div>' +
+            '<div style="display:flex;align-items:center;justify-content:flex-end;margin-bottom:6px;gap:4px">' +
+                (numLoading > 0 ? '<span style="font-size:11px;color:var(--accent);margin-right:auto">loading ' + numLoading + '…</span>' : '') +
+                '<button style="' + btn2Style + '" onclick="otdSetClaimsView(2)">2 claims</button>' +
+                '<button style="' + btn3Style + '" onclick="otdSetClaimsView(3)" title="' + (pro ? '3 claims/sport' : 'Pro required') + '">3 claims' + (pro ? '' : ' 🔒') + '</button>' +
+                (overlapCount > 0 ? '<button style="' + overlapBtnStyle + '" onclick="otdToggleOverlaps()" title="Days where you have more cards than claim slots">⚠ Overlaps' + (overlapCount ? ' ' + overlapCount : '') + '</button>' : '') +
             '</div>' +
             overlapPanel +
             '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">' +
