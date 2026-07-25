@@ -3123,8 +3123,19 @@
         29:185, 30:190, 31:196, 32:202, 33:208, 34:214, 35:220, 36:226, 37:233,
         38:240, 39:250
     };
-    function otdApplyMultiplier(earningsArr, level) {
-        var mult = OTD_LEVEL_MULTIPLIERS[level] || 0;
+    // Returns the true RS multiplier for a sport+level pair by scanning loaded real passes.
+    // Falls back to the hardcoded table when no real pass at that level exists.
+    function otdGetDerivedMult(sport, level) {
+        for (var i = 0; i < otdPlayers.length; i++) {
+            var p = otdPlayers[i];
+            if (!p.isAdded && p.sport === sport && p._origLevel === level && p._origMultiplier) {
+                return parseFloat(p._origMultiplier);
+            }
+        }
+        return OTD_LEVEL_MULTIPLIERS[level] || 0;
+    }
+    function otdApplyMultiplier(earningsArr, level, sport) {
+        var mult = sport ? otdGetDerivedMult(sport, level) : (OTD_LEVEL_MULTIPLIERS[level] || 0);
         return earningsArr.map(function(e) {
             var base = e.earnings || 0;
             return (mult && base) ? Object.assign({}, e, { atRarityEarnings: Math.round(base * mult) }) : e;
@@ -3667,7 +3678,7 @@
             .then(function(r) { return r.ok ? r.json() : { ok: false }; })
             .then(function(d) {
                 if (OTD_LEVEL_MULTIPLIERS[newLevel]) p.multiplier = OTD_LEVEL_MULTIPLIERS[newLevel] + 'x';
-                p.earnings = (d.ok && d.earnings) ? otdApplyMultiplier(d.earnings, newLevel) : [];
+                p.earnings = (d.ok && d.earnings) ? otdApplyMultiplier(d.earnings, newLevel, p.sport) : [];
                 otdDateMapDirty = true;
                 // Feed results into Find Player panel if it's still showing this player at this level
                 if (otdFindPlayer && String(otdFindPlayer.id) === String(p.id) && otdFindPlayer.sport === p.sport && otdFindPlayer.level === newLevel) {
@@ -3867,7 +3878,7 @@
             .then(function(r) { return r.ok ? r.json() : { ok: false }; })
             .then(function(ed) {
                 if (OTD_LEVEL_MULTIPLIERS[level]) p.multiplier = OTD_LEVEL_MULTIPLIERS[level] + 'x';
-                p.earnings = (ed.ok && ed.earnings) ? otdApplyMultiplier(ed.earnings, level) : [];
+                p.earnings = (ed.ok && ed.earnings) ? otdApplyMultiplier(ed.earnings, level, p.sport) : [];
                 otdDateMapDirty = true;
                 if (ed.baseTotal !== null && ed.baseTotal !== undefined) p.baseTotal = ed.baseTotal;
                 renderOtdChips();
@@ -4125,7 +4136,7 @@
         // If a matching pass already has earnings + baseTotal, use them directly (no RS call).
         if (rsMatchForCheck && rsMatchForCheck.earnings && rsMatchForCheck.earnings.length > 0) {
             otdCheckLoading = false;
-            otdCheckEarnings = otdApplyMultiplier(rsMatchForCheck.earnings, cp2.level);
+            otdCheckEarnings = otdApplyMultiplier(rsMatchForCheck.earnings, cp2.level, cp2.sport);
             otdCheckBaseTotal = rsMatchForCheck.baseTotal || null;
             renderOtdCheckWrap();
             return;
@@ -4142,7 +4153,7 @@
             .then(function(r) { return r.ok ? r.json() : r.json().catch(function() { return { ok: false, _status: r.status }; }); })
             .then(function(d) {
                 otdCheckLoading = false;
-                otdCheckEarnings = (d.ok && d.earnings && d.earnings.length > 0) ? otdApplyMultiplier(d.earnings, cp2.level) : [];
+                otdCheckEarnings = (d.ok && d.earnings && d.earnings.length > 0) ? otdApplyMultiplier(d.earnings, cp2.level, cp2.sport) : [];
                 otdCheckBaseTotal = (d.ok && d.baseTotal != null) ? d.baseTotal : null;
                 otdCheckDebug = d.ok ? null : (d.error || d._status || 'empty');
                 renderOtdCheckWrap();
@@ -4193,9 +4204,9 @@
             fetch('/api/real/otd?action=earnings&id=' + cp.id + '&sport=' + cp.sport + '&season=' + cp.season + '&level=' + cp.level + '&entityType=' + (cp.entityType || 'player'), { credentials: 'same-origin' })
                 .then(function(r) { return r.ok ? r.json() : { ok: false }; })
                 .then(function(d) {
-                    entry.earnings = (d.ok && d.earnings) ? otdApplyMultiplier(d.earnings, cp.level) : [];
+                    entry.earnings = (d.ok && d.earnings) ? otdApplyMultiplier(d.earnings, cp.level, cp.sport) : [];
                     entry.baseTotal = (d.ok && d.baseTotal != null) ? d.baseTotal : null;
-                    if (d.ok && d.earnings) otdCheckEarnings = otdApplyMultiplier(d.earnings, cp.level);
+                    if (d.ok && d.earnings) otdCheckEarnings = otdApplyMultiplier(d.earnings, cp.level, cp.sport);
                     if (d.ok && d.baseTotal != null) otdCheckBaseTotal = d.baseTotal;
                     otdDateMapDirty = true;
                     renderOtdChips();
