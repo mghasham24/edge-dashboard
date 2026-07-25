@@ -443,23 +443,32 @@ export async function onRequestGet(context) {
       const RS_EARN_SPORT_MAP = { ncaabb: 'ncaam', mma: 'ufc' };
       const rsSport = RS_EARN_SPORT_MAP[sport] || sport;
       const earningsUrl = `${RS_BASE}/userpassearnings/${rsSport}/season/${season}/entity/${entityType}/${id}?level=1`;
-      const controller = new AbortController();
-      const abortTimer = setTimeout(() => controller.abort(), 8000);
-      let res;
-      try {
-        res = await fetch(earningsUrl, { headers, signal: controller.signal });
-      } finally {
-        clearTimeout(abortTimer);
+
+      async function rsGet(hdrs) {
+        const c = new AbortController();
+        const t = setTimeout(() => c.abort(), 8000);
+        try { return await fetch(earningsUrl, { headers: hdrs, signal: c.signal }); }
+        finally { clearTimeout(t); }
       }
 
-      // Retry up to 3 times with exponential backoff on 429
+      let usedToken = pickToken();
+      let res = await rsGet(buildHeadersWithToken(usedToken));
+
+      // RS 429: retry up to 3 times with exponential backoff (same token — RS throttle, not auth issue)
       const retryDelays = [500, 1500, 3000];
       for (let i = 0; i < retryDelays.length && res.status === 429; i++) {
         await new Promise(r => setTimeout(r, retryDelays[i]));
-        const c2 = new AbortController();
-        const t2 = setTimeout(() => c2.abort(), 8000);
-        try { res = await fetch(earningsUrl, { headers, signal: c2.signal }); } finally { clearTimeout(t2); }
+        res = await rsGet(buildHeadersWithToken(usedToken));
       }
+
+      // RS 401: token expired — try every other token in the pool before giving up
+      if (res.status === 401 && poolTokens.length > 1) {
+        for (const fallbackToken of poolTokens.filter(t => t !== usedToken)) {
+          res = await rsGet(buildHeadersWithToken(fallbackToken));
+          if (res.status !== 401) { usedToken = fallbackToken; break; }
+        }
+      }
+
       if (!res.ok) return fail(res.status, 'RS earnings failed: ' + res.status);
 
       const data = await res.json();
