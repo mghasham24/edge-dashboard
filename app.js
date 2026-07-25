@@ -3123,23 +3123,17 @@
         29:185, 30:190, 31:196, 32:202, 33:208, 34:214, 35:220, 36:226, 37:233,
         38:240, 39:250
     };
-    // Returns the true RS multiplier for a sport+level pair by scanning loaded real passes.
-    // Exact match wins. If only a different level of the same sport is found, interpolates
-    // using the ratio between that pass's real mult and the NBA table value at its level.
-    // Falls back to the hardcoded table when no real pass for that sport exists at all.
+    // Returns the exact RS multiplier for a sport+level pair.
+    // Priority: 1) D1-probed table (exact, all levels)  2) loaded real pass (_origMultiplier)
+    //           3) hardcoded NBA/NHL table fallback.
     function otdGetDerivedMult(sport, level) {
-        var anyRef = null;
+        var dbKey = sport + ':' + level;
+        if (otdSportMultipliers[dbKey]) return otdSportMultipliers[dbKey];
         for (var i = 0; i < otdPlayers.length; i++) {
             var p = otdPlayers[i];
-            if (p.isAdded || p.sport !== sport || !p._origMultiplier) continue;
-            if (p._origLevel === level) return parseFloat(p._origMultiplier);
-            if (!anyRef) anyRef = p;
-        }
-        if (anyRef) {
-            var refReal = parseFloat(anyRef._origMultiplier);
-            var refTable = OTD_LEVEL_MULTIPLIERS[anyRef._origLevel] || 1;
-            var targetTable = OTD_LEVEL_MULTIPLIERS[level] || 1;
-            return Math.max(1, Math.round(targetTable * refReal / refTable));
+            if (!p.isAdded && p.sport === sport && p._origLevel === level && p._origMultiplier) {
+                return parseFloat(p._origMultiplier);
+            }
         }
         return OTD_LEVEL_MULTIPLIERS[level] || 0;
     }
@@ -3219,6 +3213,7 @@
 
     var otdVisible = false;
     var otdPlayers = []; // { id, name, sport, season, level, levelLabel, color, earnings }
+    var otdSportMultipliers = {}; // { 'sport:level': float } — loaded from D1 via probe_multipliers
     var otdSearchTimer = null;
     var otdSelectedPlayer = null; // { id, name, sport } from autocomplete
     var otdColorIdx = 0;
@@ -4585,6 +4580,13 @@
         document.getElementById('otd-panel').classList.add('visible');
         otdVisible = true;
         renderOtdPanel();
+        // Load probed sport multipliers from D1 (built by admin probe_multipliers action)
+        if (!Object.keys(otdSportMultipliers).length) {
+            fetch('/api/real/otd?action=get_multipliers', { credentials: 'same-origin' })
+                .then(function(r) { return r.ok ? r.json() : null; })
+                .then(function(d) { if (d && d.ok && d.multipliers) otdSportMultipliers = d.multipliers; })
+                .catch(function() {});
+        }
         // Auto-load from URL deeplink (e.g. /otd/username) or sessionStorage on first visit
         var otdPathUser = (function() { var m = window.location.pathname.match(/^\/otd\/([^\/]+)/); return m ? decodeURIComponent(m[1]) : null; })();
         if (otdPathUser && !otdSelectedUser && !otdLoadingPasses) { otdAutoLoadFromUrl(otdPathUser); }

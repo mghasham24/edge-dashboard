@@ -896,5 +896,92 @@ export async function onRequestGet(context) {
     }
   }
 
+  // Serve the stored sport multiplier table (built by probe_multipliers)
+  if (action === 'get_multipliers') {
+    const row = await env.DB.prepare(
+      "SELECT data FROM odds_cache WHERE cache_key='meta:otd_sport_multipliers'"
+    ).first();
+    if (!row) return new Response(JSON.stringify({ ok: false, error: 'not probed yet' }), { headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ ok: true, multipliers: JSON.parse(row.data) }), { headers: { 'Content-Type': 'application/json' } });
+  }
+
+  // Admin: probe the exact RS multiplier for every sport+level combo found in D1 pass caches.
+  // Reads all otd_passes_all_v8_* rows, picks one representative pass per sport:level,
+  // fetches RS earnings at that actual level, computes atRarityEarnings/earnings,
+  // and stores the complete table in D1 as meta:otd_sport_multipliers.
+  if (action === 'probe_multipliers') {
+    if (!session.is_admin) return fail(403, 'Admin only');
+
+    const RS_EARN_SPORT_MAP = { ncaabb: 'ncaam', mma: 'ufc' };
+    const RS_SEASON_NORM = { ufc: 'alltime' };
+
+    // Collect all user pass caches
+    const passRows = await env.DB.prepare(
+      "SELECT data FROM odds_cache WHERE cache_key LIKE 'otd_passes_all_v8_%'"
+    ).all();
+
+    // Build map: 'sport:level' -> one representative pass
+    const comboMap = {};
+    for (const row of (passRows.results || [])) {
+      let pd;
+      try { pd = JSON.parse(row.data); } catch(e) { continue; }
+      for (const p of (pd.passes || [])) {
+        if (!p.playerId || !p.sport || p.level == null) continue;
+        const k = `${p.sport}:${p.level}`;
+        if (!comboMap[k]) comboMap[k] = p;
+      }
+    }
+
+    const results = {};
+    const errors = {};
+    const combos = Object.entries(comboMap);
+
+    for (const [key, p] of combos) {
+      const rsSport = RS_EARN_SPORT_MAP[p.sport] || p.sport;
+      const rsSeason = RS_SEASON_NORM[p.sport] || p.season;
+      const entityType = p.entityType || 'player';
+      const earningsUrl = `${RS_BASE}/userpassearnings/${rsSport}/season/${rsSeason}/entity/${entityType}/${p.playerId}?level=${p.level}`;
+
+      try {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 8000);
+        let res;
+        try { res = await fetch(earningsUrl, { headers: buildHeadersWithToken(pickToken()), signal: ctrl.signal }); }
+        finally { clearTimeout(t); }
+
+        if (!res.ok) { errors[key] = res.status; continue; }
+        const data = await res.json();
+        const evts = data.earnings || data.events || data.performances || data.playerEarnings ||
+          (Array.isArray(data.data) ? data.data : null) ||
+          (Array.isArray(data.results) ? data.results : null) ||
+          (Array.isArray(data) ? data : []);
+
+        let found = false;
+        for (const ev of evts) {
+          const base = ev.earnings || 0;
+          const rar = ev.atRarityEarnings || 0;
+          if (base > 0 && rar > 0) {
+            results[key] = Math.round((rar / base) * 100) / 100;
+            found = true;
+            break;
+          }
+        }
+        if (!found) errors[key] = 'no valid event';
+      } catch(e) {
+        errors[key] = e.message;
+      }
+
+      // Pace RS requests to avoid rate limiting
+      await new Promise(r => setTimeout(r, 200));
+    }
+
+    // Store results permanently in D1
+    await env.DB.prepare(
+      "INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,9999999999) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at"
+    ).bind('meta:otd_sport_multipliers', JSON.stringify(results)).run();
+
+    return new Response(JSON.stringify({ ok: true, probed: combos.length, found: Object.keys(results).length, results, errors }, null, 2), { headers: { 'Content-Type': 'application/json' } });
+  }
+
   return fail(400, 'Unknown action');
 }
