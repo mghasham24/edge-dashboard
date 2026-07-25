@@ -3135,6 +3135,15 @@
                 return parseFloat(p._origMultiplier);
             }
         }
+        // Single-level gap: extrapolate from two adjacent known levels for same sport
+        if (sport) {
+            var a1 = otdSportMultipliers[sport + ':' + (level + 1)];
+            var a2 = otdSportMultipliers[sport + ':' + (level + 2)];
+            if (a1 && a2) { var ext = a1 - (a2 - a1); if (ext > 0) return ext; }
+            var b1 = otdSportMultipliers[sport + ':' + (level - 1)];
+            var b2 = otdSportMultipliers[sport + ':' + (level - 2)];
+            if (b1 && b2) { var ext2 = b1 + (b1 - b2); if (ext2 > 0) return ext2; }
+        }
         return OTD_LEVEL_MULTIPLIERS[level] || 0;
     }
     function otdApplyMultiplier(earningsArr, level, sport) {
