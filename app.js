@@ -4273,7 +4273,8 @@
                 // Use D1 baseTotal (RS season total) × level multiplier for accuracy.
                 // Summing events misses current-year events due to the OTD year filter.
                 if (otdCheckBaseTotal != null) {
-                    var mult = OTD_LEVEL_MULTIPLIERS[cp.level] || 1;
+                    var mult = cp.sport ? otdGetDerivedMult(cp.sport, cp.level) : (OTD_LEVEL_MULTIPLIERS[cp.level] || 1);
+                    if (!mult) mult = 1;
                     earnTotal = Math.round(otdCheckBaseTotal * mult);
                 }
                 otdCheckEarnings.forEach(function(e) {
@@ -4472,11 +4473,11 @@
                 // OTD earns on the anniversary date every year — season year is irrelevant for slot collision.
                 var dk = String(otdCalYear) + '-' + edp[1].padStart(2,'0') + '-' + edp[2].padStart(2,'0');
                 if (!checkDateMap[dk]) checkDateMap[dk] = [];
-                checkDateMap[dk].push({ player: p, rax: (ev.atRarityEarnings || 0) || Math.round((ev.earnings || 0) * (OTD_LEVEL_MULTIPLIERS[p.level] || 1)) });
+                checkDateMap[dk].push({ player: p, rax: (ev.atRarityEarnings || 0) || Math.round((ev.earnings || 0) * (otdGetDerivedMult(p.sport, p.level) || OTD_LEVEL_MULTIPLIERS[p.level] || 1)) });
             });
         });
 
-        var checkMult = OTD_LEVEL_MULTIPLIERS[otdCheckPlayer.level] || 1;
+        var checkMult = otdGetDerivedMult(otdCheckPlayer.sport, otdCheckPlayer.level) || OTD_LEVEL_MULTIPLIERS[otdCheckPlayer.level] || 1;
         otdCheckEarnings.forEach(function(e) {
             var dp = (e.day || '').split('T')[0].split('-');
             if (dp.length !== 3) return;
