@@ -3566,6 +3566,19 @@
         renderOtdPanel();
     }
 
+    function otdCheckFromPass(playerIdx) {
+        var p = otdPlayers[playerIdx];
+        if (!p) return;
+        otdCheckMode = true;
+        if (otdCarouselOpen) { otdCarouselOpen = false; }
+        otdCheckPlayer = { id: String(p.id), name: p.name, sport: p.sport, season: p.season, level: p.level, levelLabel: p.levelLabel, entityType: p.entityType || 'player', avatar: p.avatar || '' };
+        otdCheckPlayerSelected = true;
+        otdCheckEarnings = p.earnings || null;
+        otdCheckBaseTotal = p.baseTotal != null ? p.baseTotal : null;
+        renderOtdPanel();
+        setTimeout(otdRunCheck, 0);
+    }
+
     function otdCheckSearchInput(val) {
         otdCheckPlayerSelected = false;
         clearTimeout(otdCheckSearchTimer);
@@ -4003,10 +4016,11 @@
                     : '<div style="position:absolute;top:10%;left:0;right:0;height:52%;display:flex;align-items:center;justify-content:center;font-size:40px;z-index:1">' + emoji + '</div>') +
                 // Dark gradient overlay for text legibility
                 '<div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.05) 0%,rgba(0,0,0,.15) 40%,rgba(0,0,0,.82) 68%,rgba(0,0,0,.92) 100%);z-index:2"></div>' +
-                // Top-left: sport badge + card button below it
+                // Top-left: sport badge + card button + overlap button below it
                 '<div style="position:absolute;top:6px;left:6px;z-index:3;display:flex;flex-direction:column;align-items:flex-start;gap:3px">' +
                     '<span style="font-size:8px;font-weight:800;color:#fff;background:rgba(0,0,0,.55);padding:2px 6px;border-radius:3px;letter-spacing:.04em">' + p.sport.toUpperCase() + '</span>' +
                     (eid ? '<button onclick="event.stopPropagation();otdOpenCardLink(\'' + eid + '\',\'' + p.sport + '\',\'' + eet + '\',\'\',\'' + pId + '\')" title="View card on RS" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:4px;color:#fff;padding:2px 5px;cursor:pointer;display:flex;align-items:center">' + CARD_SVG + '</button>' : '') +
+                    '<button onclick="event.stopPropagation();otdCheckFromPass(' + playerIdx + ')" title="Check overlaps" style="background:rgba(99,102,241,.7);border:1px solid rgba(99,102,241,.9);border-radius:4px;color:#fff;font-family:var(--sans);font-size:8px;font-weight:700;padding:2px 5px;cursor:pointer;letter-spacing:.02em">OVL</button>' +
                 '</div>' +
                 // Top-right: season badge + × below it
                 '<div style="position:absolute;top:6px;right:6px;z-index:3;display:flex;flex-direction:column;align-items:flex-end;gap:3px">' +
