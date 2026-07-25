@@ -989,7 +989,7 @@ export async function onRequestGet(context) {
       "INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,9999999999) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at"
     ).bind('meta:otd_sport_multipliers', JSON.stringify(results)).run();
 
-    return new Response(JSON.stringify({ ok: true, probed: combos.length, found: Object.keys(results).length, results, errors }, null, 2), { headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ ok: true, probed: Object.keys(comboMap).length, found: Object.keys(results).length, results, errors }, null, 2), { headers: { 'Content-Type': 'application/json' } });
   }
 
   return fail(400, 'Unknown action');
