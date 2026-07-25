@@ -3930,7 +3930,7 @@
     function buildBreakdownCard(p) {
         if (!p || !p.earnings) return '';
         var MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-        var rc = p.rarityColor || otdRarityColor(p.level);
+        var rc = otdRarityColor(p.level);
         var monthMap = {};
         p.earnings.forEach(function(e) {
             var dp = (e.day || '').split('T')[0].split('-');
@@ -4041,7 +4041,7 @@
         var cardHtmls = items.map(function(item, i) {
             var p = item.p;
             var playerIdx = otdPlayers.indexOf(p);
-            var rc = p.rarityColor || otdRarityColor(p.level);
+            var rc = otdRarityColor(p.level);
             var av = p.avatar || '';
             var emoji = OTD_SPORT_EMOJI[p.sport] || '🎴';
             var seasonFmt = otdFormatSeason(p.sport, p.season);
@@ -4664,7 +4664,7 @@
 
         var cards = sorted.map(function(p) {
             var idx = otdPlayers.indexOf(p);
-            var rc = p.rarityColor || otdRarityColor(p.level);
+            var rc = otdRarityColor(p.level);
             var av = p.avatar || '';
             var emoji = OTD_SPORT_EMOJI[p.sport] || '🎴';
             var seasonFmt = otdFormatSeason(p.sport, p.season);
@@ -5239,10 +5239,10 @@
             var idx = otdPlayers.indexOf(p);
             var sport = p.sport || 'mlb';
             var emoji = OTD_SPORT_EMOJI[sport] || '🎴';
-            var rc = p.rarityColor || otdRarityColor(p.level);
+            var rc = otdRarityColor(p.level);
             var av = p.avatar || '';
             var bgUrl = p.backgroundSource ? '/api/real/otd?action=card_bg&src=' + encodeURIComponent(p.backgroundSource) : '';
-            var borderCol = p.rarityColor || p.color;
+            var borderCol = otdRarityColor(p.level);
             var levelSel = '<select onchange="otdChangeLevel(' + idx + ',parseInt(this.value,10))" onclick="event.stopPropagation()" ' +
                 'style="background:transparent;border:none;color:' + rc + ';font-size:10px;font-weight:700;cursor:pointer;max-width:100%;font-family:var(--sans);text-align:center">' +
                 OTD_LEVEL_OPTIONS.map(function(o) {
@@ -5494,7 +5494,7 @@
                     '<div style="flex:1;min-width:0">' +
                         '<span style="font-family:var(--mono);font-size:10px;color:var(--muted);white-space:nowrap;margin-right:6px">' + escHtml(dateStr) + '</span>' +
                         '<span style="font-weight:600;color:var(--fg)">' + escHtml(w.player.name) + '</span>' +
-                        (lbl ? '<span style="font-size:9px;background:' + (w.player.rarityColor||'var(--muted)')+';color:#fff;border-radius:3px;padding:1px 4px;margin-left:5px;font-weight:700">' + escHtml(lbl) + '</span>' : '') +
+                        (lbl ? '<span style="font-size:9px;background:' + otdRarityColor(w.player.level) + ';color:#fff;border-radius:3px;padding:1px 4px;margin-left:5px;font-weight:700">' + escHtml(lbl) + '</span>' : '') +
                         '<span style="font-size:10px;color:var(--muted);margin-left:5px">' + yr + '</span>' +
                         '<span style="font-size:9px;color:' + sportColor + ';margin-left:5px;font-weight:600">' + escHtml(sportLabel) + '</span>' +
                     '</div>' +
@@ -5634,7 +5634,7 @@
                 var bgSource = e.player.backgroundSource || (passRef && passRef.backgroundSource) || null;
                 var avHash = e.player.avatar || (passRef && passRef.avatar) || '';
                 var serial = e.player.serialNumber || (passRef && passRef.serialNumber) || null;
-                var rc = e.player.rarityColor || (passRef && passRef.rarityColor) || otdRarityColor(lvl);
+                var rc = otdRarityColor(lvl);
                 var yearFmt = otdFormatSeason(e.player.sport, e.player.season);
                 var eid = String(e.player.id);
                 var eet = e.player.entityType || 'player';
@@ -5784,7 +5784,7 @@
                         '<div style="flex:1;min-width:0">' +
                             '<span style="font-family:var(--mono);font-size:10px;color:var(--muted);white-space:nowrap;margin-right:6px">' + escHtml(dateStr) + '</span>' +
                             '<span style="font-weight:600;color:var(--fg)">' + escHtml(w.player.name) + '</span>' +
-                            (lbl ? '<span style="font-size:9px;background:' + (w.player.rarityColor||'var(--muted)')+';color:#fff;border-radius:3px;padding:1px 4px;margin-left:5px;font-weight:700">' + escHtml(lbl) + '</span>' : '') +
+                            (lbl ? '<span style="font-size:9px;background:' + otdRarityColor(w.player.level) + ';color:#fff;border-radius:3px;padding:1px 4px;margin-left:5px;font-weight:700">' + escHtml(lbl) + '</span>' : '') +
                             ovlSimBadge +
                             '<span style="font-size:10px;color:var(--muted);margin-left:5px">' + yr + '</span>' +
                             '<span style="font-size:9px;color:' + sportColor + ';margin-left:5px;font-weight:600">' + escHtml(sportLabel) + '</span>' +
