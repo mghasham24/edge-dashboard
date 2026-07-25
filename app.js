@@ -3132,6 +3132,14 @@
         20:20, 21:20.3, 22:20.6, 23:20.9, 24:21.2, 25:21.5, 26:21.8, 27:22.1, 28:22.4, 29:22.7,
         30:23, 31:23.3, 32:23.6, 33:23.9, 34:24.2, 35:24.5
     };
+    // Team cards use a separate, much flatter multiplier scale (not the player table).
+    var OTD_TEAM_LEVEL_MULTIPLIERS = {
+        0:1, 1:1.2, 2:1.4, 3:1.6, 4:2,
+        5:2.5, 6:2.5, 7:2.5, 8:2.5, 9:2.5,
+        10:4, 11:4, 12:4, 13:4, 14:4, 15:4, 16:4, 17:4, 18:4, 19:4,
+        20:6, 21:6, 22:6, 23:6, 24:6, 25:6, 26:6, 27:6, 28:6, 29:6,
+        30:6, 31:6, 32:6, 33:6, 34:6, 35:6, 36:6, 37:6, 38:6, 39:6
+    };
     // Returns the RS multiplier for a sport+level pair.
     // Priority: 1) loaded real pass (_origMultiplier, sanity-checked)
     //           2) UFC hardcoded table  3) NBA/NHL fallback table
@@ -3148,8 +3156,16 @@
         if (sport === 'ufc') return UFC_LEVEL_MULTIPLIERS[level] || 0;
         return OTD_LEVEL_MULTIPLIERS[level] || 0;
     }
-    function otdApplyMultiplier(earningsArr, level, sport) {
-        var mult = sport ? otdGetDerivedMult(sport, level) : (OTD_LEVEL_MULTIPLIERS[level] || 0);
+    // Single multiplier lookup — handles team vs UFC vs player automatically.
+    function otdGetMult(p) {
+        if ((p.entityType || 'player') === 'team') return OTD_TEAM_LEVEL_MULTIPLIERS[p.level] || 1;
+        if (p.sport === 'ufc') return UFC_LEVEL_MULTIPLIERS[p.level] || OTD_LEVEL_MULTIPLIERS[p.level] || 1;
+        return otdGetDerivedMult(p.sport, p.level) || OTD_LEVEL_MULTIPLIERS[p.level] || 1;
+    }
+    function otdApplyMultiplier(earningsArr, level, sport, entityType) {
+        var mult = (entityType === 'team')
+            ? (OTD_TEAM_LEVEL_MULTIPLIERS[level] || 1)
+            : (sport ? otdGetDerivedMult(sport, level) : (OTD_LEVEL_MULTIPLIERS[level] || 0));
         return earningsArr.map(function(e) {
             var base = e.earnings || 0;
             return (mult && base) ? Object.assign({}, e, { atRarityEarnings: Math.round(base * mult) }) : e;
@@ -3692,8 +3708,8 @@
         fetch('/api/real/otd?action=earnings&id=' + p.id + '&sport=' + p.sport + '&season=' + p.season + '&level=' + p.level + '&entityType=' + (p.entityType || 'player'), { credentials: 'same-origin' })
             .then(function(r) { return r.ok ? r.json() : { ok: false }; })
             .then(function(d) {
-                if (OTD_LEVEL_MULTIPLIERS[newLevel]) p.multiplier = OTD_LEVEL_MULTIPLIERS[newLevel] + 'x';
-                p.earnings = (d.ok && d.earnings) ? otdApplyMultiplier(d.earnings, newLevel, p.sport) : [];
+                p.multiplier = otdGetMult(p) + 'x';
+                p.earnings = (d.ok && d.earnings) ? otdApplyMultiplier(d.earnings, newLevel, p.sport, p.entityType) : [];
                 otdDateMapDirty = true;
                 // Feed results into Find Player panel if it's still showing this player at this level
                 if (otdFindPlayer && String(otdFindPlayer.id) === String(p.id) && otdFindPlayer.sport === p.sport && otdFindPlayer.level === newLevel) {
@@ -3892,8 +3908,7 @@
         fetch('/api/real/otd?action=earnings&id=' + p.id + '&sport=' + p.sport + '&season=' + p.season + '&level=' + level + '&entityType=' + (p.entityType || 'player'), { credentials: 'same-origin' })
             .then(function(r) { return r.ok ? r.json() : { ok: false }; })
             .then(function(ed) {
-                if (OTD_LEVEL_MULTIPLIERS[level]) p.multiplier = OTD_LEVEL_MULTIPLIERS[level] + 'x';
-                p.earnings = (ed.ok && ed.earnings) ? otdApplyMultiplier(ed.earnings, level, p.sport) : [];
+                p.earnings = (ed.ok && ed.earnings) ? otdApplyMultiplier(ed.earnings, level, p.sport, p.entityType) : [];
                 otdDateMapDirty = true;
                 if ((p.baseTotal === null || p.baseTotal === undefined) && ed.baseTotal !== null && ed.baseTotal !== undefined) p.baseTotal = ed.baseTotal;
                 renderOtdChips();
@@ -3997,10 +4012,7 @@
             .map(function(p) {
                 var total = 0;
                 if (p.baseTotal != null) {
-                    var bMult = p.sport === 'ufc'
-                        ? (UFC_LEVEL_MULTIPLIERS[p.level] || OTD_LEVEL_MULTIPLIERS[p.level] || 1)
-                        : (OTD_LEVEL_MULTIPLIERS[p.level] || 1);
-                    total = Math.round(p.baseTotal * bMult);
+                    total = Math.round(p.baseTotal * otdGetMult(p));
                 } else if (p.earnings) {
                     p.earnings.forEach(function(e) { total += e.atRarityEarnings || 0; });
                 }
@@ -4156,7 +4168,7 @@
         // If a matching pass already has earnings + baseTotal, use them directly (no RS call).
         if (rsMatchForCheck && rsMatchForCheck.earnings && rsMatchForCheck.earnings.length > 0) {
             otdCheckLoading = false;
-            otdCheckEarnings = otdApplyMultiplier(rsMatchForCheck.earnings, cp2.level, cp2.sport);
+            otdCheckEarnings = otdApplyMultiplier(rsMatchForCheck.earnings, cp2.level, cp2.sport, cp2.entityType);
             otdCheckBaseTotal = rsMatchForCheck.baseTotal || null;
             renderOtdCheckWrap();
             return;
@@ -4173,7 +4185,7 @@
             .then(function(r) { return r.ok ? r.json() : r.json().catch(function() { return { ok: false, _status: r.status }; }); })
             .then(function(d) {
                 otdCheckLoading = false;
-                otdCheckEarnings = (d.ok && d.earnings && d.earnings.length > 0) ? otdApplyMultiplier(d.earnings, cp2.level, cp2.sport) : [];
+                otdCheckEarnings = (d.ok && d.earnings && d.earnings.length > 0) ? otdApplyMultiplier(d.earnings, cp2.level, cp2.sport, cp2.entityType) : [];
                 otdCheckBaseTotal = (d.ok && d.baseTotal != null) ? d.baseTotal : null;
                 otdCheckDebug = d.ok ? null : (d.error || d._status || 'empty');
                 renderOtdCheckWrap();
@@ -4224,9 +4236,9 @@
             fetch('/api/real/otd?action=earnings&id=' + cp.id + '&sport=' + cp.sport + '&season=' + cp.season + '&level=' + cp.level + '&entityType=' + (cp.entityType || 'player'), { credentials: 'same-origin' })
                 .then(function(r) { return r.ok ? r.json() : { ok: false }; })
                 .then(function(d) {
-                    entry.earnings = (d.ok && d.earnings) ? otdApplyMultiplier(d.earnings, cp.level, cp.sport) : [];
+                    entry.earnings = (d.ok && d.earnings) ? otdApplyMultiplier(d.earnings, cp.level, cp.sport, cp.entityType) : [];
                     entry.baseTotal = (d.ok && d.baseTotal != null) ? d.baseTotal : null;
-                    if (d.ok && d.earnings) otdCheckEarnings = otdApplyMultiplier(d.earnings, cp.level, cp.sport);
+                    if (d.ok && d.earnings) otdCheckEarnings = otdApplyMultiplier(d.earnings, cp.level, cp.sport, cp.entityType);
                     if (d.ok && d.baseTotal != null) otdCheckBaseTotal = d.baseTotal;
                     otdDateMapDirty = true;
                     renderOtdChips();
@@ -4279,8 +4291,7 @@
                 // Use D1 baseTotal (RS season total) × level multiplier for accuracy.
                 // Summing events misses current-year events due to the OTD year filter.
                 if (otdCheckBaseTotal != null) {
-                    var mult = cp.sport ? otdGetDerivedMult(cp.sport, cp.level) : (OTD_LEVEL_MULTIPLIERS[cp.level] || 1);
-                    if (!mult) mult = 1;
+                    var mult = otdGetMult(cp) || 1;
                     earnTotal = Math.round(otdCheckBaseTotal * mult);
                 }
                 otdCheckEarnings.forEach(function(e) {
@@ -4479,11 +4490,11 @@
                 // OTD earns on the anniversary date every year — season year is irrelevant for slot collision.
                 var dk = String(otdCalYear) + '-' + edp[1].padStart(2,'0') + '-' + edp[2].padStart(2,'0');
                 if (!checkDateMap[dk]) checkDateMap[dk] = [];
-                checkDateMap[dk].push({ player: p, rax: (ev.atRarityEarnings || 0) || Math.round((ev.earnings || 0) * (otdGetDerivedMult(p.sport, p.level) || OTD_LEVEL_MULTIPLIERS[p.level] || 1)) });
+                checkDateMap[dk].push({ player: p, rax: (ev.atRarityEarnings || 0) || Math.round((ev.earnings || 0) * otdGetMult(p)) });
             });
         });
 
-        var checkMult = otdGetDerivedMult(otdCheckPlayer.sport, otdCheckPlayer.level) || OTD_LEVEL_MULTIPLIERS[otdCheckPlayer.level] || 1;
+        var checkMult = otdGetMult(otdCheckPlayer) || 1;
         otdCheckEarnings.forEach(function(e) {
             var dp = (e.day || '').split('T')[0].split('-');
             if (dp.length !== 3) return;
@@ -4641,8 +4652,8 @@
 
         var q = otdCarouselSearch.toLowerCase();
         var sorted = otdPlayers.slice().sort(function(a, b) {
-            var ta = a.baseTotal != null ? Math.round(a.baseTotal * (otdGetDerivedMult(a.sport, a.level) || OTD_LEVEL_MULTIPLIERS[a.level] || 1)) : 0;
-            var tb = b.baseTotal != null ? Math.round(b.baseTotal * (otdGetDerivedMult(b.sport, b.level) || OTD_LEVEL_MULTIPLIERS[b.level] || 1)) : 0;
+            var ta = a.baseTotal != null ? Math.round(a.baseTotal * otdGetMult(a)) : 0;
+            var tb = b.baseTotal != null ? Math.round(b.baseTotal * otdGetMult(b)) : 0;
             if (!ta && a.earnings) a.earnings.forEach(function(e) { ta += e.atRarityEarnings || 0; });
             if (!tb && b.earnings) b.earnings.forEach(function(e) { tb += e.atRarityEarnings || 0; });
             return tb - ta;
@@ -4667,10 +4678,7 @@
             var total = 0;
             if (!isLoading) {
                 if (p.baseTotal != null) {
-                    var cardMult = p.sport === 'ufc'
-                        ? (UFC_LEVEL_MULTIPLIERS[p.level] || OTD_LEVEL_MULTIPLIERS[p.level] || 1)
-                        : (OTD_LEVEL_MULTIPLIERS[p.level] || 1);
-                    total = Math.round(p.baseTotal * cardMult);
+                    total = Math.round(p.baseTotal * otdGetMult(p));
                 } else if (p.earnings) {
                     p.earnings.forEach(function(e) { total += e.atRarityEarnings || 0; });
                 }
@@ -4895,7 +4903,7 @@
             .then(function(d) {
                 if (!d.ok) { entry.earnings = []; otdDateMapDirty = true; renderOtdChips(); renderOtdResults(); return; }
                 if (entry.baseTotal === null && d.baseTotal != null) entry.baseTotal = d.baseTotal;
-                entry.earnings = otdApplyMultiplier(d.earnings || [], level, sport);
+                entry.earnings = otdApplyMultiplier(d.earnings || [], level, sport, et);
                 otdDateMapDirty = true;
                 // First player loaded: jump calendar to nearest upcoming claim date
                 var loadedCount = otdPlayers.filter(function(p) { return p.earnings && p.earnings.length; }).length;
