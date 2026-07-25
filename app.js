@@ -4512,7 +4512,7 @@
                 var monthDay = parts.length === 3 ? (MONTH_NAMES[parseInt(parts[1], 10) - 1] + ' ' + parseInt(parts[2], 10)) : d.day;
                 // Build combined sorted list: existing entries + new card, sorted by Rax desc
                 var allCards = d.entries.map(function(ent) {
-                    return { name: ent.player.name, rax: ent.rax || 0, level: ent.player.levelLabel || '', isNew: false, id: String(ent.player.id || ''), sport: ent.player.sport || sport, entityType: ent.player.entityType || 'player', season: ent.player.season || '', passId: String(ent.player.passId || '') };
+                    return { name: ent.player.name, rax: ent.rax || 0, level: ent.player.levelLabel || '', isNew: false, isSim: !!(ent.player.isAdded), id: String(ent.player.id || ''), sport: ent.player.sport || sport, entityType: ent.player.entityType || 'player', season: ent.player.season || '', passId: String(ent.player.passId || '') };
                 });
                 allCards.push({ name: otdCheckPlayer.name, rax: d.newRax || 0, level: otdCheckPlayer.levelLabel || '', isNew: true, id: String(otdCheckPlayer.id || ''), sport: otdCheckPlayer.sport, entityType: otdCheckPlayer.entityType || 'player', season: otdCheckPlayer.season || '', passId: '' });
                 allCards.sort(function(a, b) { return b.rax - a.rax; });
@@ -4521,10 +4521,11 @@
                     var claimed = idx < limit;
                     var color = claimed ? '#22c55e' : '#ef5350';
                     var newBadge = c.isNew ? ' <span style="background:#4f6ef7;color:#fff;font-size:9px;font-weight:700;padding:1px 4px;border-radius:3px;vertical-align:middle">NEW</span>' : '';
+                    var simBadge = c.isSim ? '<span style="display:inline-block;font-size:8px;font-weight:700;color:#fff;background:#f97316;padding:1px 4px;border-radius:3px;letter-spacing:.4px;margin-left:4px;vertical-align:middle">SIM</span>' : '';
                     var seasonTag = c.season ? '<span style="font-size:9px;color:var(--muted2);margin-left:4px">' + escHtml(otdFormatSeason(c.sport, c.season)) + '</span>' : '';
                     var nameEl = (c.id && !c.isNew)
-                        ? '<button onclick="otdOpenCardLink(\'' + c.id + '\',\'' + c.sport + '\',\'' + c.entityType + '\',\'\',\'' + c.passId + '\')" class="otd-link-btn" style="color:' + color + ';font-weight:500;font-size:12px;padding:0;text-align:left">' + escHtml(c.name) + '</button>' + seasonTag
-                        : '<span style="color:' + color + ';font-weight:700">' + escHtml(c.name) + newBadge + '</span>' + seasonTag;
+                        ? '<button onclick="otdOpenCardLink(\'' + c.id + '\',\'' + c.sport + '\',\'' + c.entityType + '\',\'\',\'' + c.passId + '\')" class="otd-link-btn" style="color:' + color + ';font-weight:500;font-size:12px;padding:0;text-align:left">' + escHtml(c.name) + '</button>' + simBadge + seasonTag
+                        : '<span style="color:' + color + ';font-weight:700">' + escHtml(c.name) + newBadge + '</span>' + simBadge + seasonTag;
                     var raxEl = '<button onclick="otdOpenPerfLink(\'' + c.id + '\',\'' + c.sport + '\',\'' + c.entityType + '\',\'\',\'' + c.season + '\',\'\')" class="otd-link-btn" style="color:' + color + ';font-family:var(--mono);font-size:12px">' + (c.rax || 0).toLocaleString() + '</button>';
                     return '<div style="display:flex;justify-content:space-between;align-items:center;padding:2px 0;border-bottom:1px solid var(--border2)">' +
                         nameEl + (c.isNew ? newBadge : '') +
@@ -5553,7 +5554,7 @@
                     ? '<span style="display:inline-flex;align-items:center;gap:0;cursor:pointer" title="Change rarity">' + rarSel + '<span style="font-size:8px;color:rgba(255,255,255,.75);line-height:1;pointer-events:none;user-select:none;margin-left:1px">↕</span></span>'
                     : '';
                 var isSimPass = !!(e.player.isAdded);
-                var simBadge = isSimPass ? '<span style="display:inline-block;font-size:8px;font-weight:700;color:#fff;background:#7c3aed;padding:1px 5px;border-radius:3px;letter-spacing:.4px;margin-left:4px;vertical-align:middle">SIM</span>' : '';
+                var simBadge = isSimPass ? '<span style="display:inline-block;font-size:8px;font-weight:700;color:#fff;background:#f97316;padding:1px 5px;border-radius:3px;letter-spacing:.4px;margin-left:4px;vertical-align:middle">SIM</span>' : '';
                 var tile = '<div class="otd-day-entry" style="border-color:' + rc + '55">' +
                     thumb +
                     '<div class="otd-entry-tile-body">' +
@@ -5661,6 +5662,7 @@
                     var sportColor = g.sport === '3rd-slot' ? '#9c27b0' : 'var(--muted)';
                     var lbl = (OTD_LEVEL_OPTIONS.find(function(o){return o.value===w.player.level;})||{}).label || '';
                     var yr = escHtml(otdFormatSeason(w.player.sport, w.player.season));
+                    var ovlSimBadge = w.player.isAdded ? '<span style="display:inline-block;font-size:8px;font-weight:700;color:#fff;background:#f97316;padding:1px 5px;border-radius:3px;letter-spacing:.4px;margin-left:4px;vertical-align:middle">SIM</span>' : '';
                     var linkDay = w.origDay || dk;
                     var pid = w.player.passId || '';
                     var eid = String(w.player.id || '');
@@ -5674,6 +5676,7 @@
                             '<span style="font-family:var(--mono);font-size:10px;color:var(--muted);white-space:nowrap;margin-right:6px">' + escHtml(dateStr) + '</span>' +
                             '<span style="font-weight:600;color:var(--fg)">' + escHtml(w.player.name) + '</span>' +
                             (lbl ? '<span style="font-size:9px;background:' + (w.player.rarityColor||'var(--muted)')+';color:#fff;border-radius:3px;padding:1px 4px;margin-left:5px;font-weight:700">' + escHtml(lbl) + '</span>' : '') +
+                            ovlSimBadge +
                             '<span style="font-size:10px;color:var(--muted);margin-left:5px">' + yr + '</span>' +
                             '<span style="font-size:9px;color:' + sportColor + ';margin-left:5px;font-weight:600">' + escHtml(sportLabel) + '</span>' +
                         '</div>' +
