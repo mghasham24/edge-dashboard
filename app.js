@@ -3124,13 +3124,22 @@
         38:240, 39:250
     };
     // Returns the true RS multiplier for a sport+level pair by scanning loaded real passes.
-    // Falls back to the hardcoded table when no real pass at that level exists.
+    // Exact match wins. If only a different level of the same sport is found, interpolates
+    // using the ratio between that pass's real mult and the NBA table value at its level.
+    // Falls back to the hardcoded table when no real pass for that sport exists at all.
     function otdGetDerivedMult(sport, level) {
+        var anyRef = null;
         for (var i = 0; i < otdPlayers.length; i++) {
             var p = otdPlayers[i];
-            if (!p.isAdded && p.sport === sport && p._origLevel === level && p._origMultiplier) {
-                return parseFloat(p._origMultiplier);
-            }
+            if (p.isAdded || p.sport !== sport || !p._origMultiplier) continue;
+            if (p._origLevel === level) return parseFloat(p._origMultiplier);
+            if (!anyRef) anyRef = p;
+        }
+        if (anyRef) {
+            var refReal = parseFloat(anyRef._origMultiplier);
+            var refTable = OTD_LEVEL_MULTIPLIERS[anyRef._origLevel] || 1;
+            var targetTable = OTD_LEVEL_MULTIPLIERS[level] || 1;
+            return Math.max(1, Math.round(targetTable * refReal / refTable));
         }
         return OTD_LEVEL_MULTIPLIERS[level] || 0;
     }
