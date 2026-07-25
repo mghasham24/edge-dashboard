@@ -4233,8 +4233,6 @@
                 otdCheckEarnings.forEach(function(e) {
                     var dp = (e.day || '').split('T')[0].split('-');
                     if (dp.length !== 3) return;
-                    var origYear = parseInt(dp[0], 10);
-                    if (origYear >= otdCalYear) return;
                     if (!otdCheckBaseTotal) earnTotal += e.atRarityEarnings || 0;
                     earnDays++;
                 });
@@ -4410,14 +4408,18 @@
         var totalDays = 0;
         var overlapDays = [];
         var wastedCount = 0;
+        // Earning year = year after the season (2026 season earns OTD in 2027)
+        var firstEvDp = (otdCheckEarnings[0] && otdCheckEarnings[0].day || '').split('T')[0].split('-');
+        var checkEarnYear = firstEvDp.length === 3 ? parseInt(firstEvDp[0], 10) + 1 : otdCalYear;
 
         var checkMult = OTD_LEVEL_MULTIPLIERS[otdCheckPlayer.level] || 1;
         otdCheckEarnings.forEach(function(e) {
             var dp = (e.day || '').split('T')[0].split('-');
             if (dp.length !== 3) return;
             var origYear = parseInt(dp[0], 10);
-            if (origYear >= otdCalYear) return;
-            var dayKey = String(otdCalYear) + '-' + dp[1].padStart(2,'0') + '-' + dp[2].padStart(2,'0');
+            // Events earn OTD on the anniversary one year later
+            var earnYear = origYear + 1;
+            var dayKey = String(earnYear) + '-' + dp[1].padStart(2,'0') + '-' + dp[2].padStart(2,'0');
             totalDays++;
             // Exclude the check player itself from existing entries — same card can't conflict with itself.
             // Uses both ID and name comparison since search/passes APIs may return different entity IDs.
@@ -4461,7 +4463,7 @@
             '<div style="font-size:12px;font-weight:700;color:' + summaryColor + ';margin-bottom:4px">' + summaryText + '</div>' +
             '<div style="font-size:11px;color:var(--muted2);margin-bottom:10px">' +
                 escHtml(otdCheckPlayer.name) + ' · ' + sport.toUpperCase() + ' ' + otdFormatSeason(sport, otdCheckPlayer.season) + ' ' + escHtml(otdCheckPlayer.levelLabel) +
-                ' · ' + totalDays + ' earning days this year · claim limit: ' + limit + '/sport/day' +
+                ' · ' + totalDays + ' earning days in ' + checkEarnYear + ' · claim limit: ' + limit + '/sport/day' +
             '</div>';
 
         if (realConflicts.length > 0) {
