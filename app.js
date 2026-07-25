@@ -3123,9 +3123,18 @@
         29:185, 30:190, 31:196, 32:202, 33:208, 34:214, 35:220, 36:226, 37:233,
         38:240, 39:250
     };
+    // UFC uses a completely different multiplier scale — hardcoded from RS probe data.
+    // Gaps (levels 5, 10-12, 15, 20, 34) are extrapolated from the surrounding pattern.
+    var UFC_LEVEL_MULTIPLIERS = {
+        1:1, 2:1.4, 3:1.6, 4:2,
+        5:5, 6:5.4, 7:5.8, 8:6.2, 9:6.7,
+        10:10, 11:10.2, 12:10.4, 13:10.6, 14:10.8, 15:11, 16:11.2, 17:11.4, 18:11.6, 19:12,
+        20:20, 21:20.3, 22:20.6, 23:20.9, 24:21.2, 25:21.5, 26:21.8, 27:22.1, 28:22.4, 29:22.7,
+        30:23, 31:23.3, 32:23.6, 33:23.9, 34:24.2, 35:24.5
+    };
     // Returns the exact RS multiplier for a sport+level pair.
-    // Priority: 1) D1-probed table (exact, all levels)  2) loaded real pass (_origMultiplier)
-    //           3) hardcoded NBA/NHL table fallback.
+    // Priority: 1) D1-probed table (exact)  2) loaded real pass (_origMultiplier)
+    //           3) UFC hardcoded table  4) NBA/NHL fallback table
     function otdGetDerivedMult(sport, level) {
         var dbKey = sport + ':' + level;
         if (otdSportMultipliers[dbKey]) return otdSportMultipliers[dbKey];
@@ -3135,15 +3144,7 @@
                 return parseFloat(p._origMultiplier);
             }
         }
-        // Single-level gap: extrapolate from two adjacent known levels for same sport
-        if (sport) {
-            var a1 = otdSportMultipliers[sport + ':' + (level + 1)];
-            var a2 = otdSportMultipliers[sport + ':' + (level + 2)];
-            if (a1 && a2) { var ext = a1 - (a2 - a1); if (ext > 0) return ext; }
-            var b1 = otdSportMultipliers[sport + ':' + (level - 1)];
-            var b2 = otdSportMultipliers[sport + ':' + (level - 2)];
-            if (b1 && b2) { var ext2 = b1 + (b1 - b2); if (ext2 > 0) return ext2; }
-        }
+        if (sport === 'ufc') return UFC_LEVEL_MULTIPLIERS[level] || 0;
         return OTD_LEVEL_MULTIPLIERS[level] || 0;
     }
     function otdApplyMultiplier(earningsArr, level, sport) {
