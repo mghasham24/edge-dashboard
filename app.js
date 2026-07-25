@@ -4453,6 +4453,7 @@
                 var newTotal = existingEntries.length + 1;
                 var isOver = newTotal > limit;
                 var wasted = false;
+                var dayWastedRax = 0;
                 if (isOver) {
                     // Build sorted combined list to find highest-earning wasted card
                     var combined = existingEntries.map(function(ent) { return ent.rax || 0; });
@@ -4460,18 +4461,20 @@
                     combined.sort(function(a, b) { return b - a; });
                     // Only a real conflict if the best wasted card earns > 199 Rax
                     wasted = combined[limit] > 199;
+                    if (wasted) combined.slice(limit).forEach(function(r) { if (r > 199) dayWastedRax += r; });
                 }
                 if (wasted) wastedCount++;
-                if (isOver) overlapDays.push({ day: dayKey, entries: existingEntries, total: newTotal, wasted: wasted, newRax: newRax });
+                if (isOver) overlapDays.push({ day: dayKey, entries: existingEntries, total: newTotal, wasted: wasted, newRax: newRax, wastedRax: dayWastedRax });
             }
         });
 
         overlapDays.sort(function(a, b) { return a.day < b.day ? -1 : 1; });
 
         var realConflicts = overlapDays.filter(function(d) { return d.wasted; });
+        var totalWastedRax = realConflicts.reduce(function(s, d) { return s + (d.wastedRax || 0); }, 0);
         var summaryColor = wastedCount > 0 ? '#ef5350' : '#22c55e';
         var summaryText = wastedCount > 0
-            ? wastedCount + ' day' + (wastedCount > 1 ? 's' : '') + ' with a wasted claim over 199 Rax'
+            ? wastedCount + ' day' + (wastedCount > 1 ? 's' : '') + ' with a wasted claim · ' + totalWastedRax.toLocaleString() + ' Rax lost'
             : 'No significant conflicts — safe to buy (' + totalDays + ' earning days)';
 
         var html = '<div style="border-top:1px solid var(--border2);padding-top:10px">' +
@@ -4492,7 +4495,7 @@
                 });
                 allCards.push({ name: otdCheckPlayer.name, rax: d.newRax || 0, level: otdCheckPlayer.levelLabel || '', isNew: true });
                 allCards.sort(function(a, b) { return b.rax - a.rax; });
-                allCards = allCards.filter(function(c, idx) { return idx < limit || c.rax >= 200; });
+                allCards = allCards.filter(function(c, idx) { return idx < limit || c.rax >= 200 || c.isNew; });
                 var cardRows = allCards.map(function(c, idx) {
                     var claimed = idx < limit;
                     var color = claimed ? '#22c55e' : '#ef5350';
