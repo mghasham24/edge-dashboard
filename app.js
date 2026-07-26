@@ -4908,26 +4908,22 @@
             var medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '';
             var rankDisp = medal ? medal : '<span style="color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums">' + (i + 1) + '</span>';
             var nameHtml = p.name ? escHtml(p.name) : '<span style="color:var(--muted);font-size:11px">' + escHtml(p.playerId) + '</span>';
-            var ownersHtml = p.owners ? p.owners : '<span style="color:var(--muted);opacity:.4">—</span>';
+            var baseRaxHtml = p.total != null ? p.total.toLocaleString() : '<span style="color:var(--muted);opacity:.4">—</span>';
+            var passCountHtml = p.passCount != null ? Number(p.passCount).toLocaleString() : '<span style="color:var(--muted);opacity:.4">—</span>';
             var iconicHtml = p.iconic ? p.iconic : '<span style="color:var(--muted);opacity:.4">—</span>';
-            var seasonsHtml = otdLeaderboardAllTime && p.seasons && p.seasons.length
-                ? '<td style="padding:9px 10px;color:var(--muted);font-size:11px;white-space:nowrap">' + escHtml(p.seasons.sort().join(', ')) + '</td>'
-                : '';
             return '<tr style="border-bottom:1px solid var(--border)">' +
                 '<td style="padding:9px 10px;text-align:right;width:36px">' + rankDisp + '</td>' +
                 '<td style="padding:9px 10px;font-weight:600;font-size:13px">' + nameHtml + '</td>' +
-                '<td style="padding:9px 10px;text-align:right;font-variant-numeric:tabular-nums;font-size:13px;font-weight:700;color:var(--accent);white-space:nowrap">' + p.total.toLocaleString() + '</td>' +
-                seasonsHtml +
-                '<td style="padding:9px 10px;text-align:right;font-variant-numeric:tabular-nums;font-size:12px;color:var(--fg)">' + ownersHtml + '</td>' +
+                '<td style="padding:9px 10px;text-align:right;font-variant-numeric:tabular-nums;font-size:13px;font-weight:700;color:var(--accent);white-space:nowrap">' + baseRaxHtml + '</td>' +
+                '<td style="padding:9px 10px;text-align:right;font-variant-numeric:tabular-nums;font-size:12px;color:var(--fg)">' + passCountHtml + '</td>' +
                 '<td style="padding:9px 10px;text-align:right;font-variant-numeric:tabular-nums;font-size:12px;color:var(--fg)">' + iconicHtml + '</td>' +
             '</tr>';
         }).join('');
 
-        var seasonColHeader = otdLeaderboardAllTime ? '<th style="' + thStyle + ';text-align:left">SEASONS</th>' : '';
         el.innerHTML =
             '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px">' +
                 '<div style="font-size:12px;color:var(--muted)">' + filtered.length + ' player' + (filtered.length === 1 ? '' : 's') + '</div>' +
-                '<div style="font-size:11px;color:var(--muted);opacity:.6">Base Rax · owners = RaxEdge users</div>' +
+                '<div style="font-size:11px;color:var(--muted);opacity:.6">Base Rax · Owners from RS · Iconic from RaxEdge</div>' +
             '</div>' +
             '<div style="overflow-x:auto">' +
             '<table style="width:100%;border-collapse:collapse">' +
@@ -4935,7 +4931,6 @@
                     '<th style="' + thStyle + ';text-align:right;width:36px">#</th>' +
                     '<th style="' + thStyle + ';text-align:left">PLAYER</th>' +
                     '<th style="' + thStyle + ';text-align:right">BASE RAX</th>' +
-                    seasonColHeader +
                     '<th style="' + thStyle + ';text-align:right">OWNERS</th>' +
                     '<th style="' + thStyle + ';text-align:right">AT ICONIC</th>' +
                 '</tr></thead>' +

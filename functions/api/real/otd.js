@@ -1024,8 +1024,7 @@ export async function onRequestGet(context) {
     const isAlwaysAllTime = !!RS_SEASON_NORM_LB[sportKey];
     const effectiveAllTime = allTime || isAlwaysAllTime;
 
-    // Bump to v2 — de-dupes same player cached at multiple rarity levels
-    const lbCacheKey = `otd_lb_v2_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
+    const lbCacheKey = `otd_lb_v3_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
     if (url.searchParams.get('force') !== '1') {
       try {
         const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(lbCacheKey).first();
@@ -1035,33 +1034,50 @@ export async function onRequestGet(context) {
       } catch(e) {}
     }
 
-    // Strip the _l{number} rarity suffix some cache keys have (e.g. "660271_l20" → "660271")
-    // These occur when earnings were fetched using the card's level-suffixed RS ID.
-    function baseId(id) { return id.replace(/_l\d+$/, ''); }
+    function bId(id) { return String(id).replace(/_l\d+$/, ''); }
 
-    // Build player name map (keyed by baseId) from all pass caches + player-info cache
+    // ── Fetch from RS shop endpoint ──────────────────────────────────────────
+    // /userpassshop/{sport}/season/{season}/entity/{entityType}/section/hotseason?before=0
+    // Returns passes ranked by RS hotseason metric. `value` = total pass owners on RS platform.
+    // Paginate (cursor = last `id` of previous page) until we have 100 or no more.
+    const shopPasses = [];
+    if (!effectiveAllTime) {
+      let cursor = 0;
+      for (let page = 0; page < 10 && shopPasses.length < 100; page++) {
+        try {
+          const shopUrl = `${RS_BASE}/userpassshop/${sportKey}/season/${season}/entity/${entityType}/section/hotseason?before=${cursor}`;
+          const c = new AbortController();
+          const t = setTimeout(() => c.abort(), 8000);
+          let shopRes;
+          try { shopRes = await fetch(shopUrl, { headers, signal: c.signal }); }
+          finally { clearTimeout(t); }
+          if (!shopRes.ok) break;
+          const shopData = await shopRes.json();
+          const items = shopData.passes || shopData.items || shopData.cards || (Array.isArray(shopData) ? shopData : []);
+          if (!items.length) break;
+          for (const p of items) shopPasses.push(p);
+          const last = items[items.length - 1];
+          cursor = last.id || last.entityId || 0;
+          if (!shopData.hasMore && shopData.hasMore !== undefined) break;
+          if (items.length < 10) break; // likely last page
+        } catch(e) { break; }
+      }
+    }
+
+    // ── Build name map + iconic sets from D1 pass caches ────────────────────
     const nameMap = {};
+    const iconicSets = {}; // baseId → Set of RaxEdge userIds at level >= 20
     const passRows = await env.DB.prepare("SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE 'otd_passes_all_v9_%'").all().catch(() => ({ results: [] }));
-
-    // Also count owners and Iconic holders from pass caches
-    // ownerSets[baseId] = Set of userId strings (unique users who own this player)
-    // iconicSets[baseId] = Set of userId strings at level >= 20
-    const ownerSets = {};
-    const iconicSets = {};
-
     for (const row of (passRows.results || [])) {
       const userId = row.cache_key.replace('otd_passes_all_v9_', '');
       try {
         const pd = JSON.parse(row.data);
         for (const p of (pd.passes || [])) {
           if (!p.playerId) continue;
-          const bid = baseId(p.playerId);
+          const bid = bId(p.playerId);
           if (p.playerName && !nameMap[bid]) nameMap[bid] = p.playerName;
-          // Filter for owner counts: must match sport; season only matters when not alltime
           if (p.sport !== sportKey) continue;
           if (!effectiveAllTime && String(p.season) !== season) continue;
-          if (!ownerSets[bid]) ownerSets[bid] = new Set();
-          ownerSets[bid].add(userId);
           if ((p.level || 0) >= 20) {
             if (!iconicSets[bid]) iconicSets[bid] = new Set();
             iconicSets[bid].add(userId);
@@ -1070,36 +1086,19 @@ export async function onRequestGet(context) {
       } catch(e) {}
     }
 
-    // Supplement names from player-info cache
-    const piRows = await env.DB.prepare("SELECT data FROM odds_cache WHERE cache_key LIKE 'otd_player_%'").all().catch(() => ({ results: [] }));
-    for (const row of (piRows.results || [])) {
-      try {
-        const pd = JSON.parse(row.data);
-        const p = pd.player;
-        if (p && p.id && p.name && p.name.trim() && !nameMap[baseId(p.id)]) {
-          nameMap[baseId(p.id)] = p.name.trim();
-        }
-      } catch(e) {}
-    }
+    // ── Batch-load D1 earnings for baseTotal ────────────────────────────────
+    const earningsPrefix = `otd_earnings_v10_${entityType}_${sportKey}_`;
+    const earningsPattern = effectiveAllTime ? earningsPrefix + '%' : earningsPrefix + season + '_%';
+    const earningsRows = await env.DB.prepare('SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE ?').bind(earningsPattern).all().catch(() => ({ results: [] }));
 
-    // Query earnings entries for this sport/season
-    const prefix = `otd_earnings_v10_${entityType}_${sportKey}_`;
-    const pattern = effectiveAllTime ? prefix + '%' : prefix + season + '_%';
-    const earningsRows = await env.DB.prepare('SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE ?').bind(pattern).all().catch(() => ({ results: [] }));
-
-    // De-duplicate: same player may be cached under "id", "id_l20", "id_l10" etc.
-    // Track max total per baseId+season, then sum across seasons.
-    const seasonMaxes = {}; // `${baseId}:${season}` → max baseTotal seen
-    const meta = {};        // baseId → { seasons[] }
-
+    const seasonMaxes = {}; // `${baseId}:${seasonPart}` → max baseTotal (de-dupe _l20 etc.)
     for (const row of (earningsRows.results || [])) {
-      const rest = row.cache_key.slice(prefix.length); // "{season}_{rawId}"
+      const rest = row.cache_key.slice(earningsPrefix.length);
       const uidx = rest.indexOf('_');
       if (uidx < 0) continue;
       const seasonPart = rest.slice(0, uidx);
-      const rawId = rest.slice(uidx + 1);
-      if (!rawId) continue;
-      const bid = baseId(rawId);
+      const bid = bId(rest.slice(uidx + 1));
+      if (!bid) continue;
       try {
         const data = JSON.parse(row.data);
         const total = typeof data.baseTotal === 'number' && data.baseTotal > 0
@@ -1108,34 +1107,51 @@ export async function onRequestGet(context) {
         if (!total) continue;
         const sk = bid + ':' + seasonPart;
         if (!seasonMaxes[sk] || total > seasonMaxes[sk]) seasonMaxes[sk] = total;
-        if (!meta[bid]) meta[bid] = { seasons: [] };
-        if (!meta[bid].seasons.includes(seasonPart)) meta[bid].seasons.push(seasonPart);
       } catch(e) {}
     }
-
-    // Sum per-season maxes into a final total per player
-    const totals = {}; // baseId → total
-    for (const [sk, maxTotal] of Object.entries(seasonMaxes)) {
+    const earningsTotals = {}; // baseId → summed baseTotal across seasons
+    for (const [sk, v] of Object.entries(seasonMaxes)) {
       const bid = sk.slice(0, sk.indexOf(':'));
-      totals[bid] = (totals[bid] || 0) + maxTotal;
+      earningsTotals[bid] = (earningsTotals[bid] || 0) + v;
     }
 
-    const list = Object.entries(totals)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 100)
-      .map(([bid, total], i) => ({
-        rank: i + 1,
-        playerId: bid,
-        name: nameMap[bid] || null,
-        total,
-        seasons: (meta[bid] || {}).seasons || [],
-        owners: ownerSets[bid] ? ownerSets[bid].size : 0,
-        iconic: iconicSets[bid] ? iconicSets[bid].size : 0,
-        sport: sportKey,
-        entityType,
-      }));
+    // ── Build final list ─────────────────────────────────────────────────────
+    let list;
+    if (shopPasses.length > 0) {
+      // Shop-based: comprehensive RS data, `value` = RS pass owner count
+      list = shopPasses.slice(0, 100).map((p, i) => {
+        const bid = bId(String(p.id || p.entityId || ''));
+        const name = p.label || p.playerName || p.name || p.displayName || nameMap[bid] || null;
+        if (name && !nameMap[bid]) nameMap[bid] = name;
+        return {
+          rank: i + 1,
+          playerId: bid,
+          name,
+          total: earningsTotals[bid] || null,
+          passCount: p.value != null ? p.value : null,
+          iconic: iconicSets[bid] ? iconicSets[bid].size : 0,
+          sport: sportKey,
+          entityType: p.entityType || entityType,
+        };
+      });
+    } else {
+      // D1 fallback (alltime or shop fetch failed)
+      list = Object.entries(earningsTotals)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 100)
+        .map(([bid, total], i) => ({
+          rank: i + 1,
+          playerId: bid,
+          name: nameMap[bid] || null,
+          total,
+          passCount: null,
+          iconic: iconicSets[bid] ? iconicSets[bid].size : 0,
+          sport: sportKey,
+          entityType,
+        }));
+    }
 
-    const body = JSON.stringify({ ok: true, leaderboard: list, sport: sportKey, allTime: effectiveAllTime });
+    const body = JSON.stringify({ ok: true, leaderboard: list, sport: sportKey, allTime: effectiveAllTime, fromShop: shopPasses.length > 0 });
     await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
       .bind(lbCacheKey, body, now).run().catch(() => {});
     return new Response(body, { headers: { 'Content-Type': 'application/json' } });
