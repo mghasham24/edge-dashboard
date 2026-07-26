@@ -4062,7 +4062,7 @@
             var pId = String(p.passId || '');
             var CARD_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>';
 
-            var cardH = window.innerWidth <= 480 ? '130px' : '180px';
+            var cardH = window.innerWidth <= 480 ? '110px' : '180px';
             return '<div onclick="otdSelectPass(' + playerIdx + ')" style="position:relative;border-radius:10px;overflow:hidden;height:' + cardH + ';cursor:pointer;background:linear-gradient(160deg,' + rc + '55 0%,' + rc + '22 100%);border:' + (isSelected ? '2px solid ' + rc : '1px solid ' + rc + '55') + ';box-shadow:' + (isSelected ? '0 0 0 1px ' + rc + '66,0 0 12px ' + rc + '33' : 'none') + '">' +
                 // Card art background (abstract pattern/art, lowest layer)
                 (bgUrl ? '<img src="' + bgUrl + '" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;z-index:0" onerror="this.style.display=\'none\'">' : '') +
@@ -4124,7 +4124,7 @@
               '</div>'
             : '';
 
-        return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;padding-bottom:6px">' + cardHtmls.join('') + moreBtn + '</div>';
+        return '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding-bottom:6px">' + cardHtmls.join('') + moreBtn + '</div>';
     }
 
     function otdShowMoreOverlaps() {
