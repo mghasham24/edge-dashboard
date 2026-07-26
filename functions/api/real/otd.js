@@ -1028,7 +1028,7 @@ export async function onRequestGet(context) {
     const isAlwaysAllTime = !!RS_SEASON_NORM_LB[sportKey];
     const effectiveAllTime = allTime || isAlwaysAllTime;
 
-    const lbCacheKey = `otd_lb_v10_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
+    const lbCacheKey = `otd_lb_v11_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
     if (url.searchParams.get('force') !== '1') {
       try {
         const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(lbCacheKey).first();
@@ -1075,13 +1075,17 @@ export async function onRequestGet(context) {
       ? [[], await fetchShopSection('hotseason', 200, currentSeasonStr)]
       : await Promise.all([fetchShopSection('earningstotal', 200), fetchShopSection('hotseason', 500)]);
 
-    // For alltime: fetch 3 pages per year for 3 recent years → up to 180 names to seed nameMap
+    // For alltime: seed nameMap from all historically relevant seasons.
+    // 3 pages for recent 3 years (top 60 each), 1 page for older years (top 20 each).
+    // Golf goes back to 2015; all other sports go back to 2022.
     let allTimeNameItems = [];
     if (effectiveAllTime) {
       const currentYear = new Date().getFullYear();
+      const sportMinYear = sportKey === 'golf' ? 2015 : 2022;
       const nameFetches = [];
-      for (let y = currentYear; y >= currentYear - 2; y--) {
-        for (let pg = 0; pg < 3; pg++) {
+      for (let y = currentYear; y >= sportMinYear; y--) {
+        const numPages = y >= currentYear - 2 ? 3 : 1;
+        for (let pg = 0; pg < numPages; pg++) {
           const before = pg * 20;
           const u = `${RS_BASE}/userpassshop/${sportKey}/season/${y}/entity/${entityType}/section/earningstotal?before=${before}`;
           const c = new AbortController();
@@ -1235,8 +1239,8 @@ export async function onRequestGet(context) {
         if (d1NameMap[item.playerId]) item.name = d1NameMap[item.playerId];
       }
 
-      // Step 2: RS API fetch for remaining unknowns (players only, cap 60 — all parallel, 5s timeout each)
-      const stillUnknown = list.filter(item => !item.name && item.entityType !== 'team').slice(0, 60);
+      // Step 2: RS API fetch for remaining unknowns (players only, cap 120 — all parallel, 5s timeout each)
+      const stillUnknown = list.filter(item => !item.name && item.entityType !== 'team').slice(0, 120);
       if (stillUnknown.length > 0) {
         const rsFetches = stillUnknown.map(async item => {
           const c = new AbortController();
