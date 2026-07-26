@@ -675,9 +675,9 @@ export async function onRequestGet(context) {
       if (l === 'uncommon')  return 2;
       if (l === 'rare')      return 3;
       if (l === 'epic')      return 4;
-      const m = l.match(/^(legendary|mystic|iconic)\s+(\d+)$/);
+      const m = l.match(/^(legendary|mystic|iconic)(?:\s+(\d+))?$/);
       if (!m) return 0;
-      const n = parseInt(m[2], 10);
+      const n = parseInt(m[2] || '1', 10);
       if (m[1] === 'legendary') return 4 + n;
       if (m[1] === 'mystic')    return 9 + n;
       if (m[1] === 'iconic')    return 19 + n;
@@ -826,9 +826,9 @@ export async function onRequestGet(context) {
         if (l === 'uncommon')  return 2;
         if (l === 'rare')      return 3;
         if (l === 'epic')      return 4;
-        const m = l.match(/^(legendary|mystic|iconic)\s+(\d+)$/);
+        const m = l.match(/^(legendary|mystic|iconic)(?:\s+(\d+))?$/);
         if (!m) return 0;
-        const n = parseInt(m[2], 10);
+        const n = parseInt(m[2] || '1', 10);
         if (m[1] === 'legendary') return 4 + n;
         if (m[1] === 'mystic')    return 9 + n;
         if (m[1] === 'iconic')    return 19 + n;
