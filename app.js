@@ -4924,10 +4924,12 @@
             var medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '';
             var rankDisp = medal || '<span style="color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums">' + (i + 1) + '</span>';
 
-            var rsUrl = 'https://www.realapp.com/passes/' + encodeURIComponent(sport) + '/' + encodeURIComponent(p.playerId);
+            var pid = parseInt(p.playerId, 10);
+            var rsUrl = pid ? rsEntityUrl(p.entityType || 'player', sport, pid) : '#';
             var displayName = p.name ? escHtml(p.name) : escHtml(p.playerId);
+            var yearHtml = p.season ? ' <span style="font-size:11px;font-weight:400;color:var(--muted);opacity:.6">' + escHtml(p.season) + '</span>' : '';
             var posHtml = p.position ? ' <span style="font-size:10px;font-weight:600;color:var(--muted);background:var(--bg3);border:1px solid var(--border2);border-radius:3px;padding:1px 5px;vertical-align:middle">' + escHtml(p.position) + '</span>' : '';
-            var nameHtml = '<a href="' + rsUrl + '" target="_blank" rel="noopener" style="color:var(--fg);text-decoration:none;font-weight:600" onmouseover="this.style.color=\'var(--accent)\'" onmouseout="this.style.color=\'var(--fg)\'">' + displayName + '</a>' + posHtml;
+            var nameHtml = '<a href="' + rsUrl + '" target="_blank" rel="noopener" style="color:var(--fg);text-decoration:none;font-weight:600" onmouseover="this.style.color=\'var(--accent)\'" onmouseout="this.style.color=\'var(--fg)\'">' + displayName + '</a>' + yearHtml + posHtml;
 
             var baseRaxHtml = p.total != null
                 ? RAX_SVG + p.total.toLocaleString()

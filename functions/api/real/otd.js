@@ -1028,7 +1028,7 @@ export async function onRequestGet(context) {
     const isAlwaysAllTime = !!RS_SEASON_NORM_LB[sportKey];
     const effectiveAllTime = allTime || isAlwaysAllTime;
 
-    const lbCacheKey = `otd_lb_v5_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
+    const lbCacheKey = `otd_lb_v6_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
     if (url.searchParams.get('force') !== '1') {
       try {
         const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(lbCacheKey).first();
@@ -1143,6 +1143,7 @@ export async function onRequestGet(context) {
           rank: i + 1,
           playerId: bid,
           name,
+          season,
           position: p.position || p.pos || null,
           total: p.value != null ? Number(p.value) : (earningsTotals[bid] || null),
           passCount: ownerMap[bid] != null ? ownerMap[bid] : null,
@@ -1152,17 +1153,26 @@ export async function onRequestGet(context) {
         };
       });
     } else {
-      // D1 fallback (alltime or shop fetch failed)
-      list = Object.entries(earningsTotals)
-        .sort((a, b) => b[1] - a[1])
+      // D1 fallback (alltime) — one row per (player, season), NOT summed
+      list = Object.entries(seasonMaxes)
+        .map(([sk, total]) => {
+          const colonIdx = sk.indexOf(':');
+          const bid = sk.slice(0, colonIdx);
+          const seasonPart = sk.slice(colonIdx + 1);
+          return { bid, season: seasonPart, total };
+        })
+        .filter(r => r.bid && r.total > 0)
+        .sort((a, b) => b.total - a.total)
         .slice(0, 100)
-        .map(([bid, total], i) => ({
+        .map((r, i) => ({
           rank: i + 1,
-          playerId: bid,
-          name: nameMap[bid] || null,
-          total,
+          playerId: r.bid,
+          name: nameMap[r.bid] || null,
+          season: r.season,
+          position: null,
+          total: r.total,
           passCount: null,
-          iconic: iconicSets[bid] ? iconicSets[bid].size : 0,
+          iconic: iconicSets[r.bid] ? iconicSets[r.bid].size : 0,
           sport: sportKey,
           entityType,
         }));
