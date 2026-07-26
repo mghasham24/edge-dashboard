@@ -98,6 +98,7 @@ const ICONIC_TARGETS = [
 // playerId matches the `playerId` field in the listing response.
 const PLAY_CARD_TARGETS = [
   { name: 'Derek Simpson', playerId: '5105858', sport: 'ncaam', season: 2026 },
+  { name: 'Tylen Riley',   playerId: '5178210', sport: 'ncaam', season: 2026 },
 ];
 
 function buildPlayCardUrl(playerId, sport, season, offset, beforeEndsAt) {
