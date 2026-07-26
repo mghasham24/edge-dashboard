@@ -4062,7 +4062,8 @@
             var pId = String(p.passId || '');
             var CARD_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>';
 
-            return '<div onclick="otdSelectPass(' + playerIdx + ')" style="position:relative;border-radius:10px;overflow:hidden;height:180px;cursor:pointer;background:linear-gradient(160deg,' + rc + '55 0%,' + rc + '22 100%);border:' + (isSelected ? '2px solid ' + rc : '1px solid ' + rc + '55') + ';box-shadow:' + (isSelected ? '0 0 0 1px ' + rc + '66,0 0 12px ' + rc + '33' : 'none') + '">' +
+            var cardH = window.innerWidth <= 480 ? '130px' : '180px';
+            return '<div onclick="otdSelectPass(' + playerIdx + ')" style="position:relative;border-radius:10px;overflow:hidden;height:' + cardH + ';cursor:pointer;background:linear-gradient(160deg,' + rc + '55 0%,' + rc + '22 100%);border:' + (isSelected ? '2px solid ' + rc : '1px solid ' + rc + '55') + ';box-shadow:' + (isSelected ? '0 0 0 1px ' + rc + '66,0 0 12px ' + rc + '33' : 'none') + '">' +
                 // Card art background (abstract pattern/art, lowest layer)
                 (bgUrl ? '<img src="' + bgUrl + '" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;z-index:0" onerror="this.style.display=\'none\'">' : '') +
                 // Emoji watermark when no card art
@@ -4921,8 +4922,9 @@
         var thStyle = 'padding:8px 10px;font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.05em;white-space:nowrap';
 
         var rows = filtered.map(function(p, i) {
-            var medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '';
-            var rankDisp = medal || '<span style="color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums">' + (i + 1) + '</span>';
+            var actualRank = p.rank || (i + 1);
+            var medal = actualRank === 1 ? '🥇' : actualRank === 2 ? '🥈' : actualRank === 3 ? '🥉' : '';
+            var rankDisp = medal || '<span style="color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums">' + actualRank + '</span>';
 
             var pid = parseInt(p.playerId, 10);
             var rsUrl = pid ? rsEntityUrl(p.entityType || 'player', sport, pid) : '#';
