@@ -1028,7 +1028,7 @@ export async function onRequestGet(context) {
     const isAlwaysAllTime = !!RS_SEASON_NORM_LB[sportKey];
     const effectiveAllTime = allTime || isAlwaysAllTime;
 
-    const lbCacheKey = `otd_lb_v7_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
+    const lbCacheKey = `otd_lb_v8_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
     if (url.searchParams.get('force') !== '1') {
       try {
         const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(lbCacheKey).first();
@@ -1043,7 +1043,7 @@ export async function onRequestGet(context) {
     async function fetchShopSection(section) {
       const results = [];
       let cursor = 0;
-      for (let page = 0; page < 10 && results.length < 100; page++) {
+      for (let page = 0; page < 10 && results.length < 200; page++) {
         try {
           const u = `${RS_BASE}/userpassshop/${sportKey}/season/${season}/entity/${entityType}/section/${section}?before=${cursor}`;
           const c = new AbortController();
@@ -1161,7 +1161,7 @@ export async function onRequestGet(context) {
     if (shopPasses.length > 0) {
       // earningstotal section: `value` = season base earnings total direct from RS
       // hotseason section: `value` = total RS platform owner count (from ownerMap)
-      list = shopPasses.slice(0, 100).map((p, i) => {
+      list = shopPasses.slice(0, 200).map((p, i) => {
         const bid = bId(String(p.id || p.entityId || ''));
         const name = p.label || p.playerName || p.name || p.displayName || nameMap[bid] || null;
         if (name && !nameMap[bid]) nameMap[bid] = name;
@@ -1189,7 +1189,7 @@ export async function onRequestGet(context) {
         })
         .filter(r => r.bid && r.total > 0)
         .sort((a, b) => b.total - a.total)
-        .slice(0, 100)
+        .slice(0, 200)
         .map((r, i) => ({
           rank: i + 1,
           playerId: r.bid,

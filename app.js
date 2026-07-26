@@ -4757,7 +4757,8 @@
                 return '<option value="' + s.key + '"' + (s.key === otdLeaderboardSport ? ' selected' : '') + '>' + escHtml(s.label) + '</option>';
             }).join('');
             var lbSeasonOpts = '<option value=""' + (otdLeaderboardAllTime ? ' selected' : '') + '>All Time</option>';
-            for (var _y = new Date().getFullYear(); _y >= 2022; _y--) {
+            var lbSeasonMin = otdLeaderboardSport === 'golf' ? 2015 : 2022;
+            for (var _y = new Date().getFullYear(); _y >= lbSeasonMin; _y--) {
                 lbSeasonOpts += '<option value="' + _y + '"' + (!otdLeaderboardAllTime && String(_y) === otdLeaderboardSeason ? ' selected' : '') + '>' + _y + '</option>';
             }
             var selStyle = 'background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;padding:8px 6px;border-radius:6px;cursor:pointer';
