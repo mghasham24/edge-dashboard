@@ -96,15 +96,50 @@ export async function onRequestPost({ request, env }) {
       const status = obj.status;
       const plan   = (status === 'active' || status === 'trialing') ? 'pro' : 'free';
       const proExpiresAt = (plan === 'pro' && obj.current_period_end) ? obj.current_period_end : null;
+      const billingInterval = (obj.items?.data?.[0]?.price?.recurring?.interval === 'year') ? 'annual' : 'monthly';
       await env.DB.prepare(
-        'UPDATE users SET plan=?, stripe_sub_id=?, pro_expires_at=? WHERE stripe_customer_id=?'
-      ).bind(plan, obj.id, proExpiresAt, obj.customer).run();
+        'UPDATE users SET plan=?, stripe_sub_id=?, pro_expires_at=?, billing_interval=? WHERE stripe_customer_id=?'
+      ).bind(plan, obj.id, proExpiresAt, billingInterval, obj.customer).run();
 
       // Trial converted to paid — reward referrer now (not at trial start)
       const prevAttrs = event.data.previous_attributes || {};
       if (prevAttrs.status === 'trialing' && status === 'active') {
         const interval = obj.items?.data?.[0]?.price?.recurring?.interval || 'month';
         await rewardReferrerForCustomer(obj.customer, obj.metadata, env.DB, interval);
+      }
+
+      // Monthly → annual upgrade: immediately charge any pending proration invoice items
+      // so they don't pile up on next year's renewal alongside the full annual charge.
+      if (billingInterval === 'annual' && status === 'active') {
+        const prevUser = await env.DB.prepare(
+          'SELECT billing_interval FROM users WHERE stripe_customer_id=?'
+        ).bind(obj.customer).first();
+        if (prevUser && prevUser.billing_interval === 'monthly') {
+          try {
+            const auth = { 'Authorization': 'Bearer ' + env.STRIPE_SECRET_KEY };
+            const pendingRes = await fetch(
+              'https://api.stripe.com/v1/invoiceitems?customer=' + obj.customer + '&pending=true&limit=10',
+              { headers: auth }
+            );
+            const pending = await pendingRes.json();
+            if (pending.data && pending.data.length > 0) {
+              const invRes = await fetch('https://api.stripe.com/v1/invoices', {
+                method: 'POST',
+                headers: { ...auth, 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ customer: obj.customer }).toString()
+              });
+              const inv = await invRes.json();
+              if (inv.id) {
+                await fetch('https://api.stripe.com/v1/invoices/' + inv.id + '/finalize', {
+                  method: 'POST', headers: auth
+                });
+                await fetch('https://api.stripe.com/v1/invoices/' + inv.id + '/pay', {
+                  method: 'POST', headers: auth
+                });
+              }
+            }
+          } catch(e) {}
+        }
       }
       break;
     }
