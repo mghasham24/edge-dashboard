@@ -4925,7 +4925,7 @@
             var rankDisp = medal || '<span style="color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums">' + (i + 1) + '</span>';
 
             var pid = parseInt(p.playerId, 10);
-            var rsUrl = pid ? rsEntityUrl(p.entityType || 'player', sport, pid) + (p.season ? '?season=' + encodeURIComponent(p.season) : '') : '#';
+            var rsUrl = pid ? rsEntityUrl(p.entityType || 'player', sport, pid) : '#';
             var displayName = p.name ? escHtml(p.name) : escHtml(p.playerId);
             var yearHtml = p.season ? ' <span style="font-size:11px;font-weight:400;color:var(--muted);opacity:.6">' + escHtml(p.season) + '</span>' : '';
             var posHtml = p.position ? ' <span style="font-size:10px;font-weight:600;color:var(--muted);background:var(--bg3);border:1px solid var(--border2);border-radius:3px;padding:1px 5px;vertical-align:middle">' + escHtml(p.position) + '</span>' : '';
