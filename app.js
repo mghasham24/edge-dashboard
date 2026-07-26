@@ -3246,7 +3246,14 @@
     var otdColorIdx = 0;
     var otdCalYear = new Date().getFullYear();
     var otdCalMonth = new Date().getMonth(); // 0-indexed
-    var otdMode = 'username'; // 'player' | 'username'
+    var otdMode = 'username'; // 'player' | 'username' | 'leaderboard'
+    var otdLeaderboard = [];
+    var otdLeaderboardLoading = false;
+    var otdLeaderboardSport = 'mlb';
+    var otdLeaderboardSeason = String(new Date().getFullYear());
+    var otdLeaderboardAllTime = false;
+    var otdLeaderboardEntityType = 'player';
+    var otdLeaderboardSearch = '';
     var otdSelectedUser = null; // { id, username, displayName }
     var otdUserSearchTimer = null;
     var otdLoadingPasses = false;
@@ -4743,7 +4750,28 @@
 
         // Input section changes based on mode
         var inputSection;
-        if (otdMode === 'username') {
+        if (otdMode === 'leaderboard') {
+            var lbSportOpts = OTD_SPORTS_LIST.map(function(s) {
+                return '<option value="' + s.key + '"' + (s.key === otdLeaderboardSport ? ' selected' : '') + '>' + escHtml(s.label) + '</option>';
+            }).join('');
+            var lbSeasonOpts = '<option value=""' + (otdLeaderboardAllTime ? ' selected' : '') + '>All Time</option>';
+            for (var _y = new Date().getFullYear(); _y >= 2022; _y--) {
+                lbSeasonOpts += '<option value="' + _y + '"' + (!otdLeaderboardAllTime && String(_y) === otdLeaderboardSeason ? ' selected' : '') + '>' + _y + '</option>';
+            }
+            var selStyle = 'background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;padding:8px 6px;border-radius:6px;cursor:pointer';
+            inputSection =
+                '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:12px">' +
+                    '<select id="otd-lb-sport" onchange="otdLbFilterChange()" style="' + selStyle + '">' + lbSportOpts + '</select>' +
+                    '<select id="otd-lb-season" onchange="otdLbFilterChange()" style="' + selStyle + '">' + lbSeasonOpts + '</select>' +
+                    '<select id="otd-lb-entitytype" onchange="otdLbFilterChange()" style="' + selStyle + '">' +
+                        '<option value="player"' + (otdLeaderboardEntityType === 'player' ? ' selected' : '') + '>Players</option>' +
+                        '<option value="team"' + (otdLeaderboardEntityType === 'team' ? ' selected' : '') + '>Teams</option>' +
+                    '</select>' +
+                    '<input id="otd-lb-search" type="text" placeholder="Search by name…" value="' + escHtml(otdLeaderboardSearch) + '" ' +
+                        'oninput="otdLbSearchInput(this.value)" autocomplete="off" ' +
+                        'style="flex:1;min-width:140px;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px 10px;border-radius:6px">' +
+                '</div>';
+        } else if (otdMode === 'username') {
             inputSection =
                 '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:10px">' +
                     '<div style="position:relative;flex:1;min-width:180px">' +
@@ -4795,6 +4823,7 @@
             '<div style="display:flex;gap:3px;margin-bottom:14px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:3px;width:fit-content">' +
                 '<button onclick="otdSetMode(\'username\')" style="' + (otdMode === 'username' ? tabActive : tabInactive) + '">My RS Passes</button>' +
                 '<button onclick="otdSetMode(\'player\')" style="' + (otdMode === 'player' ? tabActive : tabInactive) + '">Search Players</button>' +
+                '<button onclick="otdSetMode(\'leaderboard\')" style="' + (otdMode === 'leaderboard' ? tabActive : tabInactive) + '">Top OTD</button>' +
             '</div>' +
             inputSection +
             '<div id="otd-search-err" style="display:none;font-size:12px;color:#ef5350;margin-bottom:8px"></div>' +
@@ -4805,10 +4834,111 @@
             '<div id="otd-check-wrap"></div>' +
             '<div id="otd-results"></div>';
 
-        renderOtdChips();
-        renderOtdCarousel();
-        renderOtdCheckWrap();
-        renderOtdResults();
+        if (otdMode === 'leaderboard') {
+            renderOtdLeaderboard();
+        } else {
+            renderOtdChips();
+            renderOtdCarousel();
+            renderOtdCheckWrap();
+            renderOtdResults();
+        }
+    }
+
+    function loadOtdLeaderboard() {
+        otdLeaderboardLoading = true;
+        renderOtdLeaderboard();
+        var qs = '?action=leaderboard&sport=' + encodeURIComponent(otdLeaderboardSport) +
+            '&season=' + encodeURIComponent(otdLeaderboardSeason) +
+            '&entityType=' + encodeURIComponent(otdLeaderboardEntityType) +
+            (otdLeaderboardAllTime ? '&alltime=1' : '');
+        fetch('/api/real/otd' + qs, { credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                otdLeaderboardLoading = false;
+                otdLeaderboard = (d.ok && d.leaderboard) ? d.leaderboard : [];
+                renderOtdLeaderboard();
+            })
+            .catch(function() {
+                otdLeaderboardLoading = false;
+                otdLeaderboard = [];
+                renderOtdLeaderboard();
+            });
+    }
+
+    function otdLbFilterChange() {
+        var sportEl = document.getElementById('otd-lb-sport');
+        var seasonEl = document.getElementById('otd-lb-season');
+        var etEl = document.getElementById('otd-lb-entitytype');
+        if (sportEl) otdLeaderboardSport = sportEl.value;
+        if (seasonEl) {
+            otdLeaderboardAllTime = !seasonEl.value;
+            if (seasonEl.value) otdLeaderboardSeason = seasonEl.value;
+        }
+        if (etEl) otdLeaderboardEntityType = etEl.value;
+        otdLeaderboard = [];
+        loadOtdLeaderboard();
+    }
+
+    function otdLbSearchInput(val) {
+        otdLeaderboardSearch = val;
+        renderOtdLeaderboard();
+    }
+
+    function renderOtdLeaderboard() {
+        var el = document.getElementById('otd-results');
+        if (!el || otdMode !== 'leaderboard') return;
+
+        if (otdLeaderboardLoading) {
+            el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);font-size:14px">Loading leaderboard…</div>';
+            return;
+        }
+
+        if (!otdLeaderboard.length) {
+            el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);font-size:13px">No earnings data cached for this filter yet.<br><span style="font-size:12px;margin-top:6px;display:block">Load player passes or search players to populate the leaderboard.</span></div>';
+            return;
+        }
+
+        var search = otdLeaderboardSearch.toLowerCase().trim();
+        var filtered = search ? otdLeaderboard.filter(function(p) {
+            return p.name && p.name.toLowerCase().includes(search);
+        }) : otdLeaderboard;
+
+        var RAX_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;opacity:.7"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
+        var RAX_ICON = '<svg width="11" height="11" viewBox="0 0 100 100" fill="currentColor" style="vertical-align:-1px;opacity:.8"><circle cx="50" cy="50" r="45" stroke="currentColor" stroke-width="8" fill="none"/><circle cx="50" cy="50" r="20" fill="currentColor"/></svg>';
+
+        var rows = filtered.map(function(p, i) {
+            var medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '';
+            var nameHtml = p.name
+                ? escHtml(p.name)
+                : '<span style="color:var(--muted);font-size:11px">ID:' + escHtml(p.playerId) + '</span>';
+            var seasonsHtml = otdLeaderboardAllTime && p.seasons && p.seasons.length
+                ? '<td style="padding:9px 8px;color:var(--muted);font-size:11px;white-space:nowrap">' + escHtml(p.seasons.join(', ')) + '</td>'
+                : '';
+            return '<tr style="border-bottom:1px solid var(--border)">' +
+                '<td style="padding:9px 8px;color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums;text-align:right;width:40px;white-space:nowrap">' + (medal || (i + 1)) + '</td>' +
+                '<td style="padding:9px 8px;font-weight:600;font-size:13px">' + nameHtml + '</td>' +
+                seasonsHtml +
+                '<td style="padding:9px 8px;text-align:right;font-variant-numeric:tabular-nums;font-size:13px;font-weight:700;color:var(--accent);white-space:nowrap">' + p.total.toLocaleString() + '</td>' +
+            '</tr>';
+        }).join('');
+
+        var seasonColHeader = otdLeaderboardAllTime ? '<th style="padding:8px;text-align:left;font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.05em">SEASONS</th>' : '';
+        el.innerHTML =
+            '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px">' +
+                '<div style="font-size:12px;color:var(--muted)">' + filtered.length + ' player' + (filtered.length === 1 ? '' : 's') + '</div>' +
+                '<div style="font-size:11px;color:var(--muted);opacity:.6">Base Rax — no rarity multiplier</div>' +
+            '</div>' +
+            '<div style="overflow-x:auto">' +
+            '<table style="width:100%;border-collapse:collapse">' +
+                '<thead><tr style="border-bottom:2px solid var(--border2)">' +
+                    '<th style="padding:8px;text-align:right;font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.05em;width:40px">#</th>' +
+                    '<th style="padding:8px;text-align:left;font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.05em">PLAYER</th>' +
+                    seasonColHeader +
+                    '<th style="padding:8px;text-align:right;font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.05em">BASE RAX</th>' +
+                '</tr></thead>' +
+                '<tbody>' + rows + '</tbody>' +
+            '</table>' +
+            '</div>';
     }
 
     function otdOnSearchInput(val) {
@@ -4941,6 +5071,9 @@
         otdSelectedUser = null;
         otdLoadingPasses = false;
         renderOtdPanel();
+        if (mode === 'leaderboard' && !otdLeaderboard.length && !otdLeaderboardLoading) {
+            loadOtdLeaderboard();
+        }
     }
 
     function otdClearAll() {

@@ -1013,5 +1013,108 @@ export async function onRequestGet(context) {
     return new Response(JSON.stringify({ ok: true, probed: Object.keys(comboMap).length, found: Object.keys(results).length, results, errors }, null, 2), { headers: { 'Content-Type': 'application/json' } });
   }
 
+  if (action === 'leaderboard') {
+    const sport = url.searchParams.get('sport') || 'mlb';
+    const season = url.searchParams.get('season') || String(new Date().getFullYear());
+    const allTime = url.searchParams.get('alltime') === '1';
+    const entityType = url.searchParams.get('entityType') || 'player';
+    const RS_SPORT_ALIAS_LB = { ncaabb: 'ncaam', mma: 'ufc' };
+    const RS_SEASON_NORM_LB = { ufc: 'alltime', mma: 'alltime' };
+    const sportKey = RS_SPORT_ALIAS_LB[sport] || sport;
+    // UFC always stores as 'alltime' regardless of season param
+    const isAlwaysAllTime = !!RS_SEASON_NORM_LB[sportKey];
+    const effectiveAllTime = allTime || isAlwaysAllTime;
+
+    const lbCacheKey = `otd_lb_v1_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
+    if (url.searchParams.get('force') !== '1') {
+      try {
+        const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(lbCacheKey).first();
+        if (cached && (now - cached.fetched_at) < 3600) {
+          return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
+        }
+      } catch(e) {}
+    }
+
+    // Build player name map from all pass caches
+    const nameMap = {};
+    try {
+      const passRows = await env.DB.prepare("SELECT data FROM odds_cache WHERE cache_key LIKE 'otd_passes_all_v9_%'").all();
+      for (const row of (passRows.results || [])) {
+        try {
+          const pd = JSON.parse(row.data);
+          for (const p of (pd.passes || [])) {
+            if (p.playerId && p.playerName && !nameMap[p.playerId]) {
+              nameMap[p.playerId] = { name: p.playerName };
+            }
+          }
+        } catch(e) {}
+      }
+    } catch(e) {}
+
+    // Supplement from player-info cache
+    try {
+      const piRows = await env.DB.prepare("SELECT data FROM odds_cache WHERE cache_key LIKE 'otd_player_%'").all();
+      for (const row of (piRows.results || [])) {
+        try {
+          const pd = JSON.parse(row.data);
+          const p = pd.player;
+          if (p && p.id && p.name && p.name.trim()) {
+            if (!nameMap[p.id]) nameMap[p.id] = {};
+            if (!nameMap[p.id].name) nameMap[p.id].name = p.name.trim();
+          }
+        } catch(e) {}
+      }
+    } catch(e) {}
+
+    // Query matching earnings entries
+    const prefix = `otd_earnings_v10_${entityType}_${sportKey}_`;
+    const pattern = effectiveAllTime ? prefix + '%' : prefix + season + '_%';
+    let earningsRows;
+    try {
+      earningsRows = await env.DB.prepare('SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE ?').bind(pattern).all();
+    } catch(e) { return fail(500, 'DB: ' + e.message); }
+
+    // Aggregate totals by playerId (sum across seasons for all-time)
+    const totals = {};
+    for (const row of (earningsRows.results || [])) {
+      const rest = row.cache_key.slice(prefix.length); // "{season}_{playerId}"
+      const uidx = rest.indexOf('_');
+      if (uidx < 0) continue;
+      const seasonPart = rest.slice(0, uidx);
+      const playerId = rest.slice(uidx + 1);
+      if (!playerId) continue;
+      try {
+        const data = JSON.parse(row.data);
+        const total = typeof data.baseTotal === 'number' && data.baseTotal > 0
+          ? data.baseTotal
+          : (data.earnings || []).reduce((s, e) => s + (e.earnings || 0), 0);
+        if (!total) continue;
+        if (!totals[playerId]) totals[playerId] = { playerId, total: 0, seasons: [] };
+        totals[playerId].total += total;
+        if (!totals[playerId].seasons.includes(seasonPart)) totals[playerId].seasons.push(seasonPart);
+      } catch(e) {}
+    }
+
+    const list = Object.values(totals)
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 100)
+      .map((item, i) => ({
+        rank: i + 1,
+        playerId: item.playerId,
+        name: (nameMap[item.playerId] || {}).name || null,
+        total: item.total,
+        seasons: item.seasons.sort(),
+        sport: sportKey,
+        entityType,
+      }));
+
+    const body = JSON.stringify({ ok: true, leaderboard: list, sport: sportKey, allTime: effectiveAllTime, cachedCount: (earningsRows.results || []).length });
+    try {
+      await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
+        .bind(lbCacheKey, body, now).run();
+    } catch(e) {}
+    return new Response(body, { headers: { 'Content-Type': 'application/json' } });
+  }
+
   return fail(400, 'Unknown action');
 }
