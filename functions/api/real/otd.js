@@ -665,6 +665,25 @@ export async function onRequestGet(context) {
     const golfSeasons = [];
     for (let y = 2021; y >= 2015; y--) golfSeasons.push(y);
 
+    // Parse RS rarityLabel strings like "Iconic 1", "Mystic 3", "Legendary 2" → our level number.
+    // This is the most reliable source: RS uses it in their own UI and it's unambiguous.
+    function rarityLabelToLevel(label) {
+      if (!label) return 0;
+      const l = label.toLowerCase().trim();
+      if (l === 'general')   return 0;
+      if (l === 'common')    return 1;
+      if (l === 'uncommon')  return 2;
+      if (l === 'rare')      return 3;
+      if (l === 'epic')      return 4;
+      const m = l.match(/^(legendary|mystic|iconic)\s+(\d+)$/);
+      if (!m) return 0;
+      const n = parseInt(m[2], 10);
+      if (m[1] === 'legendary') return 4 + n;
+      if (m[1] === 'mystic')    return 9 + n;
+      if (m[1] === 'iconic')    return 19 + n;
+      return 0;
+    }
+
     function rarityToLevelAll(rarity, rarityLevel) {
       const r = (rarity || '').toLowerCase();
       const rl = Math.max(1, parseInt(rarityLevel || 1, 10));
@@ -684,17 +703,24 @@ export async function onRequestGet(context) {
       const results = [];
       for (const p of raw) {
         const entity = p.entity || p.player || p.team || {};
+        const bi = p.boostInfo || {};
         const playerId = p.entityId || p.playerId || entity.id;
         const playerName = p.label
           || (entity.firstName && entity.lastName ? (entity.firstName + ' ' + entity.lastName).trim() : null)
           || entity.name || entity.displayName || null;
         const sport = p.sport || entity.sport || null;
         const season = String(p.season || fallbackSeason);
-        // Team pass rarity may be nested inside the entity object rather than at the top level.
+        // RS does not expose rarity as a top-level string — it lives in boostInfo.
+        // boostInfo.rarityLabel ("Iconic 1", "Mystic 3", etc.) is the most reliable source.
+        // boostInfo.level is a direct numeric level (20 for Iconic 1) and matches our system.
+        // boostInfo.multiplier is the ACTIVE SEASON multiplier — intentionally ignored here.
+        const labelLevel = rarityLabelToLevel(bi.rarityLabel);
         const rarityStr = p.rarity || p.rarityName || entity.rarity || entity.rarityName || '';
         const raritySubLevel = p.rarityLevel || p.subLevel || entity.rarityLevel || entity.subLevel;
-        const rarityLevel = rarityToLevelAll(rarityStr, raritySubLevel);
-        const level = rarityLevel > 0 ? rarityLevel
+        const rarityStrLevel = rarityToLevelAll(rarityStr, raritySubLevel);
+        const level = labelLevel > 0 ? labelLevel
+          : rarityStrLevel > 0 ? rarityStrLevel
+          : (typeof bi.level === 'number' && bi.level > 0) ? bi.level
           : typeof p.level === 'number' ? p.level
           : typeof p.collectingLevel === 'number' ? p.collectingLevel
           : 0;
@@ -705,7 +731,7 @@ export async function onRequestGet(context) {
             avatar:           entity.avatar || null,
             entityAvatar:     p.entityAvatar || entity.entityAvatar || null,
             backgroundSource: p.backgroundSource || null,
-            rarityColor:      p.rarityColor || null,
+            rarityColor:      bi.rarityColor || p.rarityColor || null,
             serialNumber:     p.serialNumber || null,
           });
         }
@@ -792,17 +818,20 @@ export async function onRequestGet(context) {
         fetch(`${RS_BASE}/userpasses/${encodeURIComponent(userId)}/passes?entityType=team&season=${season}&sport=${sport}`, { headers })
       ]);
 
-      function rarityToLevel(rarity, rarityLevel) {
-        const r = (rarity || '').toLowerCase();
-        const rl = Math.max(1, parseInt(rarityLevel || 1, 10));
-        if (r === 'general')   return 0;
-        if (r === 'common')    return 1;
-        if (r === 'uncommon')  return 2;
-        if (r === 'rare')      return 3;
-        if (r === 'epic')      return 4;
-        if (r === 'legendary') return 4 + rl;
-        if (r === 'mystic')    return 9 + rl;
-        if (r === 'iconic')    return 19 + rl;
+      function rarityLabelToLvl(label) {
+        if (!label) return 0;
+        const l = label.toLowerCase().trim();
+        if (l === 'general')   return 0;
+        if (l === 'common')    return 1;
+        if (l === 'uncommon')  return 2;
+        if (l === 'rare')      return 3;
+        if (l === 'epic')      return 4;
+        const m = l.match(/^(legendary|mystic|iconic)\s+(\d+)$/);
+        if (!m) return 0;
+        const n = parseInt(m[2], 10);
+        if (m[1] === 'legendary') return 4 + n;
+        if (m[1] === 'mystic')    return 9 + n;
+        if (m[1] === 'iconic')    return 19 + n;
         return 0;
       }
 
@@ -812,12 +841,14 @@ export async function onRequestGet(context) {
           const raw = Array.isArray(data) ? data : (data.passes || data.items || data.collectingCards || []);
           return raw.map(p => {
             const entity = p.entity || p.player || p.team || {};
+            const bi = p.boostInfo || {};
             const playerId = p.entityId || p.playerId || entity.id;
             const playerName = p.label
               || (entity.firstName && entity.lastName ? (entity.firstName + ' ' + entity.lastName).trim() : null)
               || entity.name || entity.displayName || null;
-            const rl = rarityToLevel(p.rarity || p.rarityName, p.rarityLevel || p.subLevel);
-            const level = rl > 0 ? rl
+            const labelLevel = rarityLabelToLvl(bi.rarityLabel);
+            const level = labelLevel > 0 ? labelLevel
+              : (typeof bi.level === 'number' && bi.level > 0) ? bi.level
               : typeof p.level === 'number' ? p.level
               : typeof p.collectingLevel === 'number' ? p.collectingLevel
               : 0;
