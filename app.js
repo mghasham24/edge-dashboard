@@ -4915,7 +4915,7 @@
             : (OTD_LEVEL_MULTIPLIERS[otdLbRarityLevel] || 1);
         var rarityLabel = (OTD_LEVEL_OPTIONS.find(function(o) { return o.value === otdLbRarityLevel; }) || {}).label || 'Iconic 1';
 
-        var RAX_SVG = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;margin-right:2px;opacity:.7"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
+        var RAX_SVG = '<svg viewBox="0 0 512 512" style="width:11px;height:11px;vertical-align:-1px;display:inline-block;margin-right:2px;opacity:.75" aria-hidden="true"><g fill="currentColor"><path d="M128.1,141.1h356.8C442.8,57.4,356.1,0,256,0C192,0,133.5,23.5,88.6,62.3L128.1,141.1z"/><polygon points="355.3,193.2 154.2,193.2 254.7,394"/><path d="M413.6,193.2L253.9,512c0.7,0,1.4,0,2.1,0c141.4,0,256-114.6,256-256c0-21.7-2.7-42.7-7.8-62.8H413.6z"/><path d="M225.6,452.1L50.7,103C18.9,145.7,0,198.6,0,256c0,121.7,85,223.6,198.8,249.6L225.6,452.1z"/></g></svg>';
 
         var sport = otdLeaderboardSport;
         var thStyle = 'padding:8px 10px;font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.05em;white-space:nowrap';

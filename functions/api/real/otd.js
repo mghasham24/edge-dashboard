@@ -1028,7 +1028,7 @@ export async function onRequestGet(context) {
     const isAlwaysAllTime = !!RS_SEASON_NORM_LB[sportKey];
     const effectiveAllTime = allTime || isAlwaysAllTime;
 
-    const lbCacheKey = `otd_lb_v4_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
+    const lbCacheKey = `otd_lb_v5_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
     if (url.searchParams.get('force') !== '1') {
       try {
         const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(lbCacheKey).first();
@@ -1057,7 +1057,7 @@ export async function onRequestGet(context) {
           if (!items.length) break;
           for (const p of items) results.push(p);
           const last = items[items.length - 1];
-          cursor = last.id || last.entityId || 0;
+          cursor = results.length; // sequential offset: before=0, before=20, before=40...
           if (data.hasMore === false) break;
           if (items.length < 3) break; // real end of data
         } catch(e) { break; }
