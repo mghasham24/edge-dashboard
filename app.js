@@ -5071,24 +5071,12 @@
                 // Normalize + apply earnings to one entry; jump calendar to first upcoming date on first hit
                 var calJumped = false;
                 function applyEarningsEntry(entry, earningsArr, baseTotal) {
-                    var multNum = entry.multiplier ? parseFloat(entry.multiplier) : 0;
-                    // Derive multiplier from the first earnings record that has both fields.
-                    // RS returns atRarityEarnings at the card's actual level in the response.
-                    if (!multNum) {
-                        var floorForDeriv = OTD_LEVEL_MULTIPLIERS[entry._origLevel] || 1;
-                        for (var di = 0; di < earningsArr.length; di++) {
-                            var de = earningsArr[di];
-                            if (de.earnings > 0 && de.atRarityEarnings > 0 && de.atRarityEarnings !== de.earnings) {
-                                var derived = de.atRarityEarnings / de.earnings;
-                                if (derived >= floorForDeriv) {
-                                    multNum = derived;
-                                    entry.multiplier = derived;
-                                    entry._origMultiplier = derived;
-                                    break;
-                                }
-                            }
-                        }
-                    }
+                    var et = entry.entityType || 'player';
+                    var multNum = et === 'team'
+                        ? (OTD_TEAM_LEVEL_MULTIPLIERS[entry.level] || 1)
+                        : entry.sport === 'ufc'
+                            ? (UFC_LEVEL_MULTIPLIERS[entry.level] || OTD_LEVEL_MULTIPLIERS[entry.level] || 1)
+                            : (OTD_LEVEL_MULTIPLIERS[entry.level] || 1);
                     entry.earnings = earningsArr.map(function(e) {
                         var base = e.earnings || 0;
                         if (multNum && base) return Object.assign({}, e, { atRarityEarnings: Math.round(base * multNum) });
