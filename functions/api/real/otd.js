@@ -424,10 +424,14 @@ export async function onRequestGet(context) {
     const sportKey = RS_SPORT_ALIAS[sport] || sport;
     const seasonKey = RS_SEASON_NORMALIZE[sport] || season;
     const cacheKey = `otd_earnings_v10_${entityType}_${sportKey}_${seasonKey}_${id}`;
+    const currentYear = String(new Date().getFullYear());
+    const isActiveSeason = seasonKey === currentYear || seasonKey === 'alltime';
+    // Active season: 1-day TTL (earnings grow daily). Past seasons: permanent.
+    const earningsTTL = isActiveSeason ? 86400 : Infinity;
     if (!force) {
       try {
         const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
-        if (cached) {
+        if (cached && (!isActiveSeason || (now - cached.fetched_at) < earningsTTL)) {
           return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
         }
       } catch(e) {}
@@ -1028,7 +1032,7 @@ export async function onRequestGet(context) {
     if (url.searchParams.get('force') !== '1') {
       try {
         const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(lbCacheKey).first();
-        if (cached && (now - cached.fetched_at) < 3600) {
+        if (cached && (now - cached.fetched_at) < 604800) {
           return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
         }
       } catch(e) {}
