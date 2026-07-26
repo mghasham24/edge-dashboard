@@ -32,6 +32,12 @@ async function verifyStripeSignature(payload, sigHeader, secret) {
   });
 }
 
+// Stripe moved current_period_end from the top-level subscription object
+// into items.data[0] in newer API versions. Check both for compatibility.
+function subPeriodEnd(sub) {
+  return sub?.items?.data?.[0]?.current_period_end || sub?.current_period_end || null;
+}
+
 // ── Handler ───────────────────────────────────────────
 export async function onRequestPost({ request, env }) {
   const rawBody = await request.text();
@@ -62,7 +68,7 @@ export async function onRequestPost({ request, env }) {
     case 'customer.subscription.created': {
       const status = obj.status;
       const plan   = (status === 'active' || status === 'trialing') ? 'pro' : 'free';
-      const proExpiresAt = (plan === 'pro' && obj.current_period_end) ? obj.current_period_end : null;
+      const proExpiresAt = (plan === 'pro') ? subPeriodEnd(obj) : null;
 
       if (status === 'trialing') {
         // Run fingerprint check here AND in checkout.session.completed — Stripe does not
@@ -95,7 +101,7 @@ export async function onRequestPost({ request, env }) {
     case 'customer.subscription.updated': {
       const status = obj.status;
       const plan   = (status === 'active' || status === 'trialing') ? 'pro' : 'free';
-      const proExpiresAt = (plan === 'pro' && obj.current_period_end) ? obj.current_period_end : null;
+      const proExpiresAt = (plan === 'pro') ? subPeriodEnd(obj) : null;
       const billingInterval = (obj.items?.data?.[0]?.price?.recurring?.interval === 'year') ? 'annual' : 'monthly';
       await env.DB.prepare(
         'UPDATE users SET plan=?, stripe_sub_id=?, pro_expires_at=?, billing_interval=? WHERE stripe_customer_id=?'
@@ -169,7 +175,7 @@ export async function onRequestPost({ request, env }) {
 
         if (otherActiveSub) {
           // Still has a live sub — point stripe_sub_id to it and keep pro
-          const proExpiresAt = otherActiveSub.current_period_end || null;
+          const proExpiresAt = subPeriodEnd(otherActiveSub);
           await env.DB.prepare(
             'UPDATE users SET plan=\'pro\', stripe_sub_id=?, pro_expires_at=? WHERE stripe_customer_id=? AND stripe_sub_id=?'
           ).bind(otherActiveSub.id, proExpiresAt, obj.customer, obj.id).run();
@@ -216,7 +222,7 @@ export async function onRequestPost({ request, env }) {
             break; // abused — skip welcome email
           } else {
             // Activate pro immediately — don't rely on subscription.created webhook firing successfully
-            const proExpiresAt = subData.trial_end || subData.current_period_end || null;
+            const proExpiresAt = subData.trial_end || subPeriodEnd(subData) || null;
             await env.DB.prepare(
               'UPDATE users SET plan=\'pro\', stripe_sub_id=?, pro_expires_at=?, had_free_trial=1, billing_interval=? WHERE stripe_customer_id=?'
             ).bind(obj.subscription, proExpiresAt, billingInterval, obj.customer).run();
@@ -225,7 +231,7 @@ export async function onRequestPost({ request, env }) {
 
         if (isPaid) {
           // Immediate paid subscription — set pro and reward referrer
-          const proExpiresAt = subData && subData.current_period_end ? subData.current_period_end : null;
+          const proExpiresAt = subData ? subPeriodEnd(subData) : null;
           await env.DB.prepare(
             'UPDATE users SET plan=\'pro\', stripe_sub_id=?, pro_expires_at=?, billing_interval=? WHERE stripe_customer_id=?'
           ).bind(obj.subscription, proExpiresAt, billingInterval, obj.customer).run();
