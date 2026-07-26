@@ -4872,6 +4872,7 @@
         var sportEl = document.getElementById('otd-lb-sport');
         var seasonEl = document.getElementById('otd-lb-season');
         var etEl = document.getElementById('otd-lb-entitytype');
+        var prevSport = otdLeaderboardSport;
         if (sportEl) otdLeaderboardSport = sportEl.value;
         if (seasonEl) {
             otdLeaderboardAllTime = !seasonEl.value;
@@ -4879,6 +4880,8 @@
         }
         if (etEl) otdLeaderboardEntityType = etEl.value;
         otdLeaderboard = [];
+        // Re-render panel when sport changes so season dropdown rebuilds with correct year range
+        if (sportEl && otdLeaderboardSport !== prevSport) renderOtdPanel();
         loadOtdLeaderboard();
     }
 
