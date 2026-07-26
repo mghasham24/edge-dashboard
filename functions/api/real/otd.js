@@ -632,7 +632,6 @@ export async function onRequestGet(context) {
         entitySport: (p.entity||p.player||p.team||{}).sport,
         season: p.season,
         rarity: p.rarity || p.rarityName,
-        boostLevel: p.boostInfo && p.boostInfo.level,
         level: p.level,
         collectingLevel: p.collectingLevel,
       }));
@@ -689,11 +688,8 @@ export async function onRequestGet(context) {
           || entity.name || entity.displayName || null;
         const sport = p.sport || entity.sport || null;
         const season = String(p.season || fallbackSeason);
-        // boostInfo.level is 0 for Common cards (it tracks boost progress, not rarity).
-        // Always derive rarity level from the rarity string first; use boostInfo only for Rare+.
         const rarityLevel = rarityToLevelAll(p.rarity || p.rarityName, p.rarityLevel || p.subLevel);
         const level = rarityLevel > 0 ? rarityLevel
-          : (p.boostInfo && typeof p.boostInfo.level === 'number' && p.boostInfo.level > 0) ? p.boostInfo.level
           : typeof p.level === 'number' ? p.level
           : typeof p.collectingLevel === 'number' ? p.collectingLevel
           : 0;
@@ -704,9 +700,8 @@ export async function onRequestGet(context) {
             avatar:           entity.avatar || null,
             entityAvatar:     p.entityAvatar || entity.entityAvatar || null,
             backgroundSource: p.backgroundSource || null,
-            rarityColor:      (p.boostInfo && p.boostInfo.rarityColor) || null,
+            rarityColor:      p.rarityColor || null,
             serialNumber:     p.serialNumber || null,
-            multiplier:       (p.boostInfo && p.boostInfo.multiplier) || null,
           });
         }
       }
@@ -818,7 +813,6 @@ export async function onRequestGet(context) {
               || entity.name || entity.displayName || null;
             const rl = rarityToLevel(p.rarity || p.rarityName, p.rarityLevel || p.subLevel);
             const level = rl > 0 ? rl
-              : (p.boostInfo && typeof p.boostInfo.level === 'number' && p.boostInfo.level > 0) ? p.boostInfo.level
               : typeof p.level === 'number' ? p.level
               : typeof p.collectingLevel === 'number' ? p.collectingLevel
               : 0;
@@ -906,10 +900,8 @@ export async function onRequestGet(context) {
   }
 
   // Admin: probe the exact RS multiplier for every sport+level combo found in D1 pass caches.
-  // Pass 1: extract multipliers directly from pass data (p.multiplier = boostInfo.multiplier).
-  //         Works for all sports including UFC without hitting RS earnings API.
-  // Pass 2: for any combos still missing a multiplier, fetch RS earnings at that level
-  //         and compute atRarityEarnings/earnings. (UFC RS earnings returns 500 — skipped.)
+  // Derives multiplier from RS earnings API by computing atRarityEarnings/earnings for
+  // the first valid event. (UFC RS earnings returns 500 — skipped.)
   // Stores the complete table in D1 as meta:otd_sport_multipliers.
   if (action === 'probe_multipliers') {
     if (!session.is_admin) return fail(403, 'Admin only');
@@ -937,15 +929,8 @@ export async function onRequestGet(context) {
     const results = {};
     const errors = {};
 
-    // Pass 1: extract multiplier directly from pass data (p.multiplier = boostInfo.multiplier).
-    // This covers all sports without an RS API call — UFC included.
-    for (const [key, p] of Object.entries(comboMap)) {
-      const m = parseFloat(p.multiplier);
-      if (m > 0) results[key] = Math.round(m * 100) / 100;
-    }
-
-    // Pass 2: for combos where pass.multiplier was missing, derive from RS earnings API.
-    const needsEarnings = Object.entries(comboMap).filter(([k]) => !results[k]);
+    // Derive multiplier from RS earnings API for all combos.
+    const needsEarnings = Object.entries(comboMap);
     for (const [key, p] of needsEarnings) {
       const rsSport = RS_EARN_SPORT_MAP[p.sport] || p.sport;
       const rsSeason = RS_SEASON_NORM[p.sport] || p.season;

@@ -5061,7 +5061,7 @@
                     var lbl = (OTD_LEVEL_OPTIONS.find(function(o) { return o.value === pass.level; }) || {}).label || 'Level ' + pass.level;
                     var color = OTD_COLORS[otdColorIdx % OTD_COLORS.length];
                     otdColorIdx++;
-                    var entry = { id: pass.playerId, name: pass.playerName || ('Player ' + pass.playerId), sport: pass.sport, season: String(pass.season), level: pass.level, levelLabel: lbl, color: color, earnings: null, baseTotal: null, entityType: pass.entityType || 'player', passId: pass.passId || null, avatar: pass.avatar || pass.entityAvatar || '', backgroundSource: pass.backgroundSource || null, rarityColor: pass.rarityColor || null, serialNumber: pass.serialNumber || null, multiplier: pass.multiplier || null, _origLevel: pass.level, _origMultiplier: pass.multiplier || null };
+                    var entry = { id: pass.playerId, name: pass.playerName || ('Player ' + pass.playerId), sport: pass.sport, season: String(pass.season), level: pass.level, levelLabel: lbl, color: color, earnings: null, baseTotal: null, entityType: pass.entityType || 'player', passId: pass.passId || null, avatar: pass.avatar || pass.entityAvatar || '', backgroundSource: pass.backgroundSource || null, rarityColor: pass.rarityColor || null, serialNumber: pass.serialNumber || null, multiplier: null, _origLevel: pass.level, _origMultiplier: null };
                     otdPlayers.push(entry);
                 });
 
@@ -5072,9 +5072,8 @@
                 var calJumped = false;
                 function applyEarningsEntry(entry, earningsArr, baseTotal) {
                     var multNum = entry.multiplier ? parseFloat(entry.multiplier) : 0;
-                    // If pass didn't carry boostInfo.multiplier, derive it from the first
-                    // earnings record that has both fields (RS returns atRarityEarnings at
-                    // the card's actual level even when we request ?level=1).
+                    // Derive multiplier from the first earnings record that has both fields.
+                    // RS returns atRarityEarnings at the card's actual level in the response.
                     if (!multNum) {
                         var floorForDeriv = OTD_LEVEL_MULTIPLIERS[entry._origLevel] || 1;
                         for (var di = 0; di < earningsArr.length; di++) {
