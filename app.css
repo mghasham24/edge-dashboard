@@ -1541,13 +1541,12 @@
         gap: 1px;
     }
     .otd-day-tab-rax svg { width: 9px !important; height: 9px !important }
-    .otd-day-entries { display: flex; flex-wrap: wrap; gap: 10px; padding: 10px 14px }
+    .otd-day-entries { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 8px 10px }
     .otd-entry-wrap {
         display: flex;
         flex-direction: column;
-        width: 128px;
         gap: 4px;
-        flex-shrink: 0;
+        min-width: 0;
     }
     .otd-day-entry {
         display: flex;
@@ -1570,7 +1569,7 @@
     }
     .otd-entry-thumb {
         width: 100%;
-        height: 168px;
+        height: 120px;
         background-size: cover;
         background-position: center;
         position: relative;
