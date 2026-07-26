@@ -1028,7 +1028,7 @@ export async function onRequestGet(context) {
     const isAlwaysAllTime = !!RS_SEASON_NORM_LB[sportKey];
     const effectiveAllTime = allTime || isAlwaysAllTime;
 
-    const lbCacheKey = `otd_lb_v3_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
+    const lbCacheKey = `otd_lb_v4_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
     if (url.searchParams.get('force') !== '1') {
       try {
         const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(lbCacheKey).first();
@@ -1059,7 +1059,7 @@ export async function onRequestGet(context) {
           const last = items[items.length - 1];
           cursor = last.id || last.entityId || 0;
           if (data.hasMore === false) break;
-          if (items.length < 10) break; // likely last page
+          if (items.length < 3) break; // real end of data
         } catch(e) { break; }
       }
       return results;
@@ -1143,6 +1143,7 @@ export async function onRequestGet(context) {
           rank: i + 1,
           playerId: bid,
           name,
+          position: p.position || p.pos || null,
           total: p.value != null ? Number(p.value) : (earningsTotals[bid] || null),
           passCount: ownerMap[bid] != null ? ownerMap[bid] : null,
           iconic: iconicSets[bid] ? iconicSets[bid].size : 0,

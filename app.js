@@ -3254,6 +3254,7 @@
     var otdLeaderboardAllTime = false;
     var otdLeaderboardEntityType = 'player';
     var otdLeaderboardSearch = '';
+    var otdLbRarityLevel = 20; // default Iconic 1 for the AT RARITY column
     var otdSelectedUser = null; // { id, username, displayName }
     var otdUserSearchTimer = null;
     var otdLoadingPasses = false;
@@ -4884,6 +4885,11 @@
         renderOtdLeaderboard();
     }
 
+    function otdLbRarityChange(level) {
+        otdLbRarityLevel = parseInt(level, 10);
+        renderOtdLeaderboard();
+    }
+
     function renderOtdLeaderboard() {
         var el = document.getElementById('otd-results');
         if (!el || otdMode !== 'leaderboard') return;
@@ -4894,36 +4900,66 @@
         }
 
         if (!otdLeaderboard.length) {
-            el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);font-size:13px">No earnings data cached for this filter yet.<br><span style="font-size:12px;margin-top:6px;display:block">Load player passes or search players to populate the leaderboard.</span></div>';
+            el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);font-size:13px">No data yet for this filter.</div>';
             return;
         }
 
         var search = otdLeaderboardSearch.toLowerCase().trim();
         var filtered = search ? otdLeaderboard.filter(function(p) {
-            return p.name && p.name.toLowerCase().includes(search);
+            return (p.name && p.name.toLowerCase().includes(search)) || (p.position && p.position.toLowerCase().includes(search));
         }) : otdLeaderboard;
 
+        // Rarity multiplier for the AT RARITY column
+        var rarityMult = otdLeaderboardEntityType === 'team'
+            ? (OTD_TEAM_LEVEL_MULTIPLIERS[otdLbRarityLevel] || 1)
+            : (OTD_LEVEL_MULTIPLIERS[otdLbRarityLevel] || 1);
+        var rarityLabel = (OTD_LEVEL_OPTIONS.find(function(o) { return o.value === otdLbRarityLevel; }) || {}).label || 'Iconic 1';
+
+        var RAX_SVG = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;margin-right:2px;opacity:.7"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
+
+        var sport = otdLeaderboardSport;
         var thStyle = 'padding:8px 10px;font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.05em;white-space:nowrap';
+
         var rows = filtered.map(function(p, i) {
             var medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '';
-            var rankDisp = medal ? medal : '<span style="color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums">' + (i + 1) + '</span>';
-            var nameHtml = p.name ? escHtml(p.name) : '<span style="color:var(--muted);font-size:11px">' + escHtml(p.playerId) + '</span>';
-            var baseRaxHtml = p.total != null ? p.total.toLocaleString() : '<span style="color:var(--muted);opacity:.4">—</span>';
-            var passCountHtml = p.passCount != null ? Number(p.passCount).toLocaleString() : '<span style="color:var(--muted);opacity:.4">—</span>';
-            var iconicHtml = p.iconic ? p.iconic : '<span style="color:var(--muted);opacity:.4">—</span>';
+            var rankDisp = medal || '<span style="color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums">' + (i + 1) + '</span>';
+
+            var rsUrl = 'https://www.realapp.com/passes/' + encodeURIComponent(sport) + '/' + encodeURIComponent(p.playerId);
+            var displayName = p.name ? escHtml(p.name) : escHtml(p.playerId);
+            var posHtml = p.position ? ' <span style="font-size:10px;font-weight:600;color:var(--muted);background:var(--bg3);border:1px solid var(--border2);border-radius:3px;padding:1px 5px;vertical-align:middle">' + escHtml(p.position) + '</span>' : '';
+            var nameHtml = '<a href="' + rsUrl + '" target="_blank" rel="noopener" style="color:var(--fg);text-decoration:none;font-weight:600" onmouseover="this.style.color=\'var(--accent)\'" onmouseout="this.style.color=\'var(--fg)\'">' + displayName + '</a>' + posHtml;
+
+            var baseRaxHtml = p.total != null
+                ? RAX_SVG + p.total.toLocaleString()
+                : '<span style="color:var(--muted);opacity:.4">—</span>';
+
+            var passCountHtml = p.passCount != null
+                ? Number(p.passCount).toLocaleString()
+                : '<span style="color:var(--muted);opacity:.4">—</span>';
+
+            var atRarityHtml = p.total != null
+                ? RAX_SVG + Math.round(p.total * rarityMult).toLocaleString()
+                : '<span style="color:var(--muted);opacity:.4">—</span>';
+
             return '<tr style="border-bottom:1px solid var(--border)">' +
                 '<td style="padding:9px 10px;text-align:right;width:36px">' + rankDisp + '</td>' +
-                '<td style="padding:9px 10px;font-weight:600;font-size:13px">' + nameHtml + '</td>' +
+                '<td style="padding:9px 10px;font-size:13px">' + nameHtml + '</td>' +
                 '<td style="padding:9px 10px;text-align:right;font-variant-numeric:tabular-nums;font-size:13px;font-weight:700;color:var(--accent);white-space:nowrap">' + baseRaxHtml + '</td>' +
                 '<td style="padding:9px 10px;text-align:right;font-variant-numeric:tabular-nums;font-size:12px;color:var(--fg)">' + passCountHtml + '</td>' +
-                '<td style="padding:9px 10px;text-align:right;font-variant-numeric:tabular-nums;font-size:12px;color:var(--fg)">' + iconicHtml + '</td>' +
+                '<td style="padding:9px 10px;text-align:right;font-variant-numeric:tabular-nums;font-size:12px;color:var(--fg);white-space:nowrap">' + atRarityHtml + '</td>' +
             '</tr>';
         }).join('');
 
+        // Rarity dropdown in column header
+        var rarityOpts = OTD_LEVEL_OPTIONS.map(function(o) {
+            return '<option value="' + o.value + '"' + (o.value === otdLbRarityLevel ? ' selected' : '') + '>' + escHtml(o.label) + '</option>';
+        }).join('');
+        var raritySelect = '<select onchange="otdLbRarityChange(this.value)" style="background:transparent;border:none;color:var(--muted);font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.05em;cursor:pointer;padding:0;outline:none">' + rarityOpts + '</select>';
+
         el.innerHTML =
             '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px">' +
-                '<div style="font-size:12px;color:var(--muted)">' + filtered.length + ' player' + (filtered.length === 1 ? '' : 's') + '</div>' +
-                '<div style="font-size:11px;color:var(--muted);opacity:.6">Base Rax · Owners from RS · Iconic from RaxEdge</div>' +
+                '<div style="font-size:12px;color:var(--muted)">' + filtered.length + ' results</div>' +
+                '<div style="font-size:11px;color:var(--muted);opacity:.6">Owners from RS · Rarity Rax = base × table mult</div>' +
             '</div>' +
             '<div style="overflow-x:auto">' +
             '<table style="width:100%;border-collapse:collapse">' +
@@ -4932,7 +4968,7 @@
                     '<th style="' + thStyle + ';text-align:left">PLAYER</th>' +
                     '<th style="' + thStyle + ';text-align:right">BASE RAX</th>' +
                     '<th style="' + thStyle + ';text-align:right">OWNERS</th>' +
-                    '<th style="' + thStyle + ';text-align:right">AT ICONIC</th>' +
+                    '<th style="' + thStyle + ';text-align:right">' + raritySelect + '</th>' +
                 '</tr></thead>' +
                 '<tbody>' + rows + '</tbody>' +
             '</table>' +
