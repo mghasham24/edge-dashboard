@@ -89,8 +89,34 @@ const TARGETS = [
   { name: 'Mahomes',         entityId: '18890',   sport: 'nfl', season: 2023 },
 ];
 
+// Iconic pass targets — scans an entire sport for newly listed iconic passes (no player filter)
+const ICONIC_TARGETS = [
+  { sport: 'soccer', season: 2025 },
+];
+
+// Play card targets — alerts on any newly listed play (moment) card for these players.
+// playerId matches the `playerId` field in the listing response.
+const PLAY_CARD_TARGETS = [
+  { name: 'Derek Simpson', playerId: '5105858', sport: 'ncaam', season: 2026 },
+];
+
+function buildPlayCardUrl(playerId, sport, season, offset, beforeEndsAt) {
+  let url = `https://web.realapp.com/cardmarketplacelistings?cohort=all&filterEntityType=player&listingType=card&prestige=all&rarity=all&season=${season}&sport=${sport}&filterEntityId=${playerId}`;
+  if (offset) url += `&offset=${offset}`;
+  if (beforeEndsAt) url += `&beforeEndsAt=${encodeURIComponent(beforeEndsAt)}`;
+  return url;
+}
+
 function buildUrl(sport, entityId, season, offset, beforeEndsAt) {
   let url = `https://web.realapp.com/cardmarketplacelistings?cohort=all&filterEntityType=player&listingType=userpassfull&prestige=all&rarity=all&season=${season}&sport=${sport}&filterEntityId=${entityId}`;
+  if (offset) url += `&offset=${offset}`;
+  if (beforeEndsAt) url += `&beforeEndsAt=${encodeURIComponent(beforeEndsAt)}`;
+  return url;
+}
+
+// Iconic passes = rarity 7. No filterEntityId — scans all players for the sport.
+function buildIconicUrl(sport, season, offset, beforeEndsAt) {
+  let url = `https://web.realapp.com/cardmarketplacelistings?cohort=all&filterEntityType=player&listingType=userpassfull&prestige=all&rarity=7&season=${season}&sport=${sport}`;
   if (offset) url += `&offset=${offset}`;
   if (beforeEndsAt) url += `&beforeEndsAt=${encodeURIComponent(beforeEndsAt)}`;
   return url;
@@ -241,6 +267,100 @@ async function fetchListings(entityId, sport, season, token) {
   return all;
 }
 
+async function fetchIconicPage(sport, season, token, offset, beforeEndsAt) {
+  const res = await uFetch(buildIconicUrl(sport, season, offset, beforeEndsAt), {
+    dispatcher,
+    headers: {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+      'Origin': 'https://realsports.io',
+      'Referer': 'https://realsports.io/',
+      'Sec-Fetch-Dest': 'empty',
+      'Sec-Fetch-Mode': 'cors',
+      'Sec-Fetch-Site': 'cross-site',
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
+      'real-device-uuid': DEVICE_UUID,
+      'real-device-type': 'desktop_web',
+      'real-version': '34',
+      'real-request-token': hashidsEncode(Date.now()),
+      'real-auth-info': token,
+    },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) {
+    console.error('pass-scanner: iconic RS API error', res.status, sport);
+    return [];
+  }
+  const data = await res.json();
+  return data.listings || [];
+}
+
+async function fetchIconicListings(sport, season, token) {
+  const PAGE_SIZE = 10;
+  const MAX_PAGES = 10; // iconic listings can be numerous — scan more pages
+  const all = [];
+  let offset = 0;
+  let beforeEndsAt = null;
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    if (page > 0) await sleep(400);
+    const listings = await fetchIconicPage(sport, season, token, page > 0 ? offset : null, beforeEndsAt);
+    all.push(...listings);
+    if (listings.length < PAGE_SIZE) break;
+    beforeEndsAt = listings[listings.length - 1].endsAt;
+    offset += PAGE_SIZE;
+  }
+
+  return all;
+}
+
+async function fetchPlayCardPage(playerId, sport, season, token, offset, beforeEndsAt) {
+  const res = await uFetch(buildPlayCardUrl(playerId, sport, season, offset, beforeEndsAt), {
+    dispatcher,
+    headers: {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+      'Origin': 'https://realsports.io',
+      'Referer': 'https://realsports.io/',
+      'Sec-Fetch-Dest': 'empty',
+      'Sec-Fetch-Mode': 'cors',
+      'Sec-Fetch-Site': 'cross-site',
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Safari/605.1.15',
+      'real-device-uuid': DEVICE_UUID,
+      'real-device-type': 'desktop_web',
+      'real-version': '34',
+      'real-request-token': hashidsEncode(Date.now()),
+      'real-auth-info': token,
+    },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) {
+    console.error('pass-scanner: play card RS API error', res.status, 'for player', playerId);
+    return [];
+  }
+  const data = await res.json();
+  return (data.listings || []).filter(l => l.entityType === 'play');
+}
+
+async function fetchPlayCardListings(playerId, sport, season, token) {
+  const PAGE_SIZE = 10;
+  const MAX_PAGES = 5;
+  const all = [];
+  let offset = 0;
+  let beforeEndsAt = null;
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    if (page > 0) await sleep(400);
+    const listings = await fetchPlayCardPage(playerId, sport, season, token, page > 0 ? offset : null, beforeEndsAt);
+    all.push(...listings);
+    if (listings.length < PAGE_SIZE) break;
+    beforeEndsAt = listings[listings.length - 1].endsAt;
+    offset += PAGE_SIZE;
+  }
+
+  return all;
+}
+
 // ── Poll ──────────────────────────────────────────────────────────────────────
 
 async function poll() {
@@ -298,12 +418,107 @@ async function poll() {
     }
   }
 
+  // ── Iconic pass targets ──────────────────────────────────────────────────────
+  for (const target of ICONIC_TARGETS) {
+    await sleep(400);
+    let listings;
+    try {
+      listings = await fetchIconicListings(target.sport, target.season, token);
+    } catch(e) {
+      console.error('pass-scanner: iconic fetch error for', target.sport, e.message);
+      continue;
+    }
+
+    console.log('pass-scanner: iconic', target.sport, '→', listings.length, 'listing(s)');
+
+    for (const listing of listings) {
+      const id = String(listing.id || '');
+      if (!id || seenIds.has(id)) continue;
+      seenIds.add(id);
+
+      const name       = listing.card?.label || [listing.card?.entity?.firstName, listing.card?.entity?.lastName].filter(Boolean).join(' ') || '?';
+      const iconicLvl  = listing.card?.boostInfo?.rarityLabel || 'Iconic';
+      const rating     = listing.value || listing.card?.boostValue || '';
+      const serial     = listing.mintNumber ? `#${listing.mintNumber}` : '';
+      const curBid     = listing.currentBidAmount;
+      const buyNow     = listing.buyNowPrice;
+      const numBids    = listing.numBids || 0;
+      const endsStr    = formatEndsAt(listing.endsAt);
+      const sportEmoji = { golf: '⛳', soccer: '⚽', nfl: '🏈', nba: '🏀', nhl: '🏒', baseball: '⚾', ncaam: '🏀' }[target.sport] || '🎮';
+
+      const priceStr = curBid != null ? `Current bid: <b>${curBid.toLocaleString()} Rax</b>` : '';
+      const buyStr   = buyNow && buyNow !== curBid ? ` | Buy Now: ${buyNow.toLocaleString()} Rax` : (buyNow ? ` | Buy Now: ${buyNow.toLocaleString()} Rax` : '');
+      const bidsStr  = numBids > 0 ? ` | ${numBids} bid${numBids !== 1 ? 's' : ''}` : '';
+      const link     = `https://realapp.com/cards?sport=${target.sport}&season=${target.season}&rarity=7&listingType=userpassfull&sort=new`;
+
+      const priceForAvg = buyNow || curBid;
+      const avgRaw   = (priceForAvg && rating) ? Math.round(priceForAvg / Number(rating)) : null;
+      const avgVal   = avgRaw != null ? ` · ${avgRaw.toLocaleString()} Rax/pt` : '';
+
+      const line1 = `${name} · ${iconicLvl}${avgVal}`;
+      const line2 = [rating ? `${rating} rated` : '', serial].filter(Boolean).join(' · ');
+      const line3 = `${priceStr}${buyStr}${bidsStr}${endsStr}`;
+      const msg   = `${sportEmoji} <b>Iconic Pass Listed</b>\n${line1}${line2 ? '\n' + line2 : ''}\n${line3}\n<a href="${link}">View on RS ↗</a>`;
+
+      console.log(`pass-scanner: ICONIC ALERT ${name} | ${iconicLvl} | bid ${curBid} | buy ${buyNow}`);
+      await sendTelegram(msg);
+    }
+  }
+
+  // ── Play card targets ────────────────────────────────────────────────────────
+  for (const target of PLAY_CARD_TARGETS) {
+    await sleep(300);
+    let listings;
+    try {
+      listings = await fetchPlayCardListings(target.playerId, target.sport, target.season, token);
+    } catch(e) {
+      console.error('pass-scanner: play card fetch error for', target.name, e.message);
+      continue;
+    }
+
+    console.log('pass-scanner: play cards', target.name, '→', listings.length, 'listing(s)');
+
+    for (const listing of listings) {
+      const id = String(listing.id || '');
+      if (!id || seenIds.has(id)) continue;
+      seenIds.add(id);
+
+      const card       = listing.card || {};
+      const player     = card.primaryPlayer || {};
+      const playerName = [player.firstName, player.lastName].filter(Boolean).join(' ') || target.name;
+      const playLabel  = card.attributionInfo?.label || card.collectingCategoryLabel || 'Play';
+      const rarity     = card.rarityLabel || '';
+      const serial     = listing.mintNumber ? `#${listing.mintNumber}` : '';
+      const value      = listing.value || card.value || '';
+      const curBid     = listing.currentBidAmount;
+      const buyNow     = listing.buyNowPrice;
+      const numBids    = listing.numBids || 0;
+      const endsStr    = formatEndsAt(listing.endsAt);
+      const sportEmoji = { golf: '⛳', soccer: '⚽', nfl: '🏈', nba: '🏀', nhl: '🏒', baseball: '⚾', ncaam: '🏀' }[target.sport] || '🎮';
+
+      const priceStr = curBid != null ? `Current bid: <b>${curBid.toLocaleString()} Rax</b>` : '';
+      const buyStr   = buyNow ? ` | Buy Now: ${buyNow.toLocaleString()} Rax` : '';
+      const bidsStr  = numBids > 0 ? ` | ${numBids} bid${numBids !== 1 ? 's' : ''}` : '';
+      const link     = `https://realapp.com/cards?sport=${target.sport}&filterEntityId=${target.playerId}&listingType=card&sort=new`;
+
+      const line1 = `${playerName} · ${rarity}${serial ? ` · ${serial}` : ''} (${target.season})`;
+      const line2 = `${playLabel}${value ? ` · ${value} pts` : ''}`;
+      const line3 = `${priceStr}${buyStr}${bidsStr}${endsStr}`;
+      const msg   = `${sportEmoji} <b>Play Card Listed</b>\n${line1}\n${line2}\n${line3}\n<a href="${link}">View on RS ↗</a>`;
+
+      console.log(`pass-scanner: PLAY CARD ALERT ${playerName} | ${playLabel} | ${rarity} | bid ${curBid} | buy ${buyNow}`);
+      await sendTelegram(msg);
+    }
+  }
+
   saveSeen();
 }
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 
 loadSeen();
-await sendTelegram('✅ Pass scanner started. Targets: ' + TARGETS.map(t => t.name).join(', '));
+const iconicSummary = ICONIC_TARGETS.map(t => `${t.sport} ${t.season} iconic`).join(', ');
+const playCardSummary = PLAY_CARD_TARGETS.map(t => `${t.name} (${t.sport} ${t.season})`).join(', ');
+await sendTelegram('✅ Pass scanner started.\nPlayer targets: ' + TARGETS.map(t => t.name).join(', ') + '\nIconic targets: ' + iconicSummary + (playCardSummary ? '\nPlay card targets: ' + playCardSummary : ''));
 await poll();
 setInterval(poll, POLL_MS);
