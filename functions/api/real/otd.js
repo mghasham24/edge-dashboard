@@ -1028,7 +1028,7 @@ export async function onRequestGet(context) {
     const isAlwaysAllTime = !!RS_SEASON_NORM_LB[sportKey];
     const effectiveAllTime = allTime || isAlwaysAllTime;
 
-    const lbCacheKey = `otd_lb_v6_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
+    const lbCacheKey = `otd_lb_v7_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
     if (url.searchParams.get('force') !== '1') {
       try {
         const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(lbCacheKey).first();
@@ -1066,9 +1066,29 @@ export async function onRequestGet(context) {
     }
 
     // Fetch earningstotal (BASE RAX, primary ranking) and hotseason (OWNERS) in parallel
+    // For alltime: skip shop data (D1 used for rankings) but still fetch name-populating pages
     const [earningsPasses, ownerPasses] = effectiveAllTime
       ? [[], []]
       : await Promise.all([fetchShopSection('earningstotal'), fetchShopSection('hotseason')]);
+
+    // For alltime: fetch first page of recent seasons to get names for entities not in D1 pass cache
+    let allTimeNameItems = [];
+    if (effectiveAllTime) {
+      const currentYear = new Date().getFullYear();
+      const nameFetches = [];
+      for (let y = currentYear; y >= currentYear - 2; y--) {
+        const u = `${RS_BASE}/userpassshop/${sportKey}/season/${y}/entity/${entityType}/section/earningstotal?before=0`;
+        const c = new AbortController();
+        const t = setTimeout(() => c.abort(), 6000);
+        nameFetches.push(fetch(u, { headers, signal: c.signal }).then(r => { clearTimeout(t); return r.ok ? r.json() : null; }).catch(() => null));
+      }
+      const nameResults = await Promise.all(nameFetches);
+      for (const data of nameResults) {
+        if (!data) continue;
+        const items = data.passes || data.items || data.cards || (Array.isArray(data) ? data : []);
+        for (const p of items) allTimeNameItems.push(p);
+      }
+    }
 
     // ownerMap: playerId → owner count value from hotseason
     const ownerMap = {};
@@ -1081,6 +1101,12 @@ export async function onRequestGet(context) {
 
     // ── Build name map + iconic sets from D1 pass caches ────────────────────
     const nameMap = {};
+    // Merge alltime name items fetched from recent shop pages
+    for (const p of allTimeNameItems) {
+      const bid = bId(String(p.id || p.entityId || ''));
+      const name = p.label || p.playerName || p.name || p.displayName || null;
+      if (bid && name) nameMap[bid] = name;
+    }
     const iconicSets = {}; // baseId → Set of RaxEdge userIds at level >= 20
     const passRows = await env.DB.prepare("SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE 'otd_passes_all_v9_%'").all().catch(() => ({ results: [] }));
     for (const row of (passRows.results || [])) {
