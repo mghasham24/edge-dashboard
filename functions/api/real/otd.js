@@ -1021,11 +1021,11 @@ export async function onRequestGet(context) {
     const RS_SPORT_ALIAS_LB = { ncaabb: 'ncaam', mma: 'ufc' };
     const RS_SEASON_NORM_LB = { ufc: 'alltime', mma: 'alltime' };
     const sportKey = RS_SPORT_ALIAS_LB[sport] || sport;
-    // UFC always stores as 'alltime' regardless of season param
     const isAlwaysAllTime = !!RS_SEASON_NORM_LB[sportKey];
     const effectiveAllTime = allTime || isAlwaysAllTime;
 
-    const lbCacheKey = `otd_lb_v1_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
+    // Bump to v2 — de-dupes same player cached at multiple rarity levels
+    const lbCacheKey = `otd_lb_v2_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
     if (url.searchParams.get('force') !== '1') {
       try {
         const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(lbCacheKey).first();
@@ -1035,84 +1035,109 @@ export async function onRequestGet(context) {
       } catch(e) {}
     }
 
-    // Build player name map from all pass caches
+    // Strip the _l{number} rarity suffix some cache keys have (e.g. "660271_l20" → "660271")
+    // These occur when earnings were fetched using the card's level-suffixed RS ID.
+    function baseId(id) { return id.replace(/_l\d+$/, ''); }
+
+    // Build player name map (keyed by baseId) from all pass caches + player-info cache
     const nameMap = {};
-    try {
-      const passRows = await env.DB.prepare("SELECT data FROM odds_cache WHERE cache_key LIKE 'otd_passes_all_v9_%'").all();
-      for (const row of (passRows.results || [])) {
-        try {
-          const pd = JSON.parse(row.data);
-          for (const p of (pd.passes || [])) {
-            if (p.playerId && p.playerName && !nameMap[p.playerId]) {
-              nameMap[p.playerId] = { name: p.playerName };
-            }
-          }
-        } catch(e) {}
-      }
-    } catch(e) {}
+    const passRows = await env.DB.prepare("SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE 'otd_passes_all_v9_%'").all().catch(() => ({ results: [] }));
 
-    // Supplement from player-info cache
-    try {
-      const piRows = await env.DB.prepare("SELECT data FROM odds_cache WHERE cache_key LIKE 'otd_player_%'").all();
-      for (const row of (piRows.results || [])) {
-        try {
-          const pd = JSON.parse(row.data);
-          const p = pd.player;
-          if (p && p.id && p.name && p.name.trim()) {
-            if (!nameMap[p.id]) nameMap[p.id] = {};
-            if (!nameMap[p.id].name) nameMap[p.id].name = p.name.trim();
-          }
-        } catch(e) {}
-      }
-    } catch(e) {}
+    // Also count owners and Iconic holders from pass caches
+    // ownerSets[baseId] = Set of userId strings (unique users who own this player)
+    // iconicSets[baseId] = Set of userId strings at level >= 20
+    const ownerSets = {};
+    const iconicSets = {};
 
-    // Query matching earnings entries
+    for (const row of (passRows.results || [])) {
+      const userId = row.cache_key.replace('otd_passes_all_v9_', '');
+      try {
+        const pd = JSON.parse(row.data);
+        for (const p of (pd.passes || [])) {
+          if (!p.playerId) continue;
+          const bid = baseId(p.playerId);
+          if (p.playerName && !nameMap[bid]) nameMap[bid] = p.playerName;
+          // Filter for owner counts: must match sport; season only matters when not alltime
+          if (p.sport !== sportKey) continue;
+          if (!effectiveAllTime && String(p.season) !== season) continue;
+          if (!ownerSets[bid]) ownerSets[bid] = new Set();
+          ownerSets[bid].add(userId);
+          if ((p.level || 0) >= 20) {
+            if (!iconicSets[bid]) iconicSets[bid] = new Set();
+            iconicSets[bid].add(userId);
+          }
+        }
+      } catch(e) {}
+    }
+
+    // Supplement names from player-info cache
+    const piRows = await env.DB.prepare("SELECT data FROM odds_cache WHERE cache_key LIKE 'otd_player_%'").all().catch(() => ({ results: [] }));
+    for (const row of (piRows.results || [])) {
+      try {
+        const pd = JSON.parse(row.data);
+        const p = pd.player;
+        if (p && p.id && p.name && p.name.trim() && !nameMap[baseId(p.id)]) {
+          nameMap[baseId(p.id)] = p.name.trim();
+        }
+      } catch(e) {}
+    }
+
+    // Query earnings entries for this sport/season
     const prefix = `otd_earnings_v10_${entityType}_${sportKey}_`;
     const pattern = effectiveAllTime ? prefix + '%' : prefix + season + '_%';
-    let earningsRows;
-    try {
-      earningsRows = await env.DB.prepare('SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE ?').bind(pattern).all();
-    } catch(e) { return fail(500, 'DB: ' + e.message); }
+    const earningsRows = await env.DB.prepare('SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE ?').bind(pattern).all().catch(() => ({ results: [] }));
 
-    // Aggregate totals by playerId (sum across seasons for all-time)
-    const totals = {};
+    // De-duplicate: same player may be cached under "id", "id_l20", "id_l10" etc.
+    // Track max total per baseId+season, then sum across seasons.
+    const seasonMaxes = {}; // `${baseId}:${season}` → max baseTotal seen
+    const meta = {};        // baseId → { seasons[] }
+
     for (const row of (earningsRows.results || [])) {
-      const rest = row.cache_key.slice(prefix.length); // "{season}_{playerId}"
+      const rest = row.cache_key.slice(prefix.length); // "{season}_{rawId}"
       const uidx = rest.indexOf('_');
       if (uidx < 0) continue;
       const seasonPart = rest.slice(0, uidx);
-      const playerId = rest.slice(uidx + 1);
-      if (!playerId) continue;
+      const rawId = rest.slice(uidx + 1);
+      if (!rawId) continue;
+      const bid = baseId(rawId);
       try {
         const data = JSON.parse(row.data);
         const total = typeof data.baseTotal === 'number' && data.baseTotal > 0
           ? data.baseTotal
           : (data.earnings || []).reduce((s, e) => s + (e.earnings || 0), 0);
         if (!total) continue;
-        if (!totals[playerId]) totals[playerId] = { playerId, total: 0, seasons: [] };
-        totals[playerId].total += total;
-        if (!totals[playerId].seasons.includes(seasonPart)) totals[playerId].seasons.push(seasonPart);
+        const sk = bid + ':' + seasonPart;
+        if (!seasonMaxes[sk] || total > seasonMaxes[sk]) seasonMaxes[sk] = total;
+        if (!meta[bid]) meta[bid] = { seasons: [] };
+        if (!meta[bid].seasons.includes(seasonPart)) meta[bid].seasons.push(seasonPart);
       } catch(e) {}
     }
 
-    const list = Object.values(totals)
-      .sort((a, b) => b.total - a.total)
+    // Sum per-season maxes into a final total per player
+    const totals = {}; // baseId → total
+    for (const [sk, maxTotal] of Object.entries(seasonMaxes)) {
+      const bid = sk.slice(0, sk.indexOf(':'));
+      totals[bid] = (totals[bid] || 0) + maxTotal;
+    }
+
+    const list = Object.entries(totals)
+      .sort((a, b) => b[1] - a[1])
       .slice(0, 100)
-      .map((item, i) => ({
+      .map(([bid, total], i) => ({
         rank: i + 1,
-        playerId: item.playerId,
-        name: (nameMap[item.playerId] || {}).name || null,
-        total: item.total,
-        seasons: item.seasons.sort(),
+        playerId: bid,
+        name: nameMap[bid] || null,
+        total,
+        seasons: (meta[bid] || {}).seasons || [],
+        owners: ownerSets[bid] ? ownerSets[bid].size : 0,
+        iconic: iconicSets[bid] ? iconicSets[bid].size : 0,
         sport: sportKey,
         entityType,
       }));
 
-    const body = JSON.stringify({ ok: true, leaderboard: list, sport: sportKey, allTime: effectiveAllTime, cachedCount: (earningsRows.results || []).length });
-    try {
-      await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
-        .bind(lbCacheKey, body, now).run();
-    } catch(e) {}
+    const body = JSON.stringify({ ok: true, leaderboard: list, sport: sportKey, allTime: effectiveAllTime });
+    await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
+      .bind(lbCacheKey, body, now).run().catch(() => {});
     return new Response(body, { headers: { 'Content-Type': 'application/json' } });
   }
 

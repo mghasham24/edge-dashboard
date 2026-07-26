@@ -4903,38 +4903,41 @@
             return p.name && p.name.toLowerCase().includes(search);
         }) : otdLeaderboard;
 
-        var RAX_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;opacity:.7"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
-        var RAX_ICON = '<svg width="11" height="11" viewBox="0 0 100 100" fill="currentColor" style="vertical-align:-1px;opacity:.8"><circle cx="50" cy="50" r="45" stroke="currentColor" stroke-width="8" fill="none"/><circle cx="50" cy="50" r="20" fill="currentColor"/></svg>';
-
+        var thStyle = 'padding:8px 10px;font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.05em;white-space:nowrap';
         var rows = filtered.map(function(p, i) {
             var medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '';
-            var nameHtml = p.name
-                ? escHtml(p.name)
-                : '<span style="color:var(--muted);font-size:11px">ID:' + escHtml(p.playerId) + '</span>';
+            var rankDisp = medal ? medal : '<span style="color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums">' + (i + 1) + '</span>';
+            var nameHtml = p.name ? escHtml(p.name) : '<span style="color:var(--muted);font-size:11px">' + escHtml(p.playerId) + '</span>';
+            var ownersHtml = p.owners ? p.owners : '<span style="color:var(--muted);opacity:.4">—</span>';
+            var iconicHtml = p.iconic ? p.iconic : '<span style="color:var(--muted);opacity:.4">—</span>';
             var seasonsHtml = otdLeaderboardAllTime && p.seasons && p.seasons.length
-                ? '<td style="padding:9px 8px;color:var(--muted);font-size:11px;white-space:nowrap">' + escHtml(p.seasons.join(', ')) + '</td>'
+                ? '<td style="padding:9px 10px;color:var(--muted);font-size:11px;white-space:nowrap">' + escHtml(p.seasons.sort().join(', ')) + '</td>'
                 : '';
             return '<tr style="border-bottom:1px solid var(--border)">' +
-                '<td style="padding:9px 8px;color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums;text-align:right;width:40px;white-space:nowrap">' + (medal || (i + 1)) + '</td>' +
-                '<td style="padding:9px 8px;font-weight:600;font-size:13px">' + nameHtml + '</td>' +
+                '<td style="padding:9px 10px;text-align:right;width:36px">' + rankDisp + '</td>' +
+                '<td style="padding:9px 10px;font-weight:600;font-size:13px">' + nameHtml + '</td>' +
+                '<td style="padding:9px 10px;text-align:right;font-variant-numeric:tabular-nums;font-size:13px;font-weight:700;color:var(--accent);white-space:nowrap">' + p.total.toLocaleString() + '</td>' +
                 seasonsHtml +
-                '<td style="padding:9px 8px;text-align:right;font-variant-numeric:tabular-nums;font-size:13px;font-weight:700;color:var(--accent);white-space:nowrap">' + p.total.toLocaleString() + '</td>' +
+                '<td style="padding:9px 10px;text-align:right;font-variant-numeric:tabular-nums;font-size:12px;color:var(--fg)">' + ownersHtml + '</td>' +
+                '<td style="padding:9px 10px;text-align:right;font-variant-numeric:tabular-nums;font-size:12px;color:var(--fg)">' + iconicHtml + '</td>' +
             '</tr>';
         }).join('');
 
-        var seasonColHeader = otdLeaderboardAllTime ? '<th style="padding:8px;text-align:left;font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.05em">SEASONS</th>' : '';
+        var seasonColHeader = otdLeaderboardAllTime ? '<th style="' + thStyle + ';text-align:left">SEASONS</th>' : '';
         el.innerHTML =
             '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px">' +
                 '<div style="font-size:12px;color:var(--muted)">' + filtered.length + ' player' + (filtered.length === 1 ? '' : 's') + '</div>' +
-                '<div style="font-size:11px;color:var(--muted);opacity:.6">Base Rax — no rarity multiplier</div>' +
+                '<div style="font-size:11px;color:var(--muted);opacity:.6">Base Rax · owners = RaxEdge users</div>' +
             '</div>' +
             '<div style="overflow-x:auto">' +
             '<table style="width:100%;border-collapse:collapse">' +
                 '<thead><tr style="border-bottom:2px solid var(--border2)">' +
-                    '<th style="padding:8px;text-align:right;font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.05em;width:40px">#</th>' +
-                    '<th style="padding:8px;text-align:left;font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.05em">PLAYER</th>' +
+                    '<th style="' + thStyle + ';text-align:right;width:36px">#</th>' +
+                    '<th style="' + thStyle + ';text-align:left">PLAYER</th>' +
+                    '<th style="' + thStyle + ';text-align:right">BASE RAX</th>' +
                     seasonColHeader +
-                    '<th style="padding:8px;text-align:right;font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.05em">BASE RAX</th>' +
+                    '<th style="' + thStyle + ';text-align:right">OWNERS</th>' +
+                    '<th style="' + thStyle + ';text-align:right">AT ICONIC</th>' +
                 '</tr></thead>' +
                 '<tbody>' + rows + '</tbody>' +
             '</table>' +
