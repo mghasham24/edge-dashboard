@@ -1028,7 +1028,7 @@ export async function onRequestGet(context) {
     const isAlwaysAllTime = !!RS_SEASON_NORM_LB[sportKey];
     const effectiveAllTime = allTime || isAlwaysAllTime;
 
-    const lbCacheKey = `otd_lb_v9_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
+    const lbCacheKey = `otd_lb_v10_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
     if (url.searchParams.get('force') !== '1') {
       try {
         const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(lbCacheKey).first();
@@ -1040,13 +1040,14 @@ export async function onRequestGet(context) {
 
     function bId(id) { return String(id).replace(/_l\d+$/, ''); }
 
-    async function fetchShopSection(section, maxCount = 200) {
+    async function fetchShopSection(section, maxCount = 200, seasonOverride) {
+      const useSeason = seasonOverride || season;
       const results = [];
       let cursor = 0;
       const maxPages = Math.ceil(maxCount / 20) + 2;
       for (let page = 0; page < maxPages && results.length < maxCount; page++) {
         try {
-          const u = `${RS_BASE}/userpassshop/${sportKey}/season/${season}/entity/${entityType}/section/${section}?before=${cursor}`;
+          const u = `${RS_BASE}/userpassshop/${sportKey}/season/${useSeason}/entity/${entityType}/section/${section}?before=${cursor}`;
           const c = new AbortController();
           const t = setTimeout(() => c.abort(), 8000);
           let res;
@@ -1068,20 +1069,25 @@ export async function onRequestGet(context) {
     // Fetch earningstotal (BASE RAX, primary ranking) and hotseason (OWNERS) in parallel.
     // hotseason fetches 500 items so its coverage overlaps well with earningstotal top 200
     // (the two lists rank differently — a player ranked 180 in earnings may be ranked 300 in owners).
+    // For alltime: skip earningstotal (use D1 instead) but still fetch hotseason for current year so owners show.
+    const currentSeasonStr = String(new Date().getFullYear());
     const [earningsPasses, ownerPasses] = effectiveAllTime
-      ? [[], []]
+      ? [[], await fetchShopSection('hotseason', 200, currentSeasonStr)]
       : await Promise.all([fetchShopSection('earningstotal', 200), fetchShopSection('hotseason', 500)]);
 
-    // For alltime: fetch first page of recent seasons to get names for entities not in D1 pass cache
+    // For alltime: fetch 3 pages per year for 3 recent years → up to 180 names to seed nameMap
     let allTimeNameItems = [];
     if (effectiveAllTime) {
       const currentYear = new Date().getFullYear();
       const nameFetches = [];
       for (let y = currentYear; y >= currentYear - 2; y--) {
-        const u = `${RS_BASE}/userpassshop/${sportKey}/season/${y}/entity/${entityType}/section/earningstotal?before=0`;
-        const c = new AbortController();
-        const t = setTimeout(() => c.abort(), 6000);
-        nameFetches.push(fetch(u, { headers, signal: c.signal }).then(r => { clearTimeout(t); return r.ok ? r.json() : null; }).catch(() => null));
+        for (let pg = 0; pg < 3; pg++) {
+          const before = pg * 20;
+          const u = `${RS_BASE}/userpassshop/${sportKey}/season/${y}/entity/${entityType}/section/earningstotal?before=${before}`;
+          const c = new AbortController();
+          const t = setTimeout(() => c.abort(), 6000);
+          nameFetches.push(fetch(u, { headers, signal: c.signal }).then(r => { clearTimeout(t); return r.ok ? r.json() : null; }).catch(() => null));
+        }
       }
       const nameResults = await Promise.all(nameFetches);
       for (const data of nameResults) {
@@ -1117,7 +1123,8 @@ export async function onRequestGet(context) {
         for (const p of (pd.passes || [])) {
           if (!p.playerId) continue;
           const bid = bId(p.playerId);
-          if (p.playerName && !nameMap[bid]) nameMap[bid] = p.playerName;
+          // Only use name if it matches the current sport — different sports can share the same entity ID
+          if (p.playerName && !nameMap[bid] && p.sport === sportKey) nameMap[bid] = p.playerName;
           if (p.sport !== sportKey) continue;
           if (!effectiveAllTime && String(p.season) !== season) continue;
           if ((p.level || 0) >= 20) {
@@ -1228,8 +1235,8 @@ export async function onRequestGet(context) {
         if (d1NameMap[item.playerId]) item.name = d1NameMap[item.playerId];
       }
 
-      // Step 2: RS API fetch for remaining unknowns (players only, cap 30)
-      const stillUnknown = list.filter(item => !item.name && item.entityType !== 'team').slice(0, 30);
+      // Step 2: RS API fetch for remaining unknowns (players only, cap 60 — all parallel, 5s timeout each)
+      const stillUnknown = list.filter(item => !item.name && item.entityType !== 'team').slice(0, 60);
       if (stillUnknown.length > 0) {
         const rsFetches = stillUnknown.map(async item => {
           const c = new AbortController();
