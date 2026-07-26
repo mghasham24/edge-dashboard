@@ -132,7 +132,7 @@ export async function onRequestPost({ request, env }) {
               const invRes = await fetch('https://api.stripe.com/v1/invoices', {
                 method: 'POST',
                 headers: { ...auth, 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: new URLSearchParams({ customer: obj.customer }).toString()
+                body: new URLSearchParams({ customer: obj.customer, subscription: obj.id }).toString()
               });
               const inv = await invRes.json();
               if (inv.id) {
