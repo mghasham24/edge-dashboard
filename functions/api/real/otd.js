@@ -1036,33 +1036,44 @@ export async function onRequestGet(context) {
 
     function bId(id) { return String(id).replace(/_l\d+$/, ''); }
 
-    // ── Fetch from RS shop endpoint ──────────────────────────────────────────
-    // /userpassshop/{sport}/season/{season}/entity/{entityType}/section/hotseason?before=0
-    // Returns passes ranked by RS hotseason metric. `value` = total pass owners on RS platform.
-    // Paginate (cursor = last `id` of previous page) until we have 100 or no more.
-    const shopPasses = [];
-    if (!effectiveAllTime) {
+    async function fetchShopSection(section) {
+      const results = [];
       let cursor = 0;
-      for (let page = 0; page < 10 && shopPasses.length < 100; page++) {
+      for (let page = 0; page < 10 && results.length < 100; page++) {
         try {
-          const shopUrl = `${RS_BASE}/userpassshop/${sportKey}/season/${season}/entity/${entityType}/section/hotseason?before=${cursor}`;
+          const u = `${RS_BASE}/userpassshop/${sportKey}/season/${season}/entity/${entityType}/section/${section}?before=${cursor}`;
           const c = new AbortController();
           const t = setTimeout(() => c.abort(), 8000);
-          let shopRes;
-          try { shopRes = await fetch(shopUrl, { headers, signal: c.signal }); }
+          let res;
+          try { res = await fetch(u, { headers, signal: c.signal }); }
           finally { clearTimeout(t); }
-          if (!shopRes.ok) break;
-          const shopData = await shopRes.json();
-          const items = shopData.passes || shopData.items || shopData.cards || (Array.isArray(shopData) ? shopData : []);
+          if (!res.ok) break;
+          const data = await res.json();
+          const items = data.passes || data.items || data.cards || (Array.isArray(data) ? data : []);
           if (!items.length) break;
-          for (const p of items) shopPasses.push(p);
+          for (const p of items) results.push(p);
           const last = items[items.length - 1];
           cursor = last.id || last.entityId || 0;
-          if (!shopData.hasMore && shopData.hasMore !== undefined) break;
+          if (data.hasMore === false) break;
           if (items.length < 10) break; // likely last page
         } catch(e) { break; }
       }
+      return results;
     }
+
+    // Fetch earningstotal (BASE RAX, primary ranking) and hotseason (OWNERS) in parallel
+    const [earningsPasses, ownerPasses] = effectiveAllTime
+      ? [[], []]
+      : await Promise.all([fetchShopSection('earningstotal'), fetchShopSection('hotseason')]);
+
+    // ownerMap: playerId → owner count value from hotseason
+    const ownerMap = {};
+    for (const p of ownerPasses) {
+      const bid = bId(String(p.id || p.entityId || ''));
+      if (bid && p.value != null) ownerMap[bid] = p.value;
+    }
+
+    const shopPasses = earningsPasses; // primary list ranked by earnings
 
     // ── Build name map + iconic sets from D1 pass caches ────────────────────
     const nameMap = {};
@@ -1118,7 +1129,8 @@ export async function onRequestGet(context) {
     // ── Build final list ─────────────────────────────────────────────────────
     let list;
     if (shopPasses.length > 0) {
-      // Shop-based: comprehensive RS data, `value` = RS pass owner count
+      // earningstotal section: `value` = season base earnings total direct from RS
+      // hotseason section: `value` = total RS platform owner count (from ownerMap)
       list = shopPasses.slice(0, 100).map((p, i) => {
         const bid = bId(String(p.id || p.entityId || ''));
         const name = p.label || p.playerName || p.name || p.displayName || nameMap[bid] || null;
@@ -1127,8 +1139,8 @@ export async function onRequestGet(context) {
           rank: i + 1,
           playerId: bid,
           name,
-          total: earningsTotals[bid] || null,
-          passCount: p.value != null ? p.value : null,
+          total: p.value != null ? Number(p.value) : (earningsTotals[bid] || null),
+          passCount: ownerMap[bid] != null ? ownerMap[bid] : null,
           iconic: iconicSets[bid] ? iconicSets[bid].size : 0,
           sport: sportKey,
           entityType: p.entityType || entityType,
