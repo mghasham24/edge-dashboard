@@ -1028,7 +1028,7 @@ export async function onRequestGet(context) {
     const isAlwaysAllTime = !!RS_SEASON_NORM_LB[sportKey];
     const effectiveAllTime = allTime || isAlwaysAllTime;
 
-    const lbCacheKey = `otd_lb_v8_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
+    const lbCacheKey = `otd_lb_v9_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
     if (url.searchParams.get('force') !== '1') {
       try {
         const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(lbCacheKey).first();
@@ -1040,10 +1040,11 @@ export async function onRequestGet(context) {
 
     function bId(id) { return String(id).replace(/_l\d+$/, ''); }
 
-    async function fetchShopSection(section) {
+    async function fetchShopSection(section, maxCount = 200) {
       const results = [];
       let cursor = 0;
-      for (let page = 0; page < 10 && results.length < 200; page++) {
+      const maxPages = Math.ceil(maxCount / 20) + 2;
+      for (let page = 0; page < maxPages && results.length < maxCount; page++) {
         try {
           const u = `${RS_BASE}/userpassshop/${sportKey}/season/${season}/entity/${entityType}/section/${section}?before=${cursor}`;
           const c = new AbortController();
@@ -1056,7 +1057,6 @@ export async function onRequestGet(context) {
           const items = data.passes || data.items || data.cards || (Array.isArray(data) ? data : []);
           if (!items.length) break;
           for (const p of items) results.push(p);
-          const last = items[items.length - 1];
           cursor = results.length; // sequential offset: before=0, before=20, before=40...
           if (data.hasMore === false) break;
           if (items.length < 3) break; // real end of data
@@ -1065,11 +1065,12 @@ export async function onRequestGet(context) {
       return results;
     }
 
-    // Fetch earningstotal (BASE RAX, primary ranking) and hotseason (OWNERS) in parallel
-    // For alltime: skip shop data (D1 used for rankings) but still fetch name-populating pages
+    // Fetch earningstotal (BASE RAX, primary ranking) and hotseason (OWNERS) in parallel.
+    // hotseason fetches 500 items so its coverage overlaps well with earningstotal top 200
+    // (the two lists rank differently — a player ranked 180 in earnings may be ranked 300 in owners).
     const [earningsPasses, ownerPasses] = effectiveAllTime
       ? [[], []]
-      : await Promise.all([fetchShopSection('earningstotal'), fetchShopSection('hotseason')]);
+      : await Promise.all([fetchShopSection('earningstotal', 200), fetchShopSection('hotseason', 500)]);
 
     // For alltime: fetch first page of recent seasons to get names for entities not in D1 pass cache
     let allTimeNameItems = [];
@@ -1202,6 +1203,62 @@ export async function onRequestGet(context) {
           sport: sportKey,
           entityType,
         }));
+    }
+
+    // ── Resolve missing names ────────────────────────────────────────────────
+    // earningstotal returns {id, value, entityType} only — no names.
+    // 1. Check D1 otd_player_{sport}_{id} cache (populated by prior earnings lookups).
+    // 2. For still-missing player IDs, fetch from RS /players/{id}/sport/{sport} in parallel.
+    const unknownItems = list.filter(item => !item.name);
+    if (unknownItems.length > 0) {
+      // Step 1: bulk D1 lookup
+      const d1PlayerRows = await env.DB.prepare(
+        `SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE ?`
+      ).bind(`otd_player_${sportKey}_%`).all().catch(() => ({ results: [] }));
+      const d1NameMap = {};
+      for (const row of (d1PlayerRows.results || [])) {
+        const id = row.cache_key.replace(`otd_player_${sportKey}_`, '');
+        try {
+          const pd = JSON.parse(row.data);
+          const n = pd.player && pd.player.name ? pd.player.name.trim() : null;
+          if (n) d1NameMap[id] = n;
+        } catch(e) {}
+      }
+      for (const item of unknownItems) {
+        if (d1NameMap[item.playerId]) item.name = d1NameMap[item.playerId];
+      }
+
+      // Step 2: RS API fetch for remaining unknowns (players only, cap 30)
+      const stillUnknown = list.filter(item => !item.name && item.entityType !== 'team').slice(0, 30);
+      if (stillUnknown.length > 0) {
+        const rsFetches = stillUnknown.map(async item => {
+          const c = new AbortController();
+          const t = setTimeout(() => c.abort(), 5000);
+          try {
+            const res = await fetch(`${RS_BASE}/players/${item.playerId}/sport/${sportKey}`, { headers, signal: c.signal });
+            clearTimeout(t);
+            if (!res.ok) return null;
+            const data = await res.json();
+            const p = data.player || {};
+            const name = ((p.firstName || '') + ' ' + (p.lastName || '')).trim() || null;
+            const pos = p.position || null;
+            return { id: item.playerId, name, pos };
+          } catch(e) { clearTimeout(t); return null; }
+        });
+        const rsResults = await Promise.all(rsFetches);
+        const cacheWrites = [];
+        for (const r of rsResults) {
+          if (!r || !r.name) continue;
+          // Update list item
+          const item = list.find(i => i.playerId === r.id);
+          if (item) { item.name = r.name; if (r.pos && !item.position) item.position = r.pos; }
+          // Cache in D1
+          const ck = `otd_player_${sportKey}_${r.id}`;
+          const cb = JSON.stringify({ ok: true, player: { id: r.id, name: r.name, sport: sportKey, position: r.pos } });
+          cacheWrites.push(env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at').bind(ck, cb, now).run().catch(() => {}));
+        }
+        await Promise.all(cacheWrites);
+      }
     }
 
     const body = JSON.stringify({ ok: true, leaderboard: list, sport: sportKey, allTime: effectiveAllTime, fromShop: shopPasses.length > 0 });
