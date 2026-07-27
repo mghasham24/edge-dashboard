@@ -113,7 +113,7 @@ export async function onRequestGet(context) {
     if (sport === 'ufc') {
       try {
         const passRows = await env.DB.prepare(
-          "SELECT data FROM odds_cache WHERE cache_key LIKE 'otd_passes_all_v9_%' ORDER BY fetched_at DESC LIMIT 60"
+          "SELECT data FROM odds_cache WHERE cache_key LIKE 'otd_passes_all_v10_%' ORDER BY fetched_at DESC LIMIT 60"
         ).all();
         const ufcMap = {};
         for (const row of (passRows.results || [])) {
@@ -352,7 +352,7 @@ export async function onRequestGet(context) {
     let passes = [];
     try {
       const passesRow = await env.DB.prepare('SELECT data FROM odds_cache WHERE cache_key=?')
-        .bind(`otd_passes_all_v9_${userId}`).first();
+        .bind(`otd_passes_all_v10_${userId}`).first();
       if (passesRow) {
         const pd = JSON.parse(passesRow.data);
         passes = pd.passes || [];
@@ -652,7 +652,7 @@ export async function onRequestGet(context) {
     // Query by season only — no sport filter so RS returns all passes regardless of sport.
     // 5 seasons × 2 entity types = 10 parallel calls (vs 110 sport-filtered calls that RS rate-limits).
     const force = url.searchParams.get('force') === '1';
-    const cacheKey = `otd_passes_all_v9_${userId}`;
+    const cacheKey = `otd_passes_all_v10_${userId}`;
     if (!force) {
       try {
         const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
@@ -728,7 +728,7 @@ export async function onRequestGet(context) {
           : typeof p.level === 'number' ? p.level
           : typeof p.collectingLevel === 'number' ? p.collectingLevel
           : 0;
-        if (playerId && sport && level >= 1) {
+        if (playerId && sport && level >= 0) {
           results.push({
             playerId, playerName, sport, season, level, entityType,
             passId:           p.id || null,
@@ -857,7 +857,7 @@ export async function onRequestGet(context) {
               : typeof p.collectingLevel === 'number' ? p.collectingLevel
               : 0;
             return { playerId, playerName, sport: p.sport || sport, season: String(p.season || season), level, entityType, passId: p.id || null };
-          }).filter(p => p.playerId && p.level >= 1);
+          }).filter(p => p.playerId && p.level >= 0);
         }).catch(() => []);
       }
 
@@ -951,7 +951,7 @@ export async function onRequestGet(context) {
 
     // Collect all user pass caches
     const passRows = await env.DB.prepare(
-      "SELECT data FROM odds_cache WHERE cache_key LIKE 'otd_passes_all_v9_%'"
+      "SELECT data FROM odds_cache WHERE cache_key LIKE 'otd_passes_all_v10_%'"
     ).all();
 
     // Build map: 'sport:level' -> one representative pass
@@ -1186,9 +1186,9 @@ export async function onRequestGet(context) {
       if (bid && name) nameMap[bid] = name;
     }
     const iconicSets = {}; // baseId → Set of RaxEdge userIds at level >= 20
-    const passRows = await env.DB.prepare("SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE 'otd_passes_all_v9_%'").all().catch(() => ({ results: [] }));
+    const passRows = await env.DB.prepare("SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE 'otd_passes_all_v10_%'").all().catch(() => ({ results: [] }));
     for (const row of (passRows.results || [])) {
-      const userId = row.cache_key.replace('otd_passes_all_v9_', '');
+      const userId = row.cache_key.replace('otd_passes_all_v10_', '');
       try {
         const pd = JSON.parse(row.data);
         for (const p of (pd.passes || [])) {
