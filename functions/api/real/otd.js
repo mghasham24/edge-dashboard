@@ -1028,17 +1028,65 @@ export async function onRequestGet(context) {
     const isAlwaysAllTime = !!RS_SEASON_NORM_LB[sportKey];
     const effectiveAllTime = allTime || isAlwaysAllTime;
 
-    const lbCacheKey = `otd_lb_v15_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
+    const currentSeasonStr = String(new Date().getFullYear());
+    // Ended seasons (≤ last year) have frozen data — cache forever.
+    // Current year and alltime: 1-week TTL.
+    const WEEK = 604800;
+    const isActiveSeason = !effectiveAllTime && season === currentSeasonStr;
+    const lbTtl = (isActiveSeason || effectiveAllTime) ? WEEK : Infinity;
+
+    const lbCacheKey = `otd_lb_v16_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
     if (url.searchParams.get('force') !== '1') {
       try {
         const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(lbCacheKey).first();
-        if (cached && (now - cached.fetched_at) < 604800) {
+        if (cached && (now - cached.fetched_at) < lbTtl) {
           return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
         }
       } catch(e) {}
     }
 
     function bId(id) { return String(id).replace(/_l\d+$/, ''); }
+
+    // ── Component caches: earningstotal and ownerMap per season ──────────────
+    // Past seasons: frozen data, cache forever.  Current year: 1-week TTL.
+    const DB_UPSERT = 'INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at';
+
+    async function getCachedComponent(cacheKey, ttl) {
+      try {
+        const row = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
+        if (row && (now - row.fetched_at) < ttl) return JSON.parse(row.data);
+      } catch(e) {}
+      return null;
+    }
+    async function setCachedComponent(cacheKey, data) {
+      try { await env.DB.prepare(DB_UPSERT).bind(cacheKey, JSON.stringify(data), now).run(); } catch(e) {}
+    }
+
+    async function getEarningsTotal(targetSeason) {
+      const ttl = targetSeason === currentSeasonStr ? WEEK : Infinity;
+      const key = `otd_earningstotal_v1_${sportKey}_${entityType}_${targetSeason}`;
+      const cached = await getCachedComponent(key, ttl);
+      if (cached) return cached;
+      const passes = await fetchShopSection('earningstotal', 200);
+      await setCachedComponent(key, passes);
+      return passes;
+    }
+
+    async function getOwnerMap(targetSeason) {
+      const ttl = targetSeason === currentSeasonStr ? WEEK : Infinity;
+      const key = `otd_owners_v1_${sportKey}_${entityType}_${targetSeason}`;
+      const cached = await getCachedComponent(key, ttl);
+      if (cached) return cached;
+      const maxItems = targetSeason === currentSeasonStr ? 3000 : 1000;
+      const passes = await fetchShopSection('hotseason', maxItems, targetSeason, 5);
+      const ownerMap = {};
+      for (const p of passes) {
+        const bid = bId(String(p.id || p.entityId || ''));
+        if (bid && p.value != null) ownerMap[bid] = p.value;
+      }
+      await setCachedComponent(key, ownerMap);
+      return ownerMap;
+    }
 
     // Fetches a shop section sequentially (small fetches) or in parallel batches (large fetches).
     // `concurrency` > 1 fires that many pages simultaneously per batch round — safe because
@@ -1094,14 +1142,12 @@ export async function onRequestGet(context) {
       return results;
     }
 
-    // Fetch earningstotal (BASE RAX, primary ranking) and hotseason (OWNERS) in parallel.
-    // hotseason: parallel batches of 5 pages so we cover 3000 items in ~6s instead of 30s.
-    // fetchShopSection stops naturally when RS returns no more data.
-    // For alltime: skip earningstotal (use D1 instead) but still fetch hotseason for current year.
-    const currentSeasonStr = String(new Date().getFullYear());
-    const [earningsPasses, ownerPasses] = effectiveAllTime
-      ? [[], await fetchShopSection('hotseason', 500, currentSeasonStr, 5)]
-      : await Promise.all([fetchShopSection('earningstotal', 200), fetchShopSection('hotseason', 3000, undefined, 5)]);
+    // Fetch earningstotal and ownerMap via component caches.
+    // Old seasons: forever cache.  Current year: 1-week TTL.
+    // For alltime: earningstotal comes from D1 earnings rows (not RS API); only ownerMap fetched here.
+    const [earningsPasses, ownerMap] = effectiveAllTime
+      ? [[], await getOwnerMap(currentSeasonStr)]
+      : await Promise.all([getEarningsTotal(season), getOwnerMap(season)]);
 
     // For alltime: seed nameMap from all historically relevant seasons.
     // 3 pages for recent 3 years (top 60 each), 1 page for older years (top 20 each).
@@ -1127,13 +1173,6 @@ export async function onRequestGet(context) {
         const items = data.passes || data.items || data.cards || (Array.isArray(data) ? data : []);
         for (const p of items) allTimeNameItems.push(p);
       }
-    }
-
-    // ownerMap: playerId → owner count value from hotseason
-    const ownerMap = {};
-    for (const p of ownerPasses) {
-      const bid = bId(String(p.id || p.entityId || ''));
-      if (bid && p.value != null) ownerMap[bid] = p.value;
     }
 
     const shopPasses = earningsPasses; // primary list ranked by earnings
@@ -1245,23 +1284,18 @@ export async function onRequestGet(context) {
     }
 
     // ── Supplement alltime owner counts per season ───────────────────────────
-    // ownerMap was seeded only from the current year's hotseason (top 200).
-    // Players ranked high in earnings from older seasons may not appear there.
-    // Fetch hotseason for each unique season in the list that isn't already covered.
+    // ownerMap seeded only from current year so far. For other seasons in the list,
+    // pull from getOwnerMap (forever-cached for past seasons — instant on repeat calls).
     if (effectiveAllTime) {
       const uniqueSeasons = [...new Set(list.map(r => r.season).filter(Boolean))];
       const extraSeasons = uniqueSeasons.filter(s => s !== currentSeasonStr);
       if (extraSeasons.length > 0) {
-        const extraFetches = extraSeasons.map(yr => fetchShopSection('hotseason', 1000, yr, 5));
-        const extraResults = await Promise.all(extraFetches);
-        for (const items of extraResults) {
-          for (const p of items) {
-            const bid = bId(String(p.id || p.entityId || ''));
-            // Only fill gaps — don't overwrite current-season data
-            if (bid && p.value != null && ownerMap[bid] == null) ownerMap[bid] = p.value;
+        const extraMaps = await Promise.all(extraSeasons.map(yr => getOwnerMap(yr)));
+        for (const extraMap of extraMaps) {
+          for (const [bid, count] of Object.entries(extraMap)) {
+            if (ownerMap[bid] == null) ownerMap[bid] = count; // don't overwrite current-year data
           }
         }
-        // Re-apply ownerMap to any list items still missing passCount
         for (const item of list) {
           if (item.passCount == null && ownerMap[item.playerId] != null) {
             item.passCount = ownerMap[item.playerId];
