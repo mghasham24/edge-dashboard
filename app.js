@@ -4971,14 +4971,14 @@
 
         var sport = otdLeaderboardSport;
         var mob = window.innerWidth <= 768;
-        var cellPad = mob ? '7px 4px' : '9px 10px';
-        var thStyle = 'padding:' + (mob ? '6px 4px' : '8px 10px') + ';font-size:' + (mob ? '9px' : '10px') + ';font-weight:700;color:var(--muted);letter-spacing:.04em;white-space:nowrap';
+        var cellPad = mob ? '5px 3px' : '9px 10px';
+        var thStyle = 'padding:' + (mob ? '5px 3px' : '8px 10px') + ';font-size:' + (mob ? '8px' : '10px') + ';font-weight:700;color:var(--muted);letter-spacing:.03em;overflow:hidden' + (mob ? '' : ';white-space:nowrap');
         var nameFontSize = mob ? '11px' : '13px';
-        var numFontSize  = mob ? '11px' : '13px';
-        var smFontSize   = mob ? '10px' : '12px';
+        var numFontSize  = mob ? '10px' : '13px';
+        var smFontSize   = mob ? '9px' : '12px';
         var tblWidth     = mob ? '100%' : '560px';
         var cols = mob
-            ? ['6%', '28%', '18%', '15%', '25%', '8%']
+            ? ['22px', 'auto', '52px', '36px', '52px', '24px']
             : ['38px', '170px', '86px', '74px', '114px', '34px'];
 
         var rows = filtered.map(function(p, i) {
@@ -5013,25 +5013,28 @@
             return '<tr style="border-bottom:1px solid var(--border)">' +
                 '<td style="padding:' + cellPad + ';text-align:right">' + rankDisp + '</td>' +
                 '<td style="padding:' + cellPad + ';font-size:' + nameFontSize + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:0">' + nameHtml + '</td>' +
-                '<td style="padding:' + cellPad + ';text-align:right;font-variant-numeric:tabular-nums;font-size:' + numFontSize + ';font-weight:700;color:var(--accent);white-space:nowrap">' + baseRaxHtml + '</td>' +
-                '<td style="padding:' + cellPad + ';text-align:right;font-variant-numeric:tabular-nums;font-size:' + smFontSize + ';color:var(--fg)">' + passCountHtml + '</td>' +
-                '<td style="padding:' + cellPad + ';text-align:right;font-variant-numeric:tabular-nums;font-size:' + smFontSize + ';color:var(--fg);white-space:nowrap;overflow:hidden">' + atRarityHtml + '</td>' +
-                '<td style="padding:' + (mob ? '4px 2px' : '9px 6px') + ';text-align:center">' + addBtn + '</td>' +
+                '<td style="padding:' + cellPad + ';text-align:right;font-variant-numeric:tabular-nums;font-size:' + numFontSize + ';font-weight:700;color:var(--accent);overflow:hidden">' + baseRaxHtml + '</td>' +
+                '<td style="padding:' + cellPad + ';text-align:right;font-variant-numeric:tabular-nums;font-size:' + smFontSize + ';color:var(--fg);overflow:hidden">' + passCountHtml + '</td>' +
+                '<td style="padding:' + cellPad + ';text-align:right;font-variant-numeric:tabular-nums;font-size:' + smFontSize + ';color:var(--fg);overflow:hidden">' + atRarityHtml + '</td>' +
+                '<td style="padding:' + (mob ? '3px 1px' : '9px 6px') + ';text-align:center">' + addBtn + '</td>' +
             '</tr>';
         }).join('');
 
-        // Rarity dropdown in column header
+        // Rarity dropdown — in header on desktop, above table on mobile
         var rarityOpts = OTD_LEVEL_OPTIONS.map(function(o) {
             return '<option value="' + o.value + '"' + (o.value === otdLbRarityLevel ? ' selected' : '') + '>' + escHtml(o.label) + '</option>';
         }).join('');
-        var raritySelect = '<select onchange="otdLbRarityChange(this.value)" style="background:transparent;border:none;color:var(--muted);font-family:var(--sans);font-size:' + (mob ? '9px' : '10px') + ';font-weight:700;letter-spacing:.04em;cursor:pointer;padding:0;outline:none;max-width:100%">' + rarityOpts + '</select>';
+        var raritySelectDesktop = '<select onchange="otdLbRarityChange(this.value)" style="background:transparent;border:none;color:var(--muted);font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.04em;cursor:pointer;padding:0;outline:none;max-width:100%">' + rarityOpts + '</select>';
+        var raritySelectMobile = mob ? '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px"><span style="font-size:10px;font-weight:700;color:var(--muted)">RARITY:</span><select onchange="otdLbRarityChange(this.value)" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:11px;padding:3px 6px;border-radius:5px;cursor:pointer;outline:none">' + rarityOpts + '</select></div>' : '';
+        var rarLabel = mob ? 'RARITY' : raritySelectDesktop;
 
         el.innerHTML =
-            '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px;max-width:' + (mob ? '100%' : '560px') + '">' +
+            '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:6px;max-width:' + (mob ? '100%' : '560px') + '">' +
                 '<div style="font-size:12px;color:var(--muted)">' + filtered.length + ' results</div>' +
-                '<div style="font-size:11px;color:var(--muted);opacity:.6">Owners from RS · Rarity Rax = base × mult</div>' +
+                (mob ? '' : '<div style="font-size:11px;color:var(--muted);opacity:.6">Owners from RS · Rarity Rax = base × mult</div>') +
             '</div>' +
-            '<div>' +
+            raritySelectMobile +
+            '<div style="overflow-x:auto">' +
             '<table style="border-collapse:collapse;table-layout:fixed;width:' + tblWidth + '">' +
                 '<colgroup>' +
                     '<col style="width:' + cols[0] + '">' +
@@ -5043,10 +5046,10 @@
                 '</colgroup>' +
                 '<thead><tr style="border-bottom:2px solid var(--border2)">' +
                     '<th style="' + thStyle + ';text-align:right">#</th>' +
-                    '<th style="' + thStyle + ';text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">PLAYER</th>' +
-                    '<th style="' + thStyle + ';text-align:right">BASE RAX</th>' +
-                    '<th style="' + thStyle + ';text-align:right">OWNERS</th>' +
-                    '<th style="' + thStyle + ';text-align:right;overflow:hidden">' + raritySelect + '</th>' +
+                    '<th style="' + thStyle + ';text-align:left">' + (mob ? 'PLAYER' : 'PLAYER') + '</th>' +
+                    '<th style="' + thStyle + ';text-align:right">' + (mob ? 'BASE' : 'BASE RAX') + '</th>' +
+                    '<th style="' + thStyle + ';text-align:right">OWN</th>' +
+                    '<th style="' + thStyle + ';text-align:right">' + rarLabel + '</th>' +
                     '<th style="' + thStyle + '"></th>' +
                 '</tr></thead>' +
                 '<tbody>' + rows + '</tbody>' +
