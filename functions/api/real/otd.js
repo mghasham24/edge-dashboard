@@ -1028,7 +1028,7 @@ export async function onRequestGet(context) {
     const isAlwaysAllTime = !!RS_SEASON_NORM_LB[sportKey];
     const effectiveAllTime = allTime || isAlwaysAllTime;
 
-    const lbCacheKey = `otd_lb_v14_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
+    const lbCacheKey = `otd_lb_v15_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
     if (url.searchParams.get('force') !== '1') {
       try {
         const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(lbCacheKey).first();
@@ -1040,40 +1040,68 @@ export async function onRequestGet(context) {
 
     function bId(id) { return String(id).replace(/_l\d+$/, ''); }
 
-    async function fetchShopSection(section, maxCount = 200, seasonOverride) {
+    // Fetches a shop section sequentially (small fetches) or in parallel batches (large fetches).
+    // `concurrency` > 1 fires that many pages simultaneously per batch round — safe because
+    // RS uses a simple absolute offset (`before=N`) so offsets can be pre-computed.
+    async function fetchShopSection(section, maxCount = 200, seasonOverride, concurrency = 1) {
       const useSeason = seasonOverride || season;
+      const PAGE = 20;
+
+      function makeFetch(offset) {
+        const u = `${RS_BASE}/userpassshop/${sportKey}/season/${useSeason}/entity/${entityType}/section/${section}?before=${offset}`;
+        const c = new AbortController();
+        const t = setTimeout(() => c.abort(), 8000);
+        return fetch(u, { headers, signal: c.signal })
+          .then(r => { clearTimeout(t); return r.ok ? r.json() : null; })
+          .catch(() => { clearTimeout(t); return null; });
+      }
+
       const results = [];
-      let cursor = 0;
-      const maxPages = Math.ceil(maxCount / 20) + 2;
-      for (let page = 0; page < maxPages && results.length < maxCount; page++) {
-        try {
-          const u = `${RS_BASE}/userpassshop/${sportKey}/season/${useSeason}/entity/${entityType}/section/${section}?before=${cursor}`;
-          const c = new AbortController();
-          const t = setTimeout(() => c.abort(), 8000);
-          let res;
-          try { res = await fetch(u, { headers, signal: c.signal }); }
-          finally { clearTimeout(t); }
-          if (!res.ok) break;
-          const data = await res.json();
-          const items = data.passes || data.items || data.cards || (Array.isArray(data) ? data : []);
-          if (!items.length) break;
-          for (const p of items) results.push(p);
-          cursor = results.length; // sequential offset: before=0, before=20, before=40...
-          if (data.hasMore === false) break;
-          if (items.length < 3) break; // real end of data
-        } catch(e) { break; }
+      let done = false;
+
+      if (concurrency <= 1) {
+        // Sequential — for small fetches where order matters for early-stop
+        const maxPages = Math.ceil(maxCount / PAGE) + 2;
+        for (let page = 0; page < maxPages && !done && results.length < maxCount; page++) {
+          try {
+            const data = await makeFetch(results.length);
+            if (!data) { done = true; break; }
+            const items = data.passes || data.items || data.cards || (Array.isArray(data) ? data : []);
+            if (!items.length) { done = true; break; }
+            for (const p of items) results.push(p);
+            if (data.hasMore === false || items.length < 3) done = true;
+          } catch(e) { done = true; }
+        }
+      } else {
+        // Parallel batches — fetch `concurrency` pages at once, stop when a batch comes back empty
+        for (let batchStart = 0; batchStart < maxCount && !done; batchStart += concurrency * PAGE) {
+          const batch = [];
+          for (let i = 0; i < concurrency; i++) {
+            const offset = batchStart + i * PAGE;
+            if (offset >= maxCount) break;
+            batch.push(makeFetch(offset));
+          }
+          const responses = await Promise.all(batch);
+          for (const data of responses) {
+            if (!data) { done = true; break; }
+            const items = data.passes || data.items || data.cards || (Array.isArray(data) ? data : []);
+            if (!items.length || items.length < 3) { done = true; break; }
+            for (const p of items) results.push(p);
+            if (data.hasMore === false) { done = true; break; }
+          }
+        }
       }
       return results;
     }
 
     // Fetch earningstotal (BASE RAX, primary ranking) and hotseason (OWNERS) in parallel.
-    // hotseason maxCount=1000 to cover even low-owner players. fetchShopSection stops early
-    // when RS runs out of data (hasMore===false or items<3), so the cap is just a safety ceiling.
-    // For alltime: skip earningstotal (use D1 instead) but still fetch hotseason for current year so owners show.
+    // hotseason: parallel batches of 5 pages so we cover 3000 items in ~6s instead of 30s.
+    // fetchShopSection stops naturally when RS returns no more data.
+    // For alltime: skip earningstotal (use D1 instead) but still fetch hotseason for current year.
     const currentSeasonStr = String(new Date().getFullYear());
     const [earningsPasses, ownerPasses] = effectiveAllTime
-      ? [[], await fetchShopSection('hotseason', 500, currentSeasonStr)]
-      : await Promise.all([fetchShopSection('earningstotal', 200), fetchShopSection('hotseason', 1000)]);
+      ? [[], await fetchShopSection('hotseason', 500, currentSeasonStr, 5)]
+      : await Promise.all([fetchShopSection('earningstotal', 200), fetchShopSection('hotseason', 3000, undefined, 5)]);
 
     // For alltime: seed nameMap from all historically relevant seasons.
     // 3 pages for recent 3 years (top 60 each), 1 page for older years (top 20 each).
@@ -1224,7 +1252,7 @@ export async function onRequestGet(context) {
       const uniqueSeasons = [...new Set(list.map(r => r.season).filter(Boolean))];
       const extraSeasons = uniqueSeasons.filter(s => s !== currentSeasonStr);
       if (extraSeasons.length > 0) {
-        const extraFetches = extraSeasons.map(yr => fetchShopSection('hotseason', 500, yr));
+        const extraFetches = extraSeasons.map(yr => fetchShopSection('hotseason', 1000, yr, 5));
         const extraResults = await Promise.all(extraFetches);
         for (const items of extraResults) {
           for (const p of items) {
