@@ -4899,11 +4899,15 @@
     function otdAddLbPlayer(idx) {
         var p = otdLbPlayerCache[idx];
         if (!p || !p.playerId) return;
+        // Prevent duplicate adds
+        var alreadyAdded = otdPlayers.some(function(pl) {
+            return String(pl.id) === String(p.playerId) && pl.sport === p.sport && pl.season === p.season;
+        });
+        if (alreadyAdded) return;
+        // Switch to player mode — preserve existing players (accumulated via repeated lb→+)
         otdMode = 'player';
-        otdPlayers = [];
         otdDateMapDirty = true;
         otdPassesPage = 0;
-        otdColorIdx = 0;
         otdSelectedPlayer = null;
         otdSelectedUser = null;
         otdLoadingPasses = false;
@@ -4998,7 +5002,7 @@
 
             return '<tr style="border-bottom:1px solid var(--border)">' +
                 '<td style="padding:9px 10px;text-align:right;width:36px">' + rankDisp + '</td>' +
-                '<td style="padding:9px 10px;font-size:13px">' + nameHtml + '</td>' +
+                '<td style="padding:9px 10px;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:0">' + nameHtml + '</td>' +
                 '<td style="padding:9px 10px;text-align:right;font-variant-numeric:tabular-nums;font-size:13px;font-weight:700;color:var(--accent);white-space:nowrap">' + baseRaxHtml + '</td>' +
                 '<td style="padding:9px 10px;text-align:right;font-variant-numeric:tabular-nums;font-size:12px;color:var(--fg)">' + passCountHtml + '</td>' +
                 '<td style="padding:9px 10px;text-align:right;font-variant-numeric:tabular-nums;font-size:12px;color:var(--fg);white-space:nowrap">' + atRarityHtml + '</td>' +
@@ -5017,15 +5021,23 @@
                 '<div style="font-size:12px;color:var(--muted)">' + filtered.length + ' results</div>' +
                 '<div style="font-size:11px;color:var(--muted);opacity:.6">Owners from RS · Rarity Rax = base × table mult</div>' +
             '</div>' +
-            '<div style="overflow-x:auto;max-width:680px">' +
-            '<table style="width:100%;border-collapse:collapse">' +
+            '<div style="max-width:640px">' +
+            '<table style="width:100%;border-collapse:collapse;table-layout:fixed">' +
+                '<colgroup>' +
+                    '<col style="width:40px">' +
+                    '<col>' +
+                    '<col style="width:86px">' +
+                    '<col style="width:70px">' +
+                    '<col style="width:108px">' +
+                    '<col style="width:32px">' +
+                '</colgroup>' +
                 '<thead><tr style="border-bottom:2px solid var(--border2)">' +
-                    '<th style="' + thStyle + ';text-align:right;width:36px">#</th>' +
-                    '<th style="' + thStyle + ';text-align:left">PLAYER</th>' +
+                    '<th style="' + thStyle + ';text-align:right">#</th>' +
+                    '<th style="' + thStyle + ';text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">PLAYER</th>' +
                     '<th style="' + thStyle + ';text-align:right">BASE RAX</th>' +
                     '<th style="' + thStyle + ';text-align:right">OWNERS</th>' +
                     '<th style="' + thStyle + ';text-align:right">' + raritySelect + '</th>' +
-                    '<th style="' + thStyle + ';width:32px"></th>' +
+                    '<th style="' + thStyle + '"></th>' +
                 '</tr></thead>' +
                 '<tbody>' + rows + '</tbody>' +
             '</table>' +
@@ -5155,9 +5167,13 @@
 
     function otdSetMode(mode) {
         otdMode = mode;
-        otdPlayers = [];
+        // When switching to leaderboard, preserve players so repeated "+" clicks accumulate.
+        // Switching to username or player (via tab) starts fresh.
+        if (mode !== 'leaderboard') {
+            otdPlayers = [];
+            otdColorIdx = 0;
+        }
         otdDateMapDirty = true; otdPassesPage = 0;
-        otdColorIdx = 0;
         otdSelectedPlayer = null;
         otdSelectedUser = null;
         otdLoadingPasses = false;
