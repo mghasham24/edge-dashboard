@@ -4976,9 +4976,9 @@
         var nameFontSize = mob ? '11px' : '13px';
         var numFontSize  = mob ? '10px' : '13px';
         var smFontSize   = mob ? '9px' : '12px';
-        var tblWidth     = mob ? '100%' : '560px';
+        var tblWidth     = mob ? '308px' : '560px';
         var cols = mob
-            ? ['22px', 'auto', '52px', '36px', '52px', '24px']
+            ? ['20px', '120px', '54px', '36px', '54px', '24px']
             : ['38px', '170px', '86px', '74px', '114px', '34px'];
 
         var rows = filtered.map(function(p, i) {
@@ -5555,6 +5555,7 @@
     }
 
     function renderOtdResults() {
+        if (otdMode === 'leaderboard') return;
         var el = document.getElementById('otd-results');
         if (!el) return;
 
