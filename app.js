@@ -3255,6 +3255,7 @@
     var otdLeaderboardEntityType = 'player';
     var otdLeaderboardSearch = '';
     var otdLbRarityLevel = 20; // default Iconic 1 for the AT RARITY column
+    var otdLbPlayerCache = []; // last filtered leaderboard array — indexed by row for + button
     var otdSelectedUser = null; // { id, username, displayName }
     var otdUserSearchTimer = null;
     var otdLoadingPasses = false;
@@ -3289,7 +3290,7 @@
     var otdFindLoading = false;
     var otdFindSearchTimer = null;
     var otdFindExpandedMonths = {}; // { monthIndex: true } — which months are expanded in More Info
-    var otdPassesOpen = false;
+    var otdPassesOpen = window.innerWidth > 768; // default open on desktop
     var otdCarouselOpen = false;
     var otdPassesSearch = '';
     var otdCarouselSearch = '';
@@ -4824,7 +4825,7 @@
                 '<button onclick="document.getElementById(\'otd-tab-btn\').click()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:7px 14px;border-radius:6px;cursor:pointer">&larr; Back</button>' +
             '</div>' +
             '<div style="display:flex;gap:3px;margin-bottom:14px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:3px;width:fit-content">' +
-                '<button onclick="otdSetMode(\'username\')" style="' + (otdMode === 'username' ? tabActive : tabInactive) + '">My RS Passes</button>' +
+                '<button onclick="otdSetMode(\'username\')" style="' + (otdMode === 'username' ? tabActive : tabInactive) + '">Username</button>' +
                 '<button onclick="otdSetMode(\'player\')" style="' + (otdMode === 'player' ? tabActive : tabInactive) + '">Search Players</button>' +
                 '<button onclick="otdSetMode(\'leaderboard\')" style="' + (otdMode === 'leaderboard' ? tabActive : tabInactive) + '">Top OTD</button>' +
             '</div>' +
@@ -4895,6 +4896,47 @@
         renderOtdLeaderboard();
     }
 
+    function otdAddLbPlayer(idx) {
+        var p = otdLbPlayerCache[idx];
+        if (!p || !p.playerId) return;
+        otdMode = 'player';
+        otdPlayers = [];
+        otdDateMapDirty = true;
+        otdPassesPage = 0;
+        otdColorIdx = 0;
+        otdSelectedPlayer = null;
+        otdSelectedUser = null;
+        otdLoadingPasses = false;
+        if (window.innerWidth > 768) otdPassesOpen = true;
+        var level = 1;
+        var lbl = (OTD_LEVEL_OPTIONS.find(function(o) { return o.value === level; }) || {}).label || 'Level 1';
+        var color = OTD_COLORS[otdColorIdx % OTD_COLORS.length];
+        otdColorIdx++;
+        var entry = {
+            id: String(p.playerId),
+            name: p.name || String(p.playerId),
+            sport: p.sport,
+            season: p.season || String(new Date().getFullYear()),
+            level: level, levelLabel: lbl, color: color,
+            earnings: null, baseTotal: null,
+            entityType: p.entityType || 'player',
+            avatar: '', rarityColor: otdRarityColor(level)
+        };
+        otdPlayers.push(entry);
+        renderOtdPanel();
+        fetch('/api/real/otd?action=earnings&id=' + encodeURIComponent(entry.id) + '&sport=' + encodeURIComponent(entry.sport) + '&season=' + encodeURIComponent(entry.season) + '&level=' + level + '&entityType=' + encodeURIComponent(entry.entityType), { credentials: 'same-origin' })
+            .then(function(r) { return r.ok ? r.json() : { ok: false }; })
+            .then(function(d) {
+                if (!d.ok) { entry.earnings = []; otdDateMapDirty = true; renderOtdChips(); renderOtdResults(); return; }
+                entry.earnings = otdApplyMultiplier(d.earnings || [], level, entry.sport, entry.entityType);
+                entry.baseTotal = d.baseTotal != null ? d.baseTotal : null;
+                otdDateMapDirty = true;
+                renderOtdChips();
+                renderOtdResults();
+            })
+            .catch(function() { entry.earnings = []; otdDateMapDirty = true; renderOtdChips(); renderOtdResults(); });
+    }
+
     function renderOtdLeaderboard() {
         var el = document.getElementById('otd-results');
         if (!el || otdMode !== 'leaderboard') return;
@@ -4913,6 +4955,7 @@
         var filtered = search ? otdLeaderboard.filter(function(p) {
             return (p.name && p.name.toLowerCase().includes(search)) || (p.position && p.position.toLowerCase().includes(search));
         }) : otdLeaderboard;
+        otdLbPlayerCache = filtered;
 
         // Rarity multiplier for the AT RARITY column
         var rarityMult = otdLeaderboardEntityType === 'team'
@@ -4949,12 +4992,17 @@
                 ? RAX_SVG + Math.round(p.total * rarityMult).toLocaleString()
                 : '<span style="color:var(--muted);opacity:.4">—</span>';
 
+            var addBtn = (p.entityType || 'player') !== 'team'
+                ? '<button onclick="otdAddLbPlayer(' + i + ')" title="Add to calendar" style="background:none;border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:13px;font-weight:700;width:24px;height:24px;border-radius:5px;cursor:pointer;line-height:1;padding:0;display:inline-flex;align-items:center;justify-content:center" onmouseover="this.style.borderColor=\'var(--accent)\';this.style.color=\'var(--accent)\'" onmouseout="this.style.borderColor=\'var(--border2)\';this.style.color=\'var(--muted)\'">+</button>'
+                : '';
+
             return '<tr style="border-bottom:1px solid var(--border)">' +
                 '<td style="padding:9px 10px;text-align:right;width:36px">' + rankDisp + '</td>' +
                 '<td style="padding:9px 10px;font-size:13px">' + nameHtml + '</td>' +
                 '<td style="padding:9px 10px;text-align:right;font-variant-numeric:tabular-nums;font-size:13px;font-weight:700;color:var(--accent);white-space:nowrap">' + baseRaxHtml + '</td>' +
                 '<td style="padding:9px 10px;text-align:right;font-variant-numeric:tabular-nums;font-size:12px;color:var(--fg)">' + passCountHtml + '</td>' +
                 '<td style="padding:9px 10px;text-align:right;font-variant-numeric:tabular-nums;font-size:12px;color:var(--fg);white-space:nowrap">' + atRarityHtml + '</td>' +
+                '<td style="padding:9px 6px;text-align:center;width:32px">' + addBtn + '</td>' +
             '</tr>';
         }).join('');
 
@@ -4965,11 +5013,11 @@
         var raritySelect = '<select onchange="otdLbRarityChange(this.value)" style="background:transparent;border:none;color:var(--muted);font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.05em;cursor:pointer;padding:0;outline:none">' + rarityOpts + '</select>';
 
         el.innerHTML =
-            '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px">' +
+            '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px;max-width:680px">' +
                 '<div style="font-size:12px;color:var(--muted)">' + filtered.length + ' results</div>' +
                 '<div style="font-size:11px;color:var(--muted);opacity:.6">Owners from RS · Rarity Rax = base × table mult</div>' +
             '</div>' +
-            '<div style="overflow-x:auto">' +
+            '<div style="overflow-x:auto;max-width:680px">' +
             '<table style="width:100%;border-collapse:collapse">' +
                 '<thead><tr style="border-bottom:2px solid var(--border2)">' +
                     '<th style="' + thStyle + ';text-align:right;width:36px">#</th>' +
@@ -4977,6 +5025,7 @@
                     '<th style="' + thStyle + ';text-align:right">BASE RAX</th>' +
                     '<th style="' + thStyle + ';text-align:right">OWNERS</th>' +
                     '<th style="' + thStyle + ';text-align:right">' + raritySelect + '</th>' +
+                    '<th style="' + thStyle + ';width:32px"></th>' +
                 '</tr></thead>' +
                 '<tbody>' + rows + '</tbody>' +
             '</table>' +

@@ -1209,7 +1209,7 @@ export async function onRequestGet(context) {
           season: r.season,
           position: null,
           total: r.total,
-          passCount: null,
+          passCount: ownerMap[r.bid] != null ? ownerMap[r.bid] : null,
           iconic: iconicSets[r.bid] ? iconicSets[r.bid].size : 0,
           sport: sportKey,
           entityType,
