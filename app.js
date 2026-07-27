@@ -4709,7 +4709,7 @@
                 // Top-left: sport + card btn
                 '<div style="position:absolute;top:4px;left:4px;z-index:3;display:flex;flex-direction:column;align-items:flex-start;gap:2px">' +
                     '<span style="font-size:7px;font-weight:800;color:#fff;background:rgba(0,0,0,.55);padding:1px 5px;border-radius:3px;letter-spacing:.04em">' + p.sport.toUpperCase() + '</span>' +
-                    (eid ? '<button onclick="event.stopPropagation();otdOpenCardLink(\'' + eid + '\',\'' + p.sport + '\',\'' + eet + '\',\'\',\'' + pId + '\')" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);border-radius:3px;color:#fff;padding:2px 4px;cursor:pointer;display:flex;align-items:center">' + CARD_SVG + '</button>' : '') +
+                    (eid && otdMode === 'username' ? '<button onclick="event.stopPropagation();otdOpenCardLink(\'' + eid + '\',\'' + p.sport + '\',\'' + eet + '\',\'\',\'' + pId + '\')" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);border-radius:3px;color:#fff;padding:2px 4px;cursor:pointer;display:flex;align-items:center">' + CARD_SVG + '</button>' : '') +
                 '</div>' +
                 // Top-right: season + ×
                 '<div style="position:absolute;top:4px;right:4px;z-index:3;display:flex;flex-direction:column;align-items:flex-end;gap:2px">' +
@@ -5187,7 +5187,6 @@
         otdSelectedPlayer = null;
         otdSelectedUser = null;
         otdLoadingPasses = false;
-        if (mode !== 'username') otdCarouselOpen = false;
         renderOtdPanel();
         if (mode === 'leaderboard' && !otdLeaderboard.length && !otdLeaderboardLoading) {
             loadOtdLeaderboard();
@@ -6109,7 +6108,7 @@
             (otdSelectedUser ? '<div style="text-align:center;margin-top:8px"><a href="/otd/' + encodeURIComponent(otdSelectedUser.username) + '" onclick="event.preventDefault();navigator.clipboard.writeText(\'raxedge.com/otd/\'+\'' + encodeURIComponent(otdSelectedUser.username) + '\').then(function(){otdCopyToast(\'Link copied!\');})" style="font-size:11px;color:var(--muted2);text-decoration:none;font-family:var(--mono)" title="Click to copy link">🔗 raxedge.com/otd/' + escHtml(otdSelectedUser.username) + '</a></div>' : '') +
             dayPanel;
 
-        if (otdPassesOpen && window.innerWidth > 768 && otdMode === 'username') {
+        if (otdPassesOpen && window.innerWidth > 768) {
             el.innerHTML =
                 '<div style="display:flex;gap:16px;align-items:flex-start">' +
                     '<div style="flex:1;min-width:0">' + calHtml + '</div>' +
