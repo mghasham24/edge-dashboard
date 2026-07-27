@@ -5187,6 +5187,7 @@
         otdSelectedPlayer = null;
         otdSelectedUser = null;
         otdLoadingPasses = false;
+        if (mode !== 'username') otdCarouselOpen = false;
         renderOtdPanel();
         if (mode === 'leaderboard' && !otdLeaderboard.length && !otdLeaderboardLoading) {
             loadOtdLeaderboard();
@@ -6108,7 +6109,7 @@
             (otdSelectedUser ? '<div style="text-align:center;margin-top:8px"><a href="/otd/' + encodeURIComponent(otdSelectedUser.username) + '" onclick="event.preventDefault();navigator.clipboard.writeText(\'raxedge.com/otd/\'+\'' + encodeURIComponent(otdSelectedUser.username) + '\').then(function(){otdCopyToast(\'Link copied!\');})" style="font-size:11px;color:var(--muted2);text-decoration:none;font-family:var(--mono)" title="Click to copy link">🔗 raxedge.com/otd/' + escHtml(otdSelectedUser.username) + '</a></div>' : '') +
             dayPanel;
 
-        if (otdPassesOpen && window.innerWidth > 768) {
+        if (otdPassesOpen && window.innerWidth > 768 && otdMode === 'username') {
             el.innerHTML =
                 '<div style="display:flex;gap:16px;align-items:flex-start">' +
                     '<div style="flex:1;min-width:0">' + calHtml + '</div>' +
