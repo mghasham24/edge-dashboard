@@ -4970,18 +4970,28 @@
         var RAX_SVG = '<svg viewBox="0 0 512 512" style="width:11px;height:11px;vertical-align:-1px;display:inline-block;margin-right:2px;opacity:.75" aria-hidden="true"><g fill="currentColor"><path d="M128.1,141.1h356.8C442.8,57.4,356.1,0,256,0C192,0,133.5,23.5,88.6,62.3L128.1,141.1z"/><polygon points="355.3,193.2 154.2,193.2 254.7,394"/><path d="M413.6,193.2L253.9,512c0.7,0,1.4,0,2.1,0c141.4,0,256-114.6,256-256c0-21.7-2.7-42.7-7.8-62.8H413.6z"/><path d="M225.6,452.1L50.7,103C18.9,145.7,0,198.6,0,256c0,121.7,85,223.6,198.8,249.6L225.6,452.1z"/></g></svg>';
 
         var sport = otdLeaderboardSport;
-        var thStyle = 'padding:8px 10px;font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.05em;white-space:nowrap';
+        var mob = window.innerWidth <= 768;
+        var cellPad = mob ? '7px 4px' : '9px 10px';
+        var thStyle = 'padding:' + (mob ? '6px 4px' : '8px 10px') + ';font-size:' + (mob ? '9px' : '10px') + ';font-weight:700;color:var(--muted);letter-spacing:.04em;white-space:nowrap';
+        var nameFontSize = mob ? '11px' : '13px';
+        var numFontSize  = mob ? '11px' : '13px';
+        var smFontSize   = mob ? '10px' : '12px';
+        var tblWidth     = mob ? '100%' : '560px';
+        var cols = mob
+            ? ['24px', 'auto', '58px', '52px', '68px', '26px']
+            : ['38px', '170px', '86px', '74px', '114px', '34px'];
 
         var rows = filtered.map(function(p, i) {
             var actualRank = p.rank || (i + 1);
             var medal = actualRank === 1 ? '🥇' : actualRank === 2 ? '🥈' : actualRank === 3 ? '🥉' : '';
-            var rankDisp = medal || '<span style="color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums">' + actualRank + '</span>';
+            var rankDisp = medal ? '<span style="font-size:' + (mob ? '11px' : '14px') + '">' + medal + '</span>'
+                : '<span style="color:var(--muted);font-size:' + smFontSize + ';font-variant-numeric:tabular-nums">' + actualRank + '</span>';
 
             var pid = parseInt(p.playerId, 10);
             var rsUrl = pid ? rsEntityUrl(p.entityType || 'player', sport, pid) : '#';
             var displayName = p.name ? escHtml(p.name) : escHtml(p.playerId);
-            var yearHtml = p.season ? ' <span style="font-size:11px;font-weight:400;color:var(--muted);opacity:.6">' + escHtml(p.season) + '</span>' : '';
-            var posHtml = p.position ? ' <span style="font-size:10px;font-weight:600;color:var(--muted);background:var(--bg3);border:1px solid var(--border2);border-radius:3px;padding:1px 5px;vertical-align:middle">' + escHtml(p.position) + '</span>' : '';
+            var yearHtml = p.season ? ' <span style="font-size:' + (mob ? '9px' : '11px') + ';font-weight:400;color:var(--muted);opacity:.6">' + escHtml(p.season) + '</span>' : '';
+            var posHtml = (!mob && p.position) ? ' <span style="font-size:10px;font-weight:600;color:var(--muted);background:var(--bg3);border:1px solid var(--border2);border-radius:3px;padding:1px 5px;vertical-align:middle">' + escHtml(p.position) + '</span>' : '';
             var nameHtml = '<a href="' + rsUrl + '" target="_blank" rel="noopener" style="color:var(--fg);text-decoration:none;font-weight:600" onmouseover="this.style.color=\'var(--accent)\'" onmouseout="this.style.color=\'var(--fg)\'">' + displayName + '</a>' + yearHtml + posHtml;
 
             var baseRaxHtml = p.total != null
@@ -4997,16 +5007,16 @@
                 : '<span style="color:var(--muted);opacity:.4">—</span>';
 
             var addBtn = (p.entityType || 'player') !== 'team'
-                ? '<button onclick="otdAddLbPlayer(' + i + ')" title="Add to calendar" style="background:none;border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:13px;font-weight:700;width:24px;height:24px;border-radius:5px;cursor:pointer;line-height:1;padding:0;display:inline-flex;align-items:center;justify-content:center" onmouseover="this.style.borderColor=\'var(--accent)\';this.style.color=\'var(--accent)\'" onmouseout="this.style.borderColor=\'var(--border2)\';this.style.color=\'var(--muted)\'">+</button>'
+                ? '<button onclick="otdAddLbPlayer(' + i + ')" title="Add to calendar" style="background:none;border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:' + numFontSize + ';font-weight:700;width:' + (mob ? '20px' : '24px') + ';height:' + (mob ? '20px' : '24px') + ';border-radius:5px;cursor:pointer;line-height:1;padding:0;display:inline-flex;align-items:center;justify-content:center" onmouseover="this.style.borderColor=\'var(--accent)\';this.style.color=\'var(--accent)\'" onmouseout="this.style.borderColor=\'var(--border2)\';this.style.color=\'var(--muted)\'">+</button>'
                 : '';
 
             return '<tr style="border-bottom:1px solid var(--border)">' +
-                '<td style="padding:9px 10px;text-align:right;width:36px">' + rankDisp + '</td>' +
-                '<td style="padding:9px 10px;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:0">' + nameHtml + '</td>' +
-                '<td style="padding:9px 10px;text-align:right;font-variant-numeric:tabular-nums;font-size:13px;font-weight:700;color:var(--accent);white-space:nowrap">' + baseRaxHtml + '</td>' +
-                '<td style="padding:9px 10px;text-align:right;font-variant-numeric:tabular-nums;font-size:12px;color:var(--fg)">' + passCountHtml + '</td>' +
-                '<td style="padding:9px 10px;text-align:right;font-variant-numeric:tabular-nums;font-size:12px;color:var(--fg);white-space:nowrap">' + atRarityHtml + '</td>' +
-                '<td style="padding:9px 6px;text-align:center;width:32px">' + addBtn + '</td>' +
+                '<td style="padding:' + cellPad + ';text-align:right">' + rankDisp + '</td>' +
+                '<td style="padding:' + cellPad + ';font-size:' + nameFontSize + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:0">' + nameHtml + '</td>' +
+                '<td style="padding:' + cellPad + ';text-align:right;font-variant-numeric:tabular-nums;font-size:' + numFontSize + ';font-weight:700;color:var(--accent);white-space:nowrap">' + baseRaxHtml + '</td>' +
+                '<td style="padding:' + cellPad + ';text-align:right;font-variant-numeric:tabular-nums;font-size:' + smFontSize + ';color:var(--fg)">' + passCountHtml + '</td>' +
+                '<td style="padding:' + cellPad + ';text-align:right;font-variant-numeric:tabular-nums;font-size:' + smFontSize + ';color:var(--fg);white-space:nowrap;overflow:hidden">' + atRarityHtml + '</td>' +
+                '<td style="padding:' + (mob ? '4px 2px' : '9px 6px') + ';text-align:center">' + addBtn + '</td>' +
             '</tr>';
         }).join('');
 
@@ -5014,29 +5024,29 @@
         var rarityOpts = OTD_LEVEL_OPTIONS.map(function(o) {
             return '<option value="' + o.value + '"' + (o.value === otdLbRarityLevel ? ' selected' : '') + '>' + escHtml(o.label) + '</option>';
         }).join('');
-        var raritySelect = '<select onchange="otdLbRarityChange(this.value)" style="background:transparent;border:none;color:var(--muted);font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.05em;cursor:pointer;padding:0;outline:none">' + rarityOpts + '</select>';
+        var raritySelect = '<select onchange="otdLbRarityChange(this.value)" style="background:transparent;border:none;color:var(--muted);font-family:var(--sans);font-size:' + (mob ? '9px' : '10px') + ';font-weight:700;letter-spacing:.04em;cursor:pointer;padding:0;outline:none;max-width:100%">' + rarityOpts + '</select>';
 
         el.innerHTML =
-            '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px;max-width:560px">' +
+            '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px;max-width:' + (mob ? '100%' : '560px') + '">' +
                 '<div style="font-size:12px;color:var(--muted)">' + filtered.length + ' results</div>' +
-                '<div style="font-size:11px;color:var(--muted);opacity:.6">Owners from RS · Rarity Rax = base × table mult</div>' +
+                '<div style="font-size:11px;color:var(--muted);opacity:.6">Owners from RS · Rarity Rax = base × mult</div>' +
             '</div>' +
             '<div>' +
-            '<table style="border-collapse:collapse;table-layout:fixed;width:560px">' +
+            '<table style="border-collapse:collapse;table-layout:fixed;width:' + tblWidth + '">' +
                 '<colgroup>' +
-                    '<col style="width:38px">' +
-                    '<col style="width:170px">' +
-                    '<col style="width:86px">' +
-                    '<col style="width:74px">' +
-                    '<col style="width:114px">' +
-                    '<col style="width:34px">' +
+                    '<col style="width:' + cols[0] + '">' +
+                    '<col style="width:' + cols[1] + '">' +
+                    '<col style="width:' + cols[2] + '">' +
+                    '<col style="width:' + cols[3] + '">' +
+                    '<col style="width:' + cols[4] + '">' +
+                    '<col style="width:' + cols[5] + '">' +
                 '</colgroup>' +
                 '<thead><tr style="border-bottom:2px solid var(--border2)">' +
                     '<th style="' + thStyle + ';text-align:right">#</th>' +
                     '<th style="' + thStyle + ';text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">PLAYER</th>' +
                     '<th style="' + thStyle + ';text-align:right">BASE RAX</th>' +
                     '<th style="' + thStyle + ';text-align:right">OWNERS</th>' +
-                    '<th style="' + thStyle + ';text-align:right">' + raritySelect + '</th>' +
+                    '<th style="' + thStyle + ';text-align:right;overflow:hidden">' + raritySelect + '</th>' +
                     '<th style="' + thStyle + '"></th>' +
                 '</tr></thead>' +
                 '<tbody>' + rows + '</tbody>' +

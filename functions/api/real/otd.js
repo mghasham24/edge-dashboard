@@ -1028,7 +1028,7 @@ export async function onRequestGet(context) {
     const isAlwaysAllTime = !!RS_SEASON_NORM_LB[sportKey];
     const effectiveAllTime = allTime || isAlwaysAllTime;
 
-    const lbCacheKey = `otd_lb_v12_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
+    const lbCacheKey = `otd_lb_v13_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
     if (url.searchParams.get('force') !== '1') {
       try {
         const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(lbCacheKey).first();
@@ -1072,7 +1072,7 @@ export async function onRequestGet(context) {
     // For alltime: skip earningstotal (use D1 instead) but still fetch hotseason for current year so owners show.
     const currentSeasonStr = String(new Date().getFullYear());
     const [earningsPasses, ownerPasses] = effectiveAllTime
-      ? [[], await fetchShopSection('hotseason', 200, currentSeasonStr)]
+      ? [[], await fetchShopSection('hotseason', 300, currentSeasonStr)]
       : await Promise.all([fetchShopSection('earningstotal', 200), fetchShopSection('hotseason', 500)]);
 
     // For alltime: seed nameMap from all historically relevant seasons.
@@ -1224,7 +1224,7 @@ export async function onRequestGet(context) {
       const uniqueSeasons = [...new Set(list.map(r => r.season).filter(Boolean))];
       const extraSeasons = uniqueSeasons.filter(s => s !== currentSeasonStr);
       if (extraSeasons.length > 0) {
-        const extraFetches = extraSeasons.map(yr => fetchShopSection('hotseason', 200, yr));
+        const extraFetches = extraSeasons.map(yr => fetchShopSection('hotseason', 300, yr));
         const extraResults = await Promise.all(extraFetches);
         for (const items of extraResults) {
           for (const p of items) {
