@@ -3258,6 +3258,7 @@
     var otdLeaderboardSearch = '';
     var otdLbRarityLevel = 20; // default Iconic 1 for the AT RARITY column
     var otdLbPlayerCache = []; // last filtered leaderboard array — indexed by row for + button
+    var otdLbNewAdded = 0; // count of players added from leaderboard since last Search Players visit
     var otdSelectedUser = null; // { id, username, displayName }
     var otdUserSearchTimer = null;
     var otdLoadingPasses = false;
@@ -4830,7 +4831,7 @@
             '</div>' +
             '<div style="display:flex;gap:3px;margin-bottom:14px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:3px;width:fit-content">' +
                 '<button onclick="otdSetMode(\'username\')" style="' + (otdMode === 'username' ? tabActive : tabInactive) + '">Username</button>' +
-                '<button onclick="otdSetMode(\'player\')" style="' + (otdMode === 'player' ? tabActive : tabInactive) + '">Search Players' + (otdPlayers.length > 0 ? ' <span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--accent);color:#fff;font-size:9px;font-weight:700;margin-left:3px;vertical-align:middle">' + otdPlayers.length + '</span>' : '') + '</button>' +
+                '<button onclick="otdSetMode(\'player\')" style="' + (otdMode === 'player' ? tabActive : tabInactive) + '">Search Players' + (otdLbNewAdded > 0 ? ' <span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--accent);color:#fff;font-size:9px;font-weight:700;margin-left:3px;vertical-align:middle">' + otdLbNewAdded + '</span>' : '') + '</button>' +
                 '<button onclick="otdSetMode(\'leaderboard\')" style="' + (otdMode === 'leaderboard' ? tabActive : tabInactive) + '">Top OTD</button>' +
             '</div>' +
             inputSection +
@@ -4927,14 +4928,15 @@
             avatar: '', rarityColor: otdRarityColor(level)
         };
         otdPlayers.push(entry);
+        otdLbNewAdded++;
         // Re-render leaderboard so button flips to "Added" and tab badge updates
         renderOtdLeaderboard();
-        // Update tab badge
+        // Update tab badge directly without full panel re-render
         var tabBtn = document.querySelector('[onclick="otdSetMode(\'player\')"]');
         if (tabBtn) {
             var badge = tabBtn.querySelector('span');
-            if (badge) badge.textContent = otdPlayers.length;
-            else tabBtn.innerHTML = tabBtn.textContent.trim() + ' <span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--accent);color:#fff;font-size:9px;font-weight:700;margin-left:3px;vertical-align:middle">' + otdPlayers.length + '</span>';
+            if (badge) badge.textContent = otdLbNewAdded;
+            else tabBtn.innerHTML = 'Search Players <span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--accent);color:#fff;font-size:9px;font-weight:700;margin-left:3px;vertical-align:middle">' + otdLbNewAdded + '</span>';
         }
         fetch('/api/real/otd?action=earnings&id=' + encodeURIComponent(entry.id) + '&sport=' + encodeURIComponent(entry.sport) + '&season=' + encodeURIComponent(entry.season) + '&level=' + level + '&entityType=' + encodeURIComponent(entry.entityType), { credentials: 'same-origin' })
             .then(function(r) { return r.ok ? r.json() : { ok: false }; })
@@ -5202,7 +5204,10 @@
         if (mode === 'username') {
             otdPlayers = [];
             otdColorIdx = 0;
+            otdLbNewAdded = 0;
         }
+        // Visiting Search Players clears the "new additions" badge
+        if (mode === 'player') otdLbNewAdded = 0;
         otdDateMapDirty = true; otdPassesPage = 0;
         otdSelectedPlayer = null;
         otdSelectedUser = null;
