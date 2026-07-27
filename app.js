@@ -4978,7 +4978,7 @@
         var smFontSize   = mob ? '10px' : '12px';
         var tblWidth     = mob ? '100%' : '560px';
         var cols = mob
-            ? ['24px', 'auto', '58px', '52px', '68px', '26px']
+            ? ['6%', '28%', '18%', '15%', '25%', '8%']
             : ['38px', '170px', '86px', '74px', '114px', '34px'];
 
         var rows = filtered.map(function(p, i) {
