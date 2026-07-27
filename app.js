@@ -4756,19 +4756,21 @@
         // Input section changes based on mode
         var inputSection;
         if (otdMode === 'leaderboard') {
-            var lbSportOpts = OTD_SPORTS_LIST.map(function(s) {
-                return '<option value="' + s.key + '"' + (s.key === otdLeaderboardSport ? ' selected' : '') + '>' + escHtml(s.label) + '</option>';
-            }).join('');
+            var lbSportOpts = '<option value="all"' + (otdLeaderboardSport === 'all' ? ' selected' : '') + '>All Sports</option>' +
+                OTD_SPORTS_LIST.map(function(s) {
+                    return '<option value="' + s.key + '"' + (s.key === otdLeaderboardSport ? ' selected' : '') + '>' + escHtml(s.label) + '</option>';
+                }).join('');
             var lbSeasonOpts = '<option value=""' + (otdLeaderboardAllTime ? ' selected' : '') + '>All Time</option>';
             var lbSeasonMin = otdLeaderboardSport === 'golf' ? 2015 : 2022;
             for (var _y = new Date().getFullYear(); _y >= lbSeasonMin; _y--) {
                 lbSeasonOpts += '<option value="' + _y + '"' + (!otdLeaderboardAllTime && String(_y) === otdLeaderboardSeason ? ' selected' : '') + '>' + _y + '</option>';
             }
             var selStyle = 'background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;padding:8px 6px;border-radius:6px;cursor:pointer';
+            var seasonSel = otdLeaderboardSport === 'all' ? '' : ('<select id="otd-lb-season" onchange="otdLbFilterChange()" style="' + selStyle + '">' + lbSeasonOpts + '</select>');
             inputSection =
                 '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:12px">' +
                     '<select id="otd-lb-sport" onchange="otdLbFilterChange()" style="' + selStyle + '">' + lbSportOpts + '</select>' +
-                    '<select id="otd-lb-season" onchange="otdLbFilterChange()" style="' + selStyle + '">' + lbSeasonOpts + '</select>' +
+                    seasonSel +
                     '<select id="otd-lb-entitytype" onchange="otdLbFilterChange()" style="' + selStyle + '">' +
                         '<option value="player"' + (otdLeaderboardEntityType === 'player' ? ' selected' : '') + '>Players</option>' +
                         '<option value="team"' + (otdLeaderboardEntityType === 'team' ? ' selected' : '') + '>Teams</option>' +
@@ -4877,7 +4879,9 @@
         var etEl = document.getElementById('otd-lb-entitytype');
         var prevSport = otdLeaderboardSport;
         if (sportEl) otdLeaderboardSport = sportEl.value;
-        if (seasonEl) {
+        if (otdLeaderboardSport === 'all') {
+            otdLeaderboardAllTime = true;
+        } else if (seasonEl) {
             otdLeaderboardAllTime = !seasonEl.value;
             if (seasonEl.value) otdLeaderboardSeason = seasonEl.value;
         }
@@ -4982,11 +4986,13 @@
             var rankDisp = medal ? '<span style="font-size:' + (mob ? '11px' : '14px') + '">' + medal + '</span>'
                 : '<span style="color:var(--muted);font-size:' + smFontSize + ';font-variant-numeric:tabular-nums">' + actualRank + '</span>';
             var pid = parseInt(p.playerId, 10);
-            var rsUrl = pid ? rsEntityUrl(p.entityType || 'player', sport, pid) : '#';
+            var rowSport = p.sport || sport;
+            var rsUrl = pid ? rsEntityUrl(p.entityType || 'player', rowSport, pid) : '#';
             var displayName = p.name ? escHtml(p.name) : escHtml(p.playerId);
-            var yearHtml = p.season ? ' <span style="font-size:' + (mob ? '8px' : '11px') + ';font-weight:400;color:var(--muted);opacity:.6">' + escHtml(p.season) + '</span>' : '';
+            var sportBadge = sport === 'all' ? ' <span style="font-size:' + (mob ? '8px' : '9px') + ';font-weight:700;letter-spacing:.04em;color:var(--accent);background:var(--bg3);border:1px solid var(--border2);border-radius:3px;padding:1px 4px;vertical-align:middle">' + escHtml(rowSport.toUpperCase()) + '</span>' : '';
+            var yearHtml = (sport !== 'all' && p.season) ? ' <span style="font-size:' + (mob ? '8px' : '11px') + ';font-weight:400;color:var(--muted);opacity:.6">' + escHtml(p.season) + '</span>' : '';
             var posHtml = (!mob && p.position) ? ' <span style="font-size:10px;font-weight:600;color:var(--muted);background:var(--bg3);border:1px solid var(--border2);border-radius:3px;padding:1px 5px;vertical-align:middle">' + escHtml(p.position) + '</span>' : '';
-            var nameHtml = '<a href="' + rsUrl + '" target="_blank" rel="noopener" style="color:var(--fg);text-decoration:none;font-weight:600" onmouseover="this.style.color=\'var(--accent)\'" onmouseout="this.style.color=\'var(--fg)\'">' + displayName + '</a>' + yearHtml + posHtml;
+            var nameHtml = '<a href="' + rsUrl + '" target="_blank" rel="noopener" style="color:var(--fg);text-decoration:none;font-weight:600" onmouseover="this.style.color=\'var(--accent)\'" onmouseout="this.style.color=\'var(--fg)\'">' + displayName + '</a>' + sportBadge + yearHtml + posHtml;
             var baseRaxHtml = p.total != null ? RAX_SVG + p.total.toLocaleString() : '<span style="color:var(--muted);opacity:.4">—</span>';
             var passCountHtml = p.passCount != null ? Number(p.passCount).toLocaleString() : '<span style="color:var(--muted);opacity:.4">—</span>';
             var atRarityHtml = p.total != null ? RAX_SVG + Math.round(p.total * rarityMult).toLocaleString() : '<span style="color:var(--muted);opacity:.4">—</span>';

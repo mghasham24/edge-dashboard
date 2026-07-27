@@ -1022,6 +1022,28 @@ export async function onRequestGet(context) {
     const season = url.searchParams.get('season') || String(new Date().getFullYear());
     const allTime = url.searchParams.get('alltime') === '1';
     const entityType = url.searchParams.get('entityType') || 'player';
+
+    // "All Sports" view — merge all cached per-sport leaderboards from D1
+    if (sport === 'all') {
+      const suffix = 'alltime'; // all-sports view is always alltime
+      const pattern = `otd_lb_v16_${entityType}_%_${suffix}`;
+      let rows;
+      try { rows = await env.DB.prepare('SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE ?').bind(pattern).all(); }
+      catch(e) { return fail(500, e.message); }
+      const combined = [];
+      for (const row of (rows.results || [])) {
+        try {
+          const d = JSON.parse(row.data);
+          const sportFromKey = row.cache_key.replace(`otd_lb_v16_${entityType}_`, '').replace(`_${suffix}`, '');
+          for (const item of (d.leaderboard || [])) {
+            combined.push(Object.assign({}, item, { sport: item.sport || sportFromKey }));
+          }
+        } catch(e) {}
+      }
+      combined.sort((a, b) => (b.total || 0) - (a.total || 0));
+      const leaderboard = combined.slice(0, 200).map((item, i) => Object.assign({}, item, { rank: i + 1 }));
+      return new Response(JSON.stringify({ ok: true, leaderboard }), { headers: { 'Content-Type': 'application/json' } });
+    }
     const RS_SPORT_ALIAS_LB = { ncaabb: 'ncaam', mma: 'ufc' };
     const RS_SEASON_NORM_LB = { ufc: 'alltime', mma: 'alltime' };
     const sportKey = RS_SPORT_ALIAS_LB[sport] || sport;
