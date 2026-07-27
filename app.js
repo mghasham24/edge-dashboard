@@ -4990,9 +4990,7 @@
             var baseRaxHtml = p.total != null ? RAX_SVG + p.total.toLocaleString() : '<span style="color:var(--muted);opacity:.4">—</span>';
             var passCountHtml = p.passCount != null ? Number(p.passCount).toLocaleString() : '<span style="color:var(--muted);opacity:.4">—</span>';
             var atRarityHtml = p.total != null ? RAX_SVG + Math.round(p.total * rarityMult).toLocaleString() : '<span style="color:var(--muted);opacity:.4">—</span>';
-            var addBtn = (p.entityType || 'player') !== 'team'
-                ? '<button onclick="otdAddLbPlayer(' + i + ')" title="Add to calendar" style="background:none;border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:' + (mob ? '10px' : '13px') + ';font-weight:700;width:' + (mob ? '20px' : '24px') + ';height:' + (mob ? '20px' : '24px') + ';border-radius:5px;cursor:pointer;line-height:1;padding:0;display:inline-flex;align-items:center;justify-content:center" onmouseover="this.style.borderColor=\'var(--accent)\';this.style.color=\'var(--accent)\'" onmouseout="this.style.borderColor=\'var(--border2)\';this.style.color=\'var(--muted)\'">+</button>'
-                : '';
+            var addBtn = '<button onclick="otdAddLbPlayer(' + i + ')" title="Add to calendar" style="background:none;border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:' + (mob ? '10px' : '13px') + ';font-weight:700;width:' + (mob ? '20px' : '24px') + ';height:' + (mob ? '20px' : '24px') + ';border-radius:5px;cursor:pointer;line-height:1;padding:0;display:inline-flex;align-items:center;justify-content:center" onmouseover="this.style.borderColor=\'var(--accent)\';this.style.color=\'var(--accent)\'" onmouseout="this.style.borderColor=\'var(--border2)\';this.style.color=\'var(--muted)\'">+</button>';
             return { rankDisp: rankDisp, nameHtml: nameHtml, baseRaxHtml: baseRaxHtml, passCountHtml: passCountHtml, atRarityHtml: atRarityHtml, addBtn: addBtn };
         });
 
