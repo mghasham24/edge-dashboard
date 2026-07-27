@@ -5335,10 +5335,10 @@
                 var calJumped = false;
                 function applyEarningsEntry(entry, earningsArr, baseTotal) {
                     var et = entry.entityType || 'player';
-                    var multNum = et === 'team'
-                        ? (OTD_TEAM_LEVEL_MULTIPLIERS[entry.level] || 1)
-                        : entry.sport === 'ufc'
-                            ? (UFC_LEVEL_MULTIPLIERS[entry.level] || OTD_LEVEL_MULTIPLIERS[entry.level] || 1)
+                    var multNum = entry.sport === 'ufc'
+                        ? (UFC_LEVEL_MULTIPLIERS[entry.level] || OTD_LEVEL_MULTIPLIERS[entry.level] || 1)
+                        : et === 'team'
+                            ? (OTD_TEAM_LEVEL_MULTIPLIERS[entry.level] || 1)
                             : (OTD_LEVEL_MULTIPLIERS[entry.level] || 1);
                     entry.earnings = earningsArr.map(function(e) {
                         var base = e.earnings || 0;
