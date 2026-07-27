@@ -4830,7 +4830,7 @@
             '</div>' +
             '<div style="display:flex;gap:3px;margin-bottom:14px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:3px;width:fit-content">' +
                 '<button onclick="otdSetMode(\'username\')" style="' + (otdMode === 'username' ? tabActive : tabInactive) + '">Username</button>' +
-                '<button onclick="otdSetMode(\'player\')" style="' + (otdMode === 'player' ? tabActive : tabInactive) + '">Search Players</button>' +
+                '<button onclick="otdSetMode(\'player\')" style="' + (otdMode === 'player' ? tabActive : tabInactive) + '">Search Players' + (otdPlayers.length > 0 ? ' <span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--accent);color:#fff;font-size:9px;font-weight:700;margin-left:3px;vertical-align:middle">' + otdPlayers.length + '</span>' : '') + '</button>' +
                 '<button onclick="otdSetMode(\'leaderboard\')" style="' + (otdMode === 'leaderboard' ? tabActive : tabInactive) + '">Top OTD</button>' +
             '</div>' +
             inputSection +
@@ -4910,14 +4910,8 @@
             return String(pl.id) === String(p.playerId) && pl.sport === p.sport && pl.season === p.season;
         });
         if (alreadyAdded) return;
-        // Switch to player mode — preserve existing players (accumulated via repeated lb→+)
-        otdMode = 'player';
+        // Stay in leaderboard mode — don't redirect to Search Players
         otdDateMapDirty = true;
-        otdPassesPage = 0;
-        otdSelectedPlayer = null;
-        otdSelectedUser = null;
-        otdLoadingPasses = false;
-        if (window.innerWidth > 768) otdPassesOpen = true;
         var level = 1;
         var lbl = (OTD_LEVEL_OPTIONS.find(function(o) { return o.value === level; }) || {}).label || 'Level 1';
         var color = OTD_COLORS[otdColorIdx % OTD_COLORS.length];
@@ -4933,16 +4927,22 @@
             avatar: '', rarityColor: otdRarityColor(level)
         };
         otdPlayers.push(entry);
-        renderOtdPanel();
+        // Re-render leaderboard so button flips to "Added" and tab badge updates
+        renderOtdLeaderboard();
+        // Update tab badge
+        var tabBtn = document.querySelector('[onclick="otdSetMode(\'player\')"]');
+        if (tabBtn) {
+            var badge = tabBtn.querySelector('span');
+            if (badge) badge.textContent = otdPlayers.length;
+            else tabBtn.innerHTML = tabBtn.textContent.trim() + ' <span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--accent);color:#fff;font-size:9px;font-weight:700;margin-left:3px;vertical-align:middle">' + otdPlayers.length + '</span>';
+        }
         fetch('/api/real/otd?action=earnings&id=' + encodeURIComponent(entry.id) + '&sport=' + encodeURIComponent(entry.sport) + '&season=' + encodeURIComponent(entry.season) + '&level=' + level + '&entityType=' + encodeURIComponent(entry.entityType), { credentials: 'same-origin' })
             .then(function(r) { return r.ok ? r.json() : { ok: false }; })
             .then(function(d) {
-                if (!d.ok) { entry.earnings = []; otdDateMapDirty = true; renderOtdChips(); renderOtdResults(); return; }
+                if (!d.ok) { entry.earnings = []; otdDateMapDirty = true; return; }
                 entry.earnings = otdApplyMultiplier(d.earnings || [], level, entry.sport, entry.entityType);
                 entry.baseTotal = d.baseTotal != null ? d.baseTotal : null;
                 otdDateMapDirty = true;
-                renderOtdChips();
-                renderOtdResults();
             })
             .catch(function() { entry.earnings = []; otdDateMapDirty = true; renderOtdChips(); renderOtdResults(); });
     }
@@ -4996,7 +4996,10 @@
             var baseRaxHtml = p.total != null ? RAX_SVG + p.total.toLocaleString() : '<span style="color:var(--muted);opacity:.4">—</span>';
             var passCountHtml = p.passCount != null ? Number(p.passCount).toLocaleString() : '<span style="color:var(--muted);opacity:.4">—</span>';
             var atRarityHtml = p.total != null ? RAX_SVG + Math.round(p.total * rarityMult).toLocaleString() : '<span style="color:var(--muted);opacity:.4">—</span>';
-            var addBtn = '<button onclick="otdAddLbPlayer(' + i + ')" title="Add to calendar" style="background:none;border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:' + (mob ? '10px' : '13px') + ';font-weight:700;width:' + (mob ? '20px' : '24px') + ';height:' + (mob ? '20px' : '24px') + ';border-radius:5px;cursor:pointer;line-height:1;padding:0;display:inline-flex;align-items:center;justify-content:center" onmouseover="this.style.borderColor=\'var(--accent)\';this.style.color=\'var(--accent)\'" onmouseout="this.style.borderColor=\'var(--border2)\';this.style.color=\'var(--muted)\'">+</button>';
+            var isAdded = otdPlayers.some(function(pl) { return String(pl.id) === String(p.playerId) && pl.sport === (p.sport || sport) && pl.season === p.season; });
+            var addBtn = isAdded
+                ? '<span style="font-size:' + (mob ? '9px' : '11px') + ';font-weight:700;color:var(--accent);white-space:nowrap">Added</span>'
+                : '<button onclick="otdAddLbPlayer(' + i + ')" title="Add to calendar" style="background:none;border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:' + (mob ? '10px' : '13px') + ';font-weight:700;width:' + (mob ? '20px' : '24px') + ';height:' + (mob ? '20px' : '24px') + ';border-radius:5px;cursor:pointer;line-height:1;padding:0;display:inline-flex;align-items:center;justify-content:center" onmouseover="this.style.borderColor=\'var(--accent)\';this.style.color=\'var(--accent)\'" onmouseout="this.style.borderColor=\'var(--border2)\';this.style.color=\'var(--muted)\'">+</button>';
             return { rankDisp: rankDisp, nameHtml: nameHtml, baseRaxHtml: baseRaxHtml, passCountHtml: passCountHtml, atRarityHtml: atRarityHtml, addBtn: addBtn };
         });
 
