@@ -4821,7 +4821,7 @@
         panel.innerHTML =
             '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">' +
                 '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">' +
-                    '<div style="font-size:16px;font-weight:800;letter-spacing:.04em">🗓️ On This Day</div>' +
+                    '<div style="display:flex;align-items:center;gap:8px"><div style="font-size:16px;font-weight:800;letter-spacing:.04em">🗓️ On This Day</div><span style="font-size:9px;font-weight:700;letter-spacing:.08em;color:#fff;background:var(--accent);border-radius:4px;padding:2px 6px;vertical-align:middle;line-height:1.4">BETA</span></div>' +
                     loadedChip +
                 '</div>' +
                 '<button onclick="document.getElementById(\'otd-tab-btn\').click()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:7px 14px;border-radius:6px;cursor:pointer">&larr; Back</button>' +
