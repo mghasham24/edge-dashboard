@@ -5017,19 +5017,19 @@
         var raritySelect = '<select onchange="otdLbRarityChange(this.value)" style="background:transparent;border:none;color:var(--muted);font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.05em;cursor:pointer;padding:0;outline:none">' + rarityOpts + '</select>';
 
         el.innerHTML =
-            '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px;max-width:680px">' +
+            '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px;max-width:560px">' +
                 '<div style="font-size:12px;color:var(--muted)">' + filtered.length + ' results</div>' +
                 '<div style="font-size:11px;color:var(--muted);opacity:.6">Owners from RS · Rarity Rax = base × table mult</div>' +
             '</div>' +
-            '<div style="max-width:640px">' +
-            '<table style="width:100%;border-collapse:collapse;table-layout:fixed">' +
+            '<div>' +
+            '<table style="border-collapse:collapse;table-layout:fixed;width:560px">' +
                 '<colgroup>' +
-                    '<col style="width:40px">' +
-                    '<col>' +
+                    '<col style="width:38px">' +
+                    '<col style="width:170px">' +
                     '<col style="width:86px">' +
-                    '<col style="width:70px">' +
-                    '<col style="width:108px">' +
-                    '<col style="width:32px">' +
+                    '<col style="width:74px">' +
+                    '<col style="width:114px">' +
+                    '<col style="width:34px">' +
                 '</colgroup>' +
                 '<thead><tr style="border-bottom:2px solid var(--border2)">' +
                     '<th style="' + thStyle + ';text-align:right">#</th>' +

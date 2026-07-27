@@ -1028,7 +1028,7 @@ export async function onRequestGet(context) {
     const isAlwaysAllTime = !!RS_SEASON_NORM_LB[sportKey];
     const effectiveAllTime = allTime || isAlwaysAllTime;
 
-    const lbCacheKey = `otd_lb_v11_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
+    const lbCacheKey = `otd_lb_v12_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
     if (url.searchParams.get('force') !== '1') {
       try {
         const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(lbCacheKey).first();
@@ -1214,6 +1214,32 @@ export async function onRequestGet(context) {
           sport: sportKey,
           entityType,
         }));
+    }
+
+    // ── Supplement alltime owner counts per season ───────────────────────────
+    // ownerMap was seeded only from the current year's hotseason (top 200).
+    // Players ranked high in earnings from older seasons may not appear there.
+    // Fetch hotseason for each unique season in the list that isn't already covered.
+    if (effectiveAllTime) {
+      const uniqueSeasons = [...new Set(list.map(r => r.season).filter(Boolean))];
+      const extraSeasons = uniqueSeasons.filter(s => s !== currentSeasonStr);
+      if (extraSeasons.length > 0) {
+        const extraFetches = extraSeasons.map(yr => fetchShopSection('hotseason', 200, yr));
+        const extraResults = await Promise.all(extraFetches);
+        for (const items of extraResults) {
+          for (const p of items) {
+            const bid = bId(String(p.id || p.entityId || ''));
+            // Only fill gaps — don't overwrite current-season data
+            if (bid && p.value != null && ownerMap[bid] == null) ownerMap[bid] = p.value;
+          }
+        }
+        // Re-apply ownerMap to any list items still missing passCount
+        for (const item of list) {
+          if (item.passCount == null && ownerMap[item.playerId] != null) {
+            item.passCount = ownerMap[item.playerId];
+          }
+        }
+      }
     }
 
     // ── Resolve missing names ────────────────────────────────────────────────
