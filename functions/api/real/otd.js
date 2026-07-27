@@ -1028,7 +1028,7 @@ export async function onRequestGet(context) {
     const isAlwaysAllTime = !!RS_SEASON_NORM_LB[sportKey];
     const effectiveAllTime = allTime || isAlwaysAllTime;
 
-    const lbCacheKey = `otd_lb_v13_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
+    const lbCacheKey = `otd_lb_v14_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
     if (url.searchParams.get('force') !== '1') {
       try {
         const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(lbCacheKey).first();
@@ -1067,13 +1067,13 @@ export async function onRequestGet(context) {
     }
 
     // Fetch earningstotal (BASE RAX, primary ranking) and hotseason (OWNERS) in parallel.
-    // hotseason fetches 500 items so its coverage overlaps well with earningstotal top 200
-    // (the two lists rank differently — a player ranked 180 in earnings may be ranked 300 in owners).
+    // hotseason maxCount=1000 to cover even low-owner players. fetchShopSection stops early
+    // when RS runs out of data (hasMore===false or items<3), so the cap is just a safety ceiling.
     // For alltime: skip earningstotal (use D1 instead) but still fetch hotseason for current year so owners show.
     const currentSeasonStr = String(new Date().getFullYear());
     const [earningsPasses, ownerPasses] = effectiveAllTime
-      ? [[], await fetchShopSection('hotseason', 300, currentSeasonStr)]
-      : await Promise.all([fetchShopSection('earningstotal', 200), fetchShopSection('hotseason', 500)]);
+      ? [[], await fetchShopSection('hotseason', 500, currentSeasonStr)]
+      : await Promise.all([fetchShopSection('earningstotal', 200), fetchShopSection('hotseason', 1000)]);
 
     // For alltime: seed nameMap from all historically relevant seasons.
     // 3 pages for recent 3 years (top 60 each), 1 page for older years (top 20 each).
@@ -1224,7 +1224,7 @@ export async function onRequestGet(context) {
       const uniqueSeasons = [...new Set(list.map(r => r.season).filter(Boolean))];
       const extraSeasons = uniqueSeasons.filter(s => s !== currentSeasonStr);
       if (extraSeasons.length > 0) {
-        const extraFetches = extraSeasons.map(yr => fetchShopSection('hotseason', 300, yr));
+        const extraFetches = extraSeasons.map(yr => fetchShopSection('hotseason', 500, yr));
         const extraResults = await Promise.all(extraFetches);
         for (const items of extraResults) {
           for (const p of items) {
