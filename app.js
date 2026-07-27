@@ -5196,9 +5196,10 @@
 
     function otdSetMode(mode) {
         otdMode = mode;
-        // When switching to leaderboard, preserve players so repeated "+" clicks accumulate.
-        // Switching to username or player (via tab) starts fresh.
-        if (mode !== 'leaderboard') {
+        // Preserve players when switching between leaderboard and search players
+        // (user adds from leaderboard then views/adjusts in search players tab).
+        // Only clear when switching to username (different workflow entirely).
+        if (mode === 'username') {
             otdPlayers = [];
             otdColorIdx = 0;
         }
