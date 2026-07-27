@@ -4971,62 +4971,89 @@
 
         var sport = otdLeaderboardSport;
         var mob = window.innerWidth <= 768;
-        var cellPad = mob ? '5px 3px' : '9px 10px';
-        var thStyle = 'padding:' + (mob ? '5px 3px' : '8px 10px') + ';font-size:' + (mob ? '8px' : '10px') + ';font-weight:700;color:var(--muted);letter-spacing:.03em;overflow:hidden' + (mob ? '' : ';white-space:nowrap');
-        var nameFontSize = mob ? '11px' : '13px';
-        var numFontSize  = mob ? '10px' : '13px';
-        var smFontSize   = mob ? '9px' : '12px';
-        var tblWidth     = mob ? '308px' : '560px';
-        var cols = mob
-            ? ['20px', '120px', '54px', '36px', '54px', '24px']
-            : ['38px', '170px', '86px', '74px', '114px', '34px'];
+        var smFontSize = mob ? '9px' : '12px';
 
-        var rows = filtered.map(function(p, i) {
+        // Shared data builders (used by both mobile grid and desktop table)
+        var rowData = filtered.map(function(p, i) {
             var actualRank = p.rank || (i + 1);
             var medal = actualRank === 1 ? '🥇' : actualRank === 2 ? '🥈' : actualRank === 3 ? '🥉' : '';
             var rankDisp = medal ? '<span style="font-size:' + (mob ? '11px' : '14px') + '">' + medal + '</span>'
                 : '<span style="color:var(--muted);font-size:' + smFontSize + ';font-variant-numeric:tabular-nums">' + actualRank + '</span>';
-
             var pid = parseInt(p.playerId, 10);
             var rsUrl = pid ? rsEntityUrl(p.entityType || 'player', sport, pid) : '#';
             var displayName = p.name ? escHtml(p.name) : escHtml(p.playerId);
-            var yearHtml = p.season ? ' <span style="font-size:' + (mob ? '9px' : '11px') + ';font-weight:400;color:var(--muted);opacity:.6">' + escHtml(p.season) + '</span>' : '';
+            var yearHtml = p.season ? ' <span style="font-size:' + (mob ? '8px' : '11px') + ';font-weight:400;color:var(--muted);opacity:.6">' + escHtml(p.season) + '</span>' : '';
             var posHtml = (!mob && p.position) ? ' <span style="font-size:10px;font-weight:600;color:var(--muted);background:var(--bg3);border:1px solid var(--border2);border-radius:3px;padding:1px 5px;vertical-align:middle">' + escHtml(p.position) + '</span>' : '';
             var nameHtml = '<a href="' + rsUrl + '" target="_blank" rel="noopener" style="color:var(--fg);text-decoration:none;font-weight:600" onmouseover="this.style.color=\'var(--accent)\'" onmouseout="this.style.color=\'var(--fg)\'">' + displayName + '</a>' + yearHtml + posHtml;
-
-            var baseRaxHtml = p.total != null
-                ? RAX_SVG + p.total.toLocaleString()
-                : '<span style="color:var(--muted);opacity:.4">—</span>';
-
-            var passCountHtml = p.passCount != null
-                ? Number(p.passCount).toLocaleString()
-                : '<span style="color:var(--muted);opacity:.4">—</span>';
-
-            var atRarityHtml = p.total != null
-                ? RAX_SVG + Math.round(p.total * rarityMult).toLocaleString()
-                : '<span style="color:var(--muted);opacity:.4">—</span>';
-
+            var baseRaxHtml = p.total != null ? RAX_SVG + p.total.toLocaleString() : '<span style="color:var(--muted);opacity:.4">—</span>';
+            var passCountHtml = p.passCount != null ? Number(p.passCount).toLocaleString() : '<span style="color:var(--muted);opacity:.4">—</span>';
+            var atRarityHtml = p.total != null ? RAX_SVG + Math.round(p.total * rarityMult).toLocaleString() : '<span style="color:var(--muted);opacity:.4">—</span>';
             var addBtn = (p.entityType || 'player') !== 'team'
-                ? '<button onclick="otdAddLbPlayer(' + i + ')" title="Add to calendar" style="background:none;border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:' + numFontSize + ';font-weight:700;width:' + (mob ? '20px' : '24px') + ';height:' + (mob ? '20px' : '24px') + ';border-radius:5px;cursor:pointer;line-height:1;padding:0;display:inline-flex;align-items:center;justify-content:center" onmouseover="this.style.borderColor=\'var(--accent)\';this.style.color=\'var(--accent)\'" onmouseout="this.style.borderColor=\'var(--border2)\';this.style.color=\'var(--muted)\'">+</button>'
+                ? '<button onclick="otdAddLbPlayer(' + i + ')" title="Add to calendar" style="background:none;border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:' + (mob ? '10px' : '13px') + ';font-weight:700;width:' + (mob ? '20px' : '24px') + ';height:' + (mob ? '20px' : '24px') + ';border-radius:5px;cursor:pointer;line-height:1;padding:0;display:inline-flex;align-items:center;justify-content:center" onmouseover="this.style.borderColor=\'var(--accent)\';this.style.color=\'var(--accent)\'" onmouseout="this.style.borderColor=\'var(--border2)\';this.style.color=\'var(--muted)\'">+</button>'
                 : '';
+            return { rankDisp: rankDisp, nameHtml: nameHtml, baseRaxHtml: baseRaxHtml, passCountHtml: passCountHtml, atRarityHtml: atRarityHtml, addBtn: addBtn };
+        });
 
-            return '<tr style="border-bottom:1px solid var(--border)">' +
-                '<td style="padding:' + cellPad + ';text-align:right">' + rankDisp + '</td>' +
-                '<td style="padding:' + cellPad + ';font-size:' + nameFontSize + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:0">' + nameHtml + '</td>' +
-                '<td style="padding:' + cellPad + ';text-align:right;font-variant-numeric:tabular-nums;font-size:' + numFontSize + ';font-weight:700;color:var(--accent);overflow:hidden">' + baseRaxHtml + '</td>' +
-                '<td style="padding:' + cellPad + ';text-align:right;font-variant-numeric:tabular-nums;font-size:' + smFontSize + ';color:var(--fg);overflow:hidden">' + passCountHtml + '</td>' +
-                '<td style="padding:' + cellPad + ';text-align:right;font-variant-numeric:tabular-nums;font-size:' + smFontSize + ';color:var(--fg);overflow:hidden">' + atRarityHtml + '</td>' +
-                '<td style="padding:' + (mob ? '3px 1px' : '9px 6px') + ';text-align:center">' + addBtn + '</td>' +
-            '</tr>';
-        }).join('');
-
-        // Rarity dropdown — in header on desktop, above table on mobile
+        // Rarity dropdown
         var rarityOpts = OTD_LEVEL_OPTIONS.map(function(o) {
             return '<option value="' + o.value + '"' + (o.value === otdLbRarityLevel ? ' selected' : '') + '>' + escHtml(o.label) + '</option>';
         }).join('');
         var raritySelectDesktop = '<select onchange="otdLbRarityChange(this.value)" style="background:transparent;border:none;color:var(--muted);font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.04em;cursor:pointer;padding:0;outline:none;max-width:100%">' + rarityOpts + '</select>';
         var raritySelectMobile = mob ? '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px"><span style="font-size:10px;font-weight:700;color:var(--muted)">RARITY:</span><select onchange="otdLbRarityChange(this.value)" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:11px;padding:3px 6px;border-radius:5px;cursor:pointer;outline:none">' + rarityOpts + '</select></div>' : '';
-        var rarLabel = mob ? 'RARITY' : raritySelectDesktop;
+
+        var lbHtml;
+        if (mob) {
+            // CSS Grid — immune to iOS Safari table-layout bugs
+            var GRD = 'display:grid;grid-template-columns:20px 1fr 52px 34px 52px 22px;width:100%;align-items:center';
+            var hdrCell = 'padding:5px 2px;font-size:8px;font-weight:700;color:var(--muted);letter-spacing:.03em;overflow:hidden';
+            var numCell = 'padding:5px 2px;font-size:10px;font-variant-numeric:tabular-nums;overflow:hidden;white-space:nowrap;min-width:0';
+            lbHtml =
+                '<div style="' + GRD + ';border-bottom:2px solid var(--border2)">' +
+                    '<div style="' + hdrCell + ';text-align:right">#</div>' +
+                    '<div style="' + hdrCell + ';min-width:0">PLAYER</div>' +
+                    '<div style="' + hdrCell + ';text-align:right">BASE</div>' +
+                    '<div style="' + hdrCell + ';text-align:right">OWN</div>' +
+                    '<div style="' + hdrCell + ';text-align:right">RARITY</div>' +
+                    '<div style="' + hdrCell + '"></div>' +
+                '</div>' +
+                rowData.map(function(d) {
+                    return '<div style="' + GRD + ';border-bottom:1px solid var(--border)">' +
+                        '<div style="' + numCell + ';text-align:right">' + d.rankDisp + '</div>' +
+                        '<div style="' + numCell + ';font-size:11px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">' + d.nameHtml + '</div>' +
+                        '<div style="' + numCell + ';text-align:right;font-weight:700;color:var(--accent)">' + d.baseRaxHtml + '</div>' +
+                        '<div style="' + numCell + ';text-align:right;font-size:9px">' + d.passCountHtml + '</div>' +
+                        '<div style="' + numCell + ';text-align:right;font-size:9px">' + d.atRarityHtml + '</div>' +
+                        '<div style="padding:3px 1px;text-align:center;display:flex;align-items:center;justify-content:center">' + d.addBtn + '</div>' +
+                    '</div>';
+                }).join('');
+        } else {
+            var cellPad = '9px 10px';
+            var thStyle = 'padding:8px 10px;font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.04em;white-space:nowrap';
+            var cols = ['38px', '170px', '86px', '74px', '114px', '34px'];
+            var rows = rowData.map(function(d) {
+                return '<tr style="border-bottom:1px solid var(--border)">' +
+                    '<td style="padding:' + cellPad + ';text-align:right">' + d.rankDisp + '</td>' +
+                    '<td style="padding:' + cellPad + ';font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:0">' + d.nameHtml + '</td>' +
+                    '<td style="padding:' + cellPad + ';text-align:right;font-variant-numeric:tabular-nums;font-size:13px;font-weight:700;color:var(--accent);white-space:nowrap">' + d.baseRaxHtml + '</td>' +
+                    '<td style="padding:' + cellPad + ';text-align:right;font-variant-numeric:tabular-nums;font-size:12px;color:var(--fg)">' + d.passCountHtml + '</td>' +
+                    '<td style="padding:' + cellPad + ';text-align:right;font-variant-numeric:tabular-nums;font-size:12px;color:var(--fg);white-space:nowrap">' + d.atRarityHtml + '</td>' +
+                    '<td style="padding:9px 6px;text-align:center">' + d.addBtn + '</td>' +
+                '</tr>';
+            }).join('');
+            lbHtml =
+                '<table style="border-collapse:collapse;table-layout:fixed;width:560px">' +
+                    '<colgroup>' + cols.map(function(w) { return '<col style="width:' + w + '">'; }).join('') + '</colgroup>' +
+                    '<thead><tr style="border-bottom:2px solid var(--border2)">' +
+                        '<th style="' + thStyle + ';text-align:right">#</th>' +
+                        '<th style="' + thStyle + ';text-align:left">PLAYER</th>' +
+                        '<th style="' + thStyle + ';text-align:right">BASE RAX</th>' +
+                        '<th style="' + thStyle + ';text-align:right">OWNERS</th>' +
+                        '<th style="' + thStyle + ';text-align:right">' + raritySelectDesktop + '</th>' +
+                        '<th style="' + thStyle + '"></th>' +
+                    '</tr></thead>' +
+                    '<tbody>' + rows + '</tbody>' +
+                '</table>';
+        }
 
         el.innerHTML =
             '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:6px;max-width:' + (mob ? '100%' : '560px') + '">' +
@@ -5034,27 +5061,7 @@
                 (mob ? '' : '<div style="font-size:11px;color:var(--muted);opacity:.6">Owners from RS · Rarity Rax = base × mult</div>') +
             '</div>' +
             raritySelectMobile +
-            '<div style="overflow-x:auto">' +
-            '<table style="border-collapse:collapse;table-layout:fixed;width:' + tblWidth + '">' +
-                '<colgroup>' +
-                    '<col style="width:' + cols[0] + '">' +
-                    '<col style="width:' + cols[1] + '">' +
-                    '<col style="width:' + cols[2] + '">' +
-                    '<col style="width:' + cols[3] + '">' +
-                    '<col style="width:' + cols[4] + '">' +
-                    '<col style="width:' + cols[5] + '">' +
-                '</colgroup>' +
-                '<thead><tr style="border-bottom:2px solid var(--border2)">' +
-                    '<th style="' + thStyle + ';text-align:right">#</th>' +
-                    '<th style="' + thStyle + ';text-align:left">' + (mob ? 'PLAYER' : 'PLAYER') + '</th>' +
-                    '<th style="' + thStyle + ';text-align:right">' + (mob ? 'BASE' : 'BASE RAX') + '</th>' +
-                    '<th style="' + thStyle + ';text-align:right">OWN</th>' +
-                    '<th style="' + thStyle + ';text-align:right">' + rarLabel + '</th>' +
-                    '<th style="' + thStyle + '"></th>' +
-                '</tr></thead>' +
-                '<tbody>' + rows + '</tbody>' +
-            '</table>' +
-            '</div>';
+            lbHtml;
     }
 
     function otdOnSearchInput(val) {
