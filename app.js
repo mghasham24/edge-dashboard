@@ -3158,14 +3158,16 @@
     }
     // Single multiplier lookup — handles team vs UFC vs player automatically.
     function otdGetMult(p) {
-        if ((p.entityType || 'player') === 'team') return OTD_TEAM_LEVEL_MULTIPLIERS[p.level] || 1;
         if (p.sport === 'ufc') return UFC_LEVEL_MULTIPLIERS[p.level] || OTD_LEVEL_MULTIPLIERS[p.level] || 1;
+        if ((p.entityType || 'player') === 'team') return OTD_TEAM_LEVEL_MULTIPLIERS[p.level] || 1;
         return otdGetDerivedMult(p.sport, p.level) || OTD_LEVEL_MULTIPLIERS[p.level] || 1;
     }
     function otdApplyMultiplier(earningsArr, level, sport, entityType) {
-        var mult = (entityType === 'team')
-            ? (OTD_TEAM_LEVEL_MULTIPLIERS[level] || 1)
-            : (sport ? otdGetDerivedMult(sport, level) : (OTD_LEVEL_MULTIPLIERS[level] || 0));
+        var mult = (sport === 'ufc')
+            ? (UFC_LEVEL_MULTIPLIERS[level] || OTD_LEVEL_MULTIPLIERS[level] || 0)
+            : (entityType === 'team')
+                ? (OTD_TEAM_LEVEL_MULTIPLIERS[level] || 1)
+                : (sport ? otdGetDerivedMult(sport, level) : (OTD_LEVEL_MULTIPLIERS[level] || 0));
         return earningsArr.map(function(e) {
             var base = e.earnings || 0;
             return (mult && base) ? Object.assign({}, e, { atRarityEarnings: Math.round(base * mult) }) : e;
