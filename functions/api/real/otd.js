@@ -1026,7 +1026,7 @@ export async function onRequestGet(context) {
     // "All Sports" view — merge all cached per-sport leaderboards from D1
     if (sport === 'all') {
       const suffix = 'alltime'; // all-sports view is always alltime
-      const pattern = `otd_lb_v16_${entityType}_%_${suffix}`;
+      const pattern = `otd_lb_v17_${entityType}_%_${suffix}`;
       let rows;
       try { rows = await env.DB.prepare('SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE ?').bind(pattern).all(); }
       catch(e) { return fail(500, e.message); }
@@ -1034,7 +1034,7 @@ export async function onRequestGet(context) {
       for (const row of (rows.results || [])) {
         try {
           const d = JSON.parse(row.data);
-          const sportFromKey = row.cache_key.replace(`otd_lb_v16_${entityType}_`, '').replace(`_${suffix}`, '');
+          const sportFromKey = row.cache_key.replace(`otd_lb_v17_${entityType}_`, '').replace(`_${suffix}`, '');
           for (const item of (d.leaderboard || [])) {
             combined.push(Object.assign({}, item, { sport: item.sport || sportFromKey }));
           }
@@ -1057,7 +1057,7 @@ export async function onRequestGet(context) {
     const isActiveSeason = !effectiveAllTime && season === currentSeasonStr;
     const lbTtl = (isActiveSeason || effectiveAllTime) ? WEEK : Infinity;
 
-    const lbCacheKey = `otd_lb_v16_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
+    const lbCacheKey = `otd_lb_v17_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
     if (url.searchParams.get('force') !== '1') {
       try {
         const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(lbCacheKey).first();
