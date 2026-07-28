@@ -4507,6 +4507,12 @@
             });
         });
 
+        // Normalize sport aliases so ncaam/ncaab/ncaabb all match each other,
+        // and ufc/mma match — leaderboard uses canonical RS aliases, search UI uses display keys.
+        var OTD_SPORT_NORM = { ncaabb: 'ncaam', ncaab: 'ncaam', mma: 'ufc' };
+        function normSport(s) { return OTD_SPORT_NORM[s] || s; }
+        var normCheckSport = normSport(sport);
+
         var checkMult = otdGetMult(otdCheckPlayer) || 1;
         otdCheckEarnings.forEach(function(e) {
             var dp = (e.day || '').split('T')[0].split('-');
@@ -4517,7 +4523,7 @@
             // Uses both ID and name comparison since search/passes APIs may return different entity IDs.
             var checkCp = otdCheckPlayer;
             var existingEntries = (checkDateMap[dayKey] || []).filter(function(entry) {
-                if (entry.player.sport !== sport) return false;
+                if (normSport(entry.player.sport) !== normCheckSport) return false;
                 if (!checkCp || entry.player.season !== checkCp.season) return true;
                 if (String(entry.player.id) === String(checkCp.id)) return false;
                 if (entry.player.name.toLowerCase() === checkCp.name.toLowerCase()) return false;
@@ -5645,7 +5651,8 @@
                     var dayKey = String(otdCalYear) + '-' + dp[1].padStart(2,'0') + '-' + dp[2].padStart(2,'0');
                     if (!rawDateMap[dayKey]) rawDateMap[dayKey] = {};
                     var SOCCER_SK = { epl:1, ucl:1, mls:1, fc:1, fifa:1, soccer:1 };
-                    var sk = SOCCER_SK[p.sport] ? 'soccer' : p.sport;
+                    var CBB_SK = { ncaabb:1, ncaab:1, ncaam:1 };
+                    var sk = SOCCER_SK[p.sport] ? 'soccer' : CBB_SK[p.sport] ? 'ncaam' : p.sport === 'mma' ? 'ufc' : p.sport;
                     if (!rawDateMap[dayKey][sk]) rawDateMap[dayKey][sk] = [];
                     rawDateMap[dayKey][sk].push({ player: p, rax: e.atRarityEarnings || 0, origDay: (e.day || '').split('T')[0].trim(), bsId: (e.playerBoxScoreIds && e.playerBoxScoreIds[0]) || e.playerBoxScoreId || e.boxScoreId || e.boxscoreId || e.performanceId || e.gameId || null });
                 });
