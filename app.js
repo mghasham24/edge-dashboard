@@ -3461,7 +3461,6 @@
             }).catch(function() {});
     }
     function otdSetClaimsView(n) {
-        if (n === 3 && !isPro()) return;
         otdClaimsView = n;
         renderOtdResults();
     }
@@ -3825,6 +3824,7 @@
                 otdCheckLoading = false;
             }
             renderOtdCarousel();
+            renderOtdChips();
             renderOtdCheckWrap();
             return;
         }
@@ -4125,7 +4125,7 @@
         var remaining = allItems.length - items.length;
         var moreBtn = remaining > 0
             ? '<div style="grid-column:1/-1;text-align:center;padding:10px 0 4px">' +
-                '<button onclick="otdShowMorePasses()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:7px 20px;border-radius:6px;cursor:pointer">Show ' + remaining + ' more</button>' +
+                '<button onclick="otdShowMorePasses()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:7px 20px;border-radius:6px;cursor:pointer">Show ' + Math.min(remaining, OTD_PASSES_PER_PAGE) + ' more</button>' +
               '</div>'
             : '';
 
@@ -4266,12 +4266,13 @@
     function renderOtdCheckWrap() {
         var el = document.getElementById('otd-check-wrap');
         if (!el) return;
+        if (otdMode === 'leaderboard') { el.innerHTML = ''; return; }
         var canShow = otdPlayers.length > 0 && !otdLoadingPasses;
         if (!canShow) { el.innerHTML = ''; return; }
         if (!otdCheckMode && !otdFindMode) {
             el.innerHTML = '<div style="margin-bottom:14px;display:flex;flex-wrap:wrap;gap:8px">' +
                 '<button onclick="otdToggleCheck()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:6px;cursor:pointer">✅ Check Before You Buy</button>' +
-                (otdMode === 'username' ? (function() { var po = window.innerWidth <= 768 ? otdCarouselOpen : otdPassesOpen; var PASS_CARD_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-1px"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="9" y1="7" x2="15" y2="7"/><line x1="9" y1="11" x2="15" y2="11"/><line x1="9" y1="15" x2="13" y2="15"/></svg>'; return '<button onclick="otdTogglePasses()" style="background:' + (po ? 'rgba(99,102,241,.1)' : 'var(--bg3)') + ';border:1px solid ' + (po ? 'var(--accent)' : 'var(--border2)') + ';color:' + (po ? 'var(--accent)' : 'var(--muted)') + ';font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:6px;cursor:pointer;display:inline-flex;align-items:center;gap:5px">' + PASS_CARD_SVG + ' Passes</button>'; })() : '') +
+                ((otdMode === 'username' || (otdMode === 'player' && window.innerWidth <= 768)) ? (function() { var po = window.innerWidth <= 768 ? otdCarouselOpen : otdPassesOpen; var PASS_CARD_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-1px"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="9" y1="7" x2="15" y2="7"/><line x1="9" y1="11" x2="15" y2="11"/><line x1="9" y1="15" x2="13" y2="15"/></svg>'; return '<button onclick="otdTogglePasses()" style="background:' + (po ? 'rgba(99,102,241,.1)' : 'var(--bg3)') + ';border:1px solid ' + (po ? 'var(--accent)' : 'var(--border2)') + ';color:' + (po ? 'var(--accent)' : 'var(--muted)') + ';font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:6px;cursor:pointer;display:inline-flex;align-items:center;gap:5px">' + PASS_CARD_SVG + ' Passes</button>'; })() : '') +
             '</div>';
             return;
         }
@@ -4534,6 +4535,8 @@
                 // Compute event rax from base earnings × selected multiplier so it stays in sync
                 // with the annual total and updates when rarity dropdown changes.
                 var newRax = Math.round((e.earnings || 0) * checkMult) || (e.atRarityEarnings || 0);
+                // If this card earns < 200 rax on this day it won't occupy a real claim slot — skip.
+                if ((newRax || 0) < 200) return;
                 var newTotal = existingEntries.length + 1;
                 var isOver = newTotal > limit;
                 var wasted = false;
@@ -4579,7 +4582,7 @@
                 });
                 allCards.push({ name: otdCheckPlayer.name, rax: d.newRax || 0, level: otdCheckPlayer.levelLabel || '', isNew: true, id: String(otdCheckPlayer.id || ''), sport: otdCheckPlayer.sport, entityType: otdCheckPlayer.entityType || 'player', season: otdCheckPlayer.season || '', passId: '' });
                 allCards.sort(function(a, b) { return b.rax - a.rax; });
-                allCards = allCards.filter(function(c, idx) { return idx < limit || c.rax >= 200 || c.isNew; });
+                allCards = allCards.filter(function(c, idx) { return idx < limit || c.rax >= 200; });
                 var cardRows = allCards.map(function(c, idx) {
                     var claimed = idx < limit;
                     var color = claimed ? '#22c55e' : '#ef5350';
@@ -4609,6 +4612,47 @@
         return html + '</div>';
     }
 
+    function showOtdBetaPopup() {
+        if (localStorage.getItem('otd_beta_seen')) return;
+        localStorage.setItem('otd_beta_seen', '1');
+        var overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px';
+        var box = document.createElement('div');
+        box.style.cssText = 'background:#18181f;border:1px solid rgba(99,102,241,.35);border-radius:14px;padding:28px 24px;max-width:360px;width:100%;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,.7)';
+        var badge = document.createElement('div');
+        badge.style.cssText = 'display:inline-block;background:rgba(99,102,241,.18);border:1px solid rgba(99,102,241,.4);color:#a5b4fc;font-size:10px;font-weight:800;letter-spacing:.1em;border-radius:20px;padding:3px 10px;margin-bottom:14px';
+        badge.textContent = 'BETA';
+        var heading = document.createElement('div');
+        heading.style.cssText = 'font-size:17px;font-weight:800;color:#f0eff5;margin-bottom:10px;letter-spacing:.01em';
+        heading.textContent = '🗓️ On This Day — Beta';
+        var body = document.createElement('p');
+        body.style.cssText = 'color:#a0a0b8;font-size:13px;line-height:1.6;margin-bottom:20px';
+        body.innerHTML = 'This feature is in&nbsp;<strong style="color:#f0eff5">beta</strong>. You may encounter bugs or incomplete data.<br><br>Found something? DM <strong style="color:#a5b4fc">@moe</strong> on Real.';
+        var closeBtn = document.createElement('button');
+        var WAIT = 7;
+        closeBtn.textContent = 'Got it (' + WAIT + ')';
+        closeBtn.disabled = true;
+        closeBtn.style.cssText = 'width:100%;padding:11px;border:none;background:rgba(99,102,241,.35);color:#a5b4fc;border-radius:8px;cursor:default;font-size:13px;font-weight:700;transition:background .2s,color .2s';
+        var remaining = WAIT;
+        var timer = setInterval(function() {
+            remaining--;
+            if (remaining > 0) {
+                closeBtn.textContent = 'Got it (' + remaining + ')';
+            } else {
+                clearInterval(timer);
+                closeBtn.textContent = 'Got it';
+                closeBtn.disabled = false;
+                closeBtn.style.background = 'var(--accent)';
+                closeBtn.style.color = '#fff';
+                closeBtn.style.cursor = 'pointer';
+            }
+        }, 1000);
+        function close() { clearInterval(timer); document.body.removeChild(overlay); }
+        closeBtn.onclick = function() { if (!closeBtn.disabled) close(); };
+        box.appendChild(badge); box.appendChild(heading); box.appendChild(body); box.appendChild(closeBtn);
+        overlay.appendChild(box); document.body.appendChild(overlay);
+    }
+
     function showOtdTab() {
         document.getElementById('sport-tabs').style.display = 'none';
         document.getElementById('feature-tabs').style.display = 'none';
@@ -4628,6 +4672,7 @@
         document.getElementById('otd-panel').classList.add('visible');
         otdVisible = true;
         renderOtdPanel();
+        showOtdBetaPopup();
         // Load probed sport multipliers from D1 (built by admin probe_multipliers action)
         if (!Object.keys(otdSportMultipliers).length) {
             fetch('/api/real/otd?action=get_multipliers', { credentials: 'same-origin' })
@@ -4791,10 +4836,11 @@
                     '<select id="otd-lb-sport" onchange="otdLbFilterChange()" style="' + selStyle + '">' + lbSportOpts + '</select>' +
                     seasonSel +
                     mlbPosSel +
-                    '<select id="otd-lb-entitytype" onchange="otdLbFilterChange()" style="' + selStyle + '">' +
-                        '<option value="player"' + (otdLeaderboardEntityType === 'player' ? ' selected' : '') + '>Players</option>' +
-                        '<option value="team"' + (otdLeaderboardEntityType === 'team' ? ' selected' : '') + '>Teams</option>' +
-                    '</select>' +
+                    (otdLeaderboardSport === 'ufc' ? '' :
+                        '<select id="otd-lb-entitytype" onchange="otdLbFilterChange()" style="' + selStyle + '">' +
+                            '<option value="player"' + (otdLeaderboardEntityType === 'player' ? ' selected' : '') + '>Players</option>' +
+                            '<option value="team"' + (otdLeaderboardEntityType === 'team' ? ' selected' : '') + '>Teams</option>' +
+                        '</select>') +
                     '<input id="otd-lb-search" type="text" placeholder="Search by name…" value="' + escHtml(otdLeaderboardSearch) + '" ' +
                         'oninput="otdLbSearchInput(this.value)" autocomplete="off" ' +
                         'style="flex:1;min-width:140px;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px 10px;border-radius:6px">' +
@@ -4883,7 +4929,6 @@
             .then(function(r) { return r.json(); })
             .then(function(d) {
                 otdLeaderboardLoading = false;
-                console.log('[OTD LB]', qs, JSON.stringify(d).slice(0, 200));
                 otdLeaderboard = (d.ok && d.leaderboard) ? d.leaderboard : [];
                 renderOtdLeaderboard();
             })
@@ -5047,7 +5092,7 @@
 
         // Shared data builders (used by both mobile grid and desktop table)
         var rowData = filtered.map(function(p, i) {
-            var actualRank = p.rank || (i + 1);
+            var actualRank = i + 1; // sequential rank within the filtered/displayed list
             var medal = actualRank === 1 ? '🥇' : actualRank === 2 ? '🥈' : actualRank === 3 ? '🥉' : '';
             var rankDisp = medal ? '<span style="font-size:' + (mob ? '11px' : '14px') + '">' + medal + '</span>'
                 : '<span style="color:var(--muted);font-size:' + smFontSize + ';font-variant-numeric:tabular-nums">' + actualRank + '</span>';
@@ -5273,11 +5318,11 @@
     }
 
     function otdSetMode(mode) {
+        var prevMode = otdMode;
         otdMode = mode;
-        // Preserve players when switching between leaderboard and search players
-        // (user adds from leaderboard then views/adjusts in search players tab).
-        // Only clear when switching to username (different workflow entirely).
-        if (mode === 'username') {
+        // Clear when switching to/from username, and when entering leaderboard (fresh slate).
+        // Leaderboard-added players then carry into Search Players cleanly.
+        if (mode === 'username' || prevMode === 'username' || mode === 'leaderboard') {
             otdPlayers = [];
             otdColorIdx = 0;
             otdLbNewAdded = 0;
@@ -5408,8 +5453,9 @@
                     try { history.pushState(null, '', '/otd/' + encodeURIComponent(otdSelectedUser.username)); } catch(e) {}
                 }
 
-                // Build entry objects
+                // Build entry objects — skip General (level 0) passes; user can add them manually if needed
                 d.passes.forEach(function(pass) {
+                    if (pass.level < 1) return;
                     var lbl = (OTD_LEVEL_OPTIONS.find(function(o) { return o.value === pass.level; }) || {}).label || 'Level ' + pass.level;
                     var color = OTD_COLORS[otdColorIdx % OTD_COLORS.length];
                     otdColorIdx++;
@@ -5582,6 +5628,9 @@
     function renderOtdChips() {
         var el = document.getElementById('otd-chips');
         if (!el) return;
+        if (otdMode === 'leaderboard') { el.innerHTML = ''; return; }
+        // On mobile player mode, chip grid is never shown — passes are accessed via the Passes carousel button
+        if (otdMode === 'player' && window.innerWidth <= 768) { el.innerHTML = ''; return; }
 
         var players = (otdMode === 'username')
             ? otdPlayers.filter(function(p) { return p.isAdded; })
@@ -6196,7 +6245,7 @@
             '<div style="display:flex;align-items:center;justify-content:flex-end;margin-bottom:6px;gap:4px">' +
                 (numLoading > 0 ? '<span style="font-size:11px;color:var(--accent);margin-right:auto">loading ' + numLoading + '…</span>' : '') +
                 '<button style="' + btn2Style + '" onclick="otdSetClaimsView(2)">2 claims</button>' +
-                '<button style="' + btn3Style + '" onclick="otdSetClaimsView(3)" title="' + (pro ? '3 claims/sport' : 'Pro required') + '">3 claims' + (pro ? '' : ' 🔒') + '</button>' +
+                '<button style="' + btn3Style + '" onclick="otdSetClaimsView(3)">3 claims</button>' +
                 (overlapCount > 0 ? '<button style="' + overlapBtnStyle + '" onclick="otdToggleOverlaps()" title="Days where you have more cards than claim slots">⚠ Overlaps' + (overlapCount ? ' ' + overlapCount : '') + '</button>' : '') +
             '</div>' +
             overlapPanel +

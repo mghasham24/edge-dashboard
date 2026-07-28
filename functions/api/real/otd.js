@@ -77,7 +77,7 @@ export async function onRequestGet(context) {
       const RS_SEASON_NORM_LB = { ufc: 'alltime', mma: 'alltime' };
       const sportKey = RS_SPORT_ALIAS_LB[sport] || sport;
       const effectiveAllTime = allTime || !!RS_SEASON_NORM_LB[sportKey];
-      const lbCacheKey = `otd_lb_v17_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
+      const lbCacheKey = `otd_lb_v24_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
       try {
         const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(lbCacheKey).first();
         if (cached) return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
@@ -1103,7 +1103,7 @@ export async function onRequestGet(context) {
     // "All Sports" view — merge all cached per-sport leaderboards from D1
     if (sport === 'all') {
       const suffix = 'alltime'; // all-sports view is always alltime
-      const pattern = `otd_lb_v17_${entityType}_%_${suffix}`;
+      const pattern = `otd_lb_v24_${entityType}_%_${suffix}`;
       let rows;
       try { rows = await env.DB.prepare('SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE ?').bind(pattern).all(); }
       catch(e) { return fail(500, e.message); }
@@ -1111,7 +1111,7 @@ export async function onRequestGet(context) {
       for (const row of (rows.results || [])) {
         try {
           const d = JSON.parse(row.data);
-          const sportFromKey = row.cache_key.replace(`otd_lb_v17_${entityType}_`, '').replace(`_${suffix}`, '');
+          const sportFromKey = row.cache_key.replace(`otd_lb_v24_${entityType}_`, '').replace(`_${suffix}`, '');
           for (const item of (d.leaderboard || [])) {
             combined.push(Object.assign({}, item, { sport: item.sport || sportFromKey }));
           }
@@ -1134,7 +1134,7 @@ export async function onRequestGet(context) {
     const isActiveSeason = !effectiveAllTime && season === currentSeasonStr;
     const lbTtl = (isActiveSeason || effectiveAllTime) ? WEEK : Infinity;
 
-    const lbCacheKey = `otd_lb_v17_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
+    const lbCacheKey = `otd_lb_v24_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
     if (url.searchParams.get('force') !== '1') {
       try {
         const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(lbCacheKey).first();
@@ -1143,7 +1143,7 @@ export async function onRequestGet(context) {
         }
       } catch(e) {}
 
-      // v16 → v17 promotion: migrate existing cached data without hitting RS
+      // v16 → v18 promotion: migrate existing cached data without hitting RS
       try {
         const v16Key = `otd_lb_v16_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
         const v16 = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(v16Key).first();
@@ -1183,6 +1183,14 @@ export async function onRequestGet(context) {
 
     function bId(id) { return String(id).replace(/_l\d+$/, ''); }
 
+    // RS /players/{id}/sport/{slug} uses short slugs, not the full sportKey
+    const RS_SPORT_SLUG = {
+      'baseball_mlb': 'mlb', 'basketball_nba': 'nba', 'basketball_wnba': 'wnba',
+      'icehockey_nhl': 'nhl', 'mma_mixed_martial_arts': 'ufc', 'soccer_fc': 'soccer',
+      'soccer_epl': 'epl', 'golf': 'golf',
+    };
+    const rsPlayerSlug = RS_SPORT_SLUG[sportKey] || sportKey;
+
     // ── Component caches: earningstotal and ownerMap per season ──────────────
     // Past seasons: frozen data, cache forever.  Current year: 1-week TTL.
     const DB_UPSERT = 'INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at';
@@ -1200,21 +1208,20 @@ export async function onRequestGet(context) {
 
     async function getEarningsTotal(targetSeason) {
       const ttl = targetSeason === currentSeasonStr ? WEEK : Infinity;
-      const key = `otd_earningstotal_v1_${sportKey}_${entityType}_${targetSeason}`;
+      const key = `otd_earningstotal_v2_${sportKey}_${entityType}_${targetSeason}`;
       const cached = await getCachedComponent(key, ttl);
       if (cached) return cached;
-      const passes = await fetchShopSection('earningstotal', 200);
+      const passes = await fetchShopSection('earningstotal', 500);
       await setCachedComponent(key, passes);
       return passes;
     }
 
     async function getOwnerMap(targetSeason) {
       const ttl = targetSeason === currentSeasonStr ? WEEK : Infinity;
-      const key = `otd_owners_v1_${sportKey}_${entityType}_${targetSeason}`;
+      const key = `otd_owners_v3_${sportKey}_${entityType}_${targetSeason}`;
       const cached = await getCachedComponent(key, ttl);
       if (cached) return cached;
-      const maxItems = targetSeason === currentSeasonStr ? 3000 : 1000;
-      const passes = await fetchShopSection('hotseason', maxItems, targetSeason, 5);
+      const passes = await fetchShopSection('hotseason', 10000, targetSeason, 10);
       const ownerMap = {};
       for (const p of passes) {
         const bid = bId(String(p.id || p.entityId || ''));
@@ -1280,13 +1287,28 @@ export async function onRequestGet(context) {
 
     // Fetch earningstotal and ownerMap via component caches.
     // Old seasons: forever cache.  Current year: 1-week TTL.
-    // For alltime: earningstotal comes from D1 earnings rows (not RS API); only ownerMap fetched here.
+    // For alltime: earningstotal comes from D1 earnings rows (not RS API).
+    // Owner map merges across all years so sports with data only in older seasons (e.g. UFC in 2023) get coverage.
+    async function getMultiYearOwnerMap() {
+      const currentYear = new Date().getFullYear();
+      const minYear = sportKey === 'golf' ? 2015 : 2021;
+      const years = [];
+      for (let y = currentYear; y >= minYear; y--) years.push(String(y));
+      const maps = await Promise.all(years.map(y => getOwnerMap(y)));
+      const merged = {};
+      for (const m of maps) {
+        for (const [bid, count] of Object.entries(m)) {
+          if (merged[bid] == null || count > merged[bid]) merged[bid] = count;
+        }
+      }
+      return merged;
+    }
     const [earningsPasses, ownerMap] = effectiveAllTime
-      ? [[], await getOwnerMap(currentSeasonStr)]
+      ? [[], await getMultiYearOwnerMap()]
       : await Promise.all([getEarningsTotal(season), getOwnerMap(season)]);
 
     // For alltime: seed nameMap from all historically relevant seasons.
-    // 3 pages for recent 3 years (top 60 each), 1 page for older years (top 20 each).
+    // 8 pages for recent 3 years (top 160 each), 2 pages for older years (top 40 each).
     // Golf goes back to 2015; all other sports go back to 2022.
     let allTimeNameItems = [];
     if (effectiveAllTime) {
@@ -1294,7 +1316,7 @@ export async function onRequestGet(context) {
       const sportMinYear = sportKey === 'golf' ? 2015 : 2022;
       const nameFetches = [];
       for (let y = currentYear; y >= sportMinYear; y--) {
-        const numPages = y >= currentYear - 2 ? 3 : 1;
+        const numPages = y >= currentYear - 2 ? 8 : 2;
         for (let pg = 0; pg < numPages; pg++) {
           const before = pg * 20;
           const u = `${RS_BASE}/userpassshop/${sportKey}/season/${y}/entity/${entityType}/section/earningstotal?before=${before}`;
@@ -1319,7 +1341,8 @@ export async function onRequestGet(context) {
     for (const p of allTimeNameItems) {
       const bid = bId(String(p.id || p.entityId || ''));
       const name = p.label || p.playerName || p.name || p.displayName || null;
-      if (bid && name) nameMap[bid] = name;
+      // Skip if name looks like a raw numeric ID (RS returns entity IDs for team-type entries)
+      if (bid && name && !/^\d+$/.test(String(name).trim())) nameMap[bid] = name;
     }
     const iconicSets = {}; // baseId → Set of RaxEdge userIds at level >= 20
     const passRows = await env.DB.prepare("SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE 'otd_passes_all_v10_%'").all().catch(() => ({ results: [] }));
@@ -1365,18 +1388,12 @@ export async function onRequestGet(context) {
         if (!seasonMaxes[sk] || total > seasonMaxes[sk]) seasonMaxes[sk] = total;
       } catch(e) {}
     }
-    const earningsTotals = {}; // baseId → summed baseTotal across seasons
-    for (const [sk, v] of Object.entries(seasonMaxes)) {
-      const bid = sk.slice(0, sk.indexOf(':'));
-      earningsTotals[bid] = (earningsTotals[bid] || 0) + v;
-    }
-
     // ── Build final list ─────────────────────────────────────────────────────
     let list;
     if (shopPasses.length > 0) {
       // earningstotal section: `value` = season base earnings total direct from RS
       // hotseason section: `value` = total RS platform owner count (from ownerMap)
-      list = shopPasses.slice(0, 200).map((p, i) => {
+      list = shopPasses.slice(0, 500).map((p, i) => {
         const bid = bId(String(p.id || p.entityId || ''));
         const name = p.label || p.playerName || p.name || p.displayName || nameMap[bid] || null;
         if (name && !nameMap[bid]) nameMap[bid] = name;
@@ -1386,7 +1403,7 @@ export async function onRequestGet(context) {
           name,
           season,
           position: p.position || p.pos || null,
-          total: p.value != null ? Number(p.value) : (earningsTotals[bid] || null),
+          total: p.value != null ? Number(p.value) : null,
           passCount: ownerMap[bid] != null ? ownerMap[bid] : null,
           iconic: iconicSets[bid] ? iconicSets[bid].size : 0,
           sport: sportKey,
@@ -1394,29 +1411,28 @@ export async function onRequestGet(context) {
         };
       });
     } else {
-      // D1 fallback (alltime) — one row per (player, season), NOT summed
+      // D1 fallback (alltime) — one row per player:season, ranked by that season's earnings
       list = Object.entries(seasonMaxes)
-        .map(([sk, total]) => {
+        .filter(([sk, total]) => sk && total > 0)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 500)
+        .map(([sk, total], i) => {
           const colonIdx = sk.indexOf(':');
           const bid = sk.slice(0, colonIdx);
           const seasonPart = sk.slice(colonIdx + 1);
-          return { bid, season: seasonPart, total };
-        })
-        .filter(r => r.bid && r.total > 0)
-        .sort((a, b) => b.total - a.total)
-        .slice(0, 200)
-        .map((r, i) => ({
-          rank: i + 1,
-          playerId: r.bid,
-          name: nameMap[r.bid] || null,
-          season: r.season,
-          position: null,
-          total: r.total,
-          passCount: ownerMap[r.bid] != null ? ownerMap[r.bid] : null,
-          iconic: iconicSets[r.bid] ? iconicSets[r.bid].size : 0,
-          sport: sportKey,
-          entityType,
-        }));
+          return {
+            rank: i + 1,
+            playerId: bid,
+            name: nameMap[bid] || null,
+            season: seasonPart,
+            position: null,
+            total,
+            passCount: ownerMap[bid] != null ? ownerMap[bid] : null,
+            iconic: iconicSets[bid] ? iconicSets[bid].size : 0,
+            sport: sportKey,
+            entityType,
+          };
+        });
     }
 
     // ── Supplement alltime owner counts per season ───────────────────────────
@@ -1444,33 +1460,35 @@ export async function onRequestGet(context) {
     // earningstotal returns {id, value, entityType} only — no names.
     // 1. Check D1 otd_player_{sport}_{id} cache (populated by prior earnings lookups).
     // 2. For still-missing player IDs, fetch from RS /players/{id}/sport/{sport} in parallel.
-    const unknownItems = list.filter(item => !item.name);
+    const isNumericName = n => n && /^\d+$/.test(String(n).trim());
+    const unknownItems = list.filter(item => !item.name || isNumericName(item.name));
     if (unknownItems.length > 0) {
       // Step 1: bulk D1 lookup
       const d1PlayerRows = await env.DB.prepare(
         `SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE ?`
-      ).bind(`otd_player_${sportKey}_%`).all().catch(() => ({ results: [] }));
+      ).bind(`otd_player_${rsPlayerSlug}_%`).all().catch(() => ({ results: [] }));
       const d1NameMap = {};
       for (const row of (d1PlayerRows.results || [])) {
-        const id = row.cache_key.replace(`otd_player_${sportKey}_`, '');
+        const id = row.cache_key.replace(`otd_player_${rsPlayerSlug}_`, '');
         try {
           const pd = JSON.parse(row.data);
           const n = pd.player && pd.player.name ? pd.player.name.trim() : null;
-          if (n) d1NameMap[id] = n;
+          if (n && !isNumericName(n)) d1NameMap[id] = n;
         } catch(e) {}
       }
       for (const item of unknownItems) {
         if (d1NameMap[item.playerId]) item.name = d1NameMap[item.playerId];
       }
 
-      // Step 2: RS API fetch for remaining unknowns (players only, cap 120 — all parallel, 5s timeout each)
-      const stillUnknown = list.filter(item => !item.name && item.entityType !== 'team').slice(0, 120);
+      // Step 2: RS API fetch for remaining unknowns — includes team-type entities (UFC fighters)
+      // UFC passes are stored as entityType=team but player IDs still resolve via /players/{id}/sport/{sport}
+      const stillUnknown = list.filter(item => !item.name || isNumericName(item.name)).slice(0, 400);
       if (stillUnknown.length > 0) {
         const rsFetches = stillUnknown.map(async item => {
           const c = new AbortController();
           const t = setTimeout(() => c.abort(), 5000);
           try {
-            const res = await fetch(`${RS_BASE}/players/${item.playerId}/sport/${sportKey}`, { headers, signal: c.signal });
+            const res = await fetch(`${RS_BASE}/players/${item.playerId}/sport/${rsPlayerSlug}`, { headers, signal: c.signal });
             clearTimeout(t);
             if (!res.ok) return null;
             const data = await res.json();
@@ -1488,8 +1506,8 @@ export async function onRequestGet(context) {
           const item = list.find(i => i.playerId === r.id);
           if (item) { item.name = r.name; if (r.pos && !item.position) item.position = r.pos; }
           // Cache in D1
-          const ck = `otd_player_${sportKey}_${r.id}`;
-          const cb = JSON.stringify({ ok: true, player: { id: r.id, name: r.name, sport: sportKey, position: r.pos } });
+          const ck = `otd_player_${rsPlayerSlug}_${r.id}`;
+          const cb = JSON.stringify({ ok: true, player: { id: r.id, name: r.name, sport: rsPlayerSlug, position: r.pos } });
           cacheWrites.push(env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at').bind(ck, cb, now).run().catch(() => {}));
         }
         await Promise.all(cacheWrites);
@@ -1529,17 +1547,24 @@ export async function onRequestGet(context) {
           const ctrl = new AbortController();
           const t = setTimeout(() => ctrl.abort(), 8000);
           let mlbRes;
-          try { mlbRes = await fetch(`https://statsapi.mlb.com/api/v1/people?personIds=${ids}&fields=people,id,primaryPosition,abbreviation`, { signal: ctrl.signal }); }
+          try { mlbRes = await fetch(`https://statsapi.mlb.com/api/v1/people?personIds=${ids}&fields=people,id,firstName,lastName,primaryPosition,abbreviation`, { signal: ctrl.signal }); }
           finally { clearTimeout(t); }
           if (mlbRes && mlbRes.ok) {
             const mlbData = await mlbRes.json();
             const writes = [];
             for (const p of (mlbData.people || [])) {
-              const abbr = (p.primaryPosition && p.primaryPosition.abbreviation) || null;
-              if (!abbr) continue;
               const pid = String(p.id);
-              posMap[pid] = abbr;
-              writes.push(env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,9999999999) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at').bind(`otd_mlbpos_v1_${pid}`, JSON.stringify(abbr)).run().catch(() => {}));
+              const abbr = (p.primaryPosition && p.primaryPosition.abbreviation) || null;
+              if (abbr) {
+                posMap[pid] = abbr;
+                writes.push(env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,9999999999) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at').bind(`otd_mlbpos_v1_${pid}`, JSON.stringify(abbr)).run().catch(() => {}));
+              }
+              // Fill in name for any player still showing as a numeric ID
+              const mlbName = ((p.firstName || '') + ' ' + (p.lastName || '')).trim() || null;
+              if (mlbName) {
+                const item = list.find(i => i.playerId === pid);
+                if (item && (!item.name || /^\d+$/.test(String(item.name).trim()))) item.name = mlbName;
+              }
             }
             await Promise.all(writes);
           }
@@ -1550,6 +1575,29 @@ export async function onRequestGet(context) {
       for (const item of playerItems) {
         const abbr = posMap[item.playerId] || null;
         if (abbr) item.position = abbr;
+      }
+
+      // MLB name fallback: any item still showing a numeric name gets resolved via MLB Stats API.
+      // Runs independently of position cache — players with cached positions skip posNeeded but still need names.
+      const stillNumericNames = list.filter(i => !i.name || /^\d+$/.test(String(i.name).trim()));
+      if (stillNumericNames.length > 0) {
+        try {
+          const nameIds = stillNumericNames.slice(0, 400).map(i => i.playerId).join(',');
+          const nc = new AbortController();
+          const nt = setTimeout(() => nc.abort(), 8000);
+          let nameRes;
+          try { nameRes = await fetch(`https://statsapi.mlb.com/api/v1/people?personIds=${nameIds}&fields=people,id,firstName,lastName`, { signal: nc.signal }); }
+          finally { clearTimeout(nt); }
+          if (nameRes && nameRes.ok) {
+            const nd = await nameRes.json();
+            for (const p of (nd.people || [])) {
+              const n = ((p.firstName || '') + ' ' + (p.lastName || '')).trim();
+              if (!n) continue;
+              const item = list.find(i => i.playerId === String(p.id));
+              if (item) item.name = n;
+            }
+          }
+        } catch(e) {}
       }
     }
 
