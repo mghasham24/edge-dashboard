@@ -4880,11 +4880,13 @@
             .then(function(r) { return r.json(); })
             .then(function(d) {
                 otdLeaderboardLoading = false;
+                console.log('[OTD LB]', qs, JSON.stringify(d).slice(0, 200));
                 otdLeaderboard = (d.ok && d.leaderboard) ? d.leaderboard : [];
                 renderOtdLeaderboard();
             })
-            .catch(function() {
+            .catch(function(err) {
                 otdLeaderboardLoading = false;
+                console.error('[OTD LB error]', err);
                 otdLeaderboard = [];
                 renderOtdLeaderboard();
             });
