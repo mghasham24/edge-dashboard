@@ -1382,6 +1382,63 @@ export async function onRequestGet(context) {
       }
     }
 
+    // ── MLB position lookup via MLB Stats API ────────────────────────────────
+    // RS player IDs == MLB Stats API player IDs. Batch-fetch primaryPosition for
+    // all player-type rows; cache individually forever (positions rarely change).
+    if (sportKey === 'mlb') {
+      const playerItems = list.filter(i => i.entityType !== 'team');
+      const posNeeded = [];
+      const posCacheKeys = playerItems.map(i => `otd_mlbpos_v1_${i.playerId}`);
+
+      // Batch D1 lookup
+      const CHUNK = 100;
+      const posMap = {};
+      for (let ci = 0; ci < posCacheKeys.length; ci += CHUNK) {
+        const chunk = posCacheKeys.slice(ci, ci + CHUNK);
+        try {
+          const ph = chunk.map(() => '?').join(',');
+          const rows = await env.DB.prepare(`SELECT cache_key, data FROM odds_cache WHERE cache_key IN (${ph})`).bind(...chunk).all();
+          for (const row of (rows.results || [])) {
+            const pid = row.cache_key.replace('otd_mlbpos_v1_', '');
+            try { posMap[pid] = JSON.parse(row.data); } catch(e) {}
+          }
+        } catch(e) {}
+      }
+      for (const item of playerItems) {
+        if (!posMap[item.playerId]) posNeeded.push(item.playerId);
+      }
+
+      // Fetch missing positions from MLB Stats API (one batched call)
+      if (posNeeded.length > 0) {
+        try {
+          const ids = posNeeded.slice(0, 200).join(',');
+          const ctrl = new AbortController();
+          const t = setTimeout(() => ctrl.abort(), 8000);
+          let mlbRes;
+          try { mlbRes = await fetch(`https://statsapi.mlb.com/api/v1/people?personIds=${ids}&fields=people,id,primaryPosition`, { signal: ctrl.signal }); }
+          finally { clearTimeout(t); }
+          if (mlbRes && mlbRes.ok) {
+            const mlbData = await mlbRes.json();
+            const writes = [];
+            for (const p of (mlbData.people || [])) {
+              const abbr = (p.primaryPosition && p.primaryPosition.abbreviation) || null;
+              if (!abbr) continue;
+              const pid = String(p.id);
+              posMap[pid] = abbr;
+              writes.push(env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,9999999999) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at').bind(`otd_mlbpos_v1_${pid}`, JSON.stringify(abbr)).run().catch(() => {}));
+            }
+            await Promise.all(writes);
+          }
+        } catch(e) {}
+      }
+
+      // Apply positions to list items
+      for (const item of playerItems) {
+        const abbr = posMap[item.playerId] || null;
+        if (abbr) item.position = abbr;
+      }
+    }
+
     const body = JSON.stringify({ ok: true, leaderboard: list, sport: sportKey, allTime: effectiveAllTime, fromShop: shopPasses.length > 0 });
     await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
       .bind(lbCacheKey, body, now).run().catch(() => {});

@@ -3259,6 +3259,7 @@
     var otdLbRarityLevel = 20; // default Iconic 1 for the AT RARITY column
     var otdLbPlayerCache = []; // last filtered leaderboard array — indexed by row for + button
     var otdLbNewAdded = 0; // count of players added from leaderboard since last Search Players visit
+    var otdLbMlbPosFilter = 'all'; // MLB position filter: 'all' | 'hitter' | 'sp' | 'rp'
     var otdSelectedUser = null; // { id, username, displayName }
     var otdUserSearchTimer = null;
     var otdLoadingPasses = false;
@@ -4774,10 +4775,19 @@
             }
             var selStyle = 'background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;padding:8px 6px;border-radius:6px;cursor:pointer';
             var seasonSel = otdLeaderboardSport === 'all' ? '' : ('<select id="otd-lb-season" onchange="otdLbFilterChange()" style="' + selStyle + '">' + lbSeasonOpts + '</select>');
+            var mlbPosSel = otdLeaderboardSport === 'mlb'
+                ? '<select id="otd-lb-mlbpos" onchange="otdLbMlbPosChange(this.value)" style="' + selStyle + '">' +
+                    '<option value="all"' + (otdLbMlbPosFilter === 'all' ? ' selected' : '') + '>All Positions</option>' +
+                    '<option value="hitter"' + (otdLbMlbPosFilter === 'hitter' ? ' selected' : '') + '>Hitter</option>' +
+                    '<option value="sp"' + (otdLbMlbPosFilter === 'sp' ? ' selected' : '') + '>Starting Pitcher</option>' +
+                    '<option value="rp"' + (otdLbMlbPosFilter === 'rp' ? ' selected' : '') + '>Relieving Pitcher</option>' +
+                  '</select>'
+                : '';
             inputSection =
                 '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:12px">' +
                     '<select id="otd-lb-sport" onchange="otdLbFilterChange()" style="' + selStyle + '">' + lbSportOpts + '</select>' +
                     seasonSel +
+                    mlbPosSel +
                     '<select id="otd-lb-entitytype" onchange="otdLbFilterChange()" style="' + selStyle + '">' +
                         '<option value="player"' + (otdLeaderboardEntityType === 'player' ? ' selected' : '') + '>Players</option>' +
                         '<option value="team"' + (otdLeaderboardEntityType === 'team' ? ' selected' : '') + '>Teams</option>' +
@@ -4880,6 +4890,23 @@
             });
     }
 
+    // Maps MLB Stats API primaryPosition abbreviation → category array.
+    // TWP (Two-Way Player, e.g. Ohtani) maps to both hitter and sp.
+    function mlbPosCategories(pos) {
+        if (!pos) return ['hitter'];
+        var p = pos.toUpperCase().trim();
+        if (p === 'TWP') return ['hitter', 'sp'];
+        if (p === 'SP') return ['sp'];
+        if (p === 'RP' || p === 'CL' || p === 'MR' || p === 'CP') return ['rp'];
+        if (p === 'P') return ['sp']; // generic pitcher — treat as starter
+        return ['hitter']; // 1B, 2B, 3B, SS, OF, C, DH, LF, CF, RF, IF
+    }
+
+    function otdLbMlbPosChange(val) {
+        otdLbMlbPosFilter = val;
+        renderOtdLeaderboard();
+    }
+
     function otdLbFilterChange() {
         var sportEl = document.getElementById('otd-lb-sport');
         var seasonEl = document.getElementById('otd-lb-season');
@@ -4894,8 +4921,11 @@
         }
         if (etEl) otdLeaderboardEntityType = etEl.value;
         otdLeaderboard = [];
-        // Re-render panel when sport changes so season dropdown rebuilds with correct year range
-        if (sportEl && otdLeaderboardSport !== prevSport) renderOtdPanel();
+        // Re-render panel when sport changes so season dropdown and pos filter rebuild
+        if (sportEl && otdLeaderboardSport !== prevSport) {
+            otdLbMlbPosFilter = 'all';
+            renderOtdPanel();
+        }
         loadOtdLeaderboard();
     }
 
@@ -4972,9 +5002,14 @@
         }
 
         var search = otdLeaderboardSearch.toLowerCase().trim();
-        var filtered = search ? otdLeaderboard.filter(function(p) {
-            return (p.name && p.name.toLowerCase().includes(search)) || (p.position && p.position.toLowerCase().includes(search));
-        }) : otdLeaderboard;
+        var filtered = otdLeaderboard.filter(function(p) {
+            if (search && !(p.name && p.name.toLowerCase().includes(search)) && !(p.position && p.position.toLowerCase().includes(search))) return false;
+            if (otdLbMlbPosFilter !== 'all' && otdLeaderboardSport === 'mlb' && p.entityType !== 'team') {
+                var cats = mlbPosCategories(p.position);
+                if (cats.indexOf(otdLbMlbPosFilter) === -1) return false;
+            }
+            return true;
+        });
         otdLbPlayerCache = filtered;
 
         // Rarity multiplier for the AT RARITY column
@@ -5001,7 +5036,19 @@
             var displayName = p.name ? escHtml(p.name) : escHtml(p.playerId);
             var sportBadge = sport === 'all' ? ' <span style="font-size:' + (mob ? '8px' : '9px') + ';font-weight:700;letter-spacing:.04em;color:var(--accent);background:var(--bg3);border:1px solid var(--border2);border-radius:3px;padding:1px 4px;vertical-align:middle">' + escHtml(rowSport.toUpperCase()) + '</span>' : '';
             var yearHtml = (sport !== 'all' && p.season) ? ' <span style="font-size:' + (mob ? '8px' : '11px') + ';font-weight:400;color:var(--muted);opacity:.6">' + escHtml(p.season) + '</span>' : '';
-            var posHtml = (!mob && p.position) ? ' <span style="font-size:10px;font-weight:600;color:var(--muted);background:var(--bg3);border:1px solid var(--border2);border-radius:3px;padding:1px 5px;vertical-align:middle">' + escHtml(p.position) + '</span>' : '';
+            var posHtml = '';
+            if (p.position && rowSport === 'mlb') {
+                var posCats = mlbPosCategories(p.position);
+                // For TWP show both tags; for others show the raw position abbreviation
+                var posTags = posCats.indexOf('sp') !== -1 && posCats.indexOf('hitter') !== -1
+                    ? ['SP', p.position === 'TWP' ? 'DH' : p.position]
+                    : [p.position];
+                posHtml = posTags.map(function(tag) {
+                    var isP = tag === 'SP' || mlbPosCategories(tag).indexOf('rp') !== -1;
+                    var tagColor = isP ? 'var(--accent)' : 'var(--muted)';
+                    return '<span style="font-size:' + (mob ? '8px' : '9px') + ';font-weight:700;color:' + tagColor + ';background:var(--bg3);border:1px solid var(--border2);border-radius:3px;padding:1px 4px;vertical-align:middle;margin-left:3px">' + escHtml(tag) + '</span>';
+                }).join('');
+            }
             var nameHtml = '<a href="' + rsUrl + '" target="_blank" rel="noopener" style="color:var(--fg);text-decoration:none;font-weight:600" onmouseover="this.style.color=\'var(--accent)\'" onmouseout="this.style.color=\'var(--fg)\'">' + displayName + '</a>' + sportBadge + yearHtml + posHtml;
             var baseRaxHtml = p.total != null ? RAX_SVG + p.total.toLocaleString() : '<span style="color:var(--muted);opacity:.4">—</span>';
             var passCountHtml = p.passCount != null ? Number(p.passCount).toLocaleString() : '<span style="color:var(--muted);opacity:.4">—</span>';
