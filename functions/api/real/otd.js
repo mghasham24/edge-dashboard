@@ -729,7 +729,25 @@ export async function onRequestGet(context) {
     // Query by season only — no sport filter so RS returns all passes regardless of sport.
     // 5 seasons × 2 entity types = 10 parallel calls (vs 110 sport-filtered calls that RS rate-limits).
     const force = url.searchParams.get('force') === '1';
-    const cacheKey = `otd_passes_all_v10_${userId}`;
+
+    // If userId contains non-alphanumeric chars (e.g. underscore), it's a typed username not an internal RS ID.
+    // RS searchusers may not surface these users even when searched directly, so strip trailing underscores
+    // for the query and exact-match on the full username. Fall back to the original value if unresolved.
+    let resolvedUserId = userId;
+    if (/[^a-zA-Z0-9]/.test(userId)) {
+      const resolveQ = userId.replace(/_+$/, '') || userId;
+      try {
+        const srRes = await fetch(`${RS_BASE}/searchusers?query=${encodeURIComponent(resolveQ)}`, { headers });
+        if (srRes.ok) {
+          const srData = await srRes.json();
+          const srUsers = Array.isArray(srData) ? srData : (srData.users || srData.results || []);
+          const srMatch = srUsers.find(u => (u.userName || u.username || '').toLowerCase() === userId.toLowerCase());
+          if (srMatch) resolvedUserId = srMatch.id || srMatch.userId || userId;
+        }
+      } catch(e) {}
+    }
+
+    const cacheKey = `otd_passes_all_v10_${resolvedUserId}`;
     if (!force) {
       try {
         const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
@@ -828,10 +846,10 @@ export async function onRequestGet(context) {
           try {
             const sportParam = sportFilter ? `&sport=${sportFilter}` : '';
             const fetches = sportFilter
-              ? [fetch(`${RS_BASE}/userpasses/${encodeURIComponent(userId)}/passes?entityType=player&season=${season}${sportParam}`, { headers })]
+              ? [fetch(`${RS_BASE}/userpasses/${encodeURIComponent(resolvedUserId)}/passes?entityType=player&season=${season}${sportParam}`, { headers })]
               : [
-                  fetch(`${RS_BASE}/userpasses/${encodeURIComponent(userId)}/passes?entityType=player&season=${season}`, { headers }),
-                  fetch(`${RS_BASE}/userpasses/${encodeURIComponent(userId)}/passes?entityType=team&season=${season}`, { headers })
+                  fetch(`${RS_BASE}/userpasses/${encodeURIComponent(resolvedUserId)}/passes?entityType=player&season=${season}`, { headers }),
+                  fetch(`${RS_BASE}/userpasses/${encodeURIComponent(resolvedUserId)}/passes?entityType=team&season=${season}`, { headers })
                 ];
             const entityTypes = sportFilter ? ['player'] : ['player', 'team'];
             const responses = await Promise.all(fetches);

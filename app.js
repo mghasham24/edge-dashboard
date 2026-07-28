@@ -5406,7 +5406,11 @@
                     // Prefer exact username match, fall back to first result
                     var match = users.find(function(u) { return u.username.toLowerCase() === typed.toLowerCase(); }) || users[0];
                     if (!match) {
-                        if (errEl) { errEl.textContent = 'User "' + escHtml(typed) + '" not found'; errEl.style.display = ''; setTimeout(function() { if (errEl) errEl.style.display = 'none'; }, 3000); }
+                        // RS search may not return users whose usernames end in underscores.
+                        // Try loading passes directly — server will attempt its own resolution.
+                        otdSelectedUser = { id: typed, username: typed, displayName: null, avatar: '' };
+                        if (inp) inp.value = typed;
+                        otdLoadUserPasses(force);
                         return;
                     }
                     otdSelectedUser = match;
