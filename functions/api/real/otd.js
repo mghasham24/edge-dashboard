@@ -83,14 +83,57 @@ export async function onRequestGet(context) {
         if (cached) return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
       } catch(e) {}
 
-      // Try v16 promotion before requiring a token
+      // Try v16 promotion before requiring a token (with MLB position enrichment)
       try {
         const v16Key = `otd_lb_v16_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
         const v16 = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(v16Key).first();
         if (v16) {
+          const parsed = JSON.parse(v16.data);
+          if (sportKey === 'mlb' && parsed.leaderboard) {
+            const pItems = parsed.leaderboard.filter(i => i.entityType !== 'team' && !i.position);
+            if (pItems.length) {
+              const posMap = {};
+              const posKeys = pItems.map(i => `otd_mlbpos_v1_${i.playerId}`);
+              try {
+                const ph = posKeys.map(() => '?').join(',');
+                const rows = await env.DB.prepare(`SELECT cache_key, data FROM odds_cache WHERE cache_key IN (${ph})`).bind(...posKeys).all();
+                for (const row of (rows.results || [])) {
+                  const pid = row.cache_key.replace('otd_mlbpos_v1_', '');
+                  try { posMap[pid] = JSON.parse(row.data); } catch(e2) {}
+                }
+              } catch(e2) {}
+              const missing = pItems.filter(i => !posMap[String(i.playerId)]).map(i => i.playerId);
+              if (missing.length) {
+                try {
+                  const ctrl = new AbortController();
+                  const t = setTimeout(() => ctrl.abort(), 8000);
+                  let mlbRes;
+                  try { mlbRes = await fetch(`https://statsapi.mlb.com/api/v1/people?personIds=${missing.slice(0,200).join(',')}&fields=people,id,primaryPosition,abbreviation`, { signal: ctrl.signal }); }
+                  finally { clearTimeout(t); }
+                  if (mlbRes && mlbRes.ok) {
+                    const mlbData = await mlbRes.json();
+                    const writes = [];
+                    for (const p of (mlbData.people || [])) {
+                      const abbr = (p.primaryPosition && p.primaryPosition.abbreviation) || null;
+                      if (!abbr) continue;
+                      const pid = String(p.id);
+                      posMap[pid] = abbr;
+                      writes.push(env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,9999999999) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at').bind(`otd_mlbpos_v1_${pid}`, JSON.stringify(abbr)).run().catch(() => {}));
+                    }
+                    await Promise.all(writes);
+                  }
+                } catch(e2) {}
+              }
+              for (const item of pItems) {
+                const abbr = posMap[String(item.playerId)] || null;
+                if (abbr) item.position = abbr;
+              }
+            }
+          }
+          const body = JSON.stringify(parsed);
           await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
-            .bind(lbCacheKey, v16.data, v16.fetched_at).run().catch(() => {});
-          return new Response(v16.data, { headers: { 'Content-Type': 'application/json' } });
+            .bind(lbCacheKey, body, v16.fetched_at).run().catch(() => {});
+          return new Response(body, { headers: { 'Content-Type': 'application/json' } });
         }
       } catch(e) {}
     }
@@ -1486,7 +1529,7 @@ export async function onRequestGet(context) {
           const ctrl = new AbortController();
           const t = setTimeout(() => ctrl.abort(), 8000);
           let mlbRes;
-          try { mlbRes = await fetch(`https://statsapi.mlb.com/api/v1/people?personIds=${ids}&fields=people,id,primaryPosition`, { signal: ctrl.signal }); }
+          try { mlbRes = await fetch(`https://statsapi.mlb.com/api/v1/people?personIds=${ids}&fields=people,id,primaryPosition,abbreviation`, { signal: ctrl.signal }); }
           finally { clearTimeout(t); }
           if (mlbRes && mlbRes.ok) {
             const mlbData = await mlbRes.json();
