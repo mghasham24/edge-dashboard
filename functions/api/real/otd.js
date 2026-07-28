@@ -62,6 +62,40 @@ export async function onRequestGet(context) {
     });
   }
 
+  // Leaderboard cache-only fast path — no RS token needed if D1 cache is warm.
+  // Falls through to token check + full build only on cache miss.
+  if (action === 'leaderboard' && url.searchParams.get('force') !== '1') {
+    const sport = url.searchParams.get('sport') || 'mlb';
+    const season = url.searchParams.get('season') || String(new Date().getFullYear());
+    const allTime = url.searchParams.get('alltime') === '1';
+    const entityType = url.searchParams.get('entityType') || 'player';
+
+    if (sport === 'all') {
+      // all-sports: handled fully below; skip fast path
+    } else {
+      const RS_SPORT_ALIAS_LB = { ncaabb: 'ncaam', mma: 'ufc' };
+      const RS_SEASON_NORM_LB = { ufc: 'alltime', mma: 'alltime' };
+      const sportKey = RS_SPORT_ALIAS_LB[sport] || sport;
+      const effectiveAllTime = allTime || !!RS_SEASON_NORM_LB[sportKey];
+      const lbCacheKey = `otd_lb_v17_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
+      try {
+        const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(lbCacheKey).first();
+        if (cached) return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
+      } catch(e) {}
+
+      // Try v16 promotion before requiring a token
+      try {
+        const v16Key = `otd_lb_v16_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
+        const v16 = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(v16Key).first();
+        if (v16) {
+          await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
+            .bind(lbCacheKey, v16.data, v16.fetched_at).run().catch(() => {});
+          return new Response(v16.data, { headers: { 'Content-Type': 'application/json' } });
+        }
+      } catch(e) {}
+    }
+  }
+
   if (!env.REAL_AUTH_TOKEN || !env.REAL_SESSION_TOKEN) {
     return fail(503, 'REAL_AUTH_TOKEN or REAL_SESSION_TOKEN not set');
   }
