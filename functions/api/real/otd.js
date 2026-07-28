@@ -1065,6 +1065,43 @@ export async function onRequestGet(context) {
           return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
         }
       } catch(e) {}
+
+      // v16 → v17 promotion: migrate existing cached data without hitting RS
+      try {
+        const v16Key = `otd_lb_v16_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
+        const v16 = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(v16Key).first();
+        if (v16) {
+          const parsed = JSON.parse(v16.data);
+          // For MLB, enrich with positions from D1 position cache
+          if (sportKey === 'mlb' && parsed.leaderboard) {
+            const pItems = parsed.leaderboard.filter(i => i.entityType !== 'team');
+            if (pItems.length) {
+              const posKeys = pItems.map(i => `otd_mlbpos_v1_${i.playerId}`);
+              const posMap = {};
+              const PCHUNK = 100;
+              for (let ci = 0; ci < posKeys.length; ci += PCHUNK) {
+                const chunk = posKeys.slice(ci, ci + PCHUNK);
+                try {
+                  const ph = chunk.map(() => '?').join(',');
+                  const rows = await env.DB.prepare(`SELECT cache_key, data FROM odds_cache WHERE cache_key IN (${ph})`).bind(...chunk).all();
+                  for (const row of (rows.results || [])) {
+                    const pid = row.cache_key.replace('otd_mlbpos_v1_', '');
+                    try { posMap[pid] = JSON.parse(row.data); } catch(e2) {}
+                  }
+                } catch(e2) {}
+              }
+              for (const item of pItems) {
+                const abbr = posMap[String(item.playerId)] || null;
+                if (abbr) item.position = abbr;
+              }
+            }
+          }
+          const body = JSON.stringify(parsed);
+          await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
+            .bind(lbCacheKey, body, v16.fetched_at).run().catch(() => {});
+          return new Response(body, { headers: { 'Content-Type': 'application/json' } });
+        }
+      } catch(e) {}
     }
 
     function bId(id) { return String(id).replace(/_l\d+$/, ''); }
