@@ -4913,8 +4913,10 @@
         if (alreadyAdded) return;
         // Stay in leaderboard mode — don't redirect to Search Players
         otdDateMapDirty = true;
-        var level = 1;
-        var lbl = (OTD_LEVEL_OPTIONS.find(function(o) { return o.value === level; }) || {}).label || 'Level 1';
+        // Use the rarity the user has selected in the leaderboard dropdown so conflict
+        // detection has accurate rax values (level 1 earnings are too small to trigger >199 threshold).
+        var level = otdLbRarityLevel || 1;
+        var lbl = (OTD_LEVEL_OPTIONS.find(function(o) { return o.value === level; }) || {}).label || 'Level ' + level;
         var color = OTD_COLORS[otdColorIdx % OTD_COLORS.length];
         otdColorIdx++;
         var entry = {
