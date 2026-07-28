@@ -4768,11 +4768,12 @@
                 OTD_SPORTS_LIST.map(function(s) {
                     return '<option value="' + s.key + '"' + (s.key === otdLeaderboardSport ? ' selected' : '') + '>' + escHtml(s.label) + '</option>';
                 }).join('');
-            var SPLIT_SEASON_SPORTS = { nba: true, nhl: true, ncaam: true };
             var lbSeasonOpts = '<option value=""' + (otdLeaderboardAllTime ? ' selected' : '') + '>All Time</option>';
             var lbSeasonMin = otdLeaderboardSport === 'golf' ? 2015 : 2022;
-            for (var _y = new Date().getFullYear(); _y >= lbSeasonMin; _y--) {
-                var _lbl = SPLIT_SEASON_SPORTS[otdLeaderboardSport] ? (_y - 1) + '-' + String(_y).slice(2) : String(_y);
+            var _isCrossYear = !!OTD_CROSS_YEAR_SPORTS[otdLeaderboardSport];
+            var _lbStartYear = _isCrossYear ? new Date().getFullYear() - 1 : new Date().getFullYear();
+            for (var _y = _lbStartYear; _y >= lbSeasonMin; _y--) {
+                var _lbl = _isCrossYear ? (_y + '-' + String(_y + 1).slice(2)) : String(_y);
                 lbSeasonOpts += '<option value="' + _y + '"' + (!otdLeaderboardAllTime && String(_y) === otdLeaderboardSeason ? ' selected' : '') + '>' + _lbl + '</option>';
             }
             var selStyle = 'background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;padding:8px 6px;border-radius:6px;cursor:pointer';
@@ -4915,13 +4916,31 @@
         var etEl = document.getElementById('otd-lb-entitytype');
         var prevSport = otdLeaderboardSport;
         if (sportEl) otdLeaderboardSport = sportEl.value;
+        var sportChanged = otdLeaderboardSport !== prevSport;
         if (otdLeaderboardSport === 'all' || otdLeaderboardSport === 'ufc') {
             otdLeaderboardAllTime = true;
         } else if (seasonEl) {
             otdLeaderboardAllTime = !seasonEl.value;
             if (seasonEl.value) otdLeaderboardSeason = seasonEl.value;
         }
-        if (etEl) otdLeaderboardEntityType = etEl.value;
+        // Auto-switch entity type for UFC (fighter passes = team entity in RS)
+        if (sportChanged) {
+            if (otdLeaderboardSport === 'ufc') {
+                otdLeaderboardEntityType = 'team';
+            } else if (prevSport === 'ufc') {
+                otdLeaderboardEntityType = 'player';
+            } else if (etEl) {
+                otdLeaderboardEntityType = etEl.value;
+            }
+            // Reset season to appropriate default for cross-year sports
+            if (OTD_CROSS_YEAR_SPORTS[otdLeaderboardSport]) {
+                otdLeaderboardSeason = String(new Date().getFullYear() - 1);
+            } else {
+                otdLeaderboardSeason = String(new Date().getFullYear());
+            }
+        } else if (etEl) {
+            otdLeaderboardEntityType = etEl.value;
+        }
         otdLeaderboard = [];
         // Re-render panel when sport changes so season dropdown and pos filter rebuild
         if (sportEl && otdLeaderboardSport !== prevSport) {
