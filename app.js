@@ -4768,19 +4768,21 @@
                 OTD_SPORTS_LIST.map(function(s) {
                     return '<option value="' + s.key + '"' + (s.key === otdLeaderboardSport ? ' selected' : '') + '>' + escHtml(s.label) + '</option>';
                 }).join('');
+            var SPLIT_SEASON_SPORTS = { nba: true, nhl: true, ncaam: true };
             var lbSeasonOpts = '<option value=""' + (otdLeaderboardAllTime ? ' selected' : '') + '>All Time</option>';
             var lbSeasonMin = otdLeaderboardSport === 'golf' ? 2015 : 2022;
             for (var _y = new Date().getFullYear(); _y >= lbSeasonMin; _y--) {
-                lbSeasonOpts += '<option value="' + _y + '"' + (!otdLeaderboardAllTime && String(_y) === otdLeaderboardSeason ? ' selected' : '') + '>' + _y + '</option>';
+                var _lbl = SPLIT_SEASON_SPORTS[otdLeaderboardSport] ? (_y - 1) + '-' + String(_y).slice(2) : String(_y);
+                lbSeasonOpts += '<option value="' + _y + '"' + (!otdLeaderboardAllTime && String(_y) === otdLeaderboardSeason ? ' selected' : '') + '>' + _lbl + '</option>';
             }
             var selStyle = 'background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;padding:8px 6px;border-radius:6px;cursor:pointer';
-            var seasonSel = otdLeaderboardSport === 'all' ? '' : ('<select id="otd-lb-season" onchange="otdLbFilterChange()" style="' + selStyle + '">' + lbSeasonOpts + '</select>');
+            var hideSeasonSports = { all: true, ufc: true };
+            var seasonSel = hideSeasonSports[otdLeaderboardSport] ? '' : ('<select id="otd-lb-season" onchange="otdLbFilterChange()" style="' + selStyle + '">' + lbSeasonOpts + '</select>');
             var mlbPosSel = otdLeaderboardSport === 'mlb'
                 ? '<select id="otd-lb-mlbpos" onchange="otdLbMlbPosChange(this.value)" style="' + selStyle + '">' +
                     '<option value="all"' + (otdLbMlbPosFilter === 'all' ? ' selected' : '') + '>All Positions</option>' +
                     '<option value="hitter"' + (otdLbMlbPosFilter === 'hitter' ? ' selected' : '') + '>Hitter</option>' +
-                    '<option value="sp"' + (otdLbMlbPosFilter === 'sp' ? ' selected' : '') + '>Starting Pitcher</option>' +
-                    '<option value="rp"' + (otdLbMlbPosFilter === 'rp' ? ' selected' : '') + '>Relieving Pitcher</option>' +
+                    '<option value="pitcher"' + (otdLbMlbPosFilter === 'pitcher' ? ' selected' : '') + '>Pitcher</option>' +
                   '</select>'
                 : '';
             inputSection =
@@ -4897,10 +4899,8 @@
     function mlbPosCategories(pos) {
         if (!pos) return ['hitter'];
         var p = pos.toUpperCase().trim();
-        if (p === 'TWP') return ['hitter', 'sp'];
-        if (p === 'SP') return ['sp'];
-        if (p === 'RP' || p === 'CL' || p === 'MR' || p === 'CP') return ['rp'];
-        if (p === 'P') return ['sp']; // generic pitcher — treat as starter
+        if (p === 'TWP') return ['hitter', 'pitcher'];
+        if (p === 'P' || p === 'SP' || p === 'RP' || p === 'CL' || p === 'MR' || p === 'CP') return ['pitcher'];
         return ['hitter']; // 1B, 2B, 3B, SS, OF, C, DH, LF, CF, RF, IF
     }
 
@@ -4915,7 +4915,7 @@
         var etEl = document.getElementById('otd-lb-entitytype');
         var prevSport = otdLeaderboardSport;
         if (sportEl) otdLeaderboardSport = sportEl.value;
-        if (otdLeaderboardSport === 'all') {
+        if (otdLeaderboardSport === 'all' || otdLeaderboardSport === 'ufc') {
             otdLeaderboardAllTime = true;
         } else if (seasonEl) {
             otdLeaderboardAllTime = !seasonEl.value;
@@ -5006,7 +5006,7 @@
         var search = otdLeaderboardSearch.toLowerCase().trim();
         var filtered = otdLeaderboard.filter(function(p) {
             if (search && !(p.name && p.name.toLowerCase().includes(search)) && !(p.position && p.position.toLowerCase().includes(search))) return false;
-            if (otdLbMlbPosFilter !== 'all' && otdLeaderboardSport === 'mlb' && p.entityType !== 'team') {
+            if (otdLbMlbPosFilter !== 'all' && (p.sport || sport) === 'mlb' && p.entityType !== 'team') {
                 var cats = mlbPosCategories(p.position);
                 if (cats.indexOf(otdLbMlbPosFilter) === -1) return false;
             }
@@ -5041,13 +5041,13 @@
             var posHtml = '';
             if (p.position && rowSport === 'mlb') {
                 var posCats = mlbPosCategories(p.position);
-                // For TWP show both tags; for others show the raw position abbreviation
-                var posTags = posCats.indexOf('sp') !== -1 && posCats.indexOf('hitter') !== -1
-                    ? ['SP', p.position === 'TWP' ? 'DH' : p.position]
-                    : [p.position];
+                var isPitcher = posCats.indexOf('pitcher') !== -1;
+                var isHitter = posCats.indexOf('hitter') !== -1;
+                // TWP: show both tags; pitchers: accent; hitters: muted
+                var posTags = (isPitcher && isHitter) ? [p.position, 'DH'] : [p.position];
                 posHtml = posTags.map(function(tag) {
-                    var isP = tag === 'SP' || mlbPosCategories(tag).indexOf('rp') !== -1;
-                    var tagColor = isP ? 'var(--accent)' : 'var(--muted)';
+                    var tagIsPitcher = mlbPosCategories(tag).indexOf('pitcher') !== -1;
+                    var tagColor = tagIsPitcher ? 'var(--accent)' : 'var(--muted)';
                     return '<span style="font-size:' + (mob ? '8px' : '9px') + ';font-weight:700;color:' + tagColor + ';background:var(--bg3);border:1px solid var(--border2);border-radius:3px;padding:1px 4px;vertical-align:middle;margin-left:3px">' + escHtml(tag) + '</span>';
                 }).join('');
             }
