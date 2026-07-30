@@ -1436,17 +1436,26 @@ export async function onRequestGet(context) {
     let allTimeNameItems = [];
     if (effectiveAllTime) {
       const currentYear = new Date().getFullYear();
-      const sportMinYear = sportKey === 'golf' ? 2015 : 2022;
       const nameFetches = [];
-      for (let y = currentYear; y >= sportMinYear; y--) {
-        // isAlwaysAllTime sports (UFC) store all earnings in one season — fetch more pages
-        const numPages = isAlwaysAllTime ? 10 : (y >= currentYear - 2 ? 8 : 2);
-        for (let pg = 0; pg < numPages; pg++) {
-          const before = pg * 20;
-          const u = `${RS_BASE}/userpassshop/${sportKey}/season/${y}/entity/${entityType}/section/earningstotal?before=${before}`;
+      if (isAlwaysAllTime) {
+        // UFC/MMA: all earnings live in season 2023 — fetch 20 pages from that year only
+        for (let pg = 0; pg < 20; pg++) {
+          const u = `${RS_BASE}/userpassshop/${sportKey}/season/2023/entity/${entityType}/section/earningstotal?before=${pg * 20}`;
           const c = new AbortController();
           const t = setTimeout(() => c.abort(), 6000);
           nameFetches.push(fetch(u, { headers, signal: c.signal }).then(r => { clearTimeout(t); return r.ok ? r.json() : null; }).catch(() => null));
+        }
+      } else {
+        const sportMinYear = sportKey === 'golf' ? 2015 : 2022;
+        for (let y = currentYear; y >= sportMinYear; y--) {
+          const numPages = y >= currentYear - 2 ? 8 : 2;
+          for (let pg = 0; pg < numPages; pg++) {
+            const before = pg * 20;
+            const u = `${RS_BASE}/userpassshop/${sportKey}/season/${y}/entity/${entityType}/section/earningstotal?before=${before}`;
+            const c = new AbortController();
+            const t = setTimeout(() => c.abort(), 6000);
+            nameFetches.push(fetch(u, { headers, signal: c.signal }).then(r => { clearTimeout(t); return r.ok ? r.json() : null; }).catch(() => null));
+          }
         }
       }
       const nameResults = await Promise.all(nameFetches);
