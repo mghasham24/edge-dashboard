@@ -701,7 +701,7 @@ export async function onRequestGet(context) {
     const seedSport = 'ufc';
     const seedEntity = 'team';
     const seedSeason = '2023';
-    const SEED_PAGES = 20;
+    const SEED_PAGES = parseInt(url.searchParams.get('pages') || '20', 10);
     const SEED_CONCURRENCY = 6;
     const seedOffset = Math.max(0, parseInt(url.searchParams.get('offset') || '0', 10));
     const seedLimit = Math.min(60, Math.max(1, parseInt(url.searchParams.get('limit') || '50', 10)));
