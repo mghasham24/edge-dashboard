@@ -1294,9 +1294,16 @@ export async function onRequestGet(context) {
       } catch { return []; }
     }
 
-    const [playerPasses, teamPasses] = await Promise.all([extractIds(playerRes), extractIds(teamRes)]);
+    const [playerRaw, teamRaw] = [playerRes, teamRes];
+    const [playerPasses, teamPasses] = await Promise.all([extractIds(playerRaw), extractIds(teamRaw)]);
     const allUserPasses = [...playerPasses, ...teamPasses];
     const ownedIds = new Set(allUserPasses.map(p => p.id));
+    // Temporary debug — read first raw pass to see field structure
+    let _debugRawPass = null;
+    try {
+      const _dr = playerRaw && playerRaw.ok ? playerRaw.clone() : (teamRaw && teamRaw.ok ? teamRaw.clone() : null);
+      if (_dr) { const _dd = await _dr.json(); const _ra = Array.isArray(_dd) ? _dd : (_dd.passes || _dd.items || _dd.collectingCards || []); _debugRawPass = _ra[0] || null; }
+    } catch {}
 
     // 2. Load owned passes earnings from D1
     const ownedEarningsMap = new Map();
@@ -1378,7 +1385,7 @@ export async function onRequestGet(context) {
       };
     });
 
-    const body = JSON.stringify({ ok: true, sport: suggestSport, userId: suggestUserId, ownedPasses: ownedSummary, coveredDays: coveredDates.size, suggestions: candidates.slice(0, 60) });
+    const body = JSON.stringify({ ok: true, sport: suggestSport, userId: suggestUserId, ownedPasses: ownedSummary, coveredDays: coveredDates.size, suggestions: candidates.slice(0, 60), _debug: { playerCount: playerPasses.length, teamCount: teamPasses.length, rawPass: _debugRawPass } });
     await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
       .bind(suggestCacheKey, body, now).run().catch(() => {});
     return new Response(body, { headers: { 'Content-Type': 'application/json' } });
