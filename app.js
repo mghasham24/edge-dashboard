@@ -4814,10 +4814,14 @@
             return;
         }
         if (!otdSuggestUser) {
-            fetch('/api/real/otd?action=search_users&q=' + encodeURIComponent(typed), { credentials: 'same-origin' })
-                .then(function(r) { return r.json(); })
-                .then(function(d) {
-                    var users = d.users || [];
+            var stripped = typed.replace(/_+$/, '');
+            var queries = ['/api/real/otd?action=search_users&q=' + encodeURIComponent(typed)];
+            if (stripped !== typed) queries.push('/api/real/otd?action=search_users&q=' + encodeURIComponent(stripped));
+            Promise.all(queries.map(function(url) { return fetch(url, { credentials: 'same-origin' }).then(function(r) { return r.json(); }).catch(function() { return { users: [] }; }); }))
+                .then(function(results) {
+                    var seen = {};
+                    var users = [];
+                    results.forEach(function(d) { (d.users || []).forEach(function(u) { if (u.id && !seen[u.id]) { seen[u.id] = 1; users.push(u); } }); });
                     var match = users.find(function(u) { return u.username.toLowerCase() === typed.toLowerCase(); }) || users[0];
                     otdSuggestUser = match || { id: typed, username: typed, displayName: null };
                     if (inp) inp.value = otdSuggestUser.username;
