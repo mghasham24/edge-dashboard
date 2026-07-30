@@ -4814,8 +4814,7 @@
             return;
         }
         if (!otdSuggestUser) {
-            var searchQ = typed.replace(/_+$/, '') || typed;
-            fetch('/api/real/otd?action=search_users&q=' + encodeURIComponent(searchQ), { credentials: 'same-origin' })
+            fetch('/api/real/otd?action=search_users&q=' + encodeURIComponent(typed), { credentials: 'same-origin' })
                 .then(function(r) { return r.json(); })
                 .then(function(d) {
                     var users = d.users || [];
