@@ -1565,8 +1565,8 @@ export async function onRequestGet(context) {
       const currentYear = new Date().getFullYear();
       const nameFetches = [];
       if (isAlwaysAllTime) {
-        // UFC/MMA: all earnings live in season 2023 — fetch 20 pages from that year only
-        for (let pg = 0; pg < 20; pg++) {
+        // UFC/MMA: all earnings live in season 2023 — fetch 36 pages (720 fighters)
+        for (let pg = 0; pg < 36; pg++) {
           const u = `${RS_BASE}/userpassshop/${sportKey}/season/2023/entity/${entityType}/section/earningstotal?before=${pg * 20}`;
           const c = new AbortController();
           const t = setTimeout(() => c.abort(), 6000);
