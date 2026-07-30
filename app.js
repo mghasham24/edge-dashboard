@@ -5052,13 +5052,9 @@
                 : null;
             if (openSugg) {
                 var oMult = UFC_LEVEL_MULTIPLIERS[otdSuggestLevels[openSugg.id] !== undefined ? otdSuggestLevels[openSugg.id] : 5] || 1;
-                // Only show days where the suggested fighter's slot is wasted (red)
+                // Only show days where claim slots are already full (count-based, same as card)
                 var evs = (openSugg.overlapEvents || []).filter(function(ev) {
-                    var ac = (ev.competitors || []).map(function(c) { return Math.round((c.earnings || 0) * oMult); });
-                    ac.push(Math.round((ev.earnings || 0) * oMult));
-                    ac.sort(function(a, b) { return b - a; });
-                    var newIdx = ac.indexOf(Math.round((ev.earnings || 0) * oMult));
-                    return newIdx >= otdSuggestClaimLimit;
+                    return (ev.competitors || []).length >= otdSuggestClaimLimit;
                 });
                 suggestHtml += '<div id="otd-suggest-overlap-panel" style="grid-column:1/-1;border:1px solid rgba(239,83,80,.3);border-radius:8px;padding:10px 12px;background:var(--bg2)">' +
                     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
