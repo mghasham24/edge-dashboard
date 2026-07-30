@@ -1232,8 +1232,18 @@ export async function onRequestGet(context) {
     const suggestSeason = suggestSport === 'ufc' ? '2023' : String(currentYear);
     const earningsPrefix = `otd_earnings_v10_${suggestEntityType}_${suggestSport}_${suggestSeason}_`;
 
+    // UFC multiplier table (mirrors app.js UFC_LEVEL_MULTIPLIERS)
+    const UFC_SUGGEST_MULT = {
+      1:1, 2:1.4, 3:1.6, 4:2,
+      5:5, 6:5.4, 7:5.8, 8:6.2, 9:6.7,
+      10:10, 11:10.2, 12:10.4, 13:10.6, 14:10.8, 15:11, 16:11.2, 17:11.4, 18:11.6, 19:12,
+      20:20, 21:20.3, 22:20.6, 23:20.9, 24:21.2, 25:21.5, 26:21.8, 27:22.1, 28:22.4, 29:22.7,
+      30:23, 31:23.3, 32:23.6, 33:23.9, 34:24.2, 35:24.5
+    };
+    function suggestGetMult(level) { return UFC_SUGGEST_MULT[level] || 1; }
+
     // Serve from cache if fresh (1h)
-    const suggestCacheKey = `otd_suggest_v5_${suggestSport}_${suggestUserId}`;
+    const suggestCacheKey = `otd_suggest_v6_${suggestSport}_${suggestUserId}`;
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(suggestCacheKey).first();
       if (cached && (now - cached.fetched_at) < 3600) {
@@ -1254,9 +1264,19 @@ export async function onRequestGet(context) {
         const raw = Array.isArray(data) ? data : (data.passes || data.items || data.collectingCards || []);
         return raw.map(p => {
           const entity = p.entity || p.player || p.team || {};
+          const bi = p.boostInfo || {};
           const id = String(p.entityId || p.playerId || entity.id || '');
           const name = p.label || (entity.firstName && entity.lastName ? `${entity.firstName} ${entity.lastName}`.trim() : null) || entity.name || entity.displayName || null;
-          return { id, name };
+          const labelLevel = rarityLabelToLevel(bi.rarityLabel);
+          const rarityStr = p.rarity || p.rarityName || entity.rarity || entity.rarityName || '';
+          const raritySubLevel = p.rarityLevel || p.subLevel || entity.rarityLevel || entity.subLevel;
+          const rarityStrLevel = rarityToLevelAll(rarityStr, raritySubLevel);
+          const level = labelLevel > 0 ? labelLevel
+            : rarityStrLevel > 0 ? rarityStrLevel
+            : (typeof bi.level === 'number' && bi.level > 0) ? bi.level
+            : typeof p.level === 'number' ? p.level
+            : 1;
+          return { id, name, level };
         }).filter(p => p.id);
       } catch { return []; }
     }
@@ -1282,14 +1302,18 @@ export async function onRequestGet(context) {
 
     // 3. Build covered dates set + day → owners map
     const coveredDates = new Set();
-    const dayToOwners = new Map(); // day → [{ id, name, earnings }]
+    const dayToOwners = new Map(); // day → [{ id, name, baseEarnings, earnings, level }]
     for (const [id, earningsArr] of ownedEarningsMap) {
-      const ownerName = (allUserPasses.find(p => p.id === id) || {}).name || id;
+      const pass = allUserPasses.find(p => p.id === id) || {};
+      const ownerName = pass.name || id;
+      const passLevel = pass.level || 1;
+      const passMult = suggestGetMult(passLevel);
       for (const e of earningsArr) {
         if (!e.day) continue;
         coveredDates.add(e.day);
         if (!dayToOwners.has(e.day)) dayToOwners.set(e.day, []);
-        dayToOwners.get(e.day).push({ id, name: ownerName, earnings: e.earnings || 0 });
+        const baseEarnings = e.earnings || 0;
+        dayToOwners.get(e.day).push({ id, name: ownerName, baseEarnings, earnings: Math.round(baseEarnings * passMult), level: passLevel });
       }
     }
 

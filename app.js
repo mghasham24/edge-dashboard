@@ -4803,6 +4803,7 @@
     var otdSuggestOpenOverlap = null; // fighter id whose overlap panel is open
     var otdSuggestClaimLimit = 2; // 2 or 3 claims per fight day
     var otdSuggestGlobalLevel = 5; // global rarity (Legendary 1 default)
+    var otdSuggestMyPassLevel = null; // null = use actual RS pass levels; number = override
 
     function loadOtdSuggestions() {
         var errEl = document.getElementById('otd-suggest-err');
@@ -4857,6 +4858,11 @@
         if (otdSuggestData && otdSuggestData.suggestions) {
             otdSuggestData.suggestions.forEach(function(s) { otdSuggestLevels[String(s.id)] = level; });
         }
+        renderOtdSuggest();
+    }
+
+    function otdSuggestSetMyPassLevel(val) {
+        otdSuggestMyPassLevel = val === '' ? null : parseInt(val, 10);
         renderOtdSuggest();
     }
 
@@ -4949,13 +4955,23 @@
         var rarityDropdownOpts = OTD_LEVEL_OPTIONS.filter(function(o) { return o.value >= 1; }).map(function(o) {
             return '<option value="' + o.value + '"' + (o.value === otdSuggestGlobalLevel ? ' selected' : '') + '>' + escHtml(o.label) + '</option>';
         }).join('');
+        var myPassDropdownOpts = '<option value=""' + (otdSuggestMyPassLevel === null ? ' selected' : '') + '>Actual</option>' +
+            OTD_LEVEL_OPTIONS.filter(function(o) { return o.value >= 1; }).map(function(o) {
+                return '<option value="' + o.value + '"' + (otdSuggestMyPassLevel === o.value ? ' selected' : '') + '>' + escHtml(o.label) + '</option>';
+            }).join('');
         var suggestHtml = '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:10px">' +
             '<span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Top 60 Suggestions</span>' +
             '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">' +
                 '<div style="display:flex;align-items:center;gap:5px">' +
-                    '<span style="font-size:10px;color:var(--muted2)">Rarity:</span>' +
+                    '<span style="font-size:10px;color:var(--muted2)">New pass:</span>' +
                     '<select onchange="otdSuggestSetAllLevels(parseInt(this.value,10))" style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--fg);font-family:var(--sans);font-size:10px;padding:3px 5px;cursor:pointer;outline:none">' +
                     rarityDropdownOpts +
+                    '</select>' +
+                '</div>' +
+                '<div style="display:flex;align-items:center;gap:5px">' +
+                    '<span style="font-size:10px;color:var(--muted2)">My passes:</span>' +
+                    '<select onchange="otdSuggestSetMyPassLevel(this.value)" style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--fg);font-family:var(--sans);font-size:10px;padding:3px 5px;cursor:pointer;outline:none">' +
+                    myPassDropdownOpts +
                     '</select>' +
                 '</div>' +
                 '<div style="display:flex;align-items:center;gap:5px">' +
@@ -4974,11 +4990,18 @@
             // Displacement-based wasted: if fighter is claimed (rank < limit), cost = earnings of
             // the competitor pushed out of their claim slot. If fighter itself is wasted (rank >= limit),
             // cost = fighter's own earnings.
+            // otdSuggestMyPassLevel overrides competitor earnings multiplier when set.
+            function compEffectiveEarnings(c) {
+                if (otdSuggestMyPassLevel !== null) {
+                    return Math.round((c.baseEarnings !== undefined ? c.baseEarnings : (c.earnings || 0)) * (UFC_LEVEL_MULTIPLIERS[otdSuggestMyPassLevel] || 1));
+                }
+                return c.earnings || 0;
+            }
             function computeDisplacementWasted(s, claimLimit) {
                 return (s.overlapEvents || []).reduce(function(sum, ev) {
-                    var comps = (ev.competitors || []).slice().sort(function(a, b) { return (b.earnings||0)-(a.earnings||0); });
+                    var comps = (ev.competitors || []).slice().map(function(c) { return { earnings: compEffectiveEarnings(c) }; }).sort(function(a, b) { return b.earnings - a.earnings; });
                     var myE = ev.earnings || 0;
-                    var myRank = comps.findIndex(function(c) { return (c.earnings||0) < myE; });
+                    var myRank = comps.findIndex(function(c) { return c.earnings < myE; });
                     if (myRank === -1) myRank = comps.length;
                     if (myRank < claimLimit) {
                         return sum + (comps.length >= claimLimit ? (comps[claimLimit - 1].earnings || 0) : 0);
@@ -5062,9 +5085,9 @@
                 var oMult = UFC_LEVEL_MULTIPLIERS[otdSuggestLevels[openSugg.id] !== undefined ? otdSuggestLevels[openSugg.id] : 5] || 1;
                 // Only show days where there is a displacement cost (same logic as card)
                 var evs = (openSugg.overlapEvents || []).filter(function(ev) {
-                    var comps = (ev.competitors || []).slice().sort(function(a, b) { return (b.earnings||0)-(a.earnings||0); });
+                    var comps = (ev.competitors || []).slice().map(function(c) { return { earnings: compEffectiveEarnings(c) }; }).sort(function(a, b) { return b.earnings - a.earnings; });
                     var myE = ev.earnings || 0;
-                    var myRank = comps.findIndex(function(c) { return (c.earnings||0) < myE; });
+                    var myRank = comps.findIndex(function(c) { return c.earnings < myE; });
                     if (myRank === -1) myRank = comps.length;
                     if (myRank < otdSuggestClaimLimit) return comps.length >= otdSuggestClaimLimit;
                     return true; // fighter itself is wasted
@@ -5082,7 +5105,7 @@
                                 var dp = (ev.day || '').split('-');
                                 var dayFmt = dp.length === 3 ? MONTH_SHORT[parseInt(dp[1],10)-1] + ' ' + parseInt(dp[2],10) + '\'' + String(dp[0]).slice(2) : (ev.dayDisplay || ev.day || '');
                                 var newRax = Math.round((ev.earnings || 0) * oMult);
-                                var allCards = (ev.competitors || []).map(function(c) { return { name: c.name, rax: Math.round((c.earnings || 0) * oMult), isNew: false }; });
+                                var allCards = (ev.competitors || []).map(function(c) { return { name: c.name, rax: compEffectiveEarnings(c), level: c.level, isNew: false }; });
                                 allCards.push({ name: openSugg.name, rax: newRax, isNew: true });
                                 allCards.sort(function(a, b) { return b.rax - a.rax; });
                                 var isWasted = allCards.findIndex(function(c) { return c.isNew; }) >= otdSuggestClaimLimit;
