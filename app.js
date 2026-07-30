@@ -4936,14 +4936,29 @@
         if (!d.suggestions || d.suggestions.length === 0) {
             suggestHtml += '<div style="font-size:13px;color:var(--muted2)">No suggestions — you may already own all fighters.</div>';
         } else {
+            // Re-sort suggestions by claim-limit-aware unique earnings
+            var sorted30 = d.suggestions.slice().sort(function(a, b) {
+                function wasted(s) { return (s.overlapEvents || []).reduce(function(sum, ev) { return sum + ((ev.competitors || []).length >= otdSuggestClaimLimit ? (ev.earnings || 0) : 0); }, 0); }
+                var ua = (a.totalEarnings || 0) - wasted(a);
+                var ub = (b.totalEarnings || 0) - wasted(b);
+                return ub - ua;
+            });
             var cardH = window.innerWidth <= 480 ? '130px' : '190px';
             suggestHtml += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-bottom:12px">';
-            suggestHtml += d.suggestions.map(function(s, i) {
+            suggestHtml += sorted30.map(function(s, i) {
                 var level = otdSuggestLevels[s.id] !== undefined ? otdSuggestLevels[s.id] : 5;
                 var rc = otdRarityColor(level);
                 var mult = UFC_LEVEL_MULTIPLIERS[level] || 1;
                 var atRarity = Math.round(s.totalEarnings * mult);
-                var overlapAtRarity = Math.round(s.overlapEarnings * mult);
+                // Recompute wasted earnings client-side using claim limit:
+                // a day is wasted only if competitors already fill all claim slots.
+                var wastedBase = 0;
+                (s.overlapEvents || []).forEach(function(ev) {
+                    if ((ev.competitors || []).length >= otdSuggestClaimLimit) {
+                        wastedBase += ev.earnings || 0;
+                    }
+                });
+                var overlapAtRarity = Math.round(wastedBase * mult);
                 var uniqueAtRarity = atRarity - overlapAtRarity;
                 var overlapOpen = String(otdSuggestOpenOverlap) === String(s.id);
                 var levelOpts = OTD_LEVEL_OPTIONS.filter(function(o) { return o.value >= 1; }).map(function(o) {
