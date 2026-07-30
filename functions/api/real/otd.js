@@ -81,11 +81,14 @@ export async function onRequestGet(context) {
       try {
         const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(lbCacheKey).first();
         if (cached) {
-          // For alltime views, deduplicate in-place (e.g. UFC had both year + 'alltime' rows per fighter)
-          if (effectiveAllTime) {
-            try {
-              const parsed = JSON.parse(cached.data);
-              if (parsed.leaderboard) {
+          let responseData = cached.data;
+          try {
+            const parsed = JSON.parse(cached.data);
+            if (parsed.leaderboard) {
+              let dirty = false;
+
+              // Deduplicate alltime leaderboards in-place (UFC had both year + 'alltime' rows per fighter)
+              if (effectiveAllTime) {
                 const seen = {};
                 const deduped = parsed.leaderboard.filter(item => {
                   if (seen[item.playerId]) return false;
@@ -94,15 +97,40 @@ export async function onRequestGet(context) {
                 });
                 if (deduped.length !== parsed.leaderboard.length) {
                   parsed.leaderboard = deduped.map((item, i) => ({ ...item, rank: i + 1 }));
-                  const fixed = JSON.stringify(parsed);
-                  env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
-                    .bind(lbCacheKey, fixed, cached.fetched_at).run().catch(() => {});
-                  return new Response(fixed, { headers: { 'Content-Type': 'application/json' } });
+                  dirty = true;
                 }
               }
-            } catch(e) {}
-          }
-          return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
+
+              // Enrich entries that still have numeric IDs as names from D1 player cache
+              const numericNameItems = parsed.leaderboard.filter(i => !i.name || /^\d+$/.test(String(i.name).trim()));
+              if (numericNameItems.length > 0) {
+                try {
+                  const cacheKeys = numericNameItems.slice(0, 100).map(i => `otd_player_${sportKey}_${i.playerId}`);
+                  const ph = cacheKeys.map(() => '?').join(',');
+                  const nameRows = await env.DB.prepare(`SELECT cache_key, data FROM odds_cache WHERE cache_key IN (${ph})`).bind(...cacheKeys).all();
+                  const nameMap = {};
+                  for (const row of (nameRows.results || [])) {
+                    try {
+                      const d = JSON.parse(row.data);
+                      const pid = row.cache_key.replace(`otd_player_${sportKey}_`, '');
+                      const name = d.name || ((d.firstName || '') + ' ' + (d.lastName || '')).trim() || d.displayName || null;
+                      if (name && !/^\d+$/.test(name)) nameMap[pid] = name;
+                    } catch(e2) {}
+                  }
+                  for (const item of numericNameItems) {
+                    if (nameMap[item.playerId]) { item.name = nameMap[item.playerId]; dirty = true; }
+                  }
+                } catch(e2) {}
+              }
+
+              if (dirty) {
+                responseData = JSON.stringify(parsed);
+                env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
+                  .bind(lbCacheKey, responseData, cached.fetched_at).run().catch(() => {});
+              }
+            }
+          } catch(e) {}
+          return new Response(responseData, { headers: { 'Content-Type': 'application/json' } });
         }
       } catch(e) {}
 
@@ -1182,7 +1210,7 @@ export async function onRequestGet(context) {
         } catch(e) {}
       }
       combined.sort((a, b) => (b.total || 0) - (a.total || 0));
-      const leaderboard = combined.slice(0, 500).map((item, i) => Object.assign({}, item, { rank: i + 1 }));
+      const leaderboard = combined.slice(0, 1000).map((item, i) => Object.assign({}, item, { rank: i + 1 }));
       return new Response(JSON.stringify({ ok: true, leaderboard }), { headers: { 'Content-Type': 'application/json' } });
     }
     const RS_SPORT_ALIAS_LB = { ncaabb: 'ncaam', mma: 'ufc' };
