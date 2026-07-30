@@ -722,14 +722,18 @@ export async function onRequestGet(context) {
     const pageResults = await Promise.all(pageFetches);
 
     const fighterMap = {};
+    let rawItemSample = null;
     for (const data of pageResults) {
       if (!data) continue;
-      const items = data.items || data.leaderboard || data.players || data.data || [];
+      const items = data.passes || data.items || data.leaderboard || data.players || data.data || (Array.isArray(data) ? data : []);
       for (const item of items) {
+        if (!rawItemSample) rawItemSample = item; // capture first item for debugging
         const id = String(item.id || item.entityId || '');
         const name = item.label || item.name || item.displayName || '';
         const value = Number(item.value) || 0;
-        const avatar = item.entityAvatar || item.avatar || item.avatarKey || '';
+        const entity = item.entity || item.player || item.team || {};
+        const avatar = item.entityAvatar || item.avatar || item.avatarKey || item.imageKey || item.imageHash ||
+          entity.entityAvatar || entity.avatar || entity.avatarKey || entity.imageKey || entity.image || '';
         if (!id) continue;
         if (!fighterMap[id] || value > (fighterMap[id].value || 0)) {
           fighterMap[id] = { id, name, value, avatar };
@@ -784,7 +788,9 @@ export async function onRequestGet(context) {
           const data = await res.json();
           const earnings = data.earnings || data.events || data.performances || data.playerEarnings || data.earningDays || [];
           const baseTotal = (data.info && typeof data.info.total === 'number') ? data.info.total : null;
-          return { fighter, earnings, baseTotal };
+          const info = data.info || {};
+          const avatarFromEarnings = info.entityAvatar || info.avatar || info.avatarKey || info.imageKey || info.image || info.logoUrl || info.imageUrl || '';
+          return { fighter, earnings, baseTotal, avatarFromEarnings };
         } catch { clearTimeout(t); return null; }
       }));
 
@@ -797,6 +803,11 @@ export async function onRequestGet(context) {
         const earningsKey = `otd_earnings_v10_${seedEntity}_${seedSport}_${seedSeason}_${fighter.id}`;
         writes.push(env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at').bind(earningsKey, body, now).run().catch(() => {}));
         written++;
+      }
+      for (const r of results) {
+        if (!r) continue;
+        const av = r.fighter.avatar || r.avatarFromEarnings || '';
+        if (av && !r.fighter.avatar) r.fighter.avatar = av;
       }
       for (const f of batch) {
         const nameKey = `otd_player_${seedSport}_${f.id}`;
@@ -818,6 +829,8 @@ export async function onRequestGet(context) {
       noEarningsData: noData,
       done,
       nextOffset: done ? null : seedOffset + seedLimit,
+      rawItemSample,
+      avatarsSeen: allFighters.filter(f => f.avatar).length,
     }), { headers: { 'Content-Type': 'application/json' } });
   }
 
