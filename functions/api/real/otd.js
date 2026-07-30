@@ -1233,7 +1233,7 @@ export async function onRequestGet(context) {
     const earningsPrefix = `otd_earnings_v10_${suggestEntityType}_${suggestSport}_${suggestSeason}_`;
 
     // Serve from cache if fresh (1h)
-    const suggestCacheKey = `otd_suggest_v2_${suggestSport}_${suggestUserId}`;
+    const suggestCacheKey = `otd_suggest_v3_${suggestSport}_${suggestUserId}`;
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(suggestCacheKey).first();
       if (cached && (now - cached.fetched_at) < 3600) {
