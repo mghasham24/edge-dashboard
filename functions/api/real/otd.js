@@ -77,10 +77,33 @@ export async function onRequestGet(context) {
       const RS_SEASON_NORM_LB = { ufc: 'alltime', mma: 'alltime' };
       const sportKey = RS_SPORT_ALIAS_LB[sport] || sport;
       const effectiveAllTime = allTime || !!RS_SEASON_NORM_LB[sportKey];
-      const lbCacheKey = `otd_lb_v25_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
+      const lbCacheKey = `otd_lb_v24_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
       try {
         const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(lbCacheKey).first();
-        if (cached) return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
+        if (cached) {
+          // For alltime views, deduplicate in-place (e.g. UFC had both year + 'alltime' rows per fighter)
+          if (effectiveAllTime) {
+            try {
+              const parsed = JSON.parse(cached.data);
+              if (parsed.leaderboard) {
+                const seen = {};
+                const deduped = parsed.leaderboard.filter(item => {
+                  if (seen[item.playerId]) return false;
+                  seen[item.playerId] = true;
+                  return true;
+                });
+                if (deduped.length !== parsed.leaderboard.length) {
+                  parsed.leaderboard = deduped.map((item, i) => ({ ...item, rank: i + 1 }));
+                  const fixed = JSON.stringify(parsed);
+                  env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
+                    .bind(lbCacheKey, fixed, cached.fetched_at).run().catch(() => {});
+                  return new Response(fixed, { headers: { 'Content-Type': 'application/json' } });
+                }
+              }
+            } catch(e) {}
+          }
+          return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
+        }
       } catch(e) {}
 
       // Try v16 promotion before requiring a token (with MLB position enrichment)
@@ -533,12 +556,20 @@ export async function onRequestGet(context) {
     try {
       const RS_EARN_SPORT_MAP = { ncaabb: 'ncaam', mma: 'ufc' };
       const rsSport = RS_EARN_SPORT_MAP[sport] || sport;
-      const earningsUrl = `${RS_BASE}/userpassearnings/${rsSport}/season/${season}/entity/${entityType}/${id}?level=1`;
 
-      async function rsGet(hdrs) {
+      // For UFC, 'alltime' is not a valid season in the RS earnings API — use real years.
+      // Try the pass's season first, then fall back to recent years if it returns no data.
+      const ufcSeasonCandidates = (rsSport === 'ufc' && (season === 'alltime' || isNaN(Number(season))))
+        ? [String(new Date().getFullYear()), String(new Date().getFullYear() - 1), '2024', '2023', '2022']
+        : (rsSport === 'ufc' ? [season, String(new Date().getFullYear()), String(new Date().getFullYear() - 1), '2024', '2023', '2022'].filter((s, i, a) => a.indexOf(s) === i) : null);
+
+      const earningsUrl = (s) => `${RS_BASE}/userpassearnings/${rsSport}/season/${s}/entity/${entityType}/${id}?level=1`;
+
+      async function rsGet(hdrs, url) {
+        const fetchUrl = url || earningsUrl(season);
         const c = new AbortController();
         const t = setTimeout(() => c.abort(), 8000);
-        try { return await fetch(earningsUrl, { headers: hdrs, signal: c.signal }); }
+        try { return await fetch(fetchUrl, { headers: hdrs, signal: c.signal }); }
         finally { clearTimeout(t); }
       }
 
@@ -562,12 +593,26 @@ export async function onRequestGet(context) {
 
       if (!res.ok) return fail(res.status, 'RS earnings failed: ' + res.status);
 
-      const data = await res.json();
-      const earnings = data.earnings || data.events || data.performances || data.playerEarnings || data.earningDays ||
+      let data = await res.json();
+      let earnings = data.earnings || data.events || data.performances || data.playerEarnings || data.earningDays ||
         (Array.isArray(data.data) ? data.data : null) ||
         (Array.isArray(data.results) ? data.results : null) ||
         (Array.isArray(data.items) ? data.items : null) ||
         (Array.isArray(data) ? data : []);
+
+      // UFC: if the first season returned nothing, try other years until we get data
+      if (ufcSeasonCandidates && !earnings.length) {
+        for (const candidate of ufcSeasonCandidates.slice(1)) {
+          try {
+            const candRes = await rsGet(buildHeadersWithToken(usedToken), earningsUrl(candidate));
+            if (!candRes.ok) continue;
+            const candData = await candRes.json();
+            const candEarnings = candData.earnings || candData.events || candData.performances || candData.playerEarnings ||
+              (Array.isArray(candData) ? candData : []);
+            if (candEarnings.length > 0) { data = candData; earnings = candEarnings; break; }
+          } catch(e) {}
+        }
+      }
 
       // RS returns info.total = "This season" base earnings (raw points, no multiplier)
       const baseTotal = (data.info && typeof data.info.total === 'number') ? data.info.total : null;
@@ -1122,7 +1167,7 @@ export async function onRequestGet(context) {
     // "All Sports" view — merge all cached per-sport leaderboards from D1
     if (sport === 'all') {
       const suffix = 'alltime'; // all-sports view is always alltime
-      const pattern = `otd_lb_v25_${entityType}_%_${suffix}`;
+      const pattern = `otd_lb_v24_${entityType}_%_${suffix}`;
       let rows;
       try { rows = await env.DB.prepare('SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE ?').bind(pattern).all(); }
       catch(e) { return fail(500, e.message); }
@@ -1130,7 +1175,7 @@ export async function onRequestGet(context) {
       for (const row of (rows.results || [])) {
         try {
           const d = JSON.parse(row.data);
-          const sportFromKey = row.cache_key.replace(`otd_lb_v25_${entityType}_`, '').replace(`_${suffix}`, '');
+          const sportFromKey = row.cache_key.replace(`otd_lb_v24_${entityType}_`, '').replace(`_${suffix}`, '');
           for (const item of (d.leaderboard || [])) {
             combined.push(Object.assign({}, item, { sport: item.sport || sportFromKey }));
           }
@@ -1153,7 +1198,7 @@ export async function onRequestGet(context) {
     const isActiveSeason = !effectiveAllTime && season === currentSeasonStr;
     const lbTtl = (isActiveSeason || effectiveAllTime) ? WEEK : Infinity;
 
-    const lbCacheKey = `otd_lb_v25_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
+    const lbCacheKey = `otd_lb_v24_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
     if (url.searchParams.get('force') !== '1') {
       try {
         const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(lbCacheKey).first();
