@@ -738,6 +738,21 @@ export async function onRequestGet(context) {
     const allFighters = Object.values(fighterMap).sort((a, b) => b.value - a.value);
     if (allFighters.length === 0) return fail(502, 'No fighters returned from RS — tokens may be invalid');
 
+    // list_only=1: return full RS list with D1 earnings status, no fetching
+    if (url.searchParams.get('list_only') === '1') {
+      const allKeys = allFighters.map(f => `otd_earnings_v10_${seedEntity}_${seedSport}_${seedSeason}_${f.id}`);
+      const hasEarnings = new Set();
+      for (let i = 0; i < allKeys.length; i += 100) {
+        const chunk = allKeys.slice(i, i + 100);
+        const ph = chunk.map(() => '?').join(',');
+        const rows = await env.DB.prepare(`SELECT cache_key FROM odds_cache WHERE cache_key IN (${ph})`).bind(...chunk).all().catch(() => ({ results: [] }));
+        for (const row of rows.results) hasEarnings.add(row.cache_key);
+      }
+      const withOtd = allFighters.filter(f => hasEarnings.has(`otd_earnings_v10_${seedEntity}_${seedSport}_${seedSeason}_${f.id}`));
+      const noOtd = allFighters.filter(f => !hasEarnings.has(`otd_earnings_v10_${seedEntity}_${seedSport}_${seedSeason}_${f.id}`));
+      return new Response(JSON.stringify({ ok: true, total: allFighters.length, withOtd: withOtd.length, noOtd: noOtd.length, noOtdFighters: noOtd }), { headers: { 'Content-Type': 'application/json' } });
+    }
+
     // Slice to this chunk
     const chunk = allFighters.slice(seedOffset, seedOffset + seedLimit);
     const done = seedOffset + seedLimit >= allFighters.length;
