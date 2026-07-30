@@ -4852,8 +4852,23 @@
     }
 
     function otdSuggestToggleOverlap(id) {
-        otdSuggestOpenOverlap = otdSuggestOpenOverlap === id ? null : id;
+        otdSuggestOpenOverlap = String(otdSuggestOpenOverlap) === String(id) ? null : String(id);
         renderOtdSuggest();
+        if (otdSuggestOpenOverlap !== null) {
+            setTimeout(function() {
+                var panel = document.getElementById('otd-suggest-overlap-panel');
+                var grid = document.getElementById('otd-suggest-grid');
+                if (!panel || !grid) return;
+                var openCard = grid.querySelector('[data-suggest-id="' + String(id) + '"]');
+                if (!openCard) { panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); return; }
+                var cardTop = openCard.getBoundingClientRect().top;
+                var cards = Array.from(grid.querySelectorAll('[data-suggest-id]'));
+                var sameRow = cards.filter(function(c) { return Math.abs(c.getBoundingClientRect().top - cardTop) < 5; });
+                var lastInRow = sameRow[sameRow.length - 1];
+                if (lastInRow) grid.insertBefore(panel, lastInRow.nextSibling);
+                panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }, 30);
+        }
     }
 
     function renderOtdSuggest() {
@@ -4944,7 +4959,7 @@
                 return ub - ua;
             });
             var cardH = window.innerWidth <= 480 ? '130px' : '190px';
-            suggestHtml += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-bottom:12px">';
+            suggestHtml += '<div id="otd-suggest-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-bottom:12px">';
             suggestHtml += sorted30.map(function(s, i) {
                 var level = otdSuggestLevels[s.id] !== undefined ? otdSuggestLevels[s.id] : 5;
                 var rc = otdRarityColor(level);
@@ -5008,48 +5023,53 @@
                     '</div>' +
                 '</div>';
 
-                return '<div style="min-width:0">' + card + belowCard + '</div>';
+                return '<div style="min-width:0" data-suggest-id="' + s.id + '">' + card + belowCard + '</div>';
             }).join('');
-            suggestHtml += '</div>'; // close grid
-
-            // Full-width overlap panel — rendered outside the grid so it spans the full row
+            // Full-width overlap panel — inside the grid with grid-column:1/-1 so it spans all columns.
+            // otdSuggestToggleOverlap moves it after the correct row via DOM manipulation.
             var openSugg = otdSuggestOpenOverlap !== null
                 ? sorted30.find(function(s) { return String(s.id) === String(otdSuggestOpenOverlap); })
                 : null;
-            if (openSugg && openSugg.overlapEvents && openSugg.overlapEvents.length) {
+            if (openSugg) {
                 var oMult = UFC_LEVEL_MULTIPLIERS[otdSuggestLevels[openSugg.id] !== undefined ? otdSuggestLevels[openSugg.id] : 5] || 1;
-                suggestHtml += '<div style="border:1px solid rgba(239,83,80,.3);border-radius:8px;padding:10px 12px;margin-top:4px">' +
-                    '<div style="font-size:11px;font-weight:700;color:#ef5350;margin-bottom:8px">' + escHtml(openSugg.name) + ' — Overlap Fights</div>' +
-                    '<div style="overflow-x:auto;padding-bottom:6px">' +
-                        '<div style="display:flex;gap:8px;width:max-content">' +
-                        openSugg.overlapEvents.map(function(ev) {
-                            var dp = (ev.day || '').split('-');
-                            var dayFmt = dp.length === 3 ? MONTH_SHORT[parseInt(dp[1],10)-1] + ' ' + parseInt(dp[2],10) + '\'' + String(dp[0]).slice(2) : (ev.dayDisplay || ev.day || '');
-                            var newRax = Math.round((ev.earnings || 0) * oMult);
-                            var competitors = (ev.competitors || []);
-                            var allCards = competitors.map(function(c) { return { name: c.name, rax: Math.round((c.earnings || 0) * oMult), isNew: false }; });
-                            allCards.push({ name: openSugg.name, rax: newRax, isNew: true });
-                            allCards.sort(function(a, b) { return b.rax - a.rax; });
-                            var isWasted = allCards.findIndex(function(c) { return c.isNew; }) >= otdSuggestClaimLimit;
-                            var borderClr = isWasted ? 'rgba(239,83,80,.45)' : 'rgba(34,197,94,.4)';
-                            var rows = allCards.map(function(c, idx) {
-                                var claimed = idx < otdSuggestClaimLimit;
-                                var clr = claimed ? '#22c55e' : '#ef5350';
-                                var dot = c.isNew ? '<span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#4f6ef7;vertical-align:middle;margin-right:3px;flex-shrink:0"></span>' : '';
-                                return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.05)">' +
-                                    '<span style="font-size:10px;color:' + clr + ';font-weight:' + (c.isNew ? '700' : '400') + ';white-space:nowrap;display:flex;align-items:center">' + dot + escHtml(c.name.split(' ').pop()) + '</span>' +
-                                    '<span style="font-size:10px;font-family:var(--mono);color:' + clr + ';white-space:nowrap">' + RAX_ICON + (c.rax||0).toLocaleString() + '</span>' +
-                                '</div>';
-                            }).join('');
-                            return '<div style="min-width:120px;background:var(--bg3);border:1px solid ' + borderClr + ';border-radius:6px;padding:6px 8px;flex-shrink:0">' +
-                                '<div style="font-size:9px;font-weight:700;color:var(--muted2);letter-spacing:.05em;margin-bottom:4px;white-space:nowrap">' + escHtml(dayFmt) + '</div>' +
-                                rows +
-                            '</div>';
-                        }).join('') +
-                        '</div>' +
+                var evs = openSugg.overlapEvents || [];
+                suggestHtml += '<div id="otd-suggest-overlap-panel" style="grid-column:1/-1;border:1px solid rgba(239,83,80,.3);border-radius:8px;padding:10px 12px;background:var(--bg2)">' +
+                    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
+                        '<span style="font-size:11px;font-weight:700;color:#ef5350">' + escHtml(openSugg.name) + ' — Overlap Fights (' + evs.length + ')</span>' +
+                        '<button onclick="otdSuggestToggleOverlap(\'' + openSugg.id + '\')" style="background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;padding:0 2px;line-height:1">×</button>' +
                     '</div>' +
+                    (evs.length === 0
+                        ? '<div style="font-size:12px;color:var(--muted2)">No overlap fight data available.</div>'
+                        : '<div style="overflow-x:auto;padding-bottom:6px">' +
+                            '<div style="display:flex;gap:8px;width:max-content">' +
+                            evs.map(function(ev) {
+                                var dp = (ev.day || '').split('-');
+                                var dayFmt = dp.length === 3 ? MONTH_SHORT[parseInt(dp[1],10)-1] + ' ' + parseInt(dp[2],10) + '\'' + String(dp[0]).slice(2) : (ev.dayDisplay || ev.day || '');
+                                var newRax = Math.round((ev.earnings || 0) * oMult);
+                                var allCards = (ev.competitors || []).map(function(c) { return { name: c.name, rax: Math.round((c.earnings || 0) * oMult), isNew: false }; });
+                                allCards.push({ name: openSugg.name, rax: newRax, isNew: true });
+                                allCards.sort(function(a, b) { return b.rax - a.rax; });
+                                var isWasted = allCards.findIndex(function(c) { return c.isNew; }) >= otdSuggestClaimLimit;
+                                var borderClr = isWasted ? 'rgba(239,83,80,.45)' : 'rgba(34,197,94,.4)';
+                                var rows = allCards.map(function(c, idx) {
+                                    var claimed = idx < otdSuggestClaimLimit;
+                                    var clr = claimed ? '#22c55e' : '#ef5350';
+                                    var dot = c.isNew ? '<span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#4f6ef7;vertical-align:middle;margin-right:3px"></span>' : '';
+                                    return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.05)">' +
+                                        '<span style="font-size:10px;color:' + clr + ';font-weight:' + (c.isNew ? '700' : '400') + ';white-space:nowrap">' + dot + escHtml(c.name.split(' ').pop()) + '</span>' +
+                                        '<span style="font-size:10px;font-family:var(--mono);color:' + clr + ';white-space:nowrap">' + RAX_ICON + (c.rax||0).toLocaleString() + '</span>' +
+                                    '</div>';
+                                }).join('');
+                                return '<div style="min-width:120px;background:var(--bg3);border:1px solid ' + borderClr + ';border-radius:6px;padding:6px 8px;flex-shrink:0">' +
+                                    '<div style="font-size:9px;font-weight:700;color:var(--muted2);letter-spacing:.05em;margin-bottom:4px;white-space:nowrap">' + escHtml(dayFmt) + '</div>' +
+                                    rows +
+                                '</div>';
+                            }).join('') +
+                            '</div>' +
+                          '</div>') +
                 '</div>';
             }
+            suggestHtml += '</div>'; // close grid
         }
 
         el.innerHTML = sportSel + userRow + ownedHtml + suggestHtml;
