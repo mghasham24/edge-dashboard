@@ -5007,7 +5007,7 @@
                             : '<span style="font-size:9px;color:var(--muted2)">no overlap</span>') +
                     '</div>' +
                     (overlapOpen && s.overlapEvents && s.overlapEvents.length
-                        ? '<div style="overflow-x:auto;margin-top:4px;padding-bottom:4px">' +
+                        ? '<div style="overflow-x:auto;width:100%;margin-top:4px;padding-bottom:4px">' +
                             '<div style="display:flex;gap:6px;width:max-content">' +
                             s.overlapEvents.map(function(ev) {
                                 var dp = (ev.day || '').split('-');
@@ -5039,7 +5039,7 @@
                         : '') +
                 '</div>';
 
-                return '<div>' + card + belowCard + '</div>';
+                return '<div style="min-width:0">' + card + belowCard + '</div>';
             }).join('');
             suggestHtml += '</div>';
         }
