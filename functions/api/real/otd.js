@@ -1456,7 +1456,18 @@ export async function onRequestGet(context) {
       }
     }
 
-    const shopPasses = earningsPasses; // primary list ranked by earnings
+    // For alltime with RS data: deduplicate allTimeNameItems (a fighter may appear across multiple years)
+    // and use as shopPasses so names come directly from RS without needing the D1 earnings loop.
+    let shopPasses = earningsPasses;
+    if (effectiveAllTime && allTimeNameItems.length > 0) {
+      const seen = {};
+      for (const p of allTimeNameItems) {
+        const bid = bId(String(p.id || p.entityId || ''));
+        const val = Number(p.value) || 0;
+        if (bid && (!seen[bid] || val > seen[bid].val)) seen[bid] = { val, p };
+      }
+      shopPasses = Object.values(seen).sort((a, b) => b.val - a.val).map(({ p }) => p);
+    }
 
     // ── Build name map + iconic sets from D1 pass caches ────────────────────
     const nameMap = {};
@@ -1493,8 +1504,9 @@ export async function onRequestGet(context) {
     // ── Batch-load D1 earnings for baseTotal ────────────────────────────────
     const earningsPrefix = `otd_earnings_v10_${entityType}_${sportKey}_`;
     const earningsPattern = effectiveAllTime ? earningsPrefix + '%' : earningsPrefix + season + '_%';
-    // LIMIT 500 prevents CPU 1102: 836 rows × JSON.parse was exceeding CF's 50ms CPU budget
-    const earningsRows = await env.DB.prepare('SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE ? LIMIT 500').bind(earningsPattern).all().catch(() => ({ results: [] }));
+    // Skip D1 earnings loop when shopPasses has RS data — avoids 836-row JSON.parse CPU cost
+    const earningsRows = shopPasses.length > 0 ? { results: [] } :
+      await env.DB.prepare('SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE ? LIMIT 500').bind(earningsPattern).all().catch(() => ({ results: [] }));
 
     const seasonMaxes = {}; // `${baseId}:${seasonPart}` → max baseTotal (de-dupe _l20 etc.)
     for (const row of (earningsRows.results || [])) {
@@ -1541,7 +1553,7 @@ export async function onRequestGet(context) {
           rank: i + 1,
           playerId: bid,
           name,
-          season,
+          season: effectiveAllTime ? 'alltime' : season,
           position: p.position || p.pos || null,
           total: p.value != null ? Number(p.value) : null,
           passCount: ownerMap[bid] != null ? ownerMap[bid] : null,
