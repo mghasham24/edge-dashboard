@@ -221,11 +221,7 @@ export async function onRequestGet(context) {
   }
 
   if (!env.REAL_AUTH_TOKEN || !env.REAL_SESSION_TOKEN) {
-    return new Response(JSON.stringify({
-      error: 'tokens not set',
-      auth: env.REAL_AUTH_TOKEN ? `set(${String(env.REAL_AUTH_TOKEN).slice(0,4)}...)` : 'missing',
-      session: env.REAL_SESSION_TOKEN ? `set(${String(env.REAL_SESSION_TOKEN).slice(0,4)}...)` : 'missing',
-    }), { status: 503, headers: { 'Content-Type': 'application/json' } });
+    return fail(503, 'REAL_AUTH_TOKEN or REAL_SESSION_TOKEN not set');
   }
 
   // Build token pool from env vars RS_POOL_1..N + main token
@@ -1472,7 +1468,9 @@ export async function onRequestGet(context) {
       if (bid && name && !/^\d+$/.test(String(name).trim())) nameMap[bid] = name;
     }
     const iconicSets = {}; // baseId → Set of RaxEdge userIds at level >= 20
-    const passRows = await env.DB.prepare("SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE 'otd_passes_all_v10_%'").all().catch(() => ({ results: [] }));
+    // Skip passRows for alltime views when allTimeNameItems already provides names — avoids CPU 1102 error
+    const passRows = (effectiveAllTime && allTimeNameItems.length > 0) ? { results: [] } :
+      await env.DB.prepare("SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE 'otd_passes_all_v10_%'").all().catch(() => ({ results: [] }));
     for (const row of (passRows.results || [])) {
       const userId = row.cache_key.replace('otd_passes_all_v10_', '');
       try {
@@ -1495,7 +1493,8 @@ export async function onRequestGet(context) {
     // ── Batch-load D1 earnings for baseTotal ────────────────────────────────
     const earningsPrefix = `otd_earnings_v10_${entityType}_${sportKey}_`;
     const earningsPattern = effectiveAllTime ? earningsPrefix + '%' : earningsPrefix + season + '_%';
-    const earningsRows = await env.DB.prepare('SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE ?').bind(earningsPattern).all().catch(() => ({ results: [] }));
+    // LIMIT 500 prevents CPU 1102: 836 rows × JSON.parse was exceeding CF's 50ms CPU budget
+    const earningsRows = await env.DB.prepare('SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE ? LIMIT 500').bind(earningsPattern).all().catch(() => ({ results: [] }));
 
     const seasonMaxes = {}; // `${baseId}:${seasonPart}` → max baseTotal (de-dupe _l20 etc.)
     for (const row of (earningsRows.results || [])) {
