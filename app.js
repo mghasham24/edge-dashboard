@@ -5637,8 +5637,8 @@
         var el = document.getElementById('otd-chips');
         if (!el) return;
         if (otdMode === 'leaderboard') { el.innerHTML = ''; return; }
-        // On mobile player mode, chip grid is never shown — passes are accessed via the Passes carousel button
-        if (otdMode === 'player' && window.innerWidth <= 768) { el.innerHTML = ''; return; }
+        // In Search Players mode, passes show only in the Passes panel (sidebar/carousel), not the chip grid
+        if (otdMode === 'player') { el.innerHTML = ''; return; }
 
         // Leaderboard-added entries (_fromLb) only show in the Passes panel, not the chip grid
         var players = (otdMode === 'username')
