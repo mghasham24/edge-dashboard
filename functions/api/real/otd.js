@@ -77,7 +77,7 @@ export async function onRequestGet(context) {
       const RS_SEASON_NORM_LB = { ufc: 'alltime', mma: 'alltime' };
       const sportKey = RS_SPORT_ALIAS_LB[sport] || sport;
       const effectiveAllTime = allTime || !!RS_SEASON_NORM_LB[sportKey];
-      const lbCacheKey = `otd_lb_v24_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
+      const lbCacheKey = `otd_lb_v25_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
       try {
         const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(lbCacheKey).first();
         if (cached) return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
@@ -491,7 +491,8 @@ export async function onRequestGet(context) {
     const sport = url.searchParams.get('sport') || 'mlb';
     const season = url.searchParams.get('season') || '2026';
     const level = parseInt(url.searchParams.get('level') || '1', 10);
-    const entityType = url.searchParams.get('entityType') || 'player';
+    // UFC fighters are always entityType=team in RS regardless of what the frontend passes
+    const entityType = (sport === 'ufc' || sport === 'mma') ? 'team' : (url.searchParams.get('entityType') || 'player');
     if (!id) return fail(400, 'Missing id');
 
     const force = url.searchParams.get('force') === '1';
@@ -1121,7 +1122,7 @@ export async function onRequestGet(context) {
     // "All Sports" view — merge all cached per-sport leaderboards from D1
     if (sport === 'all') {
       const suffix = 'alltime'; // all-sports view is always alltime
-      const pattern = `otd_lb_v24_${entityType}_%_${suffix}`;
+      const pattern = `otd_lb_v25_${entityType}_%_${suffix}`;
       let rows;
       try { rows = await env.DB.prepare('SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE ?').bind(pattern).all(); }
       catch(e) { return fail(500, e.message); }
@@ -1129,14 +1130,14 @@ export async function onRequestGet(context) {
       for (const row of (rows.results || [])) {
         try {
           const d = JSON.parse(row.data);
-          const sportFromKey = row.cache_key.replace(`otd_lb_v24_${entityType}_`, '').replace(`_${suffix}`, '');
+          const sportFromKey = row.cache_key.replace(`otd_lb_v25_${entityType}_`, '').replace(`_${suffix}`, '');
           for (const item of (d.leaderboard || [])) {
             combined.push(Object.assign({}, item, { sport: item.sport || sportFromKey }));
           }
         } catch(e) {}
       }
       combined.sort((a, b) => (b.total || 0) - (a.total || 0));
-      const leaderboard = combined.slice(0, 200).map((item, i) => Object.assign({}, item, { rank: i + 1 }));
+      const leaderboard = combined.slice(0, 500).map((item, i) => Object.assign({}, item, { rank: i + 1 }));
       return new Response(JSON.stringify({ ok: true, leaderboard }), { headers: { 'Content-Type': 'application/json' } });
     }
     const RS_SPORT_ALIAS_LB = { ncaabb: 'ncaam', mma: 'ufc' };
@@ -1152,7 +1153,7 @@ export async function onRequestGet(context) {
     const isActiveSeason = !effectiveAllTime && season === currentSeasonStr;
     const lbTtl = (isActiveSeason || effectiveAllTime) ? WEEK : Infinity;
 
-    const lbCacheKey = `otd_lb_v24_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
+    const lbCacheKey = `otd_lb_v25_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
     if (url.searchParams.get('force') !== '1') {
       try {
         const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(lbCacheKey).first();
@@ -1406,6 +1407,20 @@ export async function onRequestGet(context) {
         if (!seasonMaxes[sk] || total > seasonMaxes[sk]) seasonMaxes[sk] = total;
       } catch(e) {}
     }
+    // When alltime view: collapse per-season entries to one per player (keep max).
+    // Prevents duplicate rows for sports like UFC that have both year-specific
+    // and 'alltime' keys in the D1 earnings cache.
+    if (effectiveAllTime && shopPasses.length === 0) {
+      const playerMax = {};
+      for (const [sk, total] of Object.entries(seasonMaxes)) {
+        const colonIdx = sk.indexOf(':');
+        const bid = sk.slice(0, colonIdx);
+        if (!playerMax[bid] || total > playerMax[bid]) playerMax[bid] = total;
+      }
+      for (const key of Object.keys(seasonMaxes)) delete seasonMaxes[key];
+      for (const [bid, total] of Object.entries(playerMax)) seasonMaxes[bid + ':alltime'] = total;
+    }
+
     // ── Build final list ─────────────────────────────────────────────────────
     let list;
     if (shopPasses.length > 0) {

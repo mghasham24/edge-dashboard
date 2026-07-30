@@ -5029,7 +5029,8 @@
             level: level, levelLabel: lbl, color: color,
             earnings: null, baseTotal: null,
             entityType: p.entityType || 'player',
-            avatar: '', rarityColor: otdRarityColor(level)
+            avatar: '', rarityColor: otdRarityColor(level),
+            _fromLb: true
         };
         otdPlayers.push(entry);
         otdLbNewAdded++;
@@ -5101,7 +5102,7 @@
             var rsUrl = pid ? rsEntityUrl(p.entityType || 'player', rowSport, pid) : '#';
             var displayName = p.name ? escHtml(p.name) : escHtml(p.playerId);
             var sportBadge = sport === 'all' ? ' <span style="font-size:' + (mob ? '8px' : '9px') + ';font-weight:700;letter-spacing:.04em;color:var(--accent);background:var(--bg3);border:1px solid var(--border2);border-radius:3px;padding:1px 4px;vertical-align:middle">' + escHtml(rowSport.toUpperCase()) + '</span>' : '';
-            var yearHtml = (sport !== 'all' && p.season) ? ' <span style="font-size:' + (mob ? '8px' : '11px') + ';font-weight:400;color:var(--muted);opacity:.6">' + escHtml(p.season) + '</span>' : '';
+            var yearHtml = p.season ? ' <span style="font-size:' + (mob ? '8px' : '11px') + ';font-weight:400;color:var(--muted);opacity:.6">' + escHtml(p.season) + '</span>' : '';
             var posHtml = '';
             if (p.position && rowSport === 'mlb') {
                 var posCats = mlbPosCategories(p.position);
@@ -5320,14 +5321,14 @@
     function otdSetMode(mode) {
         var prevMode = otdMode;
         otdMode = mode;
-        // Clear when switching to/from username, and when entering leaderboard (fresh slate).
-        // Leaderboard-added players then carry into Search Players cleanly.
-        if (mode === 'username' || prevMode === 'username' || mode === 'leaderboard') {
+        // Clear only when switching to/from username mode — username passes don't belong in other modes.
+        // Player↔leaderboard switches preserve otdPlayers so Search Players additions survive tab switches.
+        if (mode === 'username' || prevMode === 'username') {
             otdPlayers = [];
             otdColorIdx = 0;
             otdLbNewAdded = 0;
         }
-        // Visiting Search Players clears the "new additions" badge
+        // Visiting Search Players clears the "new additions" leaderboard badge
         if (mode === 'player') otdLbNewAdded = 0;
         otdDateMapDirty = true; otdPassesPage = 0;
         otdSelectedPlayer = null;
@@ -5636,9 +5637,10 @@
         // On mobile player mode, chip grid is never shown — passes are accessed via the Passes carousel button
         if (otdMode === 'player' && window.innerWidth <= 768) { el.innerHTML = ''; return; }
 
+        // Leaderboard-added entries (_fromLb) only show in the Passes panel, not the chip grid
         var players = (otdMode === 'username')
             ? otdPlayers.filter(function(p) { return p.isAdded; })
-            : otdPlayers;
+            : otdPlayers.filter(function(p) { return !p._fromLb; });
 
         if (!players.length) {
             el.innerHTML = '<span style="font-size:12px;color:var(--muted2)">No players added yet. Search and add players above.</span>';
