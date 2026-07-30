@@ -1243,7 +1243,7 @@ export async function onRequestGet(context) {
     function suggestGetMult(level) { return UFC_SUGGEST_MULT[level] || 1; }
 
     // Serve from cache if fresh (1h)
-    const suggestCacheKey = `otd_suggest_v10_${suggestSport}_${suggestUserId}`;
+    const suggestCacheKey = `otd_suggest_v11_${suggestSport}_${suggestUserId}`;
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(suggestCacheKey).first();
       if (cached && (now - cached.fetched_at) < 3600) {
@@ -1338,7 +1338,7 @@ export async function onRequestGet(context) {
     for (const [id, earningsArr] of ownedEarningsMap) {
       const pass = allUserPasses.find(p => p.id === id) || {};
       const ownerName = pass.name || id;
-      const passLevel = pass.level || 1;
+      const passLevel = pass.level ?? 1;
       const passMult = suggestGetMult(passLevel);
       for (const e of earningsArr) {
         if (!e.day) continue;
@@ -1390,7 +1390,7 @@ export async function onRequestGet(context) {
     const ownedSummary = allUserPasses.map(p => {
       const earnings = ownedEarningsMap.get(p.id) || [];
       const baseTotal = earnings.reduce((s, e) => s + (e.earnings || 0), 0);
-      const level = p.level || 1;
+      const level = p.level ?? 1;
       const mult = suggestGetMult(level);
       return {
         id: p.id,
