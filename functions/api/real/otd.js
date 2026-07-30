@@ -693,6 +693,107 @@ export async function onRequestGet(context) {
     }
   }
 
+  // Admin: bulk-seed all UFC fighters + earnings from RS into D1
+  if (action === 'seed_ufc') {
+    if (!session?.is_admin) return fail(403, 'Admin only');
+    const seedSport = 'ufc';
+    const seedEntity = 'team';
+    const seedSeason = '2023';
+    const SEED_PAGES = 20;
+    const SEED_CONCURRENCY = 6;
+
+    // Phase 1: fetch all fighter pages
+    const pageFetches = [];
+    for (let pg = 0; pg < SEED_PAGES; pg++) {
+      const u = `${RS_BASE}/userpassshop/${seedSport}/season/${seedSeason}/entity/${seedEntity}/section/earningstotal?before=${pg * 20}`;
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 8000);
+      pageFetches.push(
+        fetch(u, { headers, signal: ctrl.signal })
+          .then(r => { clearTimeout(t); return r.ok ? r.json() : null; })
+          .catch(() => null)
+      );
+    }
+    const pageResults = await Promise.all(pageFetches);
+
+    const fighterMap = {};
+    for (const data of pageResults) {
+      if (!data) continue;
+      const items = data.items || data.leaderboard || data.players || data.data || [];
+      for (const item of items) {
+        const id = String(item.id || item.entityId || '');
+        const name = item.label || item.name || item.displayName || '';
+        const value = Number(item.value) || 0;
+        if (!id) continue;
+        if (!fighterMap[id] || value > (fighterMap[id].value || 0)) {
+          fighterMap[id] = { id, name, value };
+        }
+      }
+    }
+    const fighters = Object.values(fighterMap);
+    if (fighters.length === 0) return fail(502, 'No fighters returned from RS — tokens may be invalid');
+
+    // Phase 2: check which IDs already have earnings cached
+    const allIds = fighters.map(f => f.id);
+    const existingKeys = new Set();
+    for (let i = 0; i < allIds.length; i += 100) {
+      const chunk = allIds.slice(i, i + 100);
+      const placeholders = chunk.map(() => '?').join(',');
+      const keys = chunk.map(id => `otd_earnings_v10_${seedEntity}_${seedSport}_${seedSeason}_${id}`);
+      const rows = await env.DB.prepare(`SELECT cache_key FROM odds_cache WHERE cache_key IN (${placeholders})`).bind(...keys).all().catch(() => ({ results: [] }));
+      for (const row of rows.results) existingKeys.add(row.cache_key);
+    }
+
+    const toFetch = fighters.filter(f => !existingKeys.has(`otd_earnings_v10_${seedEntity}_${seedSport}_${seedSeason}_${f.id}`));
+
+    // Phase 3: fetch earnings in batches
+    let fetched = 0, written = 0, noData = 0;
+    for (let i = 0; i < toFetch.length; i += SEED_CONCURRENCY) {
+      const batch = toFetch.slice(i, i + SEED_CONCURRENCY);
+      const results = await Promise.all(batch.map(async (fighter) => {
+        const u = `${RS_BASE}/userpassearnings/${seedSport}/season/${seedSeason}/entity/${seedEntity}/${fighter.id}?level=1`;
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 8000);
+        try {
+          const res = await fetch(u, { headers, signal: ctrl.signal });
+          clearTimeout(t);
+          if (!res.ok) return null;
+          const data = await res.json();
+          const earnings = data.earnings || data.events || data.performances || data.playerEarnings || data.earningDays || [];
+          const baseTotal = (data.info && typeof data.info.total === 'number') ? data.info.total : null;
+          return { fighter, earnings, baseTotal };
+        } catch { clearTimeout(t); return null; }
+      }));
+
+      const writes = [];
+      for (const result of results) {
+        fetched++;
+        if (!result || result.earnings.length === 0) { noData++; continue; }
+        const { fighter, earnings, baseTotal } = result;
+        const body = JSON.stringify({ ok: true, earnings, baseTotal, rawSample: earnings[0] || null });
+        const earningsKey = `otd_earnings_v10_${seedEntity}_${seedSport}_${seedSeason}_${fighter.id}`;
+        writes.push(env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at').bind(earningsKey, body, now).run().catch(() => {}));
+        written++;
+      }
+      // Write player name rows too
+      for (const f of batch) {
+        const nameKey = `otd_player_${seedSport}_${f.id}`;
+        const nameData = JSON.stringify({ name: f.name, id: f.id, position: null });
+        writes.push(env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,9999999999) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at').bind(nameKey, nameData).run().catch(() => {}));
+      }
+      await Promise.all(writes);
+    }
+
+    return new Response(JSON.stringify({
+      ok: true,
+      totalFighters: fighters.length,
+      alreadyCached: fighters.length - toFetch.length,
+      fetched,
+      earningsWritten: written,
+      noEarningsData: noData,
+    }), { headers: { 'Content-Type': 'application/json' } });
+  }
+
   // Player profile: get name/team from player ID
   if (action === 'player') {
     const id = url.searchParams.get('id');
