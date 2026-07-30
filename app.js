@@ -4822,7 +4822,7 @@
                     var seen = {};
                     var users = [];
                     results.forEach(function(d) { (d.users || []).forEach(function(u) { if (u.id && !seen[u.id]) { seen[u.id] = 1; users.push(u); } }); });
-                    var match = users.find(function(u) { return u.username.toLowerCase() === typed.toLowerCase(); }) || users[0];
+                    var match = users.find(function(u) { return u.username.toLowerCase() === typed.toLowerCase(); });
                     otdSuggestUser = match || { id: typed, username: typed, displayName: null };
                     if (inp) inp.value = otdSuggestUser.username;
                     loadOtdSuggestions();
