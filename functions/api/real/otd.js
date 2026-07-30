@@ -1233,7 +1233,7 @@ export async function onRequestGet(context) {
     const earningsPrefix = `otd_earnings_v10_${suggestEntityType}_${suggestSport}_${suggestSeason}_`;
 
     // Serve from cache if fresh (1h)
-    const suggestCacheKey = `otd_suggest_v3_${suggestSport}_${suggestUserId}`;
+    const suggestCacheKey = `otd_suggest_v4_${suggestSport}_${suggestUserId}`;
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(suggestCacheKey).first();
       if (cached && (now - cached.fetched_at) < 3600) {
@@ -1280,10 +1280,17 @@ export async function onRequestGet(context) {
       }
     }
 
-    // 3. Build covered dates set
+    // 3. Build covered dates set + day → owners map
     const coveredDates = new Set();
-    for (const [, earningsArr] of ownedEarningsMap) {
-      for (const e of earningsArr) { if (e.day) coveredDates.add(e.day); }
+    const dayToOwners = new Map(); // day → [{ id, name, earnings }]
+    for (const [id, earningsArr] of ownedEarningsMap) {
+      const ownerName = (allUserPasses.find(p => p.id === id) || {}).name || id;
+      for (const e of earningsArr) {
+        if (!e.day) continue;
+        coveredDates.add(e.day);
+        if (!dayToOwners.has(e.day)) dayToOwners.set(e.day, []);
+        dayToOwners.get(e.day).push({ id, name: ownerName, earnings: e.earnings || 0 });
+      }
     }
 
     // 4. Load all D1 fighter earnings + names
@@ -1313,7 +1320,10 @@ export async function onRequestGet(context) {
         }
         const totalEarnings = typeof d.baseTotal === 'number' && d.baseTotal > 0
           ? d.baseTotal : earnings.reduce((s, e) => s + (e.earnings || 0), 0);
-        const overlapEvents = earnings.filter(e => coveredDates.has(e.day)).map(e => ({ day: e.day, dayDisplay: e.dayDisplay || e.day, earnings: e.earnings }));
+        const overlapEvents = earnings.filter(e => coveredDates.has(e.day)).map(e => ({
+          day: e.day, dayDisplay: e.dayDisplay || e.day, earnings: e.earnings || 0,
+          competitors: (dayToOwners.get(e.day) || []).slice().sort((a, b) => b.earnings - a.earnings),
+        }));
         const nme = nameMap.get(id) || { name: id, avatar: '' };
         candidates.push({ id, name: nme.name, avatar: nme.avatar || '', totalEarnings, uniqueEarnings, overlapEarnings, uniqueDays, overlapDays, totalDays: earnings.length, overlapEvents });
       } catch {}
@@ -1331,7 +1341,7 @@ export async function onRequestGet(context) {
       };
     });
 
-    const body = JSON.stringify({ ok: true, sport: suggestSport, userId: suggestUserId, ownedPasses: ownedSummary, coveredDays: coveredDates.size, suggestions: candidates.slice(0, 10) });
+    const body = JSON.stringify({ ok: true, sport: suggestSport, userId: suggestUserId, ownedPasses: ownedSummary, coveredDays: coveredDates.size, suggestions: candidates.slice(0, 30) });
     await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
       .bind(suggestCacheKey, body, now).run().catch(() => {});
     return new Response(body, { headers: { 'Content-Type': 'application/json' } });

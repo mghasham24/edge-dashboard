@@ -4801,6 +4801,7 @@
 
     var otdSuggestLevels = {}; // { fighterId: rarityLevel } — per-card rarity state
     var otdSuggestOpenOverlap = null; // fighter id whose overlap panel is open
+    var otdSuggestClaimLimit = 2; // 2 or 3 claims per fight day
 
     function loadOtdSuggestions() {
         var errEl = document.getElementById('otd-suggest-err');
@@ -4921,7 +4922,16 @@
 
         // Suggestion cards
         var MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-        var suggestHtml = '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Top 10 Suggestions</div>';
+        var suggestHtml = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">' +
+            '<span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Top 30 Suggestions</span>' +
+            '<div style="display:flex;align-items:center;gap:6px">' +
+                '<span style="font-size:10px;color:var(--muted2)">Claims/day:</span>' +
+                [2,3].map(function(n) {
+                    var active = otdSuggestClaimLimit === n;
+                    return '<button onclick="otdSuggestClaimLimit=' + n + ';renderOtdSuggest()" style="background:' + (active ? 'var(--accent)' : 'var(--bg3)') + ';border:1px solid ' + (active ? 'var(--accent)' : 'var(--border2)') + ';border-radius:4px;color:' + (active ? '#fff' : 'var(--muted)') + ';font-family:var(--sans);font-size:10px;font-weight:700;padding:3px 8px;cursor:pointer">' + n + '</button>';
+                }).join('') +
+            '</div>' +
+        '</div>';
 
         if (!d.suggestions || d.suggestions.length === 0) {
             suggestHtml += '<div style="font-size:13px;color:var(--muted2)">No suggestions — you may already own all fighters.</div>';
@@ -4982,15 +4992,28 @@
                             : '<span style="font-size:9px;color:var(--muted2)">no overlap</span>') +
                     '</div>' +
                     (overlapOpen && s.overlapEvents && s.overlapEvents.length
-                        ? '<div style="background:rgba(239,83,80,.08);border:1px solid rgba(239,83,80,.25);border-radius:6px;padding:6px 8px;margin-top:2px">' +
-                            '<div style="font-size:9px;font-weight:700;color:#ef5350;margin-bottom:4px">Overlap fights:</div>' +
+                        ? '<div style="background:rgba(239,83,80,.06);border:1px solid rgba(239,83,80,.22);border-radius:7px;padding:8px 10px;margin-top:2px">' +
                             s.overlapEvents.map(function(ev) {
                                 var dp = (ev.day || '').split('-');
-                                var dayFmt = dp.length === 3 ? MONTH_SHORT[parseInt(dp[1], 10) - 1] + ' ' + parseInt(dp[2], 10) + ', ' + dp[0] : ev.dayDisplay || ev.day;
-                                var evRarity = Math.round((ev.earnings || 0) * mult);
-                                return '<div style="display:flex;justify-content:space-between;font-size:10px;padding:2px 0;border-bottom:1px solid rgba(239,83,80,.15)">' +
-                                    '<span style="color:var(--muted)">' + escHtml(dayFmt) + '</span>' +
-                                    '<span style="font-family:var(--mono);color:#ef5350">' + RAX_ICON + evRarity.toLocaleString() + '</span>' +
+                                var dayFmt = dp.length === 3 ? (MONTH_SHORT[parseInt(dp[1],10)-1] + ' ' + parseInt(dp[2],10) + ', ' + dp[0]).toUpperCase() : (ev.dayDisplay || ev.day || '').toUpperCase();
+                                var newRax = Math.round((ev.earnings || 0) * mult);
+                                // Build combined sorted list
+                                var competitors = (ev.competitors || []);
+                                var allCards = competitors.map(function(c) { return { name: c.name, rax: Math.round((c.earnings || 0) * mult), isNew: false }; });
+                                allCards.push({ name: s.name, rax: newRax, isNew: true });
+                                allCards.sort(function(a, b) { return b.rax - a.rax; });
+                                var rows = allCards.map(function(c, idx) {
+                                    var claimed = idx < otdSuggestClaimLimit;
+                                    var clr = claimed ? '#22c55e' : '#ef5350';
+                                    var badge = c.isNew ? '<span style="font-size:8px;font-weight:800;color:#fff;background:#4f6ef7;padding:1px 4px;border-radius:3px;margin-left:3px">NEW</span>' : '';
+                                    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.05)">' +
+                                        '<span style="font-size:10px;color:' + clr + ';font-weight:' + (c.isNew ? '700' : '500') + '">' + escHtml(c.name) + badge + '</span>' +
+                                        '<span style="font-size:10px;font-family:var(--mono);color:' + clr + '">' + RAX_ICON + (c.rax||0).toLocaleString() + '</span>' +
+                                    '</div>';
+                                }).join('');
+                                return '<div style="margin-bottom:8px">' +
+                                    '<div style="font-size:9px;font-weight:700;color:rgba(255,255,255,.45);letter-spacing:.06em;margin-bottom:4px">' + escHtml(dayFmt) + '</div>' +
+                                    rows +
                                 '</div>';
                             }).join('') +
                           '</div>'
