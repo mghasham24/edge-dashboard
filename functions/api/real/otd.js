@@ -1257,6 +1257,22 @@ export async function onRequestGet(context) {
       fetch(`${RS_BASE}/userpasses/${encodeURIComponent(suggestUserId)}/passes?entityType=team&season=${suggestSeason}&sport=${suggestSport}`, { headers }).catch(() => null),
     ]);
 
+    function suggestRarityLabel(label) {
+      if (!label) return 0;
+      const l = label.toLowerCase().trim();
+      if (l === 'general')   return 0;
+      if (l === 'common')    return 1;
+      if (l === 'uncommon')  return 2;
+      if (l === 'rare')      return 3;
+      if (l === 'epic')      return 4;
+      const m = l.match(/^(legendary|mystic|iconic)(?:\s+(\d+))?$/);
+      if (!m) return 0;
+      const n = parseInt(m[2] || '1', 10);
+      if (m[1] === 'legendary') return 4 + n;
+      if (m[1] === 'mystic')    return 9 + n;
+      if (m[1] === 'iconic')    return 19 + n;
+      return 0;
+    }
     async function extractIds(res) {
       if (!res || !res.ok) return [];
       try {
@@ -1267,14 +1283,11 @@ export async function onRequestGet(context) {
           const bi = p.boostInfo || {};
           const id = String(p.entityId || p.playerId || entity.id || '');
           const name = p.label || (entity.firstName && entity.lastName ? `${entity.firstName} ${entity.lastName}`.trim() : null) || entity.name || entity.displayName || null;
-          const labelLevel = rarityLabelToLevel(bi.rarityLabel);
-          const rarityStr = p.rarity || p.rarityName || entity.rarity || entity.rarityName || '';
-          const raritySubLevel = p.rarityLevel || p.subLevel || entity.rarityLevel || entity.subLevel;
-          const rarityStrLevel = rarityToLevelAll(rarityStr, raritySubLevel);
+          const labelLevel = suggestRarityLabel(bi.rarityLabel);
           const level = labelLevel > 0 ? labelLevel
-            : rarityStrLevel > 0 ? rarityStrLevel
             : (typeof bi.level === 'number' && bi.level > 0) ? bi.level
             : typeof p.level === 'number' ? p.level
+            : typeof p.collectingLevel === 'number' ? p.collectingLevel
             : 1;
           return { id, name, level };
         }).filter(p => p.id);
