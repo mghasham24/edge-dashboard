@@ -4997,51 +4997,59 @@
                     '</div>' +
                 '</div>';
 
-                // Below-card stats
+                // Below-card stats (compact — no inline breakdown panel)
                 var netColor = uniqueAtRarity > 400 ? '#26a69a' : uniqueAtRarity > 100 ? 'var(--accent)' : 'var(--muted)';
                 var belowCard = '<div style="padding:6px 2px 0">' +
-                    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">' +
+                    '<div style="display:flex;justify-content:space-between;align-items:center">' +
                         '<span style="font-size:10px;font-weight:700;color:' + netColor + '">' + RAX_ICON + uniqueAtRarity.toLocaleString() + ' net</span>' +
                         (s.overlapDays > 0
                             ? '<button onclick="otdSuggestToggleOverlap(\'' + s.id + '\')" style="background:' + (overlapOpen ? 'rgba(239,83,80,.15)' : 'var(--bg3)') + ';border:1px solid ' + (overlapOpen ? 'rgba(239,83,80,.5)' : 'var(--border2)') + ';border-radius:4px;color:' + (overlapOpen ? '#ef5350' : 'var(--muted)') + ';font-family:var(--sans);font-size:9px;font-weight:700;padding:2px 6px;cursor:pointer">−' + RAX_ICON + overlapAtRarity.toLocaleString() + ' Overlap</button>'
                             : '<span style="font-size:9px;color:var(--muted2)">no overlap</span>') +
                     '</div>' +
-                    (overlapOpen && s.overlapEvents && s.overlapEvents.length
-                        ? '<div style="overflow-x:auto;width:100%;margin-top:4px;padding-bottom:4px">' +
-                            '<div style="display:flex;gap:6px;width:max-content">' +
-                            s.overlapEvents.map(function(ev) {
-                                var dp = (ev.day || '').split('-');
-                                var dayFmt = dp.length === 3 ? MONTH_SHORT[parseInt(dp[1],10)-1] + ' ' + parseInt(dp[2],10) + '\'' + String(dp[0]).slice(2) : (ev.dayDisplay || ev.day || '');
-                                var newRax = Math.round((ev.earnings || 0) * mult);
-                                var competitors = (ev.competitors || []);
-                                var allCards = competitors.map(function(c) { return { name: c.name, rax: Math.round((c.earnings || 0) * mult), isNew: false }; });
-                                allCards.push({ name: s.name, rax: newRax, isNew: true });
-                                allCards.sort(function(a, b) { return b.rax - a.rax; });
-                                var isWasted = allCards.findIndex(function(c) { return c.isNew; }) >= otdSuggestClaimLimit;
-                                var borderClr = isWasted ? 'rgba(239,83,80,.4)' : 'rgba(34,197,94,.35)';
-                                var rows = allCards.map(function(c, idx) {
-                                    var claimed = idx < otdSuggestClaimLimit;
-                                    var clr = claimed ? '#22c55e' : '#ef5350';
-                                    var nameShort = c.name.split(' ').pop(); // last name only
-                                    var dot = c.isNew ? '<span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#4f6ef7;vertical-align:middle;margin-right:2px"></span>' : '';
-                                    return '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;padding:1px 0">' +
-                                        '<span style="font-size:9px;color:' + clr + ';font-weight:' + (c.isNew ? '700' : '400') + ';white-space:nowrap">' + dot + escHtml(nameShort) + '</span>' +
-                                        '<span style="font-size:9px;font-family:var(--mono);color:' + clr + ';white-space:nowrap">' + RAX_ICON + (c.rax||0).toLocaleString() + '</span>' +
-                                    '</div>';
-                                }).join('');
-                                return '<div style="min-width:110px;background:rgba(239,83,80,.06);border:1px solid ' + borderClr + ';border-radius:6px;padding:5px 7px;flex-shrink:0">' +
-                                    '<div style="font-size:8px;font-weight:700;color:rgba(255,255,255,.4);letter-spacing:.05em;margin-bottom:3px;white-space:nowrap">' + escHtml(dayFmt) + '</div>' +
-                                    rows +
-                                '</div>';
-                            }).join('') +
-                            '</div>' +
-                          '</div>'
-                        : '') +
                 '</div>';
 
                 return '<div style="min-width:0">' + card + belowCard + '</div>';
             }).join('');
-            suggestHtml += '</div>';
+            suggestHtml += '</div>'; // close grid
+
+            // Full-width overlap panel — rendered outside the grid so it spans the full row
+            var openSugg = otdSuggestOpenOverlap !== null
+                ? sorted30.find(function(s) { return String(s.id) === String(otdSuggestOpenOverlap); })
+                : null;
+            if (openSugg && openSugg.overlapEvents && openSugg.overlapEvents.length) {
+                var oMult = UFC_LEVEL_MULTIPLIERS[otdSuggestLevels[openSugg.id] !== undefined ? otdSuggestLevels[openSugg.id] : 5] || 1;
+                suggestHtml += '<div style="border:1px solid rgba(239,83,80,.3);border-radius:8px;padding:10px 12px;margin-top:4px">' +
+                    '<div style="font-size:11px;font-weight:700;color:#ef5350;margin-bottom:8px">' + escHtml(openSugg.name) + ' — Overlap Fights</div>' +
+                    '<div style="overflow-x:auto;padding-bottom:6px">' +
+                        '<div style="display:flex;gap:8px;width:max-content">' +
+                        openSugg.overlapEvents.map(function(ev) {
+                            var dp = (ev.day || '').split('-');
+                            var dayFmt = dp.length === 3 ? MONTH_SHORT[parseInt(dp[1],10)-1] + ' ' + parseInt(dp[2],10) + '\'' + String(dp[0]).slice(2) : (ev.dayDisplay || ev.day || '');
+                            var newRax = Math.round((ev.earnings || 0) * oMult);
+                            var competitors = (ev.competitors || []);
+                            var allCards = competitors.map(function(c) { return { name: c.name, rax: Math.round((c.earnings || 0) * oMult), isNew: false }; });
+                            allCards.push({ name: openSugg.name, rax: newRax, isNew: true });
+                            allCards.sort(function(a, b) { return b.rax - a.rax; });
+                            var isWasted = allCards.findIndex(function(c) { return c.isNew; }) >= otdSuggestClaimLimit;
+                            var borderClr = isWasted ? 'rgba(239,83,80,.45)' : 'rgba(34,197,94,.4)';
+                            var rows = allCards.map(function(c, idx) {
+                                var claimed = idx < otdSuggestClaimLimit;
+                                var clr = claimed ? '#22c55e' : '#ef5350';
+                                var dot = c.isNew ? '<span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#4f6ef7;vertical-align:middle;margin-right:3px;flex-shrink:0"></span>' : '';
+                                return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.05)">' +
+                                    '<span style="font-size:10px;color:' + clr + ';font-weight:' + (c.isNew ? '700' : '400') + ';white-space:nowrap;display:flex;align-items:center">' + dot + escHtml(c.name.split(' ').pop()) + '</span>' +
+                                    '<span style="font-size:10px;font-family:var(--mono);color:' + clr + ';white-space:nowrap">' + RAX_ICON + (c.rax||0).toLocaleString() + '</span>' +
+                                '</div>';
+                            }).join('');
+                            return '<div style="min-width:120px;background:var(--bg3);border:1px solid ' + borderClr + ';border-radius:6px;padding:6px 8px;flex-shrink:0">' +
+                                '<div style="font-size:9px;font-weight:700;color:var(--muted2);letter-spacing:.05em;margin-bottom:4px;white-space:nowrap">' + escHtml(dayFmt) + '</div>' +
+                                rows +
+                            '</div>';
+                        }).join('') +
+                        '</div>' +
+                    '</div>' +
+                '</div>';
+            }
         }
 
         el.innerHTML = sportSel + userRow + ownedHtml + suggestHtml;
