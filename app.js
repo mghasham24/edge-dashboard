@@ -4926,8 +4926,10 @@
             '&entityType=' + encodeURIComponent(otdLeaderboardEntityType) +
             (otdLeaderboardAllTime ? '&alltime=1' : '');
         fetch('/api/real/otd' + qs, { credentials: 'same-origin' })
-            .then(function(r) { return r.json(); })
-            .then(function(d) {
+            .then(function(r) { return r.text(); })
+            .then(function(txt) {
+                var d;
+                try { d = JSON.parse(txt); } catch(e) { d = {}; }
                 otdLeaderboardLoading = false;
                 otdLeaderboard = (d.ok && d.leaderboard) ? d.leaderboard : [];
                 renderOtdLeaderboard();
