@@ -1434,7 +1434,8 @@ export async function onRequestGet(context) {
     // 8 pages for recent 3 years (top 160 each), 2 pages for older years (top 40 each).
     // Golf goes back to 2015; all other sports go back to 2022.
     let allTimeNameItems = [];
-    if (effectiveAllTime) {
+    // UFC's earningstotal shop section returns numeric IDs, not names — skip the 28 RS fetches
+    if (effectiveAllTime && sportKey !== 'ufc') {
       const currentYear = new Date().getFullYear();
       const sportMinYear = sportKey === 'golf' ? 2015 : 2022;
       const nameFetches = [];
@@ -1593,6 +1594,12 @@ export async function onRequestGet(context) {
       }
     }
 
+    // Write initial list to cache now and return early — name resolution + MLB positions
+    // run in background via context.waitUntil so the browser gets a fast response.
+    const earlyBody = JSON.stringify({ ok: true, leaderboard: list, sport: sportKey, allTime: effectiveAllTime, fromShop: shopPasses.length > 0 });
+    await env.DB.prepare(DB_UPSERT).bind(lbCacheKey, earlyBody, now).run().catch(() => {});
+    context.waitUntil((async () => { try {
+
     // ── Resolve missing names ────────────────────────────────────────────────
     // earningstotal returns {id, value, entityType} only — no names.
     // 1. Check D1 otd_player_{sport}_{id} cache (populated by prior earnings lookups).
@@ -1741,10 +1748,12 @@ export async function onRequestGet(context) {
       }
     }
 
-    const body = JSON.stringify({ ok: true, leaderboard: list, sport: sportKey, allTime: effectiveAllTime, fromShop: shopPasses.length > 0 });
-    await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
-      .bind(lbCacheKey, body, now).run().catch(() => {});
-    return new Response(body, { headers: { 'Content-Type': 'application/json' } });
+    // Update cache with resolved names/positions for next request
+    const resolvedBody = JSON.stringify({ ok: true, leaderboard: list, sport: sportKey, allTime: effectiveAllTime, fromShop: shopPasses.length > 0 });
+    await env.DB.prepare(DB_UPSERT).bind(lbCacheKey, resolvedBody, now).run().catch(() => {});
+
+    } catch(bgErr) {} })());
+    return new Response(earlyBody, { headers: { 'Content-Type': 'application/json' } });
     } catch(buildErr) {
       return new Response(JSON.stringify({ ok: true, leaderboard: [], error: buildErr.message }), { headers: { 'Content-Type': 'application/json' } });
     }
