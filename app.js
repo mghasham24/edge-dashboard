@@ -4935,10 +4935,11 @@
                 var atRarity = Math.round(s.totalEarnings * mult);
                 var overlapAtRarity = Math.round(s.overlapEarnings * mult);
                 var uniqueAtRarity = atRarity - overlapAtRarity;
-                var overlapOpen = otdSuggestOpenOverlap === s.id;
+                var overlapOpen = String(otdSuggestOpenOverlap) === String(s.id);
                 var levelOpts = OTD_LEVEL_OPTIONS.filter(function(o) { return o.value >= 1; }).map(function(o) {
                     return '<option value="' + o.value + '"' + (o.value === level ? ' selected' : '') + '>' + escHtml(o.label) + '</option>';
                 }).join('');
+                var headshotUrl = s.avatar ? 'https://media.realapp.com/assets/teams/default/large/' + s.avatar + '.webp' : '';
 
                 var card = '<div style="position:relative;border-radius:10px;overflow:hidden;height:' + cardH + ';background:linear-gradient(160deg,' + rc + '55 0%,' + rc + '22 100%);border:1px solid ' + rc + '55">' +
                     // Rank badge
@@ -4949,8 +4950,12 @@
                     '<div style="position:absolute;top:6px;right:6px;z-index:3">' +
                         '<span style="font-size:8px;font-weight:800;color:#fff;background:rgba(0,0,0,.55);padding:2px 6px;border-radius:3px">UFC</span>' +
                     '</div>' +
-                    // Emoji watermark
-                    '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:52px;opacity:.18;z-index:0">🥊</div>' +
+                    // Emoji watermark (hidden if headshot loads)
+                    '<div id="suggest-emoji-' + s.id + '" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:52px;opacity:.18;z-index:0">🥊</div>' +
+                    // Fighter headshot
+                    (headshotUrl
+                        ? '<img src="' + headshotUrl + '" style="position:absolute;top:8%;left:0;right:0;width:100%;height:54%;object-fit:contain;object-position:bottom center;z-index:1" onerror="this.style.display=\'none\'">'
+                        : '') +
                     // Dark overlay
                     '<div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.05) 0%,rgba(0,0,0,.1) 40%,rgba(0,0,0,.8) 65%,rgba(0,0,0,.93) 100%);z-index:2"></div>' +
                     // Bottom info
@@ -4973,7 +4978,7 @@
                     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">' +
                         '<span style="font-size:10px;font-weight:700;color:' + netColor + '">' + RAX_ICON + uniqueAtRarity.toLocaleString() + ' net</span>' +
                         (s.overlapDays > 0
-                            ? '<button onclick="otdSuggestToggleOverlap(\'' + s.id + '\')" style="background:' + (overlapOpen ? 'rgba(239,83,80,.15)' : 'var(--bg3)') + ';border:1px solid ' + (overlapOpen ? 'rgba(239,83,80,.5)' : 'var(--border2)') + ';border-radius:4px;color:' + (overlapOpen ? '#ef5350' : 'var(--muted)') + ';font-family:var(--sans);font-size:9px;font-weight:700;padding:2px 6px;cursor:pointer">−' + RAX_ICON + overlapAtRarity.toLocaleString() + ' ovlp</button>'
+                            ? '<button onclick="otdSuggestToggleOverlap(\'' + s.id + '\')" style="background:' + (overlapOpen ? 'rgba(239,83,80,.15)' : 'var(--bg3)') + ';border:1px solid ' + (overlapOpen ? 'rgba(239,83,80,.5)' : 'var(--border2)') + ';border-radius:4px;color:' + (overlapOpen ? '#ef5350' : 'var(--muted)') + ';font-family:var(--sans);font-size:9px;font-weight:700;padding:2px 6px;cursor:pointer">−' + RAX_ICON + overlapAtRarity.toLocaleString() + ' Overlap</button>'
                             : '<span style="font-size:9px;color:var(--muted2)">no overlap</span>') +
                     '</div>' +
                     (overlapOpen && s.overlapEvents && s.overlapEvents.length

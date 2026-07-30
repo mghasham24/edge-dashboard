@@ -729,9 +729,10 @@ export async function onRequestGet(context) {
         const id = String(item.id || item.entityId || '');
         const name = item.label || item.name || item.displayName || '';
         const value = Number(item.value) || 0;
+        const avatar = item.entityAvatar || item.avatar || item.avatarKey || '';
         if (!id) continue;
         if (!fighterMap[id] || value > (fighterMap[id].value || 0)) {
-          fighterMap[id] = { id, name, value };
+          fighterMap[id] = { id, name, value, avatar };
         }
       }
     }
@@ -799,7 +800,7 @@ export async function onRequestGet(context) {
       }
       for (const f of batch) {
         const nameKey = `otd_player_${seedSport}_${f.id}`;
-        const nameData = JSON.stringify({ name: f.name, id: f.id, position: null });
+        const nameData = JSON.stringify({ name: f.name, id: f.id, position: null, avatar: f.avatar || '' });
         writes.push(env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,9999999999) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at').bind(nameKey, nameData).run().catch(() => {}));
       }
       await Promise.all(writes);
@@ -1278,10 +1279,10 @@ export async function onRequestGet(context) {
       env.DB.prepare('SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE ? LIMIT 800').bind(`otd_player_${suggestSport}_%`).all().catch(() => ({ results: [] })),
     ]);
 
-    const nameMap = new Map();
+    const nameMap = new Map(); // id → { name, avatar }
     for (const row of nameRows.results) {
       const id = row.cache_key.replace(`otd_player_${suggestSport}_`, '');
-      try { const d = JSON.parse(row.data); nameMap.set(id, d.name || id); } catch {}
+      try { const d = JSON.parse(row.data); nameMap.set(id, { name: d.name || id, avatar: d.avatar || '' }); } catch {}
     }
 
     // 5. Score every non-owned fighter
@@ -1299,7 +1300,9 @@ export async function onRequestGet(context) {
         }
         const totalEarnings = typeof d.baseTotal === 'number' && d.baseTotal > 0
           ? d.baseTotal : earnings.reduce((s, e) => s + (e.earnings || 0), 0);
-        candidates.push({ id, name: nameMap.get(id) || id, totalEarnings, uniqueEarnings, overlapEarnings, uniqueDays, overlapDays, totalDays: earnings.length });
+        const overlapEvents = earnings.filter(e => coveredDates.has(e.day)).map(e => ({ day: e.day, dayDisplay: e.dayDisplay || e.day, earnings: e.earnings }));
+        const nme = nameMap.get(id) || { name: id, avatar: '' };
+        candidates.push({ id, name: nme.name, avatar: nme.avatar || '', totalEarnings, uniqueEarnings, overlapEarnings, uniqueDays, overlapDays, totalDays: earnings.length, overlapEvents });
       } catch {}
     }
     candidates.sort((a, b) => b.uniqueEarnings - a.uniqueEarnings);
@@ -1309,7 +1312,7 @@ export async function onRequestGet(context) {
       const earnings = ownedEarningsMap.get(p.id) || [];
       return {
         id: p.id,
-        name: p.name || nameMap.get(p.id) || p.id,
+        name: p.name || (nameMap.get(p.id) || {}).name || p.id,
         totalEarnings: earnings.reduce((s, e) => s + (e.earnings || 0), 0),
         fightDays: earnings.length,
       };
