@@ -1243,7 +1243,7 @@ export async function onRequestGet(context) {
     function suggestGetMult(level) { return UFC_SUGGEST_MULT[level] || 1; }
 
     // Serve from cache if fresh (1h)
-    const suggestCacheKey = `otd_suggest_v7_${suggestSport}_${suggestUserId}`;
+    const suggestCacheKey = `otd_suggest_v8_${suggestSport}_${suggestUserId}`;
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(suggestCacheKey).first();
       if (cached && (now - cached.fetched_at) < 3600) {
@@ -1273,6 +1273,19 @@ export async function onRequestGet(context) {
       if (m[1] === 'iconic')    return 19 + n;
       return 0;
     }
+    function suggestRarityStr(rarity, subLevel) {
+      const r = (rarity || '').toLowerCase();
+      const rl = Math.max(1, parseInt(subLevel || 1, 10));
+      if (r === 'general')   return 0;
+      if (r === 'common')    return 1;
+      if (r === 'uncommon')  return 2;
+      if (r === 'rare')      return 3;
+      if (r === 'epic')      return 4;
+      if (r === 'legendary') return 4 + rl;
+      if (r === 'mystic')    return 9 + rl;
+      if (r === 'iconic')    return 19 + rl;
+      return 0;
+    }
     async function extractIds(res) {
       if (!res || !res.ok) return [];
       try {
@@ -1284,7 +1297,11 @@ export async function onRequestGet(context) {
           const id = String(p.entityId || p.playerId || entity.id || '');
           const name = p.label || (entity.firstName && entity.lastName ? `${entity.firstName} ${entity.lastName}`.trim() : null) || entity.name || entity.displayName || null;
           const labelLevel = suggestRarityLabel(bi.rarityLabel);
+          const rarityStr = p.rarity || p.rarityName || entity.rarity || entity.rarityName || '';
+          const raritySubLevel = p.rarityLevel || p.subLevel || entity.rarityLevel || entity.subLevel;
+          const strLevel = suggestRarityStr(rarityStr, raritySubLevel);
           const level = labelLevel > 0 ? labelLevel
+            : strLevel > 0 ? strLevel
             : (typeof bi.level === 'number' && bi.level > 0) ? bi.level
             : typeof p.level === 'number' ? p.level
             : typeof p.collectingLevel === 'number' ? p.collectingLevel
