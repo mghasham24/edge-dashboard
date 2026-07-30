@@ -5007,30 +5007,34 @@
                             : '<span style="font-size:9px;color:var(--muted2)">no overlap</span>') +
                     '</div>' +
                     (overlapOpen && s.overlapEvents && s.overlapEvents.length
-                        ? '<div style="background:rgba(239,83,80,.06);border:1px solid rgba(239,83,80,.22);border-radius:7px;padding:8px 10px;margin-top:2px">' +
+                        ? '<div style="overflow-x:auto;margin-top:4px;padding-bottom:4px">' +
+                            '<div style="display:flex;gap:6px;width:max-content">' +
                             s.overlapEvents.map(function(ev) {
                                 var dp = (ev.day || '').split('-');
-                                var dayFmt = dp.length === 3 ? (MONTH_SHORT[parseInt(dp[1],10)-1] + ' ' + parseInt(dp[2],10) + ', ' + dp[0]).toUpperCase() : (ev.dayDisplay || ev.day || '').toUpperCase();
+                                var dayFmt = dp.length === 3 ? MONTH_SHORT[parseInt(dp[1],10)-1] + ' ' + parseInt(dp[2],10) + '\'' + String(dp[0]).slice(2) : (ev.dayDisplay || ev.day || '');
                                 var newRax = Math.round((ev.earnings || 0) * mult);
-                                // Build combined sorted list
                                 var competitors = (ev.competitors || []);
                                 var allCards = competitors.map(function(c) { return { name: c.name, rax: Math.round((c.earnings || 0) * mult), isNew: false }; });
                                 allCards.push({ name: s.name, rax: newRax, isNew: true });
                                 allCards.sort(function(a, b) { return b.rax - a.rax; });
+                                var isWasted = allCards.findIndex(function(c) { return c.isNew; }) >= otdSuggestClaimLimit;
+                                var borderClr = isWasted ? 'rgba(239,83,80,.4)' : 'rgba(34,197,94,.35)';
                                 var rows = allCards.map(function(c, idx) {
                                     var claimed = idx < otdSuggestClaimLimit;
                                     var clr = claimed ? '#22c55e' : '#ef5350';
-                                    var badge = c.isNew ? '<span style="font-size:8px;font-weight:800;color:#fff;background:#4f6ef7;padding:1px 4px;border-radius:3px;margin-left:3px">NEW</span>' : '';
-                                    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.05)">' +
-                                        '<span style="font-size:10px;color:' + clr + ';font-weight:' + (c.isNew ? '700' : '500') + '">' + escHtml(c.name) + badge + '</span>' +
-                                        '<span style="font-size:10px;font-family:var(--mono);color:' + clr + '">' + RAX_ICON + (c.rax||0).toLocaleString() + '</span>' +
+                                    var nameShort = c.name.split(' ').pop(); // last name only
+                                    var dot = c.isNew ? '<span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#4f6ef7;vertical-align:middle;margin-right:2px"></span>' : '';
+                                    return '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;padding:1px 0">' +
+                                        '<span style="font-size:9px;color:' + clr + ';font-weight:' + (c.isNew ? '700' : '400') + ';white-space:nowrap">' + dot + escHtml(nameShort) + '</span>' +
+                                        '<span style="font-size:9px;font-family:var(--mono);color:' + clr + ';white-space:nowrap">' + RAX_ICON + (c.rax||0).toLocaleString() + '</span>' +
                                     '</div>';
                                 }).join('');
-                                return '<div style="margin-bottom:8px">' +
-                                    '<div style="font-size:9px;font-weight:700;color:rgba(255,255,255,.45);letter-spacing:.06em;margin-bottom:4px">' + escHtml(dayFmt) + '</div>' +
+                                return '<div style="min-width:110px;background:rgba(239,83,80,.06);border:1px solid ' + borderClr + ';border-radius:6px;padding:5px 7px;flex-shrink:0">' +
+                                    '<div style="font-size:8px;font-weight:700;color:rgba(255,255,255,.4);letter-spacing:.05em;margin-bottom:3px;white-space:nowrap">' + escHtml(dayFmt) + '</div>' +
                                     rows +
                                 '</div>';
                             }).join('') +
+                            '</div>' +
                           '</div>'
                         : '') +
                 '</div>';
