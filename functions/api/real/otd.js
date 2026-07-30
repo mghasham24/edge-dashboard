@@ -1243,6 +1243,7 @@ export async function onRequestGet(context) {
       const leaderboard = combined.slice(0, 1000).map((item, i) => Object.assign({}, item, { rank: i + 1 }));
       return new Response(JSON.stringify({ ok: true, leaderboard }), { headers: { 'Content-Type': 'application/json' } });
     }
+    try { // top-level build guard — ensures valid JSON even if build path throws
     const RS_SPORT_ALIAS_LB = { ncaabb: 'ncaam', mma: 'ufc' };
     const RS_SEASON_NORM_LB = { ufc: 'alltime', mma: 'alltime' };
     const sportKey = RS_SPORT_ALIAS_LB[sport] || sport;
@@ -1619,7 +1620,7 @@ export async function onRequestGet(context) {
 
       // Step 2: RS API fetch for remaining unknowns — includes team-type entities (UFC fighters)
       // UFC passes are stored as entityType=team but player IDs still resolve via /players/{id}/sport/{sport}
-      const stillUnknown = list.filter(item => !item.name || isNumericName(item.name)).slice(0, 400);
+      const stillUnknown = list.filter(item => !item.name || isNumericName(item.name)).slice(0, 50);
       if (stillUnknown.length > 0) {
         const rsFetches = stillUnknown.map(async item => {
           const c = new AbortController();
@@ -1744,6 +1745,9 @@ export async function onRequestGet(context) {
     await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
       .bind(lbCacheKey, body, now).run().catch(() => {});
     return new Response(body, { headers: { 'Content-Type': 'application/json' } });
+    } catch(buildErr) {
+      return new Response(JSON.stringify({ ok: true, leaderboard: [], error: buildErr.message }), { headers: { 'Content-Type': 'application/json' } });
+    }
   }
 
   return fail(400, 'Unknown action');
