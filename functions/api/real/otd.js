@@ -1243,7 +1243,7 @@ export async function onRequestGet(context) {
     function suggestGetMult(level) { return UFC_SUGGEST_MULT[level] || 1; }
 
     // Serve from cache if fresh (1h)
-    const suggestCacheKey = `otd_suggest_v8_${suggestSport}_${suggestUserId}`;
+    const suggestCacheKey = `otd_suggest_v9_${suggestSport}_${suggestUserId}`;
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(suggestCacheKey).first();
       if (cached && (now - cached.fetched_at) < 3600) {
@@ -1387,10 +1387,15 @@ export async function onRequestGet(context) {
     // 6. Owned passes summary
     const ownedSummary = allUserPasses.map(p => {
       const earnings = ownedEarningsMap.get(p.id) || [];
+      const baseTotal = earnings.reduce((s, e) => s + (e.earnings || 0), 0);
+      const level = p.level || 1;
+      const mult = suggestGetMult(level);
       return {
         id: p.id,
         name: p.name || (nameMap.get(p.id) || {}).name || p.id,
-        totalEarnings: earnings.reduce((s, e) => s + (e.earnings || 0), 0),
+        level,
+        totalEarnings: Math.round(baseTotal * mult),
+        baseEarnings: baseTotal,
         fightDays: earnings.length,
       };
     });
