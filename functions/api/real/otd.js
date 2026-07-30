@@ -142,7 +142,8 @@ export async function onRequestGet(context) {
                       });
                       if (!r.ok) return;
                       const d = await r.json();
-                      const name = d.name || ((d.firstName || '') + ' ' + (d.lastName || '')).trim() || d.displayName || null;
+                      const top = d.team || d.player || d;
+                      const name = top.name || ((top.firstName || '') + ' ' + (top.lastName || '')).trim() || top.displayName || null;
                       if (!name || /^\d+$/.test(name)) return;
                       item.name = name; dirty = true;
                       env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,9999999999) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
@@ -1607,7 +1608,8 @@ export async function onRequestGet(context) {
         const id = row.cache_key.replace(`otd_player_${rsPlayerSlug}_`, '');
         try {
           const pd = JSON.parse(row.data);
-          const n = pd.player && pd.player.name ? pd.player.name.trim() : null;
+          const rawName = (pd.player && pd.player.name) ? pd.player.name : (pd.name || null);
+          const n = rawName ? String(rawName).trim() : null;
           if (n && !isNumericName(n)) d1NameMap[id] = n;
         } catch(e) {}
       }
@@ -1623,14 +1625,16 @@ export async function onRequestGet(context) {
           const c = new AbortController();
           const t = setTimeout(() => c.abort(), 5000);
           try {
-            const res = await fetch(`${RS_BASE}/players/${item.playerId}/sport/${rsPlayerSlug}`, { headers, signal: c.signal });
+            const isTeamEntity = sportKey === 'ufc' || item.entityType === 'team';
+            const ep = isTeamEntity ? 'teams' : 'players';
+            const res = await fetch(`${RS_BASE}/${ep}/${item.playerId}/sport/${rsPlayerSlug}`, { headers, signal: c.signal });
             clearTimeout(t);
             if (!res.ok) return null;
             const data = await res.json();
-            const p = data.player || {};
-            const name = ((p.firstName || '') + ' ' + (p.lastName || '')).trim() || null;
+            const p = data.team || data.player || data;
+            const name = p.name || ((p.firstName || '') + ' ' + (p.lastName || '')).trim() || p.displayName || null;
             const pos = p.position || null;
-            return { id: item.playerId, name, pos };
+            return { id: item.playerId, name: name || null, pos };
           } catch(e) { clearTimeout(t); return null; }
         });
         const rsResults = await Promise.all(rsFetches);
@@ -1642,7 +1646,7 @@ export async function onRequestGet(context) {
           if (item) { item.name = r.name; if (r.pos && !item.position) item.position = r.pos; }
           // Cache in D1
           const ck = `otd_player_${rsPlayerSlug}_${r.id}`;
-          const cb = JSON.stringify({ ok: true, player: { id: r.id, name: r.name, sport: rsPlayerSlug, position: r.pos } });
+          const cb = JSON.stringify({ name: r.name, id: r.id, position: r.pos });
           cacheWrites.push(env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at').bind(ck, cb, now).run().catch(() => {}));
         }
         await Promise.all(cacheWrites);
