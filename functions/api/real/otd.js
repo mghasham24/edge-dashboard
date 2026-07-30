@@ -1434,8 +1434,7 @@ export async function onRequestGet(context) {
     // 8 pages for recent 3 years (top 160 each), 2 pages for older years (top 40 each).
     // Golf goes back to 2015; all other sports go back to 2022.
     let allTimeNameItems = [];
-    // UFC's earningstotal shop section returns numeric IDs, not names — skip the 28 RS fetches
-    if (effectiveAllTime && sportKey !== 'ufc') {
+    if (effectiveAllTime) {
       const currentYear = new Date().getFullYear();
       const sportMinYear = sportKey === 'golf' ? 2015 : 2022;
       const nameFetches = [];
