@@ -1439,7 +1439,8 @@ export async function onRequestGet(context) {
       const sportMinYear = sportKey === 'golf' ? 2015 : 2022;
       const nameFetches = [];
       for (let y = currentYear; y >= sportMinYear; y--) {
-        const numPages = y >= currentYear - 2 ? 8 : 2;
+        // isAlwaysAllTime sports (UFC) store all earnings in one season — fetch more pages
+        const numPages = isAlwaysAllTime ? 10 : (y >= currentYear - 2 ? 8 : 2);
         for (let pg = 0; pg < numPages; pg++) {
           const before = pg * 20;
           const u = `${RS_BASE}/userpassshop/${sportKey}/season/${y}/entity/${entityType}/section/earningstotal?before=${before}`;
