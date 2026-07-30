@@ -4971,11 +4971,26 @@
         if (!d.suggestions || d.suggestions.length === 0) {
             suggestHtml += '<div style="font-size:13px;color:var(--muted2)">No suggestions — you may already own all fighters.</div>';
         } else {
+            // Displacement-based wasted: if fighter is claimed (rank < limit), cost = earnings of
+            // the competitor pushed out of their claim slot. If fighter itself is wasted (rank >= limit),
+            // cost = fighter's own earnings.
+            function computeDisplacementWasted(s, claimLimit) {
+                return (s.overlapEvents || []).reduce(function(sum, ev) {
+                    var comps = (ev.competitors || []).slice().sort(function(a, b) { return (b.earnings||0)-(a.earnings||0); });
+                    var myE = ev.earnings || 0;
+                    var myRank = comps.findIndex(function(c) { return (c.earnings||0) < myE; });
+                    if (myRank === -1) myRank = comps.length;
+                    if (myRank < claimLimit) {
+                        return sum + (comps.length >= claimLimit ? (comps[claimLimit - 1].earnings || 0) : 0);
+                    } else {
+                        return sum + myE;
+                    }
+                }, 0);
+            }
             // Re-sort suggestions by claim-limit-aware unique earnings
             var sorted30 = d.suggestions.slice().sort(function(a, b) {
-                function wasted(s) { return (s.overlapEvents || []).reduce(function(sum, ev) { return sum + ((ev.competitors || []).length >= otdSuggestClaimLimit ? (ev.earnings || 0) : 0); }, 0); }
-                var ua = (a.totalEarnings || 0) - wasted(a);
-                var ub = (b.totalEarnings || 0) - wasted(b);
+                var ua = (a.totalEarnings || 0) - computeDisplacementWasted(a, otdSuggestClaimLimit);
+                var ub = (b.totalEarnings || 0) - computeDisplacementWasted(b, otdSuggestClaimLimit);
                 return ub - ua;
             });
             var cardH = window.innerWidth <= 480 ? '130px' : '190px';
@@ -4985,14 +5000,7 @@
                 var rc = otdRarityColor(level);
                 var mult = UFC_LEVEL_MULTIPLIERS[level] || 1;
                 var atRarity = Math.round(s.totalEarnings * mult);
-                // Recompute wasted earnings client-side using claim limit:
-                // a day is wasted only if competitors already fill all claim slots.
-                var wastedBase = 0;
-                (s.overlapEvents || []).forEach(function(ev) {
-                    if ((ev.competitors || []).length >= otdSuggestClaimLimit) {
-                        wastedBase += ev.earnings || 0;
-                    }
-                });
+                var wastedBase = computeDisplacementWasted(s, otdSuggestClaimLimit);
                 var overlapAtRarity = Math.round(wastedBase * mult);
                 var uniqueAtRarity = atRarity - overlapAtRarity;
                 var overlapOpen = String(otdSuggestOpenOverlap) === String(s.id);
@@ -5052,9 +5060,14 @@
                 : null;
             if (openSugg) {
                 var oMult = UFC_LEVEL_MULTIPLIERS[otdSuggestLevels[openSugg.id] !== undefined ? otdSuggestLevels[openSugg.id] : 5] || 1;
-                // Only show days where claim slots are already full (count-based, same as card)
+                // Only show days where there is a displacement cost (same logic as card)
                 var evs = (openSugg.overlapEvents || []).filter(function(ev) {
-                    return (ev.competitors || []).length >= otdSuggestClaimLimit;
+                    var comps = (ev.competitors || []).slice().sort(function(a, b) { return (b.earnings||0)-(a.earnings||0); });
+                    var myE = ev.earnings || 0;
+                    var myRank = comps.findIndex(function(c) { return (c.earnings||0) < myE; });
+                    if (myRank === -1) myRank = comps.length;
+                    if (myRank < otdSuggestClaimLimit) return comps.length >= otdSuggestClaimLimit;
+                    return true; // fighter itself is wasted
                 });
                 suggestHtml += '<div id="otd-suggest-overlap-panel" style="grid-column:1/-1;border:1px solid rgba(239,83,80,.3);border-radius:8px;padding:10px 12px;background:var(--bg2)">' +
                     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
