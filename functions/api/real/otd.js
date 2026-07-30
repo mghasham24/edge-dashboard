@@ -1233,7 +1233,7 @@ export async function onRequestGet(context) {
     const earningsPrefix = `otd_earnings_v10_${suggestEntityType}_${suggestSport}_${suggestSeason}_`;
 
     // Serve from cache if fresh (1h)
-    const suggestCacheKey = `otd_suggest_v4_${suggestSport}_${suggestUserId}`;
+    const suggestCacheKey = `otd_suggest_v5_${suggestSport}_${suggestUserId}`;
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(suggestCacheKey).first();
       if (cached && (now - cached.fetched_at) < 3600) {
@@ -1341,7 +1341,7 @@ export async function onRequestGet(context) {
       };
     });
 
-    const body = JSON.stringify({ ok: true, sport: suggestSport, userId: suggestUserId, ownedPasses: ownedSummary, coveredDays: coveredDates.size, suggestions: candidates.slice(0, 30) });
+    const body = JSON.stringify({ ok: true, sport: suggestSport, userId: suggestUserId, ownedPasses: ownedSummary, coveredDays: coveredDates.size, suggestions: candidates.slice(0, 60) });
     await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
       .bind(suggestCacheKey, body, now).run().catch(() => {});
     return new Response(body, { headers: { 'Content-Type': 'application/json' } });

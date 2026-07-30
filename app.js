@@ -4802,6 +4802,7 @@
     var otdSuggestLevels = {}; // { fighterId: rarityLevel } — per-card rarity state
     var otdSuggestOpenOverlap = null; // fighter id whose overlap panel is open
     var otdSuggestClaimLimit = 2; // 2 or 3 claims per fight day
+    var otdSuggestGlobalLevel = 5; // global rarity (Legendary 1 default)
 
     function loadOtdSuggestions() {
         var errEl = document.getElementById('otd-suggest-err');
@@ -4848,6 +4849,14 @@
 
     function otdSuggestSetLevel(id, level) {
         otdSuggestLevels[id] = level;
+        renderOtdSuggest();
+    }
+
+    function otdSuggestSetAllLevels(level) {
+        otdSuggestGlobalLevel = level;
+        if (otdSuggestData && otdSuggestData.suggestions) {
+            otdSuggestData.suggestions.forEach(function(s) { otdSuggestLevels[String(s.id)] = level; });
+        }
         renderOtdSuggest();
     }
 
@@ -4937,14 +4946,25 @@
 
         // Suggestion cards
         var MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-        var suggestHtml = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">' +
-            '<span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Top 30 Suggestions</span>' +
-            '<div style="display:flex;align-items:center;gap:6px">' +
-                '<span style="font-size:10px;color:var(--muted2)">Claims/day:</span>' +
-                [2,3].map(function(n) {
-                    var active = otdSuggestClaimLimit === n;
-                    return '<button onclick="otdSuggestClaimLimit=' + n + ';renderOtdSuggest()" style="background:' + (active ? 'var(--accent)' : 'var(--bg3)') + ';border:1px solid ' + (active ? 'var(--accent)' : 'var(--border2)') + ';border-radius:4px;color:' + (active ? '#fff' : 'var(--muted)') + ';font-family:var(--sans);font-size:10px;font-weight:700;padding:3px 8px;cursor:pointer">' + n + '</button>';
-                }).join('') +
+        var rarityDropdownOpts = OTD_LEVEL_OPTIONS.filter(function(o) { return o.value >= 1; }).map(function(o) {
+            return '<option value="' + o.value + '"' + (o.value === otdSuggestGlobalLevel ? ' selected' : '') + '>' + escHtml(o.label) + '</option>';
+        }).join('');
+        var suggestHtml = '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:10px">' +
+            '<span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Top 60 Suggestions</span>' +
+            '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">' +
+                '<div style="display:flex;align-items:center;gap:5px">' +
+                    '<span style="font-size:10px;color:var(--muted2)">Rarity:</span>' +
+                    '<select onchange="otdSuggestSetAllLevels(parseInt(this.value,10))" style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--fg);font-family:var(--sans);font-size:10px;padding:3px 5px;cursor:pointer;outline:none">' +
+                    rarityDropdownOpts +
+                    '</select>' +
+                '</div>' +
+                '<div style="display:flex;align-items:center;gap:5px">' +
+                    '<span style="font-size:10px;color:var(--muted2)">Claims/day:</span>' +
+                    [2,3].map(function(n) {
+                        var active = otdSuggestClaimLimit === n;
+                        return '<button onclick="otdSuggestClaimLimit=' + n + ';renderOtdSuggest()" style="background:' + (active ? 'var(--accent)' : 'var(--bg3)') + ';border:1px solid ' + (active ? 'var(--accent)' : 'var(--border2)') + ';border-radius:4px;color:' + (active ? '#fff' : 'var(--muted)') + ';font-family:var(--sans);font-size:10px;font-weight:700;padding:3px 8px;cursor:pointer">' + n + '</button>';
+                    }).join('') +
+                '</div>' +
             '</div>' +
         '</div>';
 
@@ -5032,7 +5052,14 @@
                 : null;
             if (openSugg) {
                 var oMult = UFC_LEVEL_MULTIPLIERS[otdSuggestLevels[openSugg.id] !== undefined ? otdSuggestLevels[openSugg.id] : 5] || 1;
-                var evs = openSugg.overlapEvents || [];
+                // Only show days where the suggested fighter's slot is wasted (red)
+                var evs = (openSugg.overlapEvents || []).filter(function(ev) {
+                    var ac = (ev.competitors || []).map(function(c) { return Math.round((c.earnings || 0) * oMult); });
+                    ac.push(Math.round((ev.earnings || 0) * oMult));
+                    ac.sort(function(a, b) { return b - a; });
+                    var newIdx = ac.indexOf(Math.round((ev.earnings || 0) * oMult));
+                    return newIdx >= otdSuggestClaimLimit;
+                });
                 suggestHtml += '<div id="otd-suggest-overlap-panel" style="grid-column:1/-1;border:1px solid rgba(239,83,80,.3);border-radius:8px;padding:10px 12px;background:var(--bg2)">' +
                     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
                         '<span style="font-size:11px;font-weight:700;color:#ef5350">' + escHtml(openSugg.name) + ' — Overlap Fights (' + evs.length + ')</span>' +
