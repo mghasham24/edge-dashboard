@@ -1243,7 +1243,7 @@ export async function onRequestGet(context) {
     function suggestGetMult(level) { return UFC_SUGGEST_MULT[level] || 1; }
 
     // Serve from cache if fresh (1h)
-    const suggestCacheKey = `otd_suggest_v6_${suggestSport}_${suggestUserId}`;
+    const suggestCacheKey = `otd_suggest_v7_${suggestSport}_${suggestUserId}`;
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(suggestCacheKey).first();
       if (cached && (now - cached.fetched_at) < 3600) {
