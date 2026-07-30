@@ -221,7 +221,11 @@ export async function onRequestGet(context) {
   }
 
   if (!env.REAL_AUTH_TOKEN || !env.REAL_SESSION_TOKEN) {
-    return fail(503, 'REAL_AUTH_TOKEN or REAL_SESSION_TOKEN not set');
+    return new Response(JSON.stringify({
+      error: 'tokens not set',
+      auth: env.REAL_AUTH_TOKEN ? `set(${String(env.REAL_AUTH_TOKEN).slice(0,4)}...)` : 'missing',
+      session: env.REAL_SESSION_TOKEN ? `set(${String(env.REAL_SESSION_TOKEN).slice(0,4)}...)` : 'missing',
+    }), { status: 503, headers: { 'Content-Type': 'application/json' } });
   }
 
   // Build token pool from env vars RS_POOL_1..N + main token
