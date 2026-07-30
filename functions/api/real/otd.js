@@ -101,9 +101,10 @@ export async function onRequestGet(context) {
                 }
               }
 
-              // Enrich entries that still have numeric IDs as names from D1 player cache
+              // Enrich entries that still have numeric IDs as names
               const numericNameItems = parsed.leaderboard.filter(i => !i.name || /^\d+$/.test(String(i.name).trim()));
               if (numericNameItems.length > 0) {
+                // 1. Try D1 player cache first
                 try {
                   const cacheKeys = numericNameItems.slice(0, 100).map(i => `otd_player_${sportKey}_${i.playerId}`);
                   const ph = cacheKeys.map(() => '?').join(',');
@@ -121,6 +122,33 @@ export async function onRequestGet(context) {
                     if (nameMap[item.playerId]) { item.name = nameMap[item.playerId]; dirty = true; }
                   }
                 } catch(e2) {}
+
+                // 2. Still numeric after D1 lookup — call RS players API directly (up to 15 in parallel)
+                const stillNumeric = numericNameItems.filter(i => !i.name || /^\d+$/.test(String(i.name).trim()));
+                if (stillNumeric.length > 0 && env.REAL_AUTH_TOKEN && env.REAL_SESSION_TOKEN) {
+                  const rsAuthHdrs = {
+                    'Accept': 'application/json', 'Content-Type': 'application/json',
+                    'Origin': 'https://www.realapp.com', 'Referer': 'https://www.realapp.com/',
+                    'real-auth-info': env.REAL_AUTH_TOKEN, 'real-session-token': env.REAL_SESSION_TOKEN,
+                    'real-device-uuid': env.REAL_DEVICE_UUID || '',
+                    'real-device-type': 'desktop_web', 'real-version': '35',
+                    'real-request-token': hashidsEncode(now),
+                  };
+                  await Promise.all(stillNumeric.slice(0, 15).map(async item => {
+                    try {
+                      const r = await fetch(`${RS_BASE}/players/${item.playerId}/sport/${sportKey}`, {
+                        headers: rsAuthHdrs, signal: AbortSignal.timeout(5000)
+                      });
+                      if (!r.ok) return;
+                      const d = await r.json();
+                      const name = d.name || ((d.firstName || '') + ' ' + (d.lastName || '')).trim() || d.displayName || null;
+                      if (!name || /^\d+$/.test(name)) return;
+                      item.name = name; dirty = true;
+                      env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,9999999999) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
+                        .bind(`otd_player_${sportKey}_${item.playerId}`, JSON.stringify({ name, id: item.playerId }), now).run().catch(() => {});
+                    } catch(e2) {}
+                  }));
+                }
               }
 
               if (dirty) {
