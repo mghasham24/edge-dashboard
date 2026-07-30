@@ -4974,15 +4974,16 @@
         if (sportChanged) {
             if (otdLeaderboardSport === 'ufc') {
                 otdLeaderboardEntityType = 'team';
+                otdLeaderboardSeason = '2023'; // UFC earnings data lives in 2023; alltime is always forced server-side
             } else if (prevSport === 'ufc') {
                 otdLeaderboardEntityType = 'player';
             } else if (etEl) {
                 otdLeaderboardEntityType = etEl.value;
             }
             // Reset season to appropriate default for cross-year sports
-            if (OTD_CROSS_YEAR_SPORTS[otdLeaderboardSport]) {
+            if (otdLeaderboardSport !== 'ufc' && OTD_CROSS_YEAR_SPORTS[otdLeaderboardSport]) {
                 otdLeaderboardSeason = String(new Date().getFullYear() - 1);
-            } else {
+            } else if (otdLeaderboardSport !== 'ufc') {
                 otdLeaderboardSeason = String(new Date().getFullYear());
             }
         } else if (etEl) {
