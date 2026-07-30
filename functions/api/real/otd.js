@@ -136,7 +136,8 @@ export async function onRequestGet(context) {
                   };
                   await Promise.all(stillNumeric.slice(0, 15).map(async item => {
                     try {
-                      const r = await fetch(`${RS_BASE}/players/${item.playerId}/sport/${sportKey}`, {
+                      const rsEntityPath = (item.entityType === 'team' || sportKey === 'ufc') ? 'teams' : 'players';
+                      const r = await fetch(`${RS_BASE}/${rsEntityPath}/${item.playerId}/sport/${sportKey}`, {
                         headers: rsAuthHdrs, signal: AbortSignal.timeout(5000)
                       });
                       if (!r.ok) return;
