@@ -3248,7 +3248,7 @@
     var otdColorIdx = 0;
     var otdCalYear = new Date().getFullYear();
     var otdCalMonth = new Date().getMonth(); // 0-indexed
-    var otdMode = 'username'; // 'player' | 'username' | 'leaderboard'
+    var otdMode = 'username'; // 'player' | 'username' | 'leaderboard' | 'suggest'
     var otdLeaderboard = [];
     var otdLeaderboardLoading = false;
     var otdLeaderboardSport = 'mlb';
@@ -3263,6 +3263,11 @@
     var otdSelectedUser = null; // { id, username, displayName }
     var otdUserSearchTimer = null;
     var otdLoadingPasses = false;
+    var otdSuggestUser = null; // { id, username } for Pass Suggestion tab
+    var otdSuggestSport = 'ufc';
+    var otdSuggestLoading = false;
+    var otdSuggestData = null; // { ownedPasses, coveredDays, suggestions }
+    var otdSuggestSearchTimer = null;
     var otdClaimsView = 2; // 2 = default (free), 3 = Pro
     var otdSelectedDay = null; // ISO date string of clicked cell
     var otdSelectedDaySport = null; // active sport tab in day panel
@@ -4266,7 +4271,7 @@
     function renderOtdCheckWrap() {
         var el = document.getElementById('otd-check-wrap');
         if (!el) return;
-        if (otdMode === 'leaderboard') { el.innerHTML = ''; return; }
+        if (otdMode === 'leaderboard' || otdMode === 'suggest') { el.innerHTML = ''; return; }
         var canShow = otdPlayers.length > 0 && !otdLoadingPasses;
         if (!canShow) { el.innerHTML = ''; return; }
         if (!otdCheckMode && !otdFindMode) {
@@ -4794,6 +4799,173 @@
         if (bdEl) bdEl.innerHTML = otdSelectedPass ? buildBreakdownCard(otdSelectedPass) : '';
     }
 
+    function loadOtdSuggestions() {
+        var errEl = document.getElementById('otd-suggest-err');
+        var inp = document.getElementById('otd-suggest-input');
+        var typed = (inp ? inp.value : '').trim();
+        if (!otdSuggestUser && !typed) {
+            if (errEl) { errEl.textContent = 'Enter an RS username first'; errEl.style.display = ''; setTimeout(function() { if (errEl) errEl.style.display = 'none'; }, 3000); }
+            return;
+        }
+        if (!otdSuggestUser) {
+            var searchQ = typed.replace(/_+$/, '') || typed;
+            fetch('/api/real/otd?action=search_users&q=' + encodeURIComponent(searchQ), { credentials: 'same-origin' })
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    var users = d.users || [];
+                    var match = users.find(function(u) { return u.username.toLowerCase() === typed.toLowerCase(); }) || users[0];
+                    otdSuggestUser = match || { id: typed, username: typed, displayName: null };
+                    if (inp) inp.value = otdSuggestUser.username;
+                    loadOtdSuggestions();
+                })
+                .catch(function() { if (errEl) { errEl.textContent = 'Could not find user'; errEl.style.display = ''; } });
+            return;
+        }
+        otdSuggestLoading = true;
+        otdSuggestData = null;
+        renderOtdSuggest();
+        fetch('/api/real/otd?action=suggest&sport=' + encodeURIComponent(otdSuggestSport) + '&userId=' + encodeURIComponent(otdSuggestUser.id), { credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                otdSuggestLoading = false;
+                if (!d.ok) { if (errEl) { errEl.textContent = d.error || 'Error loading suggestions'; errEl.style.display = ''; } renderOtdSuggest(); return; }
+                otdSuggestData = d;
+                renderOtdSuggest();
+            })
+            .catch(function() {
+                otdSuggestLoading = false;
+                if (errEl) { errEl.textContent = 'Failed to load — try again'; errEl.style.display = ''; }
+                renderOtdSuggest();
+            });
+    }
+
+    function renderOtdSuggest() {
+        var el = document.getElementById('otd-results');
+        if (!el || otdMode !== 'suggest') return;
+
+        var RAX = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-1px"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
+        var SPORT_LABELS = { ufc: 'UFC', nba: 'NBA', mlb: 'MLB', nhl: 'NHL', wnba: 'WNBA' };
+        var cardBg = 'background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:14px 16px;margin-bottom:10px';
+
+        var sportSel = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">' +
+            '<span style="font-size:13px;color:var(--muted);font-weight:600">Sport:</span>' +
+            ['ufc'].map(function(s) {
+                var active = otdSuggestSport === s;
+                return '<button onclick="otdSuggestSport=\'' + s + '\';otdSuggestData=null;otdSuggestUser=null;renderOtdSuggest()" style="background:' + (active ? 'var(--accent)' : 'var(--bg3)') + ';border:1px solid ' + (active ? 'var(--accent)' : 'var(--border2)') + ';color:' + (active ? '#fff' : 'var(--muted)') + ';font-family:var(--sans);font-size:12px;font-weight:700;padding:5px 14px;border-radius:6px;cursor:pointer">' + SPORT_LABELS[s] + '</button>';
+            }).join('') +
+            '<span style="font-size:11px;color:var(--muted2);margin-left:4px">More sports coming soon</span>' +
+        '</div>';
+
+        var userRow = '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">' +
+            '<div style="position:relative;flex:1">' +
+                '<input id="otd-suggest-input" type="text" placeholder="RS username…" value="' + (otdSuggestUser ? escHtml(otdSuggestUser.username) : '') + '" autocomplete="off" ' +
+                    'oninput="otdSuggestInputChange(this.value)" ' +
+                    'style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px 10px;border-radius:6px">' +
+                '<div id="otd-suggest-ac" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg2);border:1px solid var(--border2);border-radius:6px;z-index:200;box-shadow:0 4px 16px rgba(0,0,0,.18);margin-top:2px"></div>' +
+            '</div>' +
+            '<button onclick="otdSuggestUser=null;loadOtdSuggestions()" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:13px;font-weight:700;padding:8px 18px;border-radius:6px;cursor:pointer;white-space:nowrap">' +
+                (otdSuggestLoading ? 'Analyzing…' : 'Analyze') +
+            '</button>' +
+        '</div>' +
+        '<div id="otd-suggest-err" style="display:none;font-size:12px;color:#ef5350;margin-bottom:8px"></div>';
+
+        if (otdSuggestLoading) {
+            el.innerHTML = sportSel + userRow + '<div style="color:var(--muted);font-size:13px;padding:20px 0 0">Analyzing your passes…</div>';
+            return;
+        }
+
+        if (!otdSuggestData) {
+            el.innerHTML = sportSel + userRow +
+                '<div style="color:var(--muted2);font-size:13px;padding:16px 0">' +
+                    'Enter your RS username and click Analyze. We\'ll look at your current ' + (SPORT_LABELS[otdSuggestSport] || otdSuggestSport) + ' passes and suggest the best ones to add to maximize your unique earning days.' +
+                '</div>';
+            return;
+        }
+
+        var d = otdSuggestData;
+        var ownedTotal = d.ownedPasses.reduce(function(s, p) { return s + (p.totalEarnings || 0); }, 0);
+
+        // Owned passes section
+        var ownedHtml = '<div style="margin-bottom:16px">' +
+            '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">' +
+                '<span style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Your Passes (' + d.ownedPasses.length + ')</span>' +
+                '<span style="font-size:12px;color:var(--muted)">' + d.coveredDays + ' fight days covered · ' + ownedTotal.toLocaleString() + ' ' + RAX + ' total</span>' +
+            '</div>';
+        if (d.ownedPasses.length === 0) {
+            ownedHtml += '<div style="font-size:13px;color:var(--muted2)">No ' + (SPORT_LABELS[otdSuggestSport] || '') + ' passes found for this user.</div>';
+        } else {
+            ownedHtml += '<div style="display:flex;flex-wrap:wrap;gap:6px">' +
+                d.ownedPasses.map(function(p) {
+                    return '<span style="display:inline-flex;align-items:center;gap:5px;background:var(--bg3);border:1px solid var(--border2);border-radius:20px;padding:4px 10px;font-size:12px;color:var(--fg)">' +
+                        '<span style="font-weight:600">' + escHtml(p.name) + '</span>' +
+                        '<span style="color:var(--muted)">' + (p.totalEarnings || 0).toLocaleString() + ' ' + RAX + '</span>' +
+                        '<span style="color:var(--muted2)">· ' + (p.fightDays || 0) + ' days</span>' +
+                    '</span>';
+                }).join('') +
+            '</div>';
+        }
+        ownedHtml += '</div>';
+
+        // Suggestions section
+        var suggestHtml = '<div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Top 10 Suggestions</div>';
+
+        if (!d.suggestions || d.suggestions.length === 0) {
+            suggestHtml += '<div style="font-size:13px;color:var(--muted2)">No suggestions found — all fighters may already be in your passes.</div>';
+        } else {
+            suggestHtml += d.suggestions.map(function(s, i) {
+                var pct = s.totalDays > 0 ? Math.round(s.uniqueEarnings / (s.uniqueEarnings + s.overlapEarnings || 1) * 100) : 100;
+                var barW = Math.max(2, Math.min(100, pct));
+                var netColor = s.uniqueEarnings > 400 ? 'var(--green,#26a69a)' : s.uniqueEarnings > 150 ? 'var(--accent)' : 'var(--muted)';
+                return '<div style="' + cardBg + '">' +
+                    '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">' +
+                        '<div style="display:flex;align-items:center;gap:8px">' +
+                            '<span style="font-size:11px;font-weight:700;color:var(--muted2);min-width:18px">#' + (i + 1) + '</span>' +
+                            '<span style="font-size:15px;font-weight:700;color:var(--fg)">' + escHtml(s.name) + '</span>' +
+                        '</div>' +
+                        '<div style="text-align:right">' +
+                            '<div style="font-size:16px;font-weight:800;color:' + netColor + '">+' + s.uniqueEarnings.toLocaleString() + ' ' + RAX + '</div>' +
+                            '<div style="font-size:11px;color:var(--muted2)">net new</div>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">' +
+                        '<div style="flex:1;height:6px;background:var(--bg3);border-radius:3px;overflow:hidden">' +
+                            '<div style="height:100%;width:' + barW + '%;background:' + netColor + ';border-radius:3px;transition:width .4s"></div>' +
+                        '</div>' +
+                        '<span style="font-size:11px;color:var(--muted);white-space:nowrap">' + pct + '% unique</span>' +
+                    '</div>' +
+                    '<div style="display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--muted)">' +
+                        '<span>' + s.totalEarnings.toLocaleString() + ' ' + RAX + ' gross</span>' +
+                        (s.overlapEarnings > 0 ? '<span style="color:#ef5350">−' + s.overlapEarnings.toLocaleString() + ' ' + RAX + ' overlap</span>' : '') +
+                        '<span style="color:var(--muted2)">' + s.uniqueDays + ' unique day' + (s.uniqueDays !== 1 ? 's' : '') + (s.overlapDays > 0 ? ' · ' + s.overlapDays + ' overlap' : '') + '</span>' +
+                    '</div>' +
+                '</div>';
+            }).join('');
+        }
+
+        el.innerHTML = sportSel + userRow + ownedHtml + suggestHtml;
+    }
+
+    function otdSuggestInputChange(val) {
+        var ac = document.getElementById('otd-suggest-ac');
+        if (!ac) return;
+        if (!val || val.length < 2) { ac.style.display = 'none'; otdSuggestUser = null; return; }
+        clearTimeout(otdSuggestSearchTimer);
+        otdSuggestSearchTimer = setTimeout(function() {
+            fetch('/api/real/otd?action=search_users&q=' + encodeURIComponent(val.replace(/_+$/, '') || val), { credentials: 'same-origin' })
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    var users = (d.users || []).slice(0, 5);
+                    if (!users.length) { ac.style.display = 'none'; return; }
+                    ac.innerHTML = users.map(function(u) {
+                        return '<div onclick="otdSuggestUser=' + JSON.stringify(JSON.stringify(u)).replace(/"/g,'\'') + ';document.getElementById(\'otd-suggest-input\').value=\'' + escHtml(u.username) + '\';document.getElementById(\'otd-suggest-ac\').style.display=\'none\'" ' +
+                            'style="padding:8px 12px;cursor:pointer;font-size:13px;color:var(--fg);border-bottom:1px solid var(--border2)">' +
+                            escHtml(u.username) + (u.displayName ? ' <span style="color:var(--muted)">' + escHtml(u.displayName) + '</span>' : '') + '</div>';
+                    }).join('');
+                    ac.style.display = '';
+                }).catch(function() { ac.style.display = 'none'; });
+        }, 300);
+    }
+
     function renderOtdPanel() {
         var panel = document.getElementById('otd-panel');
         if (!panel) return;
@@ -4808,7 +4980,9 @@
 
         // Input section changes based on mode
         var inputSection;
-        if (otdMode === 'leaderboard') {
+        if (otdMode === 'suggest') {
+            inputSection = '';
+        } else if (otdMode === 'leaderboard') {
             var lbSportOpts = '<option value="all"' + (otdLeaderboardSport === 'all' ? ' selected' : '') + '>All Sports</option>' +
                 OTD_SPORTS_LIST.map(function(s) {
                     return '<option value="' + s.key + '"' + (s.key === otdLeaderboardSport ? ' selected' : '') + '>' + escHtml(s.label) + '</option>';
@@ -4898,6 +5072,7 @@
                 '<button onclick="otdSetMode(\'username\')" style="' + (otdMode === 'username' ? tabActive : tabInactive) + '">Username</button>' +
                 '<button onclick="otdSetMode(\'player\')" style="' + (otdMode === 'player' ? tabActive : tabInactive) + '">Search Players' + (otdLbNewAdded > 0 ? ' <span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--accent);color:#fff;font-size:9px;font-weight:700;margin-left:3px;vertical-align:middle">' + otdLbNewAdded + '</span>' : '') + '</button>' +
                 '<button onclick="otdSetMode(\'leaderboard\')" style="' + (otdMode === 'leaderboard' ? tabActive : tabInactive) + '">Top OTD</button>' +
+                '<button onclick="otdSetMode(\'suggest\')" style="' + (otdMode === 'suggest' ? tabActive : tabInactive) + '">Pass Suggestion</button>' +
             '</div>' +
             inputSection +
             '<div id="otd-search-err" style="display:none;font-size:12px;color:#ef5350;margin-bottom:8px"></div>' +
@@ -4908,7 +5083,9 @@
             '<div id="otd-check-wrap"></div>' +
             '<div id="otd-results"></div>';
 
-        if (otdMode === 'leaderboard') {
+        if (otdMode === 'suggest') {
+            renderOtdSuggest();
+        } else if (otdMode === 'leaderboard') {
             renderOtdLeaderboard();
         } else {
             renderOtdChips();
@@ -5326,7 +5503,7 @@
         otdMode = mode;
         // Clear only when switching to/from username mode — username passes don't belong in other modes.
         // Player↔leaderboard switches preserve otdPlayers so Search Players additions survive tab switches.
-        if (mode === 'username' || prevMode === 'username') {
+        if (mode === 'username' || (prevMode === 'username' && mode !== 'suggest')) {
             otdPlayers = [];
             otdColorIdx = 0;
             otdLbNewAdded = 0;
@@ -5335,7 +5512,7 @@
         if (mode === 'player') otdLbNewAdded = 0;
         otdDateMapDirty = true; otdPassesPage = 0;
         otdSelectedPlayer = null;
-        otdSelectedUser = null;
+        if (mode !== 'suggest') otdSelectedUser = null;
         otdLoadingPasses = false;
         if (mode === 'leaderboard') otdCarouselOpen = false;
         renderOtdPanel();
@@ -5636,7 +5813,7 @@
     function renderOtdChips() {
         var el = document.getElementById('otd-chips');
         if (!el) return;
-        if (otdMode === 'leaderboard') { el.innerHTML = ''; return; }
+        if (otdMode === 'leaderboard' || otdMode === 'suggest') { el.innerHTML = ''; return; }
         // In Search Players mode, passes show only in the Passes panel (sidebar/carousel), not the chip grid
         if (otdMode === 'player') { el.innerHTML = ''; return; }
 
@@ -5711,7 +5888,7 @@
     }
 
     function renderOtdResults() {
-        if (otdMode === 'leaderboard') return;
+        if (otdMode === 'leaderboard' || otdMode === 'suggest') return;
         var el = document.getElementById('otd-results');
         if (!el) return;
 

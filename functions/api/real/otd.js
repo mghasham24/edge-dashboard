@@ -1204,6 +1204,123 @@ export async function onRequestGet(context) {
     }
   }
 
+  // Pass Suggestion: score all D1-cached fighters by net unique earnings vs user's current passes
+  if (action === 'suggest') {
+    if (!session) return fail(401, 'Login required');
+
+    const VALID_SUGGEST_SPORTS = ['ufc', 'nba', 'mlb', 'nhl', 'wnba'];
+    const suggestSport = url.searchParams.get('sport') || 'ufc';
+    if (!VALID_SUGGEST_SPORTS.includes(suggestSport)) return fail(400, 'Invalid sport');
+    const suggestUserId = url.searchParams.get('userId');
+    if (!suggestUserId) return fail(400, 'Missing userId');
+
+    const suggestEntityType = 'team';
+    const suggestSeason = suggestSport === 'ufc' ? '2023' : String(currentYear);
+    const earningsPrefix = `otd_earnings_v10_${suggestEntityType}_${suggestSport}_${suggestSeason}_`;
+
+    // Serve from cache if fresh (1h)
+    const suggestCacheKey = `otd_suggest_v1_${suggestSport}_${suggestUserId}`;
+    try {
+      const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(suggestCacheKey).first();
+      if (cached && (now - cached.fetched_at) < 3600) {
+        return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
+      }
+    } catch {}
+
+    // 1. Fetch user's passes from RS (player + team in parallel)
+    const [playerRes, teamRes] = await Promise.all([
+      fetch(`${RS_BASE}/userpasses/${encodeURIComponent(suggestUserId)}/passes?entityType=player&season=${suggestSeason}&sport=${suggestSport}`, { headers }).catch(() => null),
+      fetch(`${RS_BASE}/userpasses/${encodeURIComponent(suggestUserId)}/passes?entityType=team&season=${suggestSeason}&sport=${suggestSport}`, { headers }).catch(() => null),
+    ]);
+
+    async function extractIds(res) {
+      if (!res || !res.ok) return [];
+      try {
+        const data = await res.json();
+        const raw = Array.isArray(data) ? data : (data.passes || data.items || data.collectingCards || []);
+        return raw.map(p => {
+          const entity = p.entity || p.player || p.team || {};
+          const id = String(p.entityId || p.playerId || entity.id || '');
+          const name = p.label || (entity.firstName && entity.lastName ? `${entity.firstName} ${entity.lastName}`.trim() : null) || entity.name || entity.displayName || null;
+          return { id, name };
+        }).filter(p => p.id);
+      } catch { return []; }
+    }
+
+    const [playerPasses, teamPasses] = await Promise.all([extractIds(playerRes), extractIds(teamRes)]);
+    const allUserPasses = [...playerPasses, ...teamPasses];
+    const ownedIds = new Set(allUserPasses.map(p => p.id));
+
+    // 2. Load owned passes earnings from D1
+    const ownedEarningsMap = new Map();
+    if (ownedIds.size > 0) {
+      const ownedKeys = [...ownedIds].map(id => earningsPrefix + id);
+      for (let i = 0; i < ownedKeys.length; i += 100) {
+        const chunk = ownedKeys.slice(i, i + 100);
+        const ph = chunk.map(() => '?').join(',');
+        const rows = await env.DB.prepare(`SELECT cache_key, data FROM odds_cache WHERE cache_key IN (${ph})`).bind(...chunk).all().catch(() => ({ results: [] }));
+        for (const row of rows.results) {
+          const id = row.cache_key.replace(earningsPrefix, '');
+          try { const d = JSON.parse(row.data); ownedEarningsMap.set(id, d.earnings || []); } catch {}
+        }
+      }
+    }
+
+    // 3. Build covered dates set
+    const coveredDates = new Set();
+    for (const [, earningsArr] of ownedEarningsMap) {
+      for (const e of earningsArr) { if (e.day) coveredDates.add(e.day); }
+    }
+
+    // 4. Load all D1 fighter earnings + names
+    const [allEarningsRows, nameRows] = await Promise.all([
+      env.DB.prepare('SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE ? LIMIT 800').bind(earningsPrefix + '%').all().catch(() => ({ results: [] })),
+      env.DB.prepare('SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE ? LIMIT 800').bind(`otd_player_${suggestSport}_%`).all().catch(() => ({ results: [] })),
+    ]);
+
+    const nameMap = new Map();
+    for (const row of nameRows.results) {
+      const id = row.cache_key.replace(`otd_player_${suggestSport}_`, '');
+      try { const d = JSON.parse(row.data); nameMap.set(id, d.name || id); } catch {}
+    }
+
+    // 5. Score every non-owned fighter
+    const candidates = [];
+    for (const row of allEarningsRows.results) {
+      const id = row.cache_key.replace(earningsPrefix, '');
+      if (ownedIds.has(id)) continue;
+      try {
+        const d = JSON.parse(row.data);
+        const earnings = d.earnings || [];
+        let uniqueEarnings = 0, overlapEarnings = 0, uniqueDays = 0, overlapDays = 0;
+        for (const e of earnings) {
+          if (coveredDates.has(e.day)) { overlapEarnings += e.earnings; overlapDays++; }
+          else { uniqueEarnings += e.earnings; uniqueDays++; }
+        }
+        const totalEarnings = typeof d.baseTotal === 'number' && d.baseTotal > 0
+          ? d.baseTotal : earnings.reduce((s, e) => s + (e.earnings || 0), 0);
+        candidates.push({ id, name: nameMap.get(id) || id, totalEarnings, uniqueEarnings, overlapEarnings, uniqueDays, overlapDays, totalDays: earnings.length });
+      } catch {}
+    }
+    candidates.sort((a, b) => b.uniqueEarnings - a.uniqueEarnings);
+
+    // 6. Owned passes summary
+    const ownedSummary = allUserPasses.map(p => {
+      const earnings = ownedEarningsMap.get(p.id) || [];
+      return {
+        id: p.id,
+        name: p.name || nameMap.get(p.id) || p.id,
+        totalEarnings: earnings.reduce((s, e) => s + (e.earnings || 0), 0),
+        fightDays: earnings.length,
+      };
+    });
+
+    const body = JSON.stringify({ ok: true, sport: suggestSport, userId: suggestUserId, ownedPasses: ownedSummary, coveredDays: coveredDates.size, suggestions: candidates.slice(0, 10) });
+    await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
+      .bind(suggestCacheKey, body, now).run().catch(() => {});
+    return new Response(body, { headers: { 'Content-Type': 'application/json' } });
+  }
+
   // All passes that earned on a given OTD day — uses the requesting user's own RS token
   // so cardhistoricalearnings returns their personal card collection, not the shared token's
   if (action === 'day_earnings') {
