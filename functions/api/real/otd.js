@@ -694,6 +694,8 @@ export async function onRequestGet(context) {
   }
 
   // Admin: bulk-seed all UFC fighters + earnings from RS into D1
+  // Supports ?offset=N&limit=M to paginate within CF's 30s wall-clock limit.
+  // Call repeatedly: offset=0, offset=50, offset=100, ... until done=true.
   if (action === 'seed_ufc') {
     if (!session?.is_admin) return fail(403, 'Admin only');
     const seedSport = 'ufc';
@@ -701,8 +703,11 @@ export async function onRequestGet(context) {
     const seedSeason = '2023';
     const SEED_PAGES = 20;
     const SEED_CONCURRENCY = 6;
+    const seedOffset = Math.max(0, parseInt(url.searchParams.get('offset') || '0', 10));
+    const seedLimit = Math.min(60, Math.max(1, parseInt(url.searchParams.get('limit') || '50', 10)));
+    const skipExisting = url.searchParams.get('skip_existing') !== '0';
 
-    // Phase 1: fetch all fighter pages
+    // Phase 1: fetch all fighter pages (fast — 20 parallel fetches ~2s)
     const pageFetches = [];
     for (let pg = 0; pg < SEED_PAGES; pg++) {
       const u = `${RS_BASE}/userpassshop/${seedSport}/season/${seedSeason}/entity/${seedEntity}/section/earningstotal?before=${pg * 20}`;
@@ -730,23 +735,25 @@ export async function onRequestGet(context) {
         }
       }
     }
-    const fighters = Object.values(fighterMap);
-    if (fighters.length === 0) return fail(502, 'No fighters returned from RS — tokens may be invalid');
+    const allFighters = Object.values(fighterMap).sort((a, b) => b.value - a.value);
+    if (allFighters.length === 0) return fail(502, 'No fighters returned from RS — tokens may be invalid');
 
-    // Phase 2: check which IDs already have earnings cached
-    const allIds = fighters.map(f => f.id);
+    // Slice to this chunk
+    const chunk = allFighters.slice(seedOffset, seedOffset + seedLimit);
+    const done = seedOffset + seedLimit >= allFighters.length;
+
+    // Phase 2: check which IDs in this chunk already have earnings cached
     const existingKeys = new Set();
-    for (let i = 0; i < allIds.length; i += 100) {
-      const chunk = allIds.slice(i, i + 100);
+    if (skipExisting && chunk.length > 0) {
       const placeholders = chunk.map(() => '?').join(',');
-      const keys = chunk.map(id => `otd_earnings_v10_${seedEntity}_${seedSport}_${seedSeason}_${id}`);
+      const keys = chunk.map(f => `otd_earnings_v10_${seedEntity}_${seedSport}_${seedSeason}_${f.id}`);
       const rows = await env.DB.prepare(`SELECT cache_key FROM odds_cache WHERE cache_key IN (${placeholders})`).bind(...keys).all().catch(() => ({ results: [] }));
       for (const row of rows.results) existingKeys.add(row.cache_key);
     }
 
-    const toFetch = fighters.filter(f => !existingKeys.has(`otd_earnings_v10_${seedEntity}_${seedSport}_${seedSeason}_${f.id}`));
+    const toFetch = chunk.filter(f => !existingKeys.has(`otd_earnings_v10_${seedEntity}_${seedSport}_${seedSeason}_${f.id}`));
 
-    // Phase 3: fetch earnings in batches
+    // Phase 3: fetch earnings for this chunk
     let fetched = 0, written = 0, noData = 0;
     for (let i = 0; i < toFetch.length; i += SEED_CONCURRENCY) {
       const batch = toFetch.slice(i, i + SEED_CONCURRENCY);
@@ -775,7 +782,6 @@ export async function onRequestGet(context) {
         writes.push(env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at').bind(earningsKey, body, now).run().catch(() => {}));
         written++;
       }
-      // Write player name rows too
       for (const f of batch) {
         const nameKey = `otd_player_${seedSport}_${f.id}`;
         const nameData = JSON.stringify({ name: f.name, id: f.id, position: null });
@@ -786,11 +792,16 @@ export async function onRequestGet(context) {
 
     return new Response(JSON.stringify({
       ok: true,
-      totalFighters: fighters.length,
-      alreadyCached: fighters.length - toFetch.length,
+      totalFighters: allFighters.length,
+      offset: seedOffset,
+      limit: seedLimit,
+      chunkSize: chunk.length,
+      skipped: chunk.length - toFetch.length,
       fetched,
       earningsWritten: written,
       noEarningsData: noData,
+      done,
+      nextOffset: done ? null : seedOffset + seedLimit,
     }), { headers: { 'Content-Type': 'application/json' } });
   }
 
