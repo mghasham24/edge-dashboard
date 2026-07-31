@@ -3280,6 +3280,8 @@
     var otdOverlapPanelCache = null; // { key, html } — avoid rebuilding on every calendar tap
     var otdOverlapSportFilter = null; // null = all sports, or object {sport: true} for multi-select
     var otdOverlapSportDropdownOpen = false;
+    var otdCalSportFilter = null; // null = show all sports on calendar; object {sk: true} = whitelist
+    var otdCalSportDropdownOpen = false;
     var otdAllOverlapsView = false; // true → dedicated full-screen overlaps tab
     var otdAllOverlapsPage = 0;
     var OTD_ALL_OVERLAPS_PER_PAGE = 150;
@@ -3493,6 +3495,22 @@
             otdOverlapSportFilter[sport] = true;
         }
         otdOverlapPage = 0; otdAllOverlapsPage = 0; otdOverlapPanelCache = null;
+        renderOtdResults();
+    }
+    function otdToggleCalSportDropdown() {
+        otdCalSportDropdownOpen = !otdCalSportDropdownOpen;
+        renderOtdResults();
+    }
+    function otdToggleCalSport(sk) {
+        if (!otdCalSportFilter) otdCalSportFilter = {};
+        if (otdCalSportFilter[sk]) {
+            delete otdCalSportFilter[sk];
+            if (Object.keys(otdCalSportFilter).length === 0) otdCalSportFilter = null;
+        } else {
+            otdCalSportFilter[sk] = true;
+        }
+        otdDateMapDirty = true;
+        otdOverlapPanelCache = null;
         renderOtdResults();
     }
     function otdToggleOverlapSportDropdown() {
@@ -6149,8 +6167,12 @@
                            otdDateMapCachedYear !== otdCalYear || otdDateMapCachedCV !== otdClaimsView;
         if (needsRebuild) {
             var rawDateMap = {};
+            var _SOCCER_SK = { epl:1, ucl:1, mls:1, fc:1, fifa:1, soccer:1 };
+            var _CBB_SK = { ncaabb:1, ncaab:1, ncaam:1 };
             otdPlayers.forEach(function(p) {
                 if (!p.earnings) return;
+                var sk = _SOCCER_SK[p.sport] ? 'soccer' : _CBB_SK[p.sport] ? 'ncaam' : p.sport === 'mma' ? 'ufc' : p.sport;
+                if (otdCalSportFilter && !otdCalSportFilter[sk]) return;
                 p.earnings.forEach(function(e) {
                     var dp = (e.day || '').split('T')[0].trim().split('-');
                     if (dp.length !== 3) return;
@@ -6158,9 +6180,6 @@
                     if (origYear >= otdCalYear) return;
                     var dayKey = String(otdCalYear) + '-' + dp[1].padStart(2,'0') + '-' + dp[2].padStart(2,'0');
                     if (!rawDateMap[dayKey]) rawDateMap[dayKey] = {};
-                    var SOCCER_SK = { epl:1, ucl:1, mls:1, fc:1, fifa:1, soccer:1 };
-                    var CBB_SK = { ncaabb:1, ncaab:1, ncaam:1 };
-                    var sk = SOCCER_SK[p.sport] ? 'soccer' : CBB_SK[p.sport] ? 'ncaam' : p.sport === 'mma' ? 'ufc' : p.sport;
                     if (!rawDateMap[dayKey][sk]) rawDateMap[dayKey][sk] = [];
                     rawDateMap[dayKey][sk].push({ player: p, rax: e.atRarityEarnings || 0, origDay: (e.day || '').split('T')[0].trim(), bsId: (e.playerBoxScoreIds && e.playerBoxScoreIds[0]) || e.playerBoxScoreId || e.boxScoreId || e.boxscoreId || e.performanceId || e.gameId || null });
                 });
@@ -6631,14 +6650,42 @@
             overlapPanel = '<div style="background:var(--bg2);border:1px solid var(--border2);border-radius:8px;margin-bottom:10px;padding:12px 14px;font-size:12px;color:var(--muted2)">No overlapping claims above 199 Rax — your collection is clean.</div>';
         }
 
+        // Sport filter for the calendar
+        var _sfSoccer = { epl:1, ucl:1, mls:1, fc:1, fifa:1, soccer:1 };
+        var _sfCbb = { ncaabb:1, ncaab:1, ncaam:1 };
+        var _sfLabelFallback = { ncaam:'CBB', mma:'UFC' };
+        var calSportsSet = {};
+        otdPlayers.forEach(function(p) {
+            if (!p.earnings || !p.earnings.length) return;
+            var sk = _sfSoccer[p.sport] ? 'soccer' : _sfCbb[p.sport] ? 'ncaam' : p.sport === 'mma' ? 'ufc' : p.sport;
+            calSportsSet[sk] = true;
+        });
+        var calSports = Object.keys(calSportsSet).sort();
+        var calSfActive = otdCalSportFilter && Object.keys(otdCalSportFilter).length > 0;
+        var calSfBtnStyle = btnBase + (calSfActive ? 'var(--accent);background:rgba(99,102,241,.12);color:var(--accent)' : 'var(--border2);background:var(--bg3);color:var(--muted)');
+        var calSportFilterBtn = calSports.length > 1
+            ? '<button style="' + calSfBtnStyle + '" onclick="otdToggleCalSportDropdown()">' + (calSfActive ? Object.keys(otdCalSportFilter).length + ' sport' + (Object.keys(otdCalSportFilter).length > 1 ? 's' : '') + ' ▾' : 'Sports ▾') + '</button>'
+            : '';
+        var calSportFilterDropdown = (otdCalSportDropdownOpen && calSports.length > 1)
+            ? '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">' +
+                calSports.map(function(sk) {
+                    var checked = otdCalSportFilter && otdCalSportFilter[sk];
+                    var label = (OTD_SPORTS_LIST.find(function(s) { return s.key === sk; }) || {}).label || _sfLabelFallback[sk] || sk.toUpperCase();
+                    return '<button onclick="otdToggleCalSport(\'' + sk + '\')" style="' + btnBase + (checked ? 'var(--accent);background:rgba(99,102,241,.15);color:var(--accent)' : 'var(--border2);background:var(--bg3);color:var(--muted)') + '">' + (checked ? '✓ ' : '') + escHtml(label) + '</button>';
+                }).join('') +
+              '</div>'
+            : '';
+
         var calHtml =
             addedNote +
             '<div style="display:flex;align-items:center;justify-content:flex-end;margin-bottom:6px;gap:4px">' +
                 (numLoading > 0 ? '<span style="font-size:11px;color:var(--accent);margin-right:auto">loading ' + numLoading + '…</span>' : '') +
+                calSportFilterBtn +
                 '<button style="' + btn2Style + '" onclick="otdSetClaimsView(2)">2 claims</button>' +
                 '<button style="' + btn3Style + '" onclick="otdSetClaimsView(3)">3 claims</button>' +
                 (overlapCount > 0 ? '<button style="' + overlapBtnStyle + '" onclick="otdToggleOverlaps()" title="Days where you have more cards than claim slots">⚠ Overlaps' + (overlapCount ? ' ' + overlapCount : '') + '</button>' : '') +
             '</div>' +
+            calSportFilterDropdown +
             overlapPanel +
             '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">' +
                 '<button onclick="otdPrevMonth()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-size:16px;width:32px;height:32px;border-radius:6px;cursor:pointer;line-height:1">‹</button>' +
