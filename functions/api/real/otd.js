@@ -1222,15 +1222,18 @@ export async function onRequestGet(context) {
   if (action === 'suggest') {
     if (!session) return fail(401, 'Login required');
 
-    const VALID_SUGGEST_SPORTS = ['ufc', 'nba', 'mlb', 'nhl', 'wnba'];
+    const VALID_SUGGEST_SPORTS = ['ufc', 'nba', 'mlb', 'nhl', 'wnba', 'ncaaf'];
     const suggestSport = url.searchParams.get('sport') || 'ufc';
     if (!VALID_SUGGEST_SPORTS.includes(suggestSport)) return fail(400, 'Invalid sport');
     const suggestUserId = url.searchParams.get('userId');
     if (!suggestUserId) return fail(400, 'Missing userId');
 
-    const suggestEntityType = 'team';
-    const suggestSeason = suggestSport === 'ufc' ? '2023' : String(currentYear);
+    const suggestEntityType = suggestSport === 'ncaaf' ? 'player' : 'team';
+    const suggestSeason = suggestSport === 'ufc' ? '2023'
+      : suggestSport === 'ncaaf' ? (url.searchParams.get('season') || String(currentYear))
+      : String(currentYear);
     const earningsPrefix = `otd_earnings_v10_${suggestEntityType}_${suggestSport}_${suggestSeason}_`;
+    const earningsLimit = suggestSport === 'ncaaf' ? 8000 : 800;
 
     // UFC multiplier table (mirrors app.js UFC_LEVEL_MULTIPLIERS)
     const UFC_SUGGEST_MULT = {
@@ -1243,7 +1246,7 @@ export async function onRequestGet(context) {
     function suggestGetMult(level) { if (level === 0) return 0; return UFC_SUGGEST_MULT[level] || 1; }
 
     // Serve from cache if fresh (1h)
-    const suggestCacheKey = `otd_suggest_v13_${suggestSport}_${suggestUserId}`;
+    const suggestCacheKey = `otd_suggest_v14_${suggestSport}_${suggestSeason}_${suggestUserId}`;
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(suggestCacheKey).first();
       if (cached && (now - cached.fetched_at) < 3600) {
@@ -1251,11 +1254,13 @@ export async function onRequestGet(context) {
       }
     } catch {}
 
-    // 1. Fetch user's passes from RS (player + team in parallel)
-    const [playerRes, teamRes] = await Promise.all([
-      fetch(`${RS_BASE}/userpasses/${encodeURIComponent(suggestUserId)}/passes?entityType=player&season=${suggestSeason}&sport=${suggestSport}`, { headers }).catch(() => null),
-      fetch(`${RS_BASE}/userpasses/${encodeURIComponent(suggestUserId)}/passes?entityType=team&season=${suggestSeason}&sport=${suggestSport}`, { headers }).catch(() => null),
-    ]);
+    // 1. Fetch user's passes from RS (ncaaf = player only; others = player + team)
+    const [playerRes, teamRes] = suggestSport === 'ncaaf'
+      ? [await fetch(`${RS_BASE}/userpasses/${encodeURIComponent(suggestUserId)}/passes?entityType=player&season=${suggestSeason}&sport=${suggestSport}`, { headers }).catch(() => null), null]
+      : await Promise.all([
+          fetch(`${RS_BASE}/userpasses/${encodeURIComponent(suggestUserId)}/passes?entityType=player&season=${suggestSeason}&sport=${suggestSport}`, { headers }).catch(() => null),
+          fetch(`${RS_BASE}/userpasses/${encodeURIComponent(suggestUserId)}/passes?entityType=team&season=${suggestSeason}&sport=${suggestSport}`, { headers }).catch(() => null),
+        ]);
 
     function suggestRarityLabel(label) {
       if (!label) return 0;
@@ -1349,10 +1354,10 @@ export async function onRequestGet(context) {
       }
     }
 
-    // 4. Load all D1 fighter earnings + names
+    // 4. Load all D1 fighter/player earnings + names
     const [allEarningsRows, nameRows] = await Promise.all([
-      env.DB.prepare('SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE ? LIMIT 800').bind(earningsPrefix + '%').all().catch(() => ({ results: [] })),
-      env.DB.prepare('SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE ? LIMIT 800').bind(`otd_player_${suggestSport}_%`).all().catch(() => ({ results: [] })),
+      env.DB.prepare(`SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE ? LIMIT ${earningsLimit}`).bind(earningsPrefix + '%').all().catch(() => ({ results: [] })),
+      env.DB.prepare(`SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE ? LIMIT ${earningsLimit}`).bind(`otd_player_${suggestSport}_%`).all().catch(() => ({ results: [] })),
     ]);
 
     const nameMap = new Map(); // id → { name, avatar }

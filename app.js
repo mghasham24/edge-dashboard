@@ -3265,6 +3265,7 @@
     var otdLoadingPasses = false;
     var otdSuggestUser = null; // { id, username } for Pass Suggestion tab
     var otdSuggestSport = 'ufc';
+    var otdSuggestSeason = '2025'; // only used for ncaaf; other sports always use currentYear
     var otdSuggestLoading = false;
     var otdSuggestData = null; // { ownedPasses, coveredDays, suggestions }
     var otdSuggestSearchTimer = null;
@@ -4859,7 +4860,9 @@
         otdSuggestData = null;
         otdSuggestOpenOverlap = null;
         renderOtdSuggest();
-        fetch('/api/real/otd?action=suggest&sport=' + encodeURIComponent(otdSuggestSport) + '&userId=' + encodeURIComponent(otdSuggestUser.id), { credentials: 'same-origin' })
+        var suggestUrl = '/api/real/otd?action=suggest&sport=' + encodeURIComponent(otdSuggestSport) + '&userId=' + encodeURIComponent(otdSuggestUser.id);
+        if (otdSuggestSport === 'ncaaf') suggestUrl += '&season=' + encodeURIComponent(otdSuggestSeason);
+        fetch(suggestUrl, { credentials: 'same-origin' })
             .then(function(r) { return r.json(); })
             .then(function(d) {
                 otdSuggestLoading = false;
@@ -4918,15 +4921,21 @@
         var el = document.getElementById('otd-results');
         if (!el || otdMode !== 'suggest') return;
 
-        var SPORT_LABELS = { ufc: 'UFC', nba: 'NBA', mlb: 'MLB', nhl: 'NHL', wnba: 'WNBA' };
+        var SPORT_LABELS = { ufc: 'UFC', nba: 'NBA', mlb: 'MLB', nhl: 'NHL', wnba: 'WNBA', ncaaf: 'CFB' };
 
-        var sportSel = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">' +
+        var sportSel = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">' +
             '<span style="font-size:13px;color:var(--muted);font-weight:600">Sport:</span>' +
-            ['ufc'].map(function(s) {
+            ['ufc', 'ncaaf'].map(function(s) {
                 var active = otdSuggestSport === s;
                 return '<button onclick="otdSuggestSport=\'' + s + '\';otdSuggestData=null;otdSuggestUser=null;renderOtdSuggest()" style="background:' + (active ? 'var(--accent)' : 'var(--bg3)') + ';border:1px solid ' + (active ? 'var(--accent)' : 'var(--border2)') + ';color:' + (active ? '#fff' : 'var(--muted)') + ';font-family:var(--sans);font-size:12px;font-weight:700;padding:5px 14px;border-radius:6px;cursor:pointer">' + SPORT_LABELS[s] + '</button>';
             }).join('') +
-            '<span style="font-size:11px;color:var(--muted2);margin-left:4px">More sports coming soon</span>' +
+            (otdSuggestSport === 'ncaaf'
+                ? '<span style="font-size:12px;color:var(--muted);font-weight:600;margin-left:8px">Season:</span>' +
+                  [['2025','25-26'],['2024','24-25'],['2023','23-24']].map(function(sv) {
+                      var active = otdSuggestSeason === sv[0];
+                      return '<button onclick="otdSuggestSeason=\'' + sv[0] + '\';otdSuggestData=null;renderOtdSuggest()" style="background:' + (active ? 'var(--bg3)' : 'transparent') + ';border:1px solid ' + (active ? 'var(--border)' : 'var(--border2)') + ';color:' + (active ? 'var(--fg)' : 'var(--muted2)') + ';font-family:var(--mono);font-size:11px;padding:4px 10px;border-radius:6px;cursor:pointer">' + sv[1] + '</button>';
+                  }).join('')
+                : '') +
         '</div>';
 
         var userRow = '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">' +
@@ -4948,10 +4957,11 @@
         }
 
         if (!otdSuggestData) {
+            var suggestDesc = otdSuggestSport === 'ncaaf'
+                ? 'Enter your RS username and click Analyze. We\'ll rank every CFB player by how many unique RAX they\'d add to your portfolio after deducting game days you already cover.'
+                : 'Enter your RS username and click Analyze. We\'ll rank every UFC fighter by how many unique RAX they\'d add to your portfolio after deducting fight days you already cover.';
             el.innerHTML = sportSel + userRow +
-                '<div style="color:var(--muted2);font-size:13px;padding:16px 0">' +
-                    'Enter your RS username and click Analyze. We\'ll rank every UFC fighter by how many unique Rax they\'d add to your portfolio after deducting fight days you already cover.' +
-                '</div>';
+                '<div style="color:var(--muted2);font-size:13px;padding:16px 0">' + suggestDesc + '</div>';
             return;
         }
 
@@ -4961,11 +4971,11 @@
         // Owned passes section
         var ownedHtml = '<div style="margin-bottom:18px">' +
             '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">' +
-                '<span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Your UFC Passes (' + d.ownedPasses.length + ')</span>' +
-                '<span style="font-size:11px;color:var(--muted)">' + d.coveredDays + ' fight days · ' + RAX_ICON + ownedTotal.toLocaleString() + '</span>' +
+                '<span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Your ' + (SPORT_LABELS[otdSuggestSport] || 'Sport') + ' Passes (' + d.ownedPasses.length + ')</span>' +
+                '<span style="font-size:11px;color:var(--muted)">' + d.coveredDays + (otdSuggestSport === 'ncaaf' ? ' game' : ' fight') + ' days · ' + RAX_ICON + ownedTotal.toLocaleString() + '</span>' +
             '</div>';
         if (d.ownedPasses.length === 0) {
-            ownedHtml += '<div style="font-size:13px;color:var(--muted2)">No UFC passes found for this user.</div>';
+            ownedHtml += '<div style="font-size:13px;color:var(--muted2)">No ' + (SPORT_LABELS[otdSuggestSport] || 'sport') + ' passes found for this user.</div>';
         } else {
             ownedHtml += '<div style="display:flex;flex-wrap:wrap;gap:6px">' +
                 d.ownedPasses.map(function(p) {
