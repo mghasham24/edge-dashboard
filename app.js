@@ -4147,7 +4147,7 @@
 
         // Splice breakdown card (spans both columns) right after the row of the selected card
         if (selectedItemIdx >= 0) {
-            var insertAfter = Math.floor(selectedItemIdx / 2) * 2 + 2; // end of the row + 1
+            var insertAfter = Math.floor(selectedItemIdx / 3) * 3 + 3; // end of the row + 1
             var breakdownHtml = buildBreakdownCard(otdSelectedPass);
             if (breakdownHtml) cardHtmls.splice(Math.min(insertAfter, cardHtmls.length), 0, '<div style="grid-column:1/-1">' + breakdownHtml + '</div>');
         }
