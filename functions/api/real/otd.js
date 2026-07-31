@@ -1243,7 +1243,7 @@ export async function onRequestGet(context) {
     function suggestGetMult(level) { return UFC_SUGGEST_MULT[level] || 1; }
 
     // Serve from cache if fresh (1h)
-    const suggestCacheKey = `otd_suggest_v11_${suggestSport}_${suggestUserId}`;
+    const suggestCacheKey = `otd_suggest_v12_${suggestSport}_${suggestUserId}`;
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(suggestCacheKey).first();
       if (cached && (now - cached.fetched_at) < 3600) {
@@ -1307,7 +1307,7 @@ export async function onRequestGet(context) {
             : (typeof bi.level === 'number' && bi.level > 0) ? bi.level
             : typeof p.level === 'number' ? p.level
             : typeof p.collectingLevel === 'number' ? p.collectingLevel
-            : 1;
+            : 0; // General is the default when RS omits rarity fields
           return { id, name, level };
         }).filter(p => p.id);
       } catch { return []; }
