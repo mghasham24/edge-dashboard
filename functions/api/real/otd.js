@@ -1240,10 +1240,10 @@ export async function onRequestGet(context) {
       20:20, 21:20.3, 22:20.6, 23:20.9, 24:21.2, 25:21.5, 26:21.8, 27:22.1, 28:22.4, 29:22.7,
       30:23, 31:23.3, 32:23.6, 33:23.9, 34:24.2, 35:24.5
     };
-    function suggestGetMult(level) { return UFC_SUGGEST_MULT[level] || 1; }
+    function suggestGetMult(level) { if (level === 0) return 0; return UFC_SUGGEST_MULT[level] || 1; }
 
     // Serve from cache if fresh (1h)
-    const suggestCacheKey = `otd_suggest_v12_${suggestSport}_${suggestUserId}`;
+    const suggestCacheKey = `otd_suggest_v13_${suggestSport}_${suggestUserId}`;
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(suggestCacheKey).first();
       if (cached && (now - cached.fetched_at) < 3600) {

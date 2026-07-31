@@ -5004,6 +5004,7 @@
             // otdSuggestMyPassLevel overrides competitor earnings multiplier when set.
             function compEffectiveEarnings(c) {
                 if (otdSuggestMyPassLevel !== null) {
+                    if (otdSuggestMyPassLevel === 0) return 0;
                     return Math.round((c.baseEarnings !== undefined ? c.baseEarnings : (c.earnings || 0)) * (UFC_LEVEL_MULTIPLIERS[otdSuggestMyPassLevel] || 1));
                 }
                 return c.earnings || 0;
