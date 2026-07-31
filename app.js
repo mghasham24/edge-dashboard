@@ -3657,15 +3657,17 @@
                 .then(function(d) {
                     var ac2 = document.getElementById('otd-check-ac');
                     if (!ac2) return;
-                    var items = (d.players || []).map(function(p) {
-                        var av = escHtml(p.entityAvatar || p.avatar || '');
-                        var et = p.entityType || 'player';
-                        var se = p.season ? String(p.season) : '';
-                        return '<div style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border2)" ' +
-                            'onmousedown="otdCheckSelectPlayer(\'' + escHtml(String(p.id)) + '\',\'' + escHtml(p.name).replace(/'/g, '&#39;') + '\',\'' + sport + '\',\'' + av + '\',\'' + et + '\',\'' + se + '\')">' +
+                    var items = (d.players || []).map(function(p, i) {
+                        return '<div style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border2)" data-idx="' + i + '">' +
                             escHtml(p.name) + '</div>';
                     }).join('');
                     ac2.innerHTML = items || '<div style="padding:8px 12px;color:var(--muted);font-size:13px">No results</div>';
+                    ac2.querySelectorAll('[data-idx]').forEach(function(el) {
+                        var p = d.players[parseInt(el.dataset.idx, 10)];
+                        el.addEventListener('mousedown', function() {
+                            otdCheckSelectPlayer(String(p.id), p.name, sport, p.entityAvatar || p.avatar || '', p.entityType || 'player', p.season ? String(p.season) : '');
+                        });
+                    });
                     ac2.style.display = '';
                 }).catch(function() {});
         }, 300);
@@ -3755,12 +3757,17 @@
                 .then(function(d) {
                     var ac2 = document.getElementById('otd-find-ac');
                     if (!ac2) return;
-                    var items = (d.players || []).map(function(p) {
-                        return '<div style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border2)" ' +
-                            'onmousedown="otdFindSelectPlayer(\'' + escHtml(String(p.id)) + '\',\'' + escHtml(p.name).replace(/'/g, '&#39;') + '\',\'' + sport + '\',\'' + escHtml(p.avatar || '') + '\')">' +
+                    var items = (d.players || []).map(function(p, i) {
+                        return '<div style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border2)" data-idx="' + i + '">' +
                             escHtml(p.name) + '</div>';
                     }).join('');
                     ac2.innerHTML = items || '<div style="padding:8px 12px;color:var(--muted);font-size:13px">No results</div>';
+                    ac2.querySelectorAll('[data-idx]').forEach(function(el) {
+                        var p = d.players[parseInt(el.dataset.idx, 10)];
+                        el.addEventListener('mousedown', function() {
+                            otdFindSelectPlayer(String(p.id), p.name, sport, p.avatar || '');
+                        });
+                    });
                     ac2.style.display = '';
                 }).catch(function() {});
         }, 300);
