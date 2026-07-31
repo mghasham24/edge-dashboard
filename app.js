@@ -4944,7 +4944,7 @@
         } else {
             ownedHtml += '<div style="display:flex;flex-wrap:wrap;gap:6px">' +
                 d.ownedPasses.map(function(p) {
-                    var rc = otdRarityColor(p.level || 1);
+                    var rc = otdRarityColor(p.level != null ? p.level : 1);
                     return '<span style="display:inline-flex;align-items:center;gap:5px;background:' + rc + '22;border:1px solid ' + rc + '66;border-radius:20px;padding:3px 10px;font-size:12px;color:var(--fg)">' +
                         escHtml(p.name) +
                         '<span style="color:#22c55e;font-family:var(--mono);font-size:11px">' + RAX_ICON + (p.totalEarnings || 0).toLocaleString() + '</span>' +
