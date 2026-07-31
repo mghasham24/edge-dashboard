@@ -4951,10 +4951,14 @@
         } else {
             ownedHtml += '<div style="display:flex;flex-wrap:wrap;gap:6px">' +
                 d.ownedPasses.map(function(p) {
-                    var rc = otdRarityColor(p.level != null ? p.level : 1);
+                    var lv = p.level != null ? p.level : 1;
+                    var rc = otdRarityColor(lv);
+                    var earnHtml = lv === 0
+                        ? '<span style="color:#22c55e66;font-family:var(--mono);font-size:11px">' + RAX_ICON + '0</span>' +
+                          (p.baseEarnings ? '<span style="color:var(--muted2);font-family:var(--mono);font-size:10px">(' + Math.round(p.baseEarnings).toLocaleString() + ')</span>' : '')
+                        : '<span style="color:#22c55e;font-family:var(--mono);font-size:11px">' + RAX_ICON + (p.totalEarnings || 0).toLocaleString() + '</span>';
                     return '<span style="display:inline-flex;align-items:center;gap:5px;background:' + rc + '22;border:1px solid ' + rc + '66;border-radius:20px;padding:3px 10px;font-size:12px;color:var(--fg)">' +
-                        escHtml(p.name) +
-                        '<span style="color:#22c55e;font-family:var(--mono);font-size:11px">' + RAX_ICON + (p.totalEarnings || 0).toLocaleString() + '</span>' +
+                        escHtml(p.name) + earnHtml +
                     '</span>';
                 }).join('') +
             '</div>';
@@ -5117,7 +5121,7 @@
                                 var dp = (ev.day || '').split('-');
                                 var dayFmt = dp.length === 3 ? MONTH_SHORT[parseInt(dp[1],10)-1] + ' ' + parseInt(dp[2],10) + '\'' + String(dp[0]).slice(2) : (ev.dayDisplay || ev.day || '');
                                 var newRax = Math.round((ev.earnings || 0) * oMult);
-                                var allCards = (ev.competitors || []).map(function(c) { return { name: c.name, rax: compEffectiveEarnings(c), level: c.level, isNew: false }; });
+                                var allCards = (ev.competitors || []).map(function(c) { return { name: c.name, rax: compEffectiveEarnings(c), level: c.level, isNew: false }; }).filter(function(c) { return c.rax > 0; });
                                 allCards.push({ name: openSugg.name, rax: newRax, isNew: true });
                                 allCards.sort(function(a, b) { return b.rax - a.rax; });
                                 var isWasted = allCards.findIndex(function(c) { return c.isNew; }) >= otdSuggestClaimLimit;
