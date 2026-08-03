@@ -4774,9 +4774,8 @@
     }
 
     // ── Parlays tab ────────────────────────────────────────────────────────────
-    var parlayPicks  = {};   // { [playerId]: 'more' | 'less' }
-    var parlayFilter = 'all';
-    var parlayStake  = 1000;
+    var parlayPicks = {};   // { [playerId]: 'more' | 'less' }
+    var parlayStake = 1000;
 
     var PARLAY_PLAYERS = [
         // NYY vs STL 6:05 PM
@@ -4826,21 +4825,10 @@
         { id:38, name:'Luis Arraez',       initials:'LA', team:'SD',  pos:'2B', opp:'ARI', home:false, time:'8:40 PM', market:'hits',       stat:'Hits',        line:1.5,  moreOdds:-145, lessOdds:+115, pop:6200, color:'#3a2818', avatar:'arraez_luis'     },
     ];
 
-    var PARLAY_FILTERS = [
-        { key:'all',         label:'All' },
-        { key:'home_runs',   label:'Home Runs' },
-        { key:'hits',        label:'Hits' },
-        { key:'pitcher_ks',  label:'Pitcher Ks' },
-        { key:'outs_ou',     label:'Outs O/U' },
-        { key:'total_bases', label:'Total Bases' },
-        { key:'hrbi',        label:'H+R+RBI' },
-    ];
-
     function parlayToProb(odds) {
         return odds > 0 ? 100 / (odds + 100) : Math.abs(odds) / (Math.abs(odds) + 100);
     }
     function parlayFmtOdds(o) { return o > 0 ? '+' + o : '' + o; }
-    function parlayFmtPop(n)  { return n >= 1000 ? (n / 1000).toFixed(1) + 'K' : n; }
 
     function parlayTrueProb() {
         return Object.entries(parlayPicks).reduce(function(acc, entry) {
@@ -4856,44 +4844,21 @@
     }
 
     function parlayAvatarHtml(p, size, fsize) {
-        var url = p.avatar ? 'https://media.realapp.com/assets/players/default/small/' + p.avatar + '.webp' : '';
-        var bg  = 'linear-gradient(135deg,' + p.color + ',' + p.color + 'aa)';
-        var st  = 'width:' + size + 'px;height:' + size + 'px;border-radius:50%;background:' + bg + ';display:flex;align-items:center;justify-content:center;font-size:' + fsize + 'px;font-weight:800;color:#fff;position:relative;overflow:hidden;flex-shrink:0';
-        if (!url) return '<div style="' + st + '">' + escHtml(p.initials) + '</div>';
-        return '<div style="' + st + '">' + escHtml(p.initials) +
-            '<img src="' + url + '" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:top center;border-radius:50%" onerror="this.remove()">' +
-        '</div>';
-    }
-
-    function parlayRenderFilters() {
-        var bar = document.getElementById('parlay-filter-bar');
-        if (!bar) return;
-        bar.innerHTML = PARLAY_FILTERS.map(function(f) {
-            return '<button class="parlay-filter-tab' + (f.key === parlayFilter ? ' active' : '') +
-                '" onclick="parlaySetFilter(\'' + f.key + '\')">' + escHtml(f.label) + '</button>';
-        }).join('');
+        var bg = 'linear-gradient(135deg,' + p.color + ',' + p.color + 'aa)';
+        return '<div style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;background:' + bg + ';display:flex;align-items:center;justify-content:center;font-size:' + fsize + 'px;font-weight:800;color:#fff;flex-shrink:0">' + escHtml(p.initials) + '</div>';
     }
 
     function parlayRenderGrid() {
         var grid = document.getElementById('parlay-player-grid');
         if (!grid) return;
-        var visible = parlayFilter === 'all' ? PARLAY_PLAYERS : PARLAY_PLAYERS.filter(function(p) { return p.market === parlayFilter; });
-        if (!visible.length) {
-            grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:var(--muted2);padding:40px;font-size:13px">No props for this category today</div>';
-            return;
-        }
-        var sorted = visible.slice().sort(function(a, b) { return b.pop - a.pop; });
-        grid.innerHTML = sorted.map(function(p) {
+        grid.innerHTML = PARLAY_PLAYERS.map(function(p) {
             var sel = parlayPicks[p.id];
             var cls = sel ? (sel === 'more' ? ' sel-more' : ' sel-less') : '';
-            var matchup = (p.home ? 'vs ' : '@ ') + escHtml(p.opp) + ' · Mon ' + escHtml(p.time);
-            var url = p.avatar ? 'https://media.realapp.com/assets/players/default/small/' + escHtml(p.avatar) + '.webp' : '';
+            var matchup = (p.home ? 'vs ' : '@ ') + escHtml(p.opp) + ' · ' + escHtml(p.time);
             return '<div class="parlay-card' + cls + '">' +
                 '<div class="parlay-card-top">' +
                     '<div class="parlay-team-badge">' + escHtml(p.team) + ' · ' + escHtml(p.pos) + '</div>' +
-                    (url ? '<img class="parlay-card-headshot" src="' + url + '" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' : '') +
-                    '<div class="parlay-card-avatar" style="background:linear-gradient(135deg,' + p.color + ',' + p.color + 'aa)' + (url ? ';display:none' : '') + '">' + escHtml(p.initials) + '</div>' +
-                    '<div class="parlay-pop-badge">🔥 ' + parlayFmtPop(p.pop) + '</div>' +
+                    '<div class="parlay-card-avatar" style="background:linear-gradient(135deg,' + p.color + ',' + p.color + 'aa)">' + escHtml(p.initials) + '</div>' +
                 '</div>' +
                 '<div class="parlay-card-body">' +
                     '<div class="parlay-player-name">' + escHtml(p.name) + '</div>' +
@@ -4982,7 +4947,6 @@
     }
 
     function parlayRenderAll() {
-        parlayRenderFilters();
         parlayRenderGrid();
         parlayRenderSlip();
     }
@@ -5011,11 +4975,6 @@
         parlayRenderAll();
     }
 
-    function parlaySetFilter(key) {
-        parlayFilter = key;
-        parlayRenderAll();
-    }
-
     function parlaysOnStakeInput(el) {
         parlayStake = Math.min(Math.max(parseInt(el.value) || 0, 0), 50000);
         parlayRenderSlip();
@@ -5031,7 +4990,6 @@
         if (!panel) return;
         panel.innerHTML =
             '<div class="parlay-prop-panel">' +
-                '<div class="parlay-filter-bar" id="parlay-filter-bar"></div>' +
                 '<div class="parlay-player-grid" id="parlay-player-grid"></div>' +
             '</div>' +
             '<div class="parlay-slip-panel">' +
@@ -5071,9 +5029,13 @@
         document.getElementById('mobile-cards').style.display = 'none';
         document.getElementById('collapse-btn').style.display = 'none';
         document.getElementById('refresh-btn').style.display = 'none';
-        var panel = document.getElementById('parlays-panel');
+        var fcNav = document.getElementById('fc-league-nav');
+        var wcNav = document.getElementById('wc-sub-nav');
+        if (fcNav) fcNav.dataset.parlayHid = fcNav.style.display; fcNav && (fcNav.style.display = 'none');
+        if (wcNav) wcNav.dataset.parlayHid = wcNav.style.display; wcNav && (wcNav.style.display = 'none');
         var headerH = document.querySelector('.subheader-sticky') ? document.querySelector('.subheader-sticky').offsetHeight : 56;
-        panel.style.cssText = 'display:flex;padding:0;overflow:hidden;height:' + (window.innerHeight - headerH) + 'px';
+        var panel = document.getElementById('parlays-panel');
+        panel.style.cssText = 'display:flex;padding:0;overflow:hidden;position:fixed;top:' + headerH + 'px;left:0;right:0;bottom:0;z-index:200;background:var(--bg)';
         panel.classList.add('visible');
         renderParlayPanel();
     }
@@ -5087,6 +5049,10 @@
         document.getElementById('mobile-cards').style.display = '';
         document.getElementById('collapse-btn').style.display = 'none';
         document.getElementById('refresh-btn').style.display = '';
+        var fcNav = document.getElementById('fc-league-nav');
+        var wcNav = document.getElementById('wc-sub-nav');
+        if (fcNav) fcNav.style.display = fcNav.dataset.parlayHid || '';
+        if (wcNav) wcNav.style.display = wcNav.dataset.parlayHid || '';
         var panel = document.getElementById('parlays-panel');
         panel.style.cssText = '';
         panel.classList.remove('visible');
