@@ -4981,8 +4981,86 @@
     }
 
     function parlaysPlace() {
-        // TODO: wire to deposit flow once D1 schema + RS offer endpoint are built
-        showConfirm('Parlay placement is coming soon. Admin preview only.', function() {});
+        var ids = Object.keys(parlayPicks);
+        if (ids.length < 2) return;
+
+        var legs = ids.map(function(id) {
+            var p   = PARLAY_PLAYERS.find(function(x) { return x.id === +id; });
+            var dir = parlayPicks[id];
+            var odds = dir === 'more' ? p.moreOdds : p.lessOdds;
+            var prob = odds > 0 ? 100 / (odds + 100) : Math.abs(odds) / (Math.abs(odds) + 100);
+            return {
+                playerName:   p.name,
+                direction:    dir,
+                marketType:   p.market,
+                threshold:    p.line,
+                americanOdds: odds,
+                impliedProb:  prob,
+                label:        (dir === 'more' ? '▲ More ' : '▼ Less ') + p.line,
+                gameDate:     new Date().toISOString().slice(0, 10),
+                eventName:    p.name + ' · ' + p.stat,
+            };
+        });
+
+        var btn = document.getElementById('parlay-place-btn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Placing…'; }
+
+        fetch('/api/parlays/place', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ stake: parlayStake, legs: legs }),
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            if (d.error) {
+                if (btn) { btn.disabled = false; btn.textContent = 'Place Parlay'; }
+                showConfirm(d.error, function() {});
+                return;
+            }
+            parlayShowDepositScreen(d);
+        })
+        .catch(function() {
+            if (btn) { btn.disabled = false; btn.textContent = 'Place Parlay'; }
+            showConfirm('Network error — please try again.', function() {});
+        });
+    }
+
+    function parlayShowDepositScreen(d) {
+        var panel = document.getElementById('parlays-panel');
+        if (!panel) return;
+        var exp = new Date(d.expiresAt * 1000);
+        var expStr = exp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        panel.innerHTML =
+            '<div style="flex:1;display:flex;align-items:center;justify-content:center;padding:24px">' +
+                '<div style="max-width:420px;width:100%;display:flex;flex-direction:column;gap:18px">' +
+                    '<div style="text-align:center">' +
+                        '<div style="font-size:32px;margin-bottom:8px">🎰</div>' +
+                        '<div style="font-size:18px;font-weight:800;margin-bottom:4px">Parlay Placed!</div>' +
+                        '<div style="font-size:12px;color:var(--muted2)">ID #' + d.parlayId + ' · ' + d.legs + ' legs · ' + d.multiplier + 'x</div>' +
+                    '</div>' +
+                    '<div style="background:var(--bg2);border:1.5px solid var(--border2);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px">' +
+                        '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px">Deposit Instructions</div>' +
+                        '<div style="font-size:13px;line-height:1.6">' +
+                            'Go to the RS card below and send <strong>@edgebot</strong> an offer for exactly <strong>' + d.stake.toLocaleString() + ' Rax</strong>.' +
+                        '</div>' +
+                        '<a href="' + escHtml(d.depositCardUrl) + '" target="_blank" rel="noopener" style="display:block;background:var(--accent-dim);border:1.5px solid var(--accent);border-radius:8px;padding:10px 14px;text-decoration:none;color:var(--accent);font-size:12px;font-weight:700;text-align:center;word-break:break-all">' +
+                            '→ Open Deposit Card #' + d.depositCardId +
+                        '</a>' +
+                        '<div style="font-size:11px;color:var(--muted2);text-align:center">⏱ Expires at ' + expStr + ' (30 min)</div>' +
+                    '</div>' +
+                    '<div style="background:var(--bg2);border:1.5px solid rgba(45,204,126,.35);border-radius:12px;padding:14px;display:flex;justify-content:space-between;align-items:center">' +
+                        '<div>' +
+                            '<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">To Win</div>' +
+                            '<div style="font-size:22px;font-weight:800;color:var(--green);font-variant-numeric:tabular-nums">' + d.payoutRax.toLocaleString() + ' Rax</div>' +
+                        '</div>' +
+                        '<div style="text-align:right">' +
+                            '<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">RS Account</div>' +
+                            '<div style="font-size:13px;font-weight:700">@' + escHtml(d.rsUsername) + '</div>' +
+                        '</div>' +
+                    '</div>' +
+                    '<button onclick="parlaysClear();renderParlayPanel();" style="width:100%;padding:11px;border-radius:10px;border:1px solid var(--border2);background:var(--bg2);color:var(--muted);font-size:13px;font-weight:700;cursor:pointer;font-family:var(--sans)">← New Parlay</button>' +
+                '</div>' +
+            '</div>';
     }
 
     function renderParlayPanel() {

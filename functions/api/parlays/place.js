@@ -1,0 +1,165 @@
+// functions/api/parlays/place.js
+// POST /api/parlays/place
+// Validates parlay slip, assigns deposit card, writes parlays + parlay_legs to D1.
+// Returns deposit card URL and 30-min expiry window.
+import { getSession } from '../../_lib/session.js';
+import { ok, err } from '../../_lib/response.js';
+
+function impliedProb(odds) {
+  if (odds > 0) return 100 / (odds + 100);
+  return Math.abs(odds) / (Math.abs(odds) + 100);
+}
+
+export async function onRequestPost({ request, env }) {
+  const session = await getSession(request, env.DB);
+  if (!session) return err('Authentication required', 401);
+
+  const user = await env.DB.prepare(
+    'SELECT u.id, u.plan, u.is_admin, u.pro_expires_at, ra.rs_username ' +
+    'FROM users u LEFT JOIN real_auth ra ON ra.user_id = u.id WHERE u.id = ?'
+  ).bind(session.user_id).first();
+
+  if (!user) return err('User not found', 404);
+
+  const now = Math.floor(Date.now() / 1000);
+  const isPro = user.plan === 'pro' && (user.pro_expires_at || 0) > now;
+  const isAdmin = user.is_admin === 1;
+
+  if (!isPro && !isAdmin) return err('Pro plan required for parlays', 403);
+  if (!user.rs_username) return err('Connect your Real Sports account in Settings first', 400);
+
+  let body;
+  try { body = await request.json(); } catch { return err('Invalid request body', 400); }
+
+  const { stake, legs } = body;
+
+  if (!Number.isInteger(stake) || stake < 100) return err('Minimum stake is 100 Rax', 400);
+  if (stake > 50000) return err('Maximum stake is 50,000 Rax', 400);
+
+  if (!Array.isArray(legs) || legs.length < 2 || legs.length > 5) {
+    return err('Select 2–5 players', 400);
+  }
+
+  // Validate + normalize each leg
+  const normalized = [];
+  for (const leg of legs) {
+    if (!leg.playerName || !leg.direction || !leg.marketType) {
+      return err('Missing required leg fields', 400);
+    }
+    if (!['more', 'less'].includes(leg.direction)) return err('Invalid direction', 400);
+
+    const odds = typeof leg.americanOdds === 'number' ? leg.americanOdds : null;
+    if (odds === null || !Number.isInteger(odds) || odds === 0) return err('Invalid odds on ' + leg.playerName, 400);
+
+    const prob = typeof leg.impliedProb === 'number' ? leg.impliedProb : impliedProb(odds);
+    if (prob <= 0 || prob >= 1) return err('Invalid probability on ' + leg.playerName, 400);
+
+    const today = new Date().toISOString().slice(0, 10);
+    const gameDate = leg.gameDate || today;
+
+    normalized.push({
+      eventId:     leg.eventId    || ('mock_' + leg.playerName.replace(/[^a-z0-9]/gi, '_')),
+      eventName:   leg.eventName  || (leg.playerName + ' · ' + leg.marketType),
+      gameDate,
+      subcatId:    leg.subcatId   || 0,
+      marketType:  leg.marketType,
+      marketId:    leg.marketId   || 'mock_market',
+      selectionId: leg.selectionId || ('mock_' + leg.direction),
+      playerName:  leg.playerName,
+      label:       leg.label || ((leg.direction === 'more' ? '▲ More ' : '▼ Less ') + (leg.threshold || '')),
+      threshold:   leg.threshold  ?? null,
+      direction:   leg.direction,
+      americanOdds: odds,
+      impliedProb:  prob,
+    });
+  }
+
+  // Payout math
+  const trueProb  = normalized.reduce((acc, l) => acc * l.impliedProb, 1);
+  const payoutRax = Math.min(Math.floor(stake * 0.72 / trueProb), 10000);
+
+  // Grab available deposit card
+  const cardRow = await env.DB.prepare(
+    'SELECT card_id FROM deposit_cards WHERE assigned_to_parlay_id IS NULL LIMIT 1'
+  ).first();
+  if (!cardRow) return err('No deposit cards available — contact support', 503);
+
+  const cardId    = cardRow.card_id;
+  const expiresAt = now + 30 * 60;
+
+  // Insert parlay row
+  const parlayRes = await env.DB.prepare(
+    'INSERT INTO parlays (user_id, sport, legs_count, stake_rax, true_prob, payout_rax, ' +
+    'deposit_card_id, rs_username, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(
+    user.id, 'baseball_mlb', normalized.length, stake,
+    trueProb, payoutRax, cardId, user.rs_username, expiresAt, now
+  ).run();
+
+  const parlayId = parlayRes.meta.last_row_id;
+
+  // Atomically assign the card to this parlay
+  const lockRes = await env.DB.prepare(
+    'UPDATE deposit_cards SET assigned_to_parlay_id = ?, assigned_at = ? ' +
+    'WHERE card_id = ? AND assigned_to_parlay_id IS NULL'
+  ).bind(parlayId, now, cardId).run();
+
+  if (lockRes.meta.changes === 0) {
+    // Race: someone else grabbed this card — clean up and try once more
+    await env.DB.prepare('DELETE FROM parlays WHERE id = ?').bind(parlayId).run();
+    const retry = await env.DB.prepare(
+      'SELECT card_id FROM deposit_cards WHERE assigned_to_parlay_id IS NULL LIMIT 1'
+    ).first();
+    if (!retry) return err('No deposit cards available — try again shortly', 503);
+
+    // Re-insert with the new card
+    const retry2 = await env.DB.prepare(
+      'INSERT INTO parlays (user_id, sport, legs_count, stake_rax, true_prob, payout_rax, ' +
+      'deposit_card_id, rs_username, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(
+      user.id, 'baseball_mlb', normalized.length, stake,
+      trueProb, payoutRax, retry.card_id, user.rs_username, expiresAt, now
+    ).run();
+
+    const newParlayId = retry2.meta.last_row_id;
+    await env.DB.prepare(
+      'UPDATE deposit_cards SET assigned_to_parlay_id = ?, assigned_at = ? WHERE card_id = ?'
+    ).bind(newParlayId, now, retry.card_id).run();
+
+    return placeLegsAndRespond(env.DB, newParlayId, retry.card_id, normalized, stake, payoutRax, expiresAt, user.rs_username, now);
+  }
+
+  return placeLegsAndRespond(env.DB, parlayId, cardId, normalized, stake, payoutRax, expiresAt, user.rs_username, now);
+}
+
+async function placeLegsAndRespond(db, parlayId, cardId, legs, stake, payoutRax, expiresAt, rsUsername, now) {
+  await db.batch(legs.map(leg =>
+    db.prepare(
+      'INSERT INTO parlay_legs (parlay_id, sport, event_id, event_name, game_date, subcat_id, ' +
+      'market_type, market_id, selection_id, player_name, label, threshold, direction, ' +
+      'american_odds, implied_prob) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(
+      parlayId, 'baseball_mlb',
+      leg.eventId, leg.eventName, leg.gameDate, leg.subcatId,
+      leg.marketType, leg.marketId, leg.selectionId, leg.playerName,
+      leg.label, leg.threshold, leg.direction, leg.americanOdds, leg.impliedProb
+    )
+  ));
+
+  const mult = (0.72 / legs.reduce((a, l) => a * l.impliedProb, 1)).toFixed(2);
+
+  return ok({
+    parlayId,
+    depositCardId:  cardId,
+    depositCardUrl: 'https://realsports.io/cards/' + cardId,
+    expiresAt,
+    payoutRax,
+    stake,
+    legs:           legs.length,
+    multiplier:     mult,
+    rsUsername,
+    instruction:    'Go to realsports.io/cards/' + cardId +
+                    ' and send @edgebot an offer for exactly ' + stake +
+                    ' Rax. You have 30 minutes.',
+  });
+}
