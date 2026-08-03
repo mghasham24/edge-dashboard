@@ -3265,7 +3265,7 @@
     var otdLoadingPasses = false;
     var otdSuggestUser = null; // { id, username } for Pass Suggestion tab
     var otdSuggestSport = 'ufc';
-    var otdSuggestSeason = '2025'; // only used for ncaaf; other sports always use currentYear
+    var otdSuggestSeason = '2025'; // unused — ncaaf now uses all seasons combined
     var otdSuggestLoading = false;
     var otdSuggestData = null; // { ownedPasses, coveredDays, suggestions }
     var otdSuggestSearchTimer = null;
@@ -4572,6 +4572,7 @@
                 var isOver = newTotal > limit;
                 var wasted = false;
                 var dayWastedRax = 0;
+                var crossSportBlockers = [];
                 if (isOver) {
                     // Build sorted combined list to find highest-earning wasted card
                     var combined = existingEntries.map(function(ent) { return ent.rax || 0; });
@@ -4581,8 +4582,35 @@
                     wasted = combined[limit] > 199;
                     if (wasted) combined.slice(limit).forEach(function(r) { if (r > 199) dayWastedRax += r; });
                 }
+                // Cross-sport 3rd slot: when limit=3, only ONE 3rd claim is allowed across all sports.
+                // The sport with the highest 3rd-position earner wins the shared slot.
+                if (limit === 3 && !isOver && newRax >= 200) {
+                    var higherSameSport = existingEntries.filter(function(x) { return (x.rax || 0) > newRax; }).length;
+                    if (higherSameSport === 2) { // new card would rank exactly 3rd in its sport
+                        var allDayEntries = checkDateMap[dayKey] || [];
+                        var otherSportGroups = {};
+                        allDayEntries.forEach(function(entry) {
+                            var ns = normSport(entry.player.sport);
+                            if (ns === normCheckSport) return;
+                            if (!otherSportGroups[ns]) otherSportGroups[ns] = [];
+                            otherSportGroups[ns].push(entry);
+                        });
+                        Object.keys(otherSportGroups).forEach(function(ns) {
+                            var sorted = otherSportGroups[ns].slice().sort(function(a, b) { return (b.rax || 0) - (a.rax || 0); });
+                            var third = sorted[2]; // 3rd-highest earner in that sport
+                            if (third && (third.rax || 0) > 199 && (third.rax || 0) > newRax) {
+                                crossSportBlockers.push(third);
+                            }
+                        });
+                        if (crossSportBlockers.length > 0) {
+                            isOver = true;
+                            wasted = true;
+                            dayWastedRax = newRax;
+                        }
+                    }
+                }
                 if (wasted) wastedCount++;
-                if (isOver) overlapDays.push({ day: dayKey, entries: existingEntries, total: newTotal, wasted: wasted, newRax: newRax, wastedRax: dayWastedRax });
+                if (isOver) overlapDays.push({ day: dayKey, entries: existingEntries, total: newTotal, wasted: wasted, newRax: newRax, wastedRax: dayWastedRax, crossSportBlockers: crossSportBlockers });
             }
         });
 
@@ -4614,8 +4642,11 @@
                 allCards.push({ name: otdCheckPlayer.name, rax: d.newRax || 0, level: otdCheckPlayer.levelLabel || '', isNew: true, id: String(otdCheckPlayer.id || ''), sport: otdCheckPlayer.sport, entityType: otdCheckPlayer.entityType || 'player', season: otdCheckPlayer.season || '', passId: '' });
                 allCards.sort(function(a, b) { return b.rax - a.rax; });
                 allCards = allCards.filter(function(c, idx) { return idx < limit || c.rax >= 200; });
+                // Cross-sport conflict: the 3rd position is wasted even though same-sport limit isn't exceeded
+                var crossBlockers = d.crossSportBlockers || [];
+                var effectiveLimit = crossBlockers.length > 0 ? limit - 1 : limit;
                 var cardRows = allCards.map(function(c, idx) {
-                    var claimed = idx < limit;
+                    var claimed = idx < effectiveLimit;
                     var color = claimed ? '#22c55e' : '#ef5350';
                     var newBadge = c.isNew ? '<span style="background:#4f6ef7;color:#fff;font-size:9px;font-weight:700;padding:1px 4px;border-radius:3px;vertical-align:middle">NEW</span>' : '';
                     var simBadge = c.isSim ? '<span style="display:inline-block;font-size:8px;font-weight:700;color:#fff;background:#f97316;padding:1px 4px;border-radius:3px;letter-spacing:.4px;vertical-align:middle">SIM</span>' : '';
@@ -4630,11 +4661,23 @@
                         raxEl +
                     '</div>';
                 }).join('');
+                var crossBlockHtml = '';
+                if (crossBlockers.length > 0) {
+                    crossBlockHtml = '<div style="font-size:10px;color:var(--muted2);margin-top:6px;border-top:1px solid var(--border2);padding-top:4px">' +
+                        '3rd slot taken by: ' +
+                        crossBlockers.map(function(b) {
+                            return '<span style="color:#ef5350;font-weight:600">' + escHtml(b.player.name) + '</span>' +
+                                ' · ' + escHtml((b.player.sport || '').toUpperCase()) +
+                                ' · ' + RAX_ICON + (b.rax || 0).toLocaleString();
+                        }).join(', ') +
+                    '</div>';
+                }
                 html += '<div style="background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:8px 10px;font-size:12px">' +
                     '<div style="font-weight:700;color:var(--muted2);font-size:10px;letter-spacing:.06em;margin-bottom:6px">' +
                         '<button onclick="otdJumpToDay(\'' + d.day + '\',\'' + sport + '\')" class="otd-link-btn" style="font-size:10px;font-weight:700;letter-spacing:.06em;padding:0;color:var(--muted2)" title="Go to this day on calendar">' + monthDay.toUpperCase() + '</button>' +
                     '</div>' +
                     cardRows +
+                    crossBlockHtml +
                 '</div>';
             });
             html += '</div>';
@@ -4729,6 +4772,326 @@
         otdVisible = false;
         try { if (window.location.pathname.startsWith('/otd/')) history.pushState(null, '', '/'); } catch(e) {}
     }
+
+    // ── Parlays tab ────────────────────────────────────────────────────────────
+    var parlayPicks  = {};   // { [playerId]: 'more' | 'less' }
+    var parlayFilter = 'all';
+    var parlayStake  = 1000;
+
+    var PARLAY_PLAYERS = [
+        // NYY vs STL 6:05 PM
+        { id:1,  name:'Juan Soto',         initials:'JS', team:'NYY', pos:'OF', opp:'STL', home:true,  time:'6:05 PM', market:'hits',       stat:'Hits',        line:0.5,  moreOdds:-260, lessOdds:+200, pop:9100, color:'#1c3b6e', avatar:'soto_juan'        },
+        { id:2,  name:'Cam Schlittler',    initials:'CS', team:'NYY', pos:'SP', opp:'STL', home:true,  time:'6:05 PM', market:'pitcher_ks', stat:'Pitcher Ks',  line:4.5,  moreOdds:-150, lessOdds:+120, pop:8200, color:'#1c3b6e', avatar:'schlittler_cam'   },
+        { id:3,  name:'Gerrit Cole',       initials:'GC', team:'NYY', pos:'SP', opp:'STL', home:true,  time:'6:05 PM', market:'outs_ou',    stat:'Outs',        line:18.5, moreOdds:+115, lessOdds:-148, pop:5300, color:'#1c3b6e', avatar:'cole_gerrit'      },
+        { id:4,  name:'Trent Grisham',     initials:'TG', team:'NYY', pos:'OF', opp:'STL', home:true,  time:'6:05 PM', market:'hrbi',       stat:'H+R+RBI',     line:0.5,  moreOdds:-185, lessOdds:+145, pop:4700, color:'#1c3b6e', avatar:'grisham_trent'    },
+        { id:5,  name:'Paul Goldschmidt',  initials:'PG', team:'STL', pos:'1B', opp:'NYY', home:false, time:'6:05 PM', market:'home_runs',  stat:'Home Runs',   line:0.5,  moreOdds:+290, lessOdds:-400, pop:4400, color:'#7a0f1e', avatar:'goldschmidt_paul' },
+        { id:6,  name:'Brendan Donovan',   initials:'BD', team:'STL', pos:'IF', opp:'NYY', home:false, time:'6:05 PM', market:'hits',       stat:'Hits',        line:1.5,  moreOdds:+130, lessOdds:-170, pop:3800, color:'#7a0f1e', avatar:'donovan_brendan'  },
+        { id:7,  name:'Sonny Gray',        initials:'SG', team:'STL', pos:'SP', opp:'NYY', home:false, time:'6:05 PM', market:'pitcher_ks', stat:'Pitcher Ks',  line:5.5,  moreOdds:-115, lessOdds:-115, pop:5100, color:'#7a0f1e', avatar:'gray_sonny'       },
+        // MIL vs PIT 6:40 PM
+        { id:8,  name:'Brice Turang',      initials:'BT', team:'MIL', pos:'IF', opp:'PIT', home:true,  time:'6:40 PM', market:'hrbi',       stat:'H+R+RBI',     line:1.5,  moreOdds:+160, lessOdds:-200, pop:6300, color:'#13294B', avatar:'turang_brice'     },
+        { id:9,  name:'Christian Yelich',  initials:'CY', team:'MIL', pos:'OF', opp:'PIT', home:true,  time:'6:40 PM', market:'hits',       stat:'Hits',        line:1.5,  moreOdds:-130, lessOdds:+100, pop:7200, color:'#13294B', avatar:'yelich_christian' },
+        { id:10, name:'Cooper Pratt',      initials:'CP', team:'MIL', pos:'IF', opp:'PIT', home:true,  time:'6:40 PM', market:'hits',       stat:'Hits',        line:0.5,  moreOdds:-260, lessOdds:+190, pop:5000, color:'#13294B', avatar:'pratt_cooper'     },
+        { id:11, name:'William Contreras', initials:'WC', team:'MIL', pos:'C',  opp:'PIT', home:true,  time:'6:40 PM', market:'hrbi',       stat:'H+R+RBI',     line:0.5,  moreOdds:-190, lessOdds:+150, pop:4300, color:'#13294B', avatar:'contreras_will'   },
+        // ATL vs PHI 6:05 PM
+        { id:12, name:'Bryce Harper',      initials:'BH', team:'PHI', pos:'1B', opp:'ATL', home:true,  time:'6:05 PM', market:'home_runs',  stat:'Home Runs',   line:0.5,  moreOdds:+200, lessOdds:-270, pop:8800, color:'#8b1c2c', avatar:'harper_bryce'     },
+        { id:13, name:'Trea Turner',       initials:'TT', team:'PHI', pos:'SS', opp:'ATL', home:true,  time:'6:05 PM', market:'hits',       stat:'Hits',        line:1.5,  moreOdds:-115, lessOdds:-115, pop:6400, color:'#8b1c2c', avatar:'turner_trea'      },
+        { id:14, name:'Zack Wheeler',      initials:'ZW', team:'PHI', pos:'SP', opp:'ATL', home:true,  time:'6:05 PM', market:'pitcher_ks', stat:'Pitcher Ks',  line:7.5,  moreOdds:+120, lessOdds:-155, pop:7600, color:'#8b1c2c', avatar:'wheeler_zack'     },
+        { id:15, name:'Spencer Strider',   initials:'SS', team:'ATL', pos:'SP', opp:'PHI', home:false, time:'6:05 PM', market:'pitcher_ks', stat:'Pitcher Ks',  line:8.5,  moreOdds:-120, lessOdds:-110, pop:9200, color:'#1a3a28', avatar:'strider_spencer'  },
+        { id:16, name:'Ronald Acuña Jr.',  initials:'RA', team:'ATL', pos:'OF', opp:'PHI', home:false, time:'6:05 PM', market:'total_bases',stat:'Total Bases',  line:1.5,  moreOdds:-135, lessOdds:+105, pop:8500, color:'#1a3a28', avatar:'acuna_ronald'     },
+        { id:17, name:'Ozzie Albies',      initials:'OA', team:'ATL', pos:'2B', opp:'PHI', home:false, time:'6:05 PM', market:'home_runs',  stat:'Home Runs',   line:0.5,  moreOdds:+240, lessOdds:-325, pop:4900, color:'#1a3a28', avatar:'albies_ozzie'     },
+        // BOS vs BAL 6:35 PM
+        { id:18, name:'Rafael Devers',     initials:'RD', team:'BOS', pos:'3B', opp:'BAL', home:true,  time:'6:35 PM', market:'home_runs',  stat:'Home Runs',   line:0.5,  moreOdds:+185, lessOdds:-245, pop:7700, color:'#0d2b4e', avatar:'devers_rafael'    },
+        { id:19, name:'Gunnar Henderson',  initials:'GH', team:'BAL', pos:'SS', opp:'BOS', home:false, time:'6:35 PM', market:'home_runs',  stat:'Home Runs',   line:0.5,  moreOdds:+170, lessOdds:-225, pop:6900, color:'#d4580a', avatar:'henderson_gunnar' },
+        { id:20, name:'Alex Bregman',      initials:'AB', team:'BOS', pos:'3B', opp:'BAL', home:true,  time:'6:35 PM', market:'hits',       stat:'Hits',        line:0.5,  moreOdds:-270, lessOdds:+205, pop:5500, color:'#0d2b4e', avatar:'bregman_alex'     },
+        { id:21, name:'Adley Rutschman',   initials:'AR', team:'BAL', pos:'C',  opp:'BOS', home:false, time:'6:35 PM', market:'total_bases',stat:'Total Bases',  line:1.5,  moreOdds:+110, lessOdds:-145, pop:5200, color:'#d4580a', avatar:'rutschman_adley'  },
+        // HOU vs TOR 7:10 PM
+        { id:22, name:'Yordan Alvarez',    initials:'YA', team:'HOU', pos:'DH', opp:'TOR', home:true,  time:'7:10 PM', market:'hits',       stat:'Hits',        line:1.5,  moreOdds:-110, lessOdds:-120, pop:5100, color:'#1a3952', avatar:'alvarez_yordan'  },
+        { id:23, name:'Kyle Tucker',       initials:'KT', team:'HOU', pos:'OF', opp:'TOR', home:true,  time:'7:10 PM', market:'total_bases',stat:'Total Bases',  line:1.5,  moreOdds:-120, lessOdds:-110, pop:4800, color:'#1a3952', avatar:'tucker_kyle'     },
+        { id:24, name:'Framber Valdez',    initials:'FV', team:'HOU', pos:'SP', opp:'TOR', home:true,  time:'7:10 PM', market:'outs_ou',    stat:'Outs',        line:16.5, moreOdds:-108, lessOdds:-122, pop:4100, color:'#1a3952', avatar:'valdez_framber'  },
+        { id:25, name:'Vladimir Guerrero', initials:'VG', team:'TOR', pos:'1B', opp:'HOU', home:false, time:'7:10 PM', market:'home_runs',  stat:'Home Runs',   line:0.5,  moreOdds:+210, lessOdds:-285, pop:6700, color:'#1a4060', avatar:'guerrero_vlad'   },
+        // LAD vs SF 7:15 PM
+        { id:26, name:'Shohei Ohtani',     initials:'SO', team:'LAD', pos:'DH', opp:'SF',  home:true,  time:'7:15 PM', market:'total_bases',stat:'Total Bases',  line:1.5,  moreOdds:-125, lessOdds:+100, pop:11200, color:'#005197', avatar:'ohtani_shohei'  },
+        { id:27, name:'Freddie Freeman',   initials:'FF', team:'LAD', pos:'1B', opp:'SF',  home:true,  time:'7:15 PM', market:'hits',       stat:'Hits',        line:0.5,  moreOdds:-280, lessOdds:+210, pop:7800,  color:'#005197', avatar:'freeman_freddie' },
+        { id:28, name:'Mookie Betts',      initials:'MB', team:'LAD', pos:'OF', opp:'SF',  home:true,  time:'7:15 PM', market:'home_runs',  stat:'Home Runs',   line:0.5,  moreOdds:+200, lessOdds:-270, pop:8300,  color:'#005197', avatar:'betts_mookie'    },
+        { id:29, name:'Logan Webb',        initials:'LW', team:'SF',  pos:'SP', opp:'LAD', home:false, time:'7:15 PM', market:'outs_ou',    stat:'Outs',        line:18.5, moreOdds:+108, lessOdds:-143, pop:4100,  color:'#5c1a08', avatar:'webb_logan'       },
+        { id:30, name:'Matt Chapman',      initials:'MC', team:'SF',  pos:'3B', opp:'LAD', home:false, time:'7:15 PM', market:'hrbi',       stat:'H+R+RBI',     line:1.5,  moreOdds:+145, lessOdds:-185, pop:3900,  color:'#5c1a08', avatar:'chapman_matt'     },
+        // SD vs ARI 8:40 PM
+        { id:31, name:'Fernando Tatis Jr.',initials:'FT', team:'SD',  pos:'OF', opp:'ARI', home:false, time:'8:40 PM', market:'home_runs',  stat:'Home Runs',   line:0.5,  moreOdds:+220, lessOdds:-300, pop:8100, color:'#3a2818', avatar:'tatis_fernando'  },
+        { id:32, name:'Manny Machado',     initials:'MM', team:'SD',  pos:'3B', opp:'ARI', home:false, time:'8:40 PM', market:'hits',       stat:'Hits',        line:1.5,  moreOdds:-105, lessOdds:-125, pop:6800, color:'#3a2818', avatar:'machado_manny'   },
+        { id:33, name:'Dylan Cease',       initials:'DC', team:'SD',  pos:'SP', opp:'ARI', home:false, time:'8:40 PM', market:'pitcher_ks', stat:'Pitcher Ks',  line:6.5,  moreOdds:+105, lessOdds:-135, pop:6500, color:'#3a2818', avatar:'cease_dylan'     },
+        { id:34, name:'Corbin Burnes',     initials:'CB', team:'ARI', pos:'SP', opp:'SD',  home:true,  time:'8:40 PM', market:'pitcher_ks', stat:'Pitcher Ks',  line:5.5,  moreOdds:-105, lessOdds:-125, pop:6100, color:'#6e0a18', avatar:'burnes_corbin'   },
+        { id:35, name:'Ty France',         initials:'TF', team:'SD',  pos:'IF', opp:'ARI', home:false, time:'8:40 PM', market:'home_runs',  stat:'Home Runs',   line:0.5,  moreOdds:+380, lessOdds:-550, pop:5100, color:'#3a2818', avatar:'france_ty'       },
+        { id:36, name:'Ketel Marte',       initials:'KM', team:'ARI', pos:'2B', opp:'SD',  home:true,  time:'8:40 PM', market:'total_bases',stat:'Total Bases',  line:1.5,  moreOdds:-115, lessOdds:-115, pop:5800, color:'#4a0a14', avatar:'marte_ketel'     },
+        { id:37, name:'Corbin Carroll',    initials:'CC', team:'ARI', pos:'OF', opp:'SD',  home:true,  time:'8:40 PM', market:'hrbi',       stat:'H+R+RBI',     line:1.5,  moreOdds:+155, lessOdds:-195, pop:5400, color:'#4a0a14', avatar:'carroll_corbin'  },
+        { id:38, name:'Luis Arraez',       initials:'LA', team:'SD',  pos:'2B', opp:'ARI', home:false, time:'8:40 PM', market:'hits',       stat:'Hits',        line:1.5,  moreOdds:-145, lessOdds:+115, pop:6200, color:'#3a2818', avatar:'arraez_luis'     },
+    ];
+
+    var PARLAY_FILTERS = [
+        { key:'all',         label:'All' },
+        { key:'home_runs',   label:'Home Runs' },
+        { key:'hits',        label:'Hits' },
+        { key:'pitcher_ks',  label:'Pitcher Ks' },
+        { key:'outs_ou',     label:'Outs O/U' },
+        { key:'total_bases', label:'Total Bases' },
+        { key:'hrbi',        label:'H+R+RBI' },
+    ];
+
+    function parlayToProb(odds) {
+        return odds > 0 ? 100 / (odds + 100) : Math.abs(odds) / (Math.abs(odds) + 100);
+    }
+    function parlayFmtOdds(o) { return o > 0 ? '+' + o : '' + o; }
+    function parlayFmtPop(n)  { return n >= 1000 ? (n / 1000).toFixed(1) + 'K' : n; }
+
+    function parlayTrueProb() {
+        return Object.entries(parlayPicks).reduce(function(acc, entry) {
+            var p = PARLAY_PLAYERS.find(function(x) { return x.id === +entry[0]; });
+            return p ? acc * parlayToProb(entry[1] === 'more' ? p.moreOdds : p.lessOdds) : acc;
+        }, 1);
+    }
+
+    function parlayCalcPayout(s) {
+        var n = Object.keys(parlayPicks).length;
+        if (n < 2) return null;
+        return Math.min(Math.floor(s * 0.72 / parlayTrueProb()), 10000);
+    }
+
+    function parlayAvatarHtml(p, size, fsize) {
+        var url = p.avatar ? 'https://media.realapp.com/assets/players/default/small/' + p.avatar + '.webp' : '';
+        var bg  = 'linear-gradient(135deg,' + p.color + ',' + p.color + 'aa)';
+        var st  = 'width:' + size + 'px;height:' + size + 'px;border-radius:50%;background:' + bg + ';display:flex;align-items:center;justify-content:center;font-size:' + fsize + 'px;font-weight:800;color:#fff;position:relative;overflow:hidden;flex-shrink:0';
+        if (!url) return '<div style="' + st + '">' + escHtml(p.initials) + '</div>';
+        return '<div style="' + st + '">' + escHtml(p.initials) +
+            '<img src="' + url + '" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:top center;border-radius:50%" onerror="this.remove()">' +
+        '</div>';
+    }
+
+    function parlayRenderFilters() {
+        var bar = document.getElementById('parlay-filter-bar');
+        if (!bar) return;
+        bar.innerHTML = PARLAY_FILTERS.map(function(f) {
+            return '<button class="parlay-filter-tab' + (f.key === parlayFilter ? ' active' : '') +
+                '" onclick="parlaySetFilter(\'' + f.key + '\')">' + escHtml(f.label) + '</button>';
+        }).join('');
+    }
+
+    function parlayRenderGrid() {
+        var grid = document.getElementById('parlay-player-grid');
+        if (!grid) return;
+        var visible = parlayFilter === 'all' ? PARLAY_PLAYERS : PARLAY_PLAYERS.filter(function(p) { return p.market === parlayFilter; });
+        if (!visible.length) {
+            grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:var(--muted2);padding:40px;font-size:13px">No props for this category today</div>';
+            return;
+        }
+        var sorted = visible.slice().sort(function(a, b) { return b.pop - a.pop; });
+        grid.innerHTML = sorted.map(function(p) {
+            var sel = parlayPicks[p.id];
+            var cls = sel ? (sel === 'more' ? ' sel-more' : ' sel-less') : '';
+            var matchup = (p.home ? 'vs ' : '@ ') + escHtml(p.opp) + ' · Mon ' + escHtml(p.time);
+            var url = p.avatar ? 'https://media.realapp.com/assets/players/default/small/' + escHtml(p.avatar) + '.webp' : '';
+            return '<div class="parlay-card' + cls + '">' +
+                '<div class="parlay-card-top">' +
+                    '<div class="parlay-team-badge">' + escHtml(p.team) + ' · ' + escHtml(p.pos) + '</div>' +
+                    (url ? '<img class="parlay-card-headshot" src="' + url + '" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' : '') +
+                    '<div class="parlay-card-avatar" style="background:linear-gradient(135deg,' + p.color + ',' + p.color + 'aa)' + (url ? ';display:none' : '') + '">' + escHtml(p.initials) + '</div>' +
+                    '<div class="parlay-pop-badge">🔥 ' + parlayFmtPop(p.pop) + '</div>' +
+                '</div>' +
+                '<div class="parlay-card-body">' +
+                    '<div class="parlay-player-name">' + escHtml(p.name) + '</div>' +
+                    '<div class="parlay-matchup">' + matchup + '</div>' +
+                    '<div class="parlay-stat-display">' +
+                        '<div class="parlay-stat-num">' + p.line + '</div>' +
+                        '<div class="parlay-stat-name">' + escHtml(p.stat) + '</div>' +
+                    '</div>' +
+                    '<div class="parlay-btns">' +
+                        '<button class="parlay-pick-btn p-less' + (sel === 'less' ? ' active' : '') + '" onclick="parlayTogglePick(' + p.id + ',\'less\')">' +
+                            '<span class="parlay-btn-label">▼ Less</span>' +
+                            '<span class="parlay-btn-odds">' + parlayFmtOdds(p.lessOdds) + '</span>' +
+                        '</button>' +
+                        '<button class="parlay-pick-btn p-more' + (sel === 'more' ? ' active' : '') + '" onclick="parlayTogglePick(' + p.id + ',\'more\')">' +
+                            '<span class="parlay-btn-label">▲ More</span>' +
+                            '<span class="parlay-btn-odds">' + parlayFmtOdds(p.moreOdds) + '</span>' +
+                        '</button>' +
+                    '</div>' +
+                '</div>' +
+            '</div>';
+        }).join('');
+    }
+
+    function parlayRenderSlip() {
+        var ids   = Object.keys(parlayPicks);
+        var count = ids.length;
+
+        var badge = document.getElementById('parlay-pick-badge');
+        if (badge) badge.textContent = count;
+
+        var ready = count >= 2;
+        var legsRow = document.getElementById('parlay-legs-row');
+        if (legsRow) {
+            legsRow.innerHTML = '<span class="parlay-legs-label">Legs</span>' +
+                [1,2,3,4,5].map(function(i) {
+                    return '<div class="parlay-legs-dot' + (i <= count ? (ready ? ' ready' : ' on') : '') + '"></div>';
+                }).join('');
+        }
+
+        var body = document.getElementById('parlay-slip-body');
+        if (body) {
+            if (count === 0) {
+                body.innerHTML = '<div class="parlay-slip-empty"><div style="font-size:30px;opacity:.4">⚾</div><div style="line-height:1.5">Pick More or Less on any player to build your slip</div></div>';
+            } else {
+                body.innerHTML = ids.map(function(id) {
+                    var p   = PARLAY_PLAYERS.find(function(x) { return x.id === +id; });
+                    var dir = parlayPicks[id];
+                    var odds  = parlayFmtOdds(dir === 'more' ? p.moreOdds : p.lessOdds);
+                    var label = dir === 'more' ? '▲ More' : '▼ Less';
+                    return '<div class="parlay-slip-pick dir-' + dir + '">' +
+                        parlayAvatarHtml(p, 30, 10) +
+                        '<div class="parlay-slip-info">' +
+                            '<div class="parlay-slip-player">' + escHtml(p.name) + '</div>' +
+                            '<div class="parlay-slip-meta">' + p.line + ' ' + escHtml(p.stat) + ' · ' + escHtml(p.team) + '</div>' +
+                            '<div class="parlay-slip-dir ' + dir + '">' + label + ' <span style="opacity:.65;font-weight:500">' + odds + '</span></div>' +
+                        '</div>' +
+                        '<button class="parlay-slip-remove" onclick="parlayRemovePick(' + id + ')">×</button>' +
+                    '</div>';
+                }).join('');
+            }
+        }
+
+        var payout   = parlayCalcPayout(parlayStake);
+        var payEl    = document.getElementById('parlay-payout-amount');
+        var rowEl    = document.getElementById('parlay-payout-row');
+        var oddsEl   = document.getElementById('parlay-odds-line');
+        var noteEl   = document.getElementById('parlay-min-note');
+        var placeBtn = document.getElementById('parlay-place-btn');
+
+        if (payout !== null && payEl) {
+            var mult = (0.72 / parlayTrueProb()).toFixed(2);
+            payEl.textContent = payout.toLocaleString() + ' Rax';
+            payEl.classList.add('active');
+            if (rowEl) rowEl.classList.add('has-value');
+            if (oddsEl) oddsEl.textContent = mult + 'x parlay · ' + count + ' legs';
+            if (placeBtn) placeBtn.disabled = false;
+            if (noteEl) noteEl.textContent = count === 5 ? 'Max 5 legs reached' : count + ' legs · add up to ' + (5 - count) + ' more';
+        } else if (payEl) {
+            payEl.textContent = '—';
+            payEl.classList.remove('active');
+            if (rowEl) rowEl.classList.remove('has-value');
+            if (oddsEl) oddsEl.textContent = '';
+            if (placeBtn) placeBtn.disabled = true;
+            if (noteEl) noteEl.textContent = 'Select 2–5 players to continue';
+        }
+    }
+
+    function parlayRenderAll() {
+        parlayRenderFilters();
+        parlayRenderGrid();
+        parlayRenderSlip();
+    }
+
+    function parlayTogglePick(id, dir) {
+        var key = String(id);
+        if (parlayPicks[key] === dir) {
+            delete parlayPicks[key];
+        } else {
+            if (!parlayPicks[key] && Object.keys(parlayPicks).length >= 5) {
+                showConfirm('Max 5 legs per parlay', function() {});
+                return;
+            }
+            parlayPicks[key] = dir;
+        }
+        parlayRenderAll();
+    }
+
+    function parlayRemovePick(id) {
+        delete parlayPicks[String(id)];
+        parlayRenderAll();
+    }
+
+    function parlaysClear() {
+        parlayPicks = {};
+        parlayRenderAll();
+    }
+
+    function parlaySetFilter(key) {
+        parlayFilter = key;
+        parlayRenderAll();
+    }
+
+    function parlaysOnStakeInput(el) {
+        parlayStake = Math.min(Math.max(parseInt(el.value) || 0, 0), 50000);
+        parlayRenderSlip();
+    }
+
+    function parlaysPlace() {
+        // TODO: wire to deposit flow once D1 schema + RS offer endpoint are built
+        showConfirm('Parlay placement is coming soon. Admin preview only.', function() {});
+    }
+
+    function renderParlayPanel() {
+        var panel = document.getElementById('parlays-panel');
+        if (!panel) return;
+        panel.innerHTML =
+            '<div class="parlay-prop-panel">' +
+                '<div class="parlay-filter-bar" id="parlay-filter-bar"></div>' +
+                '<div class="parlay-player-grid" id="parlay-player-grid"></div>' +
+            '</div>' +
+            '<div class="parlay-slip-panel">' +
+                '<div class="parlay-slip-header">' +
+                    '<div class="parlay-slip-title">Current Slip</div>' +
+                    '<div class="parlay-pick-badge" id="parlay-pick-badge">0</div>' +
+                    '<button class="parlay-clear-btn" onclick="parlaysClear()">Clear</button>' +
+                '</div>' +
+                '<div class="parlay-slip-body" id="parlay-slip-body"></div>' +
+                '<div class="parlay-slip-footer">' +
+                    '<div class="parlay-legs-row" id="parlay-legs-row"></div>' +
+                    '<div>' +
+                        '<label class="parlay-input-label">Stake (Rax)</label>' +
+                        '<div class="parlay-stake-wrap">' +
+                            '<span class="parlay-stake-unit">RAX</span>' +
+                            '<input type="number" class="parlay-stake-input" id="parlay-stake-input" value="' + parlayStake + '" min="100" max="50000" step="100" oninput="parlaysOnStakeInput(this)">' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="parlay-payout-row" id="parlay-payout-row">' +
+                        '<span class="parlay-payout-label">To Win</span>' +
+                        '<span class="parlay-payout-amount" id="parlay-payout-amount">—</span>' +
+                    '</div>' +
+                    '<div class="parlay-odds-line" id="parlay-odds-line"></div>' +
+                    '<button class="parlay-place-btn" id="parlay-place-btn" onclick="parlaysPlace()" disabled>Place Parlay</button>' +
+                    '<div class="parlay-min-note" id="parlay-min-note">Select 2–5 players to continue</div>' +
+                '</div>' +
+            '</div>';
+        parlayRenderAll();
+    }
+
+    function showParlaysTab() {
+        document.getElementById('sport-tabs').style.display = 'none';
+        document.getElementById('feature-tabs').style.display = 'none';
+        document.querySelector('.controls').style.display = 'none';
+        document.querySelector('.status-bar').style.display = 'none';
+        document.querySelector('.table-wrap').style.display = 'none';
+        document.getElementById('mobile-cards').style.display = 'none';
+        document.getElementById('collapse-btn').style.display = 'none';
+        document.getElementById('refresh-btn').style.display = 'none';
+        var panel = document.getElementById('parlays-panel');
+        var headerH = document.querySelector('.subheader-sticky') ? document.querySelector('.subheader-sticky').offsetHeight : 56;
+        panel.style.cssText = 'display:flex;padding:0;overflow:hidden;height:' + (window.innerHeight - headerH) + 'px';
+        panel.classList.add('visible');
+        renderParlayPanel();
+    }
+
+    function hideParlaysTab() {
+        document.getElementById('sport-tabs').style.display = '';
+        document.getElementById('feature-tabs').style.display = '';
+        document.querySelector('.controls').style.display = '';
+        document.querySelector('.status-bar').style.display = '';
+        document.querySelector('.table-wrap').style.display = '';
+        document.getElementById('mobile-cards').style.display = '';
+        document.getElementById('collapse-btn').style.display = 'none';
+        document.getElementById('refresh-btn').style.display = '';
+        var panel = document.getElementById('parlays-panel');
+        panel.style.cssText = '';
+        panel.classList.remove('visible');
+    }
+    // ── End parlays tab ────────────────────────────────────────────────────────
 
     function renderOtdCarousel() {
         var el = document.getElementById('otd-pass-carousel');
@@ -4861,7 +5224,6 @@
         otdSuggestOpenOverlap = null;
         renderOtdSuggest();
         var suggestUrl = '/api/real/otd?action=suggest&sport=' + encodeURIComponent(otdSuggestSport) + '&userId=' + encodeURIComponent(otdSuggestUser.id);
-        if (otdSuggestSport === 'ncaaf') suggestUrl += '&season=' + encodeURIComponent(otdSuggestSeason);
         fetch(suggestUrl, { credentials: 'same-origin' })
             .then(function(r) { return r.json(); })
             .then(function(d) {
@@ -4929,13 +5291,7 @@
                 var active = otdSuggestSport === s;
                 return '<button onclick="otdSuggestSport=\'' + s + '\';otdSuggestData=null;otdSuggestUser=null;renderOtdSuggest()" style="background:' + (active ? 'var(--accent)' : 'var(--bg3)') + ';border:1px solid ' + (active ? 'var(--accent)' : 'var(--border2)') + ';color:' + (active ? '#fff' : 'var(--muted)') + ';font-family:var(--sans);font-size:12px;font-weight:700;padding:5px 14px;border-radius:6px;cursor:pointer">' + SPORT_LABELS[s] + '</button>';
             }).join('') +
-            (otdSuggestSport === 'ncaaf'
-                ? '<span style="font-size:12px;color:var(--muted);font-weight:600;margin-left:8px">Season:</span>' +
-                  [['2025','25-26'],['2024','24-25'],['2023','23-24']].map(function(sv) {
-                      var active = otdSuggestSeason === sv[0];
-                      return '<button onclick="otdSuggestSeason=\'' + sv[0] + '\';otdSuggestData=null;renderOtdSuggest()" style="background:' + (active ? 'var(--bg3)' : 'transparent') + ';border:1px solid ' + (active ? 'var(--border)' : 'var(--border2)') + ';color:' + (active ? 'var(--fg)' : 'var(--muted2)') + ';font-family:var(--mono);font-size:11px;padding:4px 10px;border-radius:6px;cursor:pointer">' + sv[1] + '</button>';
-                  }).join('')
-                : '') +
+            (otdSuggestSport === 'ncaaf' ? ' <span style="font-size:11px;color:var(--muted2);margin-left:4px">All seasons combined</span>' : '') +
         '</div>';
 
         var userRow = '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">' +
@@ -4985,8 +5341,9 @@
                         ? '<span style="color:#22c55e66;font-family:var(--mono);font-size:11px">' + RAX_ICON + '0</span>' +
                           (p.baseEarnings ? '<span style="color:var(--muted2);font-family:var(--mono);font-size:10px">(' + Math.round(p.baseEarnings).toLocaleString() + ')</span>' : '')
                         : '<span style="color:#22c55e;font-family:var(--mono);font-size:11px">' + RAX_ICON + (p.totalEarnings || 0).toLocaleString() + '</span>';
+                    var seasonTag = (otdSuggestSport === 'ncaaf' && p.season) ? '<span style="font-size:9px;color:var(--muted2);margin-left:2px">(' + escHtml(otdFormatSeason('ncaaf', p.season)) + ')</span>' : '';
                     return '<span style="display:inline-flex;align-items:center;gap:5px;background:' + rc + '22;border:1px solid ' + rc + '66;border-radius:20px;padding:3px 10px;font-size:12px;color:var(--fg)">' +
-                        escHtml(p.name) + earnHtml +
+                        escHtml(p.name) + seasonTag + earnHtml +
                     '</span>';
                 }).join('') +
             '</div>';
@@ -5515,7 +5872,7 @@
             var rsUrl = pid ? rsEntityUrl(p.entityType || 'player', rowSport, pid) : '#';
             var displayName = p.name ? escHtml(p.name) : escHtml(p.playerId);
             var sportBadge = sport === 'all' ? ' <span style="font-size:' + (mob ? '8px' : '9px') + ';font-weight:700;letter-spacing:.04em;color:var(--accent);background:var(--bg3);border:1px solid var(--border2);border-radius:3px;padding:1px 4px;vertical-align:middle">' + escHtml(rowSport.toUpperCase()) + '</span>' : '';
-            var yearHtml = p.season ? ' <span style="font-size:' + (mob ? '8px' : '11px') + ';font-weight:400;color:var(--muted);opacity:.6">' + escHtml(p.season) + '</span>' : '';
+            var yearHtml = p.season && p.season !== 'alltime' ? ' <span style="font-size:' + (mob ? '8px' : '11px') + ';font-weight:400;color:var(--muted);opacity:.6">' + escHtml(otdFormatSeason(rowSport, p.season)) + '</span>' : '';
             var posHtml = '';
             if (p.position && rowSport === 'mlb') {
                 var posCats = mlbPosCategories(p.position);
@@ -9400,6 +9757,34 @@
                 ftBar.appendChild(otdTabBtn);
             } else {
                 ftBar.appendChild(document.getElementById('otd-tab-btn'));
+            }
+
+            // Parlays tab — admin only
+            if (currentUser && currentUser.is_admin) {
+                if (!document.getElementById('parlays-tab-btn')) {
+                    var parlaysTabBtn = document.createElement('button');
+                    parlaysTabBtn.className = 'feature-tab sport-tab';
+                    parlaysTabBtn.textContent = '🎰 Parlays';
+                    parlaysTabBtn.style.cssText = 'color:var(--green);font-weight:700';
+                    parlaysTabBtn.id = 'parlays-tab-btn';
+                    parlaysTabBtn.onclick = function() {
+                        var isActive = this.classList.contains('active');
+                        if (isActive) {
+                            this.classList.remove('active');
+                            this.textContent = '🎰 Parlays';
+                            hideParlaysTab();
+                            loadOdds();
+                        } else {
+                            document.querySelectorAll('.sport-tab,.feature-tab').forEach(function(t) { t.classList.remove('active'); });
+                            this.classList.add('active');
+                            this.textContent = '<- Dashboard';
+                            showParlaysTab();
+                        }
+                    };
+                    ftBar.appendChild(parlaysTabBtn);
+                } else {
+                    ftBar.appendChild(document.getElementById('parlays-tab-btn'));
+                }
             }
 
             // Pro ✦ button (manage subscription) — right of Refer, only for pro users
