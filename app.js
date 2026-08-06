@@ -4871,7 +4871,6 @@
     var parlayRsUsername     = null;
     var parlayVerifyLoading  = false;
     var PARLAY_CATS = [
-        { key:'teams',       label:'Teams' },
         { key:'hits',        label:'Hits' },
         { key:'total_bases', label:'Total Bases' },
         { key:'rbis',        label:'RBIs' },
@@ -4879,9 +4878,9 @@
         { key:'hrbi',        label:'H+R+RBI' },
         { key:'pitcher_ks',  label:'Pitcher Ks' },
         { key:'outs_ou',     label:'Outs' },
+        { key:'teams',       label:'Teams' },
     ];
     var WNBA_CATS = [
-        { key:'teams', label:'Teams' },
         { key:'pts',   label:'Points' },
         { key:'reb',   label:'Rebounds' },
         { key:'ast',   label:'Assists' },
@@ -4890,6 +4889,7 @@
         { key:'pa',    label:'Pts+Ast' },
         { key:'pr',    label:'Pts+Reb' },
         { key:'ra',    label:'Reb+Ast' },
+        { key:'teams', label:'Teams' },
     ];
     var NFL_CATS = [
         { key: 'teams', label: 'Teams' },
@@ -5306,6 +5306,16 @@
         return null;
     }
 
+    function parlayPlayerRsUrl(p) {
+        var sport = parlayActiveSport;
+        var games = sport === 'wnba' ? PARLAY_GAMES_WNBA : sport === 'nfl' ? PARLAY_GAMES_NFL : PARLAY_GAMES;
+        var game = games.find(function(g) { return g.eventId === p.eventId; });
+        if (!game && p.team) {
+            game = games.find(function(g) { return g.awayShort === p.team || g.homeShort === p.team; });
+        }
+        return game ? parlayGameRsUrl(game, sport) : null;
+    }
+
     function parlayRenderGameCards(games, sport) {
         var grid = document.getElementById('parlay-player-grid');
         if (!grid) return;
@@ -5428,9 +5438,12 @@
             var headshotHtml = p.headshot
                 ? '<img class="parlay-card-headshot" src="' + escHtml(p.headshot) + '" alt="" onerror="parlayHeadshotFail(this)">'
                 : '<div class="parlay-card-avatar" style="' + avatarStyle + '">' + escHtml(p.initials) + '</div>';
+            var cardRsUrl = parlayPlayerRsUrl(p);
+            var cardRsBtn = cardRsUrl ? '<a href="' + escHtml(cardRsUrl) + '" target="_blank" rel="noopener" title="View game on Real Sports" onclick="event.stopPropagation()" style="position:absolute;top:6px;right:6px;z-index:3;display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;color:var(--accent);text-decoration:none;border:1px solid var(--border2);border-radius:4px;background:var(--bg2);opacity:.8">' + RS_LOGO_SVG + '</a>' : '';
             return '<div class="parlay-card' + cls + '">' +
                 '<div class="parlay-card-top" style="' + topStyle + '">' +
                     '<div class="parlay-team-badge">' + escHtml(p.team) + '</div>' +
+                    cardRsBtn +
                     headshotHtml +
                 '</div>' +
                 '<div class="parlay-card-body">' +
@@ -6138,9 +6151,11 @@
         if (storedKey && rsGameIds[storedKey]) {
             return getRealSportsUrl(rsGameIds[storedKey], 'baseball_mlb', null, storedKey);
         }
-        // Fuzzy: old slips stored short codes (e.g. "SEA @ SD") — search rsGameIds keys
-        if (storedKey && storedKey.indexOf(' @ ') !== -1) {
-            var kParts = storedKey.split(' @ ');
+        // Fuzzy: old slips stored "Player · AWY @ HME" — extract the team part after ' · '
+        var dotIdx2 = storedKey.indexOf(' · ');
+        var gamePart = dotIdx2 >= 0 ? storedKey.slice(dotIdx2 + 3) : storedKey;
+        if (gamePart && gamePart.indexOf(' @ ') !== -1) {
+            var kParts = gamePart.split(' @ ');
             var awayFrag = kParts[0].trim().toLowerCase();
             var homeFrag = kParts[1].trim().toLowerCase();
             if (awayFrag && homeFrag) {
