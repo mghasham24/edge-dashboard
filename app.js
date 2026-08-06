@@ -6132,6 +6132,25 @@
         }
     };
 
+    function parlayLegRsUrl(leg) {
+        var pools = [
+            { players: PARLAY_PLAYERS,      games: PARLAY_GAMES,      sport: 'mlb'  },
+            { players: PARLAY_PLAYERS_WNBA, games: PARLAY_GAMES_WNBA, sport: 'wnba' },
+            { players: PARLAY_PLAYERS_NFL,  games: PARLAY_GAMES_NFL,  sport: 'nfl'  },
+        ];
+        for (var pi = 0; pi < pools.length; pi++) {
+            var pool = pools[pi];
+            var player = pool.players.find(function(pp) { return pp.name === leg.player_name; });
+            if (!player) continue;
+            var game = pool.games.find(function(g) { return g.eventId === player.eventId; });
+            if (!game && player.team) {
+                game = pool.games.find(function(g) { return g.awayShort === player.team || g.homeShort === player.team; });
+            }
+            if (game) return parlayGameRsUrl(game, pool.sport);
+        }
+        return null;
+    }
+
     function parlaySlipCard(s, showUsername) {
         var LABEL = { pending_deposit:'Pending Deposit', active:'Active', won:'Won', lost:'Lost', expired:'Expired', voided:'Voided' };
         var CLS   = { pending_deposit:'s-pending', active:'s-active', won:'s-won', lost:'s-lost', expired:'s-gray', voided:'s-gray' };
@@ -6238,10 +6257,12 @@
                 }
             }
 
+            var legRsUrl = parlayLegRsUrl(leg);
+            var legRsBtn = legRsUrl ? '<a href="' + escHtml(legRsUrl) + '" target="_blank" rel="noopener" class="rs-icon-btn" title="View game on Real Sports" onclick="event.stopPropagation()" style="margin-left:2px;flex-shrink:0">' + RS_LOGO_SVG + '</a>' : '';
             legsHtml += '<div class="pslip-leg' + legResultCls + '">' +
                 avatarHtml +
                 '<div class="pslip-leg-body">' +
-                    '<div class="pslip-leg-top"><span class="pslip-leg-name">' + escHtml(leg.player_name) + '</span>' + timeHtml + legIcon + '</div>' +
+                    '<div class="pslip-leg-top"><span class="pslip-leg-name">' + escHtml(leg.player_name) + '</span>' + legRsBtn + timeHtml + legIcon + '</div>' +
                     '<div class="pslip-leg-sub">' + statLine + ' · <span class="pslip-odds">' + escHtml(odds) + '</span></div>' +
                     progHtml +
                 '</div>' +
