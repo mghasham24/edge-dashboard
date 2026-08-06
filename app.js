@@ -7008,6 +7008,10 @@
         var panel = document.getElementById('parlays-panel');
         panel.style.cssText = 'display:flex;flex-direction:column;padding:0;overflow:hidden;position:fixed;top:' + headerH + 'px;left:0;right:0;bottom:0;z-index:199;background:var(--bg)';
         panel.classList.add('visible');
+        // Lock body scroll so dragging the header area doesn't reveal the dashboard behind
+        document.body.style.overflow = 'hidden';
+        document.body.style.position = 'fixed';
+        document.body.style.width = '100%';
         parlayCheckVerified();
         setNavLabel('🎲 Parlays');
     }
@@ -7015,6 +7019,10 @@
     function hideParlaysTab() {
         var hdr = document.querySelector('.subheader-sticky');
         if (hdr) { hdr.style.transition = 'none'; hdr.style.transform = ''; requestAnimationFrame(function() { if (hdr) hdr.style.transition = ''; }); }
+        // Unlock body scroll
+        document.body.style.overflow = '';
+        document.body.style.position = '';
+        document.body.style.width = '';
         document.getElementById('sport-tabs').style.display = '';
         document.getElementById('feature-tabs').style.display = 'none';
         document.querySelector('.controls').style.display = '';
