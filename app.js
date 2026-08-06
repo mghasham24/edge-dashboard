@@ -6133,6 +6133,27 @@
     };
 
     function parlayLegRsUrl(leg) {
+        // Prefer stored game key (full team names, e.g. "Seattle Mariners @ San Diego Padres")
+        var storedKey = leg.event_name || '';
+        if (storedKey && rsGameIds[storedKey]) {
+            return getRealSportsUrl(rsGameIds[storedKey], 'baseball_mlb', null, storedKey);
+        }
+        // Fuzzy: old slips stored short codes (e.g. "SEA @ SD") — search rsGameIds keys
+        if (storedKey && storedKey.indexOf(' @ ') !== -1) {
+            var kParts = storedKey.split(' @ ');
+            var awayFrag = kParts[0].trim().toLowerCase();
+            var homeFrag = kParts[1].trim().toLowerCase();
+            if (awayFrag && homeFrag) {
+                var allKeys = Object.keys(rsGameIds);
+                for (var ki = 0; ki < allKeys.length; ki++) {
+                    var kl = allKeys[ki].toLowerCase();
+                    if (kl.indexOf(awayFrag) !== -1 && kl.indexOf(homeFrag) !== -1) {
+                        return getRealSportsUrl(rsGameIds[allKeys[ki]], 'baseball_mlb', null, allKeys[ki]);
+                    }
+                }
+            }
+        }
+        // Fall back to live player pool lookup (only works if Build tab loaded this session)
         var pools = [
             { players: PARLAY_PLAYERS,      games: PARLAY_GAMES,      sport: 'mlb'  },
             { players: PARLAY_PLAYERS_WNBA, games: PARLAY_GAMES_WNBA, sport: 'wnba' },
@@ -6660,7 +6681,13 @@
                 lbl = (dir === 'more' ? '▲ More ' : '▼ Less ') + p.line;
             }
 
-            var eventSuffix = (p.awayShort && p.homeShort) ? (p.awayShort + ' @ ' + p.homeShort) : p.stat;
+            // Build full game key for RS link lookup in My Slips (awayTeam @ homeTeam)
+            var _pg = (PARLAY_GAMES.find(function(g) { return g.eventId === p.eventId; }) ||
+                       PARLAY_GAMES_WNBA.find(function(g) { return g.eventId === p.eventId; }) ||
+                       PARLAY_GAMES_NFL.find(function(g) { return g.eventId === p.eventId; }) ||
+                       (p.awayTeam && p.homeTeam ? p : null));
+            var _gameKey = (_pg && _pg.awayTeam && _pg.homeTeam) ? (_pg.awayTeam + ' @ ' + _pg.homeTeam) :
+                           (p.awayShort && p.homeShort ? p.awayShort + ' @ ' + p.homeShort : '');
             return {
                 playerName:   p.name,
                 direction:    dir,
@@ -6670,7 +6697,7 @@
                 impliedProb:  prob,
                 label:        lbl,
                 gameDate:     new Date().toISOString().slice(0, 10),
-                eventName:    p.name + ' · ' + eventSuffix,
+                eventName:    _gameKey,
                 selectionId:  p.isTeamMarket ? (p.selId || String(p.id)) : (dir === 'more' ? p.moreSelId : p.lessSelId),
                 marketId:     p.marketId,
                 subcatId:     p.subcatId || 0,
