@@ -3334,7 +3334,7 @@
     var otdColorIdx = 0;
     var otdCalYear = new Date().getFullYear();
     var otdCalMonth = new Date().getMonth(); // 0-indexed
-    var otdMode = 'username'; // 'player' | 'username' | 'leaderboard' | 'suggest'
+    var otdMode = 'username'; // 'player' | 'username' | 'leaderboard'
     var otdLeaderboard = [];
     var otdLeaderboardLoading = false;
     var otdLeaderboardSport = 'mlb';
@@ -3349,12 +3349,6 @@
     var otdSelectedUser = null; // { id, username, displayName }
     var otdUserSearchTimer = null;
     var otdLoadingPasses = false;
-    var otdSuggestUser = null; // { id, username } for Pass Suggestion tab
-    var otdSuggestSport = 'ufc';
-    var otdSuggestSeason = '2026'; // used for MLB (and future sports); ncaaf uses all seasons
-    var otdSuggestLoading = false;
-    var otdSuggestData = null; // { ownedPasses, coveredDays, suggestions }
-    var otdSuggestSearchTimer = null;
     var otdClaimsView = 2; // 2 = default (free), 3 = Pro
     var otdSelectedDay = null; // ISO date string of clicked cell
     var otdSelectedDaySport = null; // active sport tab in day panel
@@ -4383,7 +4377,7 @@
     function renderOtdCheckWrap() {
         var el = document.getElementById('otd-check-wrap');
         if (!el) return;
-        if (otdMode === 'leaderboard' || otdMode === 'suggest') { el.innerHTML = ''; return; }
+        if (otdMode === 'leaderboard') { el.innerHTML = ''; return; }
         var canShow = otdPlayers.length > 0 && !otdLoadingPasses;
         if (!canShow) { el.innerHTML = ''; return; }
         if (!otdCheckMode && !otdFindMode) {
@@ -7200,410 +7194,6 @@
         if (bdEl) bdEl.innerHTML = otdSelectedPass ? buildBreakdownCard(otdSelectedPass) : '';
     }
 
-    var otdSuggestLevels = {}; // { fighterId: rarityLevel } — per-card rarity state
-    var otdSuggestOpenOverlap = null; // fighter id whose overlap panel is open
-    var otdSuggestClaimLimit = 2; // 2 or 3 claims per fight day
-    var otdSuggestGlobalLevel = 5; // global rarity (Legendary 1 default)
-    var otdSuggestMyPassLevel = null; // null = use actual RS pass levels; number = override
-    var otdSuggestShowAllPasses = false; // expand owned passes beyond top 15
-
-    function loadOtdSuggestions() {
-        var errEl = document.getElementById('otd-suggest-err');
-        var inp = document.getElementById('otd-suggest-input');
-        var typed = (inp ? inp.value : '').trim();
-        if (!otdSuggestUser && !typed) {
-            if (errEl) { errEl.textContent = 'Enter an RS username first'; errEl.style.display = ''; setTimeout(function() { if (errEl) errEl.style.display = 'none'; }, 3000); }
-            return;
-        }
-        if (!otdSuggestUser) {
-            var stripped = typed.replace(/_+$/, '');
-            var queries = ['/api/real/otd?action=search_users&q=' + encodeURIComponent(typed)];
-            if (stripped !== typed) queries.push('/api/real/otd?action=search_users&q=' + encodeURIComponent(stripped));
-            Promise.all(queries.map(function(url) { return fetch(url, { credentials: 'same-origin' }).then(function(r) { return r.json(); }).catch(function() { return { users: [] }; }); }))
-                .then(function(results) {
-                    var seen = {};
-                    var users = [];
-                    results.forEach(function(d) { (d.users || []).forEach(function(u) { if (u.id && !seen[u.id]) { seen[u.id] = 1; users.push(u); } }); });
-                    var match = users.find(function(u) { return u.username.toLowerCase() === typed.toLowerCase(); });
-                    otdSuggestUser = match || { id: typed, username: typed, displayName: null };
-                    if (inp) inp.value = otdSuggestUser.username;
-                    loadOtdSuggestions();
-                })
-                .catch(function() { if (errEl) { errEl.textContent = 'Could not find user'; errEl.style.display = ''; } });
-            return;
-        }
-        otdSuggestLoading = true;
-        otdSuggestData = null;
-        otdSuggestOpenOverlap = null;
-        renderOtdSuggest();
-        var suggestUrl = '/api/real/otd?action=suggest&sport=' + encodeURIComponent(otdSuggestSport) + '&userId=' + encodeURIComponent(otdSuggestUser.id);
-        fetch(suggestUrl, { credentials: 'same-origin' })
-            .then(function(r) { return r.json(); })
-            .then(function(d) {
-                otdSuggestLoading = false;
-                if (!d.ok) {
-                    renderOtdSuggest();
-                    var e2 = document.getElementById('otd-suggest-err');
-                    if (e2) { e2.textContent = d.error || 'Error loading suggestions'; e2.style.display = ''; }
-                    return;
-                }
-                otdSuggestData = d;
-                // Init per-card rarity to Legendary 1 (value=5) if not already set
-                (d.suggestions || []).forEach(function(s) { if (otdSuggestLevels[s.id] === undefined) otdSuggestLevels[s.id] = 5; });
-                renderOtdSuggest();
-            })
-            .catch(function() {
-                otdSuggestLoading = false;
-                renderOtdSuggest();
-                var e2 = document.getElementById('otd-suggest-err');
-                if (e2) { e2.textContent = 'Failed to load — try again'; e2.style.display = ''; }
-            });
-    }
-
-    function otdSuggestSetLevel(id, level) {
-        otdSuggestLevels[id] = level;
-        renderOtdSuggest();
-    }
-
-    function otdSuggestSetAllLevels(level) {
-        otdSuggestGlobalLevel = level;
-        if (otdSuggestData && otdSuggestData.suggestions) {
-            otdSuggestData.suggestions.forEach(function(s) { otdSuggestLevels[String(s.id)] = level; });
-        }
-        renderOtdSuggest();
-    }
-
-    function otdSuggestSetMyPassLevel(val) {
-        otdSuggestMyPassLevel = val === '' ? null : parseInt(val, 10);
-        renderOtdSuggest();
-    }
-
-    function otdSuggestToggleOverlap(id) {
-        otdSuggestOpenOverlap = String(otdSuggestOpenOverlap) === String(id) ? null : String(id);
-        renderOtdSuggest();
-        if (otdSuggestOpenOverlap !== null) {
-            setTimeout(function() {
-                var panel = document.getElementById('otd-suggest-overlap-panel');
-                var grid = document.getElementById('otd-suggest-grid');
-                if (!panel || !grid) return;
-                var openCard = grid.querySelector('[data-suggest-id="' + String(id) + '"]');
-                if (!openCard) { panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); return; }
-                var cardTop = openCard.getBoundingClientRect().top;
-                var cards = Array.from(grid.querySelectorAll('[data-suggest-id]'));
-                var sameRow = cards.filter(function(c) { return Math.abs(c.getBoundingClientRect().top - cardTop) < 5; });
-                var lastInRow = sameRow[sameRow.length - 1];
-                if (lastInRow) grid.insertBefore(panel, lastInRow.nextSibling);
-                panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            }, 30);
-        }
-    }
-
-    function renderOtdSuggest() {
-        var el = document.getElementById('otd-results');
-        if (!el || otdMode !== 'suggest') return;
-
-        var SPORT_LABELS = { ufc: 'UFC', nba: 'NBA', mlb: 'MLB', nhl: 'NHL', wnba: 'WNBA', ncaaf: 'CFB' };
-
-        var sportSel = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">' +
-            '<span style="font-size:13px;color:var(--muted);font-weight:600">Sport:</span>' +
-            ['ufc', 'ncaaf', 'mlb'].map(function(s) {
-                var active = otdSuggestSport === s;
-                return '<button onclick="otdSuggestSport=\'' + s + '\';otdSuggestData=null;otdSuggestUser=null;otdSuggestShowAllPasses=false;renderOtdSuggest()" style="background:' + (active ? 'var(--accent)' : 'var(--bg3)') + ';border:1px solid ' + (active ? 'var(--accent)' : 'var(--border2)') + ';color:' + (active ? '#fff' : 'var(--muted)') + ';font-family:var(--sans);font-size:12px;font-weight:700;padding:5px 14px;border-radius:6px;cursor:pointer">' + SPORT_LABELS[s] + '</button>';
-            }).join('') +
-            ((otdSuggestSport === 'ncaaf' || otdSuggestSport === 'mlb') ? ' <span style="font-size:11px;color:var(--muted2);margin-left:4px">All seasons combined</span>' : '') +
-        '</div>';
-
-        var userRow = '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">' +
-            '<div style="position:relative;flex:1">' +
-                '<input id="otd-suggest-input" type="text" placeholder="RS username…" value="' + (otdSuggestUser ? escHtml(otdSuggestUser.username) : '') + '" autocomplete="off" ' +
-                    'oninput="otdSuggestInputChange(this.value)" ' +
-                    'style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px 10px;border-radius:6px">' +
-                '<div id="otd-suggest-ac" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg2);border:1px solid var(--border2);border-radius:6px;z-index:200;box-shadow:0 4px 16px rgba(0,0,0,.18);margin-top:2px"></div>' +
-            '</div>' +
-            '<button onclick="otdSuggestUser=null;loadOtdSuggestions()" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:13px;font-weight:700;padding:8px 18px;border-radius:6px;cursor:pointer;white-space:nowrap">' +
-                (otdSuggestLoading ? 'Analyzing…' : 'Analyze') +
-            '</button>' +
-        '</div>' +
-        '<div id="otd-suggest-err" style="display:none;font-size:12px;color:#ef5350;margin-bottom:8px"></div>';
-
-        if (otdSuggestLoading) {
-            el.innerHTML = sportSel + userRow + '<div style="color:var(--muted);font-size:13px;padding:20px 0 0">Analyzing your passes…</div>';
-            return;
-        }
-
-        if (!otdSuggestData) {
-            var suggestDesc = otdSuggestSport === 'ufc'
-                ? 'Enter your RS username and click Analyze. We\'ll rank every UFC fighter by how many unique RAX they\'d add to your portfolio after deducting fight days you already cover.'
-                : 'Enter your RS username and click Analyze. We\'ll rank every ' + (SPORT_LABELS[otdSuggestSport] || 'sport') + ' player by how many unique RAX they\'d add to your portfolio after deducting game days you already cover.';
-            el.innerHTML = sportSel + userRow +
-                '<div style="color:var(--muted2);font-size:13px;padding:16px 0">' + suggestDesc + '</div>';
-            return;
-        }
-
-        var d = otdSuggestData;
-        var ownedTotal = d.ownedPasses.reduce(function(s, p) { return s + (p.totalEarnings || 0); }, 0);
-
-        // Owned passes section
-        var ownedHtml = '<div style="margin-bottom:18px">' +
-            '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">' +
-                '<span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Your ' + (SPORT_LABELS[otdSuggestSport] || 'Sport') + ' Passes</span>' +
-                '<span style="font-size:11px;color:var(--muted)">' + d.coveredDays + (otdSuggestSport === 'ufc' ? ' fight' : ' game') + ' days · ' + RAX_ICON + ownedTotal.toLocaleString() + '</span>' +
-            '</div>';
-        if (d.ownedPasses.length === 0) {
-            ownedHtml += '<div style="font-size:13px;color:var(--muted2)">No ' + (SPORT_LABELS[otdSuggestSport] || 'sport') + ' passes found for this user.</div>';
-        } else {
-            var sortedPasses = d.ownedPasses.filter(function(p) { return (p.level != null ? p.level : 1) > 1; }).sort(function(a, b) {
-                var lvDiff = (b.level != null ? b.level : 1) - (a.level != null ? a.level : 1);
-                return lvDiff !== 0 ? lvDiff : (b.totalEarnings || 0) - (a.totalEarnings || 0);
-            });
-            var displayPasses = otdSuggestShowAllPasses ? sortedPasses : sortedPasses.slice(0, 15);
-            ownedHtml += '<div style="display:flex;flex-wrap:wrap;gap:6px">' +
-                displayPasses.map(function(p) {
-                    var lv = p.level != null ? p.level : 1;
-                    var rc = otdRarityColor(lv);
-                    var earnHtml = lv === 0
-                        ? '<span style="color:#22c55e66;font-family:var(--mono);font-size:11px">' + RAX_ICON + '0</span>' +
-                          (p.baseEarnings ? '<span style="color:var(--muted2);font-family:var(--mono);font-size:10px">(' + Math.round(p.baseEarnings).toLocaleString() + ')</span>' : '')
-                        : '<span style="color:#22c55e;font-family:var(--mono);font-size:11px">' + RAX_ICON + (p.totalEarnings || 0).toLocaleString() + '</span>';
-                    var seasonTag = p.season ? '<span style="font-size:9px;color:var(--muted2);margin-left:2px">(' + escHtml(otdFormatSeason(otdSuggestSport, p.season)) + ')</span>' : '';
-                    return '<span style="display:inline-flex;align-items:center;gap:5px;background:' + rc + '22;border:1px solid ' + rc + '66;border-radius:20px;padding:3px 10px;font-size:12px;color:var(--fg)">' +
-                        escHtml(p.name) + seasonTag + earnHtml +
-                    '</span>';
-                }).join('') +
-                (sortedPasses.length > 15
-                    ? '<button onclick="otdSuggestShowAllPasses=!otdSuggestShowAllPasses;renderOtdSuggest()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:20px;color:var(--muted);font-family:var(--sans);font-size:11px;padding:3px 12px;cursor:pointer">' +
-                        (otdSuggestShowAllPasses ? 'Show less' : 'Show all ' + sortedPasses.length) + '</button>'
-                    : '') +
-            '</div>';
-        }
-        ownedHtml += '</div>';
-
-        // Suggestion cards
-        var MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-        var rarityDropdownOpts = OTD_LEVEL_OPTIONS.filter(function(o) { return o.value >= 1; }).map(function(o) {
-            return '<option value="' + o.value + '"' + (o.value === otdSuggestGlobalLevel ? ' selected' : '') + '>' + escHtml(o.label) + '</option>';
-        }).join('');
-        var myPassDropdownOpts = '<option value=""' + (otdSuggestMyPassLevel === null ? ' selected' : '') + '>Actual</option>' +
-            OTD_LEVEL_OPTIONS.filter(function(o) { return o.value >= 1; }).map(function(o) {
-                return '<option value="' + o.value + '"' + (otdSuggestMyPassLevel === o.value ? ' selected' : '') + '>' + escHtml(o.label) + '</option>';
-            }).join('');
-        var suggestHtml = '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:10px">' +
-            '<span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Top 60 Suggestions</span>' +
-            '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">' +
-                '<div style="display:flex;align-items:center;gap:5px">' +
-                    '<span style="font-size:10px;color:var(--muted2)">New pass:</span>' +
-                    '<select onchange="otdSuggestSetAllLevels(parseInt(this.value,10))" style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--fg);font-family:var(--sans);font-size:10px;padding:3px 5px;cursor:pointer;outline:none">' +
-                    rarityDropdownOpts +
-                    '</select>' +
-                '</div>' +
-                '<div style="display:flex;align-items:center;gap:5px">' +
-                    '<span style="font-size:10px;color:var(--muted2)">My passes:</span>' +
-                    '<select onchange="otdSuggestSetMyPassLevel(this.value)" style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--fg);font-family:var(--sans);font-size:10px;padding:3px 5px;cursor:pointer;outline:none">' +
-                    myPassDropdownOpts +
-                    '</select>' +
-                '</div>' +
-                '<div style="display:flex;align-items:center;gap:5px">' +
-                    '<span style="font-size:10px;color:var(--muted2)">Claims/day:</span>' +
-                    [2,3].map(function(n) {
-                        var active = otdSuggestClaimLimit === n;
-                        return '<button onclick="otdSuggestClaimLimit=' + n + ';renderOtdSuggest()" style="background:' + (active ? 'var(--accent)' : 'var(--bg3)') + ';border:1px solid ' + (active ? 'var(--accent)' : 'var(--border2)') + ';border-radius:4px;color:' + (active ? '#fff' : 'var(--muted)') + ';font-family:var(--sans);font-size:10px;font-weight:700;padding:3px 8px;cursor:pointer">' + n + '</button>';
-                    }).join('') +
-                '</div>' +
-            '</div>' +
-        '</div>';
-
-        if (!d.suggestions || d.suggestions.length === 0) {
-            suggestHtml += '<div style="font-size:13px;color:var(--muted2)">No suggestions — you may already own all fighters.</div>';
-        } else {
-            // Displacement-based wasted: if fighter is claimed (rank < limit), cost = earnings of
-            // the competitor pushed out of their claim slot. If fighter itself is wasted (rank >= limit),
-            // cost = fighter's own earnings.
-            // otdSuggestMyPassLevel overrides competitor earnings multiplier when set.
-            var _sMult = otdSuggestSport === 'ufc' ? UFC_LEVEL_MULTIPLIERS : OTD_LEVEL_MULTIPLIERS;
-            function compEffectiveEarnings(c) {
-                if (otdSuggestMyPassLevel !== null) {
-                    if (otdSuggestMyPassLevel === 0) return 0;
-                    return Math.round((c.baseEarnings !== undefined ? c.baseEarnings : (c.earnings || 0)) * (_sMult[otdSuggestMyPassLevel] || 1));
-                }
-                return c.earnings || 0;
-            }
-            function suggestShortName(name) {
-                var parts = (name || '').split(' ');
-                var last = parts[parts.length - 1] || '';
-                if (['Jr.','Jr','II','III','IV','V','Sr.','Sr'].indexOf(last) !== -1 && parts.length >= 2) {
-                    return parts[parts.length - 2] + ' ' + last;
-                }
-                return last;
-            }
-            // mult: rarity multiplier for the NEW pass being evaluated.
-            // Competitors already have rarity-adjusted earnings (their actual pass level).
-            // myE must be scaled to the same unit so the rank comparison is apples-to-apples.
-            // Returns rarity-adjusted displacement cost directly (no extra *mult needed by caller).
-            function computeDisplacementWasted(s, claimLimit, mult) {
-                return (s.overlapEvents || []).reduce(function(sum, ev) {
-                    var comps = (ev.competitors || []).slice().map(function(c) { return { earnings: compEffectiveEarnings(c) }; }).sort(function(a, b) { return b.earnings - a.earnings; });
-                    var myE = Math.round((ev.earnings || 0) * mult);
-                    var myRank = comps.findIndex(function(c) { return c.earnings < myE; });
-                    if (myRank === -1) myRank = comps.length;
-                    if (myRank < claimLimit) {
-                        return sum + (comps.length >= claimLimit ? (comps[claimLimit - 1].earnings || 0) : 0);
-                    } else {
-                        return sum + myE;
-                    }
-                }, 0);
-            }
-            // Re-sort by rarity-adjusted unique earnings so the order matches what's shown on cards
-            function _uniqueRax(s) {
-                var lv = otdSuggestLevels[s.id] !== undefined ? otdSuggestLevels[s.id] : otdSuggestGlobalLevel;
-                var m = _sMult[lv] || 1;
-                return Math.round((s.totalEarnings || 0) * m) - computeDisplacementWasted(s, otdSuggestClaimLimit, m);
-            }
-            var sorted30 = d.suggestions.slice().sort(function(a, b) { return _uniqueRax(b) - _uniqueRax(a); }).slice(0, 60);
-            var cardH = window.innerWidth <= 480 ? '130px' : '190px';
-            suggestHtml += '<div id="otd-suggest-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-bottom:12px">';
-            suggestHtml += sorted30.map(function(s, i) {
-                var level = otdSuggestLevels[s.id] !== undefined ? otdSuggestLevels[s.id] : 5;
-                var rc = otdRarityColor(level);
-                var mult = _sMult[level] || 1;
-                var atRarity = Math.round(s.totalEarnings * mult);
-                var overlapAtRarity = computeDisplacementWasted(s, otdSuggestClaimLimit, mult);
-                var uniqueAtRarity = atRarity - overlapAtRarity;
-                var overlapOpen = String(otdSuggestOpenOverlap) === String(s.id);
-                var levelOpts = OTD_LEVEL_OPTIONS.filter(function(o) { return o.value >= 1; }).map(function(o) {
-                    return '<option value="' + o.value + '"' + (o.value === level ? ' selected' : '') + '>' + escHtml(o.label) + '</option>';
-                }).join('');
-                var headshotUrl = s.avatar ? 'https://media.realapp.com/assets/teams/default/large/' + s.avatar + '.webp' : '';
-
-                var card = '<div style="position:relative;border-radius:10px;overflow:hidden;height:' + cardH + ';background:linear-gradient(160deg,' + rc + '55 0%,' + rc + '22 100%);border:1px solid ' + rc + '55">' +
-                    // Rank badge top-left
-                    '<div style="position:absolute;top:6px;left:6px;z-index:3">' +
-                        '<span style="font-size:9px;font-weight:800;color:#fff;background:rgba(0,0,0,.6);padding:2px 6px;border-radius:3px">#' + (i + 1) + '</span>' +
-                    '</div>' +
-                    // Rarity badge top-center
-                    '<div style="position:absolute;top:6px;left:0;right:0;display:flex;justify-content:center;z-index:3;pointer-events:none">' +
-                        '<select onclick="event.stopPropagation()" onchange="event.stopPropagation();otdSuggestSetLevel(\'' + s.id + '\',parseInt(this.value,10))" ' +
-                            'style="pointer-events:auto;background:' + rc + ';border:none;border-radius:4px;color:#fff;font-size:8px;font-weight:700;padding:2px 6px;cursor:pointer;outline:none;-webkit-appearance:none;appearance:none;font-family:var(--sans)">' +
-                            levelOpts +
-                        '</select>' +
-                    '</div>' +
-                    // Sport badge top-right, year badge below it
-                    '<div style="position:absolute;top:6px;right:6px;z-index:3;display:flex;flex-direction:column;align-items:flex-end;gap:3px">' +
-                        '<span style="font-size:8px;font-weight:800;color:#fff;background:rgba(0,0,0,.55);padding:2px 6px;border-radius:3px">' + (SPORT_LABELS[otdSuggestSport] || otdSuggestSport.toUpperCase()) + '</span>' +
-                        (s.season ? '<span style="font-size:8px;font-weight:800;color:rgba(255,255,255,.85);background:rgba(255,255,255,.15);padding:1px 5px;border-radius:3px;white-space:nowrap">\'' + escHtml(String(s.season).slice(2)) + '</span>' : '') +
-                    '</div>' +
-                    // Emoji watermark (hidden if headshot loads)
-                    '<div id="suggest-emoji-' + s.id + '" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:52px;opacity:.18;z-index:0">' + (otdSuggestSport === 'ufc' ? '🥊' : otdSuggestSport === 'ncaaf' ? '🏈' : otdSuggestSport === 'mlb' ? '⚾' : otdSuggestSport === 'nba' ? '🏀' : otdSuggestSport === 'nhl' ? '🏒' : '🎯') + '</div>' +
-                    // Headshot
-                    (headshotUrl
-                        ? '<img src="' + headshotUrl + '" style="position:absolute;top:8%;left:0;right:0;width:100%;height:54%;object-fit:contain;object-position:bottom center;z-index:1" onerror="this.style.display=\'none\'">'
-                        : '') +
-                    // Dark overlay
-                    '<div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.05) 0%,rgba(0,0,0,.1) 40%,rgba(0,0,0,.8) 65%,rgba(0,0,0,.93) 100%);z-index:2"></div>' +
-                    // Bottom info — name only (no rarity select, no year badge)
-                    '<div style="position:absolute;bottom:0;left:0;right:0;padding:5px 7px 6px;z-index:3">' +
-                        '<div style="font-size:13px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3;text-shadow:0 1px 4px rgba(0,0,0,.9);margin-bottom:2px">' + escHtml(s.name) + '</div>' +
-                        '<div style="display:flex;align-items:center;justify-content:space-between">' +
-                            '<span style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,.65)">' + RAX_ICON + s.totalEarnings.toLocaleString() + ' base</span>' +
-                            '<span style="font-size:10px;font-weight:700;font-family:var(--mono);color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.9)">' + RAX_ICON + atRarity.toLocaleString() + '</span>' +
-                        '</div>' +
-                    '</div>' +
-                '</div>';
-
-                // Below-card stats (compact — no inline breakdown panel)
-                var netColor = uniqueAtRarity > 400 ? '#26a69a' : uniqueAtRarity > 100 ? 'var(--accent)' : 'var(--muted)';
-                var belowCard = '<div style="padding:6px 2px 0">' +
-                    '<div style="display:flex;justify-content:space-between;align-items:center">' +
-                        '<span style="font-size:10px;font-weight:700;color:' + netColor + '">' + RAX_ICON + uniqueAtRarity.toLocaleString() + ' net</span>' +
-                        (s.overlapDays > 0
-                            ? '<button onclick="otdSuggestToggleOverlap(\'' + s.id + '\')" style="background:' + (overlapOpen ? 'rgba(239,83,80,.15)' : 'var(--bg3)') + ';border:1px solid ' + (overlapOpen ? 'rgba(239,83,80,.5)' : 'var(--border2)') + ';border-radius:4px;color:' + (overlapOpen ? '#ef5350' : 'var(--muted)') + ';font-family:var(--sans);font-size:9px;font-weight:700;padding:2px 6px;cursor:pointer">−' + RAX_ICON + overlapAtRarity.toLocaleString() + ' Overlap</button>'
-                            : '<span style="font-size:9px;color:var(--muted2)">no overlap</span>') +
-                    '</div>' +
-                '</div>';
-
-                return '<div style="min-width:0" data-suggest-id="' + s.id + '">' + card + belowCard + '</div>';
-            }).join('');
-            // Full-width overlap panel — inside the grid with grid-column:1/-1 so it spans all columns.
-            // otdSuggestToggleOverlap moves it after the correct row via DOM manipulation.
-            var openSugg = otdSuggestOpenOverlap !== null
-                ? sorted30.find(function(s) { return String(s.id) === String(otdSuggestOpenOverlap); })
-                : null;
-            if (openSugg) {
-                var oMult = _sMult[otdSuggestLevels[openSugg.id] !== undefined ? otdSuggestLevels[openSugg.id] : 5] || 1;
-                var overlapLabel = otdSuggestSport === 'ufc' ? 'Overlap Fights' : 'Overlap Claims';
-                // Show only days where the displacement cost is > 0 (matches computeDisplacementWasted exactly)
-                var evs = (openSugg.overlapEvents || []).filter(function(ev) {
-                    var newRax = Math.round((ev.earnings || 0) * oMult);
-                    var comps = (ev.competitors || []).slice().map(function(c) { return { earnings: compEffectiveEarnings(c) }; }).sort(function(a, b) { return b.earnings - a.earnings; });
-                    var myRank = comps.findIndex(function(c) { return c.earnings < newRax; });
-                    if (myRank === -1) myRank = comps.length;
-                    if (myRank < otdSuggestClaimLimit) return comps.length >= otdSuggestClaimLimit && (comps[otdSuggestClaimLimit - 1].earnings || 0) > 0;
-                    return newRax > 0;
-                });
-                suggestHtml += '<div id="otd-suggest-overlap-panel" style="grid-column:1/-1;border:1px solid rgba(239,83,80,.3);border-radius:8px;padding:10px 12px;background:var(--bg2)">' +
-                    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
-                        '<span style="font-size:11px;font-weight:700;color:#ef5350">' + escHtml(openSugg.name) + ' — ' + overlapLabel + ' (' + evs.length + ')</span>' +
-                        '<button onclick="otdSuggestToggleOverlap(\'' + openSugg.id + '\')" style="background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;padding:0 2px;line-height:1">×</button>' +
-                    '</div>' +
-                    (evs.length === 0
-                        ? '<div style="font-size:12px;color:var(--muted2)">No overlap claims ≥ 200 Rax.</div>'
-                        : '<div style="overflow-x:auto;padding-bottom:6px">' +
-                            '<div style="display:flex;gap:8px;width:max-content">' +
-                            evs.slice().sort(function(a, b) { return (b.day || '') < (a.day || '') ? -1 : 1; }).map(function(ev) {
-                                var dp = (ev.day || '').split('-');
-                                var dayFmt = dp.length === 3
-                                    ? MONTH_SHORT[parseInt(dp[1],10)-1] + ' ' + parseInt(dp[2],10) + ', 20' + String(dp[0]).slice(2)
-                                    : (ev.dayDisplay || ev.day || '');
-                                var newRax = Math.round((ev.earnings || 0) * oMult);
-                                var allCards = (ev.competitors || []).map(function(c) { return { name: c.name, rax: compEffectiveEarnings(c), level: c.level, isNew: false }; }).filter(function(c) { return c.rax > 0; });
-                                allCards.push({ name: openSugg.name, rax: newRax, isNew: true });
-                                allCards.sort(function(a, b) { return b.rax - a.rax; });
-                                var isWasted = allCards.findIndex(function(c) { return c.isNew; }) >= otdSuggestClaimLimit;
-                                var borderClr = isWasted ? 'rgba(239,83,80,.45)' : 'rgba(34,197,94,.4)';
-                                var displayCards = allCards.map(function(c, idx) { return { c: c, rank: idx }; }).filter(function(d) { return d.c.rax >= 150 || d.c.isNew; });
-                                var rows = displayCards.map(function(d) {
-                                    var c = d.c, claimed = d.rank < otdSuggestClaimLimit;
-                                    var clr = claimed ? '#22c55e' : '#ef5350';
-                                    var dot = c.isNew ? '<span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#4f6ef7;vertical-align:middle;margin-right:3px"></span>' : '';
-                                    return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.05)">' +
-                                        '<span style="font-size:10px;color:' + clr + ';font-weight:' + (c.isNew ? '700' : '400') + ';white-space:nowrap">' + dot + escHtml(suggestShortName(c.name)) + '</span>' +
-                                        '<span style="font-size:10px;font-family:var(--mono);color:' + clr + ';white-space:nowrap">' + RAX_ICON + (c.rax||0).toLocaleString() + '</span>' +
-                                    '</div>';
-                                }).join('');
-                                return '<div style="min-width:120px;background:var(--bg3);border:1px solid ' + borderClr + ';border-radius:6px;padding:6px 8px;flex-shrink:0">' +
-                                    '<div style="font-size:9px;font-weight:700;color:var(--muted2);letter-spacing:.05em;margin-bottom:4px;white-space:nowrap">' + escHtml(dayFmt) + '</div>' +
-                                    rows +
-                                '</div>';
-                            }).join('') +
-                            '</div>' +
-                          '</div>') +
-                '</div>';
-            }
-            suggestHtml += '</div>'; // close grid
-        }
-
-        el.innerHTML = sportSel + userRow + ownedHtml + suggestHtml;
-    }
-
-    function otdSuggestInputChange(val) {
-        var ac = document.getElementById('otd-suggest-ac');
-        if (!ac) return;
-        if (!val || val.length < 2) { ac.style.display = 'none'; otdSuggestUser = null; return; }
-        clearTimeout(otdSuggestSearchTimer);
-        otdSuggestSearchTimer = setTimeout(function() {
-            fetch('/api/real/otd?action=search_users&q=' + encodeURIComponent(val.replace(/_+$/, '') || val), { credentials: 'same-origin' })
-                .then(function(r) { return r.json(); })
-                .then(function(d) {
-                    var users = (d.users || []).slice(0, 5);
-                    if (!users.length) { ac.style.display = 'none'; return; }
-                    ac.innerHTML = users.map(function(u) {
-                        return '<div onclick="otdSuggestUser=' + JSON.stringify(JSON.stringify(u)).replace(/"/g,'\'') + ';document.getElementById(\'otd-suggest-input\').value=\'' + escHtml(u.username) + '\';document.getElementById(\'otd-suggest-ac\').style.display=\'none\'" ' +
-                            'style="padding:8px 12px;cursor:pointer;font-size:13px;color:var(--fg);border-bottom:1px solid var(--border2)">' +
-                            escHtml(u.username) + (u.displayName ? ' <span style="color:var(--muted)">' + escHtml(u.displayName) + '</span>' : '') + '</div>';
-                    }).join('');
-                    ac.style.display = '';
-                }).catch(function() { ac.style.display = 'none'; });
-        }, 300);
-    }
 
     function renderOtdPanel() {
         var panel = document.getElementById('otd-panel');
@@ -7619,9 +7209,7 @@
 
         // Input section changes based on mode
         var inputSection;
-        if (otdMode === 'suggest') {
-            inputSection = '';
-        } else if (otdMode === 'leaderboard') {
+        if (otdMode === 'leaderboard') {
             var lbSportOpts = '<option value="all"' + (otdLeaderboardSport === 'all' ? ' selected' : '') + '>All Sports</option>' +
                 OTD_SPORTS_LIST.map(function(s) {
                     return '<option value="' + s.key + '"' + (s.key === otdLeaderboardSport ? ' selected' : '') + '>' + escHtml(s.label) + '</option>';
@@ -7711,7 +7299,6 @@
                 '<button onclick="otdSetMode(\'username\')" style="' + (otdMode === 'username' ? tabActive : tabInactive) + '">Username</button>' +
                 '<button onclick="otdSetMode(\'player\')" style="' + (otdMode === 'player' ? tabActive : tabInactive) + '">Search Players' + (otdLbNewAdded > 0 ? ' <span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--accent);color:#fff;font-size:9px;font-weight:700;margin-left:3px;vertical-align:middle">' + otdLbNewAdded + '</span>' : '') + '</button>' +
                 '<button onclick="otdSetMode(\'leaderboard\')" style="' + (otdMode === 'leaderboard' ? tabActive : tabInactive) + '">Top OTD</button>' +
-                '<button onclick="otdSetMode(\'suggest\')" style="' + (otdMode === 'suggest' ? tabActive : tabInactive) + '">Pass Suggestion</button>' +
             '</div>' +
             inputSection +
             '<div id="otd-search-err" style="display:none;font-size:12px;color:#ef5350;margin-bottom:8px"></div>' +
@@ -7722,9 +7309,7 @@
             '<div id="otd-check-wrap"></div>' +
             '<div id="otd-results"></div>';
 
-        if (otdMode === 'suggest') {
-            renderOtdSuggest();
-        } else if (otdMode === 'leaderboard') {
+        if (otdMode === 'leaderboard') {
             renderOtdLeaderboard();
         } else {
             renderOtdChips();
@@ -8142,7 +7727,7 @@
         otdMode = mode;
         // Clear only when switching to/from username mode — username passes don't belong in other modes.
         // Player↔leaderboard switches preserve otdPlayers so Search Players additions survive tab switches.
-        if (mode === 'username' || (prevMode === 'username' && mode !== 'suggest')) {
+        if (mode === 'username' || prevMode === 'username') {
             otdPlayers = [];
             otdColorIdx = 0;
             otdLbNewAdded = 0;
@@ -8151,7 +7736,7 @@
         if (mode === 'player') otdLbNewAdded = 0;
         otdDateMapDirty = true; otdPassesPage = 0;
         otdSelectedPlayer = null;
-        if (mode !== 'suggest') otdSelectedUser = null;
+        otdSelectedUser = null;
         otdLoadingPasses = false;
         if (mode === 'leaderboard') otdCarouselOpen = false;
         renderOtdPanel();
@@ -8452,7 +8037,7 @@
     function renderOtdChips() {
         var el = document.getElementById('otd-chips');
         if (!el) return;
-        if (otdMode === 'leaderboard' || otdMode === 'suggest') { el.innerHTML = ''; return; }
+        if (otdMode === 'leaderboard') { el.innerHTML = ''; return; }
         // In Search Players mode, passes show only in the Passes panel (sidebar/carousel), not the chip grid
         if (otdMode === 'player') { el.innerHTML = ''; return; }
 
@@ -8527,7 +8112,7 @@
     }
 
     function renderOtdResults() {
-        if (otdMode === 'leaderboard' || otdMode === 'suggest') return;
+        if (otdMode === 'leaderboard') return;
         var el = document.getElementById('otd-results');
         if (!el) return;
 
