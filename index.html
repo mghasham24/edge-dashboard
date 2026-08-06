@@ -12,7 +12,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Barlow:wght@400;500;600;700&display=swap">
-    <link rel="stylesheet" href="/app.css?v=38">
+    <link rel="stylesheet" href="/app.css?v=102">
     <script src="https://www.google.com/recaptcha/api.js?render=6Let4qMsAAAAAFhvh6wy6Ai_Ruzq2j4MIlMhqRnl"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/hashids/2.3.0/hashids.min.js"></script>
     <script>
@@ -342,16 +342,31 @@
     <div id="dashboard" style="display:none">
         <div class="subheader-sticky">
         <header class="header">
-            <div class="logo" style="flex-shrink:0">
-                <span class="logo-dot"></span>
-                RAXEDGE
-                <span class="moe-badge">made by @moe_</span>
-                <span id="app-version-badge" style="font-size:9px;font-weight:600;color:var(--muted2);font-family:var(--mono);margin-left:6px;letter-spacing:.03em">v373</span>
+            <div class="logo" style="flex-shrink:0;display:flex;flex-direction:column;align-items:flex-start;gap:2px;margin-left:-4px">
+                <div style="display:flex;align-items:center;gap:6px">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" style="width:22px;height:22px;flex-shrink:0">
+                        <rect width="512" height="512" fill="#0a0a0c" rx="90"/>
+                        <polygon points="256,48 464,256 256,464 48,256" fill="none" stroke="#4f6ef7" stroke-width="40"/>
+                        <polygon points="256,165 347,256 256,347 165,256" fill="#4f6ef7"/>
+                    </svg>
+                    <span style="font-family:var(--sans);font-size:14px;font-weight:800;letter-spacing:.06em;color:var(--text)">RAXEDGE</span>
+                </div>
+                <span class="moe-badge" style="margin-left:0;font-size:8px;padding:2px 6px">made by @moe_</span>
             </div>
-            <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;margin-left:auto">
-                <div class="api-remaining" id="api-remaining" style="display:none">-- requests left</div>
+            <div class="nav-dd-wrap" id="nav-dd-wrap">
+                <button class="nav-dd-trigger" id="nav-dd-trigger" onclick="toggleNavDropdown()">
+                    <span id="nav-current-label">📊 Dashboard</span>
+                    <svg class="nav-dd-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;flex-shrink:0"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <div class="nav-dd-menu" id="nav-dd-menu">
+                    <button class="header-nav-btn nav-dd-item active" id="header-dash-btn" onclick="goToDashboard();closeNavDropdown()">📊 Dashboard</button>
+                    <button class="header-nav-btn nav-dd-item" id="header-otd-btn" onclick="headerNavOtd();closeNavDropdown()">🏆 OTD</button>
+                    <button class="header-nav-btn nav-dd-item" id="header-parlays-btn" onclick="headerNavParlays();closeNavDropdown()" style="display:none">🎲 Parlays</button>
+                </div>
+            </div>
+            <div id="header-right" style="display:flex;align-items:center;gap:8px">
                 <button id="collapse-btn" onclick="toggleAll()" style="display:none">Collapse All</button>
-                <button class="refresh-btn" id="refresh-btn" onclick="loadOdds()">Refresh</button>
+                <button id="annual-upsell-btn" onclick="openAnnualUpsell()" title="Annual plan · Save $21" style="display:none;color:var(--green);font-weight:700;background:var(--bg3);border:1px solid var(--border2);font-family:var(--sans);font-size:11px;letter-spacing:.05em;padding:5px 10px;border-radius:5px;cursor:pointer;white-space:nowrap">$39/yr</button>
                 <div class="menu-wrap" id="menu-wrap">
                     <button id="menu-btn" onclick="toggleMenu()" title="Menu" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:system-ui,sans-serif;font-size:16px;padding:6px 10px;border-radius:5px;cursor:pointer;line-height:1">☰</button>
                     <div class="menu-dropdown" id="menu-dropdown">
@@ -366,12 +381,21 @@
                             <span class="dd-icon">✏️</span><span>Reorder sports</span>
                         </div>
                         <div class="menu-dd-sep"></div>
+                        <div class="menu-dd-item" id="dd-manage-sub-item" onclick="openBillingPortal()" style="display:none">
+                            <span class="dd-icon">⭐</span><span>Manage subscription</span>
+                        </div>
+                        <div class="menu-dd-item" id="dd-portfolio-item" onclick="openPortfolioFromMenu()" style="display:none">
+                            <span class="dd-icon">📊</span><span>Portfolio</span>
+                        </div>
                         <div class="menu-dd-item" id="dd-group-item" onclick="openGroupCodeModal()" style="display:none">
                             <span class="dd-icon">👥</span><span>Predicts Group</span>
                         </div>
+                        <div class="menu-dd-sep"></div>
+                        <div class="menu-dd-item" id="logout-btn" onclick="logOut()" style="color:var(--red)">
+                            <span class="dd-icon">⏻</span><span>Log out</span>
+                        </div>
                     </div>
                 </div>
-                <button class="refresh-btn" onclick="logOut()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted)" title="Log out">⏻</button>
             </div>
         </header>
 
@@ -417,7 +441,7 @@
                 </div>
             </div>
         </div>
-        <div id="feature-tabs" style="display:flex;gap:6px;padding:6px 12px 0;border-bottom:1px solid var(--border)"></div>
+        <div id="feature-tabs" style="display:none;gap:6px;padding:6px 12px 0;border-bottom:1px solid var(--border)"></div>
 
         <nav class="sport-tabs" id="sport-tabs"></nav>
         <div id="fc-league-nav" style="display:flex"></div>
@@ -425,31 +449,27 @@
         <div id="ev-loading-bar-wrap" style="display:none;height:3px;background:var(--bg3);overflow:hidden"><div id="ev-loading-bar" style="height:100%;width:0%;background:linear-gradient(90deg,var(--accent),#7ddfab);transition:width .4s ease"></div></div>
 
         <div class="controls">
-            <div class="search-wrap">
-                <span class="search-ico">&#9906;</span>
-                <input class="search-inp" id="search" placeholder="Search team or matchup..." oninput="renderTable()">
+            <div class="ctrl-row">
+                <button id="ev-tab-btn" class="ctrl-tab-btn" onclick="toggleEvTab(this)" style="color:var(--yellow);font-weight:700;background:var(--bg3);border:1px solid var(--border2);font-family:var(--sans);font-size:12px;letter-spacing:.05em;padding:6px 14px;border-radius:5px;cursor:pointer;white-space:nowrap">⚡ Best EV</button>
+                <button id="referral-tab-btn" class="ctrl-tab-btn" onclick="toggleReferTab(this)" style="color:var(--green);font-weight:700;background:var(--bg3);border:1px solid var(--border2);font-family:var(--sans);font-size:12px;letter-spacing:.05em;padding:6px 14px;border-radius:5px;cursor:pointer;white-space:nowrap">🎁 Refer</button>
+                <div class="search-wrap">
+                    <span class="search-ico">&#9906;</span>
+                    <input class="search-inp" id="search" placeholder="Search..." oninput="renderTable()">
+                </div>
+                <div style="display:flex;align-items:center;gap:6px">
+                    <span class="ctrl-lbl">Unit <svg viewBox="0 0 512 512" style="width:12px;height:12px;vertical-align:-1px;display:inline-block" aria-hidden="true"><g fill="currentColor"><path d="M128.1,141.1h356.8C442.8,57.4,356.1,0,256,0C192,0,133.5,23.5,88.6,62.3L128.1,141.1z"/><polygon points="355.3,193.2 154.2,193.2 254.7,394"/><path d="M413.6,193.2L253.9,512c0.7,0,1.4,0,2.1,0c141.4,0,256-114.6,256-256c0-21.7-2.7-42.7-7.8-62.8H413.6z"/><path d="M225.6,452.1L50.7,103C18.9,145.7,0,198.6,0,256c0,121.7,85,223.6,198.8,249.6L225.6,452.1z"/></g></svg></span>
+                    <input class="ctrl-inp" id="unit-size" type="number" value="300" min="1" step="1" oninput="localStorage.setItem('raxedge_unit_size',this.value);renderTable()">
+                </div>
+                <button id="ev-only-btn" onclick="toggleEVOnly()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:.05em;padding:6px 14px;border-radius:5px;cursor:pointer;white-space:nowrap">+EV Only</button>
+                <button id="rs-adj-btn" onclick="toggleRsAdj()" title="Shift RS% by +1 or +2 points to test sensitivity to price movement" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:.05em;padding:6px 14px;border-radius:5px;cursor:pointer;white-space:nowrap">RS +0%</button>
+                <button id="excl-bets-btn" onclick="toggleExclusiveBets()" title="When on, checking one side automatically checks the other side too (marks the full game as positioned)" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:.05em;padding:6px 14px;border-radius:5px;cursor:pointer;white-space:nowrap">1 Side</button>
+                <button class="refresh-btn" id="refresh-btn" onclick="loadOdds()">Refresh</button>
+                <div class="dash-toggle" id="dash-toggle">
+                    <button class="dash-tog-btn" data-mode="simple" onclick="setDashMode('simple')">Simple</button>
+                    <button class="dash-tog-btn" data-mode="advanced" onclick="setDashMode('advanced')">Advanced</button>
+                </div>
+                <button onclick="toggleAll()" style="display:none;background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:11px;font-weight:600;padding:6px 12px;border-radius:5px;cursor:pointer;text-transform:uppercase;letter-spacing:.04em" id="mobile-collapse-btn">Collapse All</button>
             </div>
-            <div style="display:flex;align-items:center;gap:6px">
-                <span class="ctrl-lbl">Market</span>
-                <select class="ctrl-sel" id="mkt-filter" onchange="onMktChange()">
-                    <option value="ALL">All Markets</option>
-                    <option value="ML">Game Winner</option>
-                    <option value="Spread">Spread</option>
-                    <option value="Total">Total</option>
-                </select>
-            </div>
-            <div style="display:flex;align-items:center;gap:6px">
-                <span class="ctrl-lbl">Unit <svg viewBox="0 0 512 512" style="width:12px;height:12px;vertical-align:-1px;display:inline-block" aria-hidden="true"><g fill="currentColor"><path d="M128.1,141.1h356.8C442.8,57.4,356.1,0,256,0C192,0,133.5,23.5,88.6,62.3L128.1,141.1z"/><polygon points="355.3,193.2 154.2,193.2 254.7,394"/><path d="M413.6,193.2L253.9,512c0.7,0,1.4,0,2.1,0c141.4,0,256-114.6,256-256c0-21.7-2.7-42.7-7.8-62.8H413.6z"/><path d="M225.6,452.1L50.7,103C18.9,145.7,0,198.6,0,256c0,121.7,85,223.6,198.8,249.6L225.6,452.1z"/></g></svg></span>
-                <input class="ctrl-inp" id="unit-size" type="number" value="300" min="1" step="1" oninput="localStorage.setItem('raxedge_unit_size',this.value);renderTable()">
-            </div>
-            <button id="ev-only-btn" onclick="toggleEVOnly()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:.05em;padding:6px 14px;border-radius:5px;cursor:pointer;white-space:nowrap">+EV Only</button>
-            <button id="rs-adj-btn" onclick="toggleRsAdj()" title="Shift RS% by +1 or +2 points to test sensitivity to price movement" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:.05em;padding:6px 14px;border-radius:5px;cursor:pointer;white-space:nowrap">RS +0%</button>
-            <button id="excl-bets-btn" onclick="toggleExclusiveBets()" title="When on, checking one side automatically checks the other side too (marks the full game as positioned)" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:.05em;padding:6px 14px;border-radius:5px;cursor:pointer;white-space:nowrap">1 Side</button>
-            <div class="dash-toggle" id="dash-toggle" style="margin-left:auto">
-                <button class="dash-tog-btn" data-mode="simple" onclick="setDashMode('simple')">Simple</button>
-                <button class="dash-tog-btn" data-mode="advanced" onclick="setDashMode('advanced')">Advanced</button>
-            </div>
-            <button onclick="toggleAll()" style="display:none;background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:11px;font-weight:600;padding:6px 12px;border-radius:5px;cursor:pointer;text-transform:uppercase;letter-spacing:.04em" id="mobile-collapse-btn">Collapse All</button>
         </div>
         </div><!-- /.subheader-sticky -->
 
@@ -872,6 +892,7 @@
     <!-- end #dashboard -->
 
     <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script>
-    <script src="/app.js?v=378"></script>
+    <script src="/app.js?v=508"></script>
+    <div id="app-version-badge" style="position:fixed;bottom:6px;right:10px;font-size:9px;font-weight:600;color:var(--muted2);font-family:var(--mono);letter-spacing:.03em;pointer-events:none;z-index:1">v421</div>
 </body>
 </html>
