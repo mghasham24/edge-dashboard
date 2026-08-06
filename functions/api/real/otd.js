@@ -1216,6 +1216,7 @@ export async function onRequestGet(context) {
     } catch(e) {
       return fail(500, e.message);
     }
+  }
 
   // All passes that earned on a given OTD day — uses the requesting user's own RS token
   // so cardhistoricalearnings returns their personal card collection, not the shared token's
