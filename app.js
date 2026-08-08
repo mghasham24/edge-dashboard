@@ -3334,7 +3334,7 @@
     var otdColorIdx = 0;
     var otdCalYear = new Date().getFullYear();
     var otdCalMonth = new Date().getMonth(); // 0-indexed
-    var otdMode = 'username'; // 'player' | 'username' | 'leaderboard'
+    var otdMode = 'username'; // 'player' | 'username' | 'leaderboard' | 'suggest'
     var otdLeaderboard = [];
     var otdLeaderboardLoading = false;
     var otdLeaderboardSport = 'mlb';
@@ -3349,6 +3349,12 @@
     var otdSelectedUser = null; // { id, username, displayName }
     var otdUserSearchTimer = null;
     var otdLoadingPasses = false;
+    var otdSuggestUser = null; // { id, username } for Pass Suggestion tab
+    var otdSuggestSport = 'ufc';
+    var otdSuggestSeason = '2026'; // used for MLB (and future sports); ncaaf uses all seasons
+    var otdSuggestLoading = false;
+    var otdSuggestData = null; // { ownedPasses, coveredDays, suggestions }
+    var otdSuggestSearchTimer = null;
     var otdClaimsView = 2; // 2 = default (free), 3 = Pro
     var otdSelectedDay = null; // ISO date string of clicked cell
     var otdSelectedDaySport = null; // active sport tab in day panel
@@ -4377,7 +4383,7 @@
     function renderOtdCheckWrap() {
         var el = document.getElementById('otd-check-wrap');
         if (!el) return;
-        if (otdMode === 'leaderboard') { el.innerHTML = ''; return; }
+        if (otdMode === 'leaderboard' || otdMode === 'suggest') { el.innerHTML = ''; return; }
         var canShow = otdPlayers.length > 0 && !otdLoadingPasses;
         if (!canShow) { el.innerHTML = ''; return; }
         if (!otdCheckMode && !otdFindMode) {
@@ -4888,18 +4894,24 @@
     var NFL_CATS = [
         { key: 'teams', label: 'Teams' },
     ];
+    var UFC_CATS = [
+        { key: 'fights', label: 'Fights' },
+    ];
     var WNBA_MKT_SET = { pts:1, reb:1, ast:1, fg3m:1, pra:1, pa:1, pr:1, ra:1 };
-    var parlayActiveSport = 'mlb'; // 'mlb' | 'wnba' | 'nfl'
+    var parlayActiveSport = 'mlb'; // 'mlb' | 'wnba' | 'nfl' | 'ufc'
 
     var PARLAY_PLAYERS      = [];  // filled by loadParlayPlayers()
     var PARLAY_PLAYERS_WNBA = [];  // filled by loadParlayPlayers() when sport=wnba
     var PARLAY_PLAYERS_NFL  = [];  // team picks only for NFL
+    var PARLAY_PLAYERS_UFC  = [];  // fighter ML/total picks for UFC
     var PARLAY_GAMES        = [];  // filled by loadParlayLines() for MLB
     var PARLAY_GAMES_WNBA   = [];  // filled by loadParlayLines() for WNBA
     var PARLAY_GAMES_NFL    = [];  // filled by loadParlayLines() for NFL
+    var PARLAY_GAMES_UFC    = [];  // filled by loadParlayUfc() / loadOdds UFC branch
     var parlayGamesLoading      = false;
     var parlayGamesWnbaLoading  = false;
     var parlayGamesNflLoading   = false;
+    var parlayGamesUfcLoading   = false;
     var teamPickIdCounter   = -1; // negative IDs for team market picks
 
     // Maps DK label (e.g. "HOU Astros") → full ESPN name for logo lookup
@@ -4910,15 +4922,17 @@
         'NY Liberty':'New York Liberty','CHI Sky':'Chicago Sky',
         'SEA Storm':'Seattle Storm','PHX Mercury':'Phoenix Mercury',
         'ATL Dream':'Atlanta Dream','CONN Sun':'Connecticut Sun','CT Sun':'Connecticut Sun',
-        'DAL Wings':'Dallas Wings','WSH Mystics':'Washington Mystics','DC Mystics':'Washington Mystics',
-        'GSV Valkyries':'Golden State Valkyries','TOR Tempo':'Toronto Tempo','POR Fire':'Portland Fire',
+        'DAL Wings':'Dallas Wings','WSH Mystics':'Washington Mystics','WAS Mystics':'Washington Mystics','DC Mystics':'Washington Mystics',
+        'GSV Valkyries':'Golden State Valkyries','GS Valkyries':'Golden State Valkyries',
+        'TOR Tempo':'Toronto Tempo','POR Fire':'Portland Fire',
         // short codes (metadata.shortName)
         'LV':'Las Vegas Aces','IND':'Indiana Fever','LA':'Los Angeles Sparks',
         'MIN':'Minnesota Lynx','NY':'New York Liberty','CHI':'Chicago Sky',
         'SEA':'Seattle Storm','PHX':'Phoenix Mercury','ATL':'Atlanta Dream',
         'CONN':'Connecticut Sun','CT':'Connecticut Sun','DAL':'Dallas Wings',
-        'WSH':'Washington Mystics','DC':'Washington Mystics',
-        'GSV':'Golden State Valkyries','TOR':'Toronto Tempo','POR':'Portland Fire',
+        'WSH':'Washington Mystics','WAS':'Washington Mystics','DC':'Washington Mystics',
+        'GSV':'Golden State Valkyries','GS':'Golden State Valkyries',
+        'TOR':'Toronto Tempo','POR':'Portland Fire',
         // nicknames only
         'Aces':'Las Vegas Aces','Fever':'Indiana Fever','Sparks':'Los Angeles Sparks',
         'Lynx':'Minnesota Lynx','Liberty':'New York Liberty','Sky':'Chicago Sky',
@@ -4997,12 +5011,21 @@
     };
 
     function dkTeamLogo(dkName) {
-        var full = DK_NFL_TEAM_MAP[dkName] || DK_MLB_TEAM_MAP[dkName] || DK_WNBA_TEAM_MAP[dkName] || dkName;
+        if (!dkName) return null;
+        if (TEAM_LOGO_URLS[dkName]) return TEAM_LOGO_URLS[dkName];
+        var full;
+        if (parlayActiveSport === 'wnba') {
+            full = DK_WNBA_TEAM_MAP[dkName] || DK_NFL_TEAM_MAP[dkName] || DK_MLB_TEAM_MAP[dkName] || dkName;
+        } else {
+            full = DK_NFL_TEAM_MAP[dkName] || DK_MLB_TEAM_MAP[dkName] || DK_WNBA_TEAM_MAP[dkName] || dkName;
+        }
         return TEAM_LOGO_URLS[full] || null;
     }
 
     function dkTeamColor(dkName) {
-        var full = DK_NFL_TEAM_MAP[dkName] || DK_MLB_TEAM_MAP[dkName] || DK_WNBA_TEAM_MAP[dkName] || dkName;
+        var full = parlayActiveSport === 'wnba'
+            ? (DK_WNBA_TEAM_MAP[dkName] || DK_NFL_TEAM_MAP[dkName] || DK_MLB_TEAM_MAP[dkName] || dkName)
+            : (DK_NFL_TEAM_MAP[dkName] || DK_MLB_TEAM_MAP[dkName] || DK_WNBA_TEAM_MAP[dkName] || dkName);
         return TEAM_COLORS[full] || parlayTeamColor(dkName);
     }
 
@@ -5071,7 +5094,10 @@
                 }
                 var players = buildParlayPlayersFromDk(d.players, sport === 'wnba' ? 100000 : 1);
                 if (sport === 'wnba') PARLAY_PLAYERS_WNBA = players;
-                else                  PARLAY_PLAYERS = players;
+                else {
+                    var _teamPicks = PARLAY_PLAYERS.filter(function(p) { return p.isTeamMarket; });
+                    PARLAY_PLAYERS = _teamPicks.concat(players);
+                }
                 parlayRenderGrid();
                 if (PARLAY_SLIPS.length) parlayRenderSlips(PARLAY_SLIPS);
             })
@@ -5210,7 +5236,179 @@
         return PARLAY_PLAYERS.find(function(x) { return x.id === n; }) ||
                PARLAY_PLAYERS_WNBA.find(function(x) { return x.id === n; }) ||
                PARLAY_PLAYERS_NFL.find(function(x) { return x.id === n; }) ||
+               PARLAY_PLAYERS_UFC.find(function(x) { return x.id === n; }) ||
                null;
+    }
+
+    function buildUfcPicks() {
+        PARLAY_PLAYERS_UFC = [];
+        PARLAY_GAMES_UFC.forEach(function(fight) {
+            var awayOdds = fight.ml[fight.away];
+            var homeOdds = fight.ml[fight.home];
+            if (!awayOdds || !homeOdds) return;
+            var awayId = teamPickIdCounter--;
+            var homeId = teamPickIdCounter--;
+            var awayHeadshot = fight.away_sdid ? 'https://a.espncdn.com/i/headshots/mma/players/full/' + fight.away_sdid + '.png' : null;
+            var homeHeadshot = fight.home_sdid ? 'https://a.espncdn.com/i/headshots/mma/players/full/' + fight.home_sdid + '.png' : null;
+            var fmtTime = fight.cm ? (function() {
+                try { return new Date(fight.cm).toLocaleString('en-US', { weekday:'short', hour:'numeric', minute:'2-digit', timeZone:'America/New_York', timeZoneName:'short' }); } catch(e) { return ''; }
+            })() : '';
+            var awayInit = (fight.away||'').split(' ').map(function(w){return w[0]||'';}).join('').toUpperCase().slice(0,2);
+            var homeInit = (fight.home||'').split(' ').map(function(w){return w[0]||'';}).join('').toUpperCase().slice(0,2);
+            PARLAY_PLAYERS_UFC.push({
+                id:awayId, isTeamMarket:true, market:'ufc_ml', stat:'Win',
+                name:fight.away, team:fight.away, opp:fight.home,
+                headshot:awayHeadshot, fightId:fight.id,
+                moreOdds:awayOdds, oppOdds:homeOdds,
+                line:null, eventId:fight.id, time:fmtTime,
+                startMs:fight.cm ? new Date(fight.cm).getTime() : 0,
+                initials:awayInit, color:'#f05252', isFighter:true,
+            });
+            PARLAY_PLAYERS_UFC.push({
+                id:homeId, isTeamMarket:true, market:'ufc_ml', stat:'Win',
+                name:fight.home, team:fight.home, opp:fight.away,
+                headshot:homeHeadshot, fightId:fight.id,
+                moreOdds:homeOdds, oppOdds:awayOdds,
+                line:null, eventId:fight.id, time:fmtTime,
+                startMs:fight.cm ? new Date(fight.cm).getTime() : 0,
+                initials:homeInit, color:'#f05252', isFighter:true,
+            });
+            // Total Rounds
+            if (fight.totals && fight.totals.Over && fight.totals.Under) {
+                var overLines = Object.keys(fight.totals.Over);
+                if (overLines.length) {
+                    var ln = parseFloat(overLines[0]);
+                    var ov = fight.totals.Over[overLines[0]];
+                    var un = fight.totals.Under[overLines[0]] != null ? fight.totals.Under[overLines[0]] : (Object.values(fight.totals.Under)[0] || null);
+                    if (ov != null && un != null) {
+                        var ovId = teamPickIdCounter--;
+                        var unId = teamPickIdCounter--;
+                        PARLAY_PLAYERS_UFC.push({
+                            id:ovId, isTeamMarket:true, market:'ufc_total', stat:'Total Rounds',
+                            name:fight.away+' vs '+fight.home+' O'+ln,
+                            team:null, opp:null, headshot:null, fightId:fight.id,
+                            moreOdds:ov, oppOdds:un, line:ln, eventId:fight.id, time:fmtTime,
+                            startMs:fight.cm ? new Date(fight.cm).getTime() : 0,
+                            initials:'O', color:'#16a34a',
+                        });
+                        PARLAY_PLAYERS_UFC.push({
+                            id:unId, isTeamMarket:true, market:'ufc_total', stat:'Total Rounds',
+                            name:fight.away+' vs '+fight.home+' U'+ln,
+                            team:null, opp:null, headshot:null, fightId:fight.id,
+                            moreOdds:un, oppOdds:ov, line:ln, eventId:fight.id, time:fmtTime,
+                            startMs:fight.cm ? new Date(fight.cm).getTime() : 0,
+                            initials:'U', color:'#ef4444',
+                        });
+                    }
+                }
+            }
+        });
+    }
+
+    function loadParlayUfc() {
+        if (parlayGamesUfcLoading) return;
+        if (PARLAY_GAMES_UFC.length > 0) { parlayRenderUfcCards(); return; }
+        parlayGamesUfcLoading = true;
+        var grid = document.getElementById('parlay-player-grid');
+        if (grid) {
+            grid.style.cssText = 'display:flex;flex-direction:column;overflow-y:auto;gap:8px;padding:12px;box-sizing:border-box;flex:1;min-height:0';
+            grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">Loading fights…</div>';
+        }
+        fetch('/api/fd/ufc', { credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                parlayGamesUfcLoading = false;
+                if (!d.ok || !d.fights || !Object.keys(d.fights).length) {
+                    if (grid) grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">No UFC fights available</div>';
+                    return;
+                }
+                PARLAY_GAMES_UFC = Object.entries(d.fights).map(function(e) { return Object.assign({ gameKey:e[0] }, e[1]); });
+                PARLAY_GAMES_UFC.sort(function(a,b){ return (a.cm?new Date(a.cm).getTime():9e12)-(b.cm?new Date(b.cm).getTime():9e12); });
+                buildUfcPicks();
+                parlayRenderUfcCards();
+            })
+            .catch(function() {
+                parlayGamesUfcLoading = false;
+                if (grid) grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">Failed to load fights — try again</div>';
+            });
+    }
+
+    function parlayRenderUfcCards() {
+        var grid = document.getElementById('parlay-player-grid');
+        if (!grid) return;
+        grid.style.cssText = 'display:flex;flex-direction:column;overflow-y:auto;gap:8px;padding:12px;box-sizing:border-box;flex:1;min-height:0';
+        if (!PARLAY_GAMES_UFC.length) {
+            grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">No UFC fights available</div>';
+            return;
+        }
+        var pickIdx = {};
+        PARLAY_PLAYERS_UFC.forEach(function(p) {
+            var key = p.eventId + '|' + p.market;
+            if (!pickIdx[key]) pickIdx[key] = [];
+            pickIdx[key].push(p);
+        });
+        var nowMs = Date.now();
+        function fighterAvHtml(name, sdid, initials, isPicked) {
+            var border = isPicked ? '2px solid var(--accent)' : '2px solid var(--border2)';
+            var hs = sdid ? 'https://a.espncdn.com/i/headshots/mma/players/full/' + sdid + '.png' : null;
+            var bg = 'background:linear-gradient(135deg,#f05252,#b91c1c)';
+            var sz = 'width:52px;height:52px;border-radius:50%;flex-shrink:0';
+            var fb = '<div style="' + sz + ';border:' + border + ';' + bg + ';display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:#fff">' + escHtml(initials) + '</div>';
+            if (!hs) return fb;
+            return '<img src="' + escHtml(hs) + '" style="' + sz + ';object-fit:cover;border:' + border + '" onerror="this.outerHTML=' + "'" + escHtml(fb) + "'" + '">';
+        }
+        var html = PARLAY_GAMES_UFC.map(function(fight) {
+            if (fight.cm && new Date(fight.cm).getTime() < nowMs) return '';
+            var mlPicks  = pickIdx[fight.id + '|ufc_ml']    || [];
+            var totPicks = pickIdx[fight.id + '|ufc_total'] || [];
+            var awayPick = mlPicks.find(function(p){ return p.team === fight.away; }) || mlPicks[0];
+            var homePick = mlPicks.find(function(p){ return p.team === fight.home; }) || mlPicks[1];
+            var overPick  = totPicks.find(function(p){ return p.initials === 'O'; });
+            var underPick = totPicks.find(function(p){ return p.initials === 'U'; });
+            var awaySel = awayPick && parlayPicks[String(awayPick.id)] ? ' active' : '';
+            var homeSel = homePick && parlayPicks[String(homePick.id)] ? ' active' : '';
+            var fmtTime = fight.cm ? (function(){ try { return new Date(fight.cm).toLocaleString('en-US',{weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZone:'America/New_York',timeZoneName:'short'}); } catch(e){ return ''; } })() : '';
+            var awayInit = (fight.away||'').split(' ').map(function(w){return w[0]||'';}).join('').toUpperCase().slice(0,2);
+            var homeInit = (fight.home||'').split(' ').map(function(w){return w[0]||'';}).join('').toUpperCase().slice(0,2);
+            var awayLast = (fight.away||'').split(' ').pop();
+            var homeLast = (fight.home||'').split(' ').pop();
+            var h = '<div class="pgc-card">';
+            // Fighter header row
+            h += '<div style="padding:12px 12px 8px;display:flex;align-items:flex-start;gap:8px;justify-content:space-between">';
+            h += '<div style="display:flex;flex-direction:column;align-items:center;gap:5px;flex:1;min-width:0">';
+            h += fighterAvHtml(fight.away, fight.away_sdid, awayInit, !!awaySel);
+            h += '<span style="font-size:11px;font-weight:700;text-align:center;color:var(--fg);line-height:1.2;max-width:84px;word-break:break-word">' + escHtml(fight.away) + '</span>';
+            h += '</div>';
+            h += '<div style="display:flex;flex-direction:column;align-items:center;gap:3px;padding-top:10px">';
+            h += '<span style="font-size:12px;font-weight:800;color:var(--muted2)">VS</span>';
+            h += '<span style="font-size:9px;color:var(--muted);text-align:center;max-width:70px">' + escHtml(fmtTime) + '</span>';
+            h += '</div>';
+            h += '<div style="display:flex;flex-direction:column;align-items:center;gap:5px;flex:1;min-width:0">';
+            h += fighterAvHtml(fight.home, fight.home_sdid, homeInit, !!homeSel);
+            h += '<span style="font-size:11px;font-weight:700;text-align:center;color:var(--fg);line-height:1.2;max-width:84px;word-break:break-word">' + escHtml(fight.home) + '</span>';
+            h += '</div>';
+            h += '</div>';
+            // Fight Winner row
+            if (awayPick && homePick) {
+                h += '<div class="pgc-row">';
+                h += '<span class="pgc-label">Fight Winner</span>';
+                h += '<button class="pgc-btn' + awaySel + '" onclick="parlayTogglePick(' + awayPick.id + ',\'more\')">' + escHtml(awayLast) + ' ' + parlayFmtOdds(awayPick.moreOdds) + '</button>';
+                h += '<button class="pgc-btn' + homeSel + '" onclick="parlayTogglePick(' + homePick.id + ',\'more\')">' + escHtml(homeLast) + ' ' + parlayFmtOdds(homePick.moreOdds) + '</button>';
+                h += '</div>';
+            }
+            // Total Rounds row
+            if (overPick && underPick) {
+                var overSel  = parlayPicks[String(overPick.id)]  ? ' active' : '';
+                var underSel = parlayPicks[String(underPick.id)] ? ' active' : '';
+                h += '<div class="pgc-row"><span class="pgc-label">Rounds O/U</span>';
+                h += '<button class="pgc-btn over' + overSel + '" onclick="parlayTogglePick(' + overPick.id + ',\'more\')">Over ' + overPick.line + ' ' + parlayFmtOdds(overPick.moreOdds) + '</button>';
+                h += '<button class="pgc-btn under' + underSel + '" onclick="parlayTogglePick(' + underPick.id + ',\'more\')">Under ' + underPick.line + ' ' + parlayFmtOdds(underPick.moreOdds) + '</button>';
+                h += '</div>';
+            }
+            h += '</div>';
+            return h;
+        }).filter(Boolean).join('');
+        grid.innerHTML = html || '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">No upcoming UFC fights</div>';
     }
 
     function parlayToProb(odds) {
@@ -5261,7 +5459,9 @@
         var imgStyle = 'width:' + s + ';height:' + s + ';border-radius:50%;object-fit:contain;flex-shrink:0;background:var(--bg3)';
         var fallback = '<div style="width:' + s + ';height:' + s + ';border-radius:50%;background:linear-gradient(135deg,' + (p.color || '#333') + ',' + (p.color || '#333') + 'aa);display:flex;align-items:center;justify-content:center;font-size:' + fsize + 'px;font-weight:800;color:#fff;flex-shrink:0">' + escHtml(p.initials || '?') + '</div>';
         if (p.isTeamMarket) {
-            var logo = dkTeamLogo(p.team) || dkTeamLogo(p.homeTeam) || dkTeamLogo(p.awayTeam);
+            // UFC fighters: use headshot over team logo
+            if (p.headshot) return '<img src="' + escHtml(p.headshot) + '" style="' + imgStyle + ';object-fit:cover" onerror="this.outerHTML=' + "'" + escHtml(fallback) + "'" + '">';
+            var logo = p.logo || dkTeamLogo(p.team) || dkTeamLogo(p.awayTeam) || dkTeamLogo(p.homeTeam);
             if (logo) return '<img src="' + escHtml(logo) + '" style="' + imgStyle + ';padding:2px" onerror="this.outerHTML=' + "'" + escHtml(fallback) + "'" + '">';
             return fallback;
         }
@@ -5313,13 +5513,25 @@
     function parlayRenderGameCards(games, sport) {
         var grid = document.getElementById('parlay-player-grid');
         if (!grid) return;
-        // Switch to flex column so overflow-y:auto + flex:1 give bounded scroll height
-        // Override grid to a scrollable flex column; flex:1 + min-height:0 come from CSS
-        grid.style.cssText = 'display:flex;flex-direction:column;overflow-y:auto;gap:8px;padding:12px;box-sizing:border-box';
+        grid.style.cssText = 'display:flex;flex-direction:column;overflow-y:auto;gap:8px;padding:12px;box-sizing:border-box;flex:1;min-height:0';
         if (!games.length) {
             grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">No game lines available today</div>';
             return;
         }
+
+        // Read market pick IDs from PARLAY_PLAYERS team picks (populated by buildGamePicks).
+        // This is more reliable than reading mkt._awayPickId from game.markets (which can
+        // lose its mutations if the game object is replaced between buildGamePicks and render).
+        var playerPool = sport === 'wnba' ? PARLAY_PLAYERS_WNBA : sport === 'nfl' ? PARLAY_PLAYERS_NFL : PARLAY_PLAYERS;
+        // Index team picks by eventId + market type
+        var pickIdx = {};
+        playerPool.forEach(function(p) {
+            if (!p.isTeamMarket) return;
+            var key = p.eventId + '|' + p.market;
+            if (!pickIdx[key]) pickIdx[key] = [];
+            pickIdx[key].push(p);
+        });
+
         var cardsHtml = games.map(function(game) {
             var html = '<div class="pgc-card">';
             html += '<div class="pgc-header">';
@@ -5335,35 +5547,82 @@
                 html += '<a href="' + escHtml(gameRsUrl) + '" target="_blank" rel="noopener" class="rs-icon-btn" title="Go to game on Real Sports" onclick="event.stopPropagation()">' + RS_LOGO_SVG + '</a>';
             }
             html += '</div>';
-            game.markets.forEach(function(mkt) {
-                if (mkt.market === 'team_ml') {
-                    var awaySel = parlayPicks[String(mkt._awayPickId)] ? ' active' : '';
-                    var homeSel = parlayPicks[String(mkt._homePickId)] ? ' active' : '';
-                    html += '<div class="pgc-row">';
-                    html += '<span class="pgc-label">Game Winner</span>';
-                    html += '<button class="pgc-btn' + awaySel + '" onclick="parlayTogglePick(' + mkt._awayPickId + ',\'more\')">' + (awayLogo ? '<img class="pgc-btn-logo" src="' + escHtml(awayLogo) + '" onerror="this.style.display=\'none\'">' : '') + '<span>' + escHtml(game.awayShort) + ' ' + parlayFmtOdds(mkt.awayOdds) + '</span></button>';
-                    html += '<button class="pgc-btn' + homeSel + '" onclick="parlayTogglePick(' + mkt._homePickId + ',\'more\')">' + (homeLogo ? '<img class="pgc-btn-logo" src="' + escHtml(homeLogo) + '" onerror="this.style.display=\'none\'">' : '') + '<span>' + escHtml(game.homeShort) + ' ' + parlayFmtOdds(mkt.homeOdds) + '</span></button>';
-                    html += '</div>';
-                } else if (mkt.market === 'team_runline') {
-                    var awayRlSel = parlayPicks[String(mkt._awayPickId)] ? ' active' : '';
-                    var homeRlSel = parlayPicks[String(mkt._homePickId)] ? ' active' : '';
-                    var awayLine = mkt.awayLine > 0 ? '+' + mkt.awayLine : '' + mkt.awayLine;
-                    var homeLine = mkt.homeLine > 0 ? '+' + mkt.homeLine : '' + mkt.homeLine;
-                    html += '<div class="pgc-row">';
-                    html += '<span class="pgc-label">' + (sport === 'wnba' ? 'Spread' : 'Run Line') + '</span>';
-                    html += '<button class="pgc-btn' + awayRlSel + '" onclick="parlayTogglePick(' + mkt._awayPickId + ',\'more\')">' + (awayLogo ? '<img class="pgc-btn-logo" src="' + escHtml(awayLogo) + '" onerror="this.style.display=\'none\'">' : '') + '<span>' + escHtml(game.awayShort) + ' ' + awayLine + ' (' + parlayFmtOdds(mkt.awayOdds) + ')</span></button>';
-                    html += '<button class="pgc-btn' + homeRlSel + '" onclick="parlayTogglePick(' + mkt._homePickId + ',\'more\')">' + (homeLogo ? '<img class="pgc-btn-logo" src="' + escHtml(homeLogo) + '" onerror="this.style.display=\'none\'">' : '') + '<span>' + escHtml(game.homeShort) + ' ' + homeLine + ' (' + parlayFmtOdds(mkt.homeOdds) + ')</span></button>';
-                    html += '</div>';
-                } else if (mkt.market === 'team_total') {
-                    var overSel  = parlayPicks[String(mkt._overPickId)]  ? ' active' : '';
-                    var underSel = parlayPicks[String(mkt._underPickId)] ? ' active' : '';
-                    html += '<div class="pgc-row">';
-                    html += '<span class="pgc-label">O/U</span>';
-                    html += '<button class="pgc-btn over' + overSel + '" onclick="parlayTogglePick(' + mkt._overPickId + ',\'more\')">Over ' + mkt.line + ' ' + parlayFmtOdds(mkt.overOdds) + '</button>';
-                    html += '<button class="pgc-btn under' + underSel + '" onclick="parlayTogglePick(' + mkt._underPickId + ',\'more\')">Under ' + mkt.line + ' ' + parlayFmtOdds(mkt.underOdds) + '</button>';
-                    html += '</div>';
-                }
-            });
+
+            // Render market rows using either player picks index (preferred) or game.markets fallback
+            var markets = (game.markets || []);
+            var eid = game.eventId;
+
+            // Moneyline
+            var mlPicks = pickIdx[eid + '|team_ml'] || [];
+            var mlAway = mlPicks.find(function(p) { return p.team === game.awayShort; });
+            var mlHome = mlPicks.find(function(p) { return p.team === game.homeShort; });
+            if (!mlAway) mlAway = mlPicks[0]; if (!mlHome) mlHome = mlPicks[1];
+            var mlMkt = markets.find(function(m) { return m.market === 'team_ml'; });
+            if (mlAway && mlHome) {
+                var awaySel = parlayPicks[String(mlAway.id)] ? ' active' : '';
+                var homeSel = parlayPicks[String(mlHome.id)] ? ' active' : '';
+                html += '<div class="pgc-row">';
+                html += '<span class="pgc-label">Game Winner</span>';
+                html += '<button class="pgc-btn' + awaySel + '" onclick="parlayTogglePick(' + mlAway.id + ',\'more\')">' + (awayLogo ? '<img class="pgc-btn-logo" src="' + escHtml(awayLogo) + '" onerror="this.style.display=\'none\'">' : '') + '<span>' + escHtml(game.awayShort) + ' ' + parlayFmtOdds(mlAway.moreOdds) + '</span></button>';
+                html += '<button class="pgc-btn' + homeSel + '" onclick="parlayTogglePick(' + mlHome.id + ',\'more\')">' + (homeLogo ? '<img class="pgc-btn-logo" src="' + escHtml(homeLogo) + '" onerror="this.style.display=\'none\'">' : '') + '<span>' + escHtml(game.homeShort) + ' ' + parlayFmtOdds(mlHome.moreOdds) + '</span></button>';
+                html += '</div>';
+            } else if (mlMkt) {
+                var awaySel2 = parlayPicks[String(mlMkt._awayPickId)] ? ' active' : '';
+                var homeSel2 = parlayPicks[String(mlMkt._homePickId)] ? ' active' : '';
+                html += '<div class="pgc-row"><span class="pgc-label">Game Winner</span>';
+                html += '<button class="pgc-btn' + awaySel2 + '" onclick="parlayTogglePick(' + mlMkt._awayPickId + ',\'more\')">' + escHtml(game.awayShort) + ' ' + parlayFmtOdds(mlMkt.awayOdds) + '</button>';
+                html += '<button class="pgc-btn' + homeSel2 + '" onclick="parlayTogglePick(' + mlMkt._homePickId + ',\'more\')">' + escHtml(game.homeShort) + ' ' + parlayFmtOdds(mlMkt.homeOdds) + '</button>';
+                html += '</div>';
+            }
+
+            // Run Line / Spread
+            var rlPicks = pickIdx[eid + '|team_runline'] || [];
+            var rlAway = rlPicks.find(function(p) { return p.team === game.awayShort; });
+            var rlHome = rlPicks.find(function(p) { return p.team === game.homeShort; });
+            if (!rlAway) rlAway = rlPicks[0]; if (!rlHome) rlHome = rlPicks[1];
+            var rlMkt = markets.find(function(m) { return m.market === 'team_runline'; });
+            if (rlAway && rlHome) {
+                var awayRlSel = parlayPicks[String(rlAway.id)] ? ' active' : '';
+                var homeRlSel = parlayPicks[String(rlHome.id)] ? ' active' : '';
+                var awayLn = rlAway.line != null ? (rlAway.line > 0 ? '+' + rlAway.line : '' + rlAway.line) : '';
+                var homeLn = rlHome.line != null ? (rlHome.line > 0 ? '+' + rlHome.line : '' + rlHome.line) : '';
+                html += '<div class="pgc-row"><span class="pgc-label">' + (sport === 'wnba' ? 'Spread' : 'Run Line') + '</span>';
+                html += '<button class="pgc-btn' + awayRlSel + '" onclick="parlayTogglePick(' + rlAway.id + ',\'more\')">' + (awayLogo ? '<img class="pgc-btn-logo" src="' + escHtml(awayLogo) + '" onerror="this.style.display=\'none\'">' : '') + '<span>' + escHtml(game.awayShort) + ' ' + awayLn + ' (' + parlayFmtOdds(rlAway.moreOdds) + ')</span></button>';
+                html += '<button class="pgc-btn' + homeRlSel + '" onclick="parlayTogglePick(' + rlHome.id + ',\'more\')">' + (homeLogo ? '<img class="pgc-btn-logo" src="' + escHtml(homeLogo) + '" onerror="this.style.display=\'none\'">' : '') + '<span>' + escHtml(game.homeShort) + ' ' + homeLn + ' (' + parlayFmtOdds(rlHome.moreOdds) + ')</span></button>';
+                html += '</div>';
+            } else if (rlMkt) {
+                var awayRlSel2 = parlayPicks[String(rlMkt._awayPickId)] ? ' active' : '';
+                var homeRlSel2 = parlayPicks[String(rlMkt._homePickId)] ? ' active' : '';
+                var aln = rlMkt.awayLine > 0 ? '+' + rlMkt.awayLine : '' + rlMkt.awayLine;
+                var hln = rlMkt.homeLine > 0 ? '+' + rlMkt.homeLine : '' + rlMkt.homeLine;
+                html += '<div class="pgc-row"><span class="pgc-label">' + (sport === 'wnba' ? 'Spread' : 'Run Line') + '</span>';
+                html += '<button class="pgc-btn' + awayRlSel2 + '" onclick="parlayTogglePick(' + rlMkt._awayPickId + ',\'more\')">' + escHtml(game.awayShort) + ' ' + aln + ' (' + parlayFmtOdds(rlMkt.awayOdds) + ')</button>';
+                html += '<button class="pgc-btn' + homeRlSel2 + '" onclick="parlayTogglePick(' + rlMkt._homePickId + ',\'more\')">' + escHtml(game.homeShort) + ' ' + hln + ' (' + parlayFmtOdds(rlMkt.homeOdds) + ')</button>';
+                html += '</div>';
+            }
+
+            // Total
+            var totPicks = pickIdx[eid + '|team_total'] || [];
+            var overPick  = totPicks.find(function(p) { return p.initials === 'O'; });
+            var underPick = totPicks.find(function(p) { return p.initials === 'U'; });
+            if (!overPick) overPick = totPicks[0]; if (!underPick) underPick = totPicks[1];
+            var totMkt = markets.find(function(m) { return m.market === 'team_total'; });
+            if (overPick && underPick) {
+                var overSel  = parlayPicks[String(overPick.id)]  ? ' active' : '';
+                var underSel = parlayPicks[String(underPick.id)] ? ' active' : '';
+                html += '<div class="pgc-row"><span class="pgc-label">O/U</span>';
+                html += '<button class="pgc-btn over' + overSel + '" onclick="parlayTogglePick(' + overPick.id + ',\'more\')">Over ' + overPick.line + ' ' + parlayFmtOdds(overPick.moreOdds) + '</button>';
+                html += '<button class="pgc-btn under' + underSel + '" onclick="parlayTogglePick(' + underPick.id + ',\'more\')">Under ' + underPick.line + ' ' + parlayFmtOdds(underPick.moreOdds) + '</button>';
+                html += '</div>';
+            } else if (totMkt) {
+                var overSel2  = parlayPicks[String(totMkt._overPickId)]  ? ' active' : '';
+                var underSel2 = parlayPicks[String(totMkt._underPickId)] ? ' active' : '';
+                html += '<div class="pgc-row"><span class="pgc-label">O/U</span>';
+                html += '<button class="pgc-btn over' + overSel2 + '" onclick="parlayTogglePick(' + totMkt._overPickId + ',\'more\')">Over ' + totMkt.line + ' ' + parlayFmtOdds(totMkt.overOdds) + '</button>';
+                html += '<button class="pgc-btn under' + underSel2 + '" onclick="parlayTogglePick(' + totMkt._underPickId + ',\'more\')">Under ' + totMkt.line + ' ' + parlayFmtOdds(totMkt.underOdds) + '</button>';
+                html += '</div>';
+            }
+
             html += '</div>';
             return html;
         }).join('');
@@ -5373,6 +5632,18 @@
     function parlayRenderGrid() {
         var grid = document.getElementById('parlay-player-grid');
         if (!grid) return;
+
+        // UFC tab — fight cards with fighter headshots
+        if (parlayActiveSport === 'ufc') {
+            if (!PARLAY_PLAYERS_UFC.length && !parlayGamesUfcLoading) { loadParlayUfc(); return; }
+            if (parlayGamesUfcLoading) {
+                grid.style.cssText = 'display:flex;flex-direction:column;overflow-y:auto;gap:8px;padding:12px;box-sizing:border-box;flex:1;min-height:0';
+                grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">Loading fights…</div>';
+                return;
+            }
+            parlayRenderUfcCards();
+            return;
+        }
 
         // Teams tab
         if (parlayCategory === 'teams') {
@@ -5458,8 +5729,9 @@
             '<button class="parlay-sport-btn' + (parlayActiveSport === 'mlb'  ? ' active' : '') + '" onclick="setParlayActiveSport(\'mlb\')">MLB</button>' +
             '<button class="parlay-sport-btn' + (parlayActiveSport === 'wnba' ? ' active' : '') + '" onclick="setParlayActiveSport(\'wnba\')">WNBA</button>' +
             '<button class="parlay-sport-btn' + (parlayActiveSport === 'nfl'  ? ' active' : '') + '" onclick="setParlayActiveSport(\'nfl\')">NFL</button>' +
+            '<button class="parlay-sport-btn' + (parlayActiveSport === 'ufc'  ? ' active' : '') + '" onclick="setParlayActiveSport(\'ufc\')">UFC</button>' +
         '</div>';
-        var cats = parlayActiveSport === 'wnba' ? WNBA_CATS : parlayActiveSport === 'nfl' ? NFL_CATS : PARLAY_CATS;
+        var cats = parlayActiveSport === 'wnba' ? WNBA_CATS : parlayActiveSport === 'nfl' ? NFL_CATS : parlayActiveSport === 'ufc' ? UFC_CATS : PARLAY_CATS;
         var searchTab = parlaySearchQuery
             ? '<button class="parlay-cat-btn' + (parlayCategory === 'search' ? ' active' : '') + '" data-cat="search" onclick="parlaySetCategory(\'search\')">Player</button>'
             : '';
@@ -5473,12 +5745,13 @@
         if (parlayActiveSport === sport) return;
         parlayActiveSport = sport;
         parlaySearchQuery = '';
-        var cats = sport === 'wnba' ? WNBA_CATS : sport === 'nfl' ? NFL_CATS : PARLAY_CATS;
+        var cats = sport === 'wnba' ? WNBA_CATS : sport === 'nfl' ? NFL_CATS : sport === 'ufc' ? UFC_CATS : PARLAY_CATS;
         parlayCategory     = cats[0].key;
         parlayPrevCategory = cats[0].key;
         var nav = document.getElementById('parlay-cat-nav');
         if (nav) nav.innerHTML = parlayBuildNavHtml();
-        loadParlayPlayers();
+        if (sport === 'ufc') loadParlayUfc();
+        else loadParlayPlayers();
     }
 
     function parlaySetCategory(cat) {
@@ -6103,6 +6376,26 @@
         startLiveSlipTracking();
     }
 
+    window.parlayCancel = function(parlayId) {
+        showConfirm('Are you sure?', function() {
+            fetch('/api/parlays/cancel', {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ parlay_id: parlayId }),
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d.ok) {
+                    parlaysClear();
+                    renderParlayPanel();
+                    loadMySlips();
+                }
+            })
+            .catch(function() {});
+        });
+    };
+
     window.parlayShare = function(id, btn) {
         var s = PARLAY_SLIPS.find(function(x) { return x.id === id; });
         if (!s) return;
@@ -6110,24 +6403,20 @@
         var mult = s.stake_rax > 0 ? (s.payout_rax / s.stake_rax).toFixed(2) + 'x' : '';
         var emoji = s.status === 'won' ? '🏆' : s.status === 'lost' ? '❌' : '🎯';
         var header = emoji + ' RaxEdge Parlay' + (mult ? ' — ' + mult : '') + (s.status === 'won' ? ' WON' : s.status === 'lost' ? ' LOST' : '');
-        var text;
-        if (s.status === 'active') {
-            text = header + '\nhttps://www.realapp.com/weSGFNF26KV\nStake: ' + Number(s.stake_rax).toLocaleString() + ' · To Win: ' + Number(s.payout_rax).toLocaleString() + ' Rax\nhttps://raxedge.com';
-        } else {
-            var lines = [header, ''];
-            (s.legs || []).forEach(function(leg) {
-                var arrow = leg.direction === 'more' ? '↑' : '↓';
-                var dir   = leg.direction === 'more' ? 'Over' : 'Under';
-                var mkt   = MKT_LABEL[leg.market_type] || leg.market_type || '';
-                var result = leg.status === 'won' ? ' ✓' : leg.status === 'lost' ? ' ✗' : '';
-                lines.push(arrow + ' ' + leg.player_name + ' ' + dir + ' ' + leg.threshold + ' ' + mkt + result);
-            });
-            lines.push('');
-            if (s.status === 'won') lines.push('Won: ' + Number(s.payout_rax).toLocaleString() + ' Rax 🔥');
-            else lines.push('Stake: ' + Number(s.stake_rax).toLocaleString() + ' · Payout: ' + Number(s.payout_rax).toLocaleString() + ' Rax');
-            lines.push('https://raxedge.com');
-            text = lines.join('\n');
-        }
+        var lines = [header, ''];
+        (s.legs || []).forEach(function(leg) {
+            var arrow = leg.direction === 'more' ? '↑' : '↓';
+            var dir   = leg.direction === 'more' ? 'Over' : 'Under';
+            var mkt   = MKT_LABEL[leg.market_type] || leg.market_type || '';
+            var result = leg.status === 'won' ? ' ✓' : leg.status === 'lost' ? ' ✗' : '';
+            lines.push(arrow + ' ' + leg.player_name + ' ' + dir + ' ' + leg.threshold + ' ' + mkt + result);
+        });
+        lines.push('');
+        if (s.status === 'won') lines.push('Won: ' + Number(s.payout_rax).toLocaleString() + ' Rax 🔥');
+        else if (s.status === 'active') lines.push('Stake: ' + Number(s.stake_rax).toLocaleString() + ' · To Win: ' + Number(s.payout_rax).toLocaleString() + ' Rax');
+        else lines.push('Stake: ' + Number(s.stake_rax).toLocaleString() + ' · Payout: ' + Number(s.payout_rax).toLocaleString() + ' Rax');
+        lines.push('https://raxedge.com');
+        var text = lines.join('\n');
         if (navigator.share) {
             navigator.share({ text: text }).catch(function() {});
         } else {
@@ -6303,6 +6592,9 @@
         var depositLink = (s.status === 'pending_deposit' && s.deposit_card_url)
             ? '<a href="' + escHtml(s.deposit_card_url) + '" target="_blank" rel="noopener" class="pslip-deposit-link">Tap to send ' + Number(s.stake_rax).toLocaleString() + ' Rax deposit →</a>'
             : '';
+        var cancelBtn = (s.status === 'pending_deposit' && !showUsername)
+            ? '<button class="pslip-cancel-btn" data-id="' + s.id + '" onclick="parlayCancel(' + s.id + ')">Cancel</button>'
+            : '';
         var settleBtn = (s.status === 'active' && currentUser && currentUser.is_admin) ? '<button class="pslip-settle-btn" onclick="parlayOpenSettle(' + s.id + ')">Settle</button>' : '';
         var shareBtn = (!showUsername && (s.status === 'active' || s.status === 'won' || s.status === 'lost')) ? '<button class="pslip-share-btn" onclick="parlayShare(' + s.id + ', this)">Share</button>' : '';
         var multBadge = mult ? '<span class="pslip-mult">' + escHtml(mult) + '</span>' : '';
@@ -6325,7 +6617,7 @@
             '<div class="pslip-legs-list">' + legsHtml + '</div>' +
             depositLink +
             payoutNote +
-            '<div class="pslip-actions">' + settleBtn + shareBtn + '</div>' +
+            '<div class="pslip-actions">' + cancelBtn + settleBtn + shareBtn + '</div>' +
         '</div>';
     }
 
@@ -6494,13 +6786,19 @@
         var placeBtn = document.getElementById('parlay-place-btn');
 
         if (payout !== null && payEl) {
+            var maxS = parlayMaxStake();
+            if (parlayStake > maxS) {
+                parlayStake = maxS;
+                var sInp = document.getElementById('parlay-stake-input');
+                if (sInp) sInp.value = parlayStake;
+                payout = parlayCalcPayout(parlayStake);
+            }
             var mult = parlayStake > 0 ? (payout / parlayStake).toFixed(2) : '0.00';
             payEl.textContent = payout.toLocaleString() + ' Rax';
             payEl.classList.add('active');
             if (rowEl) rowEl.classList.add('has-value');
             if (oddsEl) oddsEl.textContent = mult + 'x parlay · ' + count + ' legs';
             if (placeBtn) placeBtn.disabled = false;
-            var maxS = parlayMaxStake();
             var legMsg = count === 5 ? 'Max 5 legs' : count + ' legs · up to ' + (5 - count) + ' more';
             if (noteEl) noteEl.textContent = legMsg + ' · max stake ' + maxS.toLocaleString() + ' Rax';
         } else if (payEl) {
@@ -6596,8 +6894,19 @@
                         showConfirm('Can\'t add the same player or pick twice', function() {});
                         return;
                     }
+                    // UFC: block any two picks from the same fight
+                    if (newP.fightId) {
+                        var _ufcConflict = Object.keys(parlayPicks).some(function(k) {
+                            var ex = findParlayPlayer(k);
+                            return ex && ex.fightId === newP.fightId;
+                        });
+                        if (_ufcConflict) {
+                            showConfirm('Only one pick per fight allowed.', function() {});
+                            return;
+                        }
+                    }
                     // Correlation check: player prop + team ML/RL from same game
-                    if (newP.eventId) {
+                    if (newP.eventId && !newP.fightId) {
                         var conflict = Object.keys(parlayPicks).some(function(k) {
                             var existing = findParlayPlayer(k);
                             if (!existing || existing.eventId !== newP.eventId) return false;
@@ -6750,15 +7059,15 @@
                         '<div style="font-size:32px;margin-bottom:8px">🎰</div>' +
                         '<div style="font-size:18px;font-weight:800;margin-bottom:4px">Parlay Pending</div>' +
                         '<div style="font-size:12px;color:var(--muted2);margin-bottom:6px">ID #' + d.parlayId + ' · ' + d.legs + ' legs · ' + d.multiplier + 'x</div>' +
-                        '<div style="font-size:13px;color:var(--muted)">Press the blue button and offer <strong>' + d.stake.toLocaleString() + ' Rax</strong> to submit your parlay!</div>' +
+                        '<div style="font-size:13px;color:var(--muted)">Press the blue button and offer <span style="color:var(--accent);font-weight:800;font-size:15px">' + d.stake.toLocaleString() + ' Rax</span> to submit your parlay!</div>' +
                     '</div>' +
                     '<div style="background:var(--bg2);border:1.5px solid var(--border2);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px">' +
                         '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px">Deposit Instructions</div>' +
                         '<div style="font-size:13px;line-height:1.6">' +
-                            'Go to the RS card below and send <strong>@edgebot</strong> an offer for exactly <strong>' + d.stake.toLocaleString() + ' Rax</strong>.' +
+                            'Go to the RS card below and send <strong>@edgebot</strong> an offer for exactly <span style="color:var(--accent);font-weight:800">' + d.stake.toLocaleString() + ' Rax</span>.' +
                         '</div>' +
-                        '<a href="' + escHtml(d.depositCardUrl) + '" target="_blank" rel="noopener" style="display:block;background:var(--accent-dim);border:1.5px solid var(--accent);border-radius:8px;padding:10px 14px;text-decoration:none;color:var(--accent);font-size:12px;font-weight:700;text-align:center;word-break:break-all">' +
-                            '→ Open Deposit Card #' + d.depositCardId +
+                        '<a href="' + escHtml(d.depositCardUrl) + '" target="_blank" rel="noopener" style="display:block;background:var(--accent-dim);border:1.5px solid var(--accent);border-radius:8px;padding:10px 14px;text-decoration:none;color:var(--accent);font-size:12px;font-weight:700;text-align:center">' +
+                            '→ Open Deposit Card' +
                         '</a>' +
                         '<div style="font-size:11px;color:var(--muted2);text-align:center">⏱ Expires at ' + expStr + ' (1 hr)</div>' +
                     '</div>' +
@@ -7093,6 +7402,7 @@
     }
 
     function headerNavParlays() {
+        if (!isPro()) { showUpgradeModal('Parlays are available on the Pro plan. Upgrade to place multi-leg parlays and win up to 10,000 Rax.'); return; }
         var otdPanel = document.getElementById('otd-panel');
         if (otdPanel && otdPanel.classList.contains('visible')) hideOtdTab();
         showParlaysTab();
@@ -7194,6 +7504,410 @@
         if (bdEl) bdEl.innerHTML = otdSelectedPass ? buildBreakdownCard(otdSelectedPass) : '';
     }
 
+    var otdSuggestLevels = {}; // { fighterId: rarityLevel } — per-card rarity state
+    var otdSuggestOpenOverlap = null; // fighter id whose overlap panel is open
+    var otdSuggestClaimLimit = 2; // 2 or 3 claims per fight day
+    var otdSuggestGlobalLevel = 5; // global rarity (Legendary 1 default)
+    var otdSuggestMyPassLevel = null; // null = use actual RS pass levels; number = override
+    var otdSuggestShowAllPasses = false; // expand owned passes beyond top 15
+
+    function loadOtdSuggestions() {
+        var errEl = document.getElementById('otd-suggest-err');
+        var inp = document.getElementById('otd-suggest-input');
+        var typed = (inp ? inp.value : '').trim();
+        if (!otdSuggestUser && !typed) {
+            if (errEl) { errEl.textContent = 'Enter an RS username first'; errEl.style.display = ''; setTimeout(function() { if (errEl) errEl.style.display = 'none'; }, 3000); }
+            return;
+        }
+        if (!otdSuggestUser) {
+            var stripped = typed.replace(/_+$/, '');
+            var queries = ['/api/real/otd?action=search_users&q=' + encodeURIComponent(typed)];
+            if (stripped !== typed) queries.push('/api/real/otd?action=search_users&q=' + encodeURIComponent(stripped));
+            Promise.all(queries.map(function(url) { return fetch(url, { credentials: 'same-origin' }).then(function(r) { return r.json(); }).catch(function() { return { users: [] }; }); }))
+                .then(function(results) {
+                    var seen = {};
+                    var users = [];
+                    results.forEach(function(d) { (d.users || []).forEach(function(u) { if (u.id && !seen[u.id]) { seen[u.id] = 1; users.push(u); } }); });
+                    var match = users.find(function(u) { return u.username.toLowerCase() === typed.toLowerCase(); });
+                    otdSuggestUser = match || { id: typed, username: typed, displayName: null };
+                    if (inp) inp.value = otdSuggestUser.username;
+                    loadOtdSuggestions();
+                })
+                .catch(function() { if (errEl) { errEl.textContent = 'Could not find user'; errEl.style.display = ''; } });
+            return;
+        }
+        otdSuggestLoading = true;
+        otdSuggestData = null;
+        otdSuggestOpenOverlap = null;
+        renderOtdSuggest();
+        var suggestUrl = '/api/real/otd?action=suggest&sport=' + encodeURIComponent(otdSuggestSport) + '&userId=' + encodeURIComponent(otdSuggestUser.id);
+        fetch(suggestUrl, { credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                otdSuggestLoading = false;
+                if (!d.ok) {
+                    renderOtdSuggest();
+                    var e2 = document.getElementById('otd-suggest-err');
+                    if (e2) { e2.textContent = d.error || 'Error loading suggestions'; e2.style.display = ''; }
+                    return;
+                }
+                otdSuggestData = d;
+                // Init per-card rarity to Legendary 1 (value=5) if not already set
+                (d.suggestions || []).forEach(function(s) { if (otdSuggestLevels[s.id] === undefined) otdSuggestLevels[s.id] = 5; });
+                renderOtdSuggest();
+            })
+            .catch(function() {
+                otdSuggestLoading = false;
+                renderOtdSuggest();
+                var e2 = document.getElementById('otd-suggest-err');
+                if (e2) { e2.textContent = 'Failed to load — try again'; e2.style.display = ''; }
+            });
+    }
+
+    function otdSuggestSetLevel(id, level) {
+        otdSuggestLevels[id] = level;
+        renderOtdSuggest();
+    }
+
+    function otdSuggestSetAllLevels(level) {
+        otdSuggestGlobalLevel = level;
+        if (otdSuggestData && otdSuggestData.suggestions) {
+            otdSuggestData.suggestions.forEach(function(s) { otdSuggestLevels[String(s.id)] = level; });
+        }
+        renderOtdSuggest();
+    }
+
+    function otdSuggestSetMyPassLevel(val) {
+        otdSuggestMyPassLevel = val === '' ? null : parseInt(val, 10);
+        renderOtdSuggest();
+    }
+
+    function otdSuggestToggleOverlap(id) {
+        otdSuggestOpenOverlap = String(otdSuggestOpenOverlap) === String(id) ? null : String(id);
+        renderOtdSuggest();
+        if (otdSuggestOpenOverlap !== null) {
+            setTimeout(function() {
+                var panel = document.getElementById('otd-suggest-overlap-panel');
+                var grid = document.getElementById('otd-suggest-grid');
+                if (!panel || !grid) return;
+                var openCard = grid.querySelector('[data-suggest-id="' + String(id) + '"]');
+                if (!openCard) { panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); return; }
+                var cardTop = openCard.getBoundingClientRect().top;
+                var cards = Array.from(grid.querySelectorAll('[data-suggest-id]'));
+                var sameRow = cards.filter(function(c) { return Math.abs(c.getBoundingClientRect().top - cardTop) < 5; });
+                var lastInRow = sameRow[sameRow.length - 1];
+                if (lastInRow) grid.insertBefore(panel, lastInRow.nextSibling);
+                panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }, 30);
+        }
+    }
+
+    function renderOtdSuggest() {
+        var el = document.getElementById('otd-results');
+        if (!el || otdMode !== 'suggest') return;
+
+        var SPORT_LABELS = { ufc: 'UFC', nba: 'NBA', mlb: 'MLB', nhl: 'NHL', wnba: 'WNBA', ncaaf: 'CFB' };
+
+        var sportSel = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">' +
+            '<span style="font-size:13px;color:var(--muted);font-weight:600">Sport:</span>' +
+            ['ufc', 'ncaaf', 'mlb'].map(function(s) {
+                var active = otdSuggestSport === s;
+                return '<button onclick="otdSuggestSport=\'' + s + '\';otdSuggestData=null;otdSuggestUser=null;otdSuggestShowAllPasses=false;renderOtdSuggest()" style="background:' + (active ? 'var(--accent)' : 'var(--bg3)') + ';border:1px solid ' + (active ? 'var(--accent)' : 'var(--border2)') + ';color:' + (active ? '#fff' : 'var(--muted)') + ';font-family:var(--sans);font-size:12px;font-weight:700;padding:5px 14px;border-radius:6px;cursor:pointer">' + SPORT_LABELS[s] + '</button>';
+            }).join('') +
+            ((otdSuggestSport === 'ncaaf' || otdSuggestSport === 'mlb') ? ' <span style="font-size:11px;color:var(--muted2);margin-left:4px">All seasons combined</span>' : '') +
+        '</div>';
+
+        var userRow = '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">' +
+            '<div style="position:relative;flex:1">' +
+                '<input id="otd-suggest-input" type="text" placeholder="RS username…" value="' + (otdSuggestUser ? escHtml(otdSuggestUser.username) : '') + '" autocomplete="off" ' +
+                    'oninput="otdSuggestInputChange(this.value)" ' +
+                    'style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:13px;padding:8px 10px;border-radius:6px">' +
+                '<div id="otd-suggest-ac" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg2);border:1px solid var(--border2);border-radius:6px;z-index:200;box-shadow:0 4px 16px rgba(0,0,0,.18);margin-top:2px"></div>' +
+            '</div>' +
+            '<button onclick="otdSuggestUser=null;loadOtdSuggestions()" style="background:var(--accent);border:none;color:#fff;font-family:var(--sans);font-size:13px;font-weight:700;padding:8px 18px;border-radius:6px;cursor:pointer;white-space:nowrap">' +
+                (otdSuggestLoading ? 'Analyzing…' : 'Analyze') +
+            '</button>' +
+        '</div>' +
+        '<div id="otd-suggest-err" style="display:none;font-size:12px;color:#ef5350;margin-bottom:8px"></div>';
+
+        if (otdSuggestLoading) {
+            el.innerHTML = sportSel + userRow + '<div style="color:var(--muted);font-size:13px;padding:20px 0 0">Analyzing your passes…</div>';
+            return;
+        }
+
+        if (!otdSuggestData) {
+            var suggestDesc = otdSuggestSport === 'ufc'
+                ? 'Enter your RS username and click Analyze. We\'ll rank every UFC fighter by how many unique RAX they\'d add to your portfolio after deducting fight days you already cover.'
+                : 'Enter your RS username and click Analyze. We\'ll rank every ' + (SPORT_LABELS[otdSuggestSport] || 'sport') + ' player by how many unique RAX they\'d add to your portfolio after deducting game days you already cover.';
+            el.innerHTML = sportSel + userRow +
+                '<div style="color:var(--muted2);font-size:13px;padding:16px 0">' + suggestDesc + '</div>';
+            return;
+        }
+
+        var d = otdSuggestData;
+        var ownedTotal = d.ownedPasses.reduce(function(s, p) { return s + (p.totalEarnings || 0); }, 0);
+
+        // Owned passes section
+        var ownedHtml = '<div style="margin-bottom:18px">' +
+            '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">' +
+                '<span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Your ' + (SPORT_LABELS[otdSuggestSport] || 'Sport') + ' Passes</span>' +
+                '<span style="font-size:11px;color:var(--muted)">' + d.coveredDays + (otdSuggestSport === 'ufc' ? ' fight' : ' game') + ' days · ' + RAX_ICON + ownedTotal.toLocaleString() + '</span>' +
+            '</div>';
+        if (d.ownedPasses.length === 0) {
+            ownedHtml += '<div style="font-size:13px;color:var(--muted2)">No ' + (SPORT_LABELS[otdSuggestSport] || 'sport') + ' passes found for this user.</div>';
+        } else {
+            var sortedPasses = d.ownedPasses.filter(function(p) { return (p.level != null ? p.level : 1) > 1; }).sort(function(a, b) {
+                var lvDiff = (b.level != null ? b.level : 1) - (a.level != null ? a.level : 1);
+                return lvDiff !== 0 ? lvDiff : (b.totalEarnings || 0) - (a.totalEarnings || 0);
+            });
+            var displayPasses = otdSuggestShowAllPasses ? sortedPasses : sortedPasses.slice(0, 15);
+            ownedHtml += '<div style="display:flex;flex-wrap:wrap;gap:6px">' +
+                displayPasses.map(function(p) {
+                    var lv = p.level != null ? p.level : 1;
+                    var rc = otdRarityColor(lv);
+                    var earnHtml = lv === 0
+                        ? '<span style="color:#22c55e66;font-family:var(--mono);font-size:11px">' + RAX_ICON + '0</span>' +
+                          (p.baseEarnings ? '<span style="color:var(--muted2);font-family:var(--mono);font-size:10px">(' + Math.round(p.baseEarnings).toLocaleString() + ')</span>' : '')
+                        : '<span style="color:#22c55e;font-family:var(--mono);font-size:11px">' + RAX_ICON + (p.totalEarnings || 0).toLocaleString() + '</span>';
+                    var seasonTag = p.season ? '<span style="font-size:9px;color:var(--muted2);margin-left:2px">(' + escHtml(otdFormatSeason(otdSuggestSport, p.season)) + ')</span>' : '';
+                    return '<span style="display:inline-flex;align-items:center;gap:5px;background:' + rc + '22;border:1px solid ' + rc + '66;border-radius:20px;padding:3px 10px;font-size:12px;color:var(--fg)">' +
+                        escHtml(p.name) + seasonTag + earnHtml +
+                    '</span>';
+                }).join('') +
+                (sortedPasses.length > 15
+                    ? '<button onclick="otdSuggestShowAllPasses=!otdSuggestShowAllPasses;renderOtdSuggest()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:20px;color:var(--muted);font-family:var(--sans);font-size:11px;padding:3px 12px;cursor:pointer">' +
+                        (otdSuggestShowAllPasses ? 'Show less' : 'Show all ' + sortedPasses.length) + '</button>'
+                    : '') +
+            '</div>';
+        }
+        ownedHtml += '</div>';
+
+        // Suggestion cards
+        var MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        var rarityDropdownOpts = OTD_LEVEL_OPTIONS.filter(function(o) { return o.value >= 1; }).map(function(o) {
+            return '<option value="' + o.value + '"' + (o.value === otdSuggestGlobalLevel ? ' selected' : '') + '>' + escHtml(o.label) + '</option>';
+        }).join('');
+        var myPassDropdownOpts = '<option value=""' + (otdSuggestMyPassLevel === null ? ' selected' : '') + '>Actual</option>' +
+            OTD_LEVEL_OPTIONS.filter(function(o) { return o.value >= 1; }).map(function(o) {
+                return '<option value="' + o.value + '"' + (otdSuggestMyPassLevel === o.value ? ' selected' : '') + '>' + escHtml(o.label) + '</option>';
+            }).join('');
+        var suggestHtml = '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:10px">' +
+            '<span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Top 60 Suggestions</span>' +
+            '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">' +
+                '<div style="display:flex;align-items:center;gap:5px">' +
+                    '<span style="font-size:10px;color:var(--muted2)">New pass:</span>' +
+                    '<select onchange="otdSuggestSetAllLevels(parseInt(this.value,10))" style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--fg);font-family:var(--sans);font-size:10px;padding:3px 5px;cursor:pointer;outline:none">' +
+                    rarityDropdownOpts +
+                    '</select>' +
+                '</div>' +
+                '<div style="display:flex;align-items:center;gap:5px">' +
+                    '<span style="font-size:10px;color:var(--muted2)">My passes:</span>' +
+                    '<select onchange="otdSuggestSetMyPassLevel(this.value)" style="background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--fg);font-family:var(--sans);font-size:10px;padding:3px 5px;cursor:pointer;outline:none">' +
+                    myPassDropdownOpts +
+                    '</select>' +
+                '</div>' +
+                '<div style="display:flex;align-items:center;gap:5px">' +
+                    '<span style="font-size:10px;color:var(--muted2)">Claims/day:</span>' +
+                    [2,3].map(function(n) {
+                        var active = otdSuggestClaimLimit === n;
+                        return '<button onclick="otdSuggestClaimLimit=' + n + ';renderOtdSuggest()" style="background:' + (active ? 'var(--accent)' : 'var(--bg3)') + ';border:1px solid ' + (active ? 'var(--accent)' : 'var(--border2)') + ';border-radius:4px;color:' + (active ? '#fff' : 'var(--muted)') + ';font-family:var(--sans);font-size:10px;font-weight:700;padding:3px 8px;cursor:pointer">' + n + '</button>';
+                    }).join('') +
+                '</div>' +
+            '</div>' +
+        '</div>';
+
+        if (!d.suggestions || d.suggestions.length === 0) {
+            suggestHtml += '<div style="font-size:13px;color:var(--muted2)">No suggestions — you may already own all fighters.</div>';
+        } else {
+            // Displacement-based wasted: if fighter is claimed (rank < limit), cost = earnings of
+            // the competitor pushed out of their claim slot. If fighter itself is wasted (rank >= limit),
+            // cost = fighter's own earnings.
+            // otdSuggestMyPassLevel overrides competitor earnings multiplier when set.
+            var _sMult = otdSuggestSport === 'ufc' ? UFC_LEVEL_MULTIPLIERS : OTD_LEVEL_MULTIPLIERS;
+            function compEffectiveEarnings(c) {
+                if (otdSuggestMyPassLevel !== null) {
+                    if (otdSuggestMyPassLevel === 0) return 0;
+                    return Math.round((c.baseEarnings !== undefined ? c.baseEarnings : (c.earnings || 0)) * (_sMult[otdSuggestMyPassLevel] || 1));
+                }
+                return c.earnings || 0;
+            }
+            function suggestShortName(name) {
+                var parts = (name || '').split(' ');
+                var last = parts[parts.length - 1] || '';
+                if (['Jr.','Jr','II','III','IV','V','Sr.','Sr'].indexOf(last) !== -1 && parts.length >= 2) {
+                    return parts[parts.length - 2] + ' ' + last;
+                }
+                return last;
+            }
+            // mult: rarity multiplier for the NEW pass being evaluated.
+            // Competitors already have rarity-adjusted earnings (their actual pass level).
+            // myE must be scaled to the same unit so the rank comparison is apples-to-apples.
+            // Returns rarity-adjusted displacement cost directly (no extra *mult needed by caller).
+            function computeDisplacementWasted(s, claimLimit, mult) {
+                return (s.overlapEvents || []).reduce(function(sum, ev) {
+                    var comps = (ev.competitors || []).slice().map(function(c) { return { earnings: compEffectiveEarnings(c) }; }).sort(function(a, b) { return b.earnings - a.earnings; });
+                    var myE = Math.round((ev.earnings || 0) * mult);
+                    var myRank = comps.findIndex(function(c) { return c.earnings < myE; });
+                    if (myRank === -1) myRank = comps.length;
+                    if (myRank < claimLimit) {
+                        return sum + (comps.length >= claimLimit ? (comps[claimLimit - 1].earnings || 0) : 0);
+                    } else {
+                        return sum + myE;
+                    }
+                }, 0);
+            }
+            // Re-sort by rarity-adjusted unique earnings so the order matches what's shown on cards
+            function _uniqueRax(s) {
+                var lv = otdSuggestLevels[s.id] !== undefined ? otdSuggestLevels[s.id] : otdSuggestGlobalLevel;
+                var m = _sMult[lv] || 1;
+                return Math.round((s.totalEarnings || 0) * m) - computeDisplacementWasted(s, otdSuggestClaimLimit, m);
+            }
+            var sorted30 = d.suggestions.slice().sort(function(a, b) { return _uniqueRax(b) - _uniqueRax(a); }).slice(0, 60);
+            var cardH = window.innerWidth <= 480 ? '130px' : '190px';
+            suggestHtml += '<div id="otd-suggest-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-bottom:12px">';
+            suggestHtml += sorted30.map(function(s, i) {
+                var level = otdSuggestLevels[s.id] !== undefined ? otdSuggestLevels[s.id] : 5;
+                var rc = otdRarityColor(level);
+                var mult = _sMult[level] || 1;
+                var atRarity = Math.round(s.totalEarnings * mult);
+                var overlapAtRarity = computeDisplacementWasted(s, otdSuggestClaimLimit, mult);
+                var uniqueAtRarity = atRarity - overlapAtRarity;
+                var overlapOpen = String(otdSuggestOpenOverlap) === String(s.id);
+                var levelOpts = OTD_LEVEL_OPTIONS.filter(function(o) { return o.value >= 1; }).map(function(o) {
+                    return '<option value="' + o.value + '"' + (o.value === level ? ' selected' : '') + '>' + escHtml(o.label) + '</option>';
+                }).join('');
+                var headshotUrl = s.avatar ? 'https://media.realapp.com/assets/teams/default/large/' + s.avatar + '.webp' : '';
+
+                var card = '<div style="position:relative;border-radius:10px;overflow:hidden;height:' + cardH + ';background:linear-gradient(160deg,' + rc + '55 0%,' + rc + '22 100%);border:1px solid ' + rc + '55">' +
+                    // Rank badge top-left
+                    '<div style="position:absolute;top:6px;left:6px;z-index:3">' +
+                        '<span style="font-size:9px;font-weight:800;color:#fff;background:rgba(0,0,0,.6);padding:2px 6px;border-radius:3px">#' + (i + 1) + '</span>' +
+                    '</div>' +
+                    // Rarity badge top-center
+                    '<div style="position:absolute;top:6px;left:0;right:0;display:flex;justify-content:center;z-index:3;pointer-events:none">' +
+                        '<select onclick="event.stopPropagation()" onchange="event.stopPropagation();otdSuggestSetLevel(\'' + s.id + '\',parseInt(this.value,10))" ' +
+                            'style="pointer-events:auto;background:' + rc + ';border:none;border-radius:4px;color:#fff;font-size:8px;font-weight:700;padding:2px 6px;cursor:pointer;outline:none;-webkit-appearance:none;appearance:none;font-family:var(--sans)">' +
+                            levelOpts +
+                        '</select>' +
+                    '</div>' +
+                    // Sport badge top-right, year badge below it
+                    '<div style="position:absolute;top:6px;right:6px;z-index:3;display:flex;flex-direction:column;align-items:flex-end;gap:3px">' +
+                        '<span style="font-size:8px;font-weight:800;color:#fff;background:rgba(0,0,0,.55);padding:2px 6px;border-radius:3px">' + (SPORT_LABELS[otdSuggestSport] || otdSuggestSport.toUpperCase()) + '</span>' +
+                        (s.season ? '<span style="font-size:8px;font-weight:800;color:rgba(255,255,255,.85);background:rgba(255,255,255,.15);padding:1px 5px;border-radius:3px;white-space:nowrap">\'' + escHtml(String(s.season).slice(2)) + '</span>' : '') +
+                    '</div>' +
+                    // Emoji watermark (hidden if headshot loads)
+                    '<div id="suggest-emoji-' + s.id + '" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:52px;opacity:.18;z-index:0">' + (otdSuggestSport === 'ufc' ? '🥊' : otdSuggestSport === 'ncaaf' ? '🏈' : otdSuggestSport === 'mlb' ? '⚾' : otdSuggestSport === 'nba' ? '🏀' : otdSuggestSport === 'nhl' ? '🏒' : '🎯') + '</div>' +
+                    // Headshot
+                    (headshotUrl
+                        ? '<img src="' + headshotUrl + '" style="position:absolute;top:8%;left:0;right:0;width:100%;height:54%;object-fit:contain;object-position:bottom center;z-index:1" onerror="this.style.display=\'none\'">'
+                        : '') +
+                    // Dark overlay
+                    '<div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.05) 0%,rgba(0,0,0,.1) 40%,rgba(0,0,0,.8) 65%,rgba(0,0,0,.93) 100%);z-index:2"></div>' +
+                    // Bottom info — name only (no rarity select, no year badge)
+                    '<div style="position:absolute;bottom:0;left:0;right:0;padding:5px 7px 6px;z-index:3">' +
+                        '<div style="font-size:13px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3;text-shadow:0 1px 4px rgba(0,0,0,.9);margin-bottom:2px">' + escHtml(s.name) + '</div>' +
+                        '<div style="display:flex;align-items:center;justify-content:space-between">' +
+                            '<span style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,.65)">' + RAX_ICON + s.totalEarnings.toLocaleString() + ' base</span>' +
+                            '<span style="font-size:10px;font-weight:700;font-family:var(--mono);color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.9)">' + RAX_ICON + atRarity.toLocaleString() + '</span>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>';
+
+                // Below-card stats (compact — no inline breakdown panel)
+                var netColor = uniqueAtRarity > 400 ? '#26a69a' : uniqueAtRarity > 100 ? 'var(--accent)' : 'var(--muted)';
+                var belowCard = '<div style="padding:6px 2px 0">' +
+                    '<div style="display:flex;justify-content:space-between;align-items:center">' +
+                        '<span style="font-size:10px;font-weight:700;color:' + netColor + '">' + RAX_ICON + uniqueAtRarity.toLocaleString() + ' net</span>' +
+                        (s.overlapDays > 0
+                            ? '<button onclick="otdSuggestToggleOverlap(\'' + s.id + '\')" style="background:' + (overlapOpen ? 'rgba(239,83,80,.15)' : 'var(--bg3)') + ';border:1px solid ' + (overlapOpen ? 'rgba(239,83,80,.5)' : 'var(--border2)') + ';border-radius:4px;color:' + (overlapOpen ? '#ef5350' : 'var(--muted)') + ';font-family:var(--sans);font-size:9px;font-weight:700;padding:2px 6px;cursor:pointer">−' + RAX_ICON + overlapAtRarity.toLocaleString() + ' Overlap</button>'
+                            : '<span style="font-size:9px;color:var(--muted2)">no overlap</span>') +
+                    '</div>' +
+                '</div>';
+
+                return '<div style="min-width:0" data-suggest-id="' + s.id + '">' + card + belowCard + '</div>';
+            }).join('');
+            // Full-width overlap panel — inside the grid with grid-column:1/-1 so it spans all columns.
+            // otdSuggestToggleOverlap moves it after the correct row via DOM manipulation.
+            var openSugg = otdSuggestOpenOverlap !== null
+                ? sorted30.find(function(s) { return String(s.id) === String(otdSuggestOpenOverlap); })
+                : null;
+            if (openSugg) {
+                var oMult = _sMult[otdSuggestLevels[openSugg.id] !== undefined ? otdSuggestLevels[openSugg.id] : 5] || 1;
+                var overlapLabel = otdSuggestSport === 'ufc' ? 'Overlap Fights' : 'Overlap Claims';
+                // Show only days where the displacement cost is > 0 (matches computeDisplacementWasted exactly)
+                var evs = (openSugg.overlapEvents || []).filter(function(ev) {
+                    var newRax = Math.round((ev.earnings || 0) * oMult);
+                    var comps = (ev.competitors || []).slice().map(function(c) { return { earnings: compEffectiveEarnings(c) }; }).sort(function(a, b) { return b.earnings - a.earnings; });
+                    var myRank = comps.findIndex(function(c) { return c.earnings < newRax; });
+                    if (myRank === -1) myRank = comps.length;
+                    if (myRank < otdSuggestClaimLimit) return comps.length >= otdSuggestClaimLimit && (comps[otdSuggestClaimLimit - 1].earnings || 0) > 0;
+                    return newRax > 0;
+                });
+                suggestHtml += '<div id="otd-suggest-overlap-panel" style="grid-column:1/-1;border:1px solid rgba(239,83,80,.3);border-radius:8px;padding:10px 12px;background:var(--bg2)">' +
+                    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
+                        '<span style="font-size:11px;font-weight:700;color:#ef5350">' + escHtml(openSugg.name) + ' — ' + overlapLabel + ' (' + evs.length + ')</span>' +
+                        '<button onclick="otdSuggestToggleOverlap(\'' + openSugg.id + '\')" style="background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;padding:0 2px;line-height:1">×</button>' +
+                    '</div>' +
+                    (evs.length === 0
+                        ? '<div style="font-size:12px;color:var(--muted2)">No overlap claims ≥ 200 Rax.</div>'
+                        : '<div style="overflow-x:auto;padding-bottom:6px">' +
+                            '<div style="display:flex;gap:8px;width:max-content">' +
+                            evs.slice().sort(function(a, b) { return (b.day || '') < (a.day || '') ? -1 : 1; }).map(function(ev) {
+                                var dp = (ev.day || '').split('-');
+                                var dayFmt = dp.length === 3
+                                    ? MONTH_SHORT[parseInt(dp[1],10)-1] + ' ' + parseInt(dp[2],10) + ', 20' + String(dp[0]).slice(2)
+                                    : (ev.dayDisplay || ev.day || '');
+                                var newRax = Math.round((ev.earnings || 0) * oMult);
+                                var allCards = (ev.competitors || []).map(function(c) { return { name: c.name, rax: compEffectiveEarnings(c), level: c.level, isNew: false }; }).filter(function(c) { return c.rax > 0; });
+                                allCards.push({ name: openSugg.name, rax: newRax, isNew: true });
+                                allCards.sort(function(a, b) { return b.rax - a.rax; });
+                                var isWasted = allCards.findIndex(function(c) { return c.isNew; }) >= otdSuggestClaimLimit;
+                                var borderClr = isWasted ? 'rgba(239,83,80,.45)' : 'rgba(34,197,94,.4)';
+                                var displayCards = allCards.map(function(c, idx) { return { c: c, rank: idx }; }).filter(function(d) { return d.c.rax >= 150 || d.c.isNew; });
+                                var rows = displayCards.map(function(d) {
+                                    var c = d.c, claimed = d.rank < otdSuggestClaimLimit;
+                                    var clr = claimed ? '#22c55e' : '#ef5350';
+                                    var dot = c.isNew ? '<span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#4f6ef7;vertical-align:middle;margin-right:3px"></span>' : '';
+                                    return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.05)">' +
+                                        '<span style="font-size:10px;color:' + clr + ';font-weight:' + (c.isNew ? '700' : '400') + ';white-space:nowrap">' + dot + escHtml(suggestShortName(c.name)) + '</span>' +
+                                        '<span style="font-size:10px;font-family:var(--mono);color:' + clr + ';white-space:nowrap">' + RAX_ICON + (c.rax||0).toLocaleString() + '</span>' +
+                                    '</div>';
+                                }).join('');
+                                return '<div style="min-width:120px;background:var(--bg3);border:1px solid ' + borderClr + ';border-radius:6px;padding:6px 8px;flex-shrink:0">' +
+                                    '<div style="font-size:9px;font-weight:700;color:var(--muted2);letter-spacing:.05em;margin-bottom:4px;white-space:nowrap">' + escHtml(dayFmt) + '</div>' +
+                                    rows +
+                                '</div>';
+                            }).join('') +
+                            '</div>' +
+                          '</div>') +
+                '</div>';
+            }
+            suggestHtml += '</div>'; // close grid
+        }
+
+        el.innerHTML = sportSel + userRow + ownedHtml + suggestHtml;
+    }
+
+    function otdSuggestInputChange(val) {
+        var ac = document.getElementById('otd-suggest-ac');
+        if (!ac) return;
+        if (!val || val.length < 2) { ac.style.display = 'none'; otdSuggestUser = null; return; }
+        clearTimeout(otdSuggestSearchTimer);
+        otdSuggestSearchTimer = setTimeout(function() {
+            fetch('/api/real/otd?action=search_users&q=' + encodeURIComponent(val.replace(/_+$/, '') || val), { credentials: 'same-origin' })
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    var users = (d.users || []).slice(0, 5);
+                    if (!users.length) { ac.style.display = 'none'; return; }
+                    ac.innerHTML = users.map(function(u) {
+                        return '<div onclick="otdSuggestUser=' + JSON.stringify(JSON.stringify(u)).replace(/"/g,'\'') + ';document.getElementById(\'otd-suggest-input\').value=\'' + escHtml(u.username) + '\';document.getElementById(\'otd-suggest-ac\').style.display=\'none\'" ' +
+                            'style="padding:8px 12px;cursor:pointer;font-size:13px;color:var(--fg);border-bottom:1px solid var(--border2)">' +
+                            escHtml(u.username) + (u.displayName ? ' <span style="color:var(--muted)">' + escHtml(u.displayName) + '</span>' : '') + '</div>';
+                    }).join('');
+                    ac.style.display = '';
+                }).catch(function() { ac.style.display = 'none'; });
+        }, 300);
+    }
 
     function renderOtdPanel() {
         var panel = document.getElementById('otd-panel');
@@ -7209,7 +7923,9 @@
 
         // Input section changes based on mode
         var inputSection;
-        if (otdMode === 'leaderboard') {
+        if (otdMode === 'suggest') {
+            inputSection = '';
+        } else if (otdMode === 'leaderboard') {
             var lbSportOpts = '<option value="all"' + (otdLeaderboardSport === 'all' ? ' selected' : '') + '>All Sports</option>' +
                 OTD_SPORTS_LIST.map(function(s) {
                     return '<option value="' + s.key + '"' + (s.key === otdLeaderboardSport ? ' selected' : '') + '>' + escHtml(s.label) + '</option>';
@@ -7299,6 +8015,7 @@
                 '<button onclick="otdSetMode(\'username\')" style="' + (otdMode === 'username' ? tabActive : tabInactive) + '">Username</button>' +
                 '<button onclick="otdSetMode(\'player\')" style="' + (otdMode === 'player' ? tabActive : tabInactive) + '">Search Players' + (otdLbNewAdded > 0 ? ' <span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--accent);color:#fff;font-size:9px;font-weight:700;margin-left:3px;vertical-align:middle">' + otdLbNewAdded + '</span>' : '') + '</button>' +
                 '<button onclick="otdSetMode(\'leaderboard\')" style="' + (otdMode === 'leaderboard' ? tabActive : tabInactive) + '">Top OTD</button>' +
+                '<button onclick="otdSetMode(\'suggest\')" style="' + (otdMode === 'suggest' ? tabActive : tabInactive) + '">Pass Suggestion</button>' +
             '</div>' +
             inputSection +
             '<div id="otd-search-err" style="display:none;font-size:12px;color:#ef5350;margin-bottom:8px"></div>' +
@@ -7309,7 +8026,9 @@
             '<div id="otd-check-wrap"></div>' +
             '<div id="otd-results"></div>';
 
-        if (otdMode === 'leaderboard') {
+        if (otdMode === 'suggest') {
+            renderOtdSuggest();
+        } else if (otdMode === 'leaderboard') {
             renderOtdLeaderboard();
         } else {
             renderOtdChips();
@@ -7727,7 +8446,7 @@
         otdMode = mode;
         // Clear only when switching to/from username mode — username passes don't belong in other modes.
         // Player↔leaderboard switches preserve otdPlayers so Search Players additions survive tab switches.
-        if (mode === 'username' || prevMode === 'username') {
+        if (mode === 'username' || (prevMode === 'username' && mode !== 'suggest')) {
             otdPlayers = [];
             otdColorIdx = 0;
             otdLbNewAdded = 0;
@@ -7736,7 +8455,7 @@
         if (mode === 'player') otdLbNewAdded = 0;
         otdDateMapDirty = true; otdPassesPage = 0;
         otdSelectedPlayer = null;
-        otdSelectedUser = null;
+        if (mode !== 'suggest') otdSelectedUser = null;
         otdLoadingPasses = false;
         if (mode === 'leaderboard') otdCarouselOpen = false;
         renderOtdPanel();
@@ -8037,7 +8756,7 @@
     function renderOtdChips() {
         var el = document.getElementById('otd-chips');
         if (!el) return;
-        if (otdMode === 'leaderboard') { el.innerHTML = ''; return; }
+        if (otdMode === 'leaderboard' || otdMode === 'suggest') { el.innerHTML = ''; return; }
         // In Search Players mode, passes show only in the Passes panel (sidebar/carousel), not the chip grid
         if (otdMode === 'player') { el.innerHTML = ''; return; }
 
@@ -8112,7 +8831,7 @@
     }
 
     function renderOtdResults() {
-        if (otdMode === 'leaderboard') return;
+        if (otdMode === 'leaderboard' || otdMode === 'suggest') return;
         var el = document.getElementById('otd-results');
         if (!el) return;
 
@@ -12025,6 +12744,90 @@
                         fetchDKAltLinesNHL();
                     }, 5000);
                 } else { renderTable(); }
+            });
+            return;
+        }
+
+        // UFC: use DK native API — Moneyline + Total Rounds, no Odds API credits
+        if (currentSport === 'mma_mixed_martial_arts') {
+            altOdds = {};
+            fetch('/api/fd/ufc?fresh=1', { credentials: 'same-origin' })
+            .then(function(r) {
+                if (r.status === 401) {
+                    dot.className = 'sdot error';
+                    stxt.textContent = 'Session expired — please log in again.';
+                    resetRefreshBtn();
+                    handleUnauthenticated();
+                    return Promise.reject('unauth');
+                }
+                if (r.status === 403) {
+                    resetRefreshBtn();
+                    showUpgradeModal('UFC is available on the Pro plan.');
+                    return Promise.reject('forbidden');
+                }
+                return r.json();
+            })
+            .then(function(data) {
+                if (!data.ok || !data.fights || !Object.keys(data.fights).length) {
+                    rawRows = []; rsGameIds = {};
+                    dot.className = 'sdot error';
+                    stxt.textContent = 'No UFC fights today';
+                    return;
+                }
+                var rows = [];
+                Object.entries(data.fights).forEach(function(entry) {
+                    var gameKey = entry[0], fight = entry[1];
+                    var cm  = fight.cm ? new Date(fight.cm) : null;
+                    var gid = String(fight.id);
+                    if (fight.ml && Object.keys(fight.ml).length >= 2) {
+                        var pid = gid + '-h2h';
+                        [[fight.away, 'A'], [fight.home, 'B']].forEach(function(pair) {
+                            var price = fight.ml[pair[0]];
+                            if (price == null) return;
+                            rows.push({ id:pid+'-'+pair[1], game:gameKey, cm:cm, mkt:'ML', side:pair[0], am:price, pt:null, pid:pid, ps:pair[1], gid:gid, _sport_key:'mma_mixed_martial_arts' });
+                        });
+                    }
+                    if (fight.totals && fight.totals.Over && fight.totals.Under) {
+                        var pid = gid + '-totals';
+                        var overLines = Object.keys(fight.totals.Over);
+                        if (overLines.length) {
+                            var ln = parseFloat(overLines[0]);
+                            var ov = fight.totals.Over[overLines[0]];
+                            var un = fight.totals.Under[overLines[0]] != null ? fight.totals.Under[overLines[0]] : (Object.values(fight.totals.Under)[0] || null);
+                            if (ov != null && un != null) {
+                                rows.push({ id:pid+'-A', game:gameKey, cm:cm, mkt:'Total', side:'Over',  am:ov, pt:ln, pid:pid, ps:'A', gid:gid, _sport_key:'mma_mixed_martial_arts' });
+                                rows.push({ id:pid+'-B', game:gameKey, cm:cm, mkt:'Total', side:'Under', am:un, pt:ln, pid:pid, ps:'B', gid:gid, _sport_key:'mma_mixed_martial_arts' });
+                            }
+                        }
+                    }
+                });
+                rawRows = rows;
+                rawRowsBySport[currentSport] = rawRows;
+                // Prefill UFC parlay data while we have it
+                if (!PARLAY_GAMES_UFC.length) {
+                    PARLAY_GAMES_UFC = Object.entries(data.fights).map(function(e){ return Object.assign({gameKey:e[0]}, e[1]); });
+                    PARLAY_GAMES_UFC.sort(function(a,b){ return (a.cm?new Date(a.cm).getTime():9e12)-(b.cm?new Date(b.cm).getTime():9e12); });
+                    buildUfcPicks();
+                }
+                var nowStr = new Date().toLocaleTimeString([], { hour:'numeric', minute:'2-digit', second:'2-digit' });
+                if (rawRows.length) {
+                    dot.className = 'sdot live';
+                    stxt.textContent = 'Updated ' + nowStr + ' - ' + Object.keys(data.fights).length + ' fights - DraftKings';
+                } else {
+                    dot.className = 'sdot error';
+                    stxt.textContent = 'No UFC fights today';
+                }
+            })
+            .catch(function(e) {
+                if (e === 'unauth' || e === 'forbidden') return;
+                rawRows = []; rsGameIds = {};
+                dot.className = 'sdot error';
+                stxt.textContent = 'Error fetching UFC data';
+            })
+            .then(function() {
+                resetRefreshBtn();
+                if (rawRows.length > 0) fetchRealMarkets(currentSport).then(function() { fetchExactEvForRows(currentSport); }).catch(function() { renderTable(); });
+                else renderTable();
             });
             return;
         }

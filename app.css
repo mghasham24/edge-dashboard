@@ -3037,16 +3037,16 @@
     .parlay-filter-tab:hover { color:var(--text); border-color:var(--muted) }
     .parlay-filter-tab.active { background:var(--accent-dim); border-color:var(--accent); color:var(--accent) }
     .parlay-player-grid { flex:1; overflow-y:auto; padding:16px; display:grid; grid-template-columns:repeat(3,1fr); gap:12px; align-content:start }
-    .parlay-card { background:var(--bg2); border:1.5px solid var(--border2); border-radius:12px; overflow:hidden; display:flex; flex-direction:column; transition:border-color .15s }
+    .parlay-card { background:var(--bg2); border:1.5px solid var(--border2); border-radius:12px; display:flex; flex-direction:column; transition:border-color .15s }
     .parlay-card:hover { border-color:var(--muted) }
     .parlay-card.sel-more { border-color:var(--green); box-shadow:0 0 0 1px var(--green) inset }
     .parlay-card.sel-less { border-color:#ef4444; box-shadow:0 0 0 1px #ef4444 inset }
-    .parlay-card-top { position:relative; background:var(--bg3); height:96px; display:flex; align-items:center; justify-content:center; flex-shrink:0; overflow:hidden }
-    .parlay-card-headshot { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:top center }
+    .parlay-card-top { position:relative; height:96px; display:flex; align-items:flex-end; justify-content:center; flex-shrink:0; overflow:hidden; border-radius:10px 10px 0 0 }
+    .parlay-card-headshot { height:100%; width:auto; display:block; object-fit:contain; object-position:center bottom; position:relative; z-index:1 }
     .parlay-card-avatar { width:58px; height:58px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:19px; font-weight:800; color:#fff; position:relative; z-index:1 }
     .parlay-team-badge { position:absolute; top:8px; left:8px; font-size:10px; font-weight:700; color:var(--muted); background:var(--bg2); border:1px solid var(--border2); padding:2px 7px; border-radius:4px; z-index:2 }
     .parlay-pop-badge { position:absolute; top:8px; right:8px; font-size:11px; font-weight:600; color:var(--yellow); z-index:2 }
-    .parlay-card-body { padding:10px 11px 11px; display:flex; flex-direction:column; flex:1 }
+    .parlay-card-body { padding:10px 11px 11px; display:flex; flex-direction:column }
     .parlay-player-name { font-size:13px; font-weight:700; margin-bottom:1px }
     .parlay-matchup { font-size:10px; color:var(--muted2); margin-bottom:10px }
     .parlay-stat-display { text-align:center; margin-bottom:10px; padding:8px 0; border-top:1px solid var(--border2); border-bottom:1px solid var(--border2) }
@@ -3105,3 +3105,149 @@
     .parlay-place-btn:not(:disabled):hover { opacity:.88 }
     .parlay-place-btn:disabled { background:var(--bg3); color:var(--muted2); border:1.5px solid var(--border2); cursor:not-allowed }
     .parlay-min-note { text-align:center; font-size:11px; color:var(--muted2); min-height:14px }
+
+    /* Parlay panel — full-screen overlay */
+    #parlays-panel { position:fixed; inset:0; z-index:199; background:var(--bg); display:none; flex-direction:column; overflow:hidden }
+    #parlays-panel.visible { display:flex }
+
+    /* View tabs (Build / My Slips / All Slips) */
+    .parlay-view-tabs { display:flex; gap:0; border-bottom:1px solid var(--border2); background:var(--bg2); flex-shrink:0 }
+    .parlay-view-tab { flex:1; padding:12px 8px; background:transparent; border:none; color:var(--muted); font-size:13px; font-weight:600; font-family:var(--sans); cursor:pointer; border-bottom:2px solid transparent; transition:color .13s,border-color .13s }
+    .parlay-view-tab:hover { color:var(--text) }
+    .parlay-view-tab.active { color:var(--accent); border-bottom-color:var(--accent) }
+
+    /* Panel body layout */
+    .parlay-panel-body { flex:1; display:flex; overflow:hidden; min-height:0 }
+
+    /* Category nav (sport toggle + category row) */
+    .parlay-cat-nav { flex-shrink:0; border-bottom:1px solid var(--border2); background:var(--bg2) }
+    .parlay-sport-tog { display:flex; gap:0; padding:8px 12px 0; overflow-x:auto; scrollbar-width:none }
+    .parlay-sport-tog::-webkit-scrollbar { display:none }
+    .parlay-sport-btn { background:transparent; border:none; color:var(--muted); font-size:12px; font-weight:700; font-family:var(--sans); padding:5px 14px; cursor:pointer; border-bottom:2px solid transparent; white-space:nowrap; transition:color .13s,border-color .13s }
+    .parlay-sport-btn.active { color:var(--accent); border-bottom-color:var(--accent) }
+    .parlay-cat-row { display:flex; gap:6px; padding:8px 12px; overflow-x:auto; scrollbar-width:none }
+    .parlay-cat-row::-webkit-scrollbar { display:none }
+    .parlay-cat-btn { flex-shrink:0; padding:5px 13px; border-radius:20px; border:1.5px solid var(--border2); background:transparent; color:var(--muted); font-size:12px; font-weight:600; font-family:var(--sans); cursor:pointer; white-space:nowrap; transition:color .13s,border-color .13s,background .13s }
+    .parlay-cat-btn.active { background:var(--accent-dim); border-color:var(--accent); color:var(--accent) }
+
+    /* Search bar */
+    .parlay-search-bar { display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid var(--border2); background:var(--bg2); flex-shrink:0 }
+    .parlay-search-icon { font-size:14px; flex-shrink:0 }
+    .parlay-search-input { flex:1; background:var(--bg3); border:1px solid var(--border2); border-radius:7px; color:var(--text); font-size:13px; padding:7px 10px; outline:none; font-family:var(--sans) }
+    .parlay-search-input:focus { border-color:var(--accent) }
+    .parlay-search-clear { background:transparent; border:none; color:var(--muted); font-size:16px; cursor:pointer; flex-shrink:0; display:flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:50% }
+    .parlay-search-clear:hover { color:var(--text) }
+
+    /* Mobile drawer handle */
+    .parlay-drawer-handle { width:36px; height:4px; background:var(--border2); border-radius:2px; margin:8px auto 4px; flex-shrink:0 }
+
+    /* Slips view */
+    .parlay-slips-view { flex:1; min-height:0; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:10px }
+
+    /* Mobile pill */
+    .parlay-mobile-pill { display:none; position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:var(--accent); color:#fff; border-radius:24px; padding:10px 18px; align-items:center; gap:8px; box-shadow:0 4px 16px rgba(79,110,247,.5); cursor:pointer; z-index:202; font-family:var(--sans); font-weight:700; font-size:13px }
+    .pmp-chevron { font-size:18px; line-height:1 }
+    .parlay-mobile-backdrop { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:201 }
+
+    /* Pslip cards — settled/active slip display */
+    .pslip-card { background:var(--bg2); border:1.5px solid var(--border2); border-radius:12px; padding:12px; flex-shrink:0 }
+    .pslip-card.pslip-settled.won { border-color:rgba(45,204,126,.4) }
+    .pslip-card.pslip-settled.lost { border-color:rgba(239,68,68,.25) }
+    .pslip-top { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px; flex-wrap:wrap }
+    .pslip-top-left { display:flex; align-items:center; gap:6px; flex-wrap:wrap }
+    .pslip-status { font-size:10px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; padding:2px 8px; border-radius:20px }
+    .pslip-status.s-active { background:rgba(79,110,247,.15); color:var(--accent); border:1px solid rgba(79,110,247,.3) }
+    .pslip-status.s-won { background:rgba(45,204,126,.15); color:var(--green); border:1px solid rgba(45,204,126,.3) }
+    .pslip-status.s-lost { background:rgba(239,68,68,.12); color:#ef4444; border:1px solid rgba(239,68,68,.25) }
+    .pslip-status.s-pending { background:rgba(251,191,36,.12); color:#fbbf24; border:1px solid rgba(251,191,36,.25) }
+    .pslip-status.s-gray { background:var(--bg3); color:var(--muted); border:1px solid var(--border2) }
+    .pslip-date { font-size:11px; color:var(--muted2) }
+    .pslip-amounts { display:flex; align-items:center; gap:6px; flex-shrink:0 }
+    .pslip-stake { font-size:13px; font-weight:700; color:var(--muted); font-variant-numeric:tabular-nums }
+    .pslip-arrow { font-size:12px; color:var(--muted2) }
+    .pslip-payout { font-size:13px; font-weight:700; color:var(--muted); font-variant-numeric:tabular-nums }
+    .pslip-payout.won { color:var(--green) }
+    .pslip-mult { font-size:11px; font-weight:700; background:rgba(79,110,247,.15); color:var(--accent); border:1px solid rgba(79,110,247,.25); border-radius:10px; padding:1px 7px }
+    .pslip-user-badge { font-size:11px; color:var(--muted); font-family:var(--mono) }
+    .pslip-legs-list { display:flex; flex-direction:column; gap:8px }
+    .pslip-leg { display:flex; align-items:flex-start; gap:8px; padding:8px 0; border-top:1px solid var(--border) }
+    .pslip-leg:first-child { border-top:none; padding-top:0 }
+    .pslip-leg.leg-won .pslip-leg-name { color:var(--green) }
+    .pslip-leg.leg-lost .pslip-leg-name { color:#ef4444; text-decoration:line-through }
+    .pslip-avatar { position:relative; flex-shrink:0 }
+    .pslip-av-inner { width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:800; color:#fff; overflow:hidden; background:var(--bg3) }
+    .pslip-av-inner img { width:100%; height:100%; object-fit:cover; object-position:top center }
+    .pslip-av-dir { position:absolute; bottom:-2px; right:-2px; width:14px; height:14px; border-radius:50%; font-size:8px; font-weight:800; display:flex; align-items:center; justify-content:center; border:2px solid var(--bg2) }
+    .pslip-av-dir.more { background:var(--green); color:#fff }
+    .pslip-av-dir.less { background:#ef4444; color:#fff }
+    .pslip-leg-body { flex:1; min-width:0 }
+    .pslip-leg-top { display:flex; align-items:center; gap:4px; flex-wrap:wrap }
+    .pslip-leg-name { font-size:13px; font-weight:700; flex:1; min-width:0 }
+    .pslip-leg-time { font-size:10px; font-weight:600; padding:1px 6px; border-radius:10px; white-space:nowrap }
+    .pslip-leg-time.live { background:rgba(239,68,68,.15); color:#ef4444 }
+    .pslip-leg-time.pregame { background:var(--bg3); color:var(--muted) }
+    .pslip-leg-time.final { background:var(--bg3); color:var(--muted2) }
+    .pslip-leg-sub { font-size:11px; color:var(--muted); margin-top:2px }
+    .pslip-odds { color:var(--muted2) }
+    .pslip-ri { font-size:12px; font-weight:800; width:18px; height:18px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0 }
+    .pslip-ri.win { background:rgba(45,204,126,.15); color:var(--green) }
+    .pslip-ri.loss { background:rgba(239,68,68,.12); color:#ef4444 }
+    .pslip-prog-wrap { margin-top:5px; display:flex; align-items:center; gap:6px }
+    .pslip-prog-track { flex:1; height:5px; background:var(--bg3); border-radius:3px; overflow:hidden; position:relative }
+    .pslip-prog-track-mark { overflow:visible }
+    .pslip-prog-fill { height:100%; border-radius:3px; transition:width .4s }
+    .pslip-prog-fill.prog-more { background:var(--accent) }
+    .pslip-prog-fill.prog-won { background:var(--green) }
+    .pslip-prog-fill.prog-lost { background:#ef4444 }
+    .pslip-prog-marker { position:absolute; top:50%; transform:translate(-50%,-50%); z-index:2 }
+    .pslip-prog-marker-val { font-size:9px; font-weight:700; white-space:nowrap; color:var(--text); display:block; margin-top:-14px; text-align:center }
+    .pslip-prog-stat { font-size:10px; font-weight:700; color:var(--muted); white-space:nowrap }
+    .pslip-payout-note { font-size:11px; color:var(--green); margin-top:8px; text-align:center }
+    .pslip-deposit-link { display:block; margin-top:8px; padding:9px 12px; background:rgba(251,191,36,.1); border:1px solid rgba(251,191,36,.3); border-radius:8px; color:#fbbf24; font-size:12px; font-weight:700; text-align:center; text-decoration:none }
+    .pslip-deposit-link:hover { background:rgba(251,191,36,.18) }
+    .pslip-actions { display:flex; gap:6px; margin-top:8px }
+    .pslip-settle-btn,.pslip-share-btn,.pslip-cancel-btn { flex:1; padding:7px; border-radius:7px; font-size:12px; font-weight:700; font-family:var(--sans); cursor:pointer; border:1.5px solid var(--border2); background:var(--bg3); color:var(--muted); transition:border-color .13s,color .13s }
+    .pslip-settle-btn:hover { border-color:var(--accent); color:var(--accent) }
+    .pslip-share-btn:hover { border-color:var(--muted); color:var(--text) }
+    .pslip-cancel-btn:hover { border-color:#ef4444; color:#ef4444 }
+
+    /* Teams tab — game cards (pgc = parlay game card) */
+    .parlay-player-grid.pgc-mode { display:flex; flex-direction:column; gap:10px; grid-template-columns:unset }
+    .pgc-card { background:var(--bg2); border:1.5px solid var(--border2); border-radius:12px; overflow:hidden; flex-shrink:0 }
+    .pgc-header { display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--border2); background:var(--bg3) }
+    .pgc-teams { display:flex; align-items:center; gap:8px; flex:1 }
+    .pgc-team { display:flex; align-items:center; gap:5px }
+    .pgc-logo { width:22px; height:22px; object-fit:contain; flex-shrink:0 }
+    .pgc-team-name { font-size:13px; font-weight:700 }
+    .pgc-at { font-size:12px; color:var(--muted2); font-weight:700 }
+    .pgc-time { font-size:11px; color:var(--muted); white-space:nowrap; margin-left:auto }
+    .pgc-row { display:flex; align-items:center; gap:8px; padding:8px 14px; border-top:1px solid var(--border) }
+    .pgc-row:first-of-type { border-top:none }
+    .pgc-label { font-size:11px; font-weight:700; color:var(--muted); width:80px; flex-shrink:0 }
+    .pgc-btn { flex:1; padding:7px 10px; border-radius:8px; border:1.5px solid var(--border2); background:var(--bg3); color:var(--text); font-size:12px; font-weight:600; font-family:var(--sans); cursor:pointer; display:flex; align-items:center; justify-content:center; gap:5px; transition:border-color .13s,background .13s }
+    .pgc-btn:hover { border-color:var(--muted); background:var(--bg2) }
+    .pgc-btn.active { background:var(--accent-dim); border-color:var(--accent); color:var(--accent) }
+    .pgc-btn.over { border-color:var(--green) }
+    .pgc-btn.over.active { background:rgba(45,204,126,.15); color:var(--green) }
+    .pgc-btn.under.active { background:rgba(239,68,68,.12); border-color:#ef4444; color:#ef4444 }
+    .pgc-btn-logo { width:16px; height:16px; object-fit:contain; flex-shrink:0 }
+
+    /* All Slips admin filters */
+    .aslip-filters { display:flex; gap:6px; flex-wrap:wrap; padding:12px 12px 0; flex-shrink:0 }
+    .aslip-filter-pill { padding:5px 12px; border-radius:20px; border:1.5px solid var(--border2); background:transparent; color:var(--muted); font-size:12px; font-weight:700; font-family:var(--sans); cursor:pointer; display:flex; align-items:center; gap:4px; transition:color .13s,border-color .13s,background .13s }
+    .aslip-filter-pill.active { background:var(--accent-dim); border-color:var(--accent); color:var(--accent) }
+    .aslip-filter-pill:hover { color:var(--text); border-color:var(--muted) }
+    .aslip-count { font-size:10px; font-weight:800; background:var(--bg3); padding:1px 5px; border-radius:10px; color:var(--muted2) }
+    .aslip-search-wrap { padding:8px 12px; flex-shrink:0 }
+    .aslip-search { width:100%; background:var(--bg3); border:1px solid var(--border2); border-radius:7px; color:var(--text); font-size:13px; padding:7px 10px; outline:none; font-family:var(--sans); box-sizing:border-box }
+    .aslip-search:focus { border-color:var(--accent) }
+    #aslip-cards { padding:12px; display:flex; flex-direction:column; gap:10px }
+
+    /* Mobile responsive — parlay */
+    @media (max-width: 768px) {
+        .parlay-panel-body { flex-direction:column }
+        .parlay-slip-panel { width:100%; border-right:none; border-top:1px solid var(--border2); max-height:55vh; position:fixed; bottom:0; left:0; right:0; z-index:202; background:var(--bg2); transform:translateY(100%); transition:transform .25s }
+        .parlay-slip-panel.drawer-open { transform:translateY(0) }
+        .parlay-mobile-pill { display:flex }
+        .parlay-player-grid { grid-template-columns:repeat(2,1fr); padding-bottom:80px }
+    }
