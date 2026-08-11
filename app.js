@@ -878,7 +878,15 @@
         return hash ? 'https://www.realapp.com/' + hash : null;
     }
     var RAX_ICON = '<svg viewBox="0 0 512 512" style="width:13px;height:13px;vertical-align:-2px;display:inline-block;margin-right:1px" aria-hidden="true"><g fill="currentColor"><path d="M128.1,141.1h356.8C442.8,57.4,356.1,0,256,0C192,0,133.5,23.5,88.6,62.3L128.1,141.1z"/><polygon points="355.3,193.2 154.2,193.2 254.7,394"/><path d="M413.6,193.2L253.9,512c0.7,0,1.4,0,2.1,0c141.4,0,256-114.6,256-256c0-21.7-2.7-42.7-7.8-62.8H413.6z"/><path d="M225.6,452.1L50.7,103C18.9,145.7,0,198.6,0,256c0,121.7,85,223.6,198.8,249.6L225.6,452.1z"/></g></svg> ';
+    var RAX_ICON_LG = '<svg viewBox="0 0 512 512" style="width:18px;height:18px;vertical-align:-3px;display:inline-block;margin-right:2px" aria-hidden="true"><g fill="currentColor"><path d="M128.1,141.1h356.8C442.8,57.4,356.1,0,256,0C192,0,133.5,23.5,88.6,62.3L128.1,141.1z"/><polygon points="355.3,193.2 154.2,193.2 254.7,394"/><path d="M413.6,193.2L253.9,512c0.7,0,1.4,0,2.1,0c141.4,0,256-114.6,256-256c0-21.7-2.7-42.7-7.8-62.8H413.6z"/><path d="M225.6,452.1L50.7,103C18.9,145.7,0,198.6,0,256c0,121.7,85,223.6,198.8,249.6L225.6,452.1z"/></g></svg>';
     var RS_LOGO_SVG = '<svg viewBox="0 0 800 800" fill="currentColor" aria-hidden="true" style="width:13px;height:13px;display:block"><path d="M183.33,106.42L143.1,36.68c-0.33-0.56-0.93-0.91-1.58-0.91L1.83,35.72c-1.4,0-2.28,1.52-1.58,2.74l418.39,725.21c0.7,1.22,2.46,1.22,3.16,0l69.82-121.01c0.33-0.56,0.33-1.26,0-1.82L257.35,234.72c-0.7-1.22,0.18-2.74,1.58-2.74l322.91,0.11c1.4,0,2.28,1.52,1.58,2.74l-49.72,86.04c-0.7,1.22,0.17,2.74,1.58,2.74l139.69,0.05c0.65,0,1.25-0.35,1.58-0.91l122.77-212.46c0.7-1.22-0.17-2.74-1.58-2.74l-612.82-0.22C184.26,107.34,183.66,106.99,183.33,106.42z"/></svg>';
+    var PARLAY_STATS_SVG = '<svg viewBox="0 0 14 12" fill="currentColor" aria-hidden="true" style="width:12px;height:12px"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="3.5" y="1" width="3" height="11" rx="1"/><rect x="7" y="4" width="3" height="8" rx="1"/><rect x="10.5" y="3" width="3" height="9" rx="1"/></svg>';
+    var PARLAY_SPORT_BALLS = {
+        mlb:  '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="width:12px;height:12px"><circle cx="8" cy="8" r="6"/><path d="M5.5 3 C3.5 5 3.5 11 5.5 13" stroke-linecap="round"/><path d="M10.5 3 C12.5 5 12.5 11 10.5 13" stroke-linecap="round"/></svg>',
+        wnba: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="width:12px;height:12px"><circle cx="8" cy="8" r="6"/><line x1="8" y1="2" x2="8" y2="14" stroke-width="1.2"/><line x1="2" y1="8" x2="14" y2="8" stroke-width="1.2"/><path d="M3.5 4.5 Q8 9 12.5 4.5" stroke-linecap="round" stroke-width="1.2"/><path d="M3.5 11.5 Q8 7 12.5 11.5" stroke-linecap="round" stroke-width="1.2"/></svg>',
+        nfl:  '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="width:12px;height:12px"><ellipse cx="8" cy="8" rx="6" ry="3.5" transform="rotate(-45 8 8)"/><line x1="5.2" y1="5.2" x2="10.8" y2="10.8" stroke-width="1.2"/><line x1="6.5" y1="7.5" x2="7.5" y2="6.5" stroke-width="1" stroke-linecap="round"/><line x1="8.5" y1="9.5" x2="9.5" y2="8.5" stroke-width="1" stroke-linecap="round"/></svg>',
+        ufc:  '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="width:12px;height:12px"><polygon points="5.5,2 10.5,2 14,5.5 14,10.5 10.5,14 5.5,14 2,10.5 2,5.5"/></svg>',
+    };
 
     // Restore saved unit size and sync both inputs
     (function() {
@@ -1378,9 +1386,13 @@
                 if (isPro()) loadGroupCode();
                 await loadBetsTaken();
                 // If redirected back from bookmarklet, open portfolio tab
+                var _openParam = new URLSearchParams(window.location.search).get('open');
+                if (_openParam) history.replaceState({}, '', '/');
                 if (sessionStorage.getItem('pending_rs_token')) {
                     var portBtn2 = document.getElementById('portfolio-tab-btn');
                     if (portBtn2) { setTimeout(function(){ portBtn2.click(); }, 100); }
+                } else if (_openParam === 'parlays') {
+                    setTimeout(function() { var pb = document.getElementById('header-parlays-btn'); if (pb) pb.click(); }, 100);
                 } else {
                     setTimeout(loadOdds, 50);
                     setTimeout(preloadAllSports, 3000); // background preload after current sport loads
@@ -1949,7 +1961,7 @@
                 : '<span style="font-size:8px;font-weight:700;color:var(--muted2);letter-spacing:.05em;text-transform:uppercase">' + escHtml(_mobSportLbl) + '</span>';
             function _mobTeamHtml(name, nick) {
                 return '<div style="display:flex;align-items:center;gap:5px;flex:1;min-width:0;overflow:hidden">'
-                    + teamLogoHtml(name, 20)
+                    + (currentSport !== 'mma_mixed_martial_arts' ? teamLogoHtml(name, 20) : '')
                     + '<div style="font-size:13px;font-weight:700;letter-spacing:.03em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)">' + escHtml(nick) + '</div>'
                     + '</div>';
             }
@@ -5079,14 +5091,49 @@
         // NFL is team-only — no player props, go straight to lines
         if (sport === 'nfl') { parlayRenderGrid(); return; }
         var cache = sport === 'wnba' ? PARLAY_PLAYERS_WNBA : PARLAY_PLAYERS;
-        if (cache.length > 0) { parlayRenderGrid(); return; }
+        var _preloadSport = sport;
+
+        // Check if RS IDs already in memory (persists for page session)
+        var hasRsIds = Object.keys(parlayRsIdCache).some(function(k) { return k.startsWith(_preloadSport + ':'); });
+
+        // Helper: fetch and cache RS IDs
+        function fetchRsIds() {
+            return fetch('/api/parlays/player-rs-ids?sport=' + _preloadSport, { credentials: 'include' })
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    if (d.ids) Object.keys(d.ids).forEach(function(n) {
+                        parlayRsIdCache[_preloadSport + ':' + n] = d.ids[n];
+                    });
+                    if (d.gamesByEventId) Object.keys(d.gamesByEventId).forEach(function(ev) {
+                        parlayGameRsIdCache[_preloadSport + ':' + ev] = d.gamesByEventId[ev];
+                    });
+                })
+                .catch(function() {});
+        }
+
+        // Props and RS IDs both in memory — instant render
+        if (cache.length > 0 && hasRsIds) { parlayRenderGrid(); return; }
+
+        // Props cached but RS IDs not — fetch IDs then render once
+        if (cache.length > 0) {
+            fetchRsIds().then(function() {
+                if (parlayActiveSport === _preloadSport) parlayRenderGrid();
+            });
+            return;
+        }
+
+        // Props not cached — fetch props + RS IDs in parallel, render once when both done
         parlayPlayersLoading = true;
         var grid = document.getElementById('parlay-player-grid');
         if (grid) grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">Loading props…</div>';
         var url = sport === 'wnba' ? '/api/dk/wnba-props' : '/api/dk/mlb-props';
-        fetch(url)
-            .then(function(r) { return r.json(); })
-            .then(function(d) {
+
+        Promise.all([
+            fetch(url).then(function(r) { return r.json(); }),
+            hasRsIds ? Promise.resolve() : fetchRsIds(),
+        ])
+            .then(function(res) {
+                var d = res[0];
                 parlayPlayersLoading = false;
                 if (!d.ok || !d.players || !d.players.length) {
                     if (grid) grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">No props available today</div>';
@@ -5098,8 +5145,25 @@
                     var _teamPicks = PARLAY_PLAYERS.filter(function(p) { return p.isTeamMarket; });
                     PARLAY_PLAYERS = _teamPicks.concat(players);
                 }
-                parlayRenderGrid();
-                if (PARLAY_SLIPS.length) parlayRenderSlips(PARLAY_SLIPS);
+                // Backfill headshot_url in D1 for any existing legs still missing it
+                var _seen = {}, _pairs = [];
+                d.players.forEach(function(p) {
+                    if (p.name && p.headshot && !_seen[p.name]) {
+                        _seen[p.name] = true;
+                        _pairs.push({ name: p.name, headshotUrl: p.headshot });
+                    }
+                });
+                if (_pairs.length) {
+                    fetch('/api/parlays/backfill-headshots', {
+                        method: 'POST', credentials: 'include',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ players: _pairs }),
+                    }).catch(function() {});
+                }
+                if (parlayActiveSport === _preloadSport) {
+                    parlayRenderGrid();
+                    if (PARLAY_SLIPS.length) parlayRenderSlips(PARLAY_SLIPS);
+                }
             })
             .catch(function() {
                 parlayPlayersLoading = false;
@@ -5207,7 +5271,7 @@
                     var underId = teamPickIdCounter--;
                     pushTo.push({
                         id: overId, isTeamMarket: true, market: 'team_total', stat: 'Total',
-                        name: game.awayShort + ' @ ' + game.homeShort + ' O' + mkt.line,
+                        name: game.awayTeam + ' @ ' + game.homeTeam + ' O' + mkt.line,
                         team: null, opp: null,
                         homeTeam: game.homeTeam, awayTeam: game.awayTeam,
                         homeShort: game.homeShort, awayShort: game.awayShort,
@@ -5217,7 +5281,7 @@
                     });
                     pushTo.push({
                         id: underId, isTeamMarket: true, market: 'team_total', stat: 'Total',
-                        name: game.awayShort + ' @ ' + game.homeShort + ' U' + mkt.line,
+                        name: game.awayTeam + ' @ ' + game.homeTeam + ' U' + mkt.line,
                         team: null, opp: null,
                         homeTeam: game.homeTeam, awayTeam: game.awayTeam,
                         homeShort: game.homeShort, awayShort: game.awayShort,
@@ -5349,13 +5413,7 @@
         });
         var nowMs = Date.now();
         function fighterAvHtml(name, sdid, initials, isPicked) {
-            var border = isPicked ? '2px solid var(--accent)' : '2px solid var(--border2)';
-            var hs = sdid ? 'https://a.espncdn.com/i/headshots/mma/players/full/' + sdid + '.png' : null;
-            var bg = 'background:linear-gradient(135deg,#f05252,#b91c1c)';
-            var sz = 'width:52px;height:52px;border-radius:50%;flex-shrink:0';
-            var fb = '<div style="' + sz + ';border:' + border + ';' + bg + ';display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:#fff">' + escHtml(initials) + '</div>';
-            if (!hs) return fb;
-            return '<img src="' + escHtml(hs) + '" style="' + sz + ';object-fit:cover;border:' + border + '" onerror="this.outerHTML=' + "'" + escHtml(fb) + "'" + '">';
+            return '';
         }
         var html = PARLAY_GAMES_UFC.map(function(fight) {
             if (fight.cm && new Date(fight.cm).getTime() < nowMs) return '';
@@ -5411,6 +5469,15 @@
         grid.innerHTML = html || '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">No upcoming UFC fights</div>';
     }
 
+    function parlayFmtTime(startMs, timeStr) {
+        if (!startMs || !timeStr) return timeStr || '';
+        var nowET  = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+        var gameET = new Date(startMs).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+        if (gameET === nowET) return timeStr;
+        var day = new Date(startMs).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'America/New_York' });
+        return day + ' ' + timeStr;
+    }
+
     function parlayToProb(odds) {
         return odds > 0 ? 100 / (odds + 100) : Math.abs(odds) / (Math.abs(odds) + 100);
     }
@@ -5421,34 +5488,32 @@
             var p   = findParlayPlayer(entry[0]);
             var dir = entry[1];
             if (!p || !p.moreOdds) return acc;
-            var pOwn, pOther;
+            var legProb;
             if (p.isTeamMarket) {
-                // Team picks: oppOdds is the other side; always picked as 'more'
-                pOwn   = parlayToProb(p.moreOdds);
-                pOther = parlayToProb(p.oppOdds);
+                var pOwn   = parlayToProb(p.moreOdds);
+                var pOther = parlayToProb(p.oppOdds);
+                legProb = pOwn / (pOwn + pOther);
             } else {
                 if (!p.lessOdds) return acc;
                 var pMore = parlayToProb(p.moreOdds);
                 var pLess = parlayToProb(p.lessOdds);
-                var novig = dir === 'more' ? pMore / (pMore + pLess) : pLess / (pMore + pLess);
-                return acc * novig;
+                legProb = dir === 'more' ? pMore / (pMore + pLess) : pLess / (pMore + pLess);
             }
-            return acc * (pOwn / (pOwn + pOther));
+            return acc * legProb;
         }, 1);
     }
 
     function parlayMaxStake() {
         if (Object.keys(parlayPicks).length < 2) return 50000;
-        return Math.floor(10000 * parlayTrueProb() / 0.693); // 0.693 = 0.9 × 0.77
+        return Math.floor(10000 * parlayTrueProb() / 0.70);
     }
 
     function parlayCalcPayout(s) {
         var n = Object.keys(parlayPicks).length;
         if (n < 2) return null;
-        var received = Math.floor(s * 0.9);
-        var raw = Math.min(Math.floor(received * 0.77 / parlayTrueProb()), 10000);
+        var raw = Math.min(Math.floor(s * 0.70 / parlayTrueProb()), 10000);
         var rounded = Math.floor((raw + 2) / 10) * 10;
-        // Per-leg-count cap: 2→4.5x, 3→9x, 4→18x, 5→36x (matches PrizePicks structure)
+        // Per-leg-count cap: 2→4.5x, 3→9x, 4→18x, 5→36x
         var LEG_CAPS = [0, 0, 4.5, 9.0, 18.0, 36.0];
         var cap = Math.floor((LEG_CAPS[n] || 4.5) * s / 10) * 10;
         return Math.min(rounded, cap);
@@ -5459,8 +5524,7 @@
         var imgStyle = 'width:' + s + ';height:' + s + ';border-radius:50%;object-fit:contain;flex-shrink:0;background:var(--bg3)';
         var fallback = '<div style="width:' + s + ';height:' + s + ';border-radius:50%;background:linear-gradient(135deg,' + (p.color || '#333') + ',' + (p.color || '#333') + 'aa);display:flex;align-items:center;justify-content:center;font-size:' + fsize + 'px;font-weight:800;color:#fff;flex-shrink:0">' + escHtml(p.initials || '?') + '</div>';
         if (p.isTeamMarket) {
-            // UFC fighters: use headshot over team logo
-            if (p.headshot) return '<img src="' + escHtml(p.headshot) + '" style="' + imgStyle + ';object-fit:cover" onerror="this.outerHTML=' + "'" + escHtml(fallback) + "'" + '">';
+            if (p.isFighter) return '';
             var logo = p.logo || dkTeamLogo(p.team) || dkTeamLogo(p.awayTeam) || dkTeamLogo(p.homeTeam);
             if (logo) return '<img src="' + escHtml(logo) + '" style="' + imgStyle + ';padding:2px" onerror="this.outerHTML=' + "'" + escHtml(fallback) + "'" + '">';
             return fallback;
@@ -5508,6 +5572,30 @@
             game = games.find(function(g) { return g.awayShort === p.team || g.homeShort === p.team; });
         }
         return game ? parlayGameRsUrl(game, sport) : null;
+    }
+
+    var parlayRsIdCache     = {}; // sport:playerName → RS player ID
+    var parlayGameRsIdCache = {}; // sport:eventId → RS game ID
+    var parlayRsSearchFlight = {}; // sport:playerName → true (in-flight)
+
+    function parlayBgSearchPlayer(playerName, sport) {
+        var k = sport + ':' + playerName;
+        if (parlayRsIdCache[k] || parlayRsSearchFlight[k]) return;
+        parlayRsSearchFlight[k] = true;
+        var sportParam = sport === 'wnba' ? 'basketball_wnba' : sport === 'nfl' ? 'football_nfl' : sport === 'ufc' ? 'ufc' : 'baseball_mlb';
+        fetch('/api/real/otd?action=search&q=' + encodeURIComponent(playerName) + '&sport=' + sportParam, { credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                var players = d.players || [];
+                var match = players.find(function(pl) { return pl.name && pl.name.toLowerCase() === playerName.toLowerCase(); });
+                if (!match && players.length) match = players[0];
+                if (match && match.id && parseInt(match.id, 10) > 0) {
+                    parlayRsIdCache[k] = String(match.id);
+                    if (parlayActiveSport === sport) parlayRenderGrid();
+                }
+            })
+            .catch(function() {})
+            .then(function() { delete parlayRsSearchFlight[k]; });
     }
 
     function parlayRenderGameCards(games, sport) {
@@ -5687,7 +5775,7 @@
         grid.innerHTML = players.map(function(p) {
             var sel     = parlayPicks[p.id];
             var cls     = sel ? (sel === 'more' ? ' sel-more' : ' sel-less') : '';
-            var matchup = escHtml(p.team) + ' vs ' + escHtml(p.opp) + ' · ' + escHtml(p.time);
+            var matchup = escHtml(p.team) + ' vs ' + escHtml(p.opp) + ' · ' + escHtml(parlayFmtTime(p.commenceMs || p.startMs || 0, p.time));
             var btns =
                 '<button class="parlay-pick-btn p-less' + (sel === 'less' ? ' active' : '') + '" onclick="parlayTogglePick(' + p.id + ',\'less\')">' +
                     '<span class="parlay-btn-label">▼ Less</span>' +
@@ -5697,18 +5785,22 @@
                     '<span class="parlay-btn-label">▲ More</span>' +
                     '<span class="parlay-btn-odds">' + parlayFmtOdds(p.moreOdds) + '</span>' +
                 '</button>';
-            var matchup = escHtml(p.team) + ' vs ' + escHtml(p.opp) + ' · ' + escHtml(p.time);
+            var matchup = escHtml(p.team) + ' vs ' + escHtml(p.opp) + ' · ' + escHtml(parlayFmtTime(p.commenceMs || p.startMs || 0, p.time));
             var avatarStyle = 'background:linear-gradient(135deg,' + p.color + ',' + p.color + 'aa)';
             var topStyle = 'background:linear-gradient(160deg,' + p.color + '55,' + p.color + '22)';
             var headshotHtml = p.headshot
                 ? '<img class="parlay-card-headshot" src="' + escHtml(p.headshot) + '" alt="" onerror="parlayHeadshotFail(this)">'
                 : '<div class="parlay-card-avatar" style="' + avatarStyle + '">' + escHtml(p.initials) + '</div>';
-            var cardRsUrl = parlayPlayerRsUrl(p);
-            var cardRsBtn = cardRsUrl ? '<a href="' + escHtml(cardRsUrl) + '" target="_blank" rel="noopener" title="View game on Real Sports" onclick="event.stopPropagation()" style="position:absolute;top:6px;right:6px;z-index:3;display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;color:var(--accent);text-decoration:none;border:1px solid var(--border2);border-radius:4px;background:var(--bg2);opacity:.8">' + RS_LOGO_SVG + '</a>' : '';
+            var rsPlayerId = parlayRsIdCache[parlayActiveSport + ':' + p.name];
+            var rsPlayerIdNum = rsPlayerId ? parseInt(rsPlayerId, 10) : 0;
+            var playerUrl  = (rsPlayerIdNum > 0) ? ('https://www.realapp.com/' + rsUrlHash(2, RS_SPORT_CODE[parlayActiveSport] || 0, 0, rsPlayerIdNum)) : null;
+            var cardRsRow = playerUrl
+                ? '<div class="parlay-card-rs-row"><a class="rs-icon-btn parlay-rs-btn" href="' + escHtml(playerUrl) + '" target="_blank" rel="noopener" title="Player on Real Sports" onclick="event.stopPropagation()">' + PARLAY_STATS_SVG + '</a></div>'
+                : '';
             return '<div class="parlay-card' + cls + '">' +
                 '<div class="parlay-card-top" style="' + topStyle + '">' +
                     '<div class="parlay-team-badge">' + escHtml(p.team) + '</div>' +
-                    cardRsBtn +
+                    cardRsRow +
                     headshotHtml +
                 '</div>' +
                 '<div class="parlay-card-body">' +
@@ -5722,6 +5814,14 @@
                 '</div>' +
             '</div>';
         }).join('');
+        // Kick off background RS player ID lookups for any uncached players
+        var _bgSport = parlayActiveSport;
+        var _seen = {};
+        players.forEach(function(p) {
+            if (_seen[p.name] || parlayRsIdCache[_bgSport + ':' + p.name]) return;
+            _seen[p.name] = true;
+            parlayBgSearchPlayer(p.name, _bgSport);
+        });
     }
 
     function parlayBuildNavHtml() {
@@ -5729,7 +5829,7 @@
             '<button class="parlay-sport-btn' + (parlayActiveSport === 'mlb'  ? ' active' : '') + '" onclick="setParlayActiveSport(\'mlb\')">MLB</button>' +
             '<button class="parlay-sport-btn' + (parlayActiveSport === 'wnba' ? ' active' : '') + '" onclick="setParlayActiveSport(\'wnba\')">WNBA</button>' +
             '<button class="parlay-sport-btn' + (parlayActiveSport === 'nfl'  ? ' active' : '') + '" onclick="setParlayActiveSport(\'nfl\')">NFL</button>' +
-            '<button class="parlay-sport-btn' + (parlayActiveSport === 'ufc'  ? ' active' : '') + '" onclick="setParlayActiveSport(\'ufc\')">UFC</button>' +
+            (currentUser && currentUser.is_admin ? '<button class="parlay-sport-btn' + (parlayActiveSport === 'ufc'  ? ' active' : '') + '" onclick="setParlayActiveSport(\'ufc\')">UFC</button>' : '') +
         '</div>';
         var cats = parlayActiveSport === 'wnba' ? WNBA_CATS : parlayActiveSport === 'nfl' ? NFL_CATS : parlayActiveSport === 'ufc' ? UFC_CATS : PARLAY_CATS;
         var searchTab = parlaySearchQuery
@@ -6210,7 +6310,9 @@
                                 var bat = (p.stats && p.stats.batting) || {};
                                 var pit = (p.stats && p.stats.pitching) || {};
                                 var h = parseInt(bat.hits || 0), r = parseInt(bat.runs || 0), rbi = parseInt(bat.rbi || 0);
-                                playerStats[name]  = { hits: h, totalBases: parseInt(bat.totalBases || 0), rbi: rbi, runs: r, hrbi: h + r + rbi, strikeOuts: parseInt(pit.strikeOuts || 0), outs: parseInt(pit.outs || 0) };
+                                var ipParts = String(pit.inningsPitched || '').split('.');
+                                var ipOuts = (parseInt(ipParts[0]) || 0) * 3 + (parseInt(ipParts[1]) || 0);
+                                playerStats[name]  = { hits: h, totalBases: parseInt(bat.totalBases || 0), rbi: rbi, runs: r, hrbi: h + r + rbi, strikeOuts: parseInt(pit.strikeOuts || 0), outs: ipOuts };
                                 playerGamePk[name] = res.pk;
                             });
                         });
@@ -6333,7 +6435,9 @@
                             var bat = (p.stats && p.stats.batting) || {};
                             var pit = (p.stats && p.stats.pitching) || {};
                             var h = parseInt(bat.hits || 0), r = parseInt(bat.runs || 0), rbi = parseInt(bat.rbi || 0);
-                            playerStats[name] = { hits: h, totalBases: parseInt(bat.totalBases || 0), rbi: rbi, runs: r, hrbi: h + r + rbi, strikeOuts: parseInt(pit.strikeOuts || 0), outs: parseInt(pit.outs || 0) };
+                            var ipParts2 = String(pit.inningsPitched || '').split('.');
+                            var ipOuts2 = (parseInt(ipParts2[0]) || 0) * 3 + (parseInt(ipParts2[1]) || 0);
+                            playerStats[name] = { hits: h, totalBases: parseInt(bat.totalBases || 0), rbi: rbi, runs: r, hrbi: h + r + rbi, strikeOuts: parseInt(pit.strikeOuts || 0), outs: ipOuts2 };
                         });
                     });
                 });
@@ -6588,9 +6692,9 @@
             '</div>';
         }
 
-        var payoutNote = s.status === 'won' ? '<div class="pslip-payout-note">Payout: ' + Number(s.payout_rax).toLocaleString() + ' Rax — sending to your Real Sports account</div>' : '';
+        var payoutNote = s.status === 'won' ? '<div class="pslip-payout-note">Payout: ' + Number(s.payout_rax).toLocaleString() + ' ' + RAX_ICON + ' — sending to your Real Sports account</div>' : '';
         var depositLink = (s.status === 'pending_deposit' && s.deposit_card_url)
-            ? '<a href="' + escHtml(s.deposit_card_url) + '" target="_blank" rel="noopener" class="pslip-deposit-link">Tap to send ' + Number(s.stake_rax).toLocaleString() + ' Rax deposit →</a>'
+            ? '<a href="' + escHtml(s.deposit_card_url) + '" target="_blank" rel="noopener" class="pslip-deposit-link">Tap to send ' + Number(s.stake_rax).toLocaleString() + ' ' + RAX_ICON + ' deposit →</a>'
             : '';
         var cancelBtn = (s.status === 'pending_deposit' && !showUsername)
             ? '<button class="pslip-cancel-btn" data-id="' + s.id + '" onclick="parlayCancel(' + s.id + ')">Cancel</button>'
@@ -6610,7 +6714,7 @@
                 '<div class="pslip-amounts">' +
                     '<span class="pslip-stake">' + Number(s.stake_rax).toLocaleString() + '</span>' +
                     '<span class="pslip-arrow">→</span>' +
-                    '<span class="pslip-payout' + payoutCls + '">' + Number(s.payout_rax).toLocaleString() + ' Rax</span>' +
+                    '<span class="pslip-payout' + payoutCls + '">' + Number(s.payout_rax).toLocaleString() + ' ' + RAX_ICON + '</span>' +
                     multBadge +
                 '</div>' +
             '</div>' +
@@ -6744,7 +6848,7 @@
                     var dir      = parlayPicks[id];
                     var dirLabel, matchup, lineStr;
                     if (p.isTeamMarket) {
-                        matchup  = p.awayShort && p.homeShort ? escHtml(p.awayShort + ' @ ' + p.homeShort) + ' · ' + escHtml(p.time) : escHtml(p.time || '');
+                        matchup  = p.awayShort && p.homeShort ? escHtml(p.awayShort + ' @ ' + p.homeShort) + ' · ' + escHtml(parlayFmtTime(p.commenceMs || p.startMs || 0, p.time)) : escHtml(parlayFmtTime(p.commenceMs || p.startMs || 0, p.time) || '');
                         if (p.market === 'team_ml') {
                             lineStr  = 'Moneyline';
                             dirLabel = escHtml(p.team) + ' Win';
@@ -6762,14 +6866,15 @@
                         lineStr  = p.line + ' ' + escHtml(p.stat);
                     }
                     return '<div class="parlay-slip-pick dir-' + dir + '">' +
-                        parlayAvatarHtml(p, 24, 8) +
+                        parlayAvatarHtml(p, 40, 12) +
                         '<div class="parlay-slip-info">' +
-                            '<div class="parlay-slip-player">' + escHtml(p.name) + '</div>' +
-                            '<div class="parlay-slip-matchup">· ' + matchup + '</div>' +
-                            '<div class="parlay-slip-linebox">' +
-                                '<span class="parlay-slip-linebox-stat">' + lineStr + '</span>' +
-                                '<span class="parlay-slip-linebox-sep"></span>' +
-                                '<span class="parlay-slip-linebox-dir ' + dir + '">' + dirLabel + '</span>' +
+                            '<div class="parlay-slip-row1">' +
+                                '<span class="parlay-slip-player">' + escHtml(p.name) + '</span>' +
+                                '<span class="parlay-slip-matchup-inline">' + matchup + '</span>' +
+                            '</div>' +
+                            '<div class="parlay-slip-row2">' +
+                                '<span class="parlay-slip-stat">' + lineStr + '</span>' +
+                                '<span class="parlay-slip-dir ' + dir + '">' + dirLabel + '</span>' +
                             '</div>' +
                         '</div>' +
                         '<button class="parlay-slip-remove" onclick="parlayRemovePick(' + id + ')">×</button>' +
@@ -6794,13 +6899,13 @@
                 payout = parlayCalcPayout(parlayStake);
             }
             var mult = parlayStake > 0 ? (payout / parlayStake).toFixed(2) : '0.00';
-            payEl.textContent = payout.toLocaleString() + ' Rax';
+            payEl.innerHTML = payout.toLocaleString() + ' ' + RAX_ICON_LG;
             payEl.classList.add('active');
             if (rowEl) rowEl.classList.add('has-value');
             if (oddsEl) oddsEl.textContent = mult + 'x parlay · ' + count + ' legs';
             if (placeBtn) placeBtn.disabled = false;
             var legMsg = count === 5 ? 'Max 5 legs' : count + ' legs · up to ' + (5 - count) + ' more';
-            if (noteEl) noteEl.textContent = legMsg + ' · max stake ' + maxS.toLocaleString() + ' Rax';
+            if (noteEl) noteEl.innerHTML = legMsg + ' · max stake ' + maxS.toLocaleString() + ' ' + RAX_ICON;
         } else if (payEl) {
             payEl.textContent = '—';
             payEl.classList.remove('active');
@@ -6841,9 +6946,8 @@
         var multEl = document.getElementById('pmp-mult');
         if (multEl) {
             var payout = parlayCalcPayout(parlayStake);
-            multEl.textContent = (payout && parlayStake > 0)
-                ? (payout / parlayStake).toFixed(2) + 'x'
-                : count + ' leg' + (count !== 1 ? 's' : '');
+            var multStr = (payout && parlayStake > 0) ? (payout / parlayStake).toFixed(2) + '×' : '';
+            multEl.textContent = count + ' leg' + (count !== 1 ? 's' : '') + (multStr ? '  ·  ' + multStr : '');
         }
     }
 
@@ -6880,6 +6984,12 @@
                 }
                 var newP = findParlayPlayer(id);
                 if (newP) {
+                    // Block picks on games that have already started
+                    var _gameMs = newP.commenceMs || newP.startMs || 0;
+                    if (_gameMs > 0 && _gameMs < Date.now()) {
+                        showConfirm('This game has already started — picks are locked.', function() {});
+                        return;
+                    }
                     // Block same player/team appearing twice
                     var duplicate = Object.keys(parlayPicks).some(function(k) {
                         var existing = findParlayPlayer(k);
@@ -6966,6 +7076,26 @@
         var ids = Object.keys(parlayPicks);
         if (ids.length < 2) return;
 
+        // Block if any game has already started
+        var _nowMs = Date.now();
+        var startedPick = ids.some(function(id) {
+            var p = findParlayPlayer(id);
+            var ms = p ? (p.commenceMs || p.startMs || 0) : 0;
+            return ms > 0 && ms < _nowMs;
+        });
+        if (startedPick) {
+            showConfirm('One or more picks are from a game that has already started.', function() {});
+            return;
+        }
+
+        // Must have picks from at least 2 different teams
+        var pickTeams = ids.map(function(id) { var p = findParlayPlayer(id); return p ? (p.team || null) : null; }).filter(Boolean);
+        var uniquePickTeams = pickTeams.filter(function(t, i) { return pickTeams.indexOf(t) === i; });
+        if (pickTeams.length >= ids.length && uniquePickTeams.length < 2) {
+            showConfirm('Picks must be from at least 2 different teams.', function() {});
+            return;
+        }
+
         var legs = ids.map(function(id) {
             var p   = findParlayPlayer(id);
             var dir = parlayPicks[id];
@@ -7014,13 +7144,16 @@
                 americanOdds: odds,
                 impliedProb:  prob,
                 label:        lbl,
-                gameDate:     new Date().toISOString().slice(0, 10),
+                sport:        parlayActiveSport,
+                gameDate:     new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' }),
                 eventName:    _gameKey,
                 selectionId:  p.isTeamMarket ? (p.selId || String(p.id)) : (dir === 'more' ? p.moreSelId : p.lessSelId),
                 marketId:     p.marketId,
                 subcatId:     p.subcatId || 0,
                 eventId:      p.eventId,
                 headshot:     p.headshot || null,
+                team:         p.team || null,
+                startMs:      p.commenceMs || p.startMs || 0,
             };
         });
 
@@ -7059,21 +7192,17 @@
                         '<div style="font-size:32px;margin-bottom:8px">🎰</div>' +
                         '<div style="font-size:18px;font-weight:800;margin-bottom:4px">Parlay Pending</div>' +
                         '<div style="font-size:12px;color:var(--muted2);margin-bottom:6px">ID #' + d.parlayId + ' · ' + d.legs + ' legs · ' + d.multiplier + 'x</div>' +
-                        '<div style="font-size:13px;color:var(--muted)">Press the blue button and offer <span style="color:var(--accent);font-weight:800;font-size:15px">' + d.stake.toLocaleString() + ' Rax</span> to submit your parlay!</div>' +
+                        '<div style="font-size:13px;color:var(--muted)">Press the blue button and offer <span style="color:var(--accent);font-weight:800;font-size:15px">' + d.stake.toLocaleString() + ' ' + RAX_ICON_LG + '</span> to submit your parlay!</div>' +
                     '</div>' +
-                    '<div style="background:var(--bg2);border:1.5px solid var(--border2);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px">' +
-                        '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px">Deposit Instructions</div>' +
-                        '<div style="font-size:13px;line-height:1.6">' +
-                            'Go to the RS card below and send <strong>@edgebot</strong> an offer for exactly <span style="color:var(--accent);font-weight:800">' + d.stake.toLocaleString() + ' Rax</span>.' +
-                        '</div>' +
-                        '<a href="' + escHtml(d.depositCardUrl) + '" target="_blank" rel="noopener" style="display:block;background:var(--accent-dim);border:1.5px solid var(--accent);border-radius:8px;padding:10px 14px;text-decoration:none;color:var(--accent);font-size:12px;font-weight:700;text-align:center">' +
-                            '→ Open Deposit Card' +
+                    '<div style="display:flex;flex-direction:column;gap:8px">' +
+                        '<a href="' + escHtml(d.depositCardUrl) + '" target="_blank" rel="noopener" style="display:block;background:var(--accent);border-radius:10px;padding:14px;text-decoration:none;color:#fff;font-size:13px;font-weight:700;text-align:center">' +
+                            'Send <span style="font-size:19px;font-weight:900;letter-spacing:-.3px">' + d.stake.toLocaleString() + ' ' + RAX_ICON_LG + '</span>' +
                         '</a>' +
                         '<div style="font-size:11px;color:var(--muted2);text-align:center">⏱ Expires at ' + expStr + ' (1 hr)</div>' +
                     '</div>' +
                     '<div style="background:var(--bg2);border:1.5px solid rgba(45,204,126,.35);border-radius:12px;padding:14px;text-align:center">' +
                         '<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">To Win</div>' +
-                        '<div style="font-size:26px;font-weight:800;color:var(--green);font-variant-numeric:tabular-nums">' + d.payoutRax.toLocaleString() + ' Rax</div>' +
+                        '<div style="font-size:26px;font-weight:800;color:var(--green);font-variant-numeric:tabular-nums">' + d.payoutRax.toLocaleString() + ' ' + RAX_ICON_LG + '</div>' +
                         '<div style="font-size:12px;color:var(--muted);margin-top:2px">' + d.multiplier + 'x multiplier</div>' +
                     '</div>' +
                     '<button onclick="parlaysClear();renderParlayPanel();" style="width:100%;padding:11px;border-radius:10px;border:1px solid var(--border2);background:var(--bg2);color:var(--muted);font-size:13px;font-weight:700;cursor:pointer;font-family:var(--sans)">← New Parlay</button>' +
@@ -7240,17 +7369,15 @@
                     '</div>' +
                     '<div class="parlay-slip-body" id="parlay-slip-body"></div>' +
                     '<div class="parlay-slip-footer">' +
-                        '<div class="parlay-legs-row" id="parlay-legs-row"></div>' +
-                        '<div>' +
-                            '<label class="parlay-input-label">Stake (Rax)</label>' +
+                        '<div class="parlay-footer-inputs">' +
                             '<div class="parlay-stake-wrap">' +
                                 '<span class="parlay-stake-unit">RAX</span>' +
                                 '<input type="number" class="parlay-stake-input" id="parlay-stake-input" value="' + parlayStake + '" min="80" max="50000" step="10" oninput="parlaysOnStakeInput(this)" onblur="parlaysOnStakeBlur(this)">' +
                             '</div>' +
-                        '</div>' +
-                        '<div class="parlay-payout-row" id="parlay-payout-row">' +
-                            '<span class="parlay-payout-label">To Win</span>' +
-                            '<span class="parlay-payout-amount" id="parlay-payout-amount">—</span>' +
+                            '<div class="parlay-payout-row" id="parlay-payout-row">' +
+                                '<span class="parlay-payout-label">To Win</span>' +
+                                '<span class="parlay-payout-amount" id="parlay-payout-amount">—</span>' +
+                            '</div>' +
                         '</div>' +
                         '<div class="parlay-odds-line" id="parlay-odds-line"></div>' +
                         '<button class="parlay-place-btn" id="parlay-place-btn" onclick="parlaysPlace()" disabled>Place Parlay</button>' +
@@ -7261,7 +7388,7 @@
             '<div class="parlay-mobile-pill" id="parlay-mobile-pill" onclick="parlayToggleDrawer()">' +
                 '<div class="pmp-heads" id="pmp-heads"></div>' +
                 '<div class="pmp-mult" id="pmp-mult"></div>' +
-                '<span class="pmp-chevron">›</span>' +
+                '<span class="pmp-chevron">View ›</span>' +
             '</div>' +
             '<div class="parlay-mobile-backdrop" id="parlay-mobile-backdrop" onclick="parlayCloseDrawer()"></div>';
         parlayRenderAll();
@@ -11205,11 +11332,13 @@
         var plan  = document.getElementById('admin-plan-filter')  ? document.getElementById('admin-plan-filter').value  : '';
         var sort  = document.getElementById('admin-sort')          ? document.getElementById('admin-sort').value          : '';
         var group = document.getElementById('admin-group-filter') ? document.getElementById('admin-group-filter').value : '';
+        var rsF   = document.getElementById('admin-rs-filter')    ? document.getElementById('admin-rs-filter').value    : '';
         var params = ['limit=50', 'offset=' + offset];
         if (q)     params.push('q='     + encodeURIComponent(q));
         if (plan)  params.push('plan='  + encodeURIComponent(plan));
         if (sort)  params.push('sort='  + encodeURIComponent(sort));
         if (group !== '') params.push('group=' + encodeURIComponent(group));
+        if (rsF === '1') params.push('rs=1');
         var url = '/api/admin/users?' + params.join('&');
         try {
             var res = await fetch(url, { credentials: 'same-origin' });
@@ -12003,11 +12132,9 @@
         var ddPort = document.getElementById('dd-portfolio-item');
         if (ddPort) ddPort.style.display = (currentUser && currentUser.is_admin) ? '' : 'none';
 
-        // Parlays — all logged-in users
-        if (currentUser) {
-            var hpb = document.getElementById('header-parlays-btn');
-            if (hpb) hpb.style.display = '';
-        }
+        // Parlays — visible to all logged-in users; non-pro sees upgrade modal on click
+        var hpb = document.getElementById('header-parlays-btn');
+        if (hpb) hpb.style.display = currentUser ? '' : 'none';
 
         // Pro → hamburger menu item
         var ddManage = document.getElementById('dd-manage-sub-item');
@@ -12108,7 +12235,7 @@
         if (!isPro()) {
             currentSport = FREE_SPORTS.indexOf(currentSport) !== -1 ? currentSport : FREE_SPORTS[0];
             var mktEl = document.getElementById('mkt-filter');
-            if (mktEl.value !== 'ML') { mktEl.value = 'ML'; }
+            if (mktEl && mktEl.value !== 'ML') { mktEl.value = 'ML'; }
         }
         if (currentSport === 'basketball_wnba') {
             var mktEl = document.getElementById('mkt-filter');
@@ -12748,7 +12875,67 @@
             return;
         }
 
-        var sel = document.getElementById('mkt-filter').value;
+        // UFC: DK native main card + Contender Series (parallel)
+        if (currentSport === 'mma_mixed_martial_arts') {
+            altOdds = {};
+            var ufcFetch = fetch('/api/fd/ufc', { credentials: 'same-origin' })
+                .then(function(r) {
+                    if (r.status === 401) {
+                        dot.className = 'sdot error'; stxt.textContent = 'Session expired — please log in again.';
+                        resetRefreshBtn(); handleUnauthenticated();
+                        return Promise.reject('unauth');
+                    }
+                    return r.json();
+                });
+            var csFetch = fetch('/api/dk/contender-series', { credentials: 'same-origin' })
+                .then(function(r) { return r.ok ? r.json() : { ok: false }; })
+                .catch(function() { return { ok: false }; });
+            Promise.all([ufcFetch, csFetch])
+            .then(function(results) {
+                var mainData = results[0], csData = results[1];
+                var rows = [];
+                function addFights(fights, prefix) {
+                    Object.entries(fights || {}).forEach(function(entry) {
+                        var gameKey = entry[0], fight = entry[1];
+                        var cm  = fight.cm ? new Date(fight.cm) : null;
+                        var pid = (prefix || '') + fight.id + '-ML';
+                        [[fight.away, 'A'], [fight.home, 'B']].forEach(function(pair) {
+                            var name = pair[0], ps = pair[1];
+                            var am = fight.ml[name];
+                            if (am == null) return;
+                            rows.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'ML', side: name, am: am, pt: null, pid: pid, ps: ps, gid: (prefix||'')+fight.id });
+                        });
+                    });
+                }
+                if (mainData && mainData.ok) addFights(mainData.fights, '');
+                if (csData   && csData.ok)  addFights(csData.fights,   'cs-');
+                rawRows = rows;
+                rawRowsBySport[currentSport] = rawRows;
+                var nowStr = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+                if (rawRows.length) {
+                    dot.className = 'sdot live';
+                    stxt.textContent = 'Updated ' + nowStr + ' - ' + (rows.length / 2 | 0) + ' fights - DraftKings';
+                } else {
+                    dot.className = 'sdot error';
+                    stxt.textContent = 'No UFC fights right now';
+                }
+            })
+            .catch(function(e) {
+                if (e === 'unauth') return;
+                rawRows = []; rsGameIds = {};
+                dot.className = 'sdot error'; stxt.textContent = 'Error fetching UFC data';
+            })
+            .then(function() {
+                resetRefreshBtn();
+                if (rawRows.length > 0) {
+                    fetchRealMarkets(currentSport).then(function() { fetchExactEvForRows(currentSport); }).catch(function() { renderTable(); });
+                } else { renderTable(); }
+            });
+            return;
+        }
+
+        var _mktSel = document.getElementById('mkt-filter');
+        var sel = _mktSel ? _mktSel.value : 'ML';
         var noSpread = ['mma_mixed_martial_arts', 'baseball_mlb'];
         var mkts = noSpread.indexOf(currentSport) !== -1 ? 'h2h'
             : (!isPro()) ? 'h2h'
@@ -13840,7 +14027,7 @@
                 html += '<tr class="ghrow" data-gk="' + r.game.replace(/"/g, '&quot;') + '" onclick="toggleGame(\'' + gk + '\')">'
                 + '<td colspan="13"><div class="gh-inner">'
                 + sportLogoHtml(currentSport, r.league, 20)
-                + '<div style="display:grid;grid-template-columns:auto minmax(0,1fr) auto auto minmax(0,1fr);align-items:center;gap:4px;flex:1;min-width:0">' + teamLogoHtml(teams[0], 20) + teamNameHtml(teams[0]) + '<span style="color:var(--muted2);text-align:center;padding:0 2px">@</span>' + teamLogoHtml(_homeTeam, 20) + teamNameHtml(_homeTeam) + '</div>'
+                + '<div style="display:grid;grid-template-columns:' + (currentSport === 'mma_mixed_martial_arts' ? 'minmax(0,1fr) auto minmax(0,1fr)' : 'auto minmax(0,1fr) auto auto minmax(0,1fr)') + ';align-items:center;gap:4px;flex:1;min-width:0">' + (currentSport !== 'mma_mixed_martial_arts' ? teamLogoHtml(teams[0], 20) : '') + teamNameHtml(teams[0]) + '<span style="color:var(--muted2);text-align:center;padding:0 2px">@</span>' + (currentSport !== 'mma_mixed_martial_arts' ? teamLogoHtml(_homeTeam, 20) : '') + teamNameHtml(_homeTeam) + '</div>'
                 + (_gameNum ? '<span class="gh-badge" style="flex-shrink:0;margin-left:6px;background:rgba(255,255,255,0.1);color:var(--muted2);font-size:10px;letter-spacing:.06em">GAME ' + _gameNum + '</span>' : '')
                 + (ti.lbl ? '<span class="gh-badge ' + ti.cls + '" style="flex-shrink:0;margin-left:6px">' + ti.lbl + '</span>' : '')
                 + '<span class="gh-score-badge gh-badge" data-game="' + r.game.replace(/"/g, '&quot;') + '" data-cm="' + (r.cm ? r.cm.getTime() : '') + '" style="display:none"></span>'
@@ -14238,7 +14425,7 @@
             var af = r.ps === 'A' ? nv.fa : nv.fb;
             return af != null && (af * (1/pred) * (1 - rsBaseTake(pred)) - 1) > 0;
         }).slice(0, 10);
-        if (!batch.length) return;
+        if (!batch.length) { renderTable(); return; }
         Promise.all(batch.map(function(r) {
             var sp = rsGameSports[r.game] || sport.split('_')[1] || 'mlb';
             var qs = 'marketId=' + rsMarketIds[r.id]
@@ -14431,16 +14618,16 @@
                 rawRows = rawRows.filter(function(r) {
                     if (resolvedMap[r.game]) return true;
                     var fdTeams = r.game.split(' @ ');
-                    var fdAway = fdTeams[0] ? fdTeams[0].toLowerCase() : '';
-                    var fdHome = fdTeams[1] ? fdTeams[1].toLowerCase() : '';
+                    var fdAway = fdTeams[0] ? norm(fdTeams[0]) : '';
+                    var fdHome = fdTeams[1] ? norm(fdTeams[1]) : '';
                     var fdAwayLast = _mmaLast(fdAway);
                     var fdHomeLast = _mmaLast(fdHome);
                     return marketKeys.some(function(k) {
                         if (k.endsWith('__lines') || k.endsWith('__gid')) return false;
                         var realTeams = k.split(' @ ');
                         if (realTeams.length !== 2) return false;
-                        var rAway = realTeams[0].trim().toLowerCase();
-                        var rHome = realTeams[1].trim().toLowerCase();
+                        var rAway = norm(realTeams[0].trim());
+                        var rHome = norm(realTeams[1].trim());
                         var rAwayLast = _mmaLast(rAway);
                         var rHomeLast = _mmaLast(rHome);
                         // Check both orientations — FD and Real Sports sometimes flip home/away
@@ -14615,14 +14802,30 @@
                     if (!match) match = isYes ? outcomes[1] : outcomes[0]; // Real Sports: No=0, Yes=1
                 }
 
-                // Pass 0c: MMA last-name matching
-                if (!match && sport === 'mma_mixed_martial_arts') {
-                    var sideLast = sideLower.split(' ').pop();
-                    match = outcomes.find(function(o) {
-                        if (!o.label) return false;
-                        var oLast = o.label.toLowerCase().split(' ').pop();
-                        return oLast.indexOf(sideLast) !== -1 || sideLast.indexOf(oLast) !== -1;
-                    });
+                // Pass 0c: MMA matching — DK-alignment when labels are identical, name fallback otherwise.
+                // DK-alignment: pick the RS outcome whose pct is closest to DK's implied no-vig for this fighter.
+                // Only applies when both RS outcome labels are the same (e.g. both "JK") — otherwise name match.
+                if (!match && sport === 'mma_mixed_martial_arts' && r.mkt === 'ML') {
+                    var _labelsIdentical0c = outcomes.length === 2
+                        && outcomes[0] && outcomes[1]
+                        && norm(outcomes[0].label || '') !== ''
+                        && norm(outcomes[0].label || '') === norm(outcomes[1].label || '');
+                    if (_labelsIdentical0c && r.am != null) {
+                        var _impliedPct0c = r.am >= 0
+                            ? (100 / (r.am + 100)) * 100
+                            : (Math.abs(r.am) / (Math.abs(r.am) + 100)) * 100;
+                        var _d0c0 = outcomes[0].pct != null ? Math.abs(outcomes[0].pct - _impliedPct0c) : 999;
+                        var _d0c1 = outcomes[1].pct != null ? Math.abs(outcomes[1].pct - _impliedPct0c) : 999;
+                        if (_d0c0 < 999 || _d0c1 < 999) match = _d0c0 <= _d0c1 ? outcomes[0] : outcomes[1];
+                    }
+                    if (!match) {
+                        var _sideLast0c = norm(r.side).split(' ').pop();
+                        match = outcomes.find(function(o) {
+                            if (!o.label) return false;
+                            var oLast = norm(o.label).split(' ').pop();
+                            return oLast.indexOf(_sideLast0c) !== -1 || _sideLast0c.indexOf(oLast) !== -1;
+                        });
+                    }
                 }
 
                 // Pass 0b: Total-specific matching

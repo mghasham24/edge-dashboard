@@ -2,96 +2,73 @@
 // POST /api/parlays/auto-settle?_cron_key=CRON_SECRET
 // GET  /api/parlays/auto-settle?_cron_key=CRON_SECRET&debug  (admin debug)
 //
-// Settles active parlays using MLB Stats API boxscores + ESPN MMA API for UFC.
-// Three reliability fixes vs v1:
-//   1. Same-day settlement — only uses games with abstractGameState=Final
-//   2. Name normalization — strips accents before matching (José → jose)
-//   3. Stale void — legs unresolved 2+ days after game_date are voided (push)
-// Wired into alert-cron every 60s.
+// Settles active parlays using sport-specific external APIs:
+//   MLB  — MLB Stats API boxscores + schedule
+//   WNBA — ESPN WNBA scoreboard + summary
+//   NFL  — ESPN NFL scoreboard
+//   UFC  — ESPN MMA scoreboard
+// Reliability: only settles Final/completed games; stale legs voided after STALE_DAYS.
 
 import { ok, err }    from '../../_lib/response.js';
 import { getSession } from '../../_lib/session.js';
 
 const MLB_API    = 'https://statsapi.mlb.com/api/v1';
+const ESPN_WNBA  = 'https://site.api.espn.com/apis/site/v2/sports/basketball/wnba';
+const ESPN_NFL   = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl';
 const ESPN_MMA   = 'https://site.api.espn.com/apis/site/v2/sports/mma/ufc';
-const STALE_DAYS = 2; // days after game_date before an unresolved leg is voided
+const STALE_DAYS = 2;
 
-// Maps market_type (as stored in parlay_legs) → MLB Stats API field name.
-// 'hrbi' is a computed stat (hits+runs+rbi) injected by extractPlayerStats.
-const STAT_FIELD = {
-  hits:        'hits',
-  total_bases: 'totalBases',
-  rbis:        'rbi',
-  runs:        'runs',
-  hrbi:        'hrbi',       // computed in extractPlayerStats
-  pitcher_ks:  'strikeOuts', // pitching strikeouts
-  outs_ou:     'outs',       // pitcher outs recorded
+const MLB_STAT_FIELD = {
+  hits: 'hits', total_bases: 'totalBases', rbis: 'rbi', runs: 'runs',
+  hrbi: 'hrbi', pitcher_ks: 'strikeOuts', outs_ou: 'outs',
 };
+const WNBA_STAT_FIELD = {
+  pts: 'pts', reb: 'reb', ast: 'ast', fg3m: 'fg3m',
+  pra: 'pra', pa: 'pa', pr: 'pr', ra: 'ra',
+};
+const WNBA_PROP_TYPES = new Set(Object.keys(WNBA_STAT_FIELD));
 
-// RS marketplace only accepts offers in multiples of 10.
-// Ones digit 0-7 → round down; 8-9 → round up.
 function roundOfferAmount(amount) {
   const ones = amount % 10;
   return ones >= 8 ? Math.ceil(amount / 10) * 10 : Math.floor(amount / 10) * 10;
 }
 
-// Strip accents + lowercase — handles José vs Jose, etc.
 function normalizeName(name) {
   return name.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 }
 
-// Returns gamePks for games that are already Final on a given date
-async function getFinalGamePks(date) {
-  const res = await fetch(`${MLB_API}/schedule?date=${date}&sportId=1`, {
-    signal: AbortSignal.timeout(8000),
-  });
-  if (!res.ok) return [];
-  const data = await res.json();
-  return (data.dates?.[0]?.games || [])
-    .filter(g => g.status?.abstractGameState === 'Final')
-    .map(g => g.gamePk);
-}
-
-// Returns Final games with team names, abbreviations, and scores for team market settlement
-async function getFinalGamesWithScores(date) {
-  const res = await fetch(
-    `${MLB_API}/schedule?date=${date}&sportId=1&hydrate=linescore`,
-    { signal: AbortSignal.timeout(8000) },
-  );
-  if (!res.ok) return [];
-  const data = await res.json();
-  return (data.dates?.[0]?.games || [])
-    .filter(g => g.status?.abstractGameState === 'Final')
-    .map(g => ({
-      gamePk:    g.gamePk,
-      homeName:  g.teams?.home?.team?.name  || g.linescore?.teams?.home?.team?.name  || '',
-      awayName:  g.teams?.away?.team?.name  || g.linescore?.teams?.away?.team?.name  || '',
-      homeAbbr:  (g.teams?.home?.team?.abbreviation || g.linescore?.teams?.home?.team?.abbreviation || '').toUpperCase(),
-      awayAbbr:  (g.teams?.away?.team?.abbreviation || g.linescore?.teams?.away?.team?.abbreviation || '').toUpperCase(),
-      homeScore: g.teams?.home?.score ?? g.linescore?.teams?.home?.runs ?? null,
-      awayScore: g.teams?.away?.score ?? g.linescore?.teams?.away?.runs ?? null,
-    }))
-    .filter(g => g.homeScore != null && g.awayScore != null);
-}
-
-// Resolve a team market leg (team_ml / team_runline / team_total) against Final game scores.
-// player_name formats:
-//   team_ml / team_runline : "<Full Team Name> ML" | "<Full Team Name> RL"
-//   team_total             : "<ABBR> @ <ABBR> O<line>" | "<ABBR> @ <ABBR> U<line>"
+// Resolve a team market leg against an array of final games with scores.
+// finalGames: [{ homeName, awayName, homeAbbr, awayAbbr, homeScore, awayScore }]
 function resolveTeamLeg(leg, finalGames) {
   const mkt = leg.market_type;
 
   if (mkt === 'team_total') {
-    // "TOR @ HOU O8.5" or "TOR @ HOU U8.5"
-    const m = leg.player_name.match(/^(\w+)\s*@\s*(\w+)\s+([OU])([\d.]+)$/i);
+    // New format: "Los Angeles Dodgers @ Kansas City Royals O8.5"
+    // Old format: "LAD @ KC O8.5" (abbreviations — kept for backwards compat)
+    const m = leg.player_name.match(/^(.+?)\s+@\s+(.+?)\s+([OU])([\d.]+)$/i);
     if (!m) return null;
-    const awayAbbr = m[1].toUpperCase();
-    const homeAbbr = m[2].toUpperCase();
-    const isOver   = m[3].toUpperCase() === 'O';
-    const line     = parseFloat(m[4]);
+    const awayRaw = m[1].trim();
+    const homeRaw = m[2].trim();
+    const isOver  = m[3].toUpperCase() === 'O';
+    const line    = parseFloat(m[4]);
+
+    function matchesTeam(raw, gameName, gameAbbr) {
+      const rawNorm = normalizeName(raw);
+      const gameNorm = normalizeName(gameName);
+      // Exact full-name match (new format)
+      if (gameNorm === rawNorm) return true;
+      // endsWith nickname (e.g. "la dodgers" → nickname "dodgers" in "los angeles dodgers")
+      const nickname = rawNorm.split(' ').slice(1).join(' ');
+      if (nickname && gameNorm.endsWith(nickname)) return true;
+      // Abbreviation exact match (old format, e.g. "LAD" === "LAD")
+      const rawUpper = raw.toUpperCase();
+      if (gameAbbr === rawUpper) return true;
+      return false;
+    }
+
     const game = finalGames.find(g =>
-      (g.awayAbbr === awayAbbr || normalizeName(g.awayName).includes(awayAbbr.toLowerCase())) &&
-      (g.homeAbbr === homeAbbr || normalizeName(g.homeName).includes(homeAbbr.toLowerCase()))
+      matchesTeam(awayRaw, g.awayName, g.awayAbbr) &&
+      matchesTeam(homeRaw, g.homeName, g.homeAbbr)
     );
     if (!game) return null;
     const total = game.homeScore + game.awayScore;
@@ -99,11 +76,9 @@ function resolveTeamLeg(leg, finalGames) {
   }
 
   // team_ml or team_runline — strip suffix, match by full name OR nickname suffix.
-  // DK names like "TB Rays" won't equal MLB full name "Tampa Bay Rays", but the
-  // nickname portion ("Rays") is unique across MLB and always ends the full name.
-  const dkName   = leg.player_name.replace(/ (ML|RL)$/i, '').trim();
+  const dkName  = leg.player_name.replace(/ (ML|RL)$/i, '').trim();
   const teamName = normalizeName(dkName);
-  // nickname = everything after the leading abbreviation, e.g. "tb rays" → "rays", "cws white sox" → "white sox"
+  // nickname = everything after leading word (handles "LA Dodgers" → "dodgers", "CWS White Sox" → "white sox")
   const nickname = teamName.split(' ').slice(1).join(' ');
   const game = finalGames.find(g => {
     const homeNorm = normalizeName(g.homeName);
@@ -113,54 +88,45 @@ function resolveTeamLeg(leg, finalGames) {
   });
   if (!game) return null;
 
-  const isHome    = normalizeName(game.homeName) === teamName;
+  // Use same logic as game-find to correctly determine home/away
+  const homeNorm = normalizeName(game.homeName);
+  const isHome   = homeNorm === teamName || (nickname && homeNorm.endsWith(nickname));
   const teamScore = isHome ? game.homeScore : game.awayScore;
   const oppScore  = isHome ? game.awayScore : game.homeScore;
 
   if (mkt === 'team_ml') {
     return teamScore > oppScore ? 'won' : 'lost';
   }
-
   if (mkt === 'team_runline') {
-    // threshold is the line from this team's perspective (e.g., -1.5 means need to win by 2+)
     const line = parseFloat(leg.threshold ?? 0);
     return (teamScore + line > oppScore) ? 'won' : 'lost';
   }
-
   return null;
 }
 
-// Returns map of normalizedLastName → { won: bool, rounds: number|null }
-// for completed UFC fights on a given date (YYYY-MM-DD).
-async function getUfcResults(date) {
-  const yyyymmdd = date.replace(/-/g, '');
-  let data;
-  try {
-    const res = await fetch(`${ESPN_MMA}/scoreboard?dates=${yyyymmdd}`, {
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!res.ok) return {};
-    data = await res.json();
-  } catch (e) { return {}; }
+// ── MLB helpers ──────────────────────────────────────────────────────────────
 
-  const results = {};
-  for (const event of (data.events || [])) {
-    for (const comp of (event.competitions || [])) {
-      if (!comp.status?.type?.completed) continue;
-      const round = comp.status?.period ?? null; // round when fight ended
-      const competitors = comp.competitors || [];
-      for (const c of competitors) {
-        const fullName = c.athlete?.displayName || c.athlete?.shortName || '';
-        if (!fullName) continue;
-        const lastName = normalizeName(fullName).split(' ').pop();
-        if (lastName) results[lastName] = { won: !!c.winner, rounds: round };
-      }
-    }
-  }
-  return results;
+async function getMlbFinalGames(date) {
+  const res = await fetch(`${MLB_API}/schedule?date=${date}&sportId=1&hydrate=linescore`, {
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return (data.dates?.[0]?.games || [])
+    .filter(g => g.status?.abstractGameState === 'Final')
+    .map(g => ({
+      gamePk:    g.gamePk,
+      homeName:  g.teams?.home?.team?.name  || '',
+      awayName:  g.teams?.away?.team?.name  || '',
+      homeAbbr:  (g.teams?.home?.team?.abbreviation || '').toUpperCase(),
+      awayAbbr:  (g.teams?.away?.team?.abbreviation || '').toUpperCase(),
+      homeScore: g.teams?.home?.score ?? g.linescore?.teams?.home?.runs ?? null,
+      awayScore: g.teams?.away?.score ?? g.linescore?.teams?.away?.runs ?? null,
+    }))
+    .filter(g => g.homeScore != null && g.awayScore != null);
 }
 
-async function getBoxscore(gamePk) {
+async function getMlbBoxscore(gamePk) {
   const res = await fetch(`${MLB_API}/game/${gamePk}/boxscore`, {
     signal: AbortSignal.timeout(8000),
   });
@@ -168,8 +134,7 @@ async function getBoxscore(gamePk) {
   return res.json();
 }
 
-// Returns map of normalizedName → merged batting+pitching stats + computed hrbi
-function extractPlayerStats(boxscore) {
+function extractMlbPlayerStats(boxscore) {
   const map = {};
   for (const side of ['away', 'home']) {
     const players = boxscore?.teams?.[side]?.players || {};
@@ -179,7 +144,6 @@ function extractPlayerStats(boxscore) {
       const batting  = p.stats?.batting  || {};
       const pitching = p.stats?.pitching || {};
       const merged   = { ...batting, ...pitching };
-      // Computed: hits + runs + rbi
       merged.hrbi = (parseInt(batting.hits || 0) + parseInt(batting.runs || 0) + parseInt(batting.rbi || 0));
       map[name] = merged;
     }
@@ -187,13 +151,122 @@ function extractPlayerStats(boxscore) {
   return map;
 }
 
+// ── ESPN helpers (WNBA + NFL) ────────────────────────────────────────────────
+
+async function getEspnFinalGames(baseUrl, date) {
+  const yyyymmdd = date.replace(/-/g, '');
+  try {
+    const res = await fetch(`${baseUrl}/scoreboard?dates=${yyyymmdd}`, {
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.events || [])
+      .filter(e => e.competitions?.[0]?.status?.type?.completed)
+      .map(e => {
+        const comps = e.competitions?.[0]?.competitors || [];
+        const home  = comps.find(c => c.homeAway === 'home');
+        const away  = comps.find(c => c.homeAway === 'away');
+        return {
+          eventId:   e.id,
+          homeName:  home?.team?.displayName || home?.team?.name || '',
+          awayName:  away?.team?.displayName || away?.team?.name || '',
+          homeAbbr:  (home?.team?.abbreviation || '').toUpperCase(),
+          awayAbbr:  (away?.team?.abbreviation || '').toUpperCase(),
+          homeScore: parseInt(home?.score, 10),
+          awayScore: parseInt(away?.score, 10),
+        };
+      })
+      .filter(g => !isNaN(g.homeScore) && !isNaN(g.awayScore));
+  } catch(e) { return []; }
+}
+
+async function getWnbaPlayerStats(date) {
+  const yyyymmdd = date.replace(/-/g, '');
+  try {
+    const sbRes = await fetch(`${ESPN_WNBA}/scoreboard?dates=${yyyymmdd}`, {
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!sbRes.ok) return {};
+    const sbData = await sbRes.json();
+    const eventIds = (sbData.events || [])
+      .filter(e => e.competitions?.[0]?.status?.type?.completed)
+      .map(e => e.id);
+
+    const summaries = await Promise.all(eventIds.map(async id => {
+      try {
+        const r = await fetch(`${ESPN_WNBA}/summary?event=${id}`, {
+          signal: AbortSignal.timeout(8000),
+        });
+        return r.ok ? r.json() : null;
+      } catch(e) { return null; }
+    }));
+
+    const stats = {};
+    for (const d of summaries) {
+      if (!d) continue;
+      for (const teamBlock of (d.boxscore?.players || [])) {
+        for (const sb of (teamBlock.statistics || [])) {
+          const names  = sb.names || sb.labels || [];
+          const ptsIdx = names.indexOf('PTS');
+          const rebIdx = names.indexOf('REB');
+          const astIdx = names.indexOf('AST');
+          const fg3Idx = names.indexOf('3PT');
+          for (const a of (sb.athletes || [])) {
+            const name = normalizeName(a.athlete?.displayName || '');
+            if (!name) continue;
+            const s = a.stats || [];
+            const getStat = idx => {
+              if (idx < 0) return 0;
+              const v = s[idx];
+              if (!v || v === '--') return 0;
+              return parseInt(String(v).split('-')[0], 10) || 0;
+            };
+            const pts = getStat(ptsIdx), reb = getStat(rebIdx), ast = getStat(astIdx), fg3m = getStat(fg3Idx);
+            stats[name] = { pts, reb, ast, fg3m, pra: pts+reb+ast, pa: pts+ast, pr: pts+reb, ra: reb+ast };
+          }
+        }
+      }
+    }
+    return stats;
+  } catch(e) { return {}; }
+}
+
+// ── UFC helper ───────────────────────────────────────────────────────────────
+
+async function getUfcResults(date) {
+  const yyyymmdd = date.replace(/-/g, '');
+  try {
+    const res = await fetch(`${ESPN_MMA}/scoreboard?dates=${yyyymmdd}`, {
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return {};
+    const data = await res.json();
+    const results = {};
+    for (const event of (data.events || [])) {
+      for (const comp of (event.competitions || [])) {
+        if (!comp.status?.type?.completed) continue;
+        const round = comp.status?.period ?? null;
+        for (const c of (comp.competitors || [])) {
+          const fullName = c.athlete?.displayName || c.athlete?.shortName || '';
+          if (!fullName) continue;
+          const lastName = normalizeName(fullName).split(' ').pop();
+          if (lastName) results[lastName] = { won: !!c.winner, rounds: round };
+        }
+      }
+    }
+    return results;
+  } catch(e) { return {}; }
+}
+
+// ── Main handler ─────────────────────────────────────────────────────────────
+
 async function handleRequest({ request, env }) {
   const url     = new URL(request.url);
   const cronKey = url.searchParams.get('_cron_key');
   const debug   = url.searchParams.has('debug');
   const lastRun = url.searchParams.has('last_run');
 
-  // last_run: return the cached result of the most recent auto-settle run (admin only)
   if (lastRun) {
     const session = await getSession(request, env.DB);
     const userRow = session
@@ -208,7 +281,6 @@ async function handleRequest({ request, env }) {
       { headers: { 'Content-Type': 'application/json' } });
   }
 
-  // Auth: cron key OR admin session
   if (!env.CRON_SECRET || cronKey !== env.CRON_SECRET) {
     const session = await getSession(request, env.DB);
     const userRow = session
@@ -217,8 +289,8 @@ async function handleRequest({ request, env }) {
     if (!userRow?.is_admin) return err('Unauthorized', 401);
   }
 
-  const now      = Math.floor(Date.now() / 1000);
-  const todayUtc = new Date().toISOString().slice(0, 10);
+  const now       = Math.floor(Date.now() / 1000);
+  const todayUtc  = new Date().toISOString().slice(0, 10);
   const staleDate = new Date(Date.now() - STALE_DAYS * 86400000).toISOString().slice(0, 10);
 
   async function cacheAndReturn(payload) {
@@ -235,46 +307,80 @@ async function handleRequest({ request, env }) {
   const { results: parlays } = await env.DB.prepare(
     "SELECT id, user_id, payout_rax, rs_username FROM parlays WHERE status='active'"
   ).all();
-
   if (!parlays.length) return cacheAndReturn({ settled: 0, reason: 'no_active_parlays' });
 
   // 2. Load all pending legs for active parlays (today or earlier)
   const { results: allLegs } = await env.DB.prepare(
     "SELECT pl.id, pl.parlay_id, pl.player_name, pl.market_id, pl.threshold, " +
-    "pl.direction, pl.game_date, pl.market_type, pl.status " +
+    "pl.direction, pl.game_date, pl.market_type, pl.status, pl.sport " +
     "FROM parlay_legs pl " +
     "JOIN parlays p ON p.id = pl.parlay_id " +
     "WHERE p.status = 'active' AND pl.status = 'pending'"
   ).all();
-
   if (!allLegs.length) return cacheAndReturn({ settled: 0, reason: 'no_pending_legs' });
 
   const eligibleLegs = allLegs.filter(l => l.game_date <= todayUtc);
   if (!eligibleLegs.length) return cacheAndReturn({ settled: 0, reason: 'all_games_future', todayUtc });
 
-  // 3. Fetch Final boxscores + game scores for each unique game_date in parallel
+  // Helper: determine effective sport for a leg
+  // Prefer stored leg.sport; fall back to market_type inference.
+  function legSportOf(leg) {
+    const s = leg.sport || '';
+    if (s === 'wnba' || s === 'basketball_wnba') return 'wnba';
+    if (s === 'nfl'  || s === 'american_football_nfl') return 'nfl';
+    if (s === 'ufc')  return 'ufc';
+    if (leg.market_type === 'ufc_ml' || leg.market_type === 'ufc_total') return 'ufc';
+    if (WNBA_PROP_TYPES.has(leg.market_type)) return 'wnba';
+    return 'mlb'; // default — covers 'baseball_mlb' and old rows
+  }
+
+  // 3. Fetch external data for each unique (sport, date) combination in parallel
   const uniqueDates = [...new Set(eligibleLegs.map(l => l.game_date))];
-  const datePlayerMap = {}; // date → { normalizedName → stats }
-  const dateGamesMap  = {}; // date → [{ homeName, awayName, homeAbbr, awayAbbr, homeScore, awayScore }]
-  const dateUfcMap    = {}; // date → { normalizedLastName → { won, rounds } }
+
+  // Per-date maps: date → { homeName, awayName, homeScore, awayScore, ... }[]
+  const mlbGamesMap  = {}; // MLB score data
+  const mlbStatsMap  = {}; // MLB player stats
+  const wnbaGamesMap = {}; // WNBA score data
+  const wnbaStatsMap = {}; // WNBA player stats
+  const nflGamesMap  = {}; // NFL score data
+  const ufcMap       = {}; // UFC fight results
+
+  const hasUfcOnDate = date => eligibleLegs.some(l => l.game_date === date && legSportOf(l) === 'ufc');
+  const hasMlbOnDate = date => eligibleLegs.some(l => l.game_date === date && legSportOf(l) === 'mlb');
+  const hasWnbaOnDate = date => eligibleLegs.some(l => l.game_date === date && legSportOf(l) === 'wnba');
+  const hasNflOnDate  = date => eligibleLegs.some(l => l.game_date === date && legSportOf(l) === 'nfl');
 
   await Promise.all(uniqueDates.map(async date => {
-    const hasUfc = eligibleLegs.some(l => l.game_date === date &&
-      (l.market_type === 'ufc_ml' || l.market_type === 'ufc_total'));
-    const [gamesWithScores, gamePks, ufcResults] = await Promise.all([
-      getFinalGamesWithScores(date),
-      getFinalGamePks(date),
-      hasUfc ? getUfcResults(date) : Promise.resolve({}),
+    const [mlbGames, wnbaGames, nflGames, ufcResults] = await Promise.all([
+      hasMlbOnDate(date)  ? getMlbFinalGames(date)                      : Promise.resolve([]),
+      hasWnbaOnDate(date) ? getEspnFinalGames(ESPN_WNBA, date)           : Promise.resolve([]),
+      hasNflOnDate(date)  ? getEspnFinalGames(ESPN_NFL,  date)           : Promise.resolve([]),
+      hasUfcOnDate(date)  ? getUfcResults(date)                          : Promise.resolve({}),
     ]);
-    dateGamesMap[date] = gamesWithScores;
-    dateUfcMap[date]   = ufcResults;
 
-    const allStats = {};
-    await Promise.all(gamePks.map(async pk => {
-      const bs = await getBoxscore(pk).catch(() => null);
-      if (bs) Object.assign(allStats, extractPlayerStats(bs));
-    }));
-    datePlayerMap[date] = allStats;
+    mlbGamesMap[date]  = mlbGames;
+    wnbaGamesMap[date] = wnbaGames;
+    nflGamesMap[date]  = nflGames;
+    ufcMap[date]       = ufcResults;
+
+    // MLB player stats — one boxscore per final game
+    if (hasMlbOnDate(date) && mlbGames.length) {
+      const allStats = {};
+      await Promise.all(mlbGames.map(async g => {
+        const bs = await getMlbBoxscore(g.gamePk).catch(() => null);
+        if (bs) Object.assign(allStats, extractMlbPlayerStats(bs));
+      }));
+      mlbStatsMap[date] = allStats;
+    } else {
+      mlbStatsMap[date] = {};
+    }
+
+    // WNBA player stats
+    if (hasWnbaOnDate(date)) {
+      wnbaStatsMap[date] = await getWnbaPlayerStats(date);
+    } else {
+      wnbaStatsMap[date] = {};
+    }
   }));
 
   if (debug) {
@@ -282,67 +388,70 @@ async function handleRequest({ request, env }) {
       todayUtc, staleDate,
       dates: uniqueDates.map(date => ({
         date,
-        finalGameCount: Object.keys(datePlayerMap[date] || {}).length > 0
-          ? 'has_stats' : 'no_final_games_yet',
-        finalGames: (dateGamesMap[date] || []).map(g =>
-          `${g.awayName || g.awayAbbr || '?'} ${g.awayScore} @ ${g.homeName || g.homeAbbr || '?'} ${g.homeScore}`
-        ),
-        ufcFights: Object.keys(dateUfcMap[date] || {}).map(last => `${last}: ${JSON.stringify(dateUfcMap[date][last])}`),
+        mlbGames:  mlbGamesMap[date].map(g => `${g.awayName} ${g.awayScore} @ ${g.homeName} ${g.homeScore}`),
+        wnbaGames: wnbaGamesMap[date].map(g => `${g.awayName} ${g.awayScore} @ ${g.homeName} ${g.homeScore}`),
+        nflGames:  nflGamesMap[date].map(g => `${g.awayName} ${g.awayScore} @ ${g.homeName} ${g.homeScore}`),
+        ufcFights: Object.entries(ufcMap[date] || {}).map(([n, r]) => `${n}: ${JSON.stringify(r)}`),
         legs: eligibleLegs.filter(l => l.game_date === date).map(l => {
+          const sport = legSportOf(l);
           const isTeam = l.market_type === 'team_ml' || l.market_type === 'team_runline' || l.market_type === 'team_total';
           if (isTeam) {
-            const finalGames = dateGamesMap[date] || [];
-            const outcome = finalGames.length ? resolveTeamLeg(l, finalGames) : null;
-            return { player: l.player_name, type: 'team_market', outcome: outcome ?? 'game_not_final_yet' };
+            const games = sport === 'wnba' ? wnbaGamesMap[date] : sport === 'nfl' ? nflGamesMap[date] : mlbGamesMap[date];
+            const outcome = games.length ? resolveTeamLeg(l, games) : null;
+            return { player: l.player_name, sport, type: 'team_market', outcome: outcome ?? 'not_final_yet' };
           }
-          if (l.market_type === 'ufc_ml' || l.market_type === 'ufc_total') {
+          if (sport === 'ufc') {
             const lastName = normalizeName(l.player_name).split(' ').pop();
-            const result   = (dateUfcMap[date] || {})[lastName];
-            return { player: l.player_name, type: l.market_type, found: !!result, result: result ?? null };
+            const result   = (ufcMap[date] || {})[lastName];
+            return { player: l.player_name, sport: 'ufc', type: l.market_type, found: !!result, result: result ?? null };
           }
-          const norm = normalizeName(l.player_name);
-          const stats = datePlayerMap[date]?.[norm] || null;
-          const statField = STAT_FIELD[l.market_type] || l.market_type;
-          const rawVal = stats?.[statField];
+          if (sport === 'wnba') {
+            const stats  = (wnbaStatsMap[date] || {})[normalizeName(l.player_name)];
+            const field  = WNBA_STAT_FIELD[l.market_type];
+            const statVal = stats ? stats[field] ?? null : null;
+            const outcome = statVal == null ? null
+              : (l.direction === 'more' ? statVal > l.threshold : statVal < l.threshold) ? 'won' : 'lost';
+            return { player: l.player_name, sport: 'wnba', market_type: l.market_type, field, statVal, outcome };
+          }
+          // MLB player prop
+          const norm    = normalizeName(l.player_name);
+          const stats   = (mlbStatsMap[date] || {})[norm] || null;
+          const field   = MLB_STAT_FIELD[l.market_type] || l.market_type;
+          const rawVal  = stats?.[field];
           const statVal = rawVal != null ? parseFloat(rawVal) : null;
           const outcome = statVal == null ? null
             : (l.direction === 'more' ? statVal > l.threshold : statVal < l.threshold) ? 'won' : 'lost';
-          return {
-            player: l.player_name, normalized: norm, found: !!stats,
-            market_type: l.market_type, statField, threshold: l.threshold,
-            direction: l.direction, statVal, outcome,
-          };
+          return { player: l.player_name, sport: 'mlb', normalized: norm, found: !!stats, market_type: l.market_type, field, threshold: l.threshold, direction: l.direction, statVal, outcome };
         }),
       })),
     }, null, 2), { headers: { 'Content-Type': 'application/json' } });
   }
 
   // 4. Resolve each eligible leg
-  // outcome: 'won' | 'lost' | 'void' (stale+not found) | null (game not Final yet)
   const legOutcomes = {};
   for (const leg of eligibleLegs) {
-    // Team market legs (MLB ML / Run Line / Total) — use final game scores
-    if (leg.market_type === 'team_ml' || leg.market_type === 'team_runline' || leg.market_type === 'team_total') {
-      const finalGames = dateGamesMap[leg.game_date] || [];
-      const outcome = finalGames.length ? resolveTeamLeg(leg, finalGames) : null;
+    const sport  = legSportOf(leg);
+    const isTeam = leg.market_type === 'team_ml' || leg.market_type === 'team_runline' || leg.market_type === 'team_total';
+
+    if (isTeam) {
+      const games = sport === 'wnba' ? wnbaGamesMap[leg.game_date] || []
+                  : sport === 'nfl'  ? nflGamesMap[leg.game_date]  || []
+                  :                    mlbGamesMap[leg.game_date]   || [];
+      const outcome = games.length ? resolveTeamLeg(leg, games) : null;
       legOutcomes[leg.id] = (outcome === null && leg.game_date < staleDate) ? 'void' : outcome;
       continue;
     }
 
-    // UFC legs — use ESPN MMA scoreboard
-    if (leg.market_type === 'ufc_ml' || leg.market_type === 'ufc_total') {
-      const ufcResults = dateUfcMap[leg.game_date] || {};
+    if (sport === 'ufc') {
+      const ufcResults = ufcMap[leg.game_date] || {};
       if (leg.market_type === 'ufc_ml') {
-        // player_name = fighter name (e.g. "Mateusz Gamrot")
         const lastName = normalizeName(leg.player_name).split(' ').pop();
         const result   = ufcResults[lastName];
         if (!result) { legOutcomes[leg.id] = leg.game_date < staleDate ? 'void' : null; continue; }
         legOutcomes[leg.id] = result.won ? 'won' : 'lost';
       } else {
-        // ufc_total — player_name = "FighterA vs FighterB O2.5" or "... U2.5"
         const m = leg.player_name.match(/([OU])([\d.]+)$/i);
         if (!m) { legOutcomes[leg.id] = null; continue; }
-        // Find result via either fighter's last name
         const nameChunk = normalizeName(leg.player_name.replace(/\s*[OU][\d.]+$/i, ''));
         const lastNames = nameChunk.split(/\s+vs\s+/i).map(s => s.trim().split(' ').pop());
         let result = null;
@@ -355,25 +464,36 @@ async function handleRequest({ request, env }) {
       continue;
     }
 
-    // Player prop legs — use boxscore stats
-    const playerStats = datePlayerMap[leg.game_date]?.[normalizeName(leg.player_name)];
-
-    if (!playerStats) {
-      // Not in any Final boxscore for this date
-      legOutcomes[leg.id] = leg.game_date < staleDate ? 'void' : null;
+    if (sport === 'wnba') {
+      const wnbaStats = (wnbaStatsMap[leg.game_date] || {})[normalizeName(leg.player_name)];
+      if (!wnbaStats) {
+        legOutcomes[leg.id] = leg.game_date < staleDate ? 'void' : null;
+        continue;
+      }
+      const field   = WNBA_STAT_FIELD[leg.market_type];
+      if (!field) { legOutcomes[leg.id] = null; continue; }
+      const statVal = wnbaStats[field];
+      if (statVal == null) { legOutcomes[leg.id] = null; continue; }
+      legOutcomes[leg.id] = (leg.direction === 'more' ? statVal > leg.threshold : statVal < leg.threshold)
+        ? 'won' : 'lost';
       continue;
     }
 
-    const statField = STAT_FIELD[leg.market_type] || leg.market_type;
+    // MLB player prop
+    const playerStats = (mlbStatsMap[leg.game_date] || {})[normalizeName(leg.player_name)];
+    if (!playerStats) {
+      legOutcomes[leg.id] = leg.game_date < staleDate ? 'void' : null;
+      continue;
+    }
+    const statField = MLB_STAT_FIELD[leg.market_type] || leg.market_type;
     const rawVal    = playerStats[statField];
     if (rawVal == null) { legOutcomes[leg.id] = null; continue; }
-
     const statVal = parseFloat(rawVal);
     legOutcomes[leg.id] = (leg.direction === 'more' ? statVal > leg.threshold : statVal < leg.threshold)
       ? 'won' : 'lost';
   }
 
-  // 5. Settle parlays where every eligible leg is resolved (won/lost/void)
+  // 5. Settle parlays where every eligible leg is resolved
   let totalSettled = 0;
   const report = [];
 
@@ -383,7 +503,7 @@ async function handleRequest({ request, env }) {
 
     const outcomes = pendingLegs.map(l => ({
       legId: l.id, outcome: legOutcomes[l.id] ?? null,
-      player: l.player_name, stat: STAT_FIELD[l.market_type] || l.market_type,
+      player: l.player_name, market_type: l.market_type,
       threshold: l.threshold, direction: l.direction,
     }));
 
@@ -393,14 +513,11 @@ async function handleRequest({ request, env }) {
       continue;
     }
 
-    // All legs resolved — determine result (void legs are pushes, excluded from won/lost calc)
-    const activeLeg = outcomes.filter(o => o.outcome !== 'void');
-    const anyLost   = activeLeg.some(o => o.outcome === 'lost');
-    const allVoid   = activeLeg.length === 0;
-
+    const activeLeg   = outcomes.filter(o => o.outcome !== 'void');
+    const anyLost     = activeLeg.some(o => o.outcome === 'lost');
+    const allVoid     = activeLeg.length === 0;
     const parlayResult = allVoid ? 'voided' : anyLost ? 'lost' : 'won';
 
-    // Write per-leg results
     for (const o of outcomes) {
       await env.DB.prepare("UPDATE parlay_legs SET status=?, settled_at=? WHERE id=?")
         .bind(o.outcome, now, o.legId).run();

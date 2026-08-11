@@ -3020,6 +3020,21 @@
         border-color: var(--accent);
         box-shadow: 0 0 8px var(--accent);
     }
+    .parlay-card-rs-row {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        z-index: 3;
+        display: flex;
+        gap: 3px;
+    }
+    .parlay-rs-btn {
+        background: var(--bg2);
+        cursor: pointer;
+        padding: 0;
+        width: 20px;
+        height: 20px;
+    }
 
     /* Disable animations for users who prefer reduced motion */
     @media (prefers-reduced-motion: reduce) {
@@ -3061,50 +3076,57 @@
     .parlay-btn-label { font-size:11px; font-weight:800; letter-spacing:.3px }
     .parlay-btn-odds { font-size:9.5px; font-weight:500; opacity:.75 }
     .parlay-slip-panel { width:280px; flex-shrink:0; display:flex; flex-direction:column; background:var(--bg2); overflow:hidden }
-    .parlay-slip-header { padding:14px 14px 12px; display:flex; align-items:center; gap:8px; border-bottom:1px solid var(--border2); flex-shrink:0 }
+    .parlay-slip-header { padding:12px 14px; display:flex; align-items:center; gap:8px; border-bottom:1px solid var(--border2); flex-shrink:0 }
     .parlay-slip-title { font-size:13px; font-weight:700; flex:1 }
     .parlay-pick-badge { background:var(--accent-dim); color:var(--accent); border:1px solid var(--accent); border-radius:20px; padding:2px 9px; font-size:11px; font-weight:700; min-width:28px; text-align:center }
     .parlay-clear-btn { background:transparent; border:1px solid var(--border2); color:var(--muted); padding:4px 10px; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer; font-family:var(--sans); transition:border-color .13s,color .13s }
     .parlay-clear-btn:hover { border-color:#ef4444; color:#ef4444 }
-    .parlay-slip-body { flex:1; overflow-y:auto; padding:10px; display:flex; flex-direction:column; gap:7px }
+    .parlay-slip-body { flex:1; overflow-y:auto; padding:8px 10px; display:flex; flex-direction:column; gap:5px }
     .parlay-slip-empty { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; color:var(--muted2); font-size:12px; text-align:center; padding:24px 16px }
-    .parlay-slip-pick { background:var(--bg3); border:1.5px solid var(--border2); border-radius:10px; padding:9px 9px 9px 11px; display:flex; align-items:flex-start; gap:8px; position:relative }
+    .parlay-slip-pick { background:var(--bg3); border:1.5px solid var(--border2); border-radius:10px; padding:10px 10px 10px 14px; display:flex; align-items:center; gap:10px; position:relative }
     .parlay-slip-pick::before { content:''; position:absolute; left:0; top:6px; bottom:6px; width:3px; border-radius:0 2px 2px 0 }
     .parlay-slip-pick.dir-more::before { background:var(--green) }
     .parlay-slip-pick.dir-less::before { background:#ef4444 }
-    .parlay-slip-avatar { width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:800; color:#fff; flex-shrink:0; overflow:hidden; position:relative }
+    .parlay-slip-avatar { width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:800; color:#fff; flex-shrink:0; overflow:hidden; position:relative }
     .parlay-slip-avatar img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:top; border-radius:50% }
     .parlay-slip-info { flex:1; min-width:0 }
-    .parlay-slip-player { font-size:12px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+    .parlay-slip-row1 { display:flex; align-items:baseline; gap:5px; margin-bottom:3px; overflow:hidden }
+    .parlay-slip-player { font-size:14px; font-weight:700; white-space:nowrap; flex-shrink:0 }
+    .parlay-slip-matchup-inline { font-size:11px; color:var(--muted2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0 }
+    .parlay-slip-row2 { display:flex; align-items:center; gap:6px }
+    .parlay-slip-stat { font-size:14px; font-weight:700; color:var(--fg) }
+    .parlay-slip-dir { font-size:14px; font-weight:700; flex-shrink:0 }
+    .parlay-slip-dir.more { color:var(--green) }
+    .parlay-slip-dir.less { color:#ef4444 }
     .parlay-slip-meta { font-size:10px; color:var(--muted); margin-top:1px }
     .parlay-slip-dir { font-size:10px; font-weight:700; margin-top:3px }
     .parlay-slip-dir.more { color:var(--green) }
     .parlay-slip-dir.less { color:#ef4444 }
     .parlay-slip-remove { background:transparent; border:none; color:var(--muted2); cursor:pointer; font-size:15px; line-height:1; padding:0; flex-shrink:0; margin-top:-1px; transition:color .13s }
     .parlay-slip-remove:hover { color:#ef4444 }
-    .parlay-slip-footer { border-top:1px solid var(--border2); padding:12px 14px; display:flex; flex-direction:column; gap:10px; flex-shrink:0 }
+    .parlay-slip-footer { border-top:1px solid var(--border2); padding:7px 10px; display:flex; flex-direction:column; gap:5px; flex-shrink:0 }
     .parlay-legs-row { display:flex; justify-content:center; align-items:center; gap:5px }
     .parlay-legs-label { font-size:10px; color:var(--muted2); text-transform:uppercase; letter-spacing:.5px; margin-right:4px }
     .parlay-legs-dot { width:7px; height:7px; border-radius:50%; background:var(--border2); transition:background .2s }
     .parlay-legs-dot.on { background:var(--accent) }
     .parlay-legs-dot.ready { background:var(--green) }
-    .parlay-input-label { display:block; font-size:10px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; margin-bottom:5px }
-    .parlay-stake-wrap { position:relative }
-    .parlay-stake-unit { position:absolute; left:10px; top:50%; transform:translateY(-50%); font-size:10px; font-weight:700; color:var(--muted); pointer-events:none; letter-spacing:.3px }
-    .parlay-stake-input { width:100%; background:var(--bg3); border:1.5px solid var(--border2); border-radius:8px; color:var(--text); font-size:20px; font-weight:800; padding:8px 10px 8px 36px; outline:none; font-variant-numeric:tabular-nums; font-family:var(--mono); transition:border-color .13s; -moz-appearance:textfield }
+    .parlay-footer-inputs { display:flex; gap:6px; align-items:stretch }
+    .parlay-stake-wrap { position:relative; flex:1 }
+    .parlay-stake-unit { position:absolute; left:8px; top:50%; transform:translateY(-50%); font-size:9px; font-weight:700; color:var(--muted); pointer-events:none; letter-spacing:.3px }
+    .parlay-stake-input { width:100%; background:var(--bg3); border:1.5px solid var(--border2); border-radius:8px; color:var(--text); font-size:16px; font-weight:800; padding:6px 6px 6px 30px; outline:none; font-variant-numeric:tabular-nums; font-family:var(--mono); transition:border-color .13s; -moz-appearance:textfield; height:100%; box-sizing:border-box }
     .parlay-stake-input::-webkit-inner-spin-button,.parlay-stake-input::-webkit-outer-spin-button { -webkit-appearance:none }
     .parlay-stake-input:focus { border-color:var(--accent) }
-    .parlay-payout-row { background:var(--bg3); border:1.5px solid var(--border2); border-radius:8px; padding:9px 12px; display:flex; justify-content:space-between; align-items:center; transition:border-color .2s }
+    .parlay-payout-row { background:var(--bg3); border:1.5px solid var(--border2); border-radius:8px; padding:5px 9px; display:flex; flex-direction:column; justify-content:center; align-items:flex-end; transition:border-color .2s; flex:1 }
     .parlay-payout-row.has-value { border-color:rgba(45,204,126,.4) }
-    .parlay-payout-label { font-size:10px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.5px }
-    .parlay-payout-amount { font-size:18px; font-weight:800; font-variant-numeric:tabular-nums; color:var(--muted2); transition:color .2s; font-family:var(--mono) }
+    .parlay-payout-label { font-size:9px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.5px }
+    .parlay-payout-amount { font-size:15px; font-weight:800; font-variant-numeric:tabular-nums; color:var(--muted2); transition:color .2s; font-family:var(--mono) }
     .parlay-payout-amount.active { color:var(--green) }
-    .parlay-odds-line { text-align:center; font-size:11px; color:var(--muted2); min-height:16px }
-    .parlay-place-btn { width:100%; padding:12px; border-radius:10px; border:none; font-size:13px; font-weight:800; cursor:pointer; text-transform:uppercase; letter-spacing:.8px; font-family:var(--sans); transition:opacity .13s,transform .1s }
+    .parlay-odds-line { text-align:center; font-size:10px; color:var(--muted2); min-height:13px }
+    .parlay-place-btn { width:100%; padding:9px; border-radius:10px; border:none; font-size:13px; font-weight:800; cursor:pointer; text-transform:uppercase; letter-spacing:.8px; font-family:var(--sans); transition:opacity .13s,transform .1s }
     .parlay-place-btn:not(:disabled) { background:linear-gradient(135deg,#4ade80,#16a34a); color:#fff }
     .parlay-place-btn:not(:disabled):hover { opacity:.88 }
     .parlay-place-btn:disabled { background:var(--bg3); color:var(--muted2); border:1.5px solid var(--border2); cursor:not-allowed }
-    .parlay-min-note { text-align:center; font-size:11px; color:var(--muted2); min-height:14px }
+    .parlay-min-note { text-align:center; font-size:10px; color:var(--muted2); min-height:12px }
 
     /* Parlay panel — full-screen overlay */
     #parlays-panel { position:fixed; inset:0; z-index:199; background:var(--bg); display:none; flex-direction:column; overflow:hidden }
@@ -3139,14 +3161,18 @@
     .parlay-search-clear:hover { color:var(--text) }
 
     /* Mobile drawer handle */
-    .parlay-drawer-handle { width:36px; height:4px; background:var(--border2); border-radius:2px; margin:8px auto 4px; flex-shrink:0 }
+    .parlay-drawer-handle { display:none; width:36px; height:4px; background:var(--border2); border-radius:2px; margin:8px auto 4px; flex-shrink:0 }
 
     /* Slips view */
     .parlay-slips-view { flex:1; min-height:0; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:10px }
 
-    /* Mobile pill */
-    .parlay-mobile-pill { display:none; position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:var(--accent); color:#fff; border-radius:24px; padding:10px 18px; align-items:center; gap:8px; box-shadow:0 4px 16px rgba(79,110,247,.5); cursor:pointer; z-index:202; font-family:var(--sans); font-weight:700; font-size:13px }
-    .pmp-chevron { font-size:18px; line-height:1 }
+    /* Mobile slip bar */
+    .parlay-mobile-pill { display:none; cursor:pointer; font-family:var(--sans); font-weight:700; font-size:13px }
+    .pmp-heads { display:flex; align-items:center; gap:4px }
+    .pmp-head { width:34px; height:34px; border-radius:50%; flex-shrink:0; overflow:hidden; position:relative }
+    .pmp-extra { background:var(--bg3); color:var(--muted); font-size:11px; font-weight:800; display:flex; align-items:center; justify-content:center; border:1.5px solid var(--border2) }
+    .pmp-mult { font-size:14px; font-weight:800 }
+    .pmp-chevron { font-size:12px; font-weight:700; line-height:1 }
     .parlay-mobile-backdrop { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:201 }
 
     /* Pslip cards — settled/active slip display */
@@ -3248,6 +3274,32 @@
         .parlay-panel-body { flex-direction:column }
         .parlay-slip-panel { width:100%; border-right:none; border-top:1px solid var(--border2); max-height:55vh; position:fixed; bottom:0; left:0; right:0; z-index:202; background:var(--bg2); transform:translateY(100%); transition:transform .25s }
         .parlay-slip-panel.drawer-open { transform:translateY(0) }
-        .parlay-mobile-pill { display:flex }
-        .parlay-player-grid { grid-template-columns:repeat(2,1fr); padding-bottom:80px }
+        .parlay-drawer-handle { display:block }
+        .parlay-slip-header { padding:2px 10px }
+        .parlay-slip-title { font-size:10px }
+        .parlay-pick-badge { padding:1px 7px; font-size:10px; min-width:22px }
+        .parlay-clear-btn { padding:0 8px; height:18px; line-height:18px; font-size:10px; border-radius:5px }
+        .parlay-slip-pick { padding:7px 8px 7px 10px; gap:7px }
+        .parlay-slip-avatar { width:30px; height:30px; font-size:10px }
+        .parlay-slip-player { font-size:12px }
+        .parlay-slip-matchup-inline { font-size:10px }
+        .parlay-slip-stat { font-size:12px }
+        .parlay-slip-dir { font-size:12px }
+        .parlay-mobile-pill { display:none; position:relative; bottom:auto; left:auto; transform:none; width:100%; background:var(--bg2); border-top:1.5px solid var(--border2); box-shadow:0 -4px 16px rgba(0,0,0,.1); padding:10px 16px; flex-shrink:0; align-items:center; gap:12px; border-radius:0 }
+        .parlay-mobile-pill.has-picks { display:flex }
+        .parlay-mobile-pill .pmp-mult { flex:1; color:var(--accent); font-size:15px; padding-left:4px }
+        .parlay-mobile-pill .pmp-chevron { background:var(--accent); color:#fff; padding:8px 18px; border-radius:20px; letter-spacing:.2px }
+        .parlay-player-grid { grid-template-columns:repeat(2,1fr); gap:8px; padding:10px; padding-bottom:10px }
+        .parlay-card-top { height:70px }
+        .parlay-card-avatar { width:44px; height:44px; font-size:15px }
+        .parlay-card-body { padding:7px 9px 9px }
+        .parlay-player-name { font-size:12px }
+        .parlay-matchup { font-size:9px; margin-bottom:7px }
+        .parlay-stat-display { margin-bottom:7px; padding:5px 0 }
+        .parlay-stat-num { font-size:1.25rem }
+        .parlay-stat-name { font-size:8.5px; margin-top:3px }
+        .parlay-btns { gap:5px; margin-top:7px }
+        .parlay-pick-btn { padding:5px 3px 5px }
+        .parlay-btn-label { font-size:10px }
+        .parlay-btn-odds { font-size:8.5px }
     }

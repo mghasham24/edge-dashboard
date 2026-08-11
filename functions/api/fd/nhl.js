@@ -66,8 +66,8 @@ export async function onRequestGet(context) {
   };
 
   try {
-    const listRes = await fetch(FD_LIST_URL, { headers });
-    if (!listRes.ok) return fail(listRes.status, 'FD NHL list fetch failed');
+    const listRes = await fetch(FD_LIST_URL, { headers, signal: AbortSignal.timeout(8000) });
+    if (!listRes.ok) return new Response(JSON.stringify({ ok: true, games: {} }), { headers: { 'Content-Type': 'application/json' } });
     const listData = await listRes.json();
 
     const events = listData?.attachments?.events || {};
@@ -312,6 +312,7 @@ export async function onRequestGet(context) {
     return new Response(body, { headers: { 'Content-Type': 'application/json' } });
 
   } catch(e) {
+    if (e.name === 'TimeoutError' || e.name === 'AbortError') return new Response(JSON.stringify({ ok: true, games: {} }), { headers: { 'Content-Type': 'application/json' } });
     return fail(500, e.message);
   }
 }

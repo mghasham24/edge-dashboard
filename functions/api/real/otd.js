@@ -77,6 +77,39 @@ export async function onRequestGet(context) {
       const RS_SEASON_NORM_LB = { ufc: 'alltime', mma: 'alltime' };
       const sportKey = RS_SPORT_ALIAS_LB[sport] || sport;
       const effectiveAllTime = allTime || !!RS_SEASON_NORM_LB[sportKey];
+
+      // All-time for non-UFC: aggregate all cached per-year D1 entries — never hits RS API.
+      if (allTime && sportKey !== 'ufc') {
+        try {
+          const pattern = `otd_lb_v24_${entityType}_${sportKey}_20%`;
+          const rows = await env.DB.prepare(
+            'SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE ?'
+          ).bind(pattern).all();
+          const agg = {};
+          for (const row of (rows.results || [])) {
+            try {
+              const parsed = JSON.parse(row.data);
+              if (!parsed.leaderboard) continue;
+              for (const entry of parsed.leaderboard) {
+                const pid = String(entry.playerId);
+                if (!agg[pid]) agg[pid] = { playerId: pid, name: entry.name, earnings: 0, entityType: entry.entityType };
+                agg[pid].earnings += (entry.earnings || 0);
+                if (entry.name && !/^\d+$/.test(String(entry.name))) agg[pid].name = entry.name;
+              }
+            } catch(e2) {}
+          }
+          const leaderboard = Object.values(agg)
+            .sort((a, b) => b.earnings - a.earnings)
+            .map((e, i) => ({ ...e, rank: i + 1 }));
+          if (leaderboard.length > 0) {
+            return new Response(JSON.stringify({ ok: true, leaderboard, season: 'alltime', sport, entityType }), {
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          // No cached years yet — fall through to fetch current season from RS
+        } catch(e) {}
+      }
+
       const lbCacheKey = `otd_lb_v24_${entityType}_${sportKey}_${effectiveAllTime ? 'alltime' : season}`;
       try {
         const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(lbCacheKey).first();
@@ -332,10 +365,19 @@ export async function onRequestGet(context) {
       const players = Object.values(playerMap).slice(0, 15);
       const body = JSON.stringify({ ok: true, players });
       if (players.length > 0) {
+        const SPORT_SHORT = { baseball_mlb: 'mlb', basketball_wnba: 'wnba', basketball_nba: 'nba', football_nfl: 'nfl', icehockey_nhl: 'nhl', mma_mixed_martial_arts: 'ufc' };
+        const shortSport = SPORT_SHORT[sport] || sport;
         try {
           await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
             .bind(cacheKey, body, now).run();
         } catch(e) {}
+        // Write each player to otd_player_{short}_* so player-rs-ids can find them on next load
+        for (const p of players) {
+          if (p.id && p.name) {
+            env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
+              .bind(`otd_player_${shortSport}_${p.id}`, JSON.stringify({ name: p.name, id: p.id }), now).run().catch(() => {});
+          }
+        }
       }
       return new Response(body, { headers: { 'Content-Type': 'application/json' } });
     } catch(e) {
@@ -575,6 +617,14 @@ export async function onRequestGet(context) {
     // UFC fighters are always entityType=team in RS regardless of what the frontend passes
     const entityType = (sport === 'ufc' || sport === 'mma') ? 'team' : (url.searchParams.get('entityType') || 'player');
     if (!id) return fail(400, 'Missing id');
+
+    // 'alltime' is not a valid RS earnings season endpoint for any sport except UFC.
+    // UFC has its own year-based fallback logic below; all other sports: skip RS call.
+    if (season === 'alltime' && sport !== 'ufc' && sport !== 'mma') {
+      return new Response(JSON.stringify({ ok: true, earnings: [], season, sport, skipped: 'alltime_not_supported' }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
 
     const force = url.searchParams.get('force') === '1';
     const RS_SPORT_ALIAS = { ncaabb: 'ncaam', mma: 'ufc' };
@@ -1216,6 +1266,215 @@ export async function onRequestGet(context) {
     } catch(e) {
       return fail(500, e.message);
     }
+  }
+
+  // Pass Suggestion: score all D1-cached fighters by net unique earnings vs user's current passes
+  if (action === 'suggest') {
+    if (!session) return fail(401, 'Login required');
+
+    const VALID_SUGGEST_SPORTS = ['ufc', 'nba', 'mlb', 'nhl', 'wnba', 'ncaaf'];
+    const suggestSport = url.searchParams.get('sport') || 'ufc';
+    if (!VALID_SUGGEST_SPORTS.includes(suggestSport)) return fail(400, 'Invalid sport');
+    const suggestUserId = url.searchParams.get('userId');
+    if (!suggestUserId) return fail(400, 'Missing userId');
+
+    const currentYear = String(new Date().getFullYear());
+    // CFB season runs Aug–Jan: before August use previous year as default
+    const defaultNcaafSeason = new Date().getMonth() < 7 ? String(new Date().getFullYear() - 1) : currentYear;
+    const suggestSeason = suggestSport === 'ufc' ? '2023'
+      : suggestSport === 'ncaaf' ? (url.searchParams.get('season') || defaultNcaafSeason)
+      : currentYear;
+    const playerPrefix = `otd_earnings_v10_player_${suggestSport}_${suggestSeason}_`;
+    const teamPrefix   = `otd_earnings_v10_team_${suggestSport}_${suggestSeason}_`;
+    const earningsLimit = suggestSport === 'ncaaf' ? 8000 : 800;
+
+    // UFC multiplier table (mirrors app.js UFC_LEVEL_MULTIPLIERS)
+    const UFC_SUGGEST_MULT = {
+      1:1, 2:1.4, 3:1.6, 4:2,
+      5:5, 6:5.4, 7:5.8, 8:6.2, 9:6.7,
+      10:10, 11:10.2, 12:10.4, 13:10.6, 14:10.8, 15:11, 16:11.2, 17:11.4, 18:11.6, 19:12,
+      20:20, 21:20.3, 22:20.6, 23:20.9, 24:21.2, 25:21.5, 26:21.8, 27:22.1, 28:22.4, 29:22.7,
+      30:23, 31:23.3, 32:23.6, 33:23.9, 34:24.2, 35:24.5
+    };
+    function suggestGetMult(level) { if (level === 0) return 0; return UFC_SUGGEST_MULT[level] || 1; }
+
+    // Serve from cache if fresh (1h)
+    const suggestCacheKey = `otd_suggest_v15_${suggestSport}_${suggestSeason}_${suggestUserId}`;
+    try {
+      const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(suggestCacheKey).first();
+      if (cached && (now - cached.fetched_at) < 3600) {
+        return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
+      }
+    } catch {}
+
+    // 1. Fetch user's passes from RS (ncaaf = player only; others = player + team)
+    const [playerRes, teamRes] = suggestSport === 'ncaaf'
+      ? [await fetch(`${RS_BASE}/userpasses/${encodeURIComponent(suggestUserId)}/passes?entityType=player&season=${suggestSeason}&sport=${suggestSport}`, { headers }).catch(() => null), null]
+      : await Promise.all([
+          fetch(`${RS_BASE}/userpasses/${encodeURIComponent(suggestUserId)}/passes?entityType=player&season=${suggestSeason}&sport=${suggestSport}`, { headers }).catch(() => null),
+          fetch(`${RS_BASE}/userpasses/${encodeURIComponent(suggestUserId)}/passes?entityType=team&season=${suggestSeason}&sport=${suggestSport}`, { headers }).catch(() => null),
+        ]);
+
+    function suggestRarityLabel(label) {
+      if (!label) return 0;
+      const l = label.toLowerCase().trim();
+      if (l === 'general')   return 0;
+      if (l === 'common')    return 1;
+      if (l === 'uncommon')  return 2;
+      if (l === 'rare')      return 3;
+      if (l === 'epic')      return 4;
+      const m = l.match(/^(legendary|mystic|iconic)(?:\s+(\d+))?$/);
+      if (!m) return 0;
+      const n = parseInt(m[2] || '1', 10);
+      if (m[1] === 'legendary') return 4 + n;
+      if (m[1] === 'mystic')    return 9 + n;
+      if (m[1] === 'iconic')    return 19 + n;
+      return 0;
+    }
+    function suggestRarityStr(rarity, subLevel) {
+      const r = (rarity || '').toLowerCase();
+      if (!r) return -1; // unrecognized — don't use
+      const rl = Math.max(1, parseInt(subLevel || 1, 10));
+      if (r === 'general')   return 0;
+      if (r === 'common')    return 1;
+      if (r === 'uncommon')  return 2;
+      if (r === 'rare')      return 3;
+      if (r === 'epic')      return 4;
+      if (r === 'legendary') return 4 + rl;
+      if (r === 'mystic')    return 9 + rl;
+      if (r === 'iconic')    return 19 + rl;
+      return -1; // unrecognized
+    }
+    async function extractIds(res, entityType) {
+      if (!res || !res.ok) return [];
+      try {
+        const data = await res.json();
+        const raw = Array.isArray(data) ? data : (data.passes || data.items || data.collectingCards || []);
+        return raw.map(p => {
+          const entity = p.entity || p.player || p.team || {};
+          const bi = p.boostInfo || {};
+          const id = String(p.entityId || p.playerId || entity.id || '');
+          const name = p.label || (entity.firstName && entity.lastName ? `${entity.firstName} ${entity.lastName}`.trim() : null) || entity.name || entity.displayName || null;
+          const labelLevel = suggestRarityLabel(bi.rarityLabel);
+          const rarityStr = p.rarity || p.rarityName || entity.rarity || entity.rarityName || '';
+          const raritySubLevel = p.rarityLevel || p.subLevel || entity.rarityLevel || entity.subLevel;
+          const strLevel = suggestRarityStr(rarityStr, raritySubLevel);
+          const level = labelLevel > 0 ? labelLevel
+            : (bi.rarityLabel && labelLevel === 0) ? 0
+            : strLevel >= 0 ? strLevel
+            : (typeof bi.level === 'number' && bi.level > 0) ? bi.level
+            : typeof p.level === 'number' ? p.level
+            : typeof p.collectingLevel === 'number' ? p.collectingLevel
+            : 0; // General is the default when RS omits rarity fields
+          return { id, name, level, entityType };
+        }).filter(p => p.id);
+      } catch { return []; }
+    }
+
+    const [playerPasses, teamPasses] = await Promise.all([extractIds(playerRes, 'player'), extractIds(teamRes, 'team')]);
+    const allUserPasses = [...playerPasses, ...teamPasses];
+    const ownedIds = new Set(allUserPasses.map(p => p.id));
+
+    // 2. Load owned passes earnings from D1 — use each pass's actual entity type for the cache key
+    const ownedEarningsMap = new Map();
+    if (ownedIds.size > 0) {
+      const ownedEntries = allUserPasses.map(p => ({
+        key: `otd_earnings_v10_${p.entityType}_${suggestSport}_${suggestSeason}_${p.id}`,
+        id: p.id,
+      }));
+      for (let i = 0; i < ownedEntries.length; i += 100) {
+        const chunk = ownedEntries.slice(i, i + 100);
+        const ph = chunk.map(() => '?').join(',');
+        const rows = await env.DB.prepare(`SELECT cache_key, data FROM odds_cache WHERE cache_key IN (${ph})`).bind(...chunk.map(e => e.key)).all().catch(() => ({ results: [] }));
+        const keyToId = Object.fromEntries(chunk.map(e => [e.key, e.id]));
+        for (const row of rows.results) {
+          const id = keyToId[row.cache_key];
+          if (id) try { const d = JSON.parse(row.data); ownedEarningsMap.set(id, d.earnings || []); } catch {}
+        }
+      }
+    }
+
+    // 3. Build covered dates set + day → owners map
+    const coveredDates = new Set();
+    const dayToOwners = new Map(); // day → [{ id, name, baseEarnings, earnings, level }]
+    for (const [id, earningsArr] of ownedEarningsMap) {
+      const pass = allUserPasses.find(p => p.id === id) || {};
+      const ownerName = pass.name || id;
+      const passLevel = pass.level ?? 1;
+      const passMult = suggestGetMult(passLevel);
+      for (const e of earningsArr) {
+        if (!e.day) continue;
+        coveredDates.add(e.day);
+        if (!dayToOwners.has(e.day)) dayToOwners.set(e.day, []);
+        const baseEarnings = e.earnings || 0;
+        dayToOwners.get(e.day).push({ id, name: ownerName, baseEarnings, earnings: Math.round(baseEarnings * passMult), level: passLevel });
+      }
+    }
+
+    // 4. Load all D1 earnings + names — search both player and team prefixes
+    const halfLimit = Math.floor(earningsLimit / 2);
+    const [earningsPlayerRows, earningsTeamRows, nameRows] = await Promise.all([
+      env.DB.prepare(`SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE ? LIMIT ${halfLimit}`).bind(playerPrefix + '%').all().catch(() => ({ results: [] })),
+      env.DB.prepare(`SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE ? LIMIT ${halfLimit}`).bind(teamPrefix + '%').all().catch(() => ({ results: [] })),
+      env.DB.prepare(`SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE ? LIMIT ${earningsLimit}`).bind(`otd_player_${suggestSport}_%`).all().catch(() => ({ results: [] })),
+    ]);
+    // Tag each row with its prefix so we can extract the entity ID correctly
+    const allEarningsRows = [
+      ...earningsPlayerRows.results.map(r => ({ ...r, pfx: playerPrefix })),
+      ...earningsTeamRows.results.map(r => ({ ...r, pfx: teamPrefix })),
+    ];
+
+    const nameMap = new Map(); // id → { name, avatar }
+    for (const row of nameRows.results) {
+      const id = row.cache_key.replace(`otd_player_${suggestSport}_`, '');
+      try { const d = JSON.parse(row.data); nameMap.set(id, { name: d.name || id, avatar: d.avatar || '' }); } catch {}
+    }
+
+    // 5. Score every non-owned entity
+    const candidates = [];
+    for (const row of allEarningsRows) {
+      const id = row.cache_key.replace(row.pfx, '');
+      if (ownedIds.has(id)) continue;
+      try {
+        const d = JSON.parse(row.data);
+        const earnings = d.earnings || [];
+        let uniqueEarnings = 0, overlapEarnings = 0, uniqueDays = 0, overlapDays = 0;
+        for (const e of earnings) {
+          if (coveredDates.has(e.day)) { overlapEarnings += e.earnings; overlapDays++; }
+          else { uniqueEarnings += e.earnings; uniqueDays++; }
+        }
+        const totalEarnings = typeof d.baseTotal === 'number' && d.baseTotal > 0
+          ? d.baseTotal : earnings.reduce((s, e) => s + (e.earnings || 0), 0);
+        const overlapEvents = earnings.filter(e => coveredDates.has(e.day)).map(e => ({
+          day: e.day, dayDisplay: e.dayDisplay || e.day, earnings: e.earnings || 0,
+          competitors: (dayToOwners.get(e.day) || []).slice().sort((a, b) => b.earnings - a.earnings),
+        }));
+        const nme = nameMap.get(id) || { name: id, avatar: '' };
+        candidates.push({ id, name: nme.name, avatar: nme.avatar || '', totalEarnings, uniqueEarnings, overlapEarnings, uniqueDays, overlapDays, totalDays: earnings.length, overlapEvents });
+      } catch {}
+    }
+    candidates.sort((a, b) => b.uniqueEarnings - a.uniqueEarnings);
+
+    // 6. Owned passes summary
+    const ownedSummary = allUserPasses.map(p => {
+      const earnings = ownedEarningsMap.get(p.id) || [];
+      const baseTotal = earnings.reduce((s, e) => s + (e.earnings || 0), 0);
+      const level = p.level ?? 1;
+      const mult = suggestGetMult(level);
+      return {
+        id: p.id,
+        name: p.name || (nameMap.get(p.id) || {}).name || p.id,
+        level,
+        totalEarnings: Math.round(baseTotal * mult),
+        baseEarnings: baseTotal,
+        fightDays: earnings.length,
+      };
+    });
+
+    const body = JSON.stringify({ ok: true, sport: suggestSport, userId: suggestUserId, ownedPasses: ownedSummary, coveredDays: coveredDates.size, suggestions: candidates.slice(0, 60) });
+    await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
+      .bind(suggestCacheKey, body, now).run().catch(() => {});
+    return new Response(body, { headers: { 'Content-Type': 'application/json' } });
   }
 
   // All passes that earned on a given OTD day — uses the requesting user's own RS token

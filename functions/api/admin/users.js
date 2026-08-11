@@ -27,6 +27,7 @@ async function handleRequest({ request, env }) {
     const plan   = url.searchParams.get('plan') || '';
     const sort   = url.searchParams.get('sort') || 'signup_desc';
     const group  = url.searchParams.get('group');
+    const rs     = url.searchParams.get('rs'); // '1' = RS connected only
     const limit  = Math.min(parseInt(url.searchParams.get('limit') || '50', 10), 200);
     const offset = parseInt(url.searchParams.get('offset') || '0', 10);
 
@@ -41,11 +42,12 @@ async function handleRequest({ request, env }) {
     if (search)          { where.push('(LOWER(u.email) LIKE LOWER(?) OR LOWER(u.rs_group_username) LIKE LOWER(?))'); binds.push('%' + search + '%', '%' + search + '%'); }
     if (plan)            { where.push('u.plan=?'); binds.push(plan); }
     if (group !== null && group !== '') { where.push('u.group_access=?'); binds.push(parseInt(group)); }
+    if (rs === '1')      { where.push('ra.rs_user_id IS NOT NULL'); }
     const whereClause = where.length ? 'WHERE ' + where.join(' AND ') : '';
 
     const now = Math.floor(Date.now() / 1000);
     const [countRow, rows] = await Promise.all([
-      env.DB.prepare(`SELECT COUNT(*) as total FROM users u ${whereClause}`).bind(...binds).first(),
+      env.DB.prepare(`SELECT COUNT(*) as total FROM users u LEFT JOIN real_auth ra ON ra.user_id=u.id ${whereClause}`).bind(...binds).first(),
       env.DB.prepare(`SELECT u.id, u.email, u.plan, u.is_admin, u.banned, u.created_at, u.pro_expires_at, u.group_access, u.rs_group_username, u.rs_hashid, u.rs_username, ra.rs_user_id, ra.rs_username as ra_rs_username, COUNT(s.id) as sessions FROM users u LEFT JOIN sessions s ON s.user_id=u.id AND s.expires_at>? LEFT JOIN real_auth ra ON ra.user_id=u.id ${whereClause} GROUP BY u.id ORDER BY ${orderBy} LIMIT ? OFFSET ?`).bind(now, ...binds, limit, offset).all(),
     ]);
 

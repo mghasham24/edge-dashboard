@@ -53,10 +53,12 @@ export async function onRequestGet(context) {
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15'
   };
 
+  const noGames = new Response(JSON.stringify({ ok: true, games: {} }), { headers: { 'Content-Type': 'application/json' } });
+
   try {
     // Step 1: Get today's NBA events
-    const listRes = await fetch(FD_LIST_URL, { headers });
-    if (!listRes.ok) return fail(listRes.status, 'FD NBA list fetch failed');
+    const listRes = await fetch(FD_LIST_URL, { headers, signal: AbortSignal.timeout(8000) });
+    if (!listRes.ok) return noGames;
     const listData = await listRes.json();
 
     const events = listData?.attachments?.events || {};
@@ -225,6 +227,7 @@ export async function onRequestGet(context) {
     return new Response(body, { headers: { 'Content-Type': 'application/json' } });
 
   } catch(e) {
+    if (e.name === 'TimeoutError' || e.name === 'AbortError') return noGames;
     return fail(500, e.message);
   }
 }

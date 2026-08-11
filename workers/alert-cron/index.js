@@ -695,7 +695,7 @@ async function runCron(env, ctx) {
     const FD_STALE_THRESHOLD = 30 * 60;
     const FD_WARM_THRESHOLD  = 30;  // refresh FD if no recent site traffic (keeps live odds current)
     const RS_STALE_THRESHOLD = 4 * 60 * 60;
-    const RS_WARM_THRESHOLD  = 0;   // always warm RS — sync endpoint returns in <1s if cache is fresh (15s TTL), so no wasted work
+    const RS_WARM_THRESHOLD  = 4 * 60;  // only refresh RS if cache older than 4min — TM bridge pushes every 4min so cron rarely triggers an RS fetch
     const RE_ALERT_EV_JUMP   = 4.0;
     const RESEND_AFTER_SECS  = 1 * 3600; // re-alert on persistent +EV bets every hour
     // Midnight ET — taken bet suppression resets each calendar day.
@@ -711,6 +711,67 @@ async function runCron(env, ctx) {
 
     // Debug snapshot — written to D1 at end of each run for diagnostics
     const dbg = { ts: now, sports: {}, allBets: 0, sampleBets: [], sentCount: 0, suppressedCount: 0, failedSends: 0 };
+
+    // ── 5. Auto-settle + payout (runs every tick, before alert early-exit) ──────
+    if (env.SITE_URL && env.CRON_SECRET) {
+      try {
+        await env.DB.prepare(
+          "INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES('auto_settle_cron_heartbeat',?,?) " +
+          "ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at"
+        ).bind(JSON.stringify({ siteUrl: env.SITE_URL, ts: now }), now).run();
+      } catch(e) {}
+      try {
+        await fetch(`${env.SITE_URL}/api/parlays/auto-settle?_cron_key=${env.CRON_SECRET}`, {
+          method: 'POST',
+          signal: AbortSignal.timeout(25000),
+        });
+      } catch(e) {}
+      try {
+        await fetch(`${env.SITE_URL}/api/parlays/payout?_cron_key=${env.CRON_SECRET}`, {
+          method: 'POST',
+          signal: AbortSignal.timeout(55000),
+        });
+      } catch(e) {}
+      try {
+        await fetch(`${env.SITE_URL}/api/parlays/deposit-check?_cron_key=${env.CRON_SECRET}`, {
+          method: 'POST',
+          signal: AbortSignal.timeout(20000),
+        });
+      } catch(e) {}
+      try {
+        await fetch(`${env.SITE_URL}/api/parlays/win-notify?_cron_key=${env.CRON_SECRET}`, {
+          method: 'POST',
+          signal: AbortSignal.timeout(30000),
+        });
+      } catch(e) {}
+      // RS verify-poll — poll 3× per minute (~every 20s) since CF cron minimum is 1 min
+      const _pollUrl = `${env.SITE_URL}/api/parlays/rs-verify-poll?_cron_key=${env.CRON_SECRET}`;
+      const _doPoll = () => fetch(_pollUrl, { method: 'POST', signal: AbortSignal.timeout(15000) }).catch(() => {});
+      await _doPoll();
+      await new Promise(r => setTimeout(r, 20000));
+      await _doPoll();
+      await new Promise(r => setTimeout(r, 20000));
+      await _doPoll();
+    }
+
+    // ── 5b. Card pool reconciliation (every 5 min) ────────
+    if (env.SITE_URL && env.CRON_SECRET) {
+      try {
+        const reconcileCheck = await env.DB.prepare(
+          "SELECT fetched_at FROM odds_cache WHERE cache_key='card_reconcile_last_run'"
+        ).first();
+        if (!reconcileCheck || (now - reconcileCheck.fetched_at) > 5 * 60) {
+          await env.DB.prepare(
+            "INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES('card_reconcile_last_run','1',?) " +
+            "ON CONFLICT(cache_key) DO UPDATE SET data='1',fetched_at=excluded.fetched_at"
+          ).bind(now).run();
+          fetch(`${env.SITE_URL}/api/parlays/card-reconcile?_cron_key=${env.CRON_SECRET}`, {
+            method: 'POST',
+            signal: AbortSignal.timeout(25000),
+          }).catch(() => {});
+        }
+      } catch(e) {}
+    }
 
     // 1. Load all verified, enabled users
     const users = await env.DB.prepare(
@@ -1206,7 +1267,7 @@ async function runCron(env, ctx) {
       }
     }
 
-    // ── 5. Cleanup + debug write ───────────────────────────
+    // ── 6. Cleanup + debug write ───────────────────────────
 
     await writeDebug(env, dbg);
 
