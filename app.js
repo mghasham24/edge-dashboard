@@ -7217,7 +7217,7 @@
         }
         var panel = document.getElementById('parlays-panel');
         if (panel) panel.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:200px;color:var(--muted);font-size:13px">Checking account…</div>';
-        fetch('/api/parlays/rs-verify')
+        fetch('/api/parlays/rs-verify', { credentials: 'same-origin' })
             .then(function(r) { return r.json(); })
             .then(function(d) {
                 parlayRsVerified = !!(d.ok && d.verified);
@@ -7226,8 +7226,9 @@
                 if (parlayRsVerified && parlayView === 'build') loadParlayPlayers();
             })
             .catch(function() {
-                parlayRsVerified = false;
-                renderParlayPanel();
+                // Don't permanently lock parlayRsVerified=false on a transient error —
+                // leave as null so the next panel open retries the check
+                if (panel) panel.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:200px;color:var(--muted);font-size:13px">Connection error — <button onclick="parlayCheckVerified()" style="margin-left:6px;background:none;border:none;color:var(--accent);font-size:13px;cursor:pointer;font-family:var(--sans)">Retry</button></div>';
             });
     }
 
