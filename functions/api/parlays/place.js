@@ -35,10 +35,7 @@ export async function onRequestPost({ request, env }) {
   if (!user) return err('User not found', 404);
 
   const now = Math.floor(Date.now() / 1000);
-  const isPro = user.plan === 'pro' && (user.pro_expires_at || 0) > now;
   const isAdmin = user.is_admin === 1;
-
-  if (!isPro && !isAdmin) return err('Pro plan required for parlays', 403);
   if (!user.rs_username) return err('Connect your Real Sports account in Settings first', 400);
 
   // Rate limit: 5 place attempts per 60s per user
