@@ -7529,7 +7529,6 @@
     }
 
     function headerNavParlays() {
-        if (!isPro()) { showUpgradeModal('Parlays are available on the Pro plan. Upgrade to place multi-leg parlays and win up to 10,000 Rax.'); return; }
         var otdPanel = document.getElementById('otd-panel');
         if (otdPanel && otdPanel.classList.contains('visible')) hideOtdTab();
         showParlaysTab();
