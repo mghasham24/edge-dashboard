@@ -35,10 +35,10 @@ export async function onRequest(context) {
   if (!session) return fail(401, 'Authentication required');
   if (session.banned) return fail(403, 'Your account has been suspended. Contact support.');
 
-  // Rate limit by session cookie token — 120 req/min per session
+  // Rate limit by session cookie token — 600 req/min per session
   if (!session.is_admin) {
     const cookieId = 'ck_' + (token || '').slice(-20);
-    const allowed  = await checkRateLimit(env.DB, request, 'api', 120, 60, cookieId);
+    const allowed  = await checkRateLimit(env.DB, request, 'api', 600, 60, cookieId);
     if (!allowed) return fail(429, 'Too many requests. Please slow down.');
   }
 

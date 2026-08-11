@@ -12344,7 +12344,7 @@
                     if (currentSport !== 'basketball_nba') { clearInterval(nbaPoller); nbaPoller = null; return; }
                     if (document.hidden) return;
                     fetchAltLinesForNBA();
-                }, 5000);
+                }, 30000);
                 // Fetch DK alt lines once on load, then every 30s
                 fetchDKAltLines();
                 if (dkPoller) clearInterval(dkPoller);
@@ -12352,7 +12352,7 @@
                     if (currentSport !== 'basketball_nba') { clearInterval(dkPoller); dkPoller = null; return; }
                     if (document.hidden) return;
                     fetchDKAltLines();
-                }, 5000);
+                }, 30000);
             });
             return;
         }
@@ -12425,7 +12425,7 @@
                     if (currentSport !== 'basketball_wnba') { clearInterval(wnbaPoller); wnbaPoller = null; return; }
                     if (document.hidden) return;
                     fetchAltLinesForWNBA();
-                }, 5000);
+                }, 30000);
             });
             return;
         }
@@ -12513,7 +12513,7 @@
                     if (currentSport !== 'soccer_wc' || wcSubTab !== 'games' || evTabVisible) { clearInterval(wcPoller); wcPoller = null; return; }
                     if (document.hidden) return;
                     fetchWCNativeUpdate();
-                }, 5000);
+                }, 30000);
             });
             return;
         }
@@ -12594,7 +12594,7 @@
                     if (currentSport !== 'soccer_fc') { clearInterval(fcPoller); fcPoller = null; return; }
                     if (document.hidden) return;
                     fetchFCNativeUpdate();
-                }, 5000);
+                }, 30000);
             });
             return;
         }
@@ -12726,7 +12726,7 @@
                         if (currentSport !== 'baseball_mlb') { clearInterval(mlbPoller); mlbPoller = null; return; }
                         if (document.hidden) return;
                         fetchMLBNativeUpdate();
-                    }, 5000);
+                    }, 30000);
                 } else {
                     renderTable();
                 }
@@ -12863,13 +12863,13 @@
                         if (currentSport !== 'icehockey_nhl') { clearInterval(nhlPoller); nhlPoller = null; return; }
                         if (document.hidden) return;
                         fetchNHLNativeUpdate();
-                    }, 5000);
+                    }, 30000);
                     if (dkPoller) clearInterval(dkPoller);
                     dkPoller = setInterval(function() {
                         if (currentSport !== 'icehockey_nhl') { clearInterval(dkPoller); dkPoller = null; return; }
                         if (document.hidden) return;
                         fetchDKAltLinesNHL();
-                    }, 5000);
+                    }, 30000);
                 } else { renderTable(); }
             });
             return;
