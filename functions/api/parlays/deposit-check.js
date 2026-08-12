@@ -89,10 +89,9 @@ export async function onRequestPost({ request, env }) {
 
   const now = Math.floor(Date.now() / 1000);
 
-  // Load pending parlays first — include a 5-min grace window past expires_at so that
-  // counter-offers accepted right at the deadline are still caught before the parlay expires.
-  // (Expiry happens AFTER we process offers, not before.)
-  const GRACE = 5 * 60;
+  // GRACE must match EXPIRE_BUFFER: parlays stay in cardMap until the cron actually expires
+  // them in D1, so there's no window where an accepted offer is invisible to the matcher.
+  const GRACE = 90 * 60;
   const pendingRows = await env.DB.prepare(
     'SELECT id, stake_rax, deposit_card_id FROM parlays WHERE status=? AND expires_at > ?'
   ).bind('pending_deposit', now - GRACE).all();
