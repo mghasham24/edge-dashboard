@@ -12,7 +12,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Barlow:wght@400;500;600;700&display=swap">
-    <link rel="stylesheet" href="/app.css?v=131">
+    <link rel="stylesheet" href="/app.css?v=138">
     <script src="https://www.google.com/recaptcha/api.js?render=6Let4qMsAAAAAFhvh6wy6Ai_Ruzq2j4MIlMhqRnl"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/hashids/2.3.0/hashids.min.js"></script>
     <script>
@@ -499,8 +499,12 @@
 
         <div class="admin-panel" id="admin-panel">
             <!-- Back button -->
-            <div style="margin-bottom:20px">
+            <div style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
                 <button onclick="document.getElementById('admin-tab-btn').click()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-family:var(--sans);font-size:12px;font-weight:600;padding:7px 14px;border-radius:5px;cursor:pointer;letter-spacing:.04em">&larr; Back to Dashboard</button>
+                <div style="display:flex;gap:6px">
+                    <button class="admin-sub-btn active" id="admin-sub-users" onclick="adminShowSection('users')">Users</button>
+                    <button class="admin-sub-btn" id="admin-sub-perf" onclick="adminShowSection('perf')">Performance</button>
+                </div>
             </div>
             <div class="admin-stats">
                 <div class="admin-stat">
@@ -520,7 +524,8 @@
                     <div class="admin-stat-lbl">Pro Users</div>
                 </div>
             </div>
-            <!-- Search -->
+            <!-- Users section -->
+            <div id="admin-users-section">
             <input class="admin-search" id="admin-search" type="text" placeholder="Search by email or RS username..." oninput="adminSearch()">
             <!-- Filters -->
             <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
@@ -586,6 +591,47 @@
                 <span id="admin-load-more-lbl" style="font-family:var(--mono);font-size:12px;color:var(--muted)"></span>
                 <button onclick="adminLoadMore()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;font-weight:600;padding:7px 18px;border-radius:5px;cursor:pointer">Load More</button>
             </div>
+            </div><!-- /admin-users-section -->
+
+            <!-- Performance section -->
+            <div id="admin-perf-section" style="display:none">
+                <div class="perf-controls">
+                    <div class="perf-presets">
+                        <button class="perf-preset-btn active" onclick="perfSetRange(7,this)">7D</button>
+                        <button class="perf-preset-btn" onclick="perfSetRange(30,this)">30D</button>
+                        <button class="perf-preset-btn" onclick="perfSetRange(90,this)">90D</button>
+                        <button class="perf-preset-btn" onclick="perfSetRange(365,this)">1Y</button>
+                    </div>
+                    <div class="perf-date-row">
+                        <input type="date" id="perf-from" class="perf-date-input" onchange="perfClearPreset()">
+                        <span style="color:var(--muted2);font-size:12px">to</span>
+                        <input type="date" id="perf-to" class="perf-date-input" onchange="perfClearPreset()">
+                        <button class="perf-go-btn" onclick="loadPerfData()">Go</button>
+                    </div>
+                </div>
+                <div class="perf-summary-row" id="perf-summary" style="display:none"></div>
+                <div class="admin-table-wrap" style="margin-top:12px">
+                    <table class="admin-table" id="perf-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Total</th>
+                                <th>Won</th>
+                                <th>Lost</th>
+                                <th>Active</th>
+                                <th>Pending</th>
+                                <th>Cancelled</th>
+                                <th>Staked</th>
+                                <th>Paid Out</th>
+                                <th>Net</th>
+                                <th>Avg Mult</th>
+                                <th>Bettors</th>
+                            </tr>
+                        </thead>
+                        <tbody id="perf-tbody"><tr><td colspan="12" style="text-align:center;color:var(--muted);padding:40px">Select a date range above</td></tr></tbody>
+                    </table>
+                </div>
+            </div><!-- /admin-perf-section -->
         </div>
 
         <!-- Referral Panel -->
@@ -863,7 +909,7 @@
     <!-- end #dashboard -->
 
     <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script>
-    <script src="/app.js?v=590"></script>
+    <script src="/app.js?v=607"></script>
     <div id="app-version-badge" style="position:fixed;bottom:6px;right:10px;font-size:9px;font-weight:600;color:var(--muted2);font-family:var(--mono);letter-spacing:.03em;pointer-events:none;z-index:1">v421</div>
 </body>
 </html>
