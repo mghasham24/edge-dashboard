@@ -3303,6 +3303,13 @@
         if (n >= 1000 && window.innerWidth < 640) return (Math.round(n / 100) / 10) + 'k';
         return n.toLocaleString();
     }
+    // Convert cross-year format ("2025-26") to RS ending year ("2026") before any API call.
+    function normSeason(s) {
+        var m = String(s || '').match(/^(\d{4})-(\d{2})$/);
+        if (m) return String(parseInt(m[1], 10) + 1);
+        return String(s || '');
+    }
+
     function otdFormatSeason(sport, season) {
         var yr = parseInt(season, 10);
         if (!yr) return String(season);
@@ -3841,7 +3848,7 @@
         // Don't call renderOtdResults here — wiping earnings would trigger the loading screen.
         // Calendar updates when the fetch below completes.
         renderOtdChips(); renderOtdCheckWrap();
-        fetch('/api/real/otd?action=earnings&id=' + p.id + '&sport=' + p.sport + '&season=' + p.season + '&level=' + p.level + '&entityType=' + (p.entityType || 'player'), { credentials: 'same-origin' })
+        fetch('/api/real/otd?action=earnings&id=' + p.id + '&sport=' + p.sport + '&season=' + normSeason(p.season) + '&level=' + p.level + '&entityType=' + (p.entityType || 'player'), { credentials: 'same-origin' })
             .then(function(r) { return r.ok ? r.json() : { ok: false }; })
             .then(function(d) {
                 p.multiplier = otdGetMult(p) + 'x';
@@ -3933,7 +3940,7 @@
         fp.season = season; fp.level = level; fp.levelLabel = lbl;
         otdFindLoading = true; otdFindEarnings = null; otdFindExpandedMonths = {};
         renderOtdCheckWrap();
-        fetch('/api/real/otd?action=earnings&id=' + fp.id + '&sport=' + fp.sport + '&season=' + fp.season + '&level=' + fp.level + '&entityType=player&force=1', { credentials: 'same-origin' })
+        fetch('/api/real/otd?action=earnings&id=' + fp.id + '&sport=' + fp.sport + '&season=' + normSeason(fp.season) + '&level=' + fp.level + '&entityType=player&force=1', { credentials: 'same-origin' })
             .then(function(r) { return r.ok ? r.json() : { ok: false }; })
             .then(function(d) {
                 otdFindLoading = false;
@@ -4047,7 +4054,7 @@
         p.earnings = null;
         var listEl = document.getElementById('otd-passes-list');
         if (listEl) listEl.innerHTML = buildOtdPassesList();
-        fetch('/api/real/otd?action=earnings&id=' + p.id + '&sport=' + p.sport + '&season=' + p.season + '&level=' + level + '&entityType=' + (p.entityType || 'player'), { credentials: 'same-origin' })
+        fetch('/api/real/otd?action=earnings&id=' + p.id + '&sport=' + p.sport + '&season=' + normSeason(p.season) + '&level=' + level + '&entityType=' + (p.entityType || 'player'), { credentials: 'same-origin' })
             .then(function(r) { return r.ok ? r.json() : { ok: false }; })
             .then(function(ed) {
                 p.earnings = (ed.ok && ed.earnings) ? otdApplyMultiplier(ed.earnings, level, p.sport, p.entityType) : [];
@@ -4324,7 +4331,7 @@
         otdCheckBaseTotal = null;
         renderOtdCheckWrap();
         // No force=1 — use D1 cache (warm-up data) before hitting RS
-        fetch('/api/real/otd?action=earnings&id=' + checkId + '&sport=' + cp2.sport + '&season=' + checkSeason + '&level=' + cp2.level + '&entityType=' + checkEntityType, { credentials: 'same-origin' })
+        fetch('/api/real/otd?action=earnings&id=' + checkId + '&sport=' + cp2.sport + '&season=' + normSeason(checkSeason) + '&level=' + cp2.level + '&entityType=' + checkEntityType, { credentials: 'same-origin' })
             .then(function(r) { return r.ok ? r.json() : r.json().catch(function() { return { ok: false, _status: r.status }; }); })
             .then(function(d) {
                 otdCheckLoading = false;
@@ -4376,7 +4383,7 @@
             renderOtdChips();
             renderOtdResults();
             renderOtdCheckWrap();
-            fetch('/api/real/otd?action=earnings&id=' + cp.id + '&sport=' + cp.sport + '&season=' + cp.season + '&level=' + cp.level + '&entityType=' + (cp.entityType || 'player'), { credentials: 'same-origin' })
+            fetch('/api/real/otd?action=earnings&id=' + cp.id + '&sport=' + cp.sport + '&season=' + normSeason(cp.season) + '&level=' + cp.level + '&entityType=' + (cp.entityType || 'player'), { credentials: 'same-origin' })
                 .then(function(r) { return r.ok ? r.json() : { ok: false }; })
                 .then(function(d) {
                     entry.earnings = (d.ok && d.earnings) ? otdApplyMultiplier(d.earnings, cp.level, cp.sport, cp.entityType) : [];
@@ -5927,8 +5934,11 @@
         cardsEl.innerHTML = filtered.length
             ? filtered.map(function(s) { return parlaySlipCard(s, true); }).join('')
             : '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">No slips match.</div>';
+        // Wire live stat tracking for the admin view — renderAllSlipsCards bypasses parlayRenderSlips
+        PARLAY_SLIPS = ALL_SLIPS_DATA;
+        startLiveSlipTracking();
         // Update pill active state without destroying the input
-        var filters = ['all','active','won','lost','pending_deposit'];
+        var filters = ['all','active','won','lost','pending_deposit','expired','void'];
         filters.forEach(function(f) {
             var btn = document.getElementById('aslip-pill-' + f);
             if (btn) btn.className = 'aslip-filter-pill' + (allSlipsFilter === f ? ' active' : '');
@@ -5938,8 +5948,8 @@
     function renderAllSlipsView() {
         var container = document.getElementById('parlay-slips-view');
         if (!container) return;
-        var filters = ['all','active','won','lost','pending_deposit'];
-        var labels  = { all:'All', active:'Active', won:'Won', lost:'Lost', pending_deposit:'Pending' };
+        var filters = ['all','active','won','lost','pending_deposit','expired','void'];
+        var labels  = { all:'All', active:'Active', won:'Won', lost:'Lost', pending_deposit:'Pending', expired:'Expired', void:'Void' };
         var pillsHtml = '<div class="aslip-filters">' +
             filters.map(function(f) {
                 var count = f === 'all' ? ALL_SLIPS_DATA.length : ALL_SLIPS_DATA.filter(function(s){ return s.status === f; }).length;
@@ -5947,8 +5957,9 @@
                     labels[f] + ' <span class="aslip-count">' + count + '</span></button>';
             }).join('') +
         '</div>';
-        var searchHtml = '<div class="aslip-search-wrap">' +
-            '<input class="aslip-search" type="text" placeholder="Search by RS username…" oninput="parlayAllSlipsSearch(this.value)">' +
+        var searchHtml = '<div class="aslip-search-wrap" style="display:flex;gap:8px;align-items:center">' +
+            '<input class="aslip-search" type="text" placeholder="Search by RS username…" oninput="parlayAllSlipsSearch(this.value)" style="flex:1">' +
+            '<button onclick="loadAllSlips()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-size:12px;padding:6px 10px;border-radius:6px;cursor:pointer;white-space:nowrap">↻ Refresh</button>' +
         '</div>';
         container.innerHTML = pillsHtml + searchHtml + '<div id="aslip-cards"></div>';
         renderAllSlipsCards();
@@ -6575,8 +6586,8 @@
     }
 
     function parlaySlipCard(s, showUsername) {
-        var LABEL = { pending_deposit:'Pending Deposit', active:'Active', won:'Won', lost:'Lost', expired:'Expired', voided:'Voided' };
-        var CLS   = { pending_deposit:'s-pending', active:'s-active', won:'s-won', lost:'s-lost', expired:'s-gray', voided:'s-gray' };
+        var LABEL = { pending_deposit:'Pending Deposit', active:'Active', won:'Won', lost:'Lost', expired:'Expired', void:'Cancelled', voided:'Cancelled' };
+        var CLS   = { pending_deposit:'s-pending', active:'s-active', won:'s-won', lost:'s-lost', expired:'s-gray', void:'s-gray', voided:'s-gray' };
         var label = LABEL[s.status] || s.status;
         var cls   = CLS[s.status] || 's-gray';
         var date  = new Date(s.created_at * 1000).toLocaleDateString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' });
@@ -6726,99 +6737,110 @@
     }
 
     // Admin settle modal — exposed globally so onclick="parlayOpenSettle(N)" works from innerHTML
+    function parlayOpenSettleWithSlip(parlayId, slip) {
+        var legs = slip.legs || [];
+        var isAdminView = ALL_SLIPS_DATA.length > 0;
+
+        var overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px';
+
+        var box = document.createElement('div');
+        box.style.cssText = 'background:#18181f;border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:24px;max-width:400px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,.7);max-height:90vh;overflow-y:auto';
+
+        var title = document.createElement('h3');
+        title.style.cssText = 'color:#f0eff5;margin:0 0 16px;font-size:15px';
+        title.textContent = 'Settle Parlay #' + parlayId + (slip.rs_username ? ' (@' + slip.rs_username + ')' : '');
+        box.appendChild(title);
+
+        var legEls = legs.map(function(leg) {
+            var thresh = leg.threshold != null ? leg.threshold : '';
+            var dir = leg.direction === 'more' ? 'Over' : 'Under';
+            var row = document.createElement('div');
+            row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.08)';
+            row.setAttribute('data-leg-id', leg.id);
+
+            var nm = document.createElement('span');
+            nm.style.cssText = 'flex:1;font-size:13px;color:#f0eff5';
+            nm.textContent = leg.player_name + ' ' + dir + ' ' + thresh;
+            row.appendChild(nm);
+
+            var valInput = document.createElement('input');
+            valInput.type = 'number'; valInput.step = '0.5'; valInput.placeholder = 'Stat';
+            valInput.style.cssText = 'width:60px;background:#0f0f17;border:1px solid rgba(255,255,255,.2);color:#f0eff5;padding:5px 7px;border-radius:5px;font-size:12px';
+            if (leg.result_value != null) valInput.value = leg.result_value;
+            row.appendChild(valInput);
+
+            var sel = document.createElement('select');
+            sel.style.cssText = 'background:#0f0f17;border:1px solid rgba(255,255,255,.2);color:#f0eff5;padding:5px 7px;border-radius:5px;font-size:12px';
+            ['', 'won', 'lost', 'push'].forEach(function(v) {
+                var o = document.createElement('option');
+                o.value = v; o.textContent = v || 'Result';
+                if (leg.status === v) o.selected = true;
+                sel.appendChild(o);
+            });
+            row.appendChild(sel);
+
+            box.appendChild(row);
+            return { row: row, valInput: valInput, sel: sel, legId: leg.id };
+        });
+
+        function close() { document.body.removeChild(overlay); }
+
+        function doSettle(result) {
+            var legsData = legEls.map(function(le) {
+                var res = le.sel.value;
+                var val = le.valInput.value;
+                return { id: le.legId, result: res || 'pending', resultValue: val !== '' ? parseFloat(val) : null };
+            }).filter(function(l) { return l.result !== 'pending'; });
+            fetch('/api/parlays/settle', {
+                method: 'POST', credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ parlayId: parlayId, result: result, legs: legsData }),
+            }).then(function(r) { return r.json(); }).then(function(d) {
+                close();
+                if (d.ok) {
+                    if (isAdminView && typeof loadAllSlips === 'function') { loadAllSlips(); }
+                    else { loadParlaySlips(); }
+                } else { showConfirm('Error: ' + (d.error || 'Unknown'), function() {}); }
+            });
+        }
+
+        var btns = document.createElement('div');
+        btns.style.cssText = 'display:flex;gap:10px;margin-top:18px;justify-content:flex-end';
+
+        var cancelBtn = document.createElement('button');
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.style.cssText = 'padding:9px 16px;border:1px solid rgba(255,255,255,.2);background:transparent;color:#f0eff5;border-radius:6px;cursor:pointer;font-size:13px';
+        cancelBtn.onclick = close;
+
+        var lostBtn = document.createElement('button');
+        lostBtn.textContent = 'Mark Lost';
+        lostBtn.style.cssText = 'padding:9px 16px;border:none;background:#dc2626;color:#fff;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600';
+        lostBtn.onclick = function() { doSettle('lost'); };
+
+        var wonBtn = document.createElement('button');
+        wonBtn.textContent = 'Mark Won';
+        wonBtn.style.cssText = 'padding:9px 16px;border:none;background:#16a34a;color:#fff;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600';
+        wonBtn.onclick = function() { doSettle('won'); };
+
+        btns.appendChild(cancelBtn); btns.appendChild(lostBtn); btns.appendChild(wonBtn);
+        box.appendChild(btns);
+        overlay.appendChild(box);
+        overlay.onclick = function(e) { if (e.target === overlay) close(); };
+        document.body.appendChild(overlay);
+    }
+
     window.parlayOpenSettle = function parlayOpenSettle(parlayId) {
+        // In admin view ALL_SLIPS_DATA is already loaded — use it directly instead of
+        // fetching my-slips (which only returns the admin's own parlays, not other users').
+        var cached = ALL_SLIPS_DATA.find(function(s) { return s.id === parlayId; });
+        if (cached) { parlayOpenSettleWithSlip(parlayId, cached); return; }
         fetch('/api/parlays/my-slips', { credentials: 'include' })
             .then(function(r) { return r.json(); })
             .then(function(d) {
                 var slip = (d.slips || []).find(function(s) { return s.id === parlayId; });
                 if (!slip) return;
-                var legs = slip.legs || [];
-
-                var overlay = document.createElement('div');
-                overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px';
-
-                var box = document.createElement('div');
-                box.style.cssText = 'background:#18181f;border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:24px;max-width:400px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,.7);max-height:90vh;overflow-y:auto';
-
-                var title = document.createElement('h3');
-                title.style.cssText = 'color:#f0eff5;margin:0 0 16px;font-size:15px';
-                title.textContent = 'Settle Parlay #' + parlayId;
-                box.appendChild(title);
-
-                var legEls = legs.map(function(leg) {
-                    var thresh = leg.threshold != null ? leg.threshold : '';
-                    var dir = leg.direction === 'more' ? 'Over' : 'Under';
-                    var row = document.createElement('div');
-                    row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.08)';
-                    row.setAttribute('data-leg-id', leg.id);
-
-                    var nm = document.createElement('span');
-                    nm.style.cssText = 'flex:1;font-size:13px;color:#f0eff5';
-                    nm.textContent = leg.player_name + ' ' + dir + ' ' + thresh;
-                    row.appendChild(nm);
-
-                    var valInput = document.createElement('input');
-                    valInput.type = 'number'; valInput.step = '0.5'; valInput.placeholder = 'Stat';
-                    valInput.style.cssText = 'width:60px;background:#0f0f17;border:1px solid rgba(255,255,255,.2);color:#f0eff5;padding:5px 7px;border-radius:5px;font-size:12px';
-                    if (leg.result_value != null) valInput.value = leg.result_value;
-                    row.appendChild(valInput);
-
-                    var sel = document.createElement('select');
-                    sel.style.cssText = 'background:#0f0f17;border:1px solid rgba(255,255,255,.2);color:#f0eff5;padding:5px 7px;border-radius:5px;font-size:12px';
-                    ['', 'won', 'lost', 'push'].forEach(function(v) {
-                        var o = document.createElement('option');
-                        o.value = v; o.textContent = v || 'Result';
-                        if (leg.status === v) o.selected = true;
-                        sel.appendChild(o);
-                    });
-                    row.appendChild(sel);
-
-                    box.appendChild(row);
-                    return { row: row, valInput: valInput, sel: sel, legId: leg.id };
-                });
-
-                function close() { document.body.removeChild(overlay); }
-
-                function doSettle(result) {
-                    var legsData = legEls.map(function(le) {
-                        var res = le.sel.value;
-                        var val = le.valInput.value;
-                        return { id: le.legId, result: res || 'pending', resultValue: val !== '' ? parseFloat(val) : null };
-                    }).filter(function(l) { return l.result !== 'pending'; });
-                    fetch('/api/parlays/settle', {
-                        method: 'POST', credentials: 'include',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ parlayId: parlayId, result: result, legs: legsData }),
-                    }).then(function(r) { return r.json(); }).then(function(d) {
-                        close();
-                        if (d.ok) { loadParlaySlips(); }
-                        else { showConfirm('Error: ' + (d.error || 'Unknown'), function() {}); }
-                    });
-                }
-
-                var btns = document.createElement('div');
-                btns.style.cssText = 'display:flex;gap:10px;margin-top:18px;justify-content:flex-end';
-
-                var cancelBtn = document.createElement('button');
-                cancelBtn.textContent = 'Cancel';
-                cancelBtn.style.cssText = 'padding:9px 16px;border:1px solid rgba(255,255,255,.2);background:transparent;color:#f0eff5;border-radius:6px;cursor:pointer;font-size:13px';
-                cancelBtn.onclick = close;
-
-                var lostBtn = document.createElement('button');
-                lostBtn.textContent = 'Mark Lost';
-                lostBtn.style.cssText = 'padding:9px 16px;border:none;background:#dc2626;color:#fff;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600';
-                lostBtn.onclick = function() { doSettle('lost'); };
-
-                var wonBtn = document.createElement('button');
-                wonBtn.textContent = 'Mark Won';
-                wonBtn.style.cssText = 'padding:9px 16px;border:none;background:#16a34a;color:#fff;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600';
-                wonBtn.onclick = function() { doSettle('won'); };
-
-                btns.appendChild(cancelBtn); btns.appendChild(lostBtn); btns.appendChild(wonBtn);
-                box.appendChild(btns);
-                overlay.appendChild(box);
-                overlay.onclick = function(e) { if (e.target === overlay) close(); };
-                document.body.appendChild(overlay);
+                parlayOpenSettleWithSlip(parlayId, slip);
             });
     }
 
@@ -8293,7 +8315,7 @@
             if (badge) badge.textContent = otdLbNewAdded;
             else tabBtn.innerHTML = 'Search Players <span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--accent);color:#fff;font-size:9px;font-weight:700;margin-left:3px;vertical-align:middle">' + otdLbNewAdded + '</span>';
         }
-        fetch('/api/real/otd?action=earnings&id=' + encodeURIComponent(entry.id) + '&sport=' + encodeURIComponent(entry.sport) + '&season=' + encodeURIComponent(entry.season) + '&level=' + level + '&entityType=' + encodeURIComponent(entry.entityType), { credentials: 'same-origin' })
+        fetch('/api/real/otd?action=earnings&id=' + encodeURIComponent(entry.id) + '&sport=' + encodeURIComponent(entry.sport) + '&season=' + encodeURIComponent(normSeason(entry.season)) + '&level=' + level + '&entityType=' + encodeURIComponent(entry.entityType), { credentials: 'same-origin' })
             .then(function(r) { return r.ok ? r.json() : { ok: false }; })
             .then(function(d) {
                 if (!d.ok) { entry.earnings = []; otdDateMapDirty = true; return; }
@@ -8534,7 +8556,7 @@
         renderOtdChips();
         renderOtdResults();
 
-        fetch('/api/real/otd?action=earnings&id=' + encodeURIComponent(entry.id) + '&sport=' + encodeURIComponent(sport) + '&season=' + encodeURIComponent(season) + '&level=' + level + '&entityType=' + encodeURIComponent(et), { credentials: 'same-origin' })
+        fetch('/api/real/otd?action=earnings&id=' + encodeURIComponent(entry.id) + '&sport=' + encodeURIComponent(sport) + '&season=' + encodeURIComponent(normSeason(season)) + '&level=' + level + '&entityType=' + encodeURIComponent(et), { credentials: 'same-origin' })
             .then(function(r) { return r.ok ? r.json() : { ok: false }; })
             .then(function(d) {
                 if (!d.ok) { entry.earnings = []; otdDateMapDirty = true; renderOtdChips(); renderOtdResults(); return; }
@@ -8785,7 +8807,7 @@
                             active++;
                             (function(entry) {
                                 entry._retries = (entry._retries || 0);
-                                fetch('/api/real/otd?action=earnings&id=' + entry.id + '&sport=' + entry.sport + '&season=' + entry.season + '&level=' + entry.level + '&entityType=' + entry.entityType, { credentials: 'same-origin' })
+                                fetch('/api/real/otd?action=earnings&id=' + entry.id + '&sport=' + entry.sport + '&season=' + normSeason(entry.season) + '&level=' + entry.level + '&entityType=' + entry.entityType, { credentials: 'same-origin' })
                                     .then(function(r) {
                                         if (r.status === 429) return { ok: false, rateLimited: true };
                                         return r.ok ? r.json() : { ok: false };
