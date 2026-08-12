@@ -13,13 +13,11 @@ import { ok, err }    from '../../_lib/response.js';
 import { getSession } from '../../_lib/session.js';
 
 const MLB_API    = 'https://statsapi.mlb.com/api/v1';
+const ESPN_WNBA  = 'https://site.api.espn.com/apis/site/v2/sports/basketball/wnba';
 const ESPN_NFL   = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl';
 const ESPN_MMA   = 'https://site.api.espn.com/apis/site/v2/sports/mma/ufc';
-const VPS_HOST   = 'http://vps.raxedge.com:3003';
 const STALE_DAYS = 2;
 
-// ESPN blocks CF Worker IPs. NFL/UFC direct fetches still attempted with browser headers;
-// WNBA is routed through the Hetzner VPS proxy which ESPN does not block.
 const ESPN_HEADERS = {
   'Accept': 'application/json, text/plain, */*',
   'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
@@ -163,7 +161,7 @@ function extractMlbPlayerStats(boxscore) {
   return map;
 }
 
-// ── ESPN helpers (NFL + UFC — direct, headers only) ──────────────────────────
+// ── ESPN helpers (WNBA + NFL + UFC) ──────────────────────────────────────────
 
 async function getEspnFinalGames(baseUrl, date) {
   const yyyymmdd = date.replace(/-/g, '');
@@ -197,61 +195,23 @@ async function getEspnFinalGames(baseUrl, date) {
   } catch(e) { return []; }
 }
 
-// ── WNBA helpers — routed through Hetzner VPS (ESPN blocks CF Worker IPs) ────
-
-function parseEspnScoreboard(data) {
-  return (data.events || [])
-    .filter(e => {
-      const st = e.competitions?.[0]?.status?.type;
-      return st?.completed || (st?.name || '').toUpperCase().includes('FINAL');
-    })
-    .map(e => {
-      const comps = e.competitions?.[0]?.competitors || [];
-      const home  = comps.find(c => c.homeAway === 'home');
-      const away  = comps.find(c => c.homeAway === 'away');
-      return {
-        eventId:   e.id,
-        homeName:  home?.team?.displayName || home?.team?.name || '',
-        awayName:  away?.team?.displayName || away?.team?.name || '',
-        homeAbbr:  (home?.team?.abbreviation || '').toUpperCase(),
-        awayAbbr:  (away?.team?.abbreviation || '').toUpperCase(),
-        homeScore: parseInt(home?.score, 10),
-        awayScore: parseInt(away?.score, 10),
-      };
-    })
-    .filter(g => !isNaN(g.homeScore) && !isNaN(g.awayScore));
-}
-
-async function getWnbaFinalGames(date, proxyKey) {
+async function getWnbaPlayerStats(date) {
   const yyyymmdd = date.replace(/-/g, '');
   try {
-    const res = await fetch(
-      `${VPS_HOST}/espn-wnba/scoreboard?dates=${yyyymmdd}&key=${encodeURIComponent(proxyKey)}`,
-      { signal: AbortSignal.timeout(10000) }
-    );
-    if (!res.ok) return [];
-    const data = await res.json();
-    return parseEspnScoreboard(data);
-  } catch(e) { return []; }
-}
-
-async function getWnbaPlayerStats(date, proxyKey) {
-  const yyyymmdd = date.replace(/-/g, '');
-  try {
-    const sbRes = await fetch(
-      `${VPS_HOST}/espn-wnba/scoreboard?dates=${yyyymmdd}&key=${encodeURIComponent(proxyKey)}`,
-      { signal: AbortSignal.timeout(10000) }
-    );
+    const sbRes = await fetch(`${ESPN_WNBA}/scoreboard?dates=${yyyymmdd}`, {
+      headers: ESPN_HEADERS,
+      signal: AbortSignal.timeout(8000),
+    });
     if (!sbRes.ok) return {};
     const sbData = await sbRes.json();
     const eventIds = (sbData.events || []).map(e => e.id);
 
     const summaries = await Promise.all(eventIds.map(async id => {
       try {
-        const r = await fetch(
-          `${VPS_HOST}/espn-wnba/summary?event=${id}&key=${encodeURIComponent(proxyKey)}`,
-          { signal: AbortSignal.timeout(10000) }
-        );
+        const r = await fetch(`${ESPN_WNBA}/summary?event=${id}`, {
+          headers: ESPN_HEADERS,
+          signal: AbortSignal.timeout(8000),
+        });
         return r.ok ? r.json() : null;
       } catch(e) { return null; }
     }));
@@ -414,12 +374,10 @@ async function handleRequest({ request, env }) {
   const hasWnbaOnDate = date => eligibleLegs.some(l => l.game_date === date && legSportOf(l) === 'wnba');
   const hasNflOnDate  = date => eligibleLegs.some(l => l.game_date === date && legSportOf(l) === 'nfl');
 
-  const proxyKey = env.DK_PROXY_KEY || '';
-
   await Promise.all(uniqueDates.map(async date => {
     const [mlbGames, wnbaGames, nflGames, ufcResults] = await Promise.all([
       hasMlbOnDate(date)  ? getMlbFinalGames(date)                      : Promise.resolve([]),
-      hasWnbaOnDate(date) ? getWnbaFinalGames(date, proxyKey)            : Promise.resolve([]),
+      hasWnbaOnDate(date) ? getEspnFinalGames(ESPN_WNBA, date)           : Promise.resolve([]),
       hasNflOnDate(date)  ? getEspnFinalGames(ESPN_NFL,  date)           : Promise.resolve([]),
       hasUfcOnDate(date)  ? getUfcResults(date)                          : Promise.resolve({}),
     ]);
@@ -441,9 +399,9 @@ async function handleRequest({ request, env }) {
       mlbStatsMap[date] = {};
     }
 
-    // WNBA player stats — routed through VPS proxy
+    // WNBA player stats
     if (hasWnbaOnDate(date)) {
-      wnbaStatsMap[date] = await getWnbaPlayerStats(date, proxyKey);
+      wnbaStatsMap[date] = await getWnbaPlayerStats(date);
     } else {
       wnbaStatsMap[date] = {};
     }
