@@ -149,6 +149,30 @@ export async function onRequestPost({ request, env }) {
         400
       );
     }
+
+    // Duplicate slip guard: block placing the exact same picks twice on the same day.
+    // Fingerprint = sorted (playerName|marketType|direction) joined — order-independent.
+    const slipKey = normalized
+      .map(l => l.playerName + '|' + l.marketType + '|' + l.direction)
+      .sort()
+      .join('::');
+
+    const { results: sameDayParlays } = await env.DB.prepare(
+      "SELECT id FROM parlays WHERE user_id=? AND legs_count=? AND status IN ('active','pending_deposit') AND created_at>=?"
+    ).bind(user.id, normalized.length, todayStart).all();
+
+    for (const rp of sameDayParlays) {
+      const { results: existLegs } = await env.DB.prepare(
+        'SELECT player_name, market_type, direction FROM parlay_legs WHERE parlay_id=?'
+      ).bind(rp.id).all();
+      const existKey = existLegs
+        .map(l => l.player_name + '|' + l.market_type + '|' + l.direction)
+        .sort()
+        .join('::');
+      if (existKey === slipKey) {
+        return err('You already have an active slip with these exact picks — cancel it first to place again.', 400);
+      }
+    }
   }
 
   // Prefer cards recently verified by card-reconcile; fall back to any unassigned card
