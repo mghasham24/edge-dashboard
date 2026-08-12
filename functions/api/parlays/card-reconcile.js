@@ -61,7 +61,8 @@ async function fetchCardPage(sport, season, offset, hdrs) {
     if (!res.ok) return { ids: [], done: true, httpStatus: res.status };
     const data  = await res.json();
     const cards = data.cards || [];
-    const ids   = cards.map(c => c.id).filter(id => id != null).map(Number);
+    // Explicitly verify userId matches edgebot — defense against RS returning non-owned cards.
+    const ids   = cards.filter(c => c.userId === EDGEBOT_USER).map(c => c.id).filter(id => id != null).map(Number);
     // RS returns cardCount:0 always — can't trust it. Done when we get a partial page.
     return { ids, done: ids.length < PAGE_SIZE, httpStatus: 200 };
   } catch (e) { return { ids: [], done: true, error: e.message }; }
@@ -117,6 +118,12 @@ async function handleRequest({ request, env }) {
 
   // 0. Free cards assigned to parlays that have reached a terminal state.
   try {
+    // 0a. Expire pending_deposit parlays whose window has closed.
+    await env.DB.prepare(
+      "UPDATE parlays SET status='expired' WHERE status='pending_deposit' AND expires_at < unixepoch()"
+    ).run();
+
+    // 0b. Free cards held by any terminal-state parlay.
     await env.DB.prepare(
       "UPDATE deposit_cards SET assigned_to_parlay_id = NULL, assigned_at = NULL " +
       "WHERE assigned_to_parlay_id IN (" +
@@ -155,11 +162,22 @@ async function handleRequest({ request, env }) {
 
   // 3a. Stamp verified_at on every card edgebot still owns (used by place.js to gate assignment).
   const now = Math.floor(Date.now() / 1000);
-  const ownedPoolIds = poolRows.filter(r => owned.has(r.card_id)).map(r => r.card_id);
+  const poolCardIds   = new Set(poolRows.map(r => r.card_id));
+  const ownedPoolIds  = poolRows.filter(r => owned.has(r.card_id)).map(r => r.card_id);
   if (ownedPoolIds.length) {
     await env.DB.batch(
       ownedPoolIds.map(id =>
         env.DB.prepare('UPDATE deposit_cards SET verified_at=? WHERE card_id=?').bind(now, id)
+      )
+    );
+  }
+
+  // 3b-new. Insert cards edgebot owns that aren't in the pool yet (e.g. fresh auction wins).
+  const newCardIds = [...owned].filter(id => !poolCardIds.has(id));
+  if (newCardIds.length) {
+    await env.DB.batch(
+      newCardIds.map(id =>
+        env.DB.prepare('INSERT OR IGNORE INTO deposit_cards (card_id, verified_at) VALUES (?,?)').bind(id, now)
       )
     );
   }
@@ -173,7 +191,7 @@ async function handleRequest({ request, env }) {
   const assignedGhosts   = poolRows.filter(r => !owned.has(r.card_id) && r.assigned_to_parlay_id != null);
 
   const removed = unassignedGhosts.length + assignedGhosts.length;
-  if (!removed) return ok({ poolSize: poolRows.length, removed: 0, owned: owned.size });
+  if (!removed) return ok({ poolSize: poolRows.length, added: newCardIds.length, removed: 0, owned: owned.size });
 
   // 4a. Delete unassigned ghost cards
   await Promise.all(unassignedGhosts.map(r =>
@@ -194,11 +212,12 @@ async function handleRequest({ request, env }) {
   }
 
   return ok({
-    poolSize:        poolRows.length,
+    poolSize:         poolRows.length,
+    added:            newCardIds.length,
     removed,
     unassignedGhosts: unassignedGhosts.map(r => r.card_id),
     assignedGhosts:   assignedGhosts.map(r => ({ card_id: r.card_id, parlay_id: r.assigned_to_parlay_id })),
-    owned:           owned.size,
+    owned:            owned.size,
   });
 }
 
