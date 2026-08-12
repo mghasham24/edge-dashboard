@@ -279,9 +279,10 @@ async function getUfcResults(date) {
 
 async function handleRequest({ request, env }) {
   const url     = new URL(request.url);
-  const cronKey = url.searchParams.get('_cron_key');
-  const debug   = url.searchParams.has('debug');
-  const lastRun = url.searchParams.has('last_run');
+  const cronKey   = url.searchParams.get('_cron_key');
+  const debug     = url.searchParams.has('debug');
+  const debugDate = url.searchParams.get('date'); // optional date override for debug fetches
+  const lastRun   = url.searchParams.has('last_run');
 
   if (lastRun) {
     const session = await getSession(request, env.DB);
@@ -308,6 +309,31 @@ async function handleRequest({ request, env }) {
   const now       = Math.floor(Date.now() / 1000);
   const todayUtc  = new Date().toISOString().slice(0, 10);
   const staleDate = new Date(Date.now() - STALE_DAYS * 86400000).toISOString().slice(0, 10);
+
+  // ?debug&date=YYYY-MM-DD — fetch external API data for a specific date without needing pending legs
+  if (debug && debugDate && /^\d{4}-\d{2}-\d{2}$/.test(debugDate)) {
+    const [mlbGames, wnbaGames, nflGames, ufcResults, wnbaStats] = await Promise.all([
+      getMlbFinalGames(debugDate),
+      getEspnFinalGames(ESPN_WNBA, debugDate),
+      getEspnFinalGames(ESPN_NFL,  debugDate),
+      getUfcResults(debugDate),
+      getWnbaPlayerStats(debugDate),
+    ]);
+    const mlbStats = {};
+    await Promise.all(mlbGames.map(async g => {
+      const bs = await getMlbBoxscore(g.gamePk).catch(() => null);
+      if (bs) Object.assign(mlbStats, extractMlbPlayerStats(bs));
+    }));
+    return new Response(JSON.stringify({
+      debugDate,
+      mlbGames:    mlbGames.map(g => `${g.awayName} ${g.awayScore} @ ${g.homeName} ${g.homeScore}`),
+      wnbaGames:   wnbaGames.map(g => `${g.awayName} ${g.awayScore} @ ${g.homeName} ${g.homeScore}`),
+      nflGames:    nflGames.map(g => `${g.awayName} ${g.awayScore} @ ${g.homeName} ${g.homeScore}`),
+      ufcFights:   Object.entries(ufcResults).map(([n, r]) => `${n}: ${JSON.stringify(r)}`),
+      wnbaPlayers: Object.keys(wnbaStats),
+      mlbPlayers:  Object.keys(mlbStats),
+    }, null, 2), { headers: { 'Content-Type': 'application/json' } });
+  }
 
   async function cacheAndReturn(payload) {
     try {
