@@ -180,10 +180,9 @@ export async function onRequestPost({ request, env }) {
 
   for (const offer of offers) {
     const cardId  = offer.cardId;
-    const amount  = offer.counterAmount ?? offer.amount ?? offer.offerAmount;
     const offerId = offer.id;
 
-    if (!cardId || !amount || !offerId) continue;
+    if (!cardId || !offerId) continue;
 
     const alreadyAccepted = offer.status === 'accepted' || offer.status === 'completed';
 
@@ -191,11 +190,25 @@ export async function onRequestPost({ request, env }) {
     const match = cardMap[cardId] || (alreadyAccepted ? expiredMap[cardId] : null);
     if (!match) continue;
 
+    // RS clears counterAmount after acceptance, leaving only the original offer amount.
+    // Don't gate on stakeRax here — if RS says accepted, the deal is settled on their side.
+    if (alreadyAccepted) {
+      const effectiveAmount = Math.max(
+        offer.counterAmount ?? 0,
+        offer.amount       ?? 0,
+        offer.offerAmount  ?? 0,
+      ) || match.stakeRax;
+      await activateParlay(match.parlayId, cardId, offerId, effectiveAmount);
+      accepted++;
+      continue;
+    }
+
     const fromExpired = !cardMap[cardId] && !!expiredMap[cardId];
+    const amount = offer.counterAmount ?? offer.amount ?? offer.offerAmount;
+    if (!amount) continue;
 
     if (amount < match.stakeRax) {
-      // Never counter on an already-accepted offer or a recovered expired parlay
-      if (alreadyAccepted || fromExpired) continue;
+      if (fromExpired) continue;
       let counterResult;
       try { counterResult = await counterOffer(offerId, match.stakeRax, authInfo, sessionToken); }
       catch (e) { errors.push({ offerId, action: 'counter', error: e.message }); continue; }
@@ -203,12 +216,11 @@ export async function onRequestPost({ request, env }) {
       else errors.push({ offerId, action: 'counter', error: `RS ${counterResult.status}: ${counterResult.body}` });
       continue;
     }
-    if (!alreadyAccepted) {
-      let rsResult;
-      try { rsResult = await acceptOffer(offerId, authInfo, sessionToken); }
-      catch (e) { errors.push({ offerId, action: 'accept', error: e.message }); continue; }
-      if (!rsResult.ok) { errors.push({ offerId, action: 'accept', error: `RS ${rsResult.status}: ${rsResult.body}` }); continue; }
-    }
+
+    let rsResult;
+    try { rsResult = await acceptOffer(offerId, authInfo, sessionToken); }
+    catch (e) { errors.push({ offerId, action: 'accept', error: e.message }); continue; }
+    if (!rsResult.ok) { errors.push({ offerId, action: 'accept', error: `RS ${rsResult.status}: ${rsResult.body}` }); continue; }
 
     await activateParlay(match.parlayId, cardId, offerId, amount);
     accepted++;
