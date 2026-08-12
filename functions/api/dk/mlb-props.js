@@ -8,16 +8,24 @@ import { getSessionOrCron } from '../../_lib/auth.js';
 const DK_BASE   = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
 const DK_LEAGUE = '84240';
 const CACHE_TTL = 300; // 5 min
-const CACHE_KEY = 'dk_mlb_props_v11';
+const CACHE_KEY = 'dk_mlb_props_v12';
 
 // Standard subcategories — available at league level
 const SUBCAT_MAP = {
-  '6719':  { market: 'hits',        stat: 'Hits',        type: 'ou' },
-  '6607':  { market: 'total_bases', stat: 'Total Bases', type: 'ou' },
-  '8025':  { market: 'rbis',        stat: 'RBIs',        type: 'ou' },
-  '17406': { market: 'hrbi',        stat: 'H+R+RBI',     type: 'ou' },
-  '15221': { market: 'pitcher_ks',  stat: 'Pitcher Ks',  type: 'ou' },
-  '17413': { market: 'outs_ou',     stat: 'Outs',        type: 'ou' },
+  '6719':  { market: 'hits',         stat: 'Hits',         type: 'ou' },
+  '6607':  { market: 'total_bases',  stat: 'Total Bases',  type: 'ou' },
+  '8025':  { market: 'rbis',         stat: 'RBIs',         type: 'ou' },
+  '17406': { market: 'hrbi',         stat: 'H+R+RBI',      type: 'ou' },
+  '15221': { market: 'pitcher_ks',   stat: 'Pitcher Ks',   type: 'ou' },
+  '17413': { market: 'outs_ou',      stat: 'Outs',         type: 'ou' },
+  '17409': { market: 'singles',      stat: 'Singles',      type: 'ou' },
+  '17408': { market: 'stolen_bases', stat: 'Stolen Bases', type: 'ou' },
+  '17410': { market: 'doubles',      stat: 'Doubles',      type: 'ou' },
+  '17411': { market: 'walks',        stat: 'Walks',        type: 'ou' },
+  '9886':  { market: 'hits_allowed', stat: 'Hits Allowed', type: 'ou' },
+  '17412': { market: 'er_allowed',   stat: 'ER Allowed',   type: 'ou' },
+  '15219': { market: 'bb_allowed',   stat: 'BB Allowed',   type: 'ou' },
+  '19459': { market: 'hwer',         stat: 'H+W+ER',       type: 'ou' },
 };
 
 // Runs O/U only exists at the event level — fetched per-event after getting today's event list
