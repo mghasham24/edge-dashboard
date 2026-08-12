@@ -118,9 +118,10 @@ async function handleRequest({ request, env }) {
 
   // 0. Free cards assigned to parlays that have reached a terminal state.
   try {
-    // 0a. Expire pending_deposit parlays whose window has closed.
+    // 0a. Expire pending_deposit parlays — use same 90-min buffer as deposit-check so we
+    // never expire a parlay before deposit-check has had time to detect an accepted offer.
     await env.DB.prepare(
-      "UPDATE parlays SET status='expired' WHERE status='pending_deposit' AND expires_at < unixepoch()"
+      "UPDATE parlays SET status='expired' WHERE status='pending_deposit' AND expires_at < unixepoch() - 5400"
     ).run();
 
     // 0b. Free cards held by any terminal-state parlay.
