@@ -115,9 +115,14 @@ export async function onRequestPost({ request, env }) {
     if (uniqueTeams.size < 2) return err('Picks must be from at least 2 different teams', 400);
   }
 
-  // Payout math
-  const trueProb  = normalized.reduce((acc, l) => acc * l.impliedProb, 1);
-  const payoutRax = Math.min(Math.floor(stake * 0.70 / trueProb), 10000);
+  // Payout math — mirrors parlayCalcPayout() in the frontend exactly.
+  // Per-leg multiplier cap prevents extreme payouts on very long-odds parlays.
+  const LEG_CAPS   = [0, 0, 4.5, 9.0, 18.0, 36.0];
+  const legCapMult = LEG_CAPS[normalized.length] || 4.5;
+  const trueProb   = normalized.reduce((acc, l) => acc * l.impliedProb, 1);
+  const rawPayout  = Math.min(Math.floor(stake * 0.70 / trueProb), 10000);
+  const legCap     = Math.floor(legCapMult * stake / 10) * 10;
+  const payoutRax  = Math.min(rawPayout, legCap);
 
   // Daily caps (admins bypass)
   if (!isAdmin) {

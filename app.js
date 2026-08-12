@@ -5622,8 +5622,17 @@
     }
 
     function parlayMaxStake() {
-        if (Object.keys(parlayPicks).length < 2) return 50000;
-        return Math.floor(10000 * parlayTrueProb() / 0.70);
+        var n = Object.keys(parlayPicks).length;
+        if (n < 2) return 50000;
+        var LEG_CAPS = [0, 0, 4.5, 9.0, 18.0, 36.0];
+        var legCapMult = LEG_CAPS[n] || 4.5;
+        var trueProb = parlayTrueProb();
+        // When true multiplier exceeds leg cap, leg cap is binding — max stake is where
+        // leg-capped payout hits 10k. Otherwise 10k raw payout cap is the limit.
+        if (0.70 / trueProb > legCapMult) {
+            return Math.ceil(10000 / legCapMult);
+        }
+        return Math.floor(10000 * trueProb / 0.70);
     }
 
     function parlayCalcPayout(s) {
