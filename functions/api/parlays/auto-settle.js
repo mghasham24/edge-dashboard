@@ -718,7 +718,7 @@ async function handleRequest({ request, env }) {
   const { results: allLegs } = await env.DB.prepare(
     "SELECT pl.id, pl.parlay_id, pl.player_name, pl.market_id, pl.threshold, " +
     "pl.direction, pl.game_date, pl.market_type, pl.status, pl.sport, " +
-    "pl.label, pl.event_name " +
+    "pl.label, pl.event_name, pl.implied_prob " +
     "FROM parlay_legs pl " +
     "JOIN parlays p ON p.id = pl.parlay_id " +
     "WHERE p.status = 'active' AND pl.status = 'pending'"
@@ -964,11 +964,35 @@ async function handleRequest({ request, env }) {
       continue;
     }
 
-    const activeLeg    = outcomes.filter(o => o.outcome !== 'void' && o.outcome !== null);
-    const anyLost      = activeLeg.some(o => o.outcome === 'lost');
-    const anyVoid      = resolvedLegs.some(o => o.outcome === 'void');
-    // Any scratched leg voids the entire parlay and triggers a full stake refund
-    const parlayResult = anyVoid ? 'voided' : anyLost ? 'lost' : 'won';
+    const voidedLegs   = resolvedLegs.filter(o => o.outcome === 'void');
+    const activeLegs   = resolvedLegs.filter(o => o.outcome !== 'void');
+    const anyVoid      = voidedLegs.length > 0;
+    const anyLost      = activeLegs.some(o => o.outcome === 'lost');
+
+    // Determine result and final payout
+    let parlayResult, finalPayout;
+
+    if (!anyVoid) {
+      // No scratches — normal settlement
+      parlayResult = anyLost ? 'lost' : 'won';
+      finalPayout  = parlay.payout_rax;
+    } else if (activeLegs.length < 2) {
+      // 2-leg slip with one scratch (or all scratched) — full stake refund
+      parlayResult = 'voided';
+      finalPayout  = parlay.stake_rax;
+    } else if (anyLost) {
+      // Scratch on the slip but another leg also lost — just a loss
+      parlayResult = 'lost';
+      finalPayout  = 0;
+    } else {
+      // All remaining legs won — recalculate payout without the voided legs
+      const newTrueProb = activeLegs.reduce((acc, o) => {
+        const leg = allLegs.find(l => l.id === o.legId);
+        return acc * (leg ? parseFloat(leg.implied_prob) : 1);
+      }, 1);
+      parlayResult = 'won';
+      finalPayout  = Math.min(Math.floor(parlay.stake_rax * 0.70 / newTrueProb), 10000);
+    }
 
     for (const o of outcomes) {
       if (o.outcome === null) continue;
@@ -979,19 +1003,19 @@ async function handleRequest({ request, env }) {
     if (parlayResult === 'lost') {
       await env.DB.prepare("UPDATE parlays SET status='lost', settled_at=? WHERE id=?").bind(now, parlay.id).run();
     } else if (parlayResult === 'voided') {
-      // Refund full stake back to the user via payout_queue
       await env.DB.batch([
         env.DB.prepare("UPDATE parlays SET status='voided', settled_at=? WHERE id=?").bind(now, parlay.id),
         env.DB.prepare(
           'INSERT OR IGNORE INTO payout_queue (parlay_id, user_id, rs_username, payout_rax, offer_amount, created_at) VALUES (?,?,?,?,?,?)'
-        ).bind(parlay.id, parlay.user_id, parlay.rs_username, parlay.stake_rax, roundOfferAmount(parlay.stake_rax), now),
+        ).bind(parlay.id, parlay.user_id, parlay.rs_username, finalPayout, roundOfferAmount(finalPayout), now),
       ]);
     } else {
+      // Won — update payout_rax in case it was recalculated after a scratch
       await env.DB.batch([
-        env.DB.prepare("UPDATE parlays SET status='won', settled_at=? WHERE id=?").bind(now, parlay.id),
+        env.DB.prepare("UPDATE parlays SET status='won', payout_rax=?, settled_at=? WHERE id=?").bind(finalPayout, now, parlay.id),
         env.DB.prepare(
           'INSERT OR IGNORE INTO payout_queue (parlay_id, user_id, rs_username, payout_rax, offer_amount, created_at) VALUES (?,?,?,?,?,?)'
-        ).bind(parlay.id, parlay.user_id, parlay.rs_username, parlay.payout_rax, roundOfferAmount(parlay.payout_rax), now),
+        ).bind(parlay.id, parlay.user_id, parlay.rs_username, finalPayout, roundOfferAmount(finalPayout), now),
       ]);
     }
 
