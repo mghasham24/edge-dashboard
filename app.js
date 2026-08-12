@@ -5578,7 +5578,7 @@
                 var underSel = parlayPicks[String(underPick.id)] ? ' active' : '';
                 h += '<div class="pgc-row"><span class="pgc-label">Rounds O/U</span>';
                 h += '<button class="pgc-btn over' + overSel + '" onclick="parlayTogglePick(' + overPick.id + ',\'more\')">Over ' + overPick.line + ' ' + parlayFmtOdds(overPick.moreOdds) + '</button>';
-                h += '<button class="pgc-btn under' + underSel + '" onclick="parlayTogglePick(' + underPick.id + ',\'more\')">Under ' + underPick.line + ' ' + parlayFmtOdds(underPick.moreOdds) + '</button>';
+                h += '<button class="pgc-btn under' + underSel + '" onclick="parlayTogglePick(' + underPick.id + ',\'less\')">Under ' + underPick.line + ' ' + parlayFmtOdds(underPick.moreOdds) + '</button>';
                 h += '</div>';
             }
             h += '</div>';
@@ -5818,14 +5818,14 @@
                 var underSel = parlayPicks[String(underPick.id)] ? ' active' : '';
                 html += '<div class="pgc-row"><span class="pgc-label">O/U</span>';
                 html += '<button class="pgc-btn over' + overSel + '" onclick="parlayTogglePick(' + overPick.id + ',\'more\')">Over ' + overPick.line + ' ' + parlayFmtOdds(overPick.moreOdds) + '</button>';
-                html += '<button class="pgc-btn under' + underSel + '" onclick="parlayTogglePick(' + underPick.id + ',\'more\')">Under ' + underPick.line + ' ' + parlayFmtOdds(underPick.moreOdds) + '</button>';
+                html += '<button class="pgc-btn under' + underSel + '" onclick="parlayTogglePick(' + underPick.id + ',\'less\')">Under ' + underPick.line + ' ' + parlayFmtOdds(underPick.moreOdds) + '</button>';
                 html += '</div>';
             } else if (totMkt) {
                 var overSel2  = parlayPicks[String(totMkt._overPickId)]  ? ' active' : '';
                 var underSel2 = parlayPicks[String(totMkt._underPickId)] ? ' active' : '';
                 html += '<div class="pgc-row"><span class="pgc-label">O/U</span>';
                 html += '<button class="pgc-btn over' + overSel2 + '" onclick="parlayTogglePick(' + totMkt._overPickId + ',\'more\')">Over ' + totMkt.line + ' ' + parlayFmtOdds(totMkt.overOdds) + '</button>';
-                html += '<button class="pgc-btn under' + underSel2 + '" onclick="parlayTogglePick(' + totMkt._underPickId + ',\'more\')">Under ' + totMkt.line + ' ' + parlayFmtOdds(totMkt.underOdds) + '</button>';
+                html += '<button class="pgc-btn under' + underSel2 + '" onclick="parlayTogglePick(' + totMkt._underPickId + ',\'less\')">Under ' + totMkt.line + ' ' + parlayFmtOdds(totMkt.underOdds) + '</button>';
                 html += '</div>';
             }
 
@@ -7261,7 +7261,7 @@
                             dirLabel = escHtml(p.team) + ' Cover';
                         } else {
                             lineStr  = 'Total ' + p.line;
-                            dirLabel = p.name.indexOf(' O') !== -1 ? 'Over' : 'Under';
+                            dirLabel = p.initials === 'O' ? 'Over' : 'Under';
                         }
                     } else {
                         dirLabel = dir === 'more' ? '▲ More' : '▼ Less';
