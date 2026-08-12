@@ -17,13 +17,20 @@ const RS_DEVICE_UUID = '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e';
 const CAPSOLVER_SITEKEY = '0x4AAAAAADHHMQ4l_2uyXqiu';
 
 // Sports/seasons tried in order when searching for a winner's unowned card.
-// Ratingasc = cheapest (lowest FMV) card first — safest to buy as a payout vehicle.
+// Matches the full CARD_SPORTS list in card-reconcile.js so no category is missed.
 const CARD_TARGETS = [
   ['mlb', '2026', 'play'],
   ['nba', '2026', 'play'],
   ['nhl', '2026', 'play'],
+  ['mlb', '2025', 'play'],
   ['nba', '2025', 'play'],
   ['nhl', '2025', 'play'],
+  ['mlb', '2024', 'play'],
+  ['nba', '2024', 'play'],
+  ['nhl', '2024', 'play'],
+  ['nfl', '2024', 'play'],
+  ['nfl', '2023', 'play'],
+  ['ufc', '2023', 'play'],
 ];
 
 function buildHeaders(authInfo, sessionToken) {
@@ -85,7 +92,7 @@ async function findUnownedCards(rsUserId, authInfo, sessionToken, limit = 5) {
     try {
       const url =
         `https://web.realapp.com/collectingcards/${sport}/season/${season}/entity/${entity}` +
-        `/user/${rsUserId}/cards?filterCustomType=unowned&includeRecommendations=false&rarity=all&view=ratingasc`;
+        `/user/${rsUserId}/cards?filterCustomType=unowned&includeRecommendations=false&rarity=all&view=rating`;
       const res = await fetch(url, {
         headers: buildHeaders(authInfo, sessionToken),
         signal:  AbortSignal.timeout(8000),
