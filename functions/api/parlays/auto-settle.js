@@ -13,10 +13,20 @@ import { ok, err }    from '../../_lib/response.js';
 import { getSession } from '../../_lib/session.js';
 
 const MLB_API    = 'https://statsapi.mlb.com/api/v1';
-const ESPN_WNBA  = 'https://site.api.espn.com/apis/site/v2/sports/basketball/wnba';
 const ESPN_NFL   = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl';
 const ESPN_MMA   = 'https://site.api.espn.com/apis/site/v2/sports/mma/ufc';
+const VPS_HOST   = 'http://vps.raxedge.com:3003';
 const STALE_DAYS = 2;
+
+// ESPN blocks CF Worker IPs. NFL/UFC direct fetches still attempted with browser headers;
+// WNBA is routed through the Hetzner VPS proxy which ESPN does not block.
+const ESPN_HEADERS = {
+  'Accept': 'application/json, text/plain, */*',
+  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+  'Referer': 'https://www.espn.com/',
+  'Origin': 'https://www.espn.com',
+  'Accept-Language': 'en-US,en;q=0.9',
+};
 
 const MLB_STAT_FIELD = {
   hits: 'hits', total_bases: 'totalBases', rbis: 'rbi', runs: 'runs',
@@ -144,25 +154,31 @@ function extractMlbPlayerStats(boxscore) {
       const batting  = p.stats?.batting  || {};
       const pitching = p.stats?.pitching || {};
       const merged   = { ...batting, ...pitching };
-      merged.hrbi = (parseInt(batting.hits || 0) + parseInt(batting.runs || 0) + parseInt(batting.rbi || 0));
+      const h = parseInt(batting.hits || 0), d = parseInt(batting.doubles || 0), tri = parseInt(batting.triples || 0), hr = parseInt(batting.homeRuns || 0);
+      merged.hrbi = h + parseInt(batting.runs || 0) + parseInt(batting.rbi || 0);
+      merged.totalBases = batting.totalBases !== undefined ? parseInt(batting.totalBases || 0) : (h - d - tri - hr) + 2*d + 3*tri + 4*hr;
       map[name] = merged;
     }
   }
   return map;
 }
 
-// ── ESPN helpers (WNBA + NFL) ────────────────────────────────────────────────
+// ── ESPN helpers (NFL + UFC — direct, headers only) ──────────────────────────
 
 async function getEspnFinalGames(baseUrl, date) {
   const yyyymmdd = date.replace(/-/g, '');
   try {
     const res = await fetch(`${baseUrl}/scoreboard?dates=${yyyymmdd}`, {
+      headers: ESPN_HEADERS,
       signal: AbortSignal.timeout(8000),
     });
     if (!res.ok) return [];
     const data = await res.json();
     return (data.events || [])
-      .filter(e => e.competitions?.[0]?.status?.type?.completed)
+      .filter(e => {
+        const st = e.competitions?.[0]?.status?.type;
+        return st?.completed || (st?.name || '').toUpperCase().includes('FINAL');
+      })
       .map(e => {
         const comps = e.competitions?.[0]?.competitors || [];
         const home  = comps.find(c => c.homeAway === 'home');
@@ -181,23 +197,61 @@ async function getEspnFinalGames(baseUrl, date) {
   } catch(e) { return []; }
 }
 
-async function getWnbaPlayerStats(date) {
+// ── WNBA helpers — routed through Hetzner VPS (ESPN blocks CF Worker IPs) ────
+
+function parseEspnScoreboard(data) {
+  return (data.events || [])
+    .filter(e => {
+      const st = e.competitions?.[0]?.status?.type;
+      return st?.completed || (st?.name || '').toUpperCase().includes('FINAL');
+    })
+    .map(e => {
+      const comps = e.competitions?.[0]?.competitors || [];
+      const home  = comps.find(c => c.homeAway === 'home');
+      const away  = comps.find(c => c.homeAway === 'away');
+      return {
+        eventId:   e.id,
+        homeName:  home?.team?.displayName || home?.team?.name || '',
+        awayName:  away?.team?.displayName || away?.team?.name || '',
+        homeAbbr:  (home?.team?.abbreviation || '').toUpperCase(),
+        awayAbbr:  (away?.team?.abbreviation || '').toUpperCase(),
+        homeScore: parseInt(home?.score, 10),
+        awayScore: parseInt(away?.score, 10),
+      };
+    })
+    .filter(g => !isNaN(g.homeScore) && !isNaN(g.awayScore));
+}
+
+async function getWnbaFinalGames(date, proxyKey) {
   const yyyymmdd = date.replace(/-/g, '');
   try {
-    const sbRes = await fetch(`${ESPN_WNBA}/scoreboard?dates=${yyyymmdd}`, {
-      signal: AbortSignal.timeout(8000),
-    });
+    const res = await fetch(
+      `${VPS_HOST}/espn-wnba/scoreboard?dates=${yyyymmdd}&key=${encodeURIComponent(proxyKey)}`,
+      { signal: AbortSignal.timeout(10000) }
+    );
+    if (!res.ok) return [];
+    const data = await res.json();
+    return parseEspnScoreboard(data);
+  } catch(e) { return []; }
+}
+
+async function getWnbaPlayerStats(date, proxyKey) {
+  const yyyymmdd = date.replace(/-/g, '');
+  try {
+    const sbRes = await fetch(
+      `${VPS_HOST}/espn-wnba/scoreboard?dates=${yyyymmdd}&key=${encodeURIComponent(proxyKey)}`,
+      { signal: AbortSignal.timeout(10000) }
+    );
     if (!sbRes.ok) return {};
     const sbData = await sbRes.json();
-    const eventIds = (sbData.events || [])
-      .filter(e => e.competitions?.[0]?.status?.type?.completed)
-      .map(e => e.id);
+    const eventIds = (sbData.events || []).map(e => e.id);
 
     const summaries = await Promise.all(eventIds.map(async id => {
       try {
-        const r = await fetch(`${ESPN_WNBA}/summary?event=${id}`, {
-          signal: AbortSignal.timeout(8000),
-        });
+        const r = await fetch(
+          `${VPS_HOST}/espn-wnba/summary?event=${id}&key=${encodeURIComponent(proxyKey)}`,
+          { signal: AbortSignal.timeout(10000) }
+        );
         return r.ok ? r.json() : null;
       } catch(e) { return null; }
     }));
@@ -238,6 +292,7 @@ async function getUfcResults(date) {
   const yyyymmdd = date.replace(/-/g, '');
   try {
     const res = await fetch(`${ESPN_MMA}/scoreboard?dates=${yyyymmdd}`, {
+      headers: ESPN_HEADERS,
       signal: AbortSignal.timeout(8000),
     });
     if (!res.ok) return {};
@@ -245,7 +300,8 @@ async function getUfcResults(date) {
     const results = {};
     for (const event of (data.events || [])) {
       for (const comp of (event.competitions || [])) {
-        if (!comp.status?.type?.completed) continue;
+        const compSt = comp.status?.type;
+        if (!compSt?.completed && compSt?.name !== 'STATUS_FINAL') continue;
         const round = comp.status?.period ?? null;
         for (const c of (comp.competitors || [])) {
           const fullName = c.athlete?.displayName || c.athlete?.shortName || '';
@@ -322,16 +378,24 @@ async function handleRequest({ request, env }) {
   const eligibleLegs = allLegs.filter(l => l.game_date <= todayUtc);
   if (!eligibleLegs.length) return cacheAndReturn({ settled: 0, reason: 'all_games_future', todayUtc });
 
-  // Helper: determine effective sport for a leg
-  // Prefer stored leg.sport; fall back to market_type inference.
+  // Helper: determine effective sport for a leg.
+  // Market type wins for MLB-specific types (catches legs where parlayActiveSport was wrong).
   function legSportOf(leg) {
     const s = leg.sport || '';
+    const mkt = leg.market_type;
+    // MLB-only market types always route to MLB, regardless of stored sport field
+    if ((mkt in MLB_STAT_FIELD) && !WNBA_PROP_TYPES.has(mkt)) return 'mlb';
     if (s === 'wnba' || s === 'basketball_wnba') return 'wnba';
     if (s === 'nfl'  || s === 'american_football_nfl') return 'nfl';
     if (s === 'ufc')  return 'ufc';
-    if (leg.market_type === 'ufc_ml' || leg.market_type === 'ufc_total') return 'ufc';
-    if (WNBA_PROP_TYPES.has(leg.market_type)) return 'wnba';
-    return 'mlb'; // default — covers 'baseball_mlb' and old rows
+    if (mkt === 'ufc_ml' || mkt === 'ufc_total') return 'ufc';
+    if (WNBA_PROP_TYPES.has(mkt)) return 'wnba';
+    return 'mlb';
+  }
+
+  // Strip trailing team suffix like "(LAD)" or "(NYY)" from stored player names
+  function normForLookup(name) {
+    return normalizeName(name.replace(/\s*\([A-Z0-9]{2,5}\)\s*$/, ''));
   }
 
   // 3. Fetch external data for each unique (sport, date) combination in parallel
@@ -350,10 +414,12 @@ async function handleRequest({ request, env }) {
   const hasWnbaOnDate = date => eligibleLegs.some(l => l.game_date === date && legSportOf(l) === 'wnba');
   const hasNflOnDate  = date => eligibleLegs.some(l => l.game_date === date && legSportOf(l) === 'nfl');
 
+  const proxyKey = env.DK_PROXY_KEY || '';
+
   await Promise.all(uniqueDates.map(async date => {
     const [mlbGames, wnbaGames, nflGames, ufcResults] = await Promise.all([
       hasMlbOnDate(date)  ? getMlbFinalGames(date)                      : Promise.resolve([]),
-      hasWnbaOnDate(date) ? getEspnFinalGames(ESPN_WNBA, date)           : Promise.resolve([]),
+      hasWnbaOnDate(date) ? getWnbaFinalGames(date, proxyKey)            : Promise.resolve([]),
       hasNflOnDate(date)  ? getEspnFinalGames(ESPN_NFL,  date)           : Promise.resolve([]),
       hasUfcOnDate(date)  ? getUfcResults(date)                          : Promise.resolve({}),
     ]);
@@ -375,9 +441,9 @@ async function handleRequest({ request, env }) {
       mlbStatsMap[date] = {};
     }
 
-    // WNBA player stats
+    // WNBA player stats — routed through VPS proxy
     if (hasWnbaOnDate(date)) {
-      wnbaStatsMap[date] = await getWnbaPlayerStats(date);
+      wnbaStatsMap[date] = await getWnbaPlayerStats(date, proxyKey);
     } else {
       wnbaStatsMap[date] = {};
     }
@@ -406,7 +472,7 @@ async function handleRequest({ request, env }) {
             return { player: l.player_name, sport: 'ufc', type: l.market_type, found: !!result, result: result ?? null };
           }
           if (sport === 'wnba') {
-            const stats  = (wnbaStatsMap[date] || {})[normalizeName(l.player_name)];
+            const stats  = (wnbaStatsMap[date] || {})[normForLookup(l.player_name)];
             const field  = WNBA_STAT_FIELD[l.market_type];
             const statVal = stats ? stats[field] ?? null : null;
             const outcome = statVal == null ? null
@@ -414,7 +480,7 @@ async function handleRequest({ request, env }) {
             return { player: l.player_name, sport: 'wnba', market_type: l.market_type, field, statVal, outcome };
           }
           // MLB player prop
-          const norm    = normalizeName(l.player_name);
+          const norm    = normForLookup(l.player_name);
           const stats   = (mlbStatsMap[date] || {})[norm] || null;
           const field   = MLB_STAT_FIELD[l.market_type] || l.market_type;
           const rawVal  = stats?.[field];
@@ -465,7 +531,7 @@ async function handleRequest({ request, env }) {
     }
 
     if (sport === 'wnba') {
-      const wnbaStats = (wnbaStatsMap[leg.game_date] || {})[normalizeName(leg.player_name)];
+      const wnbaStats = (wnbaStatsMap[leg.game_date] || {})[normForLookup(leg.player_name)];
       if (!wnbaStats) {
         legOutcomes[leg.id] = leg.game_date < staleDate ? 'void' : null;
         continue;
@@ -480,7 +546,7 @@ async function handleRequest({ request, env }) {
     }
 
     // MLB player prop
-    const playerStats = (mlbStatsMap[leg.game_date] || {})[normalizeName(leg.player_name)];
+    const playerStats = (mlbStatsMap[leg.game_date] || {})[normForLookup(leg.player_name)];
     if (!playerStats) {
       legOutcomes[leg.id] = leg.game_date < staleDate ? 'void' : null;
       continue;
@@ -508,17 +574,22 @@ async function handleRequest({ request, env }) {
     }));
 
     const stillWaiting = outcomes.filter(o => o.outcome === null);
-    if (stillWaiting.length) {
+    const resolvedLegs = outcomes.filter(o => o.outcome !== null);
+    const anyLostEarly = resolvedLegs.some(o => o.outcome === 'lost');
+
+    // Settle LOST immediately if any leg is already lost — no need to wait for remaining legs
+    if (stillWaiting.length && !anyLostEarly) {
       report.push({ parlayId: parlay.id, status: 'waiting', waiting: stillWaiting.map(o => o.player) });
       continue;
     }
 
-    const activeLeg   = outcomes.filter(o => o.outcome !== 'void');
+    const activeLeg   = outcomes.filter(o => o.outcome !== 'void' && o.outcome !== null);
     const anyLost     = activeLeg.some(o => o.outcome === 'lost');
-    const allVoid     = activeLeg.length === 0;
+    const allVoid     = resolvedLegs.length > 0 && resolvedLegs.every(o => o.outcome === 'void');
     const parlayResult = allVoid ? 'voided' : anyLost ? 'lost' : 'won';
 
     for (const o of outcomes) {
+      if (o.outcome === null) continue; // leave pending legs untouched if settling early-lost
       await env.DB.prepare("UPDATE parlay_legs SET status=?, settled_at=? WHERE id=?")
         .bind(o.outcome, now, o.legId).run();
     }
