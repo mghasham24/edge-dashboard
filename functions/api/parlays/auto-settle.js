@@ -3,7 +3,7 @@
 // GET  /api/parlays/auto-settle?_cron_key=CRON_SECRET&debug  (admin debug)
 //
 // Settles active parlays using sport-specific external APIs:
-//   MLB  — MLB Stats API boxscores + schedule
+//   MLB  — MLB Stats API boxscores + schedule + linescore (1st inn)
 //   WNBA — ESPN WNBA scoreboard + summary
 //   NFL  — ESPN NFL scoreboard
 //   UFC  — ESPN MMA scoreboard
@@ -16,6 +16,7 @@ const MLB_API    = 'https://statsapi.mlb.com/api/v1';
 const ESPN_WNBA  = 'https://site.api.espn.com/apis/site/v2/sports/basketball/wnba';
 const ESPN_NFL   = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl';
 const ESPN_MMA   = 'https://site.api.espn.com/apis/site/v2/sports/mma/ufc';
+const VPS_HOST   = 'http://vps.raxedge.com:3003';
 const STALE_DAYS = 2;
 
 const ESPN_HEADERS = {
@@ -26,15 +27,42 @@ const ESPN_HEADERS = {
   'Accept-Language': 'en-US,en;q=0.9',
 };
 
+// MLB player prop market → boxscore stat field
 const MLB_STAT_FIELD = {
-  hits: 'hits', total_bases: 'totalBases', rbis: 'rbi', runs: 'runs',
-  hrbi: 'hrbi', pitcher_ks: 'strikeOuts', outs_ou: 'outs',
+  hits:         'hits',
+  total_bases:  'totalBases',
+  rbis:         'rbi',
+  runs:         'runs',
+  hrbi:         'hrbi',
+  pitcher_ks:   'strikeOuts',
+  outs_ou:      'outs',
+  // New full-game props
+  singles:      'singles',
+  stolen_bases: 'stolenBases',
+  doubles:      'doubles',
+  walks:        'batterWalks',
+  hits_allowed: 'pitcherHits',
+  er_allowed:   'earnedRuns',
+  bb_allowed:   'pitcherWalks',
+  hwer:         'hwer',
 };
+
 const WNBA_STAT_FIELD = {
   pts: 'pts', reb: 'reb', ast: 'ast', fg3m: 'fg3m',
   pra: 'pra', pa: 'pa', pr: 'pr', ra: 'ra',
 };
 const WNBA_PROP_TYPES = new Set(Object.keys(WNBA_STAT_FIELD));
+
+// 1st inning markets settleable from linescore (runs + hits per half-inning)
+const INN1_LINESCORE_MKTS = new Set([
+  '1inn_ml', '1inn_runs_ou', '1inn_hits_ou', '1inn_hits_exact',
+  '1inn_run_yn', '1inn_runs_exact',
+]);
+// 1st inning markets settleable from play-by-play (eventType counts + pitch sums)
+const INN1_PBP_MKTS = new Set([
+  '1inn_walks_ou', '1inn_pitches_ou', '1inn_pitches_range',
+  '1inn_batters_ou', '1inn_hr_yn', '1inn_ks_exact',
+]);
 
 function roundOfferAmount(amount) {
   const ones = amount % 10;
@@ -45,14 +73,12 @@ function normalizeName(name) {
   return name.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 }
 
-// Resolve a team market leg against an array of final games with scores.
-// finalGames: [{ homeName, awayName, homeAbbr, awayAbbr, homeScore, awayScore }]
+// ── Team market resolver ──────────────────────────────────────────────────────
+
 function resolveTeamLeg(leg, finalGames) {
   const mkt = leg.market_type;
 
   if (mkt === 'team_total') {
-    // New format: "Los Angeles Dodgers @ Kansas City Royals O8.5"
-    // Old format: "LAD @ KC O8.5" (abbreviations — kept for backwards compat)
     const m = leg.player_name.match(/^(.+?)\s+@\s+(.+?)\s+([OU])([\d.]+)$/i);
     if (!m) return null;
     const awayRaw = m[1].trim();
@@ -61,16 +87,12 @@ function resolveTeamLeg(leg, finalGames) {
     const line    = parseFloat(m[4]);
 
     function matchesTeam(raw, gameName, gameAbbr) {
-      const rawNorm = normalizeName(raw);
+      const rawNorm  = normalizeName(raw);
       const gameNorm = normalizeName(gameName);
-      // Exact full-name match (new format)
       if (gameNorm === rawNorm) return true;
-      // endsWith nickname (e.g. "la dodgers" → nickname "dodgers" in "los angeles dodgers")
       const nickname = rawNorm.split(' ').slice(1).join(' ');
       if (nickname && gameNorm.endsWith(nickname)) return true;
-      // Abbreviation exact match (old format, e.g. "LAD" === "LAD")
-      const rawUpper = raw.toUpperCase();
-      if (gameAbbr === rawUpper) return true;
+      if (gameAbbr === raw.toUpperCase()) return true;
       return false;
     }
 
@@ -83,10 +105,8 @@ function resolveTeamLeg(leg, finalGames) {
     return (isOver ? total > line : total < line) ? 'won' : 'lost';
   }
 
-  // team_ml or team_runline — strip suffix, match by full name OR nickname suffix.
-  const dkName  = leg.player_name.replace(/ (ML|RL)$/i, '').trim();
+  const dkName   = leg.player_name.replace(/ (ML|RL)$/i, '').trim();
   const teamName = normalizeName(dkName);
-  // nickname = everything after leading word (handles "LA Dodgers" → "dodgers", "CWS White Sox" → "white sox")
   const nickname = teamName.split(' ').slice(1).join(' ');
   const game = finalGames.find(g => {
     const homeNorm = normalizeName(g.homeName);
@@ -96,15 +116,12 @@ function resolveTeamLeg(leg, finalGames) {
   });
   if (!game) return null;
 
-  // Use same logic as game-find to correctly determine home/away
-  const homeNorm = normalizeName(game.homeName);
-  const isHome   = homeNorm === teamName || (nickname && homeNorm.endsWith(nickname));
+  const homeNorm  = normalizeName(game.homeName);
+  const isHome    = homeNorm === teamName || (nickname && homeNorm.endsWith(nickname));
   const teamScore = isHome ? game.homeScore : game.awayScore;
   const oppScore  = isHome ? game.awayScore : game.homeScore;
 
-  if (mkt === 'team_ml') {
-    return teamScore > oppScore ? 'won' : 'lost';
-  }
+  if (mkt === 'team_ml') return teamScore > oppScore ? 'won' : 'lost';
   if (mkt === 'team_runline') {
     const line = parseFloat(leg.threshold ?? 0);
     return (teamScore + line > oppScore) ? 'won' : 'lost';
@@ -112,7 +129,218 @@ function resolveTeamLeg(leg, finalGames) {
   return null;
 }
 
-// ── MLB helpers ──────────────────────────────────────────────────────────────
+// ── 1st inning resolver ───────────────────────────────────────────────────────
+
+// Parse "Away Team @ Home Team" from event_name
+function parse1innMatchup(eventName) {
+  if (!eventName) return null;
+  const m = eventName.match(/^(.+?)\s+@\s+(.+)$/);
+  if (!m) return null;
+  return { awayName: m[1].trim(), homeName: m[2].trim() };
+}
+
+// Find MLB final game matching the parsed matchup (DK names vs MLB API names)
+function match1innGame(matchup, finalGames) {
+  if (!matchup) return null;
+  const aN = normalizeName(matchup.awayName);
+  const hN = normalizeName(matchup.homeName);
+  return finalGames.find(g => {
+    const ga = normalizeName(g.awayName);
+    const gh = normalizeName(g.homeName);
+    if (ga === aN && gh === hN) return true;
+    // nickname suffix match
+    const aNick = aN.split(' ').slice(1).join(' ');
+    const hNick = hN.split(' ').slice(1).join(' ');
+    if (aNick && hNick && ga.endsWith(aNick) && gh.endsWith(hNick)) return true;
+    // abbreviation match (e.g. DK short names match MLB abbr)
+    if (g.awayAbbr.toLowerCase() === aN && g.homeAbbr.toLowerCase() === hN) return true;
+    return false;
+  });
+}
+
+// Determine if the team in playerName is the away or home side
+function get1innSide(playerName, game) {
+  const statRe = /\s+(hits?|pitches?|batters?|scores?|runs?|ks?|hr|walks?|strikeouts?)\s*$/i;
+  const teamPart = normalizeName(playerName.replace(statRe, '').trim());
+  const aN = normalizeName(game.awayName);
+  const hN = normalizeName(game.homeName);
+  const aAbbr = game.awayAbbr.toLowerCase();
+  const hAbbr = game.homeAbbr.toLowerCase();
+  const aNick = aN.split(' ').slice(1).join(' ');
+  const hNick = hN.split(' ').slice(1).join(' ');
+
+  if (teamPart === aAbbr || teamPart === aN || (aNick && aN.endsWith(teamPart))) return 'away';
+  if (teamPart === hAbbr || teamPart === hN || (hNick && hN.endsWith(teamPart))) return 'home';
+  return null; // ambiguous
+}
+
+// Resolve a 1st-inning leg. Returns 'won' | 'lost' | 'void' | null (null = not ready yet)
+// pbpMap: gamePk → { top:{walks,ks,hrs,batters,pitches}, bottom:{...} }
+function resolve1stInnLeg(leg, finalGames, linescore1Map, pbpMap) {
+  const mkt = leg.market_type;
+
+  const matchup = parse1innMatchup(leg.event_name);
+  const game    = match1innGame(matchup, finalGames);
+  if (!game) return null; // game not final yet or not found
+
+  const label = (leg.label || '').trim();
+  const isOver  = /^over\b/i.test(label);
+  const isUnder = /^under\b/i.test(label);
+  const isYes   = /^yes$/i.test(label);
+  const isNo    = /^no$/i.test(label);
+  const exactM  = label.match(/exactly\s+(\d+)/i);
+  const exactVal = exactM ? parseInt(exactM[1], 10) : null;
+
+  // ── Play-by-play markets ─────────────────────────────────────────────────
+  if (INN1_PBP_MKTS.has(mkt)) {
+    const pbp = pbpMap ? pbpMap[game.gamePk] : null;
+    if (!pbp) return null; // fetch not done or failed — retry next run
+
+    // top = away team batting; bottom = home team batting
+    // Pitches: away pitcher throws in bottom; home pitcher throws in top
+    const side = get1innSide(leg.player_name, game); // null for game-level
+
+    switch (mkt) {
+      case '1inn_walks_ou': {
+        // Game-level: total walks drawn by both teams in inning 1
+        const total = pbp.top.walks + pbp.bottom.walks;
+        const line  = parseFloat(leg.threshold);
+        if (isNaN(line)) return null;
+        if (isOver)  return total > line ? 'won' : 'lost';
+        if (isUnder) return total < line ? 'won' : 'lost';
+        return null;
+      }
+      case '1inn_batters_ou': {
+        if (!side) return null;
+        // away bats in top; home bats in bottom
+        const count = side === 'away' ? pbp.top.batters : pbp.bottom.batters;
+        const line  = parseFloat(leg.threshold);
+        if (isNaN(line)) return null;
+        if (isOver)  return count > line ? 'won' : 'lost';
+        if (isUnder) return count < line ? 'won' : 'lost';
+        return null;
+      }
+      case '1inn_pitches_ou': {
+        if (!side) return null;
+        // away pitcher throws in bottom; home pitcher throws in top
+        const pitches = side === 'away' ? pbp.bottom.pitches : pbp.top.pitches;
+        const line    = parseFloat(leg.threshold);
+        if (isNaN(line)) return null;
+        if (isOver)  return pitches > line ? 'won' : 'lost';
+        if (isUnder) return pitches < line ? 'won' : 'lost';
+        return null;
+      }
+      case '1inn_pitches_range': {
+        if (!side) return null;
+        const pitches = side === 'away' ? pbp.bottom.pitches : pbp.top.pitches;
+        // label is e.g. "10-14 pitches" or "25+ pitches" or "0-9 pitches"
+        const rangeM = label.match(/^(\d+)-(\d+)/);
+        const plusM  = label.match(/^(\d+)\+/);
+        const zeroM  = label.match(/^0-(\d+)/);
+        if (rangeM) {
+          const lo = parseInt(rangeM[1], 10), hi = parseInt(rangeM[2], 10);
+          return (pitches >= lo && pitches <= hi) ? 'won' : 'lost';
+        }
+        if (plusM) {
+          return pitches >= parseInt(plusM[1], 10) ? 'won' : 'lost';
+        }
+        if (zeroM) {
+          return pitches <= parseInt(zeroM[1], 10) ? 'won' : 'lost';
+        }
+        return null;
+      }
+      case '1inn_hr_yn': {
+        if (!side) return null;
+        // away bats in top; home bats in bottom
+        const hrs = side === 'away' ? pbp.top.hrs : pbp.bottom.hrs;
+        const hit = hrs > 0;
+        if (isYes) return hit ? 'won' : 'lost';
+        if (isNo)  return hit ? 'lost' : 'won';
+        return null;
+      }
+      case '1inn_ks_exact': {
+        if (!side || exactVal == null) return null;
+        // strikeouts as batter: away bats top, home bats bottom
+        const ks = side === 'away' ? pbp.top.ks : pbp.bottom.ks;
+        return ks === exactVal ? 'won' : 'lost';
+      }
+      default: return null;
+    }
+  }
+
+  // ── Linescore markets ────────────────────────────────────────────────────
+  const inn1 = linescore1Map[game.gamePk];
+  if (!inn1) return null;
+
+  const { away, home } = inn1;
+
+  switch (mkt) {
+    case '1inn_ml': {
+      if (away.runs == null || home.runs == null) return null;
+      const pn = normalizeName(leg.player_name);
+      if (pn === 'tie') return away.runs === home.runs ? 'won' : 'lost';
+      const side = get1innSide(leg.player_name, game);
+      if (!side) return null;
+      const myR  = side === 'away' ? away.runs : home.runs;
+      const oppR = side === 'away' ? home.runs  : away.runs;
+      if (myR > oppR) return 'won';
+      return 'lost';
+    }
+
+    case '1inn_runs_ou': {
+      if (away.runs == null || home.runs == null) return null;
+      const total = away.runs + home.runs;
+      const line  = parseFloat(leg.threshold);
+      if (isNaN(line)) return null;
+      if (isOver)  return total > line ? 'won' : 'lost';
+      if (isUnder) return total < line ? 'won' : 'lost';
+      return null;
+    }
+
+    case '1inn_hits_ou': {
+      const side = get1innSide(leg.player_name, game);
+      if (!side) return null;
+      const h = side === 'away' ? away.hits : home.hits;
+      if (h == null) return null;
+      const line = parseFloat(leg.threshold);
+      if (isNaN(line)) return null;
+      if (isOver)  return h > line ? 'won' : 'lost';
+      if (isUnder) return h < line ? 'won' : 'lost';
+      return null;
+    }
+
+    case '1inn_hits_exact': {
+      const side = get1innSide(leg.player_name, game);
+      if (!side || exactVal == null) return null;
+      const h = side === 'away' ? away.hits : home.hits;
+      if (h == null) return null;
+      return h === exactVal ? 'won' : 'lost';
+    }
+
+    case '1inn_run_yn': {
+      const side = get1innSide(leg.player_name, game);
+      if (!side) return null;
+      const r = side === 'away' ? away.runs : home.runs;
+      if (r == null) return null;
+      const scored = r > 0;
+      if (isYes) return scored ? 'won' : 'lost';
+      if (isNo)  return scored ? 'lost' : 'won';
+      return null;
+    }
+
+    case '1inn_runs_exact': {
+      const side = get1innSide(leg.player_name, game);
+      if (!side || exactVal == null) return null;
+      const r = side === 'away' ? away.runs : home.runs;
+      if (r == null) return null;
+      return r === exactVal ? 'won' : 'lost';
+    }
+
+    default: return null;
+  }
+}
+
+// ── MLB helpers ───────────────────────────────────────────────────────────────
 
 async function getMlbFinalGames(date) {
   const res = await fetch(`${MLB_API}/schedule?date=${date}&sportId=1&hydrate=linescore`, {
@@ -142,19 +370,77 @@ async function getMlbBoxscore(gamePk) {
   return res.json();
 }
 
+// Returns { away: {runs, hits}, home: {runs, hits} } for inning 1
+async function getMlbLinescore(gamePk) {
+  const res = await fetch(`${MLB_API}/game/${gamePk}/linescore`, {
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  const inn1 = (data.innings || []).find(i => i.num === 1);
+  if (!inn1) return null;
+  return {
+    away: { runs: inn1.away?.runs ?? null, hits: inn1.away?.hits ?? null },
+    home: { runs: inn1.home?.runs ?? null, hits: inn1.home?.hits ?? null },
+  };
+}
+
+// Returns { top, bottom } — each: { walks, ks, hrs, batters, pitches } for inning 1
+// top = away team batting, bottom = home team batting
+// Pitch side is inverted: away pitcher throws in bottom, home pitcher throws in top
+async function getMlbPlayByPlay(gamePk) {
+  const res = await fetch(`${MLB_API}/game/${gamePk}/playByPlay`, {
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  const inn1 = (data.allPlays || []).filter(p => p.about?.inning === 1);
+
+  function summarize(plays) {
+    return {
+      walks:   plays.filter(p => p.result?.eventType === 'walk').length,
+      ks:      plays.filter(p => p.result?.eventType === 'strikeout').length,
+      hrs:     plays.filter(p => p.result?.eventType === 'home_run').length,
+      batters: plays.length,
+      pitches: plays.reduce((s, p) => s + (p.pitchIndex || []).length, 0),
+    };
+  }
+
+  return {
+    top:    summarize(inn1.filter(p => p.about?.halfInning === 'top')),
+    bottom: summarize(inn1.filter(p => p.about?.halfInning === 'bottom')),
+  };
+}
+
 function extractMlbPlayerStats(boxscore) {
   const map = {};
   for (const side of ['away', 'home']) {
     const players = boxscore?.teams?.[side]?.players || {};
     for (const p of Object.values(players)) {
-      const name = normalizeName(p.person?.fullName || '');
+      const name    = normalizeName(p.person?.fullName || '');
       if (!name) continue;
       const batting  = p.stats?.batting  || {};
       const pitching = p.stats?.pitching || {};
       const merged   = { ...batting, ...pitching };
-      const h = parseInt(batting.hits || 0), d = parseInt(batting.doubles || 0), tri = parseInt(batting.triples || 0), hr = parseInt(batting.homeRuns || 0);
-      merged.hrbi = h + parseInt(batting.runs || 0) + parseInt(batting.rbi || 0);
-      merged.totalBases = batting.totalBases !== undefined ? parseInt(batting.totalBases || 0) : (h - d - tri - hr) + 2*d + 3*tri + 4*hr;
+      const h  = parseInt(batting.hits       || 0);
+      const d  = parseInt(batting.doubles    || 0);
+      const tri = parseInt(batting.triples   || 0);
+      const hr  = parseInt(batting.homeRuns  || 0);
+      merged.hrbi       = h + parseInt(batting.runs || 0) + parseInt(batting.rbi || 0);
+      merged.totalBases = batting.totalBases !== undefined
+        ? parseInt(batting.totalBases || 0)
+        : (h - d - tri - hr) + 2*d + 3*tri + 4*hr;
+      // New full-game prop fields — always sourced from the correct side
+      merged.doubles      = d; // explicit batter doubles (pitching spread has its own 'doubles' for allowed)
+      merged.singles      = h - d - tri - hr;
+      merged.stolenBases  = parseInt(batting.stolenBases   || 0);
+      merged.batterWalks  = parseInt(batting.baseOnBalls   || 0);
+      merged.pitcherHits  = parseInt(pitching.hits         || 0);
+      merged.earnedRuns   = parseInt(pitching.earnedRuns   || 0);
+      merged.pitcherWalks = parseInt(pitching.baseOnBalls  || 0);
+      merged.hwer         = parseInt(pitching.hits || 0)
+                          + parseInt(pitching.baseOnBalls || 0)
+                          + parseInt(pitching.earnedRuns  || 0);
       map[name] = merged;
     }
   }
@@ -195,23 +481,55 @@ async function getEspnFinalGames(baseUrl, date) {
   } catch(e) { return []; }
 }
 
-async function getWnbaPlayerStats(date) {
+async function getWnbaFinalGames(date, proxyKey) {
   const yyyymmdd = date.replace(/-/g, '');
   try {
-    const sbRes = await fetch(`${ESPN_WNBA}/scoreboard?dates=${yyyymmdd}`, {
-      headers: ESPN_HEADERS,
-      signal: AbortSignal.timeout(8000),
-    });
+    const res = await fetch(
+      `${VPS_HOST}/espn-wnba/scoreboard?dates=${yyyymmdd}&key=${encodeURIComponent(proxyKey)}`,
+      { signal: AbortSignal.timeout(10000) }
+    );
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.events || [])
+      .filter(e => {
+        const st = e.competitions?.[0]?.status?.type;
+        return st?.completed || (st?.name || '').toUpperCase().includes('FINAL');
+      })
+      .map(e => {
+        const comps = e.competitions?.[0]?.competitors || [];
+        const home  = comps.find(c => c.homeAway === 'home');
+        const away  = comps.find(c => c.homeAway === 'away');
+        return {
+          eventId:   e.id,
+          homeName:  home?.team?.displayName || home?.team?.name || '',
+          awayName:  away?.team?.displayName || away?.team?.name || '',
+          homeAbbr:  (home?.team?.abbreviation || '').toUpperCase(),
+          awayAbbr:  (away?.team?.abbreviation || '').toUpperCase(),
+          homeScore: parseInt(home?.score, 10),
+          awayScore: parseInt(away?.score, 10),
+        };
+      })
+      .filter(g => !isNaN(g.homeScore) && !isNaN(g.awayScore));
+  } catch(e) { return []; }
+}
+
+async function getWnbaPlayerStats(date, proxyKey) {
+  const yyyymmdd = date.replace(/-/g, '');
+  try {
+    const sbRes = await fetch(
+      `${VPS_HOST}/espn-wnba/scoreboard?dates=${yyyymmdd}&key=${encodeURIComponent(proxyKey)}`,
+      { signal: AbortSignal.timeout(10000) }
+    );
     if (!sbRes.ok) return {};
     const sbData = await sbRes.json();
     const eventIds = (sbData.events || []).map(e => e.id);
 
     const summaries = await Promise.all(eventIds.map(async id => {
       try {
-        const r = await fetch(`${ESPN_WNBA}/summary?event=${id}`, {
-          headers: ESPN_HEADERS,
-          signal: AbortSignal.timeout(8000),
-        });
+        const r = await fetch(
+          `${VPS_HOST}/espn-wnba/summary?event=${id}&key=${encodeURIComponent(proxyKey)}`,
+          { signal: AbortSignal.timeout(10000) }
+        );
         return r.ok ? r.json() : null;
       } catch(e) { return null; }
     }));
@@ -246,7 +564,7 @@ async function getWnbaPlayerStats(date) {
   } catch(e) { return {}; }
 }
 
-// ── UFC helper ───────────────────────────────────────────────────────────────
+// ── UFC helper ────────────────────────────────────────────────────────────────
 
 async function getUfcResults(date) {
   const yyyymmdd = date.replace(/-/g, '');
@@ -275,13 +593,13 @@ async function getUfcResults(date) {
   } catch(e) { return {}; }
 }
 
-// ── Main handler ─────────────────────────────────────────────────────────────
+// ── Main handler ──────────────────────────────────────────────────────────────
 
 async function handleRequest({ request, env }) {
-  const url     = new URL(request.url);
+  const url       = new URL(request.url);
   const cronKey   = url.searchParams.get('_cron_key');
   const debug     = url.searchParams.has('debug');
-  const debugDate = url.searchParams.get('date'); // optional date override for debug fetches
+  const debugDate = url.searchParams.get('date');
   const lastRun   = url.searchParams.has('last_run');
 
   if (lastRun) {
@@ -310,28 +628,73 @@ async function handleRequest({ request, env }) {
   const todayUtc  = new Date().toISOString().slice(0, 10);
   const staleDate = new Date(Date.now() - STALE_DAYS * 86400000).toISOString().slice(0, 10);
 
-  // ?debug&date=YYYY-MM-DD — fetch external API data for a specific date without needing pending legs
   if (debug && debugDate && /^\d{4}-\d{2}-\d{2}$/.test(debugDate)) {
+    const yyyymmdd = debugDate.replace(/-/g, '');
+    let espnStatus = null, espnEventCount = 0, espnFinalCount = 0, espnError = null;
+    try {
+      const probe = await fetch(`${ESPN_WNBA}/scoreboard?dates=${yyyymmdd}`, {
+        headers: ESPN_HEADERS, signal: AbortSignal.timeout(8000),
+      });
+      espnStatus = probe.status;
+      if (probe.ok) {
+        const d = await probe.json();
+        espnEventCount = (d.events || []).length;
+        espnFinalCount = (d.events || []).filter(e => {
+          const st = e.competitions?.[0]?.status?.type;
+          return st?.completed || (st?.name || '').toUpperCase().includes('FINAL');
+        }).length;
+      }
+    } catch(e) { espnError = e.message; }
+
+    const proxyKey = env.VPS_DK_KEY || '';
+    let vpsStatus = null, vpsEventCount = 0, vpsError = null, vpsBody = null;
+    try {
+      const vpsProbe = await fetch(
+        `${VPS_HOST}/espn-wnba/scoreboard?dates=${yyyymmdd}&key=${encodeURIComponent(proxyKey)}`,
+        { signal: AbortSignal.timeout(10000) }
+      );
+      vpsStatus = vpsProbe.status;
+      if (vpsProbe.ok) {
+        const vd = await vpsProbe.json();
+        vpsEventCount = (vd.events || []).length;
+      } else {
+        vpsBody = await vpsProbe.text().catch(() => null);
+      }
+    } catch(e) { vpsError = e.message; }
+
     const [mlbGames, wnbaGames, nflGames, ufcResults, wnbaStats] = await Promise.all([
       getMlbFinalGames(debugDate),
-      getEspnFinalGames(ESPN_WNBA, debugDate),
-      getEspnFinalGames(ESPN_NFL,  debugDate),
+      getWnbaFinalGames(debugDate, proxyKey),
+      getEspnFinalGames(ESPN_NFL, debugDate),
       getUfcResults(debugDate),
-      getWnbaPlayerStats(debugDate),
+      getWnbaPlayerStats(debugDate, proxyKey),
     ]);
     const mlbStats = {};
+    const mlbLinescore1 = {};
     await Promise.all(mlbGames.map(async g => {
-      const bs = await getMlbBoxscore(g.gamePk).catch(() => null);
+      const [bs, ls] = await Promise.all([
+        getMlbBoxscore(g.gamePk).catch(() => null),
+        getMlbLinescore(g.gamePk).catch(() => null),
+      ]);
       if (bs) Object.assign(mlbStats, extractMlbPlayerStats(bs));
+      if (ls) mlbLinescore1[g.gamePk] = ls;
     }));
     return new Response(JSON.stringify({
       debugDate,
+      espnWnbaProbe: { status: espnStatus, totalEvents: espnEventCount, finalEvents: espnFinalCount, error: espnError },
+      vpsProbe: { host: VPS_HOST, status: vpsStatus, events: vpsEventCount, error: vpsError, body: vpsBody, keyLength: proxyKey.length },
       mlbGames:    mlbGames.map(g => `${g.awayName} ${g.awayScore} @ ${g.homeName} ${g.homeScore}`),
       wnbaGames:   wnbaGames.map(g => `${g.awayName} ${g.awayScore} @ ${g.homeName} ${g.homeScore}`),
       nflGames:    nflGames.map(g => `${g.awayName} ${g.awayScore} @ ${g.homeName} ${g.homeScore}`),
       ufcFights:   Object.entries(ufcResults).map(([n, r]) => `${n}: ${JSON.stringify(r)}`),
       wnbaPlayers: Object.keys(wnbaStats),
-      mlbPlayers:  Object.keys(mlbStats),
+      mlbPlayers:  Object.keys(mlbStats).length + ' players',
+      mlbLinescore1: Object.fromEntries(Object.entries(mlbLinescore1).map(([pk, v]) => [
+        mlbGames.find(g => String(g.gamePk) === String(pk))
+          ? `${mlbGames.find(g => String(g.gamePk) === String(pk)).awayName} @ ${mlbGames.find(g => String(g.gamePk) === String(pk)).homeName}`
+          : pk,
+        v,
+      ])),
     }, null, 2), { headers: { 'Content-Type': 'application/json' } });
   }
 
@@ -347,14 +710,15 @@ async function handleRequest({ request, env }) {
 
   // 1. Load active parlays
   const { results: parlays } = await env.DB.prepare(
-    "SELECT id, user_id, payout_rax, rs_username FROM parlays WHERE status='active'"
+    "SELECT id, user_id, payout_rax, stake_rax, rs_username FROM parlays WHERE status='active'"
   ).all();
   if (!parlays.length) return cacheAndReturn({ settled: 0, reason: 'no_active_parlays' });
 
-  // 2. Load all pending legs for active parlays (today or earlier)
+  // 2. Load all pending legs for active parlays — include label + event_name for 1inn resolve
   const { results: allLegs } = await env.DB.prepare(
     "SELECT pl.id, pl.parlay_id, pl.player_name, pl.market_id, pl.threshold, " +
-    "pl.direction, pl.game_date, pl.market_type, pl.status, pl.sport " +
+    "pl.direction, pl.game_date, pl.market_type, pl.status, pl.sport, " +
+    "pl.label, pl.event_name " +
     "FROM parlay_legs pl " +
     "JOIN parlays p ON p.id = pl.parlay_id " +
     "WHERE p.status = 'active' AND pl.status = 'pending'"
@@ -364,48 +728,50 @@ async function handleRequest({ request, env }) {
   const eligibleLegs = allLegs.filter(l => l.game_date <= todayUtc);
   if (!eligibleLegs.length) return cacheAndReturn({ settled: 0, reason: 'all_games_future', todayUtc });
 
-  // Helper: determine effective sport for a leg.
-  // Market type wins for MLB-specific types (catches legs where parlayActiveSport was wrong).
   function legSportOf(leg) {
-    const s = leg.sport || '';
+    const s   = leg.sport || '';
     const mkt = leg.market_type;
-    // MLB-only market types always route to MLB, regardless of stored sport field
-    if ((mkt in MLB_STAT_FIELD) && !WNBA_PROP_TYPES.has(mkt)) return 'mlb';
-    if (s === 'wnba' || s === 'basketball_wnba') return 'wnba';
-    if (s === 'nfl'  || s === 'american_football_nfl') return 'nfl';
-    if (s === 'ufc')  return 'ufc';
-    if (mkt === 'ufc_ml' || mkt === 'ufc_total') return 'ufc';
-    if (WNBA_PROP_TYPES.has(mkt)) return 'wnba';
+    if (mkt.startsWith('1inn_'))                                 return 'mlb';
+    if ((mkt in MLB_STAT_FIELD) && !WNBA_PROP_TYPES.has(mkt))   return 'mlb';
+    if (s === 'wnba' || s === 'basketball_wnba')                 return 'wnba';
+    if (s === 'nfl'  || s === 'american_football_nfl')           return 'nfl';
+    if (s === 'ufc')                                             return 'ufc';
+    if (mkt === 'ufc_ml' || mkt === 'ufc_total')                 return 'ufc';
+    if (WNBA_PROP_TYPES.has(mkt))                                return 'wnba';
     return 'mlb';
   }
 
-  // Strip trailing team suffix like "(LAD)" or "(NYY)" from stored player names
   function normForLookup(name) {
     return normalizeName(name.replace(/\s*\([A-Z0-9]{2,5}\)\s*$/, ''));
   }
 
-  // 3. Fetch external data for each unique (sport, date) combination in parallel
+  // 3. Fetch external data per (sport, date)
   const uniqueDates = [...new Set(eligibleLegs.map(l => l.game_date))];
 
-  // Per-date maps: date → { homeName, awayName, homeScore, awayScore, ... }[]
-  const mlbGamesMap  = {}; // MLB score data
-  const mlbStatsMap  = {}; // MLB player stats
-  const wnbaGamesMap = {}; // WNBA score data
-  const wnbaStatsMap = {}; // WNBA player stats
-  const nflGamesMap  = {}; // NFL score data
-  const ufcMap       = {}; // UFC fight results
+  const mlbGamesMap     = {};
+  const mlbStatsMap     = {};
+  const mlbLinescore1Map= {}; // date → { gamePk → { away:{runs,hits}, home:{runs,hits} } }
+  const mlbPbpMap       = {}; // date → { gamePk → { top:{walks,ks,hrs,batters,pitches}, bottom:{...} } }
+  const wnbaGamesMap    = {};
+  const wnbaStatsMap    = {};
+  const nflGamesMap     = {};
+  const ufcMap          = {};
 
-  const hasUfcOnDate = date => eligibleLegs.some(l => l.game_date === date && legSportOf(l) === 'ufc');
-  const hasMlbOnDate = date => eligibleLegs.some(l => l.game_date === date && legSportOf(l) === 'mlb');
-  const hasWnbaOnDate = date => eligibleLegs.some(l => l.game_date === date && legSportOf(l) === 'wnba');
-  const hasNflOnDate  = date => eligibleLegs.some(l => l.game_date === date && legSportOf(l) === 'nfl');
+  const hasMlbOnDate    = date => eligibleLegs.some(l => l.game_date === date && legSportOf(l) === 'mlb');
+  const hasWnbaOnDate   = date => eligibleLegs.some(l => l.game_date === date && legSportOf(l) === 'wnba');
+  const hasNflOnDate    = date => eligibleLegs.some(l => l.game_date === date && legSportOf(l) === 'nfl');
+  const hasUfcOnDate    = date => eligibleLegs.some(l => l.game_date === date && legSportOf(l) === 'ufc');
+  const has1innOnDate   = date => eligibleLegs.some(l => l.game_date === date && l.market_type.startsWith('1inn_'));
+  const has1innPbpOnDate= date => eligibleLegs.some(l => l.game_date === date && INN1_PBP_MKTS.has(l.market_type));
+
+  const proxyKey = env.VPS_DK_KEY || '';
 
   await Promise.all(uniqueDates.map(async date => {
     const [mlbGames, wnbaGames, nflGames, ufcResults] = await Promise.all([
-      hasMlbOnDate(date)  ? getMlbFinalGames(date)                      : Promise.resolve([]),
-      hasWnbaOnDate(date) ? getEspnFinalGames(ESPN_WNBA, date)           : Promise.resolve([]),
-      hasNflOnDate(date)  ? getEspnFinalGames(ESPN_NFL,  date)           : Promise.resolve([]),
-      hasUfcOnDate(date)  ? getUfcResults(date)                          : Promise.resolve({}),
+      hasMlbOnDate(date)  ? getMlbFinalGames(date)             : Promise.resolve([]),
+      hasWnbaOnDate(date) ? getWnbaFinalGames(date, proxyKey)  : Promise.resolve([]),
+      hasNflOnDate(date)  ? getEspnFinalGames(ESPN_NFL, date)  : Promise.resolve([]),
+      hasUfcOnDate(date)  ? getUfcResults(date)                : Promise.resolve({}),
     ]);
 
     mlbGamesMap[date]  = mlbGames;
@@ -413,21 +779,33 @@ async function handleRequest({ request, env }) {
     nflGamesMap[date]  = nflGames;
     ufcMap[date]       = ufcResults;
 
-    // MLB player stats — one boxscore per final game
     if (hasMlbOnDate(date) && mlbGames.length) {
-      const allStats = {};
+      const fetch1inn    = has1innOnDate(date);
+      const fetch1innPbp = has1innPbpOnDate(date);
+      const allStats  = {};
+      const linescore1 = {};
+      const pbp1      = {};
       await Promise.all(mlbGames.map(async g => {
-        const bs = await getMlbBoxscore(g.gamePk).catch(() => null);
-        if (bs) Object.assign(allStats, extractMlbPlayerStats(bs));
+        const [bs, ls, pbp] = await Promise.all([
+          getMlbBoxscore(g.gamePk).catch(() => null),
+          fetch1inn    ? getMlbLinescore(g.gamePk).catch(() => null)   : Promise.resolve(null),
+          fetch1innPbp ? getMlbPlayByPlay(g.gamePk).catch(() => null)  : Promise.resolve(null),
+        ]);
+        if (bs)  Object.assign(allStats, extractMlbPlayerStats(bs));
+        if (ls)  linescore1[g.gamePk] = ls;
+        if (pbp) pbp1[g.gamePk]       = pbp;
       }));
-      mlbStatsMap[date] = allStats;
+      mlbStatsMap[date]      = allStats;
+      mlbLinescore1Map[date] = linescore1;
+      mlbPbpMap[date]        = pbp1;
     } else {
-      mlbStatsMap[date] = {};
+      mlbStatsMap[date]      = {};
+      mlbLinescore1Map[date] = {};
+      mlbPbpMap[date]        = {};
     }
 
-    // WNBA player stats
     if (hasWnbaOnDate(date)) {
-      wnbaStatsMap[date] = await getWnbaPlayerStats(date);
+      wnbaStatsMap[date] = await getWnbaPlayerStats(date, proxyKey);
     } else {
       wnbaStatsMap[date] = {};
     }
@@ -444,7 +822,14 @@ async function handleRequest({ request, env }) {
         ufcFights: Object.entries(ufcMap[date] || {}).map(([n, r]) => `${n}: ${JSON.stringify(r)}`),
         legs: eligibleLegs.filter(l => l.game_date === date).map(l => {
           const sport = legSportOf(l);
-          const isTeam = l.market_type === 'team_ml' || l.market_type === 'team_runline' || l.market_type === 'team_total';
+          const mkt   = l.market_type;
+          const is1inn = mkt.startsWith('1inn_');
+          const isTeam = mkt === 'team_ml' || mkt === 'team_runline' || mkt === 'team_total';
+
+          if (is1inn) {
+            const outcome = resolve1stInnLeg(l, mlbGamesMap[date] || [], mlbLinescore1Map[date] || {}, mlbPbpMap[date] || {});
+            return { player: l.player_name, label: l.label, event_name: l.event_name, sport: 'mlb', type: mkt, outcome: outcome ?? 'not_resolved_yet' };
+          }
           if (isTeam) {
             const games = sport === 'wnba' ? wnbaGamesMap[date] : sport === 'nfl' ? nflGamesMap[date] : mlbGamesMap[date];
             const outcome = games.length ? resolveTeamLeg(l, games) : null;
@@ -453,25 +838,24 @@ async function handleRequest({ request, env }) {
           if (sport === 'ufc') {
             const lastName = normalizeName(l.player_name).split(' ').pop();
             const result   = (ufcMap[date] || {})[lastName];
-            return { player: l.player_name, sport: 'ufc', type: l.market_type, found: !!result, result: result ?? null };
+            return { player: l.player_name, sport: 'ufc', type: mkt, found: !!result, result: result ?? null };
           }
           if (sport === 'wnba') {
-            const stats  = (wnbaStatsMap[date] || {})[normForLookup(l.player_name)];
-            const field  = WNBA_STAT_FIELD[l.market_type];
+            const stats   = (wnbaStatsMap[date] || {})[normForLookup(l.player_name)];
+            const field   = WNBA_STAT_FIELD[mkt];
             const statVal = stats ? stats[field] ?? null : null;
             const outcome = statVal == null ? null
               : (l.direction === 'more' ? statVal > l.threshold : statVal < l.threshold) ? 'won' : 'lost';
-            return { player: l.player_name, sport: 'wnba', market_type: l.market_type, field, statVal, outcome };
+            return { player: l.player_name, sport: 'wnba', market_type: mkt, field, statVal, outcome };
           }
-          // MLB player prop
           const norm    = normForLookup(l.player_name);
           const stats   = (mlbStatsMap[date] || {})[norm] || null;
-          const field   = MLB_STAT_FIELD[l.market_type] || l.market_type;
+          const field   = MLB_STAT_FIELD[mkt] || mkt;
           const rawVal  = stats?.[field];
           const statVal = rawVal != null ? parseFloat(rawVal) : null;
           const outcome = statVal == null ? null
             : (l.direction === 'more' ? statVal > l.threshold : statVal < l.threshold) ? 'won' : 'lost';
-          return { player: l.player_name, sport: 'mlb', normalized: norm, found: !!stats, market_type: l.market_type, field, threshold: l.threshold, direction: l.direction, statVal, outcome };
+          return { player: l.player_name, sport: 'mlb', normalized: norm, found: !!stats, market_type: mkt, field, threshold: l.threshold, direction: l.direction, statVal, outcome };
         }),
       })),
     }, null, 2), { headers: { 'Content-Type': 'application/json' } });
@@ -481,7 +865,18 @@ async function handleRequest({ request, env }) {
   const legOutcomes = {};
   for (const leg of eligibleLegs) {
     const sport  = legSportOf(leg);
-    const isTeam = leg.market_type === 'team_ml' || leg.market_type === 'team_runline' || leg.market_type === 'team_total';
+    const mkt    = leg.market_type;
+    const is1inn = mkt.startsWith('1inn_');
+    const isTeam = mkt === 'team_ml' || mkt === 'team_runline' || mkt === 'team_total';
+
+    if (is1inn) {
+      const games  = mlbGamesMap[leg.game_date]      || [];
+      const ls1Map = mlbLinescore1Map[leg.game_date]  || {};
+      const pbpM   = mlbPbpMap[leg.game_date]         || {};
+      const outcome = games.length ? resolve1stInnLeg(leg, games, ls1Map, pbpM) : null;
+      legOutcomes[leg.id] = (outcome === null && leg.game_date < staleDate) ? 'void' : outcome;
+      continue;
+    }
 
     if (isTeam) {
       const games = sport === 'wnba' ? wnbaGamesMap[leg.game_date] || []
@@ -494,7 +889,7 @@ async function handleRequest({ request, env }) {
 
     if (sport === 'ufc') {
       const ufcResults = ufcMap[leg.game_date] || {};
-      if (leg.market_type === 'ufc_ml') {
+      if (mkt === 'ufc_ml') {
         const lastName = normalizeName(leg.player_name).split(' ').pop();
         const result   = ufcResults[lastName];
         if (!result) { legOutcomes[leg.id] = leg.game_date < staleDate ? 'void' : null; continue; }
@@ -520,7 +915,7 @@ async function handleRequest({ request, env }) {
         legOutcomes[leg.id] = leg.game_date < staleDate ? 'void' : null;
         continue;
       }
-      const field   = WNBA_STAT_FIELD[leg.market_type];
+      const field   = WNBA_STAT_FIELD[mkt];
       if (!field) { legOutcomes[leg.id] = null; continue; }
       const statVal = wnbaStats[field];
       if (statVal == null) { legOutcomes[leg.id] = null; continue; }
@@ -532,10 +927,13 @@ async function handleRequest({ request, env }) {
     // MLB player prop
     const playerStats = (mlbStatsMap[leg.game_date] || {})[normForLookup(leg.player_name)];
     if (!playerStats) {
-      legOutcomes[leg.id] = leg.game_date < staleDate ? 'void' : null;
+      // If the player's specific game is already Final, they were scratched — void immediately
+      const matchup = parse1innMatchup(leg.event_name);
+      const gameFinal = matchup ? !!match1innGame(matchup, mlbGamesMap[leg.game_date] || []) : false;
+      legOutcomes[leg.id] = (gameFinal || leg.game_date < staleDate) ? 'void' : null;
       continue;
     }
-    const statField = MLB_STAT_FIELD[leg.market_type] || leg.market_type;
+    const statField = MLB_STAT_FIELD[mkt] || mkt;
     const rawVal    = playerStats[statField];
     if (rawVal == null) { legOutcomes[leg.id] = null; continue; }
     const statVal = parseFloat(rawVal);
@@ -543,7 +941,7 @@ async function handleRequest({ request, env }) {
       ? 'won' : 'lost';
   }
 
-  // 5. Settle parlays where every eligible leg is resolved
+  // 5. Settle parlays where all eligible legs are resolved
   let totalSettled = 0;
   const report = [];
 
@@ -561,19 +959,19 @@ async function handleRequest({ request, env }) {
     const resolvedLegs = outcomes.filter(o => o.outcome !== null);
     const anyLostEarly = resolvedLegs.some(o => o.outcome === 'lost');
 
-    // Settle LOST immediately if any leg is already lost — no need to wait for remaining legs
     if (stillWaiting.length && !anyLostEarly) {
       report.push({ parlayId: parlay.id, status: 'waiting', waiting: stillWaiting.map(o => o.player) });
       continue;
     }
 
-    const activeLeg   = outcomes.filter(o => o.outcome !== 'void' && o.outcome !== null);
-    const anyLost     = activeLeg.some(o => o.outcome === 'lost');
-    const allVoid     = resolvedLegs.length > 0 && resolvedLegs.every(o => o.outcome === 'void');
-    const parlayResult = allVoid ? 'voided' : anyLost ? 'lost' : 'won';
+    const activeLeg    = outcomes.filter(o => o.outcome !== 'void' && o.outcome !== null);
+    const anyLost      = activeLeg.some(o => o.outcome === 'lost');
+    const anyVoid      = resolvedLegs.some(o => o.outcome === 'void');
+    // Any scratched leg voids the entire parlay and triggers a full stake refund
+    const parlayResult = anyVoid ? 'voided' : anyLost ? 'lost' : 'won';
 
     for (const o of outcomes) {
-      if (o.outcome === null) continue; // leave pending legs untouched if settling early-lost
+      if (o.outcome === null) continue;
       await env.DB.prepare("UPDATE parlay_legs SET status=?, settled_at=? WHERE id=?")
         .bind(o.outcome, now, o.legId).run();
     }
@@ -581,7 +979,13 @@ async function handleRequest({ request, env }) {
     if (parlayResult === 'lost') {
       await env.DB.prepare("UPDATE parlays SET status='lost', settled_at=? WHERE id=?").bind(now, parlay.id).run();
     } else if (parlayResult === 'voided') {
-      await env.DB.prepare("UPDATE parlays SET status='voided', settled_at=? WHERE id=?").bind(now, parlay.id).run();
+      // Refund full stake back to the user via payout_queue
+      await env.DB.batch([
+        env.DB.prepare("UPDATE parlays SET status='voided', settled_at=? WHERE id=?").bind(now, parlay.id),
+        env.DB.prepare(
+          'INSERT OR IGNORE INTO payout_queue (parlay_id, user_id, rs_username, payout_rax, offer_amount, created_at) VALUES (?,?,?,?,?,?)'
+        ).bind(parlay.id, parlay.user_id, parlay.rs_username, parlay.stake_rax, roundOfferAmount(parlay.stake_rax), now),
+      ]);
     } else {
       await env.DB.batch([
         env.DB.prepare("UPDATE parlays SET status='won', settled_at=? WHERE id=?").bind(now, parlay.id),
