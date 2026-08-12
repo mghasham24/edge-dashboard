@@ -3,7 +3,7 @@
 // Processes pending payout_queue entries — called every 60s by alert-cron.
 //
 // Flow per entry:
-//   1. Find winner's cheapest unowned RS card (MLB 2026 → NBA 2025-26 → NHL 2025-26)
+//   1. Find winner's cheapest unowned RS card (MLB 2026 → NBA 2026 → NHL 2026 → NBA 2025 → NHL 2025)
 //   2. Solve Cloudflare Turnstile via CapSolver (~3-7s)
 //   3. POST /cardmarketplaceoffers — @edgebot offers payout_rax on the winner's card
 //   4. Winner receives offer_amount × 0.9 in their RS balance when they accept
@@ -19,9 +19,11 @@ const CAPSOLVER_SITEKEY = '0x4AAAAAADHHMQ4l_2uyXqiu';
 // Sports/seasons tried in order when searching for a winner's unowned card.
 // Ratingasc = cheapest (lowest FMV) card first — safest to buy as a payout vehicle.
 const CARD_TARGETS = [
-  ['mlb', '2026',    'play'],
-  ['nba', '2025-26', 'play'],
-  ['nhl', '2025-26', 'play'],
+  ['mlb', '2026', 'play'],
+  ['nba', '2026', 'play'],
+  ['nhl', '2026', 'play'],
+  ['nba', '2025', 'play'],
+  ['nhl', '2025', 'play'],
 ];
 
 function buildHeaders(authInfo, sessionToken) {
@@ -75,8 +77,11 @@ async function solveTurnstile(capsolverKey) {
   throw new Error('CapSolver timeout — no result after 15s');
 }
 
-async function findUnownedCard(rsUserId, authInfo, sessionToken) {
+// Returns up to `limit` candidate card IDs from the winner's unowned cards, cheapest first.
+async function findUnownedCards(rsUserId, authInfo, sessionToken, limit = 5) {
+  const candidates = [];
   for (const [sport, season, entity] of CARD_TARGETS) {
+    if (candidates.length >= limit) break;
     try {
       const url =
         `https://web.realapp.com/collectingcards/${sport}/season/${season}/entity/${entity}` +
@@ -88,13 +93,14 @@ async function findUnownedCard(rsUserId, authInfo, sessionToken) {
       if (!res.ok) continue;
       const data  = await res.json();
       const cards = Array.isArray(data) ? data : (data.cards || data.items || []);
-      if (cards.length > 0) {
-        const card = cards[0];
-        return card.id ?? card.cardId ?? null;
+      for (const card of cards) {
+        const id = card.id ?? card.cardId ?? null;
+        if (id) candidates.push(id);
+        if (candidates.length >= limit) break;
       }
     } catch { continue; }
   }
-  return null;
+  return candidates;
 }
 
 async function postOffer(cardId, offerAmount, turnstileToken, authInfo, sessionToken) {
@@ -167,52 +173,77 @@ export async function onRequestPost({ request, env }) {
       continue;
     }
 
-    // Step 1 — find cheapest unowned card in winner's RS portfolio
-    let cardId = null;
-    try { cardId = await findUnownedCard(entry.rs_user_id, authInfo, sessionToken); }
-    catch (e) { cardId = null; }
+    // Step 1 — find up to 5 cheapest unowned cards in winner's RS portfolio
+    let candidates = [];
+    try { candidates = await findUnownedCards(entry.rs_user_id, authInfo, sessionToken); }
+    catch (e) { candidates = []; }
 
-    if (!cardId) {
+    if (!candidates.length) {
       await env.DB.prepare(
         'UPDATE payout_queue SET notes=? WHERE id=?'
-      ).bind('No unowned cards found across MLB/NBA/NHL — will retry or needs manual payout', entry.id).run();
+      ).bind('No unowned cards found across MLB/NBA/NHL — will retry next run', entry.id).run();
       results.push({ parlayId: entry.parlay_id, result: 'no_card' });
       continue; // stays pending; retried next cron run
     }
 
-    // Step 2 — solve Turnstile
-    let turnstileToken;
-    try { turnstileToken = await solveTurnstile(capsolverKey); }
-    catch (e) {
+    // Step 2+3 — try each candidate card until one goes through.
+    // Each attempt needs a fresh Turnstile token since they are single-use.
+    // "Listed in marketplace" → skip to next card. Any other error → stop and mark failed.
+    let entrySent    = false;
+    let lastError    = null;
+    let allListed    = true;
+
+    for (const cardId of candidates) {
+      let turnstileToken;
+      try { turnstileToken = await solveTurnstile(capsolverKey); }
+      catch (e) {
+        // Turnstile failure is global — no point trying more cards this run
+        await env.DB.prepare(
+          'UPDATE payout_queue SET notes=? WHERE id=?'
+        ).bind('Turnstile solve failed: ' + e.message, entry.id).run();
+        results.push({ parlayId: entry.parlay_id, result: 'turnstile_failed', error: e.message });
+        lastError = null; // signal: already handled
+        break;
+      }
+
+      let rsOfferId;
+      try {
+        rsOfferId = await postOffer(cardId, entry.offer_amount, turnstileToken, authInfo, sessionToken);
+      } catch (e) {
+        lastError = e.message;
+        const isListed = e.message.toLowerCase().includes('listed in the marketplace');
+        if (isListed) continue; // try next candidate card
+        // Non-marketplace error — fail this entry, don't burn more Turnstile credits
+        allListed = false;
+        await env.DB.prepare(
+          "UPDATE payout_queue SET status='failed', target_card_id=?, notes=? WHERE id=?"
+        ).bind(cardId, 'RS offer failed: ' + e.message, entry.id).run();
+        results.push({ parlayId: entry.parlay_id, result: 'offer_failed', error: e.message });
+        break;
+      }
+
+      // Success
+      await env.DB.prepare(
+        "UPDATE payout_queue SET status='sent', rs_offer_id=?, target_card_id=?, sent_at=? WHERE id=?"
+      ).bind(rsOfferId, cardId, now, entry.id).run();
+      results.push({ parlayId: entry.parlay_id, result: 'sent', offerId: rsOfferId, cardId });
+      entrySent = true;
+      break;
+    }
+
+    if (!entrySent && lastError !== null && allListed) {
+      // Every candidate card was listed in the marketplace — stay pending, retry next run
       await env.DB.prepare(
         'UPDATE payout_queue SET notes=? WHERE id=?'
-      ).bind('Turnstile solve failed: ' + e.message, entry.id).run();
-      results.push({ parlayId: entry.parlay_id, result: 'turnstile_failed', error: e.message });
-      continue;
+      ).bind('All candidate cards listed in marketplace — retrying next run', entry.id).run();
+      results.push({ parlayId: entry.parlay_id, result: 'all_listed' });
     }
-
-    // Step 3 — post offer on the winner's card
-    let rsOfferId;
-    try { rsOfferId = await postOffer(cardId, entry.offer_amount, turnstileToken, authInfo, sessionToken); }
-    catch (e) {
-      await env.DB.prepare(
-        "UPDATE payout_queue SET status='failed', target_card_id=?, notes=? WHERE id=?"
-      ).bind(cardId, 'RS offer failed: ' + e.message, entry.id).run();
-      results.push({ parlayId: entry.parlay_id, result: 'offer_failed', error: e.message });
-      continue;
-    }
-
-    // Mark sent
-    await env.DB.prepare(
-      "UPDATE payout_queue SET status='sent', rs_offer_id=?, target_card_id=?, sent_at=? WHERE id=?"
-    ).bind(rsOfferId, cardId, now, entry.id).run();
-
-    results.push({ parlayId: entry.parlay_id, result: 'sent', offerId: rsOfferId, cardId });
   }
 
-  const sent   = results.filter(r => r.result === 'sent').length;
-  const noCard = results.filter(r => r.result === 'no_card').length;
-  const failed = results.filter(r => !['sent', 'no_card'].includes(r.result)).length;
+  const sent      = results.filter(r => r.result === 'sent').length;
+  const noCard    = results.filter(r => r.result === 'no_card').length;
+  const allListed = results.filter(r => r.result === 'all_listed').length;
+  const failed    = results.filter(r => !['sent', 'no_card', 'all_listed'].includes(r.result)).length;
 
-  return ok({ processed: queue.length, sent, noCard, failed, results });
+  return ok({ processed: queue.length, sent, noCard, allListed, failed, results });
 }
