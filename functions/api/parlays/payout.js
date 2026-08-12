@@ -211,8 +211,9 @@ export async function onRequestPost({ request, env }) {
         rsOfferId = await postOffer(cardId, entry.offer_amount, turnstileToken, authInfo, sessionToken);
       } catch (e) {
         lastError = e.message;
-        const isListed = e.message.toLowerCase().includes('listed in the marketplace');
-        if (isListed) continue; // try next candidate card
+        const isSkippable = e.message.toLowerCase().includes('listed in the marketplace')
+                         || e.message.toLowerCase().includes('open offer on this card');
+        if (isSkippable) continue; // try next candidate card
         // Non-marketplace error — fail this entry, don't burn more Turnstile credits
         allListed = false;
         await env.DB.prepare(
