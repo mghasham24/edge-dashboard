@@ -193,11 +193,14 @@ export async function onRequestPost({ request, env }) {
     // RS clears counterAmount after acceptance, leaving only the original offer amount.
     // Don't gate on stakeRax here — if RS says accepted, the deal is settled on their side.
     if (alreadyAccepted) {
+      // RS clears counterAmount after acceptance — use stakeRax as floor since edgebot
+      // always counter-offers to exactly stakeRax before the user can accept.
       const effectiveAmount = Math.max(
         offer.counterAmount ?? 0,
         offer.amount       ?? 0,
         offer.offerAmount  ?? 0,
-      ) || match.stakeRax;
+        match.stakeRax,
+      );
       await activateParlay(match.parlayId, cardId, offerId, effectiveAmount);
       accepted++;
       continue;
