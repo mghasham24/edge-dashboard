@@ -18,6 +18,8 @@ const RS_DEVICE_UUID = '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e';
 // Season format: sync-cards.js uses plain years (2025, 2024) — NOT '2025-26' style.
 const CARD_SPORTS = [
   { sport: 'mlb', season: '2026' },
+  { sport: 'nba', season: '2026' },
+  { sport: 'nhl', season: '2026' },
   { sport: 'mlb', season: '2025' },
   { sport: 'mlb', season: '2024' },
   { sport: 'nba', season: '2025' },
@@ -46,13 +48,15 @@ function buildHeaders(authInfo, sessionToken) {
   };
 }
 
+// RS collectingcards URL takes the RS user ID in the path, same as sync-cards.js.
+const EDGEBOT_USER = 'V3yGgkkJ';
 const PAGE_SIZE = 10;
 
-async function fetchCardPage(sport, season, edgebotToken, offset, hdrs) {
+async function fetchCardPage(sport, season, offset, hdrs) {
   try {
     const url =
       `https://web.realapp.com/collectingcards/${sport}/season/${season}/entity/play` +
-      `/user/${edgebotToken}/cards?includeRecommendations=true&rarity=all&view=rating&offset=${offset}`;
+      `/user/${EDGEBOT_USER}/cards?includeRecommendations=true&rarity=all&view=rating&offset=${offset}`;
     const res = await fetch(url, { headers: hdrs, signal: AbortSignal.timeout(12000) });
     if (!res.ok) return { ids: [], done: true, httpStatus: res.status };
     const data  = await res.json();
@@ -66,7 +70,7 @@ async function fetchCardPage(sport, season, edgebotToken, offset, hdrs) {
 // Fetch all cards edgebot owns across all configured sports.
 // Returns { owned: Set<number>, sportStats: Array } for both normal and debug use.
 // NOTE: RS returns cardCount:0 always, so we paginate until we get a partial page.
-async function fetchEdgebotOwnedCardIds(edgebotToken, authInfo, sessionToken) {
+async function fetchEdgebotOwnedCardIds(authInfo, sessionToken) {
   const owned      = new Set();
   const sportStats = [];
   const hdrs       = buildHeaders(authInfo, sessionToken);
@@ -78,7 +82,7 @@ async function fetchEdgebotOwnedCardIds(edgebotToken, authInfo, sessionToken) {
     let lastStatus;
 
     while (true) {
-      const page = await fetchCardPage(sport, season, edgebotToken, offset, hdrs);
+      const page = await fetchCardPage(sport, season, offset, hdrs);
       lastStatus = page.httpStatus;
       for (const id of page.ids) owned.add(id);
       totalFound += page.ids.length;
@@ -111,10 +115,15 @@ async function handleRequest({ request, env }) {
   const sessionToken = env.EDGEBOT_SESSION_TOKEN || '';
   if (!authInfo) return err('EDGEBOT_AUTH_INFO not configured', 500);
 
-  // Auth-info format: "token!userId!uuid"
-  // RS collectingcards URL takes the TOKEN (first segment) as the "user" path param.
-  const edgebotToken = authInfo.split('!')[0] || null;
-  if (!edgebotToken) return err('Could not parse RS token from EDGEBOT_AUTH_INFO', 500);
+  // 0. Free cards assigned to parlays that have reached a terminal state.
+  try {
+    await env.DB.prepare(
+      "UPDATE deposit_cards SET assigned_to_parlay_id = NULL, assigned_at = NULL " +
+      "WHERE assigned_to_parlay_id IN (" +
+      "  SELECT id FROM parlays WHERE status IN ('won','lost','void','voided','expired')" +
+      ")"
+    ).run();
+  } catch (_) { /* non-fatal — continue to stamp verified_at */ }
 
   // 1. Load all pool cards (assigned AND unassigned — a sold card could be assigned to an
   //    active parlay that was already deposited, so only remove truly unassigned ghost cards)
@@ -125,7 +134,7 @@ async function handleRequest({ request, env }) {
   if (!poolRows.length) return ok({ poolSize: 0, removed: 0, reason: 'pool_empty' });
 
   // 2. Fetch edgebot's actual RS card inventory
-  const { owned, sportStats } = await fetchEdgebotOwnedCardIds(edgebotToken, authInfo, sessionToken);
+  const { owned, sportStats } = await fetchEdgebotOwnedCardIds(authInfo, sessionToken);
 
   if (debug) {
     return new Response(JSON.stringify({
@@ -144,27 +153,52 @@ async function handleRequest({ request, env }) {
     return ok({ poolSize: poolRows.length, removed: 0, reason: 'rs_returned_empty_may_be_auth_error', sportStats });
   }
 
-  // 3. Find ghost cards: in pool but not in edgebot's RS inventory,
-  //    AND not currently assigned to an active pending-deposit parlay.
-  //    (Assigned cards stay until the parlay expires/completes normally.)
-  const ghosts = poolRows.filter(r =>
-    !owned.has(r.card_id) && r.assigned_to_parlay_id == null
-  );
+  // 3a. Stamp verified_at on every card edgebot still owns (used by place.js to gate assignment).
+  const now = Math.floor(Date.now() / 1000);
+  const ownedPoolIds = poolRows.filter(r => owned.has(r.card_id)).map(r => r.card_id);
+  if (ownedPoolIds.length) {
+    await env.DB.batch(
+      ownedPoolIds.map(id =>
+        env.DB.prepare('UPDATE deposit_cards SET verified_at=? WHERE card_id=?').bind(now, id)
+      )
+    );
+  }
 
-  if (!ghosts.length) return ok({ poolSize: poolRows.length, removed: 0, owned: owned.size });
+  // 3b. Find ghost cards: in pool but not in edgebot's RS inventory.
+  //    Split into two groups:
+  //    a) Unassigned ghosts — safe to delete immediately.
+  //    b) Assigned ghosts — edgebot sold the card after it was reserved for a parlay.
+  //       Void the parlay so the user can retry, then delete the card.
+  const unassignedGhosts = poolRows.filter(r => !owned.has(r.card_id) && r.assigned_to_parlay_id == null);
+  const assignedGhosts   = poolRows.filter(r => !owned.has(r.card_id) && r.assigned_to_parlay_id != null);
 
-  // 4. Remove ghost cards from the pool
-  await Promise.all(
-    ghosts.map(r =>
-      env.DB.prepare('DELETE FROM deposit_cards WHERE card_id=?').bind(r.card_id).run()
-    )
-  );
+  const removed = unassignedGhosts.length + assignedGhosts.length;
+  if (!removed) return ok({ poolSize: poolRows.length, removed: 0, owned: owned.size });
+
+  // 4a. Delete unassigned ghost cards
+  await Promise.all(unassignedGhosts.map(r =>
+    env.DB.prepare('DELETE FROM deposit_cards WHERE card_id=?').bind(r.card_id).run()
+  ));
+
+  // 4b. Void parlays where edgebot no longer owns the assigned card, then delete the card.
+  //     Only voids pending_deposit parlays — won/lost/active parlays already completed their deposit.
+  if (assignedGhosts.length) {
+    await Promise.all(assignedGhosts.map(r =>
+      env.DB.batch([
+        env.DB.prepare(
+          "UPDATE parlays SET status='void', admin_notes='deposit_card_sold' WHERE id=? AND status='pending_deposit'"
+        ).bind(r.assigned_to_parlay_id),
+        env.DB.prepare('DELETE FROM deposit_cards WHERE card_id=?').bind(r.card_id),
+      ])
+    ));
+  }
 
   return ok({
-    poolSize: poolRows.length,
-    removed:  ghosts.length,
-    removedIds: ghosts.map(r => r.card_id),
-    owned:    owned.size,
+    poolSize:        poolRows.length,
+    removed,
+    unassignedGhosts: unassignedGhosts.map(r => r.card_id),
+    assignedGhosts:   assignedGhosts.map(r => ({ card_id: r.card_id, parlay_id: r.assigned_to_parlay_id })),
+    owned:           owned.size,
   });
 }
 

@@ -151,10 +151,13 @@ export async function onRequestPost({ request, env }) {
     }
   }
 
-  // Grab available deposit card
+  // Prefer cards recently verified by card-reconcile; fall back to any unassigned card
+  // when card-reconcile hasn't run yet (verified_at IS NULL).
+  const VERIFY_MAX_AGE = 8 * 60;
   const cardRow = await env.DB.prepare(
-    'SELECT card_id FROM deposit_cards WHERE assigned_to_parlay_id IS NULL LIMIT 1'
-  ).first();
+    'SELECT card_id FROM deposit_cards WHERE assigned_to_parlay_id IS NULL ' +
+    'ORDER BY CASE WHEN verified_at > ? THEN 0 ELSE 1 END, verified_at DESC LIMIT 1'
+  ).bind(now - VERIFY_MAX_AGE).first();
   if (!cardRow) return err('No deposit cards available — contact support', 503);
 
   const cardId    = cardRow.card_id;
@@ -186,8 +189,9 @@ export async function onRequestPost({ request, env }) {
     // Race: someone else grabbed this card — clean up and try once more
     await env.DB.prepare('DELETE FROM parlays WHERE id = ?').bind(parlayId).run();
     const retry = await env.DB.prepare(
-      'SELECT card_id FROM deposit_cards WHERE assigned_to_parlay_id IS NULL LIMIT 1'
-    ).first();
+      'SELECT card_id FROM deposit_cards WHERE assigned_to_parlay_id IS NULL ' +
+      'ORDER BY CASE WHEN verified_at > ? THEN 0 ELSE 1 END, verified_at DESC LIMIT 1'
+    ).bind(now - VERIFY_MAX_AGE).first();
     if (!retry) return err('No deposit cards available — try again shortly', 503);
 
     // Re-insert with the new card

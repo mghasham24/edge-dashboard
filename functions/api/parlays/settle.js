@@ -41,13 +41,16 @@ export async function onRequestPost({ request, env }) {
   }
 
   if (result === 'lost') {
-    await env.DB.prepare(
-      "UPDATE parlays SET status='lost', settled_at=? WHERE id=?"
-    ).bind(now, parlayId).run();
+    await env.DB.batch([
+      env.DB.prepare("UPDATE parlays SET status='lost', settled_at=? WHERE id=?").bind(now, parlayId),
+      env.DB.prepare(
+        "UPDATE deposit_cards SET assigned_to_parlay_id=NULL, assigned_at=NULL WHERE assigned_to_parlay_id=?"
+      ).bind(parlayId),
+    ]);
     return ok({ parlayId, result: 'lost' });
   }
 
-  // Won — update parlay + enqueue payout atomically
+  // Won — update parlay + enqueue payout + free card atomically
   await env.DB.batch([
     env.DB.prepare(
       "UPDATE parlays SET status='won', settled_at=? WHERE id=?"
@@ -57,6 +60,9 @@ export async function onRequestPost({ request, env }) {
       '(parlay_id, user_id, rs_username, payout_rax, offer_amount, created_at) ' +
       'VALUES (?, ?, ?, ?, ?, ?)'
     ).bind(parlayId, parlay.user_id, parlay.rs_username, parlay.payout_rax, parlay.payout_rax, now),
+    env.DB.prepare(
+      "UPDATE deposit_cards SET assigned_to_parlay_id=NULL, assigned_at=NULL WHERE assigned_to_parlay_id=?"
+    ).bind(parlayId),
   ]);
 
   return ok({ parlayId, result: 'won', payoutRax: parlay.payout_rax });
