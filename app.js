@@ -6199,8 +6199,12 @@
         renderParlayPanel();
     }
 
-    function loadParlaySlips() {
-        fetch('/api/parlays/my-slips', { credentials: 'include' })
+    function loadParlaySlips(page) {
+        if (page === undefined) page = parlaySlipsPage;
+        parlaySlipsPage = page;
+        var container = document.getElementById('parlay-slips-view');
+        if (container) container.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted);font-size:13px">Loading…</div>';
+        fetch('/api/parlays/my-slips?page=' + page, { credentials: 'include' })
             .then(function(r) {
                 if (!r.ok) throw new Error('HTTP ' + r.status);
                 return r.json();
@@ -6208,6 +6212,7 @@
             .then(function(d) {
                 if (!d.ok) throw new Error('API error: ' + (d.error || 'unknown'));
                 settledLegStats = {};
+                parlaySlipsTotal = d.total || 0;
                 parlayRenderSlips(d.slips);
                 fetchSettledLegStats();
             })
@@ -6217,6 +6222,14 @@
                 if (container) container.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted);font-size:13px">Failed to load slips (' + (e.message || 'network error') + ') — try again.</div>';
             });
     }
+
+    window.parlaySlipsGoPage = function(page) {
+        var totalPages = Math.ceil(parlaySlipsTotal / 20);
+        if (page < 0 || page >= totalPages) return;
+        loadParlaySlips(page);
+        var container = document.getElementById('parlay-slips-view');
+        if (container) container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
 
     var ALL_SLIPS_DATA   = [];
     var allSlipsFilter   = 'all';
@@ -6334,6 +6347,8 @@
     var SLIP_HEADSHOT_CACHE = {}; // playerName → headshot URL or 'none'
     var liveSlipInterval = null;
     var settledLegStats = {}; // parlayId-legIndex → fetched final stat value
+    var parlaySlipsPage  = 0;
+    var parlaySlipsTotal = 0;
 
     function normSlipName(n) {
         return n.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
@@ -7013,12 +7028,28 @@
             container.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted);font-size:13px">Failed to load slips — try again.</div>';
             return;
         }
-        if (!slips.length) {
+        if (!slips.length && parlaySlipsPage === 0) {
             container.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted);font-size:13px">No slips yet. Switch to Build to place your first parlay!</div>';
             return;
         }
         PARLAY_SLIPS = slips;
-        container.innerHTML = slips.map(function(s) { return parlaySlipCard(s, false); }).join('');
+        var totalPages = Math.max(1, Math.ceil(parlaySlipsTotal / 20));
+        var curPage    = parlaySlipsPage;
+        var paginationHtml = '';
+        if (totalPages > 1) {
+            var pages = '';
+            for (var pi = 0; pi < totalPages; pi++) {
+                var active = pi === curPage ? 'style="font-weight:700;text-decoration:underline;cursor:default"' : 'style="cursor:pointer"';
+                pages += '<span ' + active + ' onclick="if(' + pi + '!==' + curPage + ')parlaySlipsGoPage(' + pi + ')">' + (pi + 1) + '</span>';
+            }
+            paginationHtml =
+                '<div style="display:flex;align-items:center;justify-content:center;gap:12px;padding:20px 16px 8px;font-size:13px;color:var(--muted)">' +
+                '<button onclick="parlaySlipsGoPage(' + (curPage - 1) + ')" ' + (curPage === 0 ? 'disabled' : '') + ' style="background:none;border:1px solid var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;color:var(--text)">← Prev</button>' +
+                pages +
+                '<button onclick="parlaySlipsGoPage(' + (curPage + 1) + ')" ' + (curPage >= totalPages - 1 ? 'disabled' : '') + ' style="background:none;border:1px solid var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;color:var(--text)">Next →</button>' +
+                '</div>';
+        }
+        container.innerHTML = slips.map(function(s) { return parlaySlipCard(s, false); }).join('') + paginationHtml;
         // Async: load MLB headshots for any legs that didn't have a stored/live URL
         slips.forEach(function(s) {
             (s.legs || []).forEach(function(leg, li) {
@@ -8041,12 +8072,13 @@
                 (isAdmin ? '<button class="parlay-view-tab' + (parlayView === 'all-slips' ? ' active' : '') + '" onclick="parlaySetView(\'all-slips\')">All Slips</button>' : '') +
             '</div>';
         if (parlayView === 'slips') {
+            parlaySlipsPage = 0;
             panel.innerHTML =
                 viewTabsHtml +
                 '<div class="parlay-slips-view" id="parlay-slips-view">' +
                     '<div style="padding:40px;text-align:center;color:var(--muted);font-size:13px">Loading…</div>' +
                 '</div>';
-            loadParlaySlips();
+            loadParlaySlips(0);
             loadParlayPlayers(); // prefetch player data so headshots resolve in slip cards
             return;
         }
