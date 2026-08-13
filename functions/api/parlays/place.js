@@ -12,6 +12,63 @@ function impliedProb(odds) {
   return Math.abs(odds) / (Math.abs(odds) + 100);
 }
 
+// Only assign cards confirmed owned by edgebot within the last 15 minutes.
+// Reconcile runs every 2 min — this survives ~7 consecutive failures before blocking.
+const VERIFY_MAX_AGE = 15 * 60;
+const EDGEBOT_USER   = 'V3yGgkkJ';
+const RS_DEVICE_UUID = '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e';
+
+// Returns true (edgebot owns it), false (someone else owns it), null (can't verify — trust verified_at).
+async function verifyEdgebotOwns(cardId, authInfo, sessionToken) {
+  try {
+    const res = await fetch(`https://web.realapp.com/collectingcards/${cardId}`, {
+      headers: {
+        'Accept':             'application/json',
+        'real-auth-info':     authInfo,
+        'real-session-token': sessionToken || '',
+        'real-device-uuid':   RS_DEVICE_UUID,
+        'real-device-type':   'desktop_web',
+        'real-version':       '35',
+      },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const uid  = data.card?.userId ?? data.userId ?? null;
+    if (uid === null) return null;
+    return uid === EDGEBOT_USER;
+  } catch { return null; }
+}
+
+// Pick a verified, unassigned card (up to 3 attempts).
+// If a card fails the ownership check it is removed from the pool and the next one is tried.
+// Returns card_id or null when none are available.
+async function pickCard(env, now) {
+  const excluded = [];
+  for (let i = 0; i < 3; i++) {
+    const notIn = excluded.length
+      ? ' AND card_id NOT IN (' + excluded.map(() => '?').join(',') + ')'
+      : '';
+    const row = await env.DB.prepare(
+      'SELECT card_id FROM deposit_cards WHERE assigned_to_parlay_id IS NULL AND freed_at IS NULL AND verified_at > ?' +
+      notIn + ' ORDER BY verified_at DESC LIMIT 1'
+    ).bind(now - VERIFY_MAX_AGE, ...excluded).first();
+    if (!row) break;
+
+    if (env.EDGEBOT_AUTH_INFO) {
+      const owned = await verifyEdgebotOwns(row.card_id, env.EDGEBOT_AUTH_INFO, env.EDGEBOT_SESSION_TOKEN || '');
+      if (owned === false) {
+        // Card confirmed not owned by edgebot — remove ghost from pool and try next
+        await env.DB.prepare('DELETE FROM deposit_cards WHERE card_id=?').bind(row.card_id).run();
+        excluded.push(row.card_id);
+        continue;
+      }
+    }
+    return row.card_id;
+  }
+  return null;
+}
+
 // Unix timestamp for midnight ET today (handles EDT/EST automatically)
 function etTodayStart() {
   const d = new Date();
@@ -93,6 +150,7 @@ export async function onRequestPost({ request, env }) {
       eventId:     leg.eventId    || ('mock_' + leg.playerName.replace(/[^a-z0-9]/gi, '_')),
       eventName:   leg.eventName  || (leg.playerName + ' · ' + leg.marketType),
       gameDate,
+      gameStartMs: startMs > 0 ? startMs : null,
       subcatId:    leg.subcatId   || 0,
       marketType:  leg.marketType,
       marketId:    leg.marketId   || 'mock_market',
@@ -113,6 +171,134 @@ export async function onRequestPost({ request, env }) {
   if (legTeams.length >= normalized.length) {
     const uniqueTeams = new Set(legTeams);
     if (uniqueTeams.size < 2) return err('Picks must be from at least 2 different teams', 400);
+  }
+
+  // Block correlated same-game legs within each market group.
+  const BATTER_MKTS  = new Set(['hits','total_bases','rbis','runs','hrbi','singles','stolen_bases','doubles','walks']);
+  const PITCHER_MKTS = new Set(['pitcher_ks','outs_ou','hits_allowed','er_allowed','bb_allowed','hwer']);
+  // Basketball player props — same player, same game correlate across all stat categories.
+  const BBALL_MKTS   = new Set(['points','assists','rebounds','steals','blocks','threes','turnovers','minutes']);
+
+  function legGroup(mkt) {
+    if (BATTER_MKTS.has(mkt))  return 'batter';
+    if (PITCHER_MKTS.has(mkt)) return 'pitcher';
+    if (BBALL_MKTS.has(mkt))   return 'bball_player';
+    return null; // 1inn handled separately below
+  }
+
+  const groupGameCounts = {};
+  for (const l of normalized) {
+    const group = legGroup(l.marketType);
+    if (!group) continue;
+    const scopeKey = group === 'bball_player'
+      ? (l.playerName || l.eventName || l.eventId)
+      : (l.eventName || l.eventId);
+    const key = group + ':' + scopeKey;
+    groupGameCounts[key] = (groupGameCounts[key] || 0) + 1;
+    if (groupGameCounts[key] > 1) {
+      const label = group === 'batter' ? 'batter' : group === 'pitcher' ? 'pitcher' : 'player';
+      return err('Cannot combine multiple ' + label + ' picks from the same game — picks are correlated.', 400);
+    }
+  }
+
+  // 1st inning props: away team always bats top, home team always bats bottom.
+  // Same-half 1st inning correlation block.
+  // Each half-inning (top = away bats/home pitches, bottom = home bats/away pitches) is a single
+  // shared event — any two markets from the same half of the same game are correlated.
+  // Pitching markets (pitches, batters, Ks) belong to the OPPOSITE half from the pitcher's team:
+  //   away pitcher throws in bottom; home pitcher throws in top.
+  const INN1_PITCHING_MKTS = new Set(['1inn_pitches_ou','1inn_pitches_range','1inn_batters_ou','1inn_ks_exact']);
+  const INN1_GAME_MKTS     = new Set(['1inn_ml','1inn_runs_ou','1inn_walks_ou']); // span both halves — unconstrained
+
+  function get1innHalf(marketType, playerName, eventName) {
+    if (INN1_GAME_MKTS.has(marketType)) return null; // game-level — no same-half restriction
+    if (!eventName || !playerName) return null;
+    const atIdx = eventName.indexOf('@');
+    if (atIdx === -1) return null;
+    const away = eventName.slice(0, atIdx).trim().toLowerCase();
+    const home = eventName.slice(atIdx + 1).trim().toLowerCase();
+    const pn   = playerName.trim().toLowerCase();
+    const hitAway = away === pn || away.startsWith(pn) || pn.startsWith(away);
+    const hitHome = home === pn || home.startsWith(pn) || pn.startsWith(home);
+    if (!hitAway && !hitHome) return null; // unresolvable — be permissive
+    const teamSide = (hitAway && !hitHome) ? 'away' : 'home';
+    // Batting markets: away bats in top, home bats in bottom
+    // Pitching markets: away pitcher throws in bottom, home pitcher throws in top — invert
+    if (INN1_PITCHING_MKTS.has(marketType)) {
+      return teamSide === 'away' ? 'bottom' : 'top';
+    }
+    return teamSide === 'away' ? 'top' : 'bottom';
+  }
+
+  const inn1ByGame = {};
+  for (const l of normalized) {
+    if (!l.marketType.startsWith('1inn_')) continue;
+    const gameKey = l.eventName || l.eventId; // eventName ("PIT @ MIA") is consistent across DK subcats; eventId differs per subcat
+    const half    = get1innHalf(l.marketType, l.playerName, l.eventName);
+    if (!half) continue; // game-level or unresolvable — skip
+    if (!inn1ByGame[gameKey]) inn1ByGame[gameKey] = {};
+    if (inn1ByGame[gameKey][half]) {
+      const label = half === 'top' ? 'top of 1st (away bats / home pitches)' : 'bottom of 1st (home bats / away pitches)';
+      return err('Cannot combine multiple picks from the ' + label + ' — picks are correlated.', 400);
+    }
+    inn1ByGame[gameKey][half] = true;
+  }
+
+  // Cross-timeframe: any 1inn batting market (hits, HR, run yn/ou) correlates with full-game batter
+  // props from the same game — 1st inning stats are a subset of the full-game totals.
+  // Likewise 1inn pitching (ks_exact, batters_ou) correlates with full-game pitcher props.
+  // 1inn ML correlates with full-game team ML (same game).
+  const INN1_BAT_CROSS = new Set(['1inn_hits_ou','1inn_hits_exact','1inn_hr_yn','1inn_run_yn','1inn_runs_exact','1inn_runs_ou']);
+  const INN1_PIT_CROSS = new Set(['1inn_ks_exact','1inn_batters_ou']);
+  const inn1BatEids = new Set();
+  const inn1PitEids = new Set();
+  const inn1MlEids  = new Set();
+  for (const l of normalized) {
+    if (!l.marketType.startsWith('1inn_')) continue;
+    const eid = l.eventName || l.eventId; // eventName is consistent across DK subcats
+    if (!eid) continue;
+    if (INN1_BAT_CROSS.has(l.marketType)) inn1BatEids.add(eid);
+    if (INN1_PIT_CROSS.has(l.marketType)) inn1PitEids.add(eid);
+    if (l.marketType === '1inn_ml')       inn1MlEids.add(eid);
+  }
+  for (const l of normalized) {
+    if (l.marketType.startsWith('1inn_')) continue;
+    const eid = l.eventName || l.eventId;
+    if (!eid) continue;
+    // team_total (full game O/U runs) correlates with 1inn_runs_ou — add alongside BATTER_MKTS
+    if ((BATTER_MKTS.has(l.marketType) || l.marketType === 'team_total') && inn1BatEids.has(eid)) {
+      return err('Cannot combine 1st inning batting markets with full-game batter props from the same game — picks are correlated.', 400);
+    }
+    if (PITCHER_MKTS.has(l.marketType) && inn1PitEids.has(eid)) {
+      return err('Cannot combine 1st inning pitching markets with full-game pitcher props from the same game — picks are correlated.', 400);
+    }
+    if (l.marketType === 'team_ml' && inn1MlEids.has(eid)) {
+      return err('Cannot combine 1st inning ML with full-game moneyline from the same game — picks are correlated.', 400);
+    }
+  }
+
+  // Block same-game ML/RL combos for the same team (correlated) or opposing teams (mutually exclusive).
+  const teamMkts = new Set(['ml', 'rl']);
+  const gameTeamLegs = normalized.filter(l => teamMkts.has(l.marketType) && (l.eventName || l.eventId));
+
+  // Same team: ML + RL from the same game
+  const sameTeamMlRl = {};
+  for (const l of gameTeamLegs) {
+    const key = (l.team || l.playerName || '') + ':' + (l.eventName || l.eventId);
+    sameTeamMlRl[key] = (sameTeamMlRl[key] || 0) + 1;
+    if (sameTeamMlRl[key] > 1) {
+      return err('Cannot combine moneyline and run line for the same team — picks are correlated.', 400);
+    }
+  }
+
+  // Opposing sides: two ML bets from the same game (one must always lose)
+  const mlByGame = {};
+  for (const l of normalized.filter(l => l.marketType === 'ml')) {
+    const gameKey = l.eventName || l.eventId;
+    mlByGame[gameKey] = (mlByGame[gameKey] || 0) + 1;
+    if (mlByGame[gameKey] > 1) {
+      return err('Cannot combine moneylines from the same game — one side must always lose.', 400);
+    }
   }
 
   // Payout math — mirrors parlayCalcPayout() in the frontend exactly.
@@ -180,16 +366,8 @@ export async function onRequestPost({ request, env }) {
     }
   }
 
-  // Only assign cards confirmed owned by edgebot in the last 10 minutes by card-reconcile.
-  // Hard gate — never fall back to unverified cards.
-  const VERIFY_MAX_AGE = 10 * 60;
-  const cardRow = await env.DB.prepare(
-    'SELECT card_id FROM deposit_cards WHERE assigned_to_parlay_id IS NULL AND freed_at IS NULL AND verified_at > ? ' +
-    'ORDER BY verified_at DESC LIMIT 1'
-  ).bind(now - VERIFY_MAX_AGE).first();
-  if (!cardRow) return err('No deposit cards available — contact support', 503);
-
-  const cardId    = cardRow.card_id;
+  const cardId = await pickCard(env, now);
+  if (!cardId) return err('No deposit cards available — contact support', 503);
   const expiresAt = now + 30 * 60;
 
   // Derive parlay-level sport from legs (use most common, or first)
@@ -215,29 +393,31 @@ export async function onRequestPost({ request, env }) {
   ).bind(parlayId, now, cardId).run();
 
   if (lockRes.meta.changes === 0) {
-    // Race: someone else grabbed this card — clean up and try once more
+    // Race: another request grabbed this card between SELECT and UPDATE — try a different one
     await env.DB.prepare('DELETE FROM parlays WHERE id = ?').bind(parlayId).run();
-    const retry = await env.DB.prepare(
-      'SELECT card_id FROM deposit_cards WHERE assigned_to_parlay_id IS NULL AND freed_at IS NULL AND verified_at > ? ' +
-      'ORDER BY verified_at DESC LIMIT 1'
-    ).bind(now - VERIFY_MAX_AGE).first();
-    if (!retry) return err('No deposit cards available — try again shortly', 503);
+    const retryCardId = await pickCard(env, now);
+    if (!retryCardId) return err('No deposit cards available — try again shortly', 503);
 
-    // Re-insert with the new card
     const retry2 = await env.DB.prepare(
       'INSERT INTO parlays (user_id, sport, legs_count, stake_rax, true_prob, payout_rax, ' +
       'deposit_card_id, rs_username, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     ).bind(
       user.id, parlayS, normalized.length, stake,
-      trueProb, payoutRax, retry.card_id, user.rs_username, expiresAt, now
+      trueProb, payoutRax, retryCardId, user.rs_username, expiresAt, now
     ).run();
 
     const newParlayId = retry2.meta.last_row_id;
-    await env.DB.prepare(
-      'UPDATE deposit_cards SET assigned_to_parlay_id = ?, assigned_at = ? WHERE card_id = ?'
-    ).bind(newParlayId, now, retry.card_id).run();
+    const lockRes2 = await env.DB.prepare(
+      'UPDATE deposit_cards SET assigned_to_parlay_id = ?, assigned_at = ? ' +
+      'WHERE card_id = ? AND assigned_to_parlay_id IS NULL'
+    ).bind(newParlayId, now, retryCardId).run();
 
-    return placeLegsAndRespond(env.DB, newParlayId, retry.card_id, normalized, stake, payoutRax, expiresAt, user.rs_username, now);
+    if (lockRes2.meta.changes === 0) {
+      await env.DB.prepare('DELETE FROM parlays WHERE id = ?').bind(newParlayId).run();
+      return err('No deposit cards available — try again shortly', 503);
+    }
+
+    return placeLegsAndRespond(env.DB, newParlayId, retryCardId, normalized, stake, payoutRax, expiresAt, user.rs_username, now);
   }
 
   return placeLegsAndRespond(env.DB, parlayId, cardId, normalized, stake, payoutRax, expiresAt, user.rs_username, now);
@@ -248,13 +428,13 @@ async function placeLegsAndRespond(db, parlayId, cardId, legs, stake, payoutRax,
     db.prepare(
       'INSERT INTO parlay_legs (parlay_id, sport, event_id, event_name, game_date, subcat_id, ' +
       'market_type, market_id, selection_id, player_name, label, threshold, direction, ' +
-      'american_odds, implied_prob, headshot_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      'american_odds, implied_prob, headshot_url, game_start_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     ).bind(
       parlayId, leg.sport,
       leg.eventId, leg.eventName, leg.gameDate, leg.subcatId,
       leg.marketType, leg.marketId, leg.selectionId, leg.playerName,
       leg.label, leg.threshold, leg.direction, leg.americanOdds, leg.impliedProb,
-      leg.headshotUrl
+      leg.headshotUrl, leg.gameStartMs || null
     )
   ));
 

@@ -29,7 +29,7 @@ export async function onRequestGet({ request, env }) {
 
   const { results: legs } = await env.DB.prepare(
     'SELECT pl.id, pl.parlay_id, pl.player_name, pl.label, pl.threshold, pl.direction, ' +
-    'pl.american_odds, pl.status, pl.result_value, pl.market_type, pl.headshot_url, pl.game_date, pl.event_name, pl.sport ' +
+    'pl.american_odds, pl.status, pl.result_value, pl.market_type, pl.headshot_url, pl.game_date, pl.event_name, pl.sport, pl.game_start_ms ' +
     'FROM parlay_legs pl ' +
     'WHERE pl.parlay_id IN (' +
     "  SELECT id FROM parlays WHERE NOT (status='pending_deposit' AND created_at<?) " +

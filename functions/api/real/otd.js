@@ -22,6 +22,13 @@ function buildHeaders(env) {
   };
 }
 
+// RS only accepts plain ending-year integers (e.g. 2026). Convert "2025-26" → "2026" if it slips through.
+function normSeason(s) {
+  const m = String(s || '').match(/^(\d{4})-(\d{2})$/);
+  if (m) return String(parseInt(m[1], 10) + 1);
+  return String(s || '');
+}
+
 function fail(status, msg) {
   return new Response(JSON.stringify({ error: msg }), {
     status, headers: { 'Content-Type': 'application/json' }
@@ -472,75 +479,40 @@ export async function onRequestGet(context) {
     const entityType = url.searchParams.get('entityType') || 'player';
     if (!entityId || !sport || !season || !day) return fail(400, 'Missing params');
 
-    const cacheKey = `otd_perf_url_v4_${entityType}_${sport}_${entityId}_${season}`;
+    const cacheKey = `otd_perf_url_v5_${sport}_${entityId}`;
     let bsList;
-    let triedUrls = [];
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
-      if (cached && (now - cached.fetched_at) < 86400) {
-        bsList = JSON.parse(cached.data);
-      }
+      if (cached && (now - cached.fetched_at) < 3600) bsList = JSON.parse(cached.data);
     } catch(e) {}
 
     if (!bsList) {
-      // Try multiple RS endpoint patterns — stop at first 200
-      // RS API convention: sport often in path, e.g. /players/{id}/sport/{sport}/...
-      const endpointsToTry = [
-        `${RS_BASE}/players/${encodeURIComponent(entityId)}/sport/${encodeURIComponent(sport)}/playerboxscores?season=${encodeURIComponent(season)}`,
-        `${RS_BASE}/players/${encodeURIComponent(entityId)}/sport/${encodeURIComponent(sport)}/playerboxscores`,
-        `${RS_BASE}/players/${encodeURIComponent(entityId)}/playerboxscores?sport=${encodeURIComponent(sport)}&season=${encodeURIComponent(season)}`,
-        `${RS_BASE}/players/${encodeURIComponent(entityId)}/playerboxscores?version=2`,
-        `${RS_BASE}/players/${encodeURIComponent(entityId)}/playerboxscores`,
-        `${RS_BASE}/players/${encodeURIComponent(entityId)}/gamelog?sport=${encodeURIComponent(sport)}&season=${encodeURIComponent(season)}`,
-        `${RS_BASE}/players/${encodeURIComponent(entityId)}/gamelogs?sport=${encodeURIComponent(sport)}&season=${encodeURIComponent(season)}`,
-        `${RS_BASE}/playerboxscores?entityId=${encodeURIComponent(entityId)}&entityType=player&sport=${encodeURIComponent(sport)}&season=${encodeURIComponent(season)}`,
-        `${RS_BASE}/entities/player/${encodeURIComponent(entityId)}/playerboxscores?season=${encodeURIComponent(season)}`,
-        `${RS_BASE}/players/${encodeURIComponent(entityId)}/performances?season=${encodeURIComponent(season)}`,
-      ];
-      for (const rsUrl of endpointsToTry) {
-        try {
-          const res = await fetch(rsUrl, { headers });
-          const shortUrl = rsUrl.replace(RS_BASE, '');
-          triedUrls.push({ url: shortUrl, status: res.status });
-          if (res.ok) {
-            const data = await res.json();
-            bsList = data.playerBoxScores || data.boxScores || data.performances || data.items || (Array.isArray(data) ? data : []);
-            try {
-              await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
-                .bind(cacheKey, JSON.stringify(bsList), now).run();
-            } catch(e) {}
-            break;
-          }
-        } catch(e) {
-          triedUrls.push({ url: rsUrl.replace(RS_BASE, ''), error: e.message });
+      // Confirmed RS endpoint from DevTools: seasonfeed returns playerBoxScores[] with id + day fields
+      const sfUrl = `${RS_BASE}/players/${encodeURIComponent(entityId)}/sport/${encodeURIComponent(sport)}/seasonfeed?limit=20&view=recent&viewFrame=default`;
+      try {
+        const res = await fetch(sfUrl, { headers, signal: AbortSignal.timeout(8000) });
+        if (res.ok) {
+          const data = await res.json();
+          bsList = data.playerBoxScores || [];
+          try {
+            await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at')
+              .bind(cacheKey, JSON.stringify(bsList), now).run();
+          } catch(e) {}
         }
-      }
+      } catch(e) {}
     }
 
-    if (!bsList || bsList.length === 0) {
-      return new Response(JSON.stringify({ ok: false, url: null, debug: { tried: triedUrls, entityId, sport, season, day } }), {
-        headers: { 'Content-Type': 'application/json' }
-      });
+    if (!bsList || !bsList.length) {
+      return new Response(JSON.stringify({ ok: false, url: null }), { headers: { 'Content-Type': 'application/json' } });
     }
 
-    const match = bsList.find(function(b) {
-      const d = b.day || b.date || b.gameDate || b.scheduledAt || b.startTime || '';
-      return d.startsWith(day) || d.replace('T', ' ').startsWith(day);
-    });
-    // Try every plausible field name RS might use for the boxscore entity ID
-    const perfId = match && (
-      match.playerBoxScoreId || match.playerBoxscoreId ||
-      match.boxScoreId       || match.boxscoreId       ||
-      match.id               || match.entityId          ||
-      match.performanceId    || match.gameId            ||
-      match.bsId             || match.recordId
-    );
-    const numPerfId = perfId ? (typeof perfId === 'number' ? perfId : parseInt(perfId, 10)) : null;
+    // Each item: { id: <boxscoreId>, day: "YYYY-MM-DD", ... }
+    const match = bsList.find(b => (b.day || '').startsWith(day));
+    const numPerfId = match ? match.id : null;
     const perfHash = numPerfId ? rsUrlEncode(14, 0, 0, numPerfId) : null;
     return new Response(JSON.stringify({
       ok: true,
       url: perfHash ? 'https://www.realapp.com/' + perfHash : null,
-      debug: { tried: triedUrls, bsCount: bsList.length, day, perfId, sampleKeys: match ? Object.keys(match) : (bsList[0] ? Object.keys(bsList[0]) : []), sample: bsList[0] || null }
     }), { headers: { 'Content-Type': 'application/json' } });
   }
 
@@ -612,7 +584,7 @@ export async function onRequestGet(context) {
   if (action === 'earnings') {
     const id = url.searchParams.get('id');
     const sport = url.searchParams.get('sport') || 'mlb';
-    const season = url.searchParams.get('season') || '2026';
+    const season = normSeason(url.searchParams.get('season') || '2026');
     const level = parseInt(url.searchParams.get('level') || '1', 10);
     // UFC fighters are always entityType=team in RS regardless of what the frontend passes
     const entityType = (sport === 'ufc' || sport === 'mma') ? 'team' : (url.searchParams.get('entityType') || 'player');
@@ -681,20 +653,22 @@ export async function onRequestGet(context) {
         finally { clearTimeout(t); }
       }
 
+      // Never send 'alltime' to RS — use the first real year candidate when available
+      const firstSeason = (ufcSeasonCandidates && ufcSeasonCandidates.length) ? ufcSeasonCandidates[0] : season;
       let usedToken = pickToken();
-      let res = await rsGet(buildHeadersWithToken(usedToken));
+      let res = await rsGet(buildHeadersWithToken(usedToken), earningsUrl(firstSeason));
 
       // RS 429: retry up to 3 times with exponential backoff (same token — RS throttle, not auth issue)
       const retryDelays = [500, 1500, 3000];
       for (let i = 0; i < retryDelays.length && res.status === 429; i++) {
         await new Promise(r => setTimeout(r, retryDelays[i]));
-        res = await rsGet(buildHeadersWithToken(usedToken));
+        res = await rsGet(buildHeadersWithToken(usedToken), earningsUrl(firstSeason));
       }
 
       // RS 401: token expired — try every other token in the pool before giving up
       if (res.status === 401 && poolTokens.length > 1) {
         for (const fallbackToken of poolTokens.filter(t => t !== usedToken)) {
-          res = await rsGet(buildHeadersWithToken(fallbackToken));
+          res = await rsGet(buildHeadersWithToken(fallbackToken), earningsUrl(firstSeason));
           if (res.status !== 401) { usedToken = fallbackToken; break; }
         }
       }
@@ -1103,7 +1077,7 @@ export async function onRequestGet(context) {
           || (entity.firstName && entity.lastName ? (entity.firstName + ' ' + entity.lastName).trim() : null)
           || entity.name || entity.displayName || null;
         const sport = p.sport || entity.sport || null;
-        const season = String(p.season || fallbackSeason);
+        const season = normSeason(p.season || fallbackSeason);
         // RS does not expose rarity as a top-level string — it lives in boostInfo.
         // boostInfo.rarityLabel ("Iconic 1", "Mystic 3", etc.) is the most reliable source.
         // boostInfo.level is a direct numeric level (20 for Iconic 1) and matches our system.
@@ -1546,7 +1520,7 @@ export async function onRequestGet(context) {
     if (!session.is_admin) return fail(403, 'Admin only');
 
     const RS_EARN_SPORT_MAP = { ncaabb: 'ncaam', mma: 'ufc' };
-    const RS_SEASON_NORM = { ufc: 'alltime' };
+    const RS_SEASON_NORM = { ufc: '2023', mma: '2023' };
 
     // Collect all user pass caches
     const passRows = await env.DB.prepare(

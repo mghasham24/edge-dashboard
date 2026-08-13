@@ -12,14 +12,7 @@ const EDGEBOT_USER   = 'V3yGgkkJ';
 
 // All sport/season combos to scan for edgebot's cards
 const CARD_SOURCES = [
-  { sport: 'mlb',  season: 2025 },
-  { sport: 'nba',  season: 2025 },
-  { sport: 'nfl',  season: 2024 },
-  { sport: 'ufc',  season: 2023 },
-  { sport: 'nhl',  season: 2025 },
-  { sport: 'nba',  season: 2024 },
-  { sport: 'nfl',  season: 2023 },
-  { sport: 'mlb',  season: 2024 },
+  { sport: 'mlb', season: 2025 },
 ];
 
 function buildHeaders(authInfo) {
@@ -106,11 +99,21 @@ export async function onRequestGet({ request, env }) {
   const existingSet = new Set((existing.results || []).map(r => r.card_id));
 
   // Insert new cards
+  const syncNow = Math.floor(Date.now() / 1000);
   const toInsert = [...allIds].filter(id => !existingSet.has(id));
   if (toInsert.length) {
     await env.DB.batch(
       toInsert.map(id =>
-        env.DB.prepare('INSERT OR IGNORE INTO deposit_cards (card_id) VALUES (?)').bind(id)
+        env.DB.prepare('INSERT OR IGNORE INTO deposit_cards (card_id, verified_at) VALUES (?,?)').bind(id, syncNow)
+      )
+    );
+  }
+  // Stamp verified_at on all existing cards that edgebot still owns
+  const toVerify = [...allIds].filter(id => existingSet.has(id));
+  if (toVerify.length) {
+    await env.DB.batch(
+      toVerify.map(id =>
+        env.DB.prepare('UPDATE deposit_cards SET verified_at=? WHERE card_id=?').bind(syncNow, id)
       )
     );
   }

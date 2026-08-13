@@ -180,10 +180,21 @@ export async function onRequestPost({ request, env }) {
       continue;
     }
 
-    // Step 1 — find up to 5 cheapest unowned cards in winner's RS portfolio
+    // Step 1 — find up to 5 cheapest unowned cards in winner's RS portfolio,
+    // then exclude any cards currently in the deposit pool. A deposit pool card appearing
+    // in outgoingAccepted (payout accepted) shares a card ID with an active deposit card,
+    // which causes deposit-check to false-activate a parlay from the payout offer.
     let candidates = [];
     try { candidates = await findUnownedCards(entry.rs_user_id, authInfo, sessionToken); }
     catch (e) { candidates = []; }
+
+    if (candidates.length) {
+      try {
+        const { results: poolRows } = await env.DB.prepare('SELECT card_id FROM deposit_cards').all();
+        const depositPoolIds = new Set((poolRows || []).map(r => r.card_id));
+        candidates = candidates.filter(id => !depositPoolIds.has(id));
+      } catch (_) { /* non-fatal — proceed with unfiltered candidates */ }
+    }
 
     if (!candidates.length) {
       await env.DB.prepare(
@@ -196,9 +207,8 @@ export async function onRequestPost({ request, env }) {
     // Step 2+3 — try each candidate card until one goes through.
     // Each attempt needs a fresh Turnstile token since they are single-use.
     // "Listed in marketplace" → skip to next card. Any other error → stop and mark failed.
-    let entrySent    = false;
-    let lastError    = null;
-    let allListed    = true;
+    let entrySent = false;
+    let lastError = null;
 
     for (const cardId of candidates) {
       let turnstileToken;
@@ -218,16 +228,13 @@ export async function onRequestPost({ request, env }) {
         rsOfferId = await postOffer(cardId, entry.offer_amount, turnstileToken, authInfo, sessionToken);
       } catch (e) {
         lastError = e.message;
-        const isSkippable = e.message.toLowerCase().includes('listed in the marketplace')
-                         || e.message.toLowerCase().includes('open offer on this card');
-        if (isSkippable) continue; // try next candidate card
-        // Non-marketplace error — fail this entry, don't burn more Turnstile credits
-        allListed = false;
+        // Skip this card and try the next — any card-specific RS error (wrong price,
+        // already listed, open offer, rate limit, etc.) should not kill the whole payout.
+        // Only Turnstile failures (handled above) are truly global and stop the run.
         await env.DB.prepare(
-          "UPDATE payout_queue SET status='failed', target_card_id=?, notes=? WHERE id=?"
-        ).bind(cardId, 'RS offer failed: ' + e.message, entry.id).run();
-        results.push({ parlayId: entry.parlay_id, result: 'offer_failed', error: e.message });
-        break;
+          'UPDATE payout_queue SET notes=? WHERE id=?'
+        ).bind('Card ' + cardId + ' skipped: ' + e.message.slice(0, 200), entry.id).run();
+        continue;
       }
 
       // Success
@@ -239,19 +246,16 @@ export async function onRequestPost({ request, env }) {
       break;
     }
 
-    if (!entrySent && lastError !== null && allListed) {
-      // Every candidate card was listed in the marketplace — stay pending, retry next run
-      await env.DB.prepare(
-        'UPDATE payout_queue SET notes=? WHERE id=?'
-      ).bind('All candidate cards listed in marketplace — retrying next run', entry.id).run();
-      results.push({ parlayId: entry.parlay_id, result: 'all_listed' });
+    if (!entrySent && lastError !== null) {
+      // All candidate cards failed (listed, restricted, etc.) — stay pending, retry next run
+      results.push({ parlayId: entry.parlay_id, result: 'all_skipped' });
     }
   }
 
-  const sent      = results.filter(r => r.result === 'sent').length;
-  const noCard    = results.filter(r => r.result === 'no_card').length;
-  const allListed = results.filter(r => r.result === 'all_listed').length;
-  const failed    = results.filter(r => !['sent', 'no_card', 'all_listed'].includes(r.result)).length;
+  const sent       = results.filter(r => r.result === 'sent').length;
+  const noCard     = results.filter(r => r.result === 'no_card').length;
+  const allSkipped = results.filter(r => r.result === 'all_skipped').length;
+  const failed     = results.filter(r => !['sent', 'no_card', 'all_skipped'].includes(r.result)).length;
 
-  return ok({ processed: queue.length, sent, noCard, allListed, failed, results });
+  return ok({ processed: queue.length, sent, noCard, allSkipped, failed, results });
 }

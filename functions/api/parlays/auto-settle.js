@@ -102,6 +102,7 @@ function resolveTeamLeg(leg, finalGames) {
     );
     if (!game) return null;
     const total = game.homeScore + game.awayScore;
+    if (total === line) return 'void'; // push — scratch this leg
     return (isOver ? total > line : total < line) ? 'won' : 'lost';
   }
 
@@ -212,8 +213,8 @@ function resolve1stInnLeg(leg, finalGames, linescore1Map, pbpMap) {
       }
       case '1inn_batters_ou': {
         if (!side) return null;
-        // away bats in top; home bats in bottom
-        const count = side === 'away' ? pbp.top.batters : pbp.bottom.batters;
+        // away pitcher faces home batters in bottom; home pitcher faces away batters in top
+        const count = side === 'away' ? pbp.bottom.batters : pbp.top.batters;
         const line  = parseFloat(leg.threshold);
         if (isNaN(line)) return null;
         if (isOver)  return count > line ? 'won' : 'lost';
@@ -260,8 +261,8 @@ function resolve1stInnLeg(leg, finalGames, linescore1Map, pbpMap) {
       }
       case '1inn_ks_exact': {
         if (!side || exactVal == null) return null;
-        // strikeouts as batter: away bats top, home bats bottom
-        const ks = side === 'away' ? pbp.top.ks : pbp.bottom.ks;
+        // pitcher Ks: away pitcher throws in bottom (home bats), home pitcher throws in top (away bats)
+        const ks = side === 'away' ? pbp.bottom.ks : pbp.top.ks;
         return ks === exactVal ? 'won' : 'lost';
       }
       default: return null;
@@ -292,6 +293,7 @@ function resolve1stInnLeg(leg, finalGames, linescore1Map, pbpMap) {
       const total = away.runs + home.runs;
       const line  = parseFloat(leg.threshold);
       if (isNaN(line)) return null;
+      if (total === line) return 'void'; // push
       if (isOver)  return total > line ? 'won' : 'lost';
       if (isUnder) return total < line ? 'won' : 'lost';
       return null;
@@ -304,6 +306,7 @@ function resolve1stInnLeg(leg, finalGames, linescore1Map, pbpMap) {
       if (h == null) return null;
       const line = parseFloat(leg.threshold);
       if (isNaN(line)) return null;
+      if (h === line) return 'void'; // push
       if (isOver)  return h > line ? 'won' : 'lost';
       if (isUnder) return h < line ? 'won' : 'lost';
       return null;
@@ -522,7 +525,13 @@ async function getWnbaPlayerStats(date, proxyKey) {
     );
     if (!sbRes.ok) return {};
     const sbData = await sbRes.json();
-    const eventIds = (sbData.events || []).map(e => e.id);
+    // Only settle from completed/final games — in-progress stats would produce false losses.
+    const eventIds = (sbData.events || [])
+      .filter(e => {
+        const st = e.competitions?.[0]?.status?.type;
+        return st?.completed || (st?.name || '').toUpperCase().includes('FINAL');
+      })
+      .map(e => e.id);
 
     const summaries = await Promise.all(eventIds.map(async id => {
       try {
@@ -548,6 +557,7 @@ async function getWnbaPlayerStats(date, proxyKey) {
             const name = normalizeName(a.athlete?.displayName || '');
             if (!name) continue;
             const s = a.stats || [];
+            if (s.length === 0) continue; // DNP — empty stats array means did not play; treat as not in box score so the leg voids rather than losing
             const getStat = idx => {
               if (idx < 0) return 0;
               const v = s[idx];
@@ -714,15 +724,19 @@ async function handleRequest({ request, env }) {
   ).all();
   if (!parlays.length) return cacheAndReturn({ settled: 0, reason: 'no_active_parlays' });
 
-  // 2. Load all pending legs for active parlays — include label + event_name for 1inn resolve
+  // 2. Load pending legs — active parlays for settlement, plus already-settled parlays so
+  // per-leg outcomes get filled in even after the parlay is decided.
   const { results: allLegs } = await env.DB.prepare(
     "SELECT pl.id, pl.parlay_id, pl.player_name, pl.market_id, pl.threshold, " +
     "pl.direction, pl.game_date, pl.market_type, pl.status, pl.sport, " +
-    "pl.label, pl.event_name, pl.implied_prob " +
+    "pl.label, pl.event_name, pl.implied_prob, p.status AS parlay_status " +
     "FROM parlay_legs pl " +
     "JOIN parlays p ON p.id = pl.parlay_id " +
-    "WHERE p.status = 'active' AND pl.status = 'pending'"
+    "WHERE pl.status = 'pending' AND p.status IN ('active','won','lost','voided')"
   ).all();
+
+  // Separate legs by whether their parlay still needs deciding
+  const settledParlayLegs = allLegs.filter(l => l.parlay_status !== 'active');
   if (!allLegs.length) return cacheAndReturn({ settled: 0, reason: 'no_pending_legs' });
 
   const eligibleLegs = allLegs.filter(l => l.game_date <= todayUtc);
@@ -912,15 +926,19 @@ async function handleRequest({ request, env }) {
     if (sport === 'wnba') {
       const wnbaStats = (wnbaStatsMap[leg.game_date] || {})[normForLookup(leg.player_name)];
       if (!wnbaStats) {
-        legOutcomes[leg.id] = leg.game_date < staleDate ? 'void' : null;
+        // If this player's specific game was final (by event_id), they DNP'd — void immediately.
+        // Otherwise fall back to stale-date check.
+        const gamesForDate = wnbaGamesMap[leg.game_date] || [];
+        const gameFinal = gamesForDate.some(g => String(g.eventId) === String(leg.event_id));
+        legOutcomes[leg.id] = (gameFinal || leg.game_date < staleDate) ? 'void' : null;
         continue;
       }
       const field   = WNBA_STAT_FIELD[mkt];
       if (!field) { legOutcomes[leg.id] = null; continue; }
       const statVal = wnbaStats[field];
       if (statVal == null) { legOutcomes[leg.id] = null; continue; }
-      legOutcomes[leg.id] = (leg.direction === 'more' ? statVal > leg.threshold : statVal < leg.threshold)
-        ? 'won' : 'lost';
+      legOutcomes[leg.id] = statVal === leg.threshold ? 'void'
+        : (leg.direction === 'more' ? statVal > leg.threshold : statVal < leg.threshold) ? 'won' : 'lost';
       continue;
     }
 
@@ -937,8 +955,8 @@ async function handleRequest({ request, env }) {
     const rawVal    = playerStats[statField];
     if (rawVal == null) { legOutcomes[leg.id] = null; continue; }
     const statVal = parseFloat(rawVal);
-    legOutcomes[leg.id] = (leg.direction === 'more' ? statVal > leg.threshold : statVal < leg.threshold)
-      ? 'won' : 'lost';
+    legOutcomes[leg.id] = statVal === leg.threshold ? 'void'
+      : (leg.direction === 'more' ? statVal > leg.threshold : statVal < leg.threshold) ? 'won' : 'lost';
   }
 
   // 5. Settle parlays where all eligible legs are resolved
@@ -1023,7 +1041,68 @@ async function handleRequest({ request, env }) {
     report.push({ parlayId: parlay.id, result: parlayResult, legs: outcomes });
   }
 
-  return cacheAndReturn({ settled: totalSettled, report });
+  // 6. Fill in per-leg outcomes for already-settled parlays (won/lost/voided).
+  // The parlay result doesn't change — just update the leg status so the slip UI
+  // shows each leg's actual outcome rather than leaving them stuck as pending.
+  let legsFilled = 0;
+  for (const leg of settledParlayLegs) {
+    const outcome = legOutcomes[leg.id];
+    if (!outcome) continue; // game not final yet — leave pending
+    await env.DB.prepare("UPDATE parlay_legs SET status=?, settled_at=? WHERE id=?")
+      .bind(outcome, now, leg.id).run();
+    legsFilled++;
+  }
+
+  // 7. Re-evaluate recently-lost parlays for DNP corrections.
+  // If a WNBA parlay was settled as 'lost' because a player appeared in ESPN's box score
+  // with empty stats (DNP), all legs now resolve to 'void' — refund the stake.
+  const dnpRefunds = [];
+  try {
+    const recentLost = await env.DB.prepare(
+      "SELECT id, user_id, stake_rax, rs_username FROM parlays WHERE status='lost' AND settled_at > ?"
+    ).bind(now - 3 * 86400).all();
+
+    for (const p of (recentLost.results || [])) {
+      const legRes = await env.DB.prepare(
+        "SELECT id, sport, event_id, market_type, player_name, threshold, direction, status, game_date FROM parlay_legs WHERE parlay_id=?"
+      ).bind(p.id).all();
+      const pLegs = legRes.results || [];
+
+      // Only consider all-WNBA parlays
+      if (!pLegs.length) continue;
+      if (!pLegs.every(l => l.sport === 'wnba' || l.sport === 'basketball_wnba')) continue;
+
+      // Check every leg: it must either already be void, or be a DNP (player absent from final-game stats)
+      let allVoidable = true;
+      for (const l of pLegs) {
+        if (l.status === 'void' || l.status === 'voided') continue;
+        if (l.status === 'won') { allVoidable = false; break; }
+        // For 'lost' or 'pending' legs: check if the player DNP'd in a final game
+        const statsForDate = wnbaStatsMap[l.game_date] || {};
+        const hasStats = !!statsForDate[normForLookup(l.player_name)];
+        if (hasStats) { allVoidable = false; break; } // player actually played — real loss
+        const gamesForDate = wnbaGamesMap[l.game_date] || [];
+        const gameWasFinal = gamesForDate.some(g => String(g.eventId) === String(l.event_id));
+        if (!gameWasFinal) { allVoidable = false; break; } // can't confirm game was final
+      }
+      if (!allVoidable) continue;
+
+      // All legs DNP'd in final games — re-settle to voided and refund stake
+      const legUpdates = pLegs
+        .filter(l => l.status !== 'void' && l.status !== 'voided')
+        .map(l => env.DB.prepare("UPDATE parlay_legs SET status='void', settled_at=? WHERE id=?").bind(now, l.id));
+      await env.DB.batch([
+        env.DB.prepare("UPDATE parlays SET status='voided', settled_at=? WHERE id=? AND status='lost'").bind(now, p.id),
+        ...legUpdates,
+        env.DB.prepare(
+          'INSERT OR IGNORE INTO payout_queue (parlay_id, user_id, rs_username, payout_rax, offer_amount, created_at) VALUES (?,?,?,?,?,?)'
+        ).bind(p.id, p.user_id, p.rs_username, p.stake_rax, roundOfferAmount(p.stake_rax), now),
+      ]);
+      dnpRefunds.push(p.id);
+    }
+  } catch(_) { /* non-fatal — DNP re-evaluation best-effort only */ }
+
+  return cacheAndReturn({ settled: totalSettled, legsFilled, dnpRefunds, report });
 }
 
 export const onRequestPost = handleRequest;

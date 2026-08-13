@@ -4884,6 +4884,7 @@
     var parlayStake          = 1000;
     var parlayCategory       = 'hits';
     var parlayPrevCategory   = 'hits'; // restored when search is cleared
+    var parlayGroup          = 'bat';  // MLB only: 'bat' | 'pitch' | '1inn' | 'team'
     var parlaySearchQuery    = '';
     var parlayView           = 'build'; // 'build' | 'slips' | 'all-slips'
     var parlayPlayersLoading = false;
@@ -4898,17 +4899,21 @@
         { key:'hrbi',         label:'H+R+RBI' },
         { key:'pitcher_ks',   label:'Pitcher Ks' },
         { key:'outs_ou',      label:'Outs' },
-        { key:'singles',      label:'Singles',      adminOnly: true },
-        { key:'stolen_bases', label:'Stolen Bases', adminOnly: true },
-        { key:'doubles',      label:'Doubles',      adminOnly: true },
-        { key:'walks',        label:'Walks',        adminOnly: true },
-        { key:'hits_allowed', label:'Hits Allowed', adminOnly: true },
-        { key:'er_allowed',   label:'ER Allowed',   adminOnly: true },
-        { key:'bb_allowed',   label:'BB Allowed',   adminOnly: true },
-        { key:'hwer',         label:'H+W+ER',       adminOnly: true },
+        { key:'singles',      label:'Singles' },
+        { key:'stolen_bases', label:'Stolen Bases' },
+        { key:'doubles',      label:'Doubles' },
+        { key:'walks',        label:'Walks' },
+        { key:'hits_allowed', label:'Hits Allowed' },
+        { key:'er_allowed',   label:'ER Allowed' },
+        { key:'bb_allowed',   label:'BB Allowed' },
+        { key:'hwer',         label:'H+W+ER' },
         { key:'1st_inning',   label:'1st Inning',   adminOnly: true },
         { key:'teams',        label:'Teams' },
     ];
+    var MLB_GROUPS = {
+        bat:  ['hits','total_bases','rbis','runs','hrbi','singles','stolen_bases','doubles','walks'],
+        pitch:['pitcher_ks','outs_ou','hits_allowed','er_allowed','bb_allowed','hwer'],
+    };
     var WNBA_CATS = [
         { key:'pts',   label:'Points' },
         { key:'reb',   label:'Rebounds' },
@@ -5901,32 +5906,36 @@
                 var op = gp(eid,'1inn_walks_ou','','over'), up = gp(eid,'1inn_walks_ou','','under');
                 if (op && up) h += '<div class="pgc-row"><span class="pgc-label">Walks O/U</span>' + btnOdds(op,'O '+game.walksOU.line) + btnOdds(up,'U '+game.walksOU.line) + '</div>';
             }
-            // Per-team columns
+            // Half-inning sections: TOP (away bats, home pitches) then BOTTOM (home bats, away pitches)
+            var sd_a = game.away || {}, sd_h = game.home || {};
+            function renderBatting(sd, ts) {
+                var hh = '';
+                if (sd.hitsOU) { var op=gp(eid,'1inn_hits_ou',ts,'over'), up=gp(eid,'1inn_hits_ou',ts,'under'); if (op&&up) hh += '<div class="prl-1inn-mkt"><div class="prl-1inn-mkt-name">Hits ' + sd.hitsOU.line + '</div><div class="prl-1inn-btns">' + btnOdds(op,'O') + btnOdds(up,'U') + '</div></div>'; }
+                if (sd.hitsExact && sd.hitsExact.length) { hh += '<div class="prl-1inn-mkt"><div class="prl-1inn-mkt-name">Hits Exact</div><div class="prl-1inn-btns">'; sd.hitsExact.forEach(function(s){ hh += btn(gp(eid,'1inn_hits_exact',ts,s.label), s.label + ' ' + parlayFmtOdds(s.odds)); }); hh += '</div></div>'; }
+                if (sd.hrYN) { var yp=gp(eid,'1inn_hr_yn',ts,'yes'), np=gp(eid,'1inn_hr_yn',ts,'no'); if (yp&&np) hh += '<div class="prl-1inn-mkt"><div class="prl-1inn-mkt-name">Home Run</div><div class="prl-1inn-btns"><button class="prl-1inn-btn yes-btn' + (parlayPicks[String(yp.id)]?' active':'') + '" onclick="parlayTogglePick('+yp.id+',\'more\')">Yes ' + parlayFmtOdds(yp.moreOdds) + '</button><button class="prl-1inn-btn no-btn' + (parlayPicks[String(np.id)]?' active':'') + '" onclick="parlayTogglePick('+np.id+',\'more\')">No ' + parlayFmtOdds(np.moreOdds) + '</button></div></div>'; }
+                if (sd.runScoredYN) { var yp=gp(eid,'1inn_run_yn',ts,'yes'), np=gp(eid,'1inn_run_yn',ts,'no'); if (yp&&np) hh += '<div class="prl-1inn-mkt"><div class="prl-1inn-mkt-name">Scores</div><div class="prl-1inn-btns"><button class="prl-1inn-btn yes-btn' + (parlayPicks[String(yp.id)]?' active':'') + '" onclick="parlayTogglePick('+yp.id+',\'more\')">Yes ' + parlayFmtOdds(yp.moreOdds) + '</button><button class="prl-1inn-btn no-btn' + (parlayPicks[String(np.id)]?' active':'') + '" onclick="parlayTogglePick('+np.id+',\'more\')">No ' + parlayFmtOdds(np.moreOdds) + '</button></div></div>'; }
+                if (sd.runsExact && sd.runsExact.length) { hh += '<div class="prl-1inn-mkt"><div class="prl-1inn-mkt-name">Runs Exact</div><div class="prl-1inn-btns">'; sd.runsExact.forEach(function(s){ hh += btn(gp(eid,'1inn_runs_exact',ts,s.label), s.label + ' ' + parlayFmtOdds(s.odds)); }); hh += '</div></div>'; }
+                return hh;
+            }
+            function renderPitching(sd, ts) {
+                var hh = '';
+                if (sd.pitchesOU) { var op=gp(eid,'1inn_pitches_ou',ts,'over'), up=gp(eid,'1inn_pitches_ou',ts,'under'); if (op&&up) hh += '<div class="prl-1inn-mkt"><div class="prl-1inn-mkt-name">Pitches ' + sd.pitchesOU.line + '</div><div class="prl-1inn-btns">' + btnOdds(op,'O') + btnOdds(up,'U') + '</div></div>'; }
+                if (sd.pitchesRanges && sd.pitchesRanges.length) { hh += '<div class="prl-1inn-mkt"><div class="prl-1inn-mkt-name">Pitches Range</div><div class="prl-1inn-range-btns">'; sd.pitchesRanges.forEach(function(s){ hh += btn(gp(eid,'1inn_pitches_range',ts,s.label), s.label + ' ' + parlayFmtOdds(s.odds)); }); hh += '</div></div>'; }
+                if (sd.battersOU) { var op=gp(eid,'1inn_batters_ou',ts,'over'), up=gp(eid,'1inn_batters_ou',ts,'under'); if (op&&up) hh += '<div class="prl-1inn-mkt"><div class="prl-1inn-mkt-name">Batters ' + sd.battersOU.line + '</div><div class="prl-1inn-btns">' + btnOdds(op,'O') + btnOdds(up,'U') + '</div></div>'; }
+                if (sd.strikeoutsExact && sd.strikeoutsExact.length) { hh += '<div class="prl-1inn-mkt"><div class="prl-1inn-mkt-name">Strikeouts</div><div class="prl-1inn-btns">'; sd.strikeoutsExact.forEach(function(s){ hh += btn(gp(eid,'1inn_ks_exact',ts,s.label), s.label + ' Ks ' + parlayFmtOdds(s.odds)); }); hh += '</div></div>'; }
+                return hh;
+            }
+            // TOP: away bats, home pitches
+            h += '<div class="prl-1inn-half-hdr">Top &mdash; <span class="prl-1inn-half-sub">' + escHtml(as) + ' bats</span></div>';
             h += '<div class="prl-1inn-teams">';
-            [{side:'away',ts:as,tl:al,sd:game.away},{side:'home',ts:hs,tl:hl,sd:game.home}].forEach(function(t) {
-                var sd = t.sd || {}, ts = t.ts;
-                h += '<div class="prl-1inn-col">';
-                h += '<div class="prl-1inn-col-hdr">' + (t.tl ? '<img src="' + escHtml(t.tl) + '">' : '') + escHtml(ts) + '</div>';
-                // Hits O/U
-                if (sd.hitsOU) { var op=gp(eid,'1inn_hits_ou',ts,'over'), up=gp(eid,'1inn_hits_ou',ts,'under'); if (op&&up) h += '<div class="prl-1inn-mkt"><div class="prl-1inn-mkt-name">Hits ' + sd.hitsOU.line + '</div><div class="prl-1inn-btns">' + btnOdds(op,'O') + btnOdds(up,'U') + '</div></div>'; }
-                // Hits Exact
-                if (sd.hitsExact && sd.hitsExact.length) { h += '<div class="prl-1inn-mkt"><div class="prl-1inn-mkt-name">Hits Exact</div><div class="prl-1inn-btns">'; sd.hitsExact.forEach(function(s){ h += btn(gp(eid,'1inn_hits_exact',ts,s.label), s.label + ' ' + parlayFmtOdds(s.odds)); }); h += '</div></div>'; }
-                // Pitches O/U
-                if (sd.pitchesOU) { var op=gp(eid,'1inn_pitches_ou',ts,'over'), up=gp(eid,'1inn_pitches_ou',ts,'under'); if (op&&up) h += '<div class="prl-1inn-mkt"><div class="prl-1inn-mkt-name">Pitches ' + sd.pitchesOU.line + '</div><div class="prl-1inn-btns">' + btnOdds(op,'O') + btnOdds(up,'U') + '</div></div>'; }
-                // Pitches Ranges
-                if (sd.pitchesRanges && sd.pitchesRanges.length) { h += '<div class="prl-1inn-mkt"><div class="prl-1inn-mkt-name">Pitches Range</div><div class="prl-1inn-range-btns">'; sd.pitchesRanges.forEach(function(s){ h += btn(gp(eid,'1inn_pitches_range',ts,s.label), s.label + ' ' + parlayFmtOdds(s.odds)); }); h += '</div></div>'; }
-                // Batters O/U
-                if (sd.battersOU) { var op=gp(eid,'1inn_batters_ou',ts,'over'), up=gp(eid,'1inn_batters_ou',ts,'under'); if (op&&up) h += '<div class="prl-1inn-mkt"><div class="prl-1inn-mkt-name">Batters ' + sd.battersOU.line + '</div><div class="prl-1inn-btns">' + btnOdds(op,'O') + btnOdds(up,'U') + '</div></div>'; }
-                // HR Yes/No
-                if (sd.hrYN) { var yp=gp(eid,'1inn_hr_yn',ts,'yes'), np=gp(eid,'1inn_hr_yn',ts,'no'); if (yp&&np) h += '<div class="prl-1inn-mkt"><div class="prl-1inn-mkt-name">Home Run</div><div class="prl-1inn-btns"><button class="prl-1inn-btn yes-btn' + (parlayPicks[String(yp.id)]?' active':'') + '" onclick="parlayTogglePick('+yp.id+',\'more\')">Yes ' + parlayFmtOdds(yp.moreOdds) + '</button><button class="prl-1inn-btn no-btn' + (parlayPicks[String(np.id)]?' active':'') + '" onclick="parlayTogglePick('+np.id+',\'more\')">No ' + parlayFmtOdds(np.moreOdds) + '</button></div></div>'; }
-                // Run Scored Yes/No
-                if (sd.runScoredYN) { var yp=gp(eid,'1inn_run_yn',ts,'yes'), np=gp(eid,'1inn_run_yn',ts,'no'); if (yp&&np) h += '<div class="prl-1inn-mkt"><div class="prl-1inn-mkt-name">Scores</div><div class="prl-1inn-btns"><button class="prl-1inn-btn yes-btn' + (parlayPicks[String(yp.id)]?' active':'') + '" onclick="parlayTogglePick('+yp.id+',\'more\')">Yes ' + parlayFmtOdds(yp.moreOdds) + '</button><button class="prl-1inn-btn no-btn' + (parlayPicks[String(np.id)]?' active':'') + '" onclick="parlayTogglePick('+np.id+',\'more\')">No ' + parlayFmtOdds(np.moreOdds) + '</button></div></div>'; }
-                // Runs Exact
-                if (sd.runsExact && sd.runsExact.length) { h += '<div class="prl-1inn-mkt"><div class="prl-1inn-mkt-name">Runs Exact</div><div class="prl-1inn-btns">'; sd.runsExact.forEach(function(s){ h += btn(gp(eid,'1inn_runs_exact',ts,s.label), s.label + ' ' + parlayFmtOdds(s.odds)); }); h += '</div></div>'; }
-                // Strikeouts Exact
-                if (sd.strikeoutsExact && sd.strikeoutsExact.length) { h += '<div class="prl-1inn-mkt"><div class="prl-1inn-mkt-name">Strikeouts</div><div class="prl-1inn-btns">'; sd.strikeoutsExact.forEach(function(s){ h += btn(gp(eid,'1inn_ks_exact',ts,s.label), s.label + ' Ks ' + parlayFmtOdds(s.odds)); }); h += '</div></div>'; }
-                h += '</div>';
-            });
+            h += '<div class="prl-1inn-col"><div class="prl-1inn-col-hdr">' + (al ? '<img src="' + escHtml(al) + '">' : '') + escHtml(as) + ' <span class="prl-1inn-role">batting</span></div>' + renderBatting(sd_a, as) + '</div>';
+            h += '<div class="prl-1inn-col"><div class="prl-1inn-col-hdr">' + (hl ? '<img src="' + escHtml(hl) + '">' : '') + escHtml(hs) + ' <span class="prl-1inn-role">pitching</span></div>' + renderPitching(sd_h, hs) + '</div>';
+            h += '</div>';
+            // BOTTOM: home bats, away pitches
+            h += '<div class="prl-1inn-half-hdr">Bottom &mdash; <span class="prl-1inn-half-sub">' + escHtml(hs) + ' bats</span></div>';
+            h += '<div class="prl-1inn-teams">';
+            h += '<div class="prl-1inn-col"><div class="prl-1inn-col-hdr">' + (hl ? '<img src="' + escHtml(hl) + '">' : '') + escHtml(hs) + ' <span class="prl-1inn-role">batting</span></div>' + renderBatting(sd_h, hs) + '</div>';
+            h += '<div class="prl-1inn-col"><div class="prl-1inn-col-hdr">' + (al ? '<img src="' + escHtml(al) + '">' : '') + escHtml(as) + ' <span class="prl-1inn-role">pitching</span></div>' + renderPitching(sd_a, as) + '</div>';
             h += '</div>';
             h += '</div>';
             return h;
@@ -6054,37 +6063,85 @@
     }
 
     function parlayBuildNavHtml() {
+        var isAdmin = currentUser && currentUser.is_admin;
         var sportTog = '<div class="parlay-sport-tog">' +
             '<button class="parlay-sport-btn' + (parlayActiveSport === 'mlb'  ? ' active' : '') + '" onclick="setParlayActiveSport(\'mlb\')">MLB</button>' +
             '<button class="parlay-sport-btn' + (parlayActiveSport === 'wnba' ? ' active' : '') + '" onclick="setParlayActiveSport(\'wnba\')">WNBA</button>' +
             '<button class="parlay-sport-btn' + (parlayActiveSport === 'nfl'  ? ' active' : '') + '" onclick="setParlayActiveSport(\'nfl\')">NFL</button>' +
-            (currentUser && currentUser.is_admin ? '<button class="parlay-sport-btn' + (parlayActiveSport === 'ufc'  ? ' active' : '') + '" onclick="setParlayActiveSport(\'ufc\')">UFC</button>' : '') +
+            (isAdmin ? '<button class="parlay-sport-btn' + (parlayActiveSport === 'ufc'  ? ' active' : '') + '" onclick="setParlayActiveSport(\'ufc\')">UFC</button>' : '') +
         '</div>';
-        var isAdmin = currentUser && currentUser.is_admin;
-        var cats = parlayActiveSport === 'wnba' ? WNBA_CATS : parlayActiveSport === 'nfl' ? NFL_CATS : parlayActiveSport === 'ufc' ? UFC_CATS : PARLAY_CATS;
-        cats = cats.filter(function(c) { return !c.adminOnly || isAdmin; });
-        var searchTab = parlaySearchQuery
-            ? '<button class="parlay-cat-btn' + (parlayCategory === 'search' ? ' active' : '') + '" data-cat="search" onclick="parlaySetCategory(\'search\')">Player</button>'
-            : '';
-        var catBtns = searchTab + cats.map(function(c) {
-            return '<button class="parlay-cat-btn' + (parlayCategory === c.key ? ' active' : '') + '" data-cat="' + c.key + '" onclick="parlaySetCategory(\'' + c.key + '\')">' + escHtml(c.label) + '</button>';
-        }).join('');
-        return sportTog + '<div class="parlay-cat-row">' + catBtns + '</div>';
+
+        if (parlayActiveSport !== 'mlb') {
+            var cats = parlayActiveSport === 'wnba' ? WNBA_CATS : parlayActiveSport === 'nfl' ? NFL_CATS : UFC_CATS;
+            cats = cats.filter(function(c) { return !c.adminOnly || isAdmin; });
+            var searchTab = parlaySearchQuery
+                ? '<button class="parlay-cat-btn' + (parlayCategory === 'search' ? ' active' : '') + '" data-cat="search" onclick="parlaySetCategory(\'search\')">Player</button>'
+                : '';
+            var catBtns = searchTab + cats.map(function(c) {
+                return '<button class="parlay-cat-btn' + (parlayCategory === c.key ? ' active' : '') + '" data-cat="' + c.key + '" onclick="parlaySetCategory(\'' + c.key + '\')">' + escHtml(c.label) + '</button>';
+            }).join('');
+            return sportTog + '<div class="parlay-cat-row">' + catBtns + '</div>';
+        }
+
+        // MLB: group row (Bat / Pitch / 1inn / Team) + sub-cat row for bat/pitch
+        var groupRow = '<div class="parlay-sport-tog">' +
+            '<button class="parlay-sport-btn' + (parlayGroup === 'bat'   ? ' active' : '') + '" onclick="parlaySetGroup(\'bat\')">Bat</button>' +
+            '<button class="parlay-sport-btn' + (parlayGroup === 'pitch' ? ' active' : '') + '" onclick="parlaySetGroup(\'pitch\')">Pitch</button>' +
+            (isAdmin ? '<button class="parlay-sport-btn' + (parlayGroup === '1inn'  ? ' active' : '') + '" onclick="parlaySetGroup(\'1inn\')">1inn</button>' : '') +
+            '<button class="parlay-sport-btn' + (parlayGroup === 'team'  ? ' active' : '') + '" onclick="parlaySetGroup(\'team\')">Team</button>' +
+        '</div>';
+
+        var subCatRow = '';
+        if (parlayGroup === 'bat' || parlayGroup === 'pitch') {
+            var groupCatKeys = MLB_GROUPS[parlayGroup];
+            var groupCats = PARLAY_CATS.filter(function(c) {
+                return groupCatKeys.indexOf(c.key) !== -1 && (!c.adminOnly || isAdmin);
+            });
+            groupCats.sort(function(a, b) { return groupCatKeys.indexOf(a.key) - groupCatKeys.indexOf(b.key); });
+            var searchTab2 = parlaySearchQuery
+                ? '<button class="parlay-cat-btn' + (parlayCategory === 'search' ? ' active' : '') + '" data-cat="search" onclick="parlaySetCategory(\'search\')">Player</button>'
+                : '';
+            var catBtns2 = searchTab2 + groupCats.map(function(c) {
+                return '<button class="parlay-cat-btn' + (parlayCategory === c.key ? ' active' : '') + '" data-cat="' + c.key + '" onclick="parlaySetCategory(\'' + c.key + '\')">' + escHtml(c.label) + '</button>';
+            }).join('');
+            subCatRow = '<div class="parlay-cat-row">' + catBtns2 + '</div>';
+        }
+
+        return sportTog + groupRow + subCatRow;
     }
 
     function setParlayActiveSport(sport) {
         if (parlayActiveSport === sport) return;
         parlayActiveSport = sport;
         parlaySearchQuery = '';
-        var cats = sport === 'wnba' ? WNBA_CATS : sport === 'nfl' ? NFL_CATS : sport === 'ufc' ? UFC_CATS : PARLAY_CATS;
-        var isAdmin = currentUser && currentUser.is_admin;
-        cats = cats.filter(function(c) { return !c.adminOnly || isAdmin; });
-        parlayCategory     = cats[0].key;
-        parlayPrevCategory = cats[0].key;
+        if (sport === 'mlb') {
+            parlayGroup        = 'bat';
+            parlayCategory     = 'hits';
+            parlayPrevCategory = 'hits';
+        } else {
+            var cats = sport === 'wnba' ? WNBA_CATS : sport === 'nfl' ? NFL_CATS : sport === 'ufc' ? UFC_CATS : PARLAY_CATS;
+            var isAdmin = currentUser && currentUser.is_admin;
+            cats = cats.filter(function(c) { return !c.adminOnly || isAdmin; });
+            parlayCategory     = cats[0].key;
+            parlayPrevCategory = cats[0].key;
+        }
         var nav = document.getElementById('parlay-cat-nav');
         if (nav) nav.innerHTML = parlayBuildNavHtml();
         if (sport === 'ufc') loadParlayUfc();
         else loadParlayPlayers();
+    }
+
+    function parlaySetGroup(group) {
+        parlayGroup = group;
+        if (group === '1inn') { parlaySetCategory('1st_inning'); return; }
+        if (group === 'team')  { parlaySetCategory('teams'); return; }
+        var isAdmin = currentUser && currentUser.is_admin;
+        var groupCatKeys = MLB_GROUPS[group] || [];
+        var groupCats = PARLAY_CATS.filter(function(c) {
+            return groupCatKeys.indexOf(c.key) !== -1 && (!c.adminOnly || isAdmin);
+        });
+        groupCats.sort(function(a, b) { return groupCatKeys.indexOf(a.key) - groupCatKeys.indexOf(b.key); });
+        if (groupCats.length) parlaySetCategory(groupCats[0].key);
     }
 
     function parlaySetCategory(cat) {
@@ -6164,8 +6221,21 @@
         var cardsEl = document.getElementById('aslip-cards');
         if (!cardsEl) return;
         var q = allSlipsSearch.toLowerCase().trim();
+        var todayFilter = new Date().toISOString().slice(0, 10);
         var filtered = ALL_SLIPS_DATA.filter(function(s) {
-            if (allSlipsFilter !== 'all' && s.status !== allSlipsFilter) return false;
+            if (allSlipsFilter === 'live') {
+                // Today = any pending leg whose game has actually started (game_start_ms < now)
+                // Fallback for old legs without game_start_ms: use game_date match
+                var nowMs = Date.now();
+                var hasStartedLeg = (s.legs || []).some(function(l) {
+                    if (l.status !== 'pending') return false;
+                    if (l.game_start_ms) return l.game_start_ms < nowMs;
+                    return !l.game_date || l.game_date === todayFilter;
+                });
+                if (!hasStartedLeg) return false;
+            } else if (allSlipsFilter !== 'all' && s.status !== allSlipsFilter) {
+                return false;
+            }
             if (q && !(s.rs_username || '').toLowerCase().includes(q)) return false;
             return true;
         });
@@ -6176,7 +6246,7 @@
         PARLAY_SLIPS = ALL_SLIPS_DATA;
         startLiveSlipTracking();
         // Update pill active state without destroying the input
-        var filters = ['all','active','won','lost','pending_deposit','expired','void'];
+        var filters = ['live','all','active','won','lost','pending_deposit','expired','void'];
         filters.forEach(function(f) {
             var btn = document.getElementById('aslip-pill-' + f);
             if (btn) btn.className = 'aslip-filter-pill' + (allSlipsFilter === f ? ' active' : '');
@@ -6186,11 +6256,26 @@
     function renderAllSlipsView() {
         var container = document.getElementById('parlay-slips-view');
         if (!container) return;
-        var filters = ['all','active','won','lost','pending_deposit','expired','void'];
-        var labels  = { all:'All', active:'Active', won:'Won', lost:'Lost', pending_deposit:'Pending', expired:'Expired', void:'Void' };
+        var todayPills = new Date().toISOString().slice(0, 10);
+        var filters = ['live','all','active','won','lost','pending_deposit','expired','void'];
+        var labels  = { live:'Today', all:'All', active:'Active', won:'Won', lost:'Lost', pending_deposit:'Pending', expired:'Expired', void:'Void' };
         var pillsHtml = '<div class="aslip-filters">' +
             filters.map(function(f) {
-                var count = f === 'all' ? ALL_SLIPS_DATA.length : ALL_SLIPS_DATA.filter(function(s){ return s.status === f; }).length;
+                var count;
+                if (f === 'live') {
+                    var nowMsPills = Date.now();
+                    count = ALL_SLIPS_DATA.filter(function(s) {
+                        return (s.legs || []).some(function(l) {
+                            if (l.status !== 'pending') return false;
+                            if (l.game_start_ms) return l.game_start_ms < nowMsPills;
+                            return !l.game_date || l.game_date === todayPills;
+                        });
+                    }).length;
+                } else if (f === 'all') {
+                    count = ALL_SLIPS_DATA.length;
+                } else {
+                    count = ALL_SLIPS_DATA.filter(function(s){ return s.status === f; }).length;
+                }
                 return '<button class="aslip-filter-pill' + (allSlipsFilter === f ? ' active' : '') + '" id="aslip-pill-' + f + '" onclick="parlayAllSlipsFilter(\'' + f + '\')">' +
                     labels[f] + ' <span class="aslip-count">' + count + '</span></button>';
             }).join('') +
@@ -6230,6 +6315,8 @@
                 ALL_SLIPS_DATA = d.slips;
                 allSlipsFilter = 'all';
                 renderAllSlipsView();
+                settledLegStats = {};
+                fetchSettledLegStats();
             })
             .catch(function(e) {
                 console.error('all-slips failed:', e);
@@ -6274,31 +6361,52 @@
 
     function startLiveSlipTracking() {
         stopLiveSlipTracking();
-        var hasActive = PARLAY_SLIPS.some(function(s) {
-            if (s.status !== 'active') return false;
-            return (s.legs || []).some(function(l) { return l.status === 'pending'; });
+        var liveToday2 = new Date().toISOString().slice(0, 10);
+        var hasLive = PARLAY_SLIPS.some(function(s) {
+            if (s.status !== 'active' && s.status !== 'lost') return false;
+            return (s.legs || []).some(function(l) {
+                return l.status === 'pending' || (l.status === 'lost' && l.game_date === liveToday2);
+            });
         });
-        if (!hasActive) return;
+        if (!hasLive) return;
         fetchLiveSlipStats();
-        liveSlipInterval = setInterval(fetchLiveSlipStats, 2 * 60 * 1000);
+        liveSlipInterval = setInterval(fetchLiveSlipStats, 60 * 1000);
     }
 
     function findTeamGame(playerName, marketType, games) {
         if (marketType === 'team_total') {
-            var m = playerName.match(/^(\w+)\s*@\s*(\w+)\s+[OU]/i);
+            // Capture full team segments: "MIL Brewers @ SD Padres U8" → ["MIL Brewers", "SD Padres"]
+            var m = playerName.match(/^(.+?)\s+@\s+(.+?)\s+[OU][\d.]+/i);
             if (!m) return null;
-            var awayAbbr = m[1].toUpperCase(), homeAbbr = m[2].toUpperCase();
+            var awayParts = m[1].trim().split(' '), homeParts = m[2].trim().split(' ');
+            var awayAbbr  = awayParts[0].toUpperCase();  // "MIL"
+            var homeAbbr  = homeParts[0].toUpperCase();  // "SD"
+            var awayNick  = normSlipName(awayParts.slice(1).join(' ')); // "brewers"
+            var homeNick  = normSlipName(homeParts.slice(1).join(' ')); // "padres"
             return games.find(function(g) {
-                var ga = ((g.teams && g.teams.away && g.teams.away.team && g.teams.away.team.abbreviation) || '').toUpperCase();
-                var gh = ((g.teams && g.teams.home && g.teams.home.team && g.teams.home.team.abbreviation) || '').toUpperCase();
-                return ga === awayAbbr && gh === homeAbbr;
+                var ga  = ((g.teams && g.teams.away && g.teams.away.team && g.teams.away.team.abbreviation) || '').toUpperCase();
+                var gh  = ((g.teams && g.teams.home && g.teams.home.team && g.teams.home.team.abbreviation) || '').toUpperCase();
+                var gan = normSlipName((g.teams && g.teams.away && g.teams.away.team && g.teams.away.team.name) || '');
+                var ghn = normSlipName((g.teams && g.teams.home && g.teams.home.team && g.teams.home.team.name) || '');
+                var abbrMatch = ga === awayAbbr && gh === homeAbbr;
+                var nickMatch = (awayNick && homeNick) && gan.endsWith(awayNick) && ghn.endsWith(homeNick);
+                return abbrMatch || nickMatch;
             }) || null;
         }
         var teamName = normSlipName(playerName.replace(/ (ML|RL)$/i, '').trim());
+        // DK names like "CIN Reds" differ from MLB API full names "Cincinnati Reds".
+        // Match by: exact, nickname suffix ("reds" matches "cincinnati reds"),
+        // or 3-letter abbreviation prefix ("cin" / "tb" / "tor").
+        var nickname  = teamName.split(' ').slice(1).join(' '); // "cin reds" → "reds"
+        var abbrFirst = teamName.split(' ')[0];                 // "cin reds" → "cin"
         return games.find(function(g) {
             var hn = normSlipName((g.teams && g.teams.home && g.teams.home.team && g.teams.home.team.name) || '');
             var an = normSlipName((g.teams && g.teams.away && g.teams.away.team && g.teams.away.team.name) || '');
-            return hn === teamName || an === teamName;
+            var ha = ((g.teams && g.teams.home && g.teams.home.team && g.teams.home.team.abbreviation) || '').toLowerCase();
+            var aa = ((g.teams && g.teams.away && g.teams.away.team && g.teams.away.team.abbreviation) || '').toLowerCase();
+            return hn === teamName || an === teamName ||
+                   (nickname && (hn.endsWith(nickname) || an.endsWith(nickname))) ||
+                   ha === abbrFirst || aa === abbrFirst;
         }) || null;
     }
 
@@ -6351,16 +6459,17 @@
                 if (marketType === 'team_total') {
                     var bsTot = hS + aS, bsLine = threshold || 0;
                     var bsOver = direction === 'more', bsWonT = bsOver ? bsTot > bsLine : bsTot < bsLine;
+                    var bsPushT = bsTot === bsLine;
                     var bsLL = (bsOver ? 'O' : 'U') + bsLine;
-                    if (isFinalT) { bsOutcomeCls = bsWonT ? 'won' : 'lost'; bsOutcomeText = bsLL + '\xb7' + bsTot + ' ' + (bsWonT ? '✓' : '✗'); }
-                    else { bsOutcomeCls = (bsOver ? bsTot >= bsLine : bsTot <= bsLine) ? 'won' : 'live'; bsOutcomeText = bsLL + '\xb7' + bsTot; }
+                    if (isFinalT) { bsOutcomeCls = bsPushT ? 'push' : (bsWonT ? 'won' : 'lost'); bsOutcomeText = bsLL + '\xb7' + bsTot + ' ' + (bsPushT ? '—' : (bsWonT ? '✓' : '✗')); }
+                    else { var bsOnTrack = bsOver ? bsTot >= bsLine : bsTot <= bsLine; bsOutcomeCls = bsPushT ? 'push' : (bsOnTrack ? 'won' : 'live'); bsOutcomeText = bsOnTrack ? 'Winning' : 'Losing'; }
                 } else if (marketType === 'team_runline' && gameInfo.pickedTeamScore != null) {
                     var bsPicked = gameInfo.pickedTeamScore, bsOpp = gameInfo.oppScore;
                     var bsRlLine = threshold || 0, bsCover = (bsPicked - bsOpp) + bsRlLine, bsWonRL = bsCover > 0;
                     var bsMargin = bsCover >= 0 ? '+' + bsCover.toFixed(1) : bsCover.toFixed(1);
                     var bsRlLabel = (bsRlLine >= 0 ? '+' : '') + bsRlLine;
                     if (isFinalT) { bsOutcomeCls = bsWonRL ? 'won' : 'lost'; bsOutcomeText = bsRlLabel + '\xb7' + bsMargin + ' ' + (bsWonRL ? '✓' : '✗'); }
-                    else { bsOutcomeCls = bsWonRL ? 'won' : 'live'; bsOutcomeText = bsRlLabel + '\xb7' + bsMargin; }
+                    else { bsOutcomeCls = bsWonRL ? 'won' : 'live'; bsOutcomeText = bsWonRL ? 'Winning' : 'Losing'; }
                 } else if (gameInfo.pickedTeamScore != null) {
                     var bsMyS = gameInfo.pickedTeamScore, bsOpS = gameInfo.oppScore;
                     var bsMlWin = bsMyS > bsOpS;
@@ -6384,7 +6493,7 @@
 
         // Update progress bar (player props only)
         if (!isTeam && barEl) {
-            var UNIT = { hits:'H', total_bases:'TB', rbis:'RBI', runs:'R', hrbi:'H+R+BI', pitcher_ks:'K', outs_ou:'Outs', pts:'PTS', reb:'REB', ast:'AST', fg3m:'3PM', pra:'PRA', pa:'P+A', pr:'P+R', ra:'R+A' };
+            var UNIT = { hits:'H', total_bases:'TB', rbis:'RBI', runs:'R', hrbi:'H+R+BI', pitcher_ks:'K', outs_ou:'Outs', hits_allowed:'H', er_allowed:'ER', bb_allowed:'BB', hwer:'H+W+ER', pts:'PTS', reb:'REB', ast:'AST', fg3m:'3PM', pra:'PRA', pa:'P+A', pr:'P+R', ra:'R+A', steals:'STL', blocks:'BLK', turnovers:'TO', minutes:'MIN', points:'PTS', assists:'AST', rebounds:'REB', threes:'3PM' };
             var unit     = UNIT[marketType] || '';
             var val      = currentVal !== null ? currentVal : 0;
             var isMore   = direction === 'more';
@@ -6416,7 +6525,7 @@
         if (!dates.length) return;
         Promise.all(dates.map(function(date) {
             var fmt = date.replace(/-/g, '');
-            return fetch('https://site.api.espn.com/apis/site/v2/sports/basketball/wnba/scoreboard?dates=' + fmt, { signal: AbortSignal.timeout(8000) })
+            return fetch('https://site.api.espn.com/apis/site/v2/sports/basketball/wnba/scoreboard?dates=' + fmt, { signal: AbortSignal.timeout(8000), cache: 'no-cache' })
                 .then(function(r) { return r.json(); })
                 .then(function(data) { return { date: date, events: (data.events || []) }; })
                 .catch(function() { return { date: date, events: [] }; });
@@ -6444,6 +6553,7 @@
                     var homeComp = comps.find(function(c) { return c.homeAway === 'home'; });
                     var awayComp = comps.find(function(c) { return c.homeAway === 'away'; });
                     var gameInfo = {
+                        eventId: ev.id,
                         state: state, inningLabel: inningLabel, startET: startET,
                         homeAbbr: homeComp && homeComp.team ? (homeComp.team.abbreviation || '').toUpperCase() : '',
                         awayAbbr: awayComp && awayComp.team ? (awayComp.team.abbreviation || '').toUpperCase() : '',
@@ -6505,7 +6615,7 @@
                 }
 
                 Promise.all(liveEvents.map(function(ev) {
-                    return fetch('https://site.api.espn.com/apis/site/v2/sports/basketball/wnba/summary?event=' + ev.id, { signal: AbortSignal.timeout(8000) })
+                    return fetch('https://site.api.espn.com/apis/site/v2/sports/basketball/wnba/summary?event=' + ev.id, { signal: AbortSignal.timeout(8000), cache: 'no-cache' })
                         .then(function(r) { return r.json(); })
                         .then(function(d) { return { eventId: ev.id, d: d }; })
                         .catch(function() { return null; });
@@ -6549,13 +6659,21 @@
                         updateLegStatus(n.parlayId, n.legIndex, val, n.threshold, n.direction, n.marketType, gameInfo, false);
                     });
 
-                    // Push stats to server — CF Workers can't access ESPN directly
+                    // Push stats to server — CF Workers can't access ESPN directly.
+                    // Only send stats from FINAL games — in-progress stats cause false losses.
                     var finalGames = wnbaGameList.filter(function(g) { return g.state === 'Final'; });
-                    if ((Object.keys(playerStats).length > 0 || finalGames.length > 0) && currentUser && currentUser.is_admin) {
+                    var finalEventIdSet = {};
+                    finalGames.forEach(function(g) { if (g.eventId) finalEventIdSet[g.eventId] = true; });
+                    var finalPlayerStats = {};
+                    Object.keys(playerStats).forEach(function(pName) {
+                        var evtId = playerEvtId[pName];
+                        if (evtId && finalEventIdSet[evtId]) finalPlayerStats[pName] = playerStats[pName];
+                    });
+                    if ((Object.keys(finalPlayerStats).length > 0 || finalGames.length > 0) && currentUser && currentUser.is_admin) {
                         fetch('/api/parlays/wnba-settle', {
                             method: 'POST', credentials: 'include',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ date: date, playerStats: playerStats, teamGames: finalGames }),
+                            body: JSON.stringify({ date: date, playerStats: finalPlayerStats, teamGames: finalGames }),
                         }).then(function(r) { return r.json(); }).then(function(d) {
                             if (d.ok && d.settled > 0) { loadParlaySlips(); if (typeof loadAllSlips === 'function') loadAllSlips(); }
                         }).catch(function() {});
@@ -6567,16 +6685,23 @@
 
     function fetchLiveSlipStats() {
         if (document.hidden) return;
-        var MLB_FIELD = { hits:'hits', total_bases:'totalBases', rbis:'rbi', runs:'runs', hrbi:'hrbi', pitcher_ks:'strikeOuts', outs_ou:'outs' };
+        var MLB_FIELD = {
+            hits:'hits', total_bases:'totalBases', rbis:'rbi', runs:'runs', hrbi:'hrbi',
+            singles:'singles', stolen_bases:'stolenBases', doubles:'doubles', walks:'batterWalks',
+            pitcher_ks:'strikeOuts', outs_ou:'outs',
+            hits_allowed:'pitcherHits', er_allowed:'earnedRuns', bb_allowed:'pitcherWalks', hwer:'hwer',
+        };
 
         // Split legs by sport — WNBA goes to ESPN, MLB goes to statsapi.mlb.com
         var neededByDate     = {};  // MLB
         var wnbaNeededByDate = {};  // WNBA
+        var liveToday = new Date().toISOString().slice(0, 10);
         PARLAY_SLIPS.forEach(function(s) {
-            if (s.status !== 'active') return;
+            if (s.status !== 'active' && s.status !== 'voided' && s.status !== 'void' && s.status !== 'lost') return;
             (s.legs || []).forEach(function(leg, li) {
-                if (leg.status !== 'pending') return;
-                var gd  = leg.game_date || new Date().toISOString().slice(0, 10);
+                // Always show live bars for today's legs; settled legs on old dates keep their static display
+                if (leg.status !== 'pending' && !(leg.status === 'lost' && leg.game_date === liveToday)) return;
+                var gd  = leg.game_date || liveToday;
                 var mkt = leg.market_type || '';
                 var legObj = { parlayId: s.id, legIndex: li, playerName: leg.player_name, marketType: mkt, threshold: parseFloat(leg.threshold) || 0, direction: leg.direction, isTeam: mkt.startsWith('team_'), sport: leg.sport || '' };
                 if (WNBA_MKT_SET[mkt] || leg.sport === 'wnba') {
@@ -6596,7 +6721,7 @@
 
         // Fetch each game_date's schedule (usually just one date, but handles edge cases)
         Promise.all(dates.map(function(date) {
-            return fetch('https://statsapi.mlb.com/api/v1/schedule?date=' + date + '&sportId=1&hydrate=linescore', { signal: AbortSignal.timeout(8000) })
+            return fetch('https://statsapi.mlb.com/api/v1/schedule?date=' + date + '&sportId=1&hydrate=linescore', { signal: AbortSignal.timeout(8000), cache: 'no-cache' })
                 .then(function(r) { return r.json(); })
                 .then(function(data) { return { date: date, games: (data.dates && data.dates[0] && data.dates[0].games) || [] }; })
                 .catch(function() { return { date: date, games: [] }; });
@@ -6607,6 +6732,21 @@
                 var needed  = neededByDate[date] || [];
                 if (!needed.length) return;
 
+                // MLB schedule API doesn't return team.abbreviation with linescore hydration.
+                // Use this static map as fallback so pregame/live score chips show real abbrs.
+                var MLB_NAME_ABBR = {
+                    'Arizona Diamondbacks':'ARI','Atlanta Braves':'ATL','Baltimore Orioles':'BAL',
+                    'Boston Red Sox':'BOS','Chicago Cubs':'CHC','Chicago White Sox':'CWS',
+                    'Cincinnati Reds':'CIN','Cleveland Guardians':'CLE','Colorado Rockies':'COL',
+                    'Detroit Tigers':'DET','Houston Astros':'HOU','Kansas City Royals':'KC',
+                    'Los Angeles Angels':'LAA','Los Angeles Dodgers':'LAD','Miami Marlins':'MIA',
+                    'Milwaukee Brewers':'MIL','Minnesota Twins':'MIN','New York Mets':'NYM',
+                    'New York Yankees':'NYY','Athletics':'OAK','Oakland Athletics':'OAK',
+                    'Philadelphia Phillies':'PHI','Pittsburgh Pirates':'PIT','San Diego Padres':'SD',
+                    'San Francisco Giants':'SF','Seattle Mariners':'SEA','St. Louis Cardinals':'STL',
+                    'Tampa Bay Rays':'TB','Texas Rangers':'TEX','Toronto Blue Jays':'TOR',
+                    'Washington Nationals':'WSH',
+                };
                 var gameInfoMap  = {};
                 var previewTimes = [];
                 games.forEach(function(g) {
@@ -6615,14 +6755,16 @@
                     var half  = ls.inningHalf || '';
                     var mark  = half === 'Top' ? '▲' : half === 'Bottom' ? '▼' : '';
                     var ord   = ls.currentInningOrdinal || '';
-                    var inningLabel = mark ? mark + ' ' + ord : (state === 'Final' ? 'Final' : '');
+                    var inningLabel = mark ? mark + ' ' + ord : state === 'Final' ? 'Final' : (ord || '');
                     var startET = new Date(g.gameDate).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' });
+                    var hName = (g.teams && g.teams.home && g.teams.home.team && g.teams.home.team.name) || '';
+                    var aName = (g.teams && g.teams.away && g.teams.away.team && g.teams.away.team.name) || '';
                     gameInfoMap[g.gamePk] = {
                         state: state, startET: startET, inningLabel: inningLabel,
-                        homeAbbr: ((g.teams && g.teams.home && g.teams.home.team && g.teams.home.team.abbreviation) || '').toUpperCase(),
-                        awayAbbr: ((g.teams && g.teams.away && g.teams.away.team && g.teams.away.team.abbreviation) || '').toUpperCase(),
-                        homeName: (g.teams && g.teams.home && g.teams.home.team && g.teams.home.team.name) || '',
-                        awayName: (g.teams && g.teams.away && g.teams.away.team && g.teams.away.team.name) || '',
+                        homeAbbr: ((g.teams && g.teams.home && g.teams.home.team && g.teams.home.team.abbreviation) || MLB_NAME_ABBR[hName] || '').toUpperCase(),
+                        awayAbbr: ((g.teams && g.teams.away && g.teams.away.team && g.teams.away.team.abbreviation) || MLB_NAME_ABBR[aName] || '').toUpperCase(),
+                        homeName: hName,
+                        awayName: aName,
                         homeScore: g.teams && g.teams.home && g.teams.home.score,
                         awayScore: g.teams && g.teams.away && g.teams.away.score,
                     };
@@ -6632,7 +6774,25 @@
                 // Team market legs: update score chip (no boxscore needed)
                 needed.filter(function(n) { return n.isTeam; }).forEach(function(n) {
                     var game = findTeamGame(n.playerName, n.marketType, games);
-                    updateLegStatus(n.parlayId, n.legIndex, null, n.threshold, n.direction, n.marketType, game ? gameInfoMap[game.gamePk] : null, true);
+                    var gi = game ? gameInfoMap[game.gamePk] : null;
+                    // For ML/RL legs, identify the picked team so updateLegStatus can show Winning/Losing
+                    if (gi && (n.marketType === 'team_ml' || n.marketType === 'team_runline') && gi.homeScore != null) {
+                        var pickedNorm = normSlipName(n.playerName.replace(/ (ML|RL)$/i, '').trim());
+                        var pickedNick = pickedNorm.split(' ').slice(1).join(' '); // "reds", "rays", "blue jays"
+                        var pickedAbbr = pickedNorm.split(' ')[0];                // "cin", "tb", "tor"
+                        var homeNorm   = normSlipName(gi.homeName);
+                        var awayNorm   = normSlipName(gi.awayName);
+                        var homeAbbr   = gi.homeAbbr.toLowerCase();
+                        var awayAbbr   = gi.awayAbbr.toLowerCase();
+                        var isHome = homeNorm === pickedNorm || (pickedNick && homeNorm.endsWith(pickedNick)) || homeAbbr === pickedAbbr;
+                        var isAway = !isHome && (awayNorm === pickedNorm || (pickedNick && awayNorm.endsWith(pickedNick)) || awayAbbr === pickedAbbr);
+                        if (isHome || isAway) {
+                            gi = Object.assign({}, gi);
+                            gi.pickedTeamScore = isHome ? gi.homeScore : gi.awayScore;
+                            gi.oppScore        = isHome ? gi.awayScore : gi.homeScore;
+                        }
+                    }
+                    updateLegStatus(n.parlayId, n.legIndex, null, n.threshold, n.direction, n.marketType, gi, true);
                 });
 
                 var propNeeded = needed.filter(function(n) { return !n.isTeam; });
@@ -6651,7 +6811,7 @@
                 }
 
                 Promise.all(livePks.map(function(pk) {
-                    return fetch('https://statsapi.mlb.com/api/v1/game/' + pk + '/boxscore', { signal: AbortSignal.timeout(8000) })
+                    return fetch('https://statsapi.mlb.com/api/v1/game/' + pk + '/boxscore', { signal: AbortSignal.timeout(8000), cache: 'no-cache' })
                         .then(function(r) { return r.json(); })
                         .then(function(bs) { return { pk: pk, bs: bs }; })
                         .catch(function() { return null; });
@@ -6667,12 +6827,23 @@
                                 if (!name) return;
                                 var bat = (p.stats && p.stats.batting) || {};
                                 var pit = (p.stats && p.stats.pitching) || {};
+                                if (pit.inningsPitched) console.log('[rax-mlb-pit]', name, JSON.stringify(pit));
                                 var h = parseInt(bat.hits || 0), r = parseInt(bat.runs || 0), rbi = parseInt(bat.rbi || 0);
                                 var d = parseInt(bat.doubles || 0), tri = parseInt(bat.triples || 0), hr = parseInt(bat.homeRuns || 0);
                                 var tb = bat.totalBases !== undefined ? parseInt(bat.totalBases || 0) : (h - d - tri - hr) + 2*d + 3*tri + 4*hr;
+                                var sb = parseInt(bat.stolenBases || 0);
+                                var bb = parseInt(bat.baseOnBalls || 0);
                                 var ipParts = String(pit.inningsPitched || '').split('.');
                                 var ipOuts = (parseInt(ipParts[0]) || 0) * 3 + (parseInt(ipParts[1]) || 0);
-                                playerStats[name]  = { hits: h, totalBases: tb, rbi: rbi, runs: r, hrbi: h + r + rbi, strikeOuts: parseInt(pit.strikeOuts || 0), outs: ipOuts };
+                                var ph = parseInt(pit.hits || 0);
+                                var er = parseInt(pit.earnedRuns || 0);
+                                var pbb = parseInt(pit.baseOnBalls || pit.walks || 0);
+                                playerStats[name] = {
+                                    hits: h, totalBases: tb, rbi: rbi, runs: r, hrbi: h + r + rbi,
+                                    singles: h - d - tri - hr, doubles: d, stolenBases: sb, batterWalks: bb,
+                                    strikeOuts: parseInt(pit.strikeOuts || 0), outs: ipOuts,
+                                    pitcherHits: ph, earnedRuns: er, pitcherWalks: pbb, hwer: ph + pbb + er,
+                                };
                                 playerGamePk[name] = res.pk;
                             });
                         });
@@ -6693,18 +6864,24 @@
     }
 
     function fetchSettledLegStats() {
-        var MLB_FIELD = { hits:'hits', total_bases:'totalBases', rbis:'rbi', runs:'runs', hrbi:'hrbi', pitcher_ks:'strikeOuts', outs_ou:'outs' };
+        var MLB_FIELD = {
+            hits:'hits', total_bases:'totalBases', rbis:'rbi', runs:'runs', hrbi:'hrbi',
+            singles:'singles', stolen_bases:'stolenBases', doubles:'doubles', walks:'batterWalks',
+            pitcher_ks:'strikeOuts', outs_ou:'outs',
+            hits_allowed:'pitcherHits', er_allowed:'earnedRuns', bb_allowed:'pitcherWalks', hwer:'hwer',
+        };
         var neededByDate     = {};  // MLB
         var wnbaNeededByDate = {};  // WNBA
         PARLAY_SLIPS.forEach(function(s) {
-            if (s.status !== 'won' && s.status !== 'lost') return;
+            if (s.status === 'void' || s.status === 'expired') return;
             (s.legs || []).forEach(function(leg, li) {
                 var mkt = leg.market_type || '';
                 if (mkt.startsWith('team_')) return;
+                if (leg.status !== 'won' && leg.status !== 'lost') return;
                 if (leg.result_value != null) return; // already stored
                 var gd = leg.game_date;
                 if (!gd) return;
-                var legObj = { parlayId: s.id, legIndex: li, playerName: leg.player_name, marketType: mkt };
+                var legObj = { parlayId: s.id, legIndex: li, playerName: leg.player_name, marketType: mkt, threshold: parseFloat(leg.threshold) || 0, direction: leg.direction || 'more' };
                 if (WNBA_MKT_SET[mkt]) {
                     if (!wnbaNeededByDate[gd]) wnbaNeededByDate[gd] = [];
                     wnbaNeededByDate[gd].push(legObj);
@@ -6720,19 +6897,18 @@
         if (wnbaDates.length) {
             Promise.all(wnbaDates.map(function(date) {
                 var fmt = date.replace(/-/g, '');
-                return fetch('https://site.api.espn.com/apis/site/v2/sports/basketball/wnba/scoreboard?dates=' + fmt, { signal: AbortSignal.timeout(8000) })
+                return fetch('https://site.api.espn.com/apis/site/v2/sports/basketball/wnba/scoreboard?dates=' + fmt, { signal: AbortSignal.timeout(8000), cache: 'no-cache' })
                     .then(function(r) { return r.json(); })
                     .then(function(data) {
                         var evts = data.events || [];
                         return Promise.all(evts.map(function(ev) {
-                            return fetch('https://site.api.espn.com/apis/site/v2/sports/basketball/wnba/summary?event=' + ev.id, { signal: AbortSignal.timeout(8000) })
+                            return fetch('https://site.api.espn.com/apis/site/v2/sports/basketball/wnba/summary?event=' + ev.id, { signal: AbortSignal.timeout(8000), cache: 'no-cache' })
                                 .then(function(r) { return r.json(); })
                                 .catch(function() { return null; });
                         })).then(function(summaries) { return { date: date, summaries: summaries }; });
                     })
                     .catch(function() { return { date: date, summaries: [] }; });
             })).then(function(results) {
-                var updated = false;
                 results.forEach(function(dr) {
                     var playerStats = {};
                     (dr.summaries || []).forEach(function(d) {
@@ -6756,12 +6932,12 @@
                     (wnbaNeededByDate[dr.date] || []).forEach(function(n) {
                         var stats = playerStats[normSlipName(n.playerName)];
                         if (stats && stats[n.marketType] !== undefined) {
-                            settledLegStats[n.parlayId + '-' + n.legIndex] = stats[n.marketType];
-                            updated = true;
+                            var sv = stats[n.marketType];
+                            settledLegStats[n.parlayId + '-' + n.legIndex] = sv;
+                            updateLegStatus(n.parlayId, n.legIndex, sv, n.threshold, n.direction, n.marketType, { state: 'Final' }, false);
                         }
                     });
                 });
-                if (updated) parlayRenderSlips(PARLAY_SLIPS);
             }).catch(function() {});
         }
 
@@ -6769,20 +6945,19 @@
         if (!dates.length) return;
 
         Promise.all(dates.map(function(date) {
-            return fetch('https://statsapi.mlb.com/api/v1/schedule?date=' + date + '&sportId=1', { signal: AbortSignal.timeout(8000) })
+            return fetch('https://statsapi.mlb.com/api/v1/schedule?date=' + date + '&sportId=1', { signal: AbortSignal.timeout(8000), cache: 'no-cache' })
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     var games = (data.dates && data.dates[0] && data.dates[0].games) || [];
                     var pks   = games.map(function(g) { return g.gamePk; });
                     return Promise.all(pks.map(function(pk) {
-                        return fetch('https://statsapi.mlb.com/api/v1/game/' + pk + '/boxscore', { signal: AbortSignal.timeout(8000) })
+                        return fetch('https://statsapi.mlb.com/api/v1/game/' + pk + '/boxscore', { signal: AbortSignal.timeout(8000), cache: 'no-cache' })
                             .then(function(r) { return r.json(); })
                             .catch(function() { return null; });
                     })).then(function(boxscores) { return { date: date, boxscores: boxscores }; });
                 })
                 .catch(function() { return { date: date, boxscores: [] }; });
         })).then(function(results) {
-            var updated = false;
             results.forEach(function(dr) {
                 var playerStats = {};
                 (dr.boxscores || []).forEach(function(bs) {
@@ -6797,9 +6972,19 @@
                             var h = parseInt(bat.hits || 0), r = parseInt(bat.runs || 0), rbi = parseInt(bat.rbi || 0);
                             var d2 = parseInt(bat.doubles || 0), tri2 = parseInt(bat.triples || 0), hr2 = parseInt(bat.homeRuns || 0);
                             var tb2 = bat.totalBases !== undefined ? parseInt(bat.totalBases || 0) : (h - d2 - tri2 - hr2) + 2*d2 + 3*tri2 + 4*hr2;
+                            var sb2 = parseInt(bat.stolenBases || 0);
+                            var bb2 = parseInt(bat.baseOnBalls || 0);
                             var ipParts2 = String(pit.inningsPitched || '').split('.');
                             var ipOuts2 = (parseInt(ipParts2[0]) || 0) * 3 + (parseInt(ipParts2[1]) || 0);
-                            playerStats[name] = { hits: h, totalBases: tb2, rbi: rbi, runs: r, hrbi: h + r + rbi, strikeOuts: parseInt(pit.strikeOuts || 0), outs: ipOuts2 };
+                            var ph2 = parseInt(pit.hits || 0);
+                            var er2 = parseInt(pit.earnedRuns || 0);
+                            var pbb2 = parseInt(pit.baseOnBalls || 0);
+                            playerStats[name] = {
+                                hits: h, totalBases: tb2, rbi: rbi, runs: r, hrbi: h + r + rbi,
+                                singles: h - d2 - tri2 - hr2, doubles: d2, stolenBases: sb2, batterWalks: bb2,
+                                strikeOuts: parseInt(pit.strikeOuts || 0), outs: ipOuts2,
+                                pitcherHits: ph2, earnedRuns: er2, pitcherWalks: pbb2, hwer: ph2 + pbb2 + er2,
+                            };
                         });
                     });
                 });
@@ -6807,12 +6992,12 @@
                     var stats = playerStats[normSlipName(n.playerName)];
                     var field = MLB_FIELD[n.marketType];
                     if (stats && field && stats[field] !== undefined) {
-                        settledLegStats[n.parlayId + '-' + n.legIndex] = stats[field];
-                        updated = true;
+                        var sv = stats[field];
+                        settledLegStats[n.parlayId + '-' + n.legIndex] = sv;
+                        updateLegStatus(n.parlayId, n.legIndex, sv, n.threshold, n.direction, n.marketType, { state: 'Final' }, false);
                     }
                 });
             });
-            if (updated) parlayRenderSlips(PARLAY_SLIPS);
         }).catch(function() {});
     }
 
@@ -6865,7 +7050,23 @@
     window.parlayShare = function(id, btn) {
         var s = PARLAY_SLIPS.find(function(x) { return x.id === id; });
         if (!s) return;
-        var MKT_LABEL = { hits:'Hits', total_bases:'Total Bases', rbis:'RBIs', runs:'Runs', hrbi:'H+R+RBI', pitcher_ks:'Pitcher Ks', outs_ou:'Outs', pts:'Points', reb:'Rebounds', ast:'Assists', fg3m:'Threes', pra:'PRA', pa:'Pts+Ast', pr:'Pts+Reb', ra:'Reb+Ast' };
+        var MKT_LABEL = {
+            hits:'Hits', total_bases:'Total Bases', rbis:'RBIs', runs:'Runs', hrbi:'H+R+RBI',
+            singles:'Singles', stolen_bases:'Stolen Bases', doubles:'Doubles', walks:'Walks',
+            pitcher_ks:'Pitcher Ks', outs_ou:'Outs',
+            hits_allowed:'Hits Allowed', er_allowed:'Earned Runs', bb_allowed:'Walks Allowed', hwer:'H+W+ER',
+            pts:'Points', reb:'Rebounds', ast:'Assists', fg3m:'Threes', pra:'PRA', pa:'Pts+Ast', pr:'Pts+Reb', ra:'Reb+Ast',
+            points:'Points', assists:'Assists', rebounds:'Rebounds', steals:'Steals',
+            blocks:'Blocks', threes:'Threes', turnovers:'Turnovers', minutes:'Minutes',
+            '1inn_ml':'1st Inn Winner', '1inn_runs_ou':'1st Inn Runs', '1inn_runs_exact':'1st Inn Runs',
+            '1inn_hits_ou':'1st Inn Hits', '1inn_hits_exact':'1st Inn Hits',
+            '1inn_run_yn':'1st Inn Score', '1inn_walks_ou':'1st Inn Walks',
+            '1inn_pitches_ou':'1st Inn Pitches', '1inn_pitches_range':'1st Inn Pitches',
+            '1inn_batters_ou':'1st Inn Batters', '1inn_hr_yn':'1st Inn HR',
+            '1inn_ks':'1st Inn Ks', '1inn_ks_exact':'1st Inn Ks',
+            team_ml:'Moneyline', team_runline:'Run Line', team_total:'Total',
+            ufc_ml:'Fighter ML', ufc_total:'Fight Total',
+        };
         var mult = s.stake_rax > 0 ? (s.payout_rax / s.stake_rax).toFixed(2) + 'x' : '';
         var emoji = s.status === 'won' ? '🏆' : s.status === 'lost' ? '❌' : '🎯';
         var header = emoji + ' RaxEdge Parlay' + (mult ? ' — ' + mult : '') + (s.status === 'won' ? ' WON' : s.status === 'lost' ? ' LOST' : '');
@@ -6937,8 +7138,8 @@
     }
 
     function parlaySlipCard(s, showUsername) {
-        var LABEL = { pending_deposit:'Pending Deposit', active:'Active', won:'Won', lost:'Lost', expired:'Expired', void:'Cancelled', voided:'Cancelled' };
-        var CLS   = { pending_deposit:'s-pending', active:'s-active', won:'s-won', lost:'s-lost', expired:'s-gray', void:'s-gray', voided:'s-gray' };
+        var LABEL = { pending_deposit:'Pending Deposit', active:'Active', won:'Won', lost:'Lost', expired:'Expired', void:'Cancelled', voided:'Refunded' };
+        var CLS   = { pending_deposit:'s-pending', active:'s-active', won:'s-won', lost:'s-lost', expired:'s-gray', void:'s-gray', voided:'s-push' };
         var label = LABEL[s.status] || s.status;
         var cls   = CLS[s.status] || 's-gray';
         var date  = new Date(s.created_at * 1000).toLocaleDateString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' });
@@ -6949,7 +7150,30 @@
         var today = new Date().toISOString().slice(0, 10);
 
         var legsHtml = '';
-        var MKT_SHORT = { hits:'Hits', total_bases:'Total Bases', rbis:'RBIs', runs:'Runs', hrbi:'H+R+RBI', pitcher_ks:'Pitcher Ks', outs_ou:'Outs', pts:'Points', reb:'Rebounds', ast:'Assists', fg3m:'Threes', pra:'PRA', pa:'Pts+Ast', pr:'Pts+Reb', ra:'Reb+Ast' };
+        var MKT_SHORT = {
+            // MLB batter
+            hits:'Hits', total_bases:'Total Bases', rbis:'RBIs', runs:'Runs', hrbi:'H+R+RBI',
+            singles:'Singles', stolen_bases:'Stolen Bases', doubles:'Doubles', walks:'Walks',
+            // MLB pitcher
+            pitcher_ks:'Pitcher Ks', outs_ou:'Outs',
+            hits_allowed:'Hits Allowed', er_allowed:'Earned Runs', bb_allowed:'Walks Allowed', hwer:'H+W+ER',
+            // WNBA/NBA abbreviated
+            pts:'Points', reb:'Rebounds', ast:'Assists', fg3m:'Threes', pra:'PRA', pa:'Pts+Ast', pr:'Pts+Reb', ra:'Reb+Ast',
+            // Basketball full-name keys
+            points:'Points', assists:'Assists', rebounds:'Rebounds', steals:'Steals',
+            blocks:'Blocks', threes:'Threes', turnovers:'Turnovers', minutes:'Minutes',
+            // 1st inning
+            '1inn_ml':'1st Inn Winner', '1inn_runs_ou':'1st Inn Runs', '1inn_runs_exact':'1st Inn Runs',
+            '1inn_hits_ou':'1st Inn Hits', '1inn_hits_exact':'1st Inn Hits',
+            '1inn_run_yn':'1st Inn Score', '1inn_walks_ou':'1st Inn Walks',
+            '1inn_pitches_ou':'1st Inn Pitches', '1inn_pitches_range':'1st Inn Pitches',
+            '1inn_batters_ou':'1st Inn Batters', '1inn_hr_yn':'1st Inn HR',
+            '1inn_ks':'1st Inn Ks', '1inn_ks_exact':'1st Inn Ks',
+            // Team markets (fallback — label usually set directly)
+            team_ml:'Moneyline', team_runline:'Run Line', team_total:'Total',
+            // UFC
+            ufc_ml:'Fighter ML', ufc_total:'Fight Total',
+        };
         for (var li = 0; li < legsArr.length; li++) {
             var leg = legsArr[li];
             var dir = leg.direction === 'more' ? 'more' : 'less';
@@ -6957,8 +7181,8 @@
             var thresh = leg.threshold != null ? leg.threshold : '';
             var mkt = leg.market_type || '';
             var isTeamMkt = mkt.startsWith('team_') || mkt.startsWith('1inn_');
-            var legResultCls = leg.status === 'won' ? ' leg-won' : leg.status === 'lost' ? ' leg-lost' : '';
-            var legIcon = leg.status === 'won' ? '<span class="pslip-ri win">✓</span>' : leg.status === 'lost' ? '<span class="pslip-ri loss">✗</span>' : '';
+            var legResultCls = leg.status === 'won' ? ' leg-won' : leg.status === 'lost' ? ' leg-lost' : leg.status === 'push' ? ' leg-push' : '';
+            var legIcon = leg.status === 'won' ? '<span class="pslip-ri win">✓</span>' : leg.status === 'lost' ? '<span class="pslip-ri loss">✗</span>' : leg.status === 'push' ? '<span class="pslip-ri push">—</span>' : '';
             var resultVal = leg.result_value != null ? ' (' + leg.result_value + ')' : '';
 
             var words = (leg.player_name || '').split(' ');
@@ -6973,7 +7197,8 @@
                 var evtAway = evtPts ? evtPts[1].trim() : null;
                 var evtHome = evtPts ? evtPts[2].trim() : null;
                 var logoA = null, logoB = null;
-                if (mkt === 'team_total') {
+                if (mkt === 'team_total' || mkt.startsWith('1inn_')) {
+                    // Game-level markets — show both team logos
                     logoA = evtAway ? dkTeamLogo(evtAway) : null;
                     logoB = evtHome ? dkTeamLogo(evtHome) : null;
                 } else if (mkt === 'team_runline') {
@@ -7020,8 +7245,10 @@
                 ? escHtml((leg.label || mkt) + resultVal)
                 : escHtml((dir === 'more' ? 'Over ' : 'Under ') + thresh + ' ' + (MKT_SHORT[mkt] || mkt) + resultVal);
 
-            // Show live tracking for all active/pending legs (no UTC date check — games run in ET)
-            var showStatus = s.status === 'active' && leg.status === 'pending';
+            // Show live tracking for any today leg that could still change
+            var showStatus = (s.status === 'active' || s.status === 'lost') &&
+                             (leg.status === 'pending' || leg.status === 'lost') &&
+                             (leg.game_date || '') === today;
             var timeHtml = '';
             if (showStatus) {
                 if (isTeamMkt) {
@@ -7042,16 +7269,19 @@
             var initPct = dir === 'more' ? '0' : '100'; // over starts empty; under starts full
             var initBar = '<div class="pslip-prog-track"><div class="pslip-prog-fill prog-more" style="width:' + initPct + '%"></div></div><span class="pslip-prog-stat">0' + (unitInline ? ' ' + unitInline : '') + '</span>';
             var progHtml = '';
-            if (isTeamMkt && s.status === 'active' && leg.status === 'pending') {
+            var isLiveParlay = s.status === 'active' || s.status === 'lost';
+            if (isTeamMkt && isLiveParlay && leg.status === 'pending') {
                 progHtml = '<div class="pslip-team-bs-wrap" id="prog-' + s.id + '-' + li + '"></div>';
-            } else if (!isTeamMkt && s.status === 'active' && leg.status === 'pending') {
+            } else if (!isTeamMkt && leg.status === 'pending' && isLiveParlay) {
+                // Pending legs always get a live-updating bar — no date check (avoids UTC/ET midnight issues)
                 progHtml = '<div class="pslip-prog-wrap" id="prog-' + s.id + '-' + li + '">' + initBar + '</div>';
             } else if (!isTeamMkt && (leg.status === 'won' || leg.status === 'lost')) {
+                // Settled legs — always give an ID so fetchSettledLegStats can update in-place
                 var rv  = leg.result_value != null ? parseFloat(leg.result_value) : (settledLegStats[s.id + '-' + li] != null ? settledLegStats[s.id + '-' + li] : null);
                 var thr = parseFloat(thresh) || 1;
                 if (leg.status === 'won') {
                     var sStatLabel = rv != null ? escHtml(String(rv) + (unitInline ? ' ' + unitInline : '')) : '';
-                    progHtml = '<div class="pslip-prog-wrap">' +
+                    progHtml = '<div class="pslip-prog-wrap" id="prog-' + s.id + '-' + li + '">' +
                         '<div class="pslip-prog-track">' +
                             '<div class="pslip-prog-fill prog-won" style="width:100%"></div>' +
                         '</div>' +
@@ -7060,19 +7290,21 @@
                 } else if (dir === 'more' && rv != null) {
                     var sPct = Math.min(rv / thr * 100, 99).toFixed(1);
                     var sMarkerHtml = '<div class="pslip-prog-marker" style="left:' + sPct + '%"><span class="pslip-prog-marker-val">' + escHtml(String(rv)) + '</span></div>';
-                    progHtml = '<div class="pslip-prog-wrap">' +
+                    progHtml = '<div class="pslip-prog-wrap" id="prog-' + s.id + '-' + li + '">' +
                         '<div class="pslip-prog-track pslip-prog-track-mark">' +
                             '<div class="pslip-prog-fill prog-lost" style="width:' + sPct + '%"></div>' +
                             sMarkerHtml +
                         '</div>' +
                         '<span class="pslip-prog-stat">' + escHtml(String(rv) + (unitInline ? ' ' + unitInline : '')) + '</span>' +
                     '</div>';
-                } else if (rv != null) {
-                    progHtml = '<div class="pslip-prog-wrap">' +
+                } else {
+                    // No result_value yet (or under-lost with rv=null) — placeholder; fetchSettledLegStats will fill in
+                    var emptyFillCls = leg.status === 'won' ? 'prog-won' : 'prog-lost';
+                    var emptyPct = leg.status === 'won' ? '100' : (dir === 'more' ? '0' : '100');
+                    progHtml = '<div class="pslip-prog-wrap" id="prog-' + s.id + '-' + li + '">' +
                         '<div class="pslip-prog-track">' +
-                            '<div class="pslip-prog-fill prog-lost" style="width:100%"></div>' +
+                            '<div class="pslip-prog-fill ' + emptyFillCls + '" style="width:' + emptyPct + '%"></div>' +
                         '</div>' +
-                        '<span class="pslip-prog-stat">' + escHtml(String(rv) + (unitInline ? ' ' + unitInline : '')) + '</span>' +
                     '</div>';
                 }
             }
@@ -7083,7 +7315,7 @@
                 avatarHtml +
                 '<div class="pslip-leg-body">' +
                     '<div class="pslip-leg-top"><span class="pslip-leg-name">' + escHtml(leg.player_name) + '</span>' + legRsBtn + timeHtml + legIcon + '</div>' +
-                    '<div class="pslip-leg-sub">' + statLine + ' · <span class="pslip-odds">' + escHtml(odds) + '</span></div>' +
+                    '<div class="pslip-leg-sub"><span class="pslip-market">' + statLine + '</span> · <span class="pslip-odds">' + escHtml(odds) + '</span></div>' +
                     progHtml +
                 '</div>' +
             '</div>';
@@ -7551,8 +7783,12 @@
                        PARLAY_GAMES_WNBA.find(function(g) { return g.eventId === p.eventId; }) ||
                        PARLAY_GAMES_NFL.find(function(g) { return g.eventId === p.eventId; }) ||
                        (p.awayTeam && p.homeTeam ? p : null));
-            var _gameKey = (_pg && _pg.awayTeam && _pg.homeTeam) ? (_pg.awayTeam + ' @ ' + _pg.homeTeam) :
-                           (p.awayShort && p.homeShort ? p.awayShort + ' @ ' + p.homeShort : '');
+            // 1inn picks: playerName uses awayShort/homeShort (e.g. "PIT Hits").
+            // awayTeam/homeTeam may be full names ("Pittsburgh Pirates") causing mismatch in
+            // place.js get1innHalf — always prefer awayShort/homeShort when available.
+            var _gameKey = (p.awayShort && p.homeShort) ? (p.awayShort + ' @ ' + p.homeShort) :
+                           (_pg && _pg.awayTeam && _pg.homeTeam) ? (_pg.awayTeam + ' @ ' + _pg.homeTeam) :
+                           '';
             return {
                 playerName:   p.name,
                 direction:    dir,

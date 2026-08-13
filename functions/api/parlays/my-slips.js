@@ -9,7 +9,7 @@ export async function onRequestGet({ request, env }) {
   if (!session) return err('Authentication required', 401);
 
   const now = Math.floor(Date.now() / 1000);
-  const pendingCutoff = now - 1800; // hide pending_deposit older than 30 min (never deposited)
+  const pendingCutoff = now - 7200; // hide pending_deposit older than 2 h (matches deposit-check 90-min expiry buffer)
 
   const { results: parlays } = await env.DB.prepare(
     'SELECT id, status, legs_count, stake_rax, payout_rax, deposit_card_id, ' +
@@ -25,7 +25,7 @@ export async function onRequestGet({ request, env }) {
   // Use subquery to avoid spreading N bind params — more reliable in D1 runtime
   const { results: legs } = await env.DB.prepare(
     'SELECT pl.id, pl.parlay_id, pl.player_name, pl.label, pl.threshold, pl.direction, ' +
-    'pl.american_odds, pl.status, pl.result_value, pl.market_type, pl.headshot_url, pl.game_date, pl.event_name, pl.sport ' +
+    'pl.american_odds, pl.status, pl.result_value, pl.market_type, pl.headshot_url, pl.game_date, pl.event_name, pl.sport, pl.game_start_ms ' +
     'FROM parlay_legs pl ' +
     'WHERE pl.parlay_id IN (' +
     "  SELECT id FROM parlays WHERE user_id = ? AND status NOT IN ('expired','void','voided') AND NOT (status='pending_deposit' AND created_at<?) " +

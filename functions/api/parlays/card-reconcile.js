@@ -17,18 +17,7 @@ const RS_DEVICE_UUID = '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e';
 // "user" path parameter — NOT the account user ID.
 // Season format: sync-cards.js uses plain years (2025, 2024) — NOT '2025-26' style.
 const CARD_SPORTS = [
-  { sport: 'mlb', season: '2026' },
-  { sport: 'nba', season: '2026' },
-  { sport: 'nhl', season: '2026' },
   { sport: 'mlb', season: '2025' },
-  { sport: 'mlb', season: '2024' },
-  { sport: 'nba', season: '2025' },
-  { sport: 'nba', season: '2024' },
-  { sport: 'nhl', season: '2025' },
-  { sport: 'nhl', season: '2024' },
-  { sport: 'nfl', season: '2024' },
-  { sport: 'nfl', season: '2023' },
-  { sport: 'ufc', season: '2023' },
 ];
 
 function buildHeaders(authInfo, sessionToken) {
@@ -50,49 +39,60 @@ function buildHeaders(authInfo, sessionToken) {
 
 // RS collectingcards URL takes the RS user ID in the path, same as sync-cards.js.
 const EDGEBOT_USER = 'V3yGgkkJ';
-const PAGE_SIZE = 10;
+const PAGE_SIZE    = 10;
+const MAX_PAGES    = 50; // safety cap per sport/season (50 × 10 = 500 cards max)
 
 async function fetchCardPage(sport, season, offset, hdrs) {
   try {
     const url =
       `https://web.realapp.com/collectingcards/${sport}/season/${season}/entity/play` +
       `/user/${EDGEBOT_USER}/cards?includeRecommendations=true&rarity=all&view=rating&offset=${offset}`;
-    const res = await fetch(url, { headers: hdrs, signal: AbortSignal.timeout(12000) });
-    if (!res.ok) return { ids: [], done: true, httpStatus: res.status };
+    const res = await fetch(url, { headers: hdrs, signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return { ids: [], httpStatus: res.status };
     const data  = await res.json();
     const cards = data.cards || [];
-    // Explicitly verify userId matches edgebot — defense against RS returning non-owned cards.
-    const ids   = cards.filter(c => c.userId === EDGEBOT_USER).map(c => c.id).filter(id => id != null).map(Number);
-    // RS returns cardCount:0 always — can't trust it. Done when we get a partial page.
-    return { ids, done: ids.length < PAGE_SIZE, httpStatus: 200 };
-  } catch (e) { return { ids: [], done: true, error: e.message }; }
+    const ids   = cards.map(c => c.id || c.cardId || null).filter(id => id != null).map(Number);
+    return { ids, httpStatus: 200 };
+  } catch (e) { return { ids: [], httpStatus: 0, error: e.message }; }
+}
+
+// Fetch all cards for one sport/season. Pages sequentially until partial page (<10) or cap.
+// RS never returns cardCount, so we must use the partial-page signal to detect the last page.
+async function fetchAllForSport(sport, season, hdrs) {
+  const first = await fetchCardPage(sport, season, 0, hdrs);
+  const allIds = [...first.ids];
+
+  if (first.ids.length >= PAGE_SIZE) {
+    let offset = PAGE_SIZE;
+    for (let p = 0; p < MAX_PAGES; p++) {
+      const page = await fetchCardPage(sport, season, offset, hdrs);
+      if (!page.ids.length) break;       // empty page = done
+      allIds.push(...page.ids);
+      if (page.ids.length < PAGE_SIZE) break; // partial page = last page
+      offset += PAGE_SIZE;
+    }
+  }
+
+  return { ids: allIds, httpStatus: first.httpStatus };
 }
 
 // Fetch all cards edgebot owns across all configured sports.
-// Returns { owned: Set<number>, sportStats: Array } for both normal and debug use.
-// NOTE: RS returns cardCount:0 always, so we paginate until we get a partial page.
+// Runs all sport/season combos in parallel; within each combo pages sequentially.
 async function fetchEdgebotOwnedCardIds(authInfo, sessionToken) {
+  const hdrs = buildHeaders(authInfo, sessionToken);
+
+  const results = await Promise.all(
+    CARD_SPORTS.map(async ({ sport, season }) => {
+      const { ids, httpStatus } = await fetchAllForSport(sport, season, hdrs);
+      return { sport, season, ids, httpStatus };
+    })
+  );
+
   const owned      = new Set();
   const sportStats = [];
-  const hdrs       = buildHeaders(authInfo, sessionToken);
-
-  for (const { sport, season } of CARD_SPORTS) {
-    let offset    = 0;
-    let totalFound = 0;
-    let pages     = 0;
-    let lastStatus;
-
-    while (true) {
-      const page = await fetchCardPage(sport, season, offset, hdrs);
-      lastStatus = page.httpStatus;
-      for (const id of page.ids) owned.add(id);
-      totalFound += page.ids.length;
-      pages++;
-      if (page.done) break;
-      offset += PAGE_SIZE;
-    }
-
-    sportStats.push({ sport, season, found: totalFound, pages, httpStatus: lastStatus });
+  for (const { sport, season, ids, httpStatus } of results) {
+    for (const id of ids) owned.add(id);
+    sportStats.push({ sport, season, found: ids.length, httpStatus });
   }
 
   return { owned, sportStats };
@@ -114,6 +114,13 @@ async function handleRequest({ request, env }) {
 
   const authInfo     = env.EDGEBOT_AUTH_INFO;
   const sessionToken = env.EDGEBOT_SESSION_TOKEN || '';
+  try {
+    const _dbgnow = Math.floor(Date.now()/1000);
+    await env.DB.prepare(
+      "INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES('card_reconcile_debug',?,?) " +
+      "ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at"
+    ).bind(JSON.stringify({ step:'auth_check', hasAuthInfo: !!authInfo, authInfoLen: authInfo?.length, hasSession: !!sessionToken, sessionLen: sessionToken?.length }), _dbgnow).run();
+  } catch(_) {}
   if (!authInfo) return err('EDGEBOT_AUTH_INFO not configured', 500);
 
   // 0. Free cards assigned to parlays that have reached a terminal state.
@@ -135,14 +142,37 @@ async function handleRequest({ request, env }) {
 
   // 1. Load all pool cards (assigned AND unassigned — a sold card could be assigned to an
   //    active parlay that was already deposited, so only remove truly unassigned ghost cards)
-  const { results: poolRows } = await env.DB.prepare(
-    'SELECT card_id, assigned_to_parlay_id FROM deposit_cards'
-  ).all();
+  let poolRows;
+  try {
+    const res = await env.DB.prepare(
+      'SELECT card_id, assigned_to_parlay_id, assigned_at FROM deposit_cards'
+    ).all();
+    poolRows = res.results || [];
+  } catch (e) {
+    try {
+      await env.DB.prepare(
+        "INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES('card_reconcile_owned',?,?) " +
+        "ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at"
+      ).bind(JSON.stringify({ crash: 'pool_query', error: e.message }), Math.floor(Date.now()/1000)).run();
+    } catch(_) {}
+    return err('pool query failed: ' + e.message, 500);
+  }
 
   if (!poolRows.length) return ok({ poolSize: 0, removed: 0, reason: 'pool_empty' });
 
   // 2. Fetch edgebot's actual RS card inventory
-  const { owned, sportStats } = await fetchEdgebotOwnedCardIds(authInfo, sessionToken);
+  let owned, sportStats;
+  try {
+    ({ owned, sportStats } = await fetchEdgebotOwnedCardIds(authInfo, sessionToken));
+  } catch (e) {
+    try {
+      await env.DB.prepare(
+        "INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES('card_reconcile_owned',?,?) " +
+        "ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at"
+      ).bind(JSON.stringify({ crash: 'rs_fetch', error: e.message }), Math.floor(Date.now()/1000)).run();
+    } catch(_) {}
+    return err('RS fetch crashed: ' + e.message, 500);
+  }
 
   if (debug) {
     return new Response(JSON.stringify({
@@ -158,23 +188,50 @@ async function handleRequest({ request, env }) {
   }
 
   if (!owned.size) {
+    try {
+      await env.DB.prepare(
+        "INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES('card_reconcile_owned',?,?) " +
+        "ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at"
+      ).bind(JSON.stringify({ owned: 0, sportStats }), Math.floor(Date.now()/1000)).run();
+    } catch(_) {}
     return ok({ poolSize: poolRows.length, removed: 0, reason: 'rs_returned_empty_may_be_auth_error', sportStats });
   }
 
   // 3a. Stamp verified_at on every card edgebot still owns (used by place.js to gate assignment).
+  // Also clear freed_at — a card that was released by a user cancel but is confirmed still owned
+  // by edgebot is safe to reassign. Without clearing freed_at the card is permanently blocked.
   const now = Math.floor(Date.now() / 1000);
   const poolCardIds   = new Set(poolRows.map(r => r.card_id));
   const ownedPoolIds  = poolRows.filter(r => owned.has(r.card_id)).map(r => r.card_id);
+  try {
+    await env.DB.prepare(
+      "INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES('card_reconcile_debug',?,?) " +
+      "ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at"
+    ).bind(JSON.stringify({
+      ownedSize: owned.size, ownedPoolIds: ownedPoolIds.length,
+      poolSize: poolRows.length, sportStats,
+      sampleOwned: [...owned].slice(0, 5),
+      samplePool: poolRows.slice(0, 5).map(r => r.card_id),
+    }), now).run();
+  } catch(_) {}
   if (ownedPoolIds.length) {
     await env.DB.batch(
       ownedPoolIds.map(id =>
-        env.DB.prepare('UPDATE deposit_cards SET verified_at=? WHERE card_id=?').bind(now, id)
+        env.DB.prepare('UPDATE deposit_cards SET verified_at=?, freed_at=NULL WHERE card_id=?').bind(now, id)
       )
     );
   }
 
   // 3b-new. Insert cards edgebot owns that aren't in the pool yet (e.g. fresh auction wins).
-  const newCardIds = [...owned].filter(id => !poolCardIds.has(id));
+  // Exclude cards recently used as deposit cards (within 2 hours) — card-reconcile running just
+  // after deposit-check deletes a used card could re-insert it before RS reflects the transfer,
+  // causing the same card to be assigned to a new parlay and matched to the stale accepted offer.
+  const recentlyUsedRes = await env.DB.prepare(
+    "SELECT deposit_card_id FROM parlays WHERE deposit_card_id IS NOT NULL AND deposited_at > ? AND status='active'"
+  ).bind(now - 2 * 3600).all();
+  const recentlyUsed = new Set((recentlyUsedRes.results || []).map(r => r.deposit_card_id));
+
+  const newCardIds = [...owned].filter(id => !poolCardIds.has(id) && !recentlyUsed.has(id));
   if (newCardIds.length) {
     await env.DB.batch(
       newCardIds.map(id =>
@@ -184,12 +241,22 @@ async function handleRequest({ request, env }) {
   }
 
   // 3b. Find ghost cards: in pool but not in edgebot's RS inventory.
-  //    Split into two groups:
+  //    Split into groups:
   //    a) Unassigned ghosts — safe to delete immediately.
-  //    b) Assigned ghosts — edgebot sold the card after it was reserved for a parlay.
-  //       Void the parlay so the user can retry, then delete the card.
+  //    b) Assigned ghosts — card left edgebot's inventory while reserved for a parlay.
+  //       If assigned within the last 90 min it's likely a legitimate deposit (user accepted
+  //       counter-offer and the card transferred to them). Leave these alone — deposit-check
+  //       will activate the parlay when it sees the accepted offer.
+  //       Only void cards assigned more than 90 min ago (edgebot sold the card externally).
+  const DEPOSIT_GRACE_SEC = 90 * 60;
   const unassignedGhosts = poolRows.filter(r => !owned.has(r.card_id) && r.assigned_to_parlay_id == null);
-  const assignedGhosts   = poolRows.filter(r => !owned.has(r.card_id) && r.assigned_to_parlay_id != null);
+  const assignedGhosts   = poolRows.filter(r =>
+    !owned.has(r.card_id) &&
+    r.assigned_to_parlay_id != null &&
+    // Fall back to `now` (not 0) when assigned_at is null — null means "just assigned"
+    // and should get the full grace window rather than bypassing it.
+    (now - (r.assigned_at ?? now)) > DEPOSIT_GRACE_SEC
+  );
 
   const removed = unassignedGhosts.length + assignedGhosts.length;
   if (!removed) return ok({ poolSize: poolRows.length, added: newCardIds.length, removed: 0, owned: owned.size });

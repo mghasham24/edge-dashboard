@@ -33,14 +33,33 @@ function buildHeaders(authInfo, sessionToken) {
   };
 }
 
+// Paginate RS offers. For accepted views the offer can be many pages back (offset=30+ has happened).
+// We paginate up to 50 offers (5 pages) and stop when all offers on a page are older than 24h.
 async function fetchOffers(authInfo, sessionToken, view, status) {
-  const res = await fetch(
-    `https://web.realapp.com/cardmarketplace/user/offers?offset=0&status=${status}&view=${view}`,
-    { headers: buildHeaders(authInfo, sessionToken), signal: AbortSignal.timeout(10000) }
-  );
-  if (!res.ok) return [];
-  const data = await res.json();
-  return Array.isArray(data) ? data : (data.offers || []);
+  const maxPages = status === 'accepted' ? 5 : 1;
+  const cutoff   = Date.now() - 86400000; // 24h ago — don't look further back
+  const all = [];
+  for (let page = 0; page < maxPages; page++) {
+    const offset = page * 10;
+    let res;
+    try {
+      res = await fetch(
+        `https://web.realapp.com/cardmarketplace/user/offers?offset=${offset}&status=${status}&view=${view}`,
+        { headers: buildHeaders(authInfo, sessionToken), signal: AbortSignal.timeout(10000) }
+      );
+    } catch { break; }
+    if (!res.ok) break;
+    const data = await res.json();
+    const offers = Array.isArray(data) ? data : (data.offers || []);
+    if (!offers.length) break;
+    all.push(...offers);
+    if (offers.length < 10) break; // partial page = last page
+    // Stop when the oldest offer on this page is beyond our 24h window
+    const oldest = offers[offers.length - 1];
+    const ts = oldest?.statusChangedAt || oldest?.createdAt || oldest?.updatedAt;
+    if (ts && new Date(ts).getTime() < cutoff) break;
+  }
+  return all;
 }
 
 async function acceptOffer(offerId, authInfo, sessionToken) {
@@ -77,7 +96,7 @@ async function counterOffer(offerId, counterAmount, authInfo, sessionToken) {
   return { ok: true };
 }
 
-export async function onRequestPost({ request, env }) {
+async function handleRequest({ request, env }) {
   const url = new URL(request.url);
   if (!env.CRON_SECRET || url.searchParams.get('_cron_key') !== env.CRON_SECRET) {
     return err('Unauthorized', 401);
@@ -133,7 +152,20 @@ export async function onRequestPost({ request, env }) {
     if (row.deposit_card_id) expiredMap[row.deposit_card_id] = { parlayId: row.id, stakeRax: row.stake_rax };
   }
 
+  // Voided-by-card-sold map: parlays voided by card-reconcile because the deposit card left
+  // edgebot's inventory (i.e. the user accepted a counter-offer and the card transferred to them).
+  // card-reconcile now skips recently-assigned cards, but if it ran fast enough to void the
+  // parlay we still need to reactivate it when we see the accepted offer.
+  const voidedDepositRows = await env.DB.prepare(
+    "SELECT id, stake_rax, deposit_card_id FROM parlays WHERE status='void' AND admin_notes='deposit_card_sold' AND created_at > ?"
+  ).bind(now - 24 * 3600).all();
+  const voidedMap = {};
+  for (const row of (voidedDepositRows.results || [])) {
+    if (row.deposit_card_id) voidedMap[row.deposit_card_id] = { parlayId: row.id, stakeRax: row.stake_rax };
+  }
+
   const debug = url.searchParams.has('debug');
+
   let incomingOpen, incomingAccepted, outgoingAccepted, outgoingRejected, outgoingOpen;
   try {
     [incomingOpen, incomingAccepted, outgoingAccepted, outgoingRejected, outgoingOpen] = await Promise.all([
@@ -145,65 +177,94 @@ export async function onRequestPost({ request, env }) {
     ]);
   } catch (e) { return err('RS fetch error: ' + e.message, 502); }
 
+  // RS may return the card under different field names depending on offer type.
+  function getCardId(offer) {
+    return offer.cardId ?? offer.card?.id ?? offer.card_id ?? null;
+  }
+
   if (debug) {
     const scans = await Promise.all([
       ['incoming','open'],['incoming','accepted'],['incoming','rejected'],['incoming','expired'],
       ['outgoing','open'],['outgoing','accepted'],['outgoing','rejected'],['outgoing','expired'],
     ].map(async ([view, status]) => {
       const list = await fetchOffers(authInfo, sessionToken, view, status);
-      const relevant = list.filter(o => fullMap[o.cardId]);
-      return { view, status, count: list.length, relevant: relevant.map(o => ({ id: o.id, cardId: o.cardId, amount: o.amount, status: o.status })) };
+      const relevant = list.filter(o => { const c = getCardId(o); return fullMap[c] || expiredMap[c] || voidedMap[c]; });
+      return { view, status, count: list.length, relevant: relevant.map(o => ({ id: o.id, cardId: getCardId(o), amount: o.amount, counterAmount: o.counterAmount, status: o.status })) };
     }));
     return new Response(JSON.stringify({ pending: allPending.map(p => ({ id: p.id, stake_rax: p.stake_rax, deposit_card_id: p.deposit_card_id, expires_at: p.expires_at })), cardMap, fullMap, scans }, null, 2), { headers: { 'Content-Type': 'application/json' } });
   }
-
-  // Build deduplicated offer list: incoming open/accepted + outgoing accepted
-  const seen = new Set();
-  const offers = [...incomingOpen, ...incomingAccepted, ...outgoingAccepted].filter(o => {
-    if (seen.has(o.id)) return false;
-    seen.add(o.id);
-    return true;
-  });
 
   let accepted = 0;
   let countered = 0;
   const errors = [];
 
   async function activateParlay(parlayId, cardId, offerId, amount) {
+    // Idempotency: if this offer already activated a different parlay, skip.
+    // This prevents a re-inserted card from matching a stale accepted offer a second time.
+    const alreadyUsed = await env.DB.prepare(
+      "SELECT id FROM parlays WHERE rs_offer_id=? AND id != ? AND status NOT IN ('pending_deposit','expired','void') LIMIT 1"
+    ).bind(offerId, parlayId).first();
+    if (alreadyUsed) return;
+
     const receivedRax = Math.floor(amount * 0.9);
-    await env.DB.prepare(
-      "UPDATE parlays SET status='active', rs_offer_id=?, received_rax=?, deposited_at=? WHERE id=? AND status IN ('pending_deposit','expired')"
-    ).bind(offerId, receivedRax, now, parlayId).run();
-    await env.DB.prepare('DELETE FROM deposit_cards WHERE card_id=?').bind(cardId).run();
+    // AND deposit_card_id=? ensures the parlay actually owns this card before activating.
+    const result = await env.DB.prepare(
+      "UPDATE parlays SET status='active', rs_offer_id=?, received_rax=?, deposited_at=? " +
+      "WHERE id=? AND deposit_card_id=? AND status IN ('pending_deposit','expired','void')"
+    ).bind(offerId, receivedRax, now, parlayId, cardId).run();
+    if (result.meta.changes > 0) {
+      await env.DB.prepare('DELETE FROM deposit_cards WHERE card_id=?').bind(cardId).run();
+    }
   }
 
-  for (const offer of offers) {
-    const cardId  = offer.cardId;
-    const offerId = offer.id;
+  // Phase 1: Process accepted incoming offers + any outgoing offers whose card matches a
+  // known deposit card. outgoingAccepted normally contains payout offers sent to winners,
+  // but when edgebot counters an incoming deposit offer and the user accepts that counter,
+  // RS may resolve it in outgoingAccepted rather than incomingAccepted. Filtering to known
+  // deposit cards prevents payout offers from false-activating a parlay.
+  const processedIds = new Set();
+  const seenSettled = new Set();
+  const depositCardOutgoing = outgoingAccepted.filter(o => {
+    const cid = getCardId(o);
+    return cid && (fullMap[cid] || expiredMap[cid] || voidedMap[cid]);
+  });
+  const allSettled = [...incomingAccepted, ...depositCardOutgoing].filter(o => {
+    if (!o.id || seenSettled.has(o.id)) return false;
+    seenSettled.add(o.id);
+    return true;
+  });
 
+  for (const offer of allSettled) {
+    processedIds.add(offer.id);
+    const cardId  = getCardId(offer);
+    const offerId = offer.id;
     if (!cardId || !offerId) continue;
 
-    const alreadyAccepted = offer.status === 'accepted' || offer.status === 'completed';
-
-    // Check active pending first; fall back to recently expired if the offer is accepted
-    const match = cardMap[cardId] || (alreadyAccepted ? expiredMap[cardId] : null);
+    const match = cardMap[cardId] || expiredMap[cardId] || fullMap[cardId] || voidedMap[cardId];
     if (!match) continue;
 
-    // RS clears counterAmount after acceptance, leaving only the original offer amount.
-    // Don't gate on stakeRax here — if RS says accepted, the deal is settled on their side.
-    if (alreadyAccepted) {
-      // RS clears counterAmount after acceptance — use stakeRax as floor since edgebot
-      // always counter-offers to exactly stakeRax before the user can accept.
-      const effectiveAmount = Math.max(
-        offer.counterAmount ?? 0,
-        offer.amount       ?? 0,
-        offer.offerAmount  ?? 0,
-        match.stakeRax,
-      );
-      await activateParlay(match.parlayId, cardId, offerId, effectiveAmount);
-      accepted++;
-      continue;
-    }
+    // stakeRax is the floor — edgebot always counter-offers to exactly stakeRax,
+    // so even if RS clears counterAmount after settlement we still know the agreed price.
+    const effectiveAmount = Math.max(
+      offer.counterAmount ?? 0,
+      offer.amount       ?? 0,
+      offer.offerAmount  ?? 0,
+      match.stakeRax,
+    );
+
+    await activateParlay(match.parlayId, cardId, offerId, effectiveAmount);
+    accepted++;
+  }
+
+  // Phase 2: Process open offers — counter if under stake, accept if exact or over.
+  for (const offer of incomingOpen) {
+    if (processedIds.has(offer.id)) continue;
+    const cardId  = getCardId(offer);
+    const offerId = offer.id;
+    if (!cardId || !offerId) continue;
+
+    const match = cardMap[cardId];
+    if (!match) continue;
 
     const fromExpired = !cardMap[cardId] && !!expiredMap[cardId];
     const amount = offer.counterAmount ?? offer.amount ?? offer.offerAmount;
@@ -228,25 +289,10 @@ export async function onRequestPost({ request, env }) {
     accepted++;
   }
 
-  // Backfill: scan outgoing/accepted against ALL pending_deposit AND recently expired parlays.
-  // Catches counter-offers the user accepted after the 30-min window elapsed,
-  // including parlays that were already expired in D1 when the offer was detected.
-  for (const offer of outgoingAccepted) {
-    const cardId = offer.cardId;
-    const amount = offer.counterAmount ?? offer.amount ?? offer.offerAmount;
-    if (!cardId || !amount) continue;
-    const match = fullMap[cardId] || expiredMap[cardId];
-    if (!match) continue;
-    if (seen.has(offer.id)) continue; // already processed above
-    if (amount < match.stakeRax) continue;
-    await activateParlay(match.parlayId, cardId, offer.id, amount);
-    accepted++;
-  }
-
   // If user rejected edgebot's counter-offer, void the parlay and free the card immediately
   // so they can place again rather than waiting 30 min for expiry.
   for (const offer of outgoingRejected) {
-    const cardId = offer.cardId;
+    const cardId = getCardId(offer);
     if (!cardId) continue;
     const match = fullMap[cardId];
     if (!match) continue;
@@ -261,9 +307,9 @@ export async function onRequestPost({ request, env }) {
   // offer hasn't been processed yet. Also add a 90-min buffer so we have plenty of
   // time to detect late RS state transitions before permanently expiring.
   const protectedCards = new Set([
-    ...outgoingOpen.map(o => o.cardId),
-    ...outgoingAccepted.map(o => o.cardId),
-    ...incomingAccepted.map(o => o.cardId),
+    ...outgoingOpen.map(o => getCardId(o)),
+    ...outgoingAccepted.map(o => getCardId(o)),
+    ...incomingAccepted.map(o => getCardId(o)),
   ].filter(Boolean));
 
   const EXPIRE_BUFFER = 90 * 60; // only expire 90 min after the 30-min window closes
@@ -281,7 +327,7 @@ export async function onRequestPost({ request, env }) {
     "DELETE FROM deposit_cards WHERE assigned_to_parlay_id IN (SELECT id FROM parlays WHERE status IN ('expired','void'))"
   ).run();
 
-  const result = { ts: now, checked: offers.length, accepted, countered, pending: pending.length, errors };
+  const result = { ts: now, checked: allSettled.length + incomingOpen.length, accepted, countered, pending: pending.length, errors };
   try {
     await env.DB.prepare(
       'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at'
@@ -289,3 +335,6 @@ export async function onRequestPost({ request, env }) {
   } catch(e) {}
   return ok(result);
 }
+
+export const onRequestPost = handleRequest;
+export const onRequestGet  = handleRequest;

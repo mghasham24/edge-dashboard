@@ -7,7 +7,7 @@ import { getSessionOrCron } from '../../_lib/auth.js';
 const DK_BASE     = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
 const DK_LEAGUE   = '84240';
 const HITS_SUBCAT = '6719';
-const CACHE_TTL   = 120; // 2 min
+const CACHE_TTL   = 300; // 5 min
 const CACHE_KEY   = 'dk_mlb_1inn_v1';
 
 // 1st-inning subcategory IDs fetched per event
@@ -253,11 +253,16 @@ export async function onRequestGet(context) {
   const now     = Math.floor(Date.now() / 1000);
   const today   = todayET();
 
+  // Always read cache — fresh copy serves immediately, stale copy used as fallback if DK rate-limits
+  let staleCache = null;
   if (!nocache && !debug) {
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(CACHE_KEY).first();
-      if (cached && (now - cached.fetched_at) < CACHE_TTL) {
-        return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
+      if (cached) {
+        if ((now - cached.fetched_at) < CACHE_TTL) {
+          return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
+        }
+        staleCache = cached.data; // keep for fallback
       }
     } catch(e) {}
   }
@@ -308,11 +313,17 @@ export async function onRequestGet(context) {
     const subcatResults = await Promise.allSettled(
       SUBCATS_1INN.map(async subcatId => {
         const res = await fetch(eventSubcatUrl(evId, subcatId), { headers: DK_HEADERS, signal: AbortSignal.timeout(8000) });
-        if (!res.ok) return { subcatId, data: {} };
+        if (!res.ok) return { subcatId, data: {}, rateLimited: res.status === 429 };
         const data = await res.json();
         return { subcatId, data };
       })
     );
+
+    // If DK rate-limited any subcat, data is incomplete — serve stale rather than partial
+    const anyRateLimited = subcatResults.some(r => r.status === 'fulfilled' && r.value?.rateLimited);
+    if (anyRateLimited && staleCache) {
+      return new Response(staleCache, { headers: { 'Content-Type': 'application/json' } });
+    }
 
     const responses = subcatResults
       .filter(r => r.status === 'fulfilled')

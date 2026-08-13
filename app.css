@@ -2110,6 +2110,23 @@
         border: 1px solid rgba(45, 204, 126, .3)
     }
 
+    /* Admin sub-nav */
+    .admin-sub-btn { background:var(--bg3); border:1.5px solid var(--border2); color:var(--muted); font-family:var(--sans); font-size:12px; font-weight:700; padding:6px 16px; border-radius:6px; cursor:pointer; letter-spacing:.04em; transition:border-color .13s,color .13s }
+    .admin-sub-btn.active { border-color:var(--accent); color:var(--accent) }
+    /* Performance section */
+    .perf-controls { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:14px }
+    .perf-presets { display:flex; gap:5px }
+    .perf-preset-btn { background:var(--bg3); border:1.5px solid var(--border2); color:var(--muted); font-family:var(--sans); font-size:11px; font-weight:700; padding:5px 11px; border-radius:5px; cursor:pointer; transition:border-color .13s,color .13s }
+    .perf-preset-btn.active { border-color:var(--accent); color:var(--accent) }
+    .perf-date-row { display:flex; align-items:center; gap:7px; flex-wrap:wrap }
+    .perf-date-input { background:var(--bg3); border:1.5px solid var(--border2); color:var(--fg); font-family:var(--sans); font-size:12px; padding:5px 9px; border-radius:5px }
+    .perf-go-btn { background:var(--accent); border:none; color:#fff; font-family:var(--sans); font-size:12px; font-weight:700; padding:6px 14px; border-radius:5px; cursor:pointer }
+    .perf-summary-row { display:flex; gap:0; flex-wrap:wrap; background:var(--bg2); border:1.5px solid var(--border2); border-radius:10px; overflow:hidden; margin-bottom:4px }
+    .perf-sum-stat { flex:1; min-width:100px; padding:12px 14px; border-right:1px solid var(--border2); display:flex; flex-direction:column; gap:3px }
+    .perf-sum-stat:last-child { border-right:none }
+    .perf-sum-val { font-size:15px; font-weight:800; font-variant-numeric:tabular-nums }
+    .perf-sum-lbl { font-size:10px; font-weight:600; color:var(--muted2); text-transform:uppercase; letter-spacing:.05em }
+
     .port-connect-card {
         background: var(--bg2);
         border: 1px solid var(--border2);
@@ -3187,6 +3204,7 @@
     .pslip-status.s-lost { background:rgba(239,68,68,.12); color:#ef4444; border:1px solid rgba(239,68,68,.25) }
     .pslip-status.s-pending { background:rgba(251,191,36,.12); color:#fbbf24; border:1px solid rgba(251,191,36,.25) }
     .pslip-status.s-gray { background:var(--bg3); color:var(--muted); border:1px solid var(--border2) }
+    .pslip-status.s-push { background:rgba(245,158,11,.12); color:#f59e0b; border:1px solid rgba(245,158,11,.3) }
     .pslip-date { font-size:11px; color:var(--muted2) }
     .pslip-amounts { display:flex; align-items:center; gap:6px; flex-shrink:0 }
     .pslip-stake { font-size:13px; font-weight:700; color:var(--muted); font-variant-numeric:tabular-nums }
@@ -3200,6 +3218,7 @@
     .pslip-leg:first-child { border-top:none; padding-top:0 }
     .pslip-leg.leg-won .pslip-leg-name { color:var(--green) }
     .pslip-leg.leg-lost .pslip-leg-name { color:#ef4444; text-decoration:line-through }
+    .pslip-leg.leg-push .pslip-leg-name { color:#f59e0b }
     .pslip-avatar { position:relative; flex-shrink:0 }
     .pslip-av-inner { width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:800; color:#fff; overflow:hidden; background:var(--bg3) }
     .pslip-av-inner img { width:100%; height:100%; object-fit:cover; object-position:top center }
@@ -3214,10 +3233,12 @@
     .pslip-leg-time.pregame { background:var(--bg3); color:var(--muted) }
     .pslip-leg-time.final { background:var(--bg3); color:var(--muted2) }
     .pslip-leg-sub { font-size:11px; color:var(--muted); margin-top:2px }
+    .pslip-market { color:#60a5fa }
     .pslip-odds { color:var(--muted2) }
     .pslip-ri { font-size:12px; font-weight:800; width:18px; height:18px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0 }
     .pslip-ri.win { background:rgba(45,204,126,.15); color:var(--green) }
     .pslip-ri.loss { background:rgba(239,68,68,.12); color:#ef4444 }
+    .pslip-ri.push { background:rgba(245,158,11,.15); color:#f59e0b }
     .pslip-prog-wrap { margin-top:5px; display:flex; align-items:center; gap:6px }
     .pslip-prog-track { flex:1; height:5px; background:var(--bg3); border-radius:3px; overflow:hidden; position:relative }
     .pslip-prog-track-mark { overflow:visible }
@@ -3231,11 +3252,38 @@
     .pslip-payout-note { font-size:11px; color:var(--green); margin-top:8px; text-align:center }
     .pslip-deposit-link { display:block; margin-top:8px; padding:9px 12px; background:rgba(251,191,36,.1); border:1px solid rgba(251,191,36,.3); border-radius:8px; color:#fbbf24; font-size:12px; font-weight:700; text-align:center; text-decoration:none }
     .pslip-deposit-link:hover { background:rgba(251,191,36,.18) }
-    .pslip-actions { display:flex; gap:6px; margin-top:8px }
+    .pslip-actions { display:flex; gap:6px; margin-top:8px; flex-wrap:wrap }
     .pslip-settle-btn,.pslip-share-btn,.pslip-cancel-btn { flex:1; padding:7px; border-radius:7px; font-size:12px; font-weight:700; font-family:var(--sans); cursor:pointer; border:1.5px solid var(--border2); background:var(--bg3); color:var(--muted); transition:border-color .13s,color .13s }
     .pslip-settle-btn:hover { border-color:var(--accent); color:var(--accent) }
     .pslip-share-btn:hover { border-color:var(--muted); color:var(--text) }
     .pslip-cancel-btn:hover { border-color:#ef4444; color:#ef4444 }
+    .pslip-admin-card-btn { padding:7px 12px; border-radius:7px; font-size:12px; font-weight:700; font-family:var(--sans); cursor:pointer; border:1.5px solid rgba(251,191,36,.35); background:rgba(251,191,36,.08); color:#fbbf24; text-decoration:none; display:inline-flex; align-items:center; transition:background .13s }
+    .pslip-admin-card-btn:hover { background:rgba(251,191,36,.16) }
+    /* Dual-logo avatar for team market legs */
+    .pslip-avatar-dual .pslip-av-inner { overflow:visible !important; background:transparent !important; position:relative !important; border-radius:0 !important }
+    .pslip-dual-logo-a,.pslip-dual-logo-b { position:absolute; width:22px !important; height:22px !important; border-radius:50%; object-fit:contain !important; object-position:center !important; background:var(--bg3); border:1.5px solid var(--bg2); padding:2px }
+    .pslip-dual-logo-a { top:0; left:0 }
+    .pslip-dual-logo-b { bottom:0; right:0 }
+    .pslip-dual-init { display:flex !important; align-items:center; justify-content:center; font-size:7px; font-weight:800; color:var(--muted) }
+    /* Team prop box score */
+    .pslip-team-bs-wrap { margin-top:5px }
+    .pslip-team-bs { display:flex; align-items:center; gap:8px; margin-top:5px; padding:5px 8px; background:var(--bg3); border-radius:7px }
+    .pslip-team-bs.pregame { justify-content:space-between }
+    .pslip-bs-rows { display:flex; flex-direction:column; gap:2px }
+    .pslip-bs-row { display:flex; align-items:center; gap:5px }
+    .pslip-bs-row.winning .pslip-bs-score { color:var(--green) }
+    .pslip-bs-abbr { font-size:10px; font-weight:800; color:var(--muted); width:26px; flex-shrink:0; letter-spacing:.03em }
+    .pslip-bs-score { font-size:14px; font-weight:800; color:var(--text); font-variant-numeric:tabular-nums; min-width:18px }
+    .pslip-bs-info { flex:1; display:flex; flex-direction:column; gap:3px; align-items:flex-end }
+    .pslip-bs-state { font-size:10px; font-weight:700; color:var(--muted2); white-space:nowrap }
+    .pslip-bs-state.live { color:#ef4444 }
+    .pslip-bs-versus { font-size:11px; font-weight:700; color:var(--muted) }
+    .pslip-bs-outcome { font-size:11px; font-weight:800; white-space:nowrap; padding:1px 6px; border-radius:4px }
+    .pslip-bs-outcome.won { background:rgba(45,204,126,.12); color:var(--green) }
+    .pslip-bs-outcome.lost { background:rgba(239,68,68,.1); color:#ef4444 }
+    .pslip-bs-outcome.live { color:var(--muted); background:transparent }
+    .pslip-bs-outcome.push { background:rgba(245,158,11,.12); color:#f59e0b }
+    .pslip-team-game { font-size:10px; font-weight:600; color:var(--muted2); white-space:nowrap; flex-shrink:0 }
 
     /* Teams tab — game cards (pgc = parlay game card) */
     .parlay-player-grid.pgc-mode { display:flex; flex-direction:column; gap:10px; grid-template-columns:unset }
@@ -3257,6 +3305,30 @@
     .pgc-btn.over.active { background:rgba(45,204,126,.15); color:var(--green) }
     .pgc-btn.under.active { background:rgba(239,68,68,.12); border-color:#ef4444; color:#ef4444 }
     .pgc-btn-logo { width:16px; height:16px; object-fit:contain; flex-shrink:0 }
+
+    /* 1st Inning tab — per-team two-column layout */
+    .prl-1inn-teams { display:grid; grid-template-columns:1fr 1fr; border-top:1px solid var(--border2) }
+    .prl-1inn-col { padding:10px 11px }
+    .prl-1inn-col:first-child { border-right:1px solid var(--border2) }
+    .prl-1inn-half-hdr { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); padding:6px 0 4px; margin-top:6px; border-top:1px solid var(--border) }
+    .prl-1inn-half-hdr:first-of-type { margin-top:0; border-top:none }
+    .prl-1inn-half-sub { color:var(--text); font-weight:600 }
+    .prl-1inn-col-hdr { display:flex; align-items:center; gap:5px; font-size:11px; font-weight:800; color:var(--text); margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid var(--border) }
+    .prl-1inn-col-hdr img { width:16px; height:16px; object-fit:contain }
+    .prl-1inn-role { font-size:9px; font-weight:500; color:var(--muted); text-transform:uppercase; letter-spacing:.05em }
+    .prl-1inn-mkt { margin-bottom:7px }
+    .prl-1inn-mkt:last-child { margin-bottom:0 }
+    .prl-1inn-mkt-name { font-size:10px; font-weight:700; color:var(--muted); margin-bottom:3px }
+    .prl-1inn-btns { display:flex; flex-wrap:wrap; gap:3px }
+    .prl-1inn-range-btns { display:grid; grid-template-columns:1fr 1fr; gap:3px }
+    .prl-1inn-btn { flex:1; min-width:38px; padding:5px 7px; border-radius:6px; border:1.5px solid var(--border2); background:var(--bg3); color:var(--text); font-size:11px; font-weight:600; font-family:var(--sans); cursor:pointer; text-align:center; transition:border-color .13s,background .13s; white-space:nowrap }
+    .prl-1inn-btn:hover { border-color:var(--muted); background:var(--bg2) }
+    .prl-1inn-btn.active { background:var(--accent-dim); border-color:var(--accent); color:var(--accent) }
+    .prl-1inn-btn.yes-btn.active { background:rgba(45,204,126,.15); border-color:var(--green); color:var(--green) }
+    .prl-1inn-btn.no-btn.active { background:rgba(239,68,68,.12); border-color:#ef4444; color:#ef4444 }
+    .prl-1inn-started .pgc-header { opacity:.6 }
+    .pgc-row .prl-1inn-btns { display:flex; gap:5px }
+    .pgc-row .prl-1inn-btns .prl-1inn-btn { border-radius:8px; padding:7px 10px; font-size:12px }
 
     /* All Slips admin filters */
     .aslip-filters { display:flex; gap:6px; flex-wrap:wrap; padding:12px 12px 0; flex-shrink:0 }
