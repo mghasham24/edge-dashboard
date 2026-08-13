@@ -13,6 +13,24 @@ import { ok, err }    from '../../_lib/response.js';
 import { getSession } from '../../_lib/session.js';
 
 const MLB_API    = 'https://statsapi.mlb.com/api/v1';
+
+// MLB Stats API schedule endpoint doesn't include team.abbreviation — derive from name
+const MLB_ABBR_FROM_NAME = {
+  'arizona diamondbacks': 'ARI', 'atlanta braves': 'ATL', 'baltimore orioles': 'BAL',
+  'boston red sox': 'BOS', 'chicago cubs': 'CHC', 'chicago white sox': 'CWS',
+  'cincinnati reds': 'CIN', 'cleveland guardians': 'CLE', 'colorado rockies': 'COL',
+  'detroit tigers': 'DET', 'houston astros': 'HOU', 'kansas city royals': 'KC',
+  'los angeles angels': 'LAA', 'los angeles dodgers': 'LAD', 'miami marlins': 'MIA',
+  'milwaukee brewers': 'MIL', 'minnesota twins': 'MIN', 'new york mets': 'NYM',
+  'new york yankees': 'NYY', 'oakland athletics': 'OAK', 'sacramento athletics': 'SAC',
+  'philadelphia phillies': 'PHI', 'pittsburgh pirates': 'PIT', 'san diego padres': 'SD',
+  'san francisco giants': 'SF', 'seattle mariners': 'SEA', 'st. louis cardinals': 'STL',
+  'tampa bay rays': 'TB', 'texas rangers': 'TEX', 'toronto blue jays': 'TOR',
+  'washington nationals': 'WAS',
+};
+function mlbAbbrFromName(name) {
+  return (name ? MLB_ABBR_FROM_NAME[name.toLowerCase()] || '' : '');
+}
 const ESPN_WNBA  = 'https://site.api.espn.com/apis/site/v2/sports/basketball/wnba';
 const ESPN_NFL   = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl';
 const ESPN_MMA   = 'https://site.api.espn.com/apis/site/v2/sports/mma/ufc';
@@ -357,8 +375,8 @@ async function getMlbFinalGames(date) {
       gamePk:    g.gamePk,
       homeName:  g.teams?.home?.team?.name  || '',
       awayName:  g.teams?.away?.team?.name  || '',
-      homeAbbr:  (g.teams?.home?.team?.abbreviation || '').toUpperCase(),
-      awayAbbr:  (g.teams?.away?.team?.abbreviation || '').toUpperCase(),
+      homeAbbr:  (g.teams?.home?.team?.abbreviation || mlbAbbrFromName(g.teams?.home?.team?.name)).toUpperCase(),
+      awayAbbr:  (g.teams?.away?.team?.abbreviation || mlbAbbrFromName(g.teams?.away?.team?.name)).toUpperCase(),
       homeScore: g.teams?.home?.score ?? g.linescore?.teams?.home?.runs ?? null,
       awayScore: g.teams?.away?.score ?? g.linescore?.teams?.away?.runs ?? null,
     }))
@@ -396,8 +414,8 @@ async function getMlbLive1innDoneGames(date) {
       gamePk:    g.gamePk,
       homeName:  g.teams?.home?.team?.name  || '',
       awayName:  g.teams?.away?.team?.name  || '',
-      homeAbbr:  (g.teams?.home?.team?.abbreviation || '').toUpperCase(),
-      awayAbbr:  (g.teams?.away?.team?.abbreviation || '').toUpperCase(),
+      homeAbbr:  (g.teams?.home?.team?.abbreviation || mlbAbbrFromName(g.teams?.home?.team?.name)).toUpperCase(),
+      awayAbbr:  (g.teams?.away?.team?.abbreviation || mlbAbbrFromName(g.teams?.away?.team?.name)).toUpperCase(),
       homeScore: g.teams?.home?.score ?? null,
       awayScore: g.teams?.away?.score ?? null,
     }));
