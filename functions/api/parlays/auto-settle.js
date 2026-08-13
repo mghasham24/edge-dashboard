@@ -886,7 +886,10 @@ async function handleRequest({ request, env }) {
       todayUtc, staleDate,
       dates: uniqueDates.map(date => ({
         date,
-        mlbGames:  mlbGamesMap[date].map(g => `${g.awayName} ${g.awayScore} @ ${g.homeName} ${g.homeScore}`),
+        mlbGames:     mlbGamesMap[date].map(g => `${g.awayAbbr} ${g.awayScore} @ ${g.homeAbbr} ${g.homeScore}`),
+        mlb1innGames: (mlb1innGamesMap[date] || []).map(g => ({ gamePk: g.gamePk, away: g.awayAbbr, home: g.homeAbbr })),
+        linescore1Keys: Object.keys(mlbLinescore1Map[date] || {}),
+        has1inn: has1innOnDate(date),
         wnbaGames: wnbaGamesMap[date].map(g => `${g.awayName} ${g.awayScore} @ ${g.homeName} ${g.homeScore}`),
         nflGames:  nflGamesMap[date].map(g => `${g.awayName} ${g.awayScore} @ ${g.homeName} ${g.homeScore}`),
         ufcFights: Object.entries(ufcMap[date] || {}).map(([n, r]) => `${n}: ${JSON.stringify(r)}`),
