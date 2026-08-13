@@ -374,6 +374,35 @@ async function getMlbBoxscore(gamePk) {
 }
 
 // Returns { away: {runs, hits}, home: {runs, hits} } for inning 1
+// Returns Live games where inning 1 is fully complete (currentInning >= 2, or inning 1 ended).
+// Used so 1inn parlays settle right after the 1st inning finishes, not at game end.
+async function getMlbLive1innDoneGames(date) {
+  const res = await fetch(`${MLB_API}/schedule?date=${date}&sportId=1&hydrate=linescore`, {
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return (data.dates?.[0]?.games || [])
+    .filter(g => {
+      if (g.status?.abstractGameState !== 'Live') return false;
+      const inn   = g.linescore?.currentInning;
+      const state = g.linescore?.inningState || '';
+      if (inn == null) return false;
+      if (inn >= 2) return true;
+      if (inn === 1 && (state === 'End' || state === 'Middle')) return true;
+      return false;
+    })
+    .map(g => ({
+      gamePk:    g.gamePk,
+      homeName:  g.teams?.home?.team?.name  || '',
+      awayName:  g.teams?.away?.team?.name  || '',
+      homeAbbr:  (g.teams?.home?.team?.abbreviation || '').toUpperCase(),
+      awayAbbr:  (g.teams?.away?.team?.abbreviation || '').toUpperCase(),
+      homeScore: g.teams?.home?.score ?? null,
+      awayScore: g.teams?.away?.score ?? null,
+    }));
+}
+
 async function getMlbLinescore(gamePk) {
   const res = await fetch(`${MLB_API}/game/${gamePk}/linescore`, {
     signal: AbortSignal.timeout(8000),
@@ -763,6 +792,7 @@ async function handleRequest({ request, env }) {
   const uniqueDates = [...new Set(eligibleLegs.map(l => l.game_date))];
 
   const mlbGamesMap     = {};
+  const mlb1innGamesMap = {}; // final games + live games past inning 1, for 1inn settle
   const mlbStatsMap     = {};
   const mlbLinescore1Map= {}; // date → { gamePk → { away:{runs,hits}, home:{runs,hits} } }
   const mlbPbpMap       = {}; // date → { gamePk → { top:{walks,ks,hrs,batters,pitches}, bottom:{...} } }
@@ -793,22 +823,47 @@ async function handleRequest({ request, env }) {
     nflGamesMap[date]  = nflGames;
     ufcMap[date]       = ufcResults;
 
-    if (hasMlbOnDate(date) && mlbGames.length) {
+    if (hasMlbOnDate(date)) {
       const fetch1inn    = has1innOnDate(date);
       const fetch1innPbp = has1innPbpOnDate(date);
       const allStats  = {};
       const linescore1 = {};
       const pbp1      = {};
-      await Promise.all(mlbGames.map(async g => {
-        const [bs, ls, pbp] = await Promise.all([
-          getMlbBoxscore(g.gamePk).catch(() => null),
-          fetch1inn    ? getMlbLinescore(g.gamePk).catch(() => null)   : Promise.resolve(null),
-          fetch1innPbp ? getMlbPlayByPlay(g.gamePk).catch(() => null)  : Promise.resolve(null),
-        ]);
-        if (bs)  Object.assign(allStats, extractMlbPlayerStats(bs));
-        if (ls)  linescore1[g.gamePk] = ls;
-        if (pbp) pbp1[g.gamePk]       = pbp;
-      }));
+
+      // Final games: full stats + linescore/pbp for 1inn
+      if (mlbGames.length) {
+        await Promise.all(mlbGames.map(async g => {
+          const [bs, ls, pbp] = await Promise.all([
+            getMlbBoxscore(g.gamePk).catch(() => null),
+            fetch1inn    ? getMlbLinescore(g.gamePk).catch(() => null)   : Promise.resolve(null),
+            fetch1innPbp ? getMlbPlayByPlay(g.gamePk).catch(() => null)  : Promise.resolve(null),
+          ]);
+          if (bs)  Object.assign(allStats, extractMlbPlayerStats(bs));
+          if (ls)  linescore1[g.gamePk] = ls;
+          if (pbp) pbp1[g.gamePk]       = pbp;
+        }));
+      }
+
+      // Live games past inning 1: fetch linescore/pbp so 1inn parlays settle mid-game
+      let live1innGames = [];
+      if (fetch1inn) {
+        live1innGames = await getMlbLive1innDoneGames(date).catch(() => []);
+        const newLive = live1innGames.filter(g => !mlbGames.some(fg => fg.gamePk === g.gamePk));
+        if (newLive.length) {
+          await Promise.all(newLive.map(async g => {
+            const [ls, pbp] = await Promise.all([
+              getMlbLinescore(g.gamePk).catch(() => null),
+              fetch1innPbp ? getMlbPlayByPlay(g.gamePk).catch(() => null) : Promise.resolve(null),
+            ]);
+            if (ls)  linescore1[g.gamePk] = ls;
+            if (pbp) pbp1[g.gamePk]       = pbp;
+          }));
+        }
+        mlb1innGamesMap[date] = [...mlbGames, ...newLive];
+      } else {
+        mlb1innGamesMap[date] = mlbGames;
+      }
+
       mlbStatsMap[date]      = allStats;
       mlbLinescore1Map[date] = linescore1;
       mlbPbpMap[date]        = pbp1;
@@ -816,6 +871,7 @@ async function handleRequest({ request, env }) {
       mlbStatsMap[date]      = {};
       mlbLinescore1Map[date] = {};
       mlbPbpMap[date]        = {};
+      mlb1innGamesMap[date]  = [];
     }
 
     if (hasWnbaOnDate(date)) {
@@ -841,7 +897,7 @@ async function handleRequest({ request, env }) {
           const isTeam = mkt === 'team_ml' || mkt === 'team_runline' || mkt === 'team_total';
 
           if (is1inn) {
-            const outcome = resolve1stInnLeg(l, mlbGamesMap[date] || [], mlbLinescore1Map[date] || {}, mlbPbpMap[date] || {});
+            const outcome = resolve1stInnLeg(l, mlb1innGamesMap[date] || [], mlbLinescore1Map[date] || {}, mlbPbpMap[date] || {});
             return { player: l.player_name, label: l.label, event_name: l.event_name, sport: 'mlb', type: mkt, outcome: outcome ?? 'not_resolved_yet' };
           }
           if (isTeam) {
@@ -884,7 +940,7 @@ async function handleRequest({ request, env }) {
     const isTeam = mkt === 'team_ml' || mkt === 'team_runline' || mkt === 'team_total';
 
     if (is1inn) {
-      const games  = mlbGamesMap[leg.game_date]      || [];
+      const games  = mlb1innGamesMap[leg.game_date]   || [];
       const ls1Map = mlbLinescore1Map[leg.game_date]  || {};
       const pbpM   = mlbPbpMap[leg.game_date]         || {};
       const outcome = games.length ? resolve1stInnLeg(leg, games, ls1Map, pbpM) : null;

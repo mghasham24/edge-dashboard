@@ -760,7 +760,7 @@ async function runCron(env, ctx) {
         const reconcileCheck = await env.DB.prepare(
           "SELECT fetched_at FROM odds_cache WHERE cache_key='card_reconcile_last_run'"
         ).first();
-        if (!reconcileCheck || (now - reconcileCheck.fetched_at) > 5 * 60) {
+        if (!reconcileCheck || (now - reconcileCheck.fetched_at) > 2 * 60) {
           await env.DB.prepare(
             "INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES('card_reconcile_last_run','1',?) " +
             "ON CONFLICT(cache_key) DO UPDATE SET data='1',fetched_at=excluded.fetched_at"

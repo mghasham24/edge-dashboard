@@ -5337,8 +5337,8 @@
             var eid = game.eventId;
             var as = game.awayShort, hs = game.homeShort;
             var at = game.awayTeam, ht = game.homeTeam;
-            var al = dkTeamLogo(at) || dkTeamLogo(as);
-            var hl = dkTeamLogo(ht) || dkTeamLogo(hs);
+            var al = (as ? 'https://a.espncdn.com/i/teamlogos/mlb/500/'+as.toLowerCase()+'.png' : null) || dkTeamLogo(at);
+            var hl = (hs ? 'https://a.espncdn.com/i/teamlogos/mlb/500/'+hs.toLowerCase()+'.png' : null) || dkTeamLogo(ht);
             var ac = dkTeamColor(at), hc = dkTeamColor(ht);
             var matchup = as + ' @ ' + hs;
             function mkp(opts) {
@@ -5613,9 +5613,14 @@
             if (!p || !p.moreOdds) return acc;
             var legProb;
             if (p.isTeamMarket) {
-                var pOwn   = parlayToProb(p.moreOdds);
-                var pOther = parlayToProb(p.oppOdds);
-                legProb = pOwn / (pOwn + pOther);
+                if (!p.oppOdds) {
+                    if (p.precompProb == null) return acc;
+                    legProb = p.precompProb;
+                } else {
+                    var pOwn   = parlayToProb(p.moreOdds);
+                    var pOther = parlayToProb(p.oppOdds);
+                    legProb = pOwn / (pOwn + pOther);
+                }
             } else {
                 if (!p.lessOdds) return acc;
                 var pMore = parlayToProb(p.moreOdds);
@@ -7199,8 +7204,14 @@
                 var logoA = null, logoB = null;
                 if (mkt === 'team_total' || mkt.startsWith('1inn_')) {
                     // Game-level markets — show both team logos
-                    logoA = evtAway ? dkTeamLogo(evtAway) : null;
-                    logoB = evtHome ? dkTeamLogo(evtHome) : null;
+                    // 1inn is always MLB — use ESPN CDN directly to avoid NFL map collision
+                    if (mkt.startsWith('1inn_') && evtAway && evtHome) {
+                        logoA = 'https://a.espncdn.com/i/teamlogos/mlb/500/' + evtAway.toLowerCase() + '.png';
+                        logoB = 'https://a.espncdn.com/i/teamlogos/mlb/500/' + evtHome.toLowerCase() + '.png';
+                    } else {
+                        logoA = evtAway ? dkTeamLogo(evtAway) : null;
+                        logoB = evtHome ? dkTeamLogo(evtHome) : null;
+                    }
                 } else if (mkt === 'team_runline') {
                     var pickedN = (leg.player_name || '').replace(/ (ML|RL)$/i, '').trim();
                     var pickedNrm = normSlipName(pickedN);
@@ -7241,9 +7252,18 @@
                 }
             }
 
-            var statLine = isTeamMkt
-                ? escHtml((leg.label || mkt) + resultVal)
-                : escHtml((dir === 'more' ? 'Over ' : 'Under ') + thresh + ' ' + (MKT_SHORT[mkt] || mkt) + resultVal);
+            var statLine;
+            if (isTeamMkt) {
+                var _lbl = leg.label || mkt;
+                if (mkt.startsWith('1inn_') && _lbl && !_lbl.toLowerCase().includes('1st')) {
+                    var _1pfx = {'1inn_runs_ou':'1st Inn Runs','1inn_walks_ou':'1st Inn Walks','1inn_pitches_ou':'1st Inn Pitches','1inn_batters_ou':'1st Inn Batters','1inn_hits_ou':'1st Inn Hits','1inn_runs_exact':'1st Inn Runs','1inn_hits_exact':'1st Inn Hits','1inn_pitches_range':'1st Inn Pitches','1inn_ks_exact':'1st Inn Ks','1inn_hr_yn':'1st Inn HR','1inn_run_yn':'1st Inn Scores'};
+                    var _pfx = _1pfx[mkt];
+                    if (_pfx) _lbl = _pfx + ' · ' + _lbl;
+                }
+                statLine = escHtml(_lbl + resultVal);
+            } else {
+                statLine = escHtml((dir === 'more' ? 'Over ' : 'Under ') + thresh + ' ' + (MKT_SHORT[mkt] || mkt) + resultVal);
+            }
 
             // Show live tracking for any today leg that could still change
             var showStatus = (s.status === 'active' || s.status === 'lost') &&
@@ -7616,6 +7636,22 @@
         parlayRenderPill();
     }
 
+    // 1inn half resolver (client-side mirror of place.js get1innHalf).
+    // Returns 'top' | 'bottom' | null. Uses team short name + awayShort/homeShort.
+    var _INN1_PITCHING_C = { '1inn_pitches_ou':1,'1inn_pitches_range':1,'1inn_batters_ou':1,'1inn_ks_exact':1 };
+    var _INN1_GAME_C     = { '1inn_ml':1,'1inn_runs_ou':1,'1inn_walks_ou':1 };
+    function get1innHalfClient(market, teamShort, awayShort, homeShort) {
+        if (_INN1_GAME_C[market]) return null;
+        if (!teamShort || !awayShort || !homeShort) return null;
+        var ts = teamShort.toLowerCase(), aw = awayShort.toLowerCase(), hm = homeShort.toLowerCase();
+        var isAway = ts === aw || ts.startsWith(aw) || aw.startsWith(ts);
+        var isHome = ts === hm || ts.startsWith(hm) || hm.startsWith(ts);
+        if (!isAway && !isHome) return null;
+        var side = (isAway && !isHome) ? 'away' : 'home';
+        if (_INN1_PITCHING_C[market]) return side === 'away' ? 'bottom' : 'top';
+        return side === 'away' ? 'top' : 'bottom';
+    }
+
     function parlayTogglePick(id, dir) {
         var key = String(id);
         if (parlayPicks[key] === dir) {
@@ -7659,6 +7695,26 @@
                             return;
                         }
                     }
+                    // 1inn same-half block: use matchup (awayShort@homeShort) as game key since
+                    // DK subcategories use different eventIds for the same game.
+                    if (newP.market && newP.market.startsWith('1inn_')) {
+                        var newHalfC  = get1innHalfClient(newP.market, newP.team, newP.awayShort, newP.homeShort);
+                        var newMtchup = newP.awayShort && newP.homeShort ? newP.awayShort + '@' + newP.homeShort : null;
+                        if (newHalfC && newMtchup) {
+                            var inn1Conflict = Object.keys(parlayPicks).some(function(k) {
+                                var ex = findParlayPlayer(k);
+                                if (!ex || !ex.market || !ex.market.startsWith('1inn_')) return false;
+                                var exMtchup = ex.awayShort && ex.homeShort ? ex.awayShort + '@' + ex.homeShort : null;
+                                if (exMtchup !== newMtchup) return false;
+                                var exHalf = get1innHalfClient(ex.market, ex.team, ex.awayShort, ex.homeShort);
+                                return exHalf && exHalf === newHalfC;
+                            });
+                            if (inn1Conflict) {
+                                showConfirm('Cannot combine picks from the same half of the 1st inning — picks are correlated.', function() {});
+                                return;
+                            }
+                        }
+                    }
                     // Correlation check: player prop + team ML/RL from same game
                     if (newP.eventId && !newP.fightId) {
                         var conflict = Object.keys(parlayPicks).some(function(k) {
@@ -7666,10 +7722,11 @@
                             if (!existing || existing.eventId !== newP.eventId) return false;
                             // Totals never conflict
                             if (existing.market === 'team_total' || newP.market === 'team_total') return false;
-                            // Must be one player prop + one team ML/RL
                             var existIsTeam = !!existing.isTeamMarket;
                             var newIsTeam   = !!newP.isTeamMarket;
                             if (existIsTeam && newIsTeam) {
+                                // 1inn picks: handled by the same-half check above — skip here
+                                if (existing.market && existing.market.startsWith('1inn_') && newP.market && newP.market.startsWith('1inn_')) return false;
                                 // Both team markets (non-total): same team in ML + RL is high correlation
                                 return !!(existing.team && existing.team === newP.team);
                             }
