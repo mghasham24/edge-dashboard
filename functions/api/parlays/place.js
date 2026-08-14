@@ -192,7 +192,7 @@ export async function onRequestPost({ request, env }) {
   }
 
   // Block correlated same-game legs within each market group.
-  const BATTER_MKTS  = new Set(['hits','total_bases','rbis','runs','hrbi','singles','stolen_bases','doubles','walks']);
+  const BATTER_MKTS  = new Set(['hits','total_bases','rbis','runs','hrbi','singles','stolen_bases','doubles','walks','home_runs']);
   const PITCHER_MKTS = new Set(['pitcher_ks','outs_ou','hits_allowed','er_allowed','bb_allowed','hwer']);
   // Basketball player props — same player, same game correlate across all stat categories.
   const BBALL_MKTS   = new Set(['points','assists','rebounds','steals','blocks','threes','turnovers','minutes']);
@@ -208,9 +208,14 @@ export async function onRequestPost({ request, env }) {
   for (const l of normalized) {
     const group = legGroup(l.marketType);
     if (!group) continue;
+    // For batters: scope by game + team so two hitters from OPPOSITE teams are allowed.
+    // Same-team batters share a lineup/pitcher → still blocked.
+    const gameKey = l.eventName || l.eventId;
     const scopeKey = group === 'bball_player'
-      ? (l.playerName || l.eventName || l.eventId)
-      : (l.eventName || l.eventId);
+      ? (l.playerName || gameKey)
+      : group === 'batter'
+      ? (gameKey + ':' + (l.team || 'unk'))
+      : gameKey;
     const key = group + ':' + scopeKey;
     groupGameCounts[key] = (groupGameCounts[key] || 0) + 1;
     if (groupGameCounts[key] > 1) {
