@@ -7993,6 +7993,7 @@
                     // Note: all 1inn buttons pass dir='more' regardless of over/under/yes/no — direction
                     // is encoded in the player object's idir field, not the dir parameter.
                     if (newP.market === '1inn_ml' || newP.market === '1inn_run_yn' ||
+                        newP.market === '1inn_hr_yn' ||
                         (newP.market === '1inn_hits_ou' && newP.idir === 'over')) {
                         var newMtchupI = newP.awayShort && newP.homeShort ? newP.awayShort + '@' + newP.homeShort : null;
                         if (newMtchupI && newP.team) {
@@ -8001,8 +8002,9 @@
                                 if (!ex || !ex.market) return false;
                                 var exMtchup = ex.awayShort && ex.homeShort ? ex.awayShort + '@' + ex.homeShort : null;
                                 if (exMtchup !== newMtchupI || !ex.team || ex.team !== newP.team) return false;
-                                if ((newP.market === '1inn_ml' && ex.market === '1inn_run_yn') ||
-                                    (newP.market === '1inn_run_yn' && ex.market === '1inn_ml')) return true;
+                                // ML + Run Scored or HR Yes (same team): HR guarantees a run = nearly identical to winning
+                                if ((newP.market === '1inn_ml' && (ex.market === '1inn_run_yn' || ex.market === '1inn_hr_yn')) ||
+                                    ((newP.market === '1inn_run_yn' || newP.market === '1inn_hr_yn') && ex.market === '1inn_ml')) return true;
                                 if (newP.market === '1inn_ml' && ex.market === '1inn_hits_ou' && ex.idir === 'over') return true;
                                 if (newP.market === '1inn_hits_ou' && newP.idir === 'over' && ex.market === '1inn_ml') return true;
                                 return false;
