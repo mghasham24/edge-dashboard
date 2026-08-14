@@ -754,7 +754,7 @@ async function runCron(env, ctx) {
       await _doPoll();
     }
 
-    // ── 5b. Card pool reconciliation (every 5 min) ────────
+    // ── 5b. Card pool reconciliation (every 2 min) ────────
     if (env.SITE_URL && env.CRON_SECRET) {
       try {
         const reconcileCheck = await env.DB.prepare(
@@ -768,6 +768,25 @@ async function runCron(env, ctx) {
           fetch(`${env.SITE_URL}/api/parlays/card-reconcile?_cron_key=${env.CRON_SECRET}`, {
             method: 'POST',
             signal: AbortSignal.timeout(25000),
+          }).catch(() => {});
+        }
+      } catch(e) {}
+    }
+
+    // ── 5c. Marketplace auto-buy (every 5 min) ─────────────
+    if (env.SITE_URL && env.CRON_SECRET) {
+      try {
+        const buyCheck = await env.DB.prepare(
+          "SELECT fetched_at FROM odds_cache WHERE cache_key='market_buy_last_run'"
+        ).first();
+        if (!buyCheck || (now - buyCheck.fetched_at) > 5 * 60) {
+          await env.DB.prepare(
+            "INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES('market_buy_last_run','1',?) " +
+            "ON CONFLICT(cache_key) DO UPDATE SET data='1',fetched_at=excluded.fetched_at"
+          ).bind(now).run();
+          fetch(`${env.SITE_URL}/api/parlays/market-buy?_cron_key=${env.CRON_SECRET}`, {
+            method: 'POST',
+            signal: AbortSignal.timeout(20000),
           }).catch(() => {});
         }
       } catch(e) {}
