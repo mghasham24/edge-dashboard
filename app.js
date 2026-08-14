@@ -8185,12 +8185,14 @@
                        PARLAY_GAMES_WNBA.find(function(g) { return g.eventId === p.eventId; }) ||
                        PARLAY_GAMES_NFL.find(function(g) { return g.eventId === p.eventId; }) ||
                        (p.awayTeam && p.homeTeam ? p : null));
-            // 1inn picks: playerName uses awayShort/homeShort (e.g. "PIT Hits").
-            // awayTeam/homeTeam may be full names ("Pittsburgh Pirates") causing mismatch in
-            // place.js get1innHalf — always prefer awayShort/homeShort when available.
-            var _gameKey = (p.awayShort && p.homeShort) ? (p.awayShort + ' @ ' + p.homeShort) :
-                           (_pg && _pg.awayTeam && _pg.homeTeam) ? (_pg.awayTeam + ' @ ' + _pg.homeTeam) :
-                           '';
+            // 1inn picks need short codes so place.js get1innHalf() can match playerName to half.
+            // All other picks store full DK team name (e.g. "Cardinals @ Cubs") so the fuzzy
+            // substring match in parlayLegRsUrl finds rsGameIds keys like "St. Louis Cardinals @ Chicago Cubs".
+            var _is1inn = p.market && p.market.startsWith('1inn_');
+            var _gameKey = _is1inn
+                ? ((p.awayShort && p.homeShort) ? (p.awayShort + ' @ ' + p.homeShort) : '')
+                : ((_pg && _pg.awayTeam && _pg.homeTeam) ? (_pg.awayTeam + ' @ ' + _pg.homeTeam)
+                  : (p.awayShort && p.homeShort) ? (p.awayShort + ' @ ' + p.homeShort) : '');
             return {
                 playerName:   p.name,
                 direction:    dir,
