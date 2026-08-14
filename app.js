@@ -7311,9 +7311,21 @@
                 }
             }
         }
+        // 1inn legs store event_name as short form ("STL @ CHC") which doesn't fuzzy-match
+        // rsGameIds full names. Resolve via PARLAY_1INN_GAMES abbreviation lookup first.
+        if (storedKey && storedKey.indexOf(' @ ') !== -1 && PARLAY_1INN_GAMES.length) {
+            var _sp = storedKey.split(' @ ');
+            var _aw = _sp[0].trim(), _hw = _sp[1].trim();
+            var _innGame = PARLAY_1INN_GAMES.find(function(g) {
+                return (g.awayShort === _aw && g.homeShort === _hw) ||
+                       (g.awayTeam === _aw && g.homeTeam === _hw);
+            });
+            if (_innGame) { var _innUrl = parlayGameRsUrl(_innGame, 'mlb'); if (_innUrl) return _innUrl; }
+        }
         // Fall back to live player pool lookup (only works if Build tab loaded this session)
         var pools = [
             { players: PARLAY_PLAYERS,      games: PARLAY_GAMES,      sport: 'mlb'  },
+            { players: PARLAY_1INN_PLAYERS, games: PARLAY_1INN_GAMES, sport: 'mlb'  },
             { players: PARLAY_PLAYERS_WNBA, games: PARLAY_GAMES_WNBA, sport: 'wnba' },
             { players: PARLAY_PLAYERS_NFL,  games: PARLAY_GAMES_NFL,  sport: 'nfl'  },
         ];
