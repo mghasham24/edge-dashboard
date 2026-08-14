@@ -6227,11 +6227,12 @@
             fetch('/api/parlays/my-slips?page=' + page, { credentials: 'include' }).then(function(r) { return r.json(); }),
             fetch('/api/real/game-ids?sport=baseball_mlb', { credentials: 'include' }).then(function(r) { return r.json(); }).catch(function() { return {}; }),
             fetch('/api/real/game-ids?sport=basketball_wnba', { credentials: 'include' }).then(function(r) { return r.json(); }).catch(function() { return {}; }),
+            fetch('/api/real/game-ids?sport=football_nfl', { credentials: 'include' }).then(function(r) { return r.json(); }).catch(function() { return {}; }),
         ]).then(function(results) {
-            var d = results[0], mlbIds = results[1], wnbaIds = results[2];
+            var d = results[0], mlbIds = results[1], wnbaIds = results[2], nflIds = results[3];
             if (!d.ok) throw new Error('API error: ' + (d.error || 'unknown'));
             // Seed rsGameIds from cache so parlayLegRsUrl works on first render
-            var _ids = Object.assign({}, (mlbIds && mlbIds.gameIds) || {}, (wnbaIds && wnbaIds.gameIds) || {});
+            var _ids = Object.assign({}, (mlbIds && mlbIds.gameIds) || {}, (wnbaIds && wnbaIds.gameIds) || {}, (nflIds && nflIds.gameIds) || {});
             Object.keys(_ids).forEach(function(gk) { if (!rsGameIds[gk]) rsGameIds[gk] = _ids[gk]; });
             settledLegStats = {};
             parlaySlipsTotal = d.total || 0;
