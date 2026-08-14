@@ -3319,6 +3319,7 @@
     .prl-1inn-col-hdr { display:flex; align-items:center; gap:5px; font-size:11px; font-weight:800; color:var(--text); margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid var(--border) }
     .prl-1inn-col-hdr img { width:16px; height:16px; object-fit:contain }
     .prl-1inn-role { font-size:9px; font-weight:500; color:var(--muted); text-transform:uppercase; letter-spacing:.05em }
+    .prl-1inn-pitcher { font-size:10px; font-weight:500; color:var(--muted) }
     .prl-1inn-mkt { margin-bottom:7px }
     .prl-1inn-mkt:last-child { margin-bottom:0 }
     .prl-1inn-mkt-name { font-size:10px; font-weight:700; color:var(--muted); margin-bottom:3px }

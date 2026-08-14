@@ -167,6 +167,8 @@ function parseFirstInn(responses, eventId, homeTeam, awayTeam, homeShort, awaySh
   }
 
   // --- 12857: Pitches Thrown (O/U + Ranges per team) ---
+  // mkt.name often includes pitcher name: "Justin Steele Pitches Thrown - 1st Inning"
+  // Extract it by stripping the market-type suffix; store as game[side].pitcher.
   const pitchesData = bySubcat.get('12857');
   if (pitchesData) {
     const smap = groupSelsByMkt(pitchesData);
@@ -176,6 +178,11 @@ function parseFirstInn(responses, eventId, homeTeam, awayTeam, homeShort, awaySh
       if (!side) continue;
       const mktName = (mkt?.marketType?.name || mkt?.name || '').toLowerCase();
       const isRange = mktName.includes('range') || sels.some(s => /\d+[-–]\d+/.test(s.label || ''));
+      // Extract pitcher name from mkt.name (not marketType.name which is generic)
+      if (!game[side].pitcher && mkt?.name) {
+        const m = mkt.name.match(/^(.+?)\s+Pitches?\s/i);
+        if (m) game[side].pitcher = m[1].trim();
+      }
       if (isRange) {
         if (!game[side].pitchesRanges) {
           const ranges = sels.map(s => ({ label: s.label, odds: parseOdds(s.displayOdds?.american), selId: String(s.id), marketId: mktId })).filter(s => s.odds);

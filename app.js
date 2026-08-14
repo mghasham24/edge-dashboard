@@ -5954,13 +5954,13 @@
             h += '<div class="prl-1inn-half-hdr">Top &mdash; <span class="prl-1inn-half-sub">' + escHtml(as) + ' bats</span></div>';
             h += '<div class="prl-1inn-teams">';
             h += '<div class="prl-1inn-col"><div class="prl-1inn-col-hdr">' + (al ? '<img src="' + escHtml(al) + '">' : '') + escHtml(as) + ' <span class="prl-1inn-role">batting</span></div>' + renderBatting(sd_a, as) + '</div>';
-            h += '<div class="prl-1inn-col"><div class="prl-1inn-col-hdr">' + (hl ? '<img src="' + escHtml(hl) + '">' : '') + escHtml(hs) + ' <span class="prl-1inn-role">pitching</span></div>' + renderPitching(sd_h, hs) + '</div>';
+            h += '<div class="prl-1inn-col"><div class="prl-1inn-col-hdr">' + (hl ? '<img src="' + escHtml(hl) + '">' : '') + escHtml(hs) + (sd_h.pitcher ? ' <span class="prl-1inn-pitcher">' + escHtml(sd_h.pitcher) + '</span>' : '') + ' <span class="prl-1inn-role">pitching</span></div>' + renderPitching(sd_h, hs) + '</div>';
             h += '</div>';
             // BOTTOM: home bats, away pitches
             h += '<div class="prl-1inn-half-hdr">Bottom &mdash; <span class="prl-1inn-half-sub">' + escHtml(hs) + ' bats</span></div>';
             h += '<div class="prl-1inn-teams">';
             h += '<div class="prl-1inn-col"><div class="prl-1inn-col-hdr">' + (hl ? '<img src="' + escHtml(hl) + '">' : '') + escHtml(hs) + ' <span class="prl-1inn-role">batting</span></div>' + renderBatting(sd_h, hs) + '</div>';
-            h += '<div class="prl-1inn-col"><div class="prl-1inn-col-hdr">' + (al ? '<img src="' + escHtml(al) + '">' : '') + escHtml(as) + ' <span class="prl-1inn-role">pitching</span></div>' + renderPitching(sd_a, as) + '</div>';
+            h += '<div class="prl-1inn-col"><div class="prl-1inn-col-hdr">' + (al ? '<img src="' + escHtml(al) + '">' : '') + escHtml(as) + (sd_a.pitcher ? ' <span class="prl-1inn-pitcher">' + escHtml(sd_a.pitcher) + '</span>' : '') + ' <span class="prl-1inn-role">pitching</span></div>' + renderPitching(sd_a, as) + '</div>';
             h += '</div>';
             h += '</div>';
             return h;
