@@ -8,7 +8,7 @@ import { getSessionOrCron } from '../../_lib/auth.js';
 const DK_BASE   = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
 const DK_LEAGUE = '84240';
 const CACHE_TTL = 300; // 5 min
-const CACHE_KEY = 'dk_mlb_props_v12';
+const CACHE_KEY = 'dk_mlb_props_v13';
 
 // Standard subcategories — available at league level
 const SUBCAT_MAP = {
@@ -31,6 +31,10 @@ const SUBCAT_MAP = {
 // Runs O/U only exists at the event level — fetched per-event after getting today's event list
 const RUNS_SUBCAT = '17407';
 const RUNS_INFO   = { market: 'runs', stat: 'Runs', type: 'ou' };
+
+// Home Runs milestone market — event-level only, labels "1+" / "2+", milestoneValue 1 / 2
+const HR_SUBCAT = '17319';
+const HR_INFO   = { market: 'home_runs', stat: 'Home Runs', type: 'milestone' };
 
 const DK_HEADERS = {
   'Accept':         '*/*',
@@ -203,6 +207,56 @@ async function fetchRunsForEvent(eventId, homeShort, awayShort, timeStr, startMs
   return parseEventMarkets(data, eventId, homeShort, awayShort, timeStr, startMs, RUNS_SUBCAT, RUNS_INFO);
 }
 
+// Parse HR milestone markets — one entry per milestone (1+, 2+) per player.
+// Uses threshold 0.5/1.5 so the standard "> threshold" settle comparison works correctly.
+function parseHRMarkets(data, eventId, homeShort, awayShort, timeStr, startMs) {
+  const players = [];
+  const selsByMarket = new Map();
+  for (const s of (data.selections || [])) {
+    const arr = selsByMarket.get(String(s.marketId)) || [];
+    arr.push(s);
+    selsByMarket.set(String(s.marketId), arr);
+  }
+  for (const mkt of (data.markets || [])) {
+    const sels = selsByMarket.get(String(mkt.id)) || [];
+    for (const sel of sels) {
+      const mv = sel.milestoneValue ?? (sel.label === '1+' ? 1 : sel.label === '2+' ? 2 : null);
+      if (mv !== 1 && mv !== 2) continue;
+      const player = (sel.participants || [])[0];
+      if (!player) continue;
+      const odds = parseOdds(sel.displayOdds?.american);
+      if (!odds) continue;
+      const dkPlayerId = player.id || null;
+      const headshot   = dkPlayerId ? `/api/dk/player-image?id=${dkPlayerId}&size=lg` : null;
+      const isHome     = player.venueRole === 'HomePlayer';
+      const team       = isHome ? homeShort : awayShort;
+      const opp        = isHome ? awayShort : homeShort;
+      const seasonHR   = player.statistic?.value ?? null;
+      const fairProb   = sel.trueOdds > 0 ? 1 / sel.trueOdds : null;
+      players.push({
+        name: player.name, team, opp, time: timeStr, startMs,
+        market: HR_INFO.market, stat: HR_INFO.stat, type: 'milestone',
+        threshold: mv === 1 ? 0.5 : 1.5,
+        milestoneLabel: mv === 1 ? '1+' : '2+',
+        direction: 'more', americanOdds: odds, fairProb, seasonHR,
+        marketId: String(mkt.id), selectionId: String(sel.id), eventId: String(eventId),
+        subcatId: HR_SUBCAT, mainLine: mv === 1, headshot, dkPlayerId,
+      });
+    }
+  }
+  return players;
+}
+
+async function fetchHRForEvent(eventId, homeShort, awayShort, timeStr, startMs) {
+  const res = await fetch(eventSubcatUrl(eventId, HR_SUBCAT), {
+    headers: DK_HEADERS,
+    signal:  AbortSignal.timeout(8000),
+  });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return parseHRMarkets(data, eventId, homeShort, awayShort, timeStr, startMs);
+}
+
 export async function onRequestGet(context) {
   const { request, env } = context;
   const session = await getSessionOrCron(request, env);
@@ -251,9 +305,9 @@ export async function onRequestGet(context) {
     return !d || d >= today;
   });
 
-  // Step 2: fetch remaining league subcategories + per-event Runs in parallel
+  // Step 2: fetch remaining league subcategories + per-event Runs + per-event HRs in parallel
   const otherEntries = Object.entries(SUBCAT_MAP).filter(([id]) => id !== '6719');
-  const [otherResults, runsResults] = await Promise.all([
+  const [otherResults, runsResults, hrResults] = await Promise.all([
     Promise.allSettled(otherEntries.map(([subcatId, info]) => fetchSubcat(subcatId, info))),
     Promise.allSettled(todayEvents.map(e => {
       const startMs   = e.startEventDate ? new Date(e.startEventDate).getTime() : 0;
@@ -267,10 +321,22 @@ export async function onRequestGet(context) {
       const awayShort = awayPart?.metadata?.shortName || awayPart?.name || '';
       return fetchRunsForEvent(String(e.id), homeShort, awayShort, timeStr, startMs);
     })),
+    Promise.allSettled(todayEvents.map(e => {
+      const startMs   = e.startEventDate ? new Date(e.startEventDate).getTime() : 0;
+      const timeStr   = startMs
+        ? new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' }).format(new Date(startMs))
+        : '';
+      const evParts   = e.participants || [];
+      const homePart  = evParts.find(p => p.venueRole === 'Home');
+      const awayPart  = evParts.find(p => p.venueRole === 'Away');
+      const homeShort = homePart?.metadata?.shortName || homePart?.name || '';
+      const awayShort = awayPart?.metadata?.shortName || awayPart?.name || '';
+      return fetchHRForEvent(String(e.id), homeShort, awayShort, timeStr, startMs);
+    })),
   ]);
 
   const allPlayers = [...hitsResult.players];
-  for (const r of [...otherResults, ...runsResults]) {
+  for (const r of [...otherResults, ...runsResults, ...hrResults]) {
     if (r.status === 'fulfilled') allPlayers.push(...(r.value.players ?? r.value));
   }
 

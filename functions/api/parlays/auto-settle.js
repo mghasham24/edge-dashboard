@@ -63,6 +63,7 @@ const MLB_STAT_FIELD = {
   er_allowed:   'earnedRuns',
   bb_allowed:   'pitcherWalks',
   hwer:         'hwer',
+  home_runs:    'homeRuns',
 };
 
 const WNBA_STAT_FIELD = {
@@ -488,6 +489,7 @@ function extractMlbPlayerStats(boxscore) {
         ? parseInt(batting.totalBases || 0)
         : (h - d - tri - hr) + 2*d + 3*tri + 4*hr;
       // New full-game prop fields — always sourced from the correct side
+      merged.homeRuns     = hr;
       merged.doubles      = d; // explicit batter doubles (pitching spread has its own 'doubles' for allowed)
       merged.singles      = h - d - tri - hr;
       merged.stolenBases  = parseInt(batting.stolenBases   || 0);

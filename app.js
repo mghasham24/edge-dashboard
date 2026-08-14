@@ -4897,6 +4897,7 @@
         { key:'rbis',         label:'RBIs' },
         { key:'runs',         label:'Runs' },
         { key:'hrbi',         label:'H+R+RBI' },
+        { key:'home_runs',    label:'Home Runs' },
         { key:'pitcher_ks',   label:'Pitcher Ks' },
         { key:'outs_ou',      label:'Outs' },
         { key:'singles',      label:'Singles' },
@@ -4911,7 +4912,7 @@
         { key:'teams',        label:'Teams' },
     ];
     var MLB_GROUPS = {
-        bat:  ['hits','total_bases','rbis','runs','hrbi','singles','stolen_bases','doubles','walks'],
+        bat:  ['hits','total_bases','rbis','runs','hrbi','home_runs','singles','stolen_bases','doubles','walks'],
         pitch:['pitcher_ks','outs_ou','hits_allowed','er_allowed','bb_allowed','hwer'],
     };
     var WNBA_CATS = [
@@ -5109,6 +5110,34 @@
         var nextId = idStart || 1;
         Object.values(byKey).forEach(function(g) {
             var meta = g.meta;
+
+            // Milestone markets (e.g. HR 1+, HR 2+) — each threshold is its own card
+            if (meta.type === 'milestone') {
+                var sorted = g.more.slice().sort(function(a,b){ return a.threshold - b.threshold; });
+                sorted.forEach(function(entry) {
+                    var words    = entry.name.split(' ');
+                    var initials = ((words[0][0]||'')+(words.length>1?words[words.length-1][0]||'':'')).toUpperCase();
+                    result.push({
+                        id: nextId++,
+                        name: entry.name, initials: initials,
+                        color: parlayTeamColor(entry.team),
+                        headshot: entry.headshot || null,
+                        team: entry.team, opp: entry.opp, time: entry.time,
+                        commenceMs: entry.startMs || 0,
+                        market: entry.market, stat: entry.stat,
+                        type: 'milestone',
+                        line: entry.threshold,
+                        milestoneLabel: entry.milestoneLabel,
+                        seasonHR: entry.seasonHR || null,
+                        precompProb: entry.fairProb || null,
+                        moreOdds: entry.americanOdds, lessOdds: null,
+                        moreSelId: entry.selectionId, lessSelId: null,
+                        marketId: entry.marketId, eventId: entry.eventId, subcatId: entry.subcatId,
+                    });
+                });
+                return;
+            }
+
             var moreEntry = g.more.find(function(e) { return e.mainLine; }) || g.more[0];
             var lessEntry = g.less.find(function(e) { return e.mainLine; }) || g.less[0];
             if (!moreEntry || !lessEntry) return;
@@ -6035,18 +6064,26 @@
         }
         grid.innerHTML = players.map(function(p) {
             var sel     = parlayPicks[p.id];
-            var cls     = sel ? (sel === 'more' ? ' sel-more' : ' sel-less') : '';
+            var isMilestone = p.type === 'milestone';
+            var cls     = sel ? (isMilestone || sel === 'more' ? ' sel-more' : ' sel-less') : '';
             var matchup = escHtml(p.team) + ' vs ' + escHtml(p.opp) + ' · ' + escHtml(parlayFmtTime(p.commenceMs || p.startMs || 0, p.time));
-            var btns =
-                '<button class="parlay-pick-btn p-less' + (sel === 'less' ? ' active' : '') + '" onclick="parlayTogglePick(' + p.id + ',\'less\')">' +
-                    '<span class="parlay-btn-label">▼ Less</span>' +
-                    '<span class="parlay-btn-odds">' + parlayFmtOdds(p.lessOdds) + '</span>' +
-                '</button>' +
-                '<button class="parlay-pick-btn p-more' + (sel === 'more' ? ' active' : '') + '" onclick="parlayTogglePick(' + p.id + ',\'more\')">' +
-                    '<span class="parlay-btn-label">▲ More</span>' +
+            var btns;
+            if (isMilestone) {
+                btns = '<button class="parlay-pick-btn p-more milestone-btn' + (sel ? ' active' : '') + '" onclick="parlayTogglePick(' + p.id + ',\'more\')">' +
+                    '<span class="parlay-btn-label">' + escHtml(p.milestoneLabel) + ' HR</span>' +
                     '<span class="parlay-btn-odds">' + parlayFmtOdds(p.moreOdds) + '</span>' +
                 '</button>';
-            var matchup = escHtml(p.team) + ' vs ' + escHtml(p.opp) + ' · ' + escHtml(parlayFmtTime(p.commenceMs || p.startMs || 0, p.time));
+            } else {
+                btns =
+                    '<button class="parlay-pick-btn p-less' + (sel === 'less' ? ' active' : '') + '" onclick="parlayTogglePick(' + p.id + ',\'less\')">' +
+                        '<span class="parlay-btn-label">▼ Less</span>' +
+                        '<span class="parlay-btn-odds">' + parlayFmtOdds(p.lessOdds) + '</span>' +
+                    '</button>' +
+                    '<button class="parlay-pick-btn p-more' + (sel === 'more' ? ' active' : '') + '" onclick="parlayTogglePick(' + p.id + ',\'more\')">' +
+                        '<span class="parlay-btn-label">▲ More</span>' +
+                        '<span class="parlay-btn-odds">' + parlayFmtOdds(p.moreOdds) + '</span>' +
+                    '</button>';
+            }
             var avatarStyle = 'background:linear-gradient(135deg,' + p.color + ',' + p.color + 'aa)';
             var topStyle = 'background:linear-gradient(160deg,' + p.color + '55,' + p.color + '22)';
             var headshotHtml = p.headshot
@@ -6058,6 +6095,9 @@
             var cardRsRow = playerUrl
                 ? '<div class="parlay-card-rs-row"><a class="rs-icon-btn parlay-rs-btn" href="' + escHtml(playerUrl) + '" target="_blank" rel="noopener" title="Player on Real Sports" onclick="event.stopPropagation()">' + PARLAY_STATS_SVG + '</a></div>'
                 : '';
+            var statNumHtml = isMilestone
+                ? escHtml(p.milestoneLabel) + (p.seasonHR != null ? '<span style="font-size:11px;font-weight:600;color:var(--muted);margin-left:4px">HR: ' + escHtml(String(p.seasonHR)) + '</span>' : '')
+                : escHtml(String(p.line));
             return '<div class="parlay-card' + cls + '">' +
                 '<div class="parlay-card-top" style="' + topStyle + '">' +
                     '<div class="parlay-team-badge">' + escHtml(p.team) + '</div>' +
@@ -6068,7 +6108,7 @@
                     '<div class="parlay-player-name">' + escHtml(p.name) + '</div>' +
                     '<div class="parlay-matchup">' + matchup + '</div>' +
                     '<div class="parlay-stat-display">' +
-                        '<div class="parlay-stat-num">' + escHtml(String(p.line)) + '</div>' +
+                        '<div class="parlay-stat-num">' + statNumHtml + '</div>' +
                         '<div class="parlay-stat-name">' + escHtml(p.stat) + '</div>' +
                     '</div>' +
                     '<div class="parlay-btns">' + btns + '</div>' +
@@ -6547,7 +6587,7 @@
 
         // Update progress bar (player props only)
         if (!isTeam && barEl) {
-            var UNIT = { hits:'H', total_bases:'TB', rbis:'RBI', runs:'R', hrbi:'H+R+BI', pitcher_ks:'K', outs_ou:'Outs', hits_allowed:'H', er_allowed:'ER', bb_allowed:'BB', hwer:'H+W+ER', pts:'PTS', reb:'REB', ast:'AST', fg3m:'3PM', pra:'PRA', pa:'P+A', pr:'P+R', ra:'R+A', steals:'STL', blocks:'BLK', turnovers:'TO', minutes:'MIN', points:'PTS', assists:'AST', rebounds:'REB', threes:'3PM' };
+            var UNIT = { hits:'H', total_bases:'TB', rbis:'RBI', runs:'R', hrbi:'H+R+BI', home_runs:'HR', pitcher_ks:'K', outs_ou:'Outs', hits_allowed:'H', er_allowed:'ER', bb_allowed:'BB', hwer:'H+W+ER', pts:'PTS', reb:'REB', ast:'AST', fg3m:'3PM', pra:'PRA', pa:'P+A', pr:'P+R', ra:'R+A', steals:'STL', blocks:'BLK', turnovers:'TO', minutes:'MIN', points:'PTS', assists:'AST', rebounds:'REB', threes:'3PM' };
             var unit     = UNIT[marketType] || '';
             var val      = currentVal !== null ? currentVal : 0;
             var isMore   = direction === 'more';
@@ -8190,6 +8230,8 @@
                 } else {
                     lbl = p.name + ' (' + oddsStr + ')'; // e.g. "NYY @ BOS O8.5 (+110)"
                 }
+            } else if (p.type === 'milestone') {
+                lbl = (p.milestoneLabel || '') + ' ' + (p.stat || 'HR') + ' (' + (odds > 0 ? '+' : '') + odds + ')';
             } else {
                 lbl = (dir === 'more' ? '▲ More ' : '▼ Less ') + p.line;
             }
