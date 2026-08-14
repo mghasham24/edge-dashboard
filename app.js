@@ -7280,7 +7280,7 @@
                     line = arrow + ' ' + leg.player_name + ' ' + mkt;
                 } else {
                     var pick = leg.label || (leg.threshold != null ? String(leg.threshold) : '');
-                    line = arrow + ' ' + leg.player_name + (pick ? ' · ' + pick : '');
+                    line = arrow + ' ' + leg.player_name + ' (1IN)' + (pick ? ' · ' + pick : '');
                 }
             } else {
                 line = arrow + ' ' + leg.player_name + ' ' + dir + ' ' + leg.threshold + ' ' + mkt;
