@@ -163,15 +163,15 @@ export async function onRequestGet(context) {
 
   // Debug: dump raw structure for a specific subcategory
   if (url.searchParams.get('debug') === '1') {
-    const subcatId = url.searchParams.get('subcat') || '13002';
+    const subcatId = url.searchParams.get('subcat') || '12488';
     const res  = await fetch(subcatUrl(subcatId), { headers: DK_HEADERS, signal: AbortSignal.timeout(12000) });
     const data = await res.json();
     const sels = data.selections || [];
-    const sample = sels.slice(0, 6).map(s => ({
-      selId: s.id, label: s.label, outcomeType: s.outcomeType,
-      participants: s.participants,
-    }));
-    return new Response(JSON.stringify({ selectionCount: sels.length, sample }, null, 2), {
+    const mkts = data.markets || [];
+    // Full raw selection (first 4) so we can see every field DK returns
+    const sample = sels.slice(0, 4);
+    const mktSample = mkts.slice(0, 2);
+    return new Response(JSON.stringify({ selectionCount: sels.length, marketCount: mkts.length, topKeys: sels[0] ? Object.keys(sels[0]) : [], mktKeys: mkts[0] ? Object.keys(mkts[0]) : [], sample, mktSample }, null, 2), {
       headers: { 'Content-Type': 'application/json' },
     });
   }
