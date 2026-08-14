@@ -4984,7 +4984,7 @@
         'NYM Mets':'New York Mets','ATL Braves':'Atlanta Braves',
         'LAD Dodgers':'Los Angeles Dodgers','SF Giants':'San Francisco Giants',
         'CHC Cubs':'Chicago Cubs','CWS White Sox':'Chicago White Sox',
-        'MIL Brewers':'Milwaukee Brewers','STL Cardinals':'St. Louis Cardinals',
+        'MIL Brewers':'Milwaukee Brewers','MIL Brew':'Milwaukee Brewers','STL Cardinals':'St. Louis Cardinals',
         'PHI Phillies':'Philadelphia Phillies','WSH Nationals':'Washington Nationals',
         'MIA Marlins':'Miami Marlins','PIT Pirates':'Pittsburgh Pirates',
         'CIN Reds':'Cincinnati Reds','COL Rockies':'Colorado Rockies',
@@ -5031,7 +5031,8 @@
         'HOU Texans':'Houston Texans','IND Colts':'Indianapolis Colts',
         'JAX Jaguars':'Jacksonville Jaguars','KC Chiefs':'Kansas City Chiefs',
         'LV Raiders':'Las Vegas Raiders','LAC Chargers':'Los Angeles Chargers',
-        'LAR Rams':'Los Angeles Rams','MIA Dolphins':'Miami Dolphins',
+        'LA Chargers':'Los Angeles Chargers','LAR Rams':'Los Angeles Rams',
+        'LA Rams':'Los Angeles Rams','MIA Dolphins':'Miami Dolphins',
         'MIN Vikings':'Minnesota Vikings','NE Patriots':'New England Patriots',
         'NO Saints':'New Orleans Saints','NYG Giants':'New York Giants',
         'NYJ Jets':'New York Jets','PHI Eagles':'Philadelphia Eagles',
@@ -5060,6 +5061,23 @@
             full = DK_WNBA_TEAM_MAP[dkName] || DK_NFL_TEAM_MAP[dkName] || DK_MLB_TEAM_MAP[dkName] || dkName;
         } else {
             full = DK_NFL_TEAM_MAP[dkName] || DK_MLB_TEAM_MAP[dkName] || DK_WNBA_TEAM_MAP[dkName] || dkName;
+        }
+        return TEAM_LOGO_URLS[full] || null;
+    }
+
+    // Sport-aware logo lookup — strictly uses only the primary sport map when sport is known,
+    // so DET/CIN/PHI abbreviations never bleed across MLB↔NFL↔WNBA boundaries.
+    function slipTeamLogo(teamName, sport) {
+        if (!teamName) return null;
+        if (TEAM_LOGO_URLS[teamName]) return TEAM_LOGO_URLS[teamName];
+        var full;
+        if (sport === 'baseball_mlb' || sport === 'mlb') {
+            full = DK_MLB_TEAM_MAP[teamName] || DK_NFL_TEAM_MAP[teamName] || DK_WNBA_TEAM_MAP[teamName] || teamName;
+        } else if (sport === 'basketball_wnba' || sport === 'wnba') {
+            full = DK_WNBA_TEAM_MAP[teamName] || DK_NFL_TEAM_MAP[teamName] || DK_MLB_TEAM_MAP[teamName] || teamName;
+        } else {
+            // NFL or unknown — NFL-first, fallback to all maps
+            full = DK_NFL_TEAM_MAP[teamName] || DK_MLB_TEAM_MAP[teamName] || DK_WNBA_TEAM_MAP[teamName] || teamName;
         }
         return TEAM_LOGO_URLS[full] || null;
     }
@@ -6703,6 +6721,93 @@
         }).catch(function() {});
     }
 
+    function fetchNflLiveStats(nflNeededByDate) {
+        var dates = Object.keys(nflNeededByDate);
+        if (!dates.length) return;
+        Promise.all(dates.map(function(date) {
+            var fmt = date.replace(/-/g, '');
+            return fetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=' + fmt, { signal: AbortSignal.timeout(8000), cache: 'no-cache' })
+                .then(function(r) { return r.json(); })
+                .then(function(data) { return { date: date, events: data.events || [] }; })
+                .catch(function() { return { date: date, events: [] }; });
+        })).then(function(dateResults) {
+            dateResults.forEach(function(dr) {
+                var date   = dr.date;
+                var events = dr.events;
+                var needed = nflNeededByDate[date] || [];
+                if (!needed.length) return;
+
+                var gameList = [];
+                events.forEach(function(ev) {
+                    var status = ev.status || {};
+                    var sType  = status.type || {};
+                    var sName  = sType.name || '';
+                    var isFinal = sName === 'STATUS_FINAL' || sName === 'STATUS_FINAL_OVERTIME';
+                    var isLive  = sName === 'STATUS_IN_PROGRESS' || sName === 'STATUS_HALFTIME' || sName === 'STATUS_END_PERIOD';
+                    var state   = isFinal ? 'Final' : (isLive ? 'Live' : 'Preview');
+                    var period  = status.period || 0;
+                    var clock   = status.displayClock || '';
+                    var qtrLabel = isLive ? (sName === 'STATUS_HALFTIME' ? 'Half' : ('Q' + period + (clock ? ' ' + clock : ''))) :
+                                   isFinal ? 'Final' : '';
+                    var comps    = (ev.competitions && ev.competitions[0] && ev.competitions[0].competitors) || [];
+                    var homeComp = comps.find(function(c) { return c.homeAway === 'home'; }) || {};
+                    var awayComp = comps.find(function(c) { return c.homeAway === 'away'; }) || {};
+                    var startET  = ev.date ? new Date(ev.date).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' }) : '';
+                    gameList.push({
+                        state: state, inningLabel: qtrLabel, startET: startET,
+                        homeAbbr: (homeComp.team && homeComp.team.abbreviation || '').toUpperCase(),
+                        awayAbbr: (awayComp.team && awayComp.team.abbreviation || '').toUpperCase(),
+                        homeName: (homeComp.team && (homeComp.team.displayName || homeComp.team.name)) || '',
+                        awayName: (awayComp.team && (awayComp.team.displayName || awayComp.team.name)) || '',
+                        homeScore: homeComp.score != null ? parseInt(homeComp.score, 10) : null,
+                        awayScore: awayComp.score != null ? parseInt(awayComp.score, 10) : null,
+                    });
+                });
+
+                needed.filter(function(n) { return n.isTeam; }).forEach(function(n) {
+                    // Strip ML/RL suffix to get raw team name (only applies to ML/RL legs)
+                    var raw      = n.playerName.replace(/ (ML|RL)$/i, '').trim();
+                    var rawNorm  = normSlipName(raw);
+                    var rawNick  = rawNorm.split(' ').slice(1).join(' ');
+                    var rawFirst = rawNorm.split(' ')[0];
+                    // matchFn: works for ML/RL where raw == team name (e.g. "GB Packers")
+                    var matchFn  = function(name) {
+                        var nm = normSlipName(name);
+                        return nm === rawNorm || (rawNick && nm.endsWith(rawNick)) || nm.split(' ')[0] === rawFirst;
+                    };
+
+                    var baseGame = null;
+                    if (n.marketType === 'team_total') {
+                        // playerName is "Away @ Home O/U X.X" — parse out the two team names
+                        var m = n.playerName.match(/^(.+?)\s+@\s+(.+?)\s+[OU][\d.]+$/i);
+                        if (m) {
+                            var awayN = normSlipName(m[1].trim()), homeN = normSlipName(m[2].trim());
+                            var awayNk = awayN.split(' ').slice(1).join(' '), homeNk = homeN.split(' ').slice(1).join(' ');
+                            var awayF  = awayN.split(' ')[0],               homeF  = homeN.split(' ')[0];
+                            baseGame = gameList.find(function(g) {
+                                var hn = normSlipName(g.homeName), an = normSlipName(g.awayName);
+                                var ha = g.homeAbbr.toLowerCase(),  aa = g.awayAbbr.toLowerCase();
+                                return (an === awayN || (awayNk && an.endsWith(awayNk)) || aa === awayF) &&
+                                       (hn === homeN || (homeNk && hn.endsWith(homeNk)) || ha === homeF);
+                            }) || null;
+                        }
+                    } else {
+                        baseGame = gameList.find(function(g) { return matchFn(g.homeName) || matchFn(g.awayName); }) || null;
+                    }
+                    if (!baseGame) return;
+
+                    var gi = Object.assign({}, baseGame);
+                    if (n.marketType !== 'team_total' && gi.homeScore != null) {
+                        var isHome = matchFn(gi.homeName);
+                        gi.pickedTeamScore = isHome ? gi.homeScore : gi.awayScore;
+                        gi.oppScore        = isHome ? gi.awayScore : gi.homeScore;
+                    }
+                    updateLegStatus(n.parlayId, n.legIndex, null, n.threshold, n.direction, n.marketType, gi, true);
+                });
+            });
+        }).catch(function() {});
+    }
+
     function fetchLiveSlipStats() {
         if (document.hidden) return;
         var MLB_FIELD = {
@@ -6712,9 +6817,10 @@
             hits_allowed:'pitcherHits', er_allowed:'earnedRuns', bb_allowed:'pitcherWalks', hwer:'hwer',
         };
 
-        // Split legs by sport — WNBA goes to ESPN, MLB goes to statsapi.mlb.com
+        // Split legs by sport — WNBA/NFL go to ESPN, MLB goes to statsapi.mlb.com
         var neededByDate     = {};  // MLB
         var wnbaNeededByDate = {};  // WNBA
+        var nflNeededByDate  = {};  // NFL
         var liveToday = new Date().toISOString().slice(0, 10);
         PARLAY_SLIPS.forEach(function(s) {
             if (s.status !== 'active' && s.status !== 'voided' && s.status !== 'void' && s.status !== 'lost') return;
@@ -6727,6 +6833,9 @@
                 if (WNBA_MKT_SET[mkt] || leg.sport === 'wnba') {
                     if (!wnbaNeededByDate[gd]) wnbaNeededByDate[gd] = [];
                     wnbaNeededByDate[gd].push(legObj);
+                } else if (leg.sport === 'nfl') {
+                    if (!nflNeededByDate[gd]) nflNeededByDate[gd] = [];
+                    nflNeededByDate[gd].push(legObj);
                 } else {
                     if (!neededByDate[gd]) neededByDate[gd] = [];
                     neededByDate[gd].push(legObj);
@@ -6735,6 +6844,7 @@
         });
 
         fetchWnbaLiveStats(wnbaNeededByDate);
+        fetchNflLiveStats(nflNeededByDate);
 
         var dates = Object.keys(neededByDate);
         if (!dates.length) return;
@@ -7230,6 +7340,10 @@
             if (isTeamMkt) {
                 // Parse both teams from event_name ("Away @ Home") for dual-logo avatars
                 var evtPts = (leg.event_name || '').match(/^(.+?)\s+@\s+(.+)$/);
+                // Fallback: if event_name is empty, parse player_name (e.g. "TEN Titans @ SF 49ers U39.5")
+                if (!evtPts && mkt === 'team_total') {
+                    evtPts = (leg.player_name || '').match(/^(.+?)\s+@\s+(.+?)\s+[OU][\d.]+$/);
+                }
                 var evtAway = evtPts ? evtPts[1].trim() : null;
                 var evtHome = evtPts ? evtPts[2].trim() : null;
                 var logoA = null, logoB = null;
@@ -7240,8 +7354,8 @@
                         logoA = 'https://a.espncdn.com/i/teamlogos/mlb/500/' + evtAway.toLowerCase() + '.png';
                         logoB = 'https://a.espncdn.com/i/teamlogos/mlb/500/' + evtHome.toLowerCase() + '.png';
                     } else {
-                        logoA = evtAway ? dkTeamLogo(evtAway) : null;
-                        logoB = evtHome ? dkTeamLogo(evtHome) : null;
+                        logoA = evtAway ? slipTeamLogo(evtAway, leg.sport) : null;
+                        logoB = evtHome ? slipTeamLogo(evtHome, leg.sport) : null;
                     }
                 } else if (mkt === 'team_runline') {
                     var pickedN = (leg.player_name || '').replace(/ (ML|RL)$/i, '').trim();
@@ -7249,11 +7363,24 @@
                     var awayNrm   = normSlipName(evtAway || '');
                     var awayNick  = awayNrm.split(' ').slice(1).join(' ');
                     var isAwayPk  = awayNrm === pickedNrm || (awayNick && pickedNrm.endsWith(awayNick));
-                    logoA = dkTeamLogo(isAwayPk ? evtAway : evtHome);
-                    logoB = dkTeamLogo(isAwayPk ? evtHome : evtAway);
+                    logoA = slipTeamLogo(isAwayPk ? evtAway : evtHome, leg.sport);
+                    logoB = slipTeamLogo(isAwayPk ? evtHome : evtAway, leg.sport);
                 } else {
                     var tmln = (leg.player_name || '').replace(/ (ML|RL)$/i, '').trim();
-                    logoA = dkTeamLogo(tmln);
+                    logoA = slipTeamLogo(tmln, leg.sport);
+                    // Fallback: try matching team against event_name parts (handles "LA Chargers" → evtAway "LAC")
+                    if (!logoA && (evtAway || evtHome)) {
+                        var tNrm = normSlipName(tmln);
+                        var aNrm = normSlipName(evtAway || '');
+                        var hNrm = normSlipName(evtHome || '');
+                        var tLast = tNrm.split(' ').pop();
+                        var aLast = aNrm.split(' ').pop();
+                        var hLast = hNrm.split(' ').pop();
+                        var isAway = aNrm === tNrm || (tLast && tLast === aLast);
+                        logoA = isAway
+                            ? (slipTeamLogo(evtAway, leg.sport) || slipTeamLogo(evtHome, leg.sport))
+                            : (slipTeamLogo(evtHome, leg.sport) || slipTeamLogo(evtAway, leg.sport));
+                    }
                 }
                 if (logoA && logoB) {
                     var mkDualImg = function(cls, src, fb) {
@@ -7296,18 +7423,27 @@
                 statLine = escHtml((dir === 'more' ? 'Over ' : 'Under ') + thresh + ' ' + (MKT_SHORT[mkt] || mkt) + resultVal);
             }
 
-            // Show live tracking for any today leg that could still change
-            var showStatus = (s.status === 'active' || s.status === 'lost') &&
+            // Show live tracking for any today leg that could still change.
+            // NFL team market legs always get the time chip so the ESPN live widget can update
+            // in-place and the start time is visible even before the game starts.
+            var isLiveParlay2 = s.status === 'active' || s.status === 'lost';
+            var showStatus = isLiveParlay2 &&
                              (leg.status === 'pending' || leg.status === 'lost') &&
                              (leg.game_date || '') === today;
+            var isNflTeamPending = leg.sport === 'nfl' && isTeamMkt && isLiveParlay2 && leg.status === 'pending';
             var timeHtml = '';
-            if (showStatus) {
+            if (showStatus || isNflTeamPending) {
                 if (isTeamMkt) {
                     var tmInitText = '';
                     if (leg.event_name) {
                         var tmParts = leg.event_name.split('@');
                         if (tmParts.length === 2)
                             tmInitText = escHtml(tmParts[0].trim().split(' ')[0] + ' vs ' + tmParts[1].trim().split(' ')[0]);
+                    }
+                    // Show formatted start time for NFL pregame legs
+                    if (isNflTeamPending && leg.game_start_ms) {
+                        var _nflEt = new Date(leg.game_start_ms).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' });
+                        tmInitText = (tmInitText ? tmInitText + ' · ' : '') + _nflEt;
                     }
                     timeHtml = '<span class="pslip-team-game" id="pst-' + s.id + '-' + li + '">' + tmInitText + '</span>';
                 } else {
@@ -7742,6 +7878,24 @@
                             });
                             if (inn1Conflict) {
                                 showConfirm('Cannot combine picks from the same half of the 1st inning — picks are correlated.', function() {});
+                                return;
+                            }
+                        }
+                    }
+                    // 1inn_ml + 1inn_runs_ou same game: winning the inning guarantees runs were scored
+                    if (newP.market === '1inn_ml' || newP.market === '1inn_runs_ou') {
+                        var newMtchupMR = newP.awayShort && newP.homeShort ? newP.awayShort + '@' + newP.homeShort : null;
+                        if (newMtchupMR) {
+                            var mlRunsConflict = Object.keys(parlayPicks).some(function(k) {
+                                var ex = findParlayPlayer(k);
+                                if (!ex) return false;
+                                var exMtchup = ex.awayShort && ex.homeShort ? ex.awayShort + '@' + ex.homeShort : null;
+                                if (exMtchup !== newMtchupMR) return false;
+                                return (newP.market === '1inn_ml' && ex.market === '1inn_runs_ou') ||
+                                       (newP.market === '1inn_runs_ou' && ex.market === '1inn_ml');
+                            });
+                            if (mlRunsConflict) {
+                                showConfirm('Cannot combine 1st inning ML with 1st inning Runs O/U — picks are correlated.', function() {});
                                 return;
                             }
                         }
