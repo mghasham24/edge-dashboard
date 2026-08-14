@@ -498,6 +498,9 @@ function extractMlbPlayerStats(boxscore) {
       merged.hwer         = parseInt(pitching.hits || 0)
                           + parseInt(pitching.baseOnBalls || 0)
                           + parseInt(pitching.earnedRuns  || 0);
+      // Pitcher outs recorded: inningsPitched "5.2" = 5 full innings + 2 outs = 17
+      const ipParts = String(pitching.inningsPitched || '').split('.');
+      merged.outs = (parseInt(ipParts[0]) || 0) * 3 + (parseInt(ipParts[1]) || 0);
       map[name] = merged;
     }
   }
@@ -650,11 +653,15 @@ async function getWnbaPlayerStats(date, proxyKey) {
           const rebIdx = names.indexOf('REB');
           const astIdx = names.indexOf('AST');
           const fg3Idx = names.indexOf('3PT');
+          const minIdx = names.indexOf('MIN');
           for (const a of (sb.athletes || [])) {
             const name = normalizeName(a.athlete?.displayName || '');
             if (!name) continue;
             const s = a.stats || [];
-            if (s.length === 0) continue; // DNP — empty stats array means did not play; treat as not in box score so the leg voids rather than losing
+            if (s.length === 0) continue; // DNP — empty stats array
+            // Also catch DNP when ESPN lists the player with 0:00 or "DNP" minutes
+            const minVal = minIdx >= 0 ? String(s[minIdx] || '') : '';
+            if (minVal === '0:00' || minVal === '0' || minVal.toUpperCase() === 'DNP') continue;
             const getStat = idx => {
               if (idx < 0) return 0;
               const v = s[idx];
