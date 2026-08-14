@@ -7311,16 +7311,22 @@
                 }
             }
         }
-        // 1inn legs store event_name as short form ("STL @ CHC") which doesn't fuzzy-match
-        // rsGameIds full names. Resolve via PARLAY_1INN_GAMES abbreviation lookup first.
-        if (storedKey && storedKey.indexOf(' @ ') !== -1 && PARLAY_1INN_GAMES.length) {
-            var _sp = storedKey.split(' @ ');
-            var _aw = _sp[0].trim(), _hw = _sp[1].trim();
-            var _innGame = PARLAY_1INN_GAMES.find(function(g) {
-                return (g.awayShort === _aw && g.homeShort === _hw) ||
-                       (g.awayTeam === _aw && g.homeTeam === _hw);
-            });
-            if (_innGame) { var _innUrl = parlayGameRsUrl(_innGame, 'mlb'); if (_innUrl) return _innUrl; }
+        // 1inn legs store event_name as short form ("STL @ CHC"). Expand via MLB abbreviation
+        // table to match rsGameIds keys like "St. Louis Cardinals @ Chicago Cubs".
+        if (gamePart && gamePart.indexOf(' @ ') !== -1) {
+            var _MLB_KW = { ARI:'Diamondbacks',ATL:'Braves',BAL:'Orioles',BOS:'Red Sox',CHC:'Cubs',CWS:'White Sox',CIN:'Reds',CLE:'Guardians',COL:'Rockies',DET:'Tigers',HOU:'Astros',KC:'Royals',LAA:'Angels',LAD:'Dodgers',MIA:'Marlins',MIL:'Brewers',MIN:'Twins',NYM:'Mets',NYY:'Yankees',OAK:'Athletics',PHI:'Phillies',PIT:'Pirates',SD:'Padres',SEA:'Mariners',SF:'Giants',STL:'Cardinals',TB:'Rays',TEX:'Rangers',TOR:'Blue Jays',WSH:'Nationals' };
+            var _kp2 = gamePart.split(' @ ');
+            var _awKw = (_MLB_KW[_kp2[0].trim().toUpperCase()] || '').toLowerCase();
+            var _hwKw = (_MLB_KW[_kp2[1].trim().toUpperCase()] || '').toLowerCase();
+            if (_awKw && _hwKw) {
+                var _kwKeys = Object.keys(rsGameIds);
+                for (var _ki2 = 0; _ki2 < _kwKeys.length; _ki2++) {
+                    var _kl2 = _kwKeys[_ki2].toLowerCase();
+                    if (_kl2.indexOf(_awKw) !== -1 && _kl2.indexOf(_hwKw) !== -1) {
+                        return getRealSportsUrl(rsGameIds[_kwKeys[_ki2]], 'baseball_mlb', null, _kwKeys[_ki2]);
+                    }
+                }
+            }
         }
         // Fall back to live player pool lookup (only works if Build tab loaded this session)
         var pools = [
