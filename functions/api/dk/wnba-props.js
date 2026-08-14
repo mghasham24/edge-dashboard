@@ -171,7 +171,8 @@ export async function onRequestGet(context) {
     // Full raw selection (first 4) so we can see every field DK returns
     const sample = sels.slice(0, 4);
     const mktSample = mkts.slice(0, 2);
-    return new Response(JSON.stringify({ selectionCount: sels.length, marketCount: mkts.length, topKeys: sels[0] ? Object.keys(sels[0]) : [], mktKeys: mkts[0] ? Object.keys(mkts[0]) : [], sample, mktSample }, null, 2), {
+    const evts = data.events || data.items || data.data || [];
+    return new Response(JSON.stringify({ responseKeys: Object.keys(data), selectionCount: sels.length, marketCount: mkts.length, eventCount: (data.events || []).length, topKeys: sels[0] ? Object.keys(sels[0]) : [], mktKeys: mkts[0] ? Object.keys(mkts[0]) : [], sample, mktSample }, null, 2), {
       headers: { 'Content-Type': 'application/json' },
     });
   }
