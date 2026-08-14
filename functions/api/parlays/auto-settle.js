@@ -556,7 +556,7 @@ async function getEspnFinalGames(baseUrl, date, db = null, proxyKey = '') {
       }));
       await db.prepare(
         'INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at'
-      ).bind(`nfl_espn_debug_${yyyymmdd}`, JSON.stringify({ ts: now, date: yyyymmdd, proxyKeyLen: proxyKey.length, responses: debugInfo }), now).run().catch(() => {});
+      ).bind(`nfl_espn_debug_${yyyymmdd}`, JSON.stringify({ ts: now, date: yyyymmdd, v: 'b7c208e', proxyKeyLen: proxyKey.length, responses: debugInfo }), now).run().catch(() => {});
     }
 
     // Merge + deduplicate by eventId
