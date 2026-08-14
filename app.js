@@ -6110,7 +6110,7 @@
         var groupRow = '<div class="parlay-sport-tog">' +
             '<button class="parlay-sport-btn' + (parlayGroup === 'bat'   ? ' active' : '') + '" onclick="parlaySetGroup(\'bat\')">Bat</button>' +
             '<button class="parlay-sport-btn' + (parlayGroup === 'pitch' ? ' active' : '') + '" onclick="parlaySetGroup(\'pitch\')">Pitch</button>' +
-            (isAdmin ? '<button class="parlay-sport-btn' + (parlayGroup === '1inn'  ? ' active' : '') + '" onclick="parlaySetGroup(\'1inn\')">1inn</button>' : '') +
+            (isAdmin ? '<button class="parlay-sport-btn' + (parlayGroup === '1inn'  ? ' active' : '') + '" onclick="parlaySetGroup(\'1inn\')">1st Inning</button>' : '') +
             '<button class="parlay-sport-btn' + (parlayGroup === 'team'  ? ' active' : '') + '" onclick="parlaySetGroup(\'team\')">Team</button>' +
         '</div>';
 
