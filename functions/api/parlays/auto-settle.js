@@ -556,7 +556,7 @@ async function getEspnFinalGames(baseUrl, date, db = null, proxyKey = '') {
       }));
       await db.prepare(
         'INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at'
-      ).bind(`nfl_espn_debug_${yyyymmdd}`, JSON.stringify({ ts: now, date: yyyymmdd, responses: debugInfo }), now).run().catch(() => {});
+      ).bind(`nfl_espn_debug_${yyyymmdd}`, JSON.stringify({ ts: now, date: yyyymmdd, proxyKeyLen: proxyKey.length, responses: debugInfo }), now).run().catch(() => {});
     }
 
     // Merge + deduplicate by eventId
@@ -744,7 +744,7 @@ async function handleRequest({ request, env }) {
       }
     } catch(e) { espnError = e.message; }
 
-    const proxyKey = env.VPS_DK_KEY || '';
+    const proxyKey = env.VPS_DK_KEY || 'rax-dk-9x3m7p2q';
     let vpsStatus = null, vpsEventCount = 0, vpsError = null, vpsBody = null;
     try {
       const vpsProbe = await fetch(
@@ -899,7 +899,7 @@ async function handleRequest({ request, env }) {
   const has1innOnDate   = date => eligibleLegs.some(l => l.game_date === date && l.market_type.startsWith('1inn_'));
   const has1innPbpOnDate= date => eligibleLegs.some(l => l.game_date === date && INN1_PBP_MKTS.has(l.market_type));
 
-  const proxyKey = env.VPS_DK_KEY || '';
+  const proxyKey = env.VPS_DK_KEY || 'rax-dk-9x3m7p2q';
 
   await Promise.all(uniqueDates.map(async date => {
     const [mlbGames, wnbaGames, nflGames, ufcResults] = await Promise.all([
