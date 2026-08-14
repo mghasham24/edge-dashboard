@@ -143,7 +143,25 @@ export async function onRequestPost({ request, env }) {
     const gameDate = leg.gameDate || today;
 
     const VALID_SPORTS = ['mlb', 'wnba', 'nfl', 'ufc'];
-    const legSport = VALID_SPORTS.includes(leg.sport) ? leg.sport : 'mlb';
+    // For team-market legs, derive sport from the team nickname so a leg placed
+    // while on the wrong tab (e.g. WNBA tab + NFL team) is stored correctly.
+    const TEAM_MARKETS = new Set(['team_ml', 'team_runline', 'team_total']);
+    const NFL_NICKNAMES = new Set([
+      'bears','bengals','bills','broncos','browns','buccaneers','cardinals','chargers',
+      'chiefs','colts','commanders','cowboys','dolphins','eagles','falcons','49ers',
+      'giants','jaguars','jets','lions','packers','panthers','patriots','raiders',
+      'rams','ravens','saints','seahawks','steelers','texans','titans','vikings',
+    ]);
+    const WNBA_NICKNAMES = new Set([
+      'aces','dream','fever','liberty','lynx','mercury','mystics','sky','sparks','storm','sun','wings',
+    ]);
+    let legSport = VALID_SPORTS.includes(leg.sport) ? leg.sport : 'mlb';
+    if (TEAM_MARKETS.has(leg.marketType)) {
+      const words = (leg.playerName || '').toLowerCase().split(/[\s@]+/);
+      if (words.some(w => NFL_NICKNAMES.has(w)))        legSport = 'nfl';
+      else if (words.some(w => WNBA_NICKNAMES.has(w)))  legSport = 'wnba';
+      else                                               legSport = 'mlb';
+    }
 
     normalized.push({
       sport:       legSport,
@@ -250,9 +268,10 @@ export async function onRequestPost({ request, env }) {
   // 1inn ML correlates with full-game team ML (same game).
   const INN1_BAT_CROSS = new Set(['1inn_hits_ou','1inn_hits_exact','1inn_hr_yn','1inn_run_yn','1inn_runs_exact','1inn_runs_ou']);
   const INN1_PIT_CROSS = new Set(['1inn_ks_exact','1inn_batters_ou']);
-  const inn1BatEids = new Set();
-  const inn1PitEids = new Set();
-  const inn1MlEids  = new Set();
+  const inn1BatEids  = new Set();
+  const inn1PitEids  = new Set();
+  const inn1MlEids   = new Set();
+  const inn1RunsEids = new Set();
   for (const l of normalized) {
     if (!l.marketType.startsWith('1inn_')) continue;
     const eid = l.eventName || l.eventId; // eventName is consistent across DK subcats
@@ -260,6 +279,11 @@ export async function onRequestPost({ request, env }) {
     if (INN1_BAT_CROSS.has(l.marketType)) inn1BatEids.add(eid);
     if (INN1_PIT_CROSS.has(l.marketType)) inn1PitEids.add(eid);
     if (l.marketType === '1inn_ml')       inn1MlEids.add(eid);
+    if (l.marketType === '1inn_runs_ou')  inn1RunsEids.add(eid);
+  }
+  // 1inn_ml + 1inn_runs_ou same game: PHI winning the inning guarantees runs were scored.
+  for (const eid of inn1MlEids) {
+    if (inn1RunsEids.has(eid)) return err('Cannot combine 1st inning ML with 1st inning Runs O/U from the same game — picks are correlated.', 400);
   }
   for (const l of normalized) {
     if (l.marketType.startsWith('1inn_')) continue;
