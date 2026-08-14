@@ -1,16 +1,20 @@
 // functions/api/parlays/market-buy.js
 // POST /api/parlays/market-buy?_cron_key=CRON_SECRET
-// Auto-buys RS deposit cards from marketplace when free pool < 10.
+// Auto-buys RS deposit cards from marketplace when free pool < POOL_TARGET.
 // Only buys listings where numBids === 0 AND buyNowPrice === 10.
+// Paginates listings until enough eligible cards are found or all pages exhausted.
 // Called every 5 min by alert-cron.
 
 import { hashidsEncode } from '../../_lib/hashids.js';
 import { ok, err }       from '../../_lib/response.js';
 
-const RS_DEVICE_UUID = '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e';
-const POOL_TARGET    = 10;
-const BID_AMOUNT     = 10;
-const LISTING_URL    = 'https://web.realapp.com/cardmarketplacelistings?cohort=all&listingType=all&prestige=all&rarity=all&season=2025&sport=mlb';
+const RS_DEVICE_UUID  = '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e';
+const POOL_TARGET     = 50;
+const BID_AMOUNT      = 10;
+const MAX_BUY_PER_RUN = 50;
+const PAGE_SIZE       = 20;
+const MAX_PAGES       = 15; // scan up to 300 listings per run
+const LISTING_BASE    = 'https://web.realapp.com/cardmarketplacelistings?cohort=all&listingType=all&prestige=all&rarity=all&season=2025&sport=mlb';
 
 function buildHeaders(authInfo, sessionToken) {
   return {
@@ -50,29 +54,38 @@ async function handleRequest({ request, env }) {
     return ok({ skipped: true, freeCount, reason: 'pool_full' });
   }
 
-  const needed = POOL_TARGET - freeCount;
+  const needed = Math.min(POOL_TARGET - freeCount, MAX_BUY_PER_RUN);
 
-  // Fetch marketplace listings
-  let listings;
-  try {
-    const res = await fetch(LISTING_URL, {
-      headers: buildHeaders(authInfo, sessionToken),
-      signal:  AbortSignal.timeout(10000),
-    });
+  // Paginate marketplace listings until we have enough eligible cards or all pages exhausted
+  const eligible = [];
+  let pagesScanned = 0;
+  let totalScanned = 0;
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const offset = page * PAGE_SIZE;
+    let res;
+    try {
+      res = await fetch(
+        `${LISTING_BASE}&limit=${PAGE_SIZE}&offset=${offset}`,
+        { headers: buildHeaders(authInfo, sessionToken), signal: AbortSignal.timeout(10000) }
+      );
+    } catch (e) {
+      if (!page) return err('RS marketplace fetch error: ' + e.message, 502);
+      break; // network blip mid-pagination — use what we have
+    }
     if (res.status === 401 || res.status === 403) {
       return err('RS auth ' + res.status + ' — EDGEBOT_AUTH_INFO expired', 502);
     }
-    if (!res.ok) return err('RS marketplace fetch failed: ' + res.status, 502);
+    if (!res.ok) { if (!page) return err('RS marketplace fetch failed: ' + res.status, 502); break; }
     const data = await res.json();
-    listings = Array.isArray(data) ? data : (data.listings || data.data || []);
-  } catch (e) {
-    return err('RS marketplace fetch error: ' + e.message, 502);
+    const page_listings = Array.isArray(data) ? data : (data.listings || data.data || []);
+    pagesScanned++;
+    totalScanned += page_listings.length;
+    for (const l of page_listings) {
+      if (l.numBids === 0 && Number(l.buyNowPrice) === BID_AMOUNT) eligible.push(l);
+    }
+    if (eligible.length >= needed) break;  // enough found — stop paginating
+    if (page_listings.length < PAGE_SIZE)  break;  // last page
   }
-
-  // Filter: no bids, exact buyNow price of 10
-  const eligible = listings.filter(
-    l => l.numBids === 0 && Number(l.buyNowPrice) === BID_AMOUNT
-  );
 
   const bought = [];
   const errors = [];
@@ -115,7 +128,7 @@ async function handleRequest({ request, env }) {
     }
   }
 
-  const result = { ts: now, freeCount, needed, eligible: eligible.length, bought: bought.length, boughtCards: bought, errors };
+  const result = { ts: now, freeCount, needed, pagesScanned, totalScanned, eligible: eligible.length, bought: bought.length, boughtCards: bought, errors };
 
   try {
     await env.DB.prepare(
