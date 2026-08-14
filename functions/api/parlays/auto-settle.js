@@ -358,6 +358,15 @@ function resolve1stInnLeg(leg, finalGames, linescore1Map, pbpMap) {
   }
 }
 
+// Hard Promise.race timeout — AbortSignal.timeout doesn't reliably cancel
+// response-body reading in all CF runtime versions, so we add an explicit fence.
+function withTimeout(promise, ms, fallback = null) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('to')), ms)),
+  ]).catch(() => fallback);
+}
+
 // ── MLB helpers ───────────────────────────────────────────────────────────────
 
 async function getMlbFinalGames(date) {
@@ -903,10 +912,10 @@ async function handleRequest({ request, env }) {
 
   await Promise.all(uniqueDates.map(async date => {
     const [mlbGames, wnbaGames, nflGames, ufcResults] = await Promise.all([
-      hasMlbOnDate(date)  ? getMlbFinalGames(date)             : Promise.resolve([]),
-      hasWnbaOnDate(date) ? getWnbaFinalGames(date, proxyKey)  : Promise.resolve([]),
-      hasNflOnDate(date)  ? getEspnFinalGames(ESPN_NFL, date, env.DB, proxyKey)  : Promise.resolve([]),
-      hasUfcOnDate(date)  ? getUfcResults(date)                : Promise.resolve({}),
+      hasMlbOnDate(date)  ? withTimeout(getMlbFinalGames(date), 9000, [])             : Promise.resolve([]),
+      hasWnbaOnDate(date) ? withTimeout(getWnbaFinalGames(date, proxyKey), 9000, [])  : Promise.resolve([]),
+      hasNflOnDate(date)  ? withTimeout(getEspnFinalGames(ESPN_NFL, date, env.DB, proxyKey), 9000, [])  : Promise.resolve([]),
+      hasUfcOnDate(date)  ? withTimeout(getUfcResults(date), 9000, {})                : Promise.resolve({}),
     ]);
 
     mlbGamesMap[date]  = mlbGames;
@@ -928,9 +937,9 @@ async function handleRequest({ request, env }) {
         if (mlbGames.length) {
           await Promise.all(mlbGames.map(async g => {
             const [bs, ls, pbp] = await Promise.all([
-              getMlbBoxscore(g.gamePk).catch(() => null),
-              fetch1inn    ? getMlbLinescore(g.gamePk).catch(() => null)  : Promise.resolve(null),
-              fetch1innPbp ? getMlbPlayByPlay(g.gamePk).catch(() => null) : Promise.resolve(null),
+              withTimeout(getMlbBoxscore(g.gamePk), 8000),
+              fetch1inn    ? withTimeout(getMlbLinescore(g.gamePk), 8000)   : Promise.resolve(null),
+              fetch1innPbp ? withTimeout(getMlbPlayByPlay(g.gamePk), 8000) : Promise.resolve(null),
             ]);
             if (bs)  Object.assign(allStats, extractMlbPlayerStats(bs));
             if (ls)  linescore1[g.gamePk] = ls;
@@ -957,7 +966,7 @@ async function handleRequest({ request, env }) {
         return { allStats, linescore1, pbp1, mlb1innGames };
       })(),
       // ── WNBA stats block ───────────────────────────────────────────────────
-      hasWnbaOnDate(date) ? getWnbaPlayerStats(date, proxyKey) : Promise.resolve({}),
+      hasWnbaOnDate(date) ? withTimeout(getWnbaPlayerStats(date, proxyKey), 12000, {}) : Promise.resolve({}),
     ]);
 
     if (mlbBlock) {
