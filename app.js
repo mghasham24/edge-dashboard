@@ -7272,12 +7272,16 @@
             var result = leg.status === 'won' ? ' ✓' : leg.status === 'lost' ? ' ✗' : '';
             var line;
             if (leg.market_type && leg.market_type.startsWith('1inn_')) {
-                // 1inn legs always store dir='more' regardless of actual pick — use stored label instead.
-                // label holds the human-readable pick: "Over 1.5", "Exactly 1", "Yes", "15-19 pitches", etc.
-                var pick = leg.label || '';
-                line = leg.market_type === '1inn_ml'
-                    ? arrow + ' ' + leg.player_name + ' ' + mkt
-                    : arrow + ' ' + leg.player_name + ' ' + mkt + (pick ? ' · ' + pick : '');
+                // 1inn legs always store dir='more' regardless of actual pick — use stored label.
+                // player_name already contains the stat descriptor ("MIN Batters", "TEX Runs", etc.)
+                // so skip mkt to avoid redundancy. ML is the exception: player_name is just the team.
+                // For old slips where label is null, fall back to threshold number (no dir — ambiguous).
+                if (leg.market_type === '1inn_ml') {
+                    line = arrow + ' ' + leg.player_name + ' ' + mkt;
+                } else {
+                    var pick = leg.label || (leg.threshold != null ? String(leg.threshold) : '');
+                    line = arrow + ' ' + leg.player_name + (pick ? ' · ' + pick : '');
+                }
             } else {
                 line = arrow + ' ' + leg.player_name + ' ' + dir + ' ' + leg.threshold + ' ' + mkt;
             }
