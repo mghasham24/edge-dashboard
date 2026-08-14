@@ -1,4 +1,4 @@
-// functions/api/parlays/auto-settle.js
+// functions/api/parlays/auto-settle.js v2
 // POST /api/parlays/auto-settle?_cron_key=CRON_SECRET
 // GET  /api/parlays/auto-settle?_cron_key=CRON_SECRET&debug  (admin debug)
 //
