@@ -147,7 +147,7 @@ async function handleRequest({ request, env }) {
   // Fetch ALL pending_deposit parlays (no expiry filter) for the completed-offer backfill.
   // This catches parlays where a counter-offer completed after the 30-min window elapsed.
   const allPendingRows = await env.DB.prepare(
-    "SELECT id, stake_rax, deposit_card_id, expires_at FROM parlays WHERE status='pending_deposit'"
+    "SELECT id, stake_rax, deposit_card_id, expires_at, rs_offer_id FROM parlays WHERE status='pending_deposit'"
   ).all();
   const allPending = allPendingRows.results || [];
 
@@ -160,7 +160,7 @@ async function handleRequest({ request, env }) {
   // Expired map: parlays that expired within the last 24 hours.
   // If Rax was sent but the cron missed the accepted offer window, we reactivate them here.
   const recentExpiredRows = await env.DB.prepare(
-    "SELECT id, stake_rax, deposit_card_id FROM parlays WHERE status='expired' AND expires_at > ?"
+    "SELECT id, stake_rax, deposit_card_id, rs_offer_id FROM parlays WHERE status='expired' AND expires_at > ?"
   ).bind(now - 24 * 3600).all();
   const expiredMap = {};
   for (const row of (recentExpiredRows.results || [])) {
@@ -172,11 +172,50 @@ async function handleRequest({ request, env }) {
   // card-reconcile now skips recently-assigned cards, but if it ran fast enough to void the
   // parlay we still need to reactivate it when we see the accepted offer.
   const voidedDepositRows = await env.DB.prepare(
-    "SELECT id, stake_rax, deposit_card_id FROM parlays WHERE status='void' AND admin_notes='deposit_card_sold' AND created_at > ?"
+    "SELECT id, stake_rax, deposit_card_id, rs_offer_id FROM parlays WHERE status='void' AND admin_notes='deposit_card_sold' AND created_at > ?"
   ).bind(now - 24 * 3600).all();
   const voidedMap = {};
   for (const row of (voidedDepositRows.results || [])) {
     if (row.deposit_card_id) voidedMap[row.deposit_card_id] = { parlayId: row.id, stakeRax: row.stake_rax };
+  }
+
+  // Phase 0: Direct offer lookup for parlays where edgebot already counter-offered.
+  // When edgebot counters, the original offer ID is stored in rs_offer_id. We fetch that
+  // specific offer directly from RS rather than relying on pagination order in incomingAccepted
+  // — a late acceptance gets buried lower in the list as new offers arrive, and pagination
+  // scanning misses it. Direct lookup is O(1) per parlay and immune to list ordering.
+  const directCheckRows = [
+    ...allPending,
+    ...(recentExpiredRows.results || []),
+    ...(voidedDepositRows.results || []),
+  ].filter(r => r.rs_offer_id != null);
+
+  async function fetchOffer(offerId) {
+    try {
+      const res = await fetch(
+        `https://web.realapp.com/cardmarketplaceoffers/${offerId}`,
+        { headers: buildHeaders(authInfo, sessionToken), signal: AbortSignal.timeout(8000) }
+      );
+      if (!res.ok) return null;
+      return await res.json();
+    } catch { return null; }
+  }
+
+  const directActivated = new Set();
+  for (const row of directCheckRows) {
+    const offer = await fetchOffer(row.rs_offer_id);
+    if (!offer) continue;
+    const status = (offer.status || offer.offerStatus || '').toLowerCase();
+    if (status !== 'accepted') continue;
+    const cardId = getCardId(offer) ?? row.deposit_card_id;
+    const amount = Math.max(
+      offer.counterAmount ?? 0,
+      offer.amount       ?? 0,
+      offer.offerAmount  ?? 0,
+      row.stake_rax,
+    );
+    await activateParlay(row.id, cardId, row.rs_offer_id, amount);
+    directActivated.add(row.rs_offer_id);
   }
 
   let incomingOpen, incomingAccepted, outgoingAccepted, outgoingRejected, outgoingOpen;
@@ -333,8 +372,15 @@ async function handleRequest({ request, env }) {
       let counterResult;
       try { counterResult = await counterOffer(offerId, match.stakeRax, authInfo, sessionToken); }
       catch (e) { errors.push({ offerId, action: 'counter', error: e.message }); continue; }
-      if (counterResult.ok) countered++;
-      else errors.push({ offerId, action: 'counter', error: `RS ${counterResult.status}: ${counterResult.body}` });
+      if (counterResult.ok) {
+        countered++;
+        // Store the offer ID so Phase 0 can directly look up its acceptance status next run,
+        // bypassing pagination entirely for late-accepted counter-offers.
+        await env.DB.prepare('UPDATE parlays SET rs_offer_id=? WHERE id=? AND rs_offer_id IS NULL')
+          .bind(offerId, match.parlayId).run();
+      } else {
+        errors.push({ offerId, action: 'counter', error: `RS ${counterResult.status}: ${counterResult.body}` });
+      }
       continue;
     }
 
