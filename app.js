@@ -7988,6 +7988,30 @@
                             }
                         }
                     }
+                    // 1inn_ml + 1inn_run_yn (same team): winning the inning requires scoring — nearly identical
+                    // 1inn_ml + 1inn_hits_ou over (same team): scoring requires hits — highly correlated
+                    if (newP.market === '1inn_ml' || newP.market === '1inn_run_yn' ||
+                        (newP.market === '1inn_hits_ou' && dir === 'over')) {
+                        var newMtchupI = newP.awayShort && newP.homeShort ? newP.awayShort + '@' + newP.homeShort : null;
+                        if (newMtchupI && newP.team) {
+                            var innCorrConflict = Object.keys(parlayPicks).some(function(k) {
+                                var ex = findParlayPlayer(k);
+                                if (!ex || !ex.market) return false;
+                                var exMtchup = ex.awayShort && ex.homeShort ? ex.awayShort + '@' + ex.homeShort : null;
+                                if (exMtchup !== newMtchupI || !ex.team || ex.team !== newP.team) return false;
+                                if ((newP.market === '1inn_ml' && ex.market === '1inn_run_yn') ||
+                                    (newP.market === '1inn_run_yn' && ex.market === '1inn_ml')) return true;
+                                var exDir = parlayPicks[k];
+                                if (newP.market === '1inn_ml' && ex.market === '1inn_hits_ou' && exDir === 'over') return true;
+                                if (newP.market === '1inn_hits_ou' && dir === 'over' && ex.market === '1inn_ml') return true;
+                                return false;
+                            });
+                            if (innCorrConflict) {
+                                showConfirm('Cannot combine 1st inning ML with a correlated same-team prop — these picks are nearly identical bets.', function() {});
+                                return;
+                            }
+                        }
+                    }
                     // Correlation check: player prop + team ML/RL from same game
                     if (newP.eventId && !newP.fightId) {
                         var conflict = Object.keys(parlayPicks).some(function(k) {
