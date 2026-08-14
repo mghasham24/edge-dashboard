@@ -5404,6 +5404,7 @@
                 // Runs Exact
                 if (sd.runsExact && sd.runsExact.length) { var ao=sd.runsExact.map(function(s){return s.odds;}); sd.runsExact.forEach(function(s){ PARLAY_1INN_PLAYERS.push(tmkp({ market:'1inn_runs_exact', stat:'1st Inn Runs Exact', idir:s.label, name:ts+' Runs', moreOdds:s.odds, precompProb:noVigN(ao,s.odds), marketId:s.marketId, selId:s.selId, label:'Exactly '+s.label })); }); }
                 // Strikeouts Exact
+                if (sd.strikeoutsYN) { var d=sd.strikeoutsYN, nv=noVig2(d.yesOdds,d.noOdds); PARLAY_1INN_PLAYERS.push(tmkp({ market:'1inn_ks_yn', stat:'1st Inn Ks', idir:'yes', name:ts+' Ks', moreOdds:d.yesOdds, oppOdds:d.noOdds,  precompProb:nv.p1, marketId:d.marketId, selId:d.yesSelId, label:'Yes' })); PARLAY_1INN_PLAYERS.push(tmkp({ market:'1inn_ks_yn', stat:'1st Inn Ks', idir:'no',  name:ts+' Ks', moreOdds:d.noOdds,  oppOdds:d.yesOdds, precompProb:nv.p2, marketId:d.marketId, selId:d.noSelId,  label:'No'  })); }
                 if (sd.strikeoutsExact && sd.strikeoutsExact.length) { var ao=sd.strikeoutsExact.map(function(s){return s.odds;}); sd.strikeoutsExact.forEach(function(s){ PARLAY_1INN_PLAYERS.push(tmkp({ market:'1inn_ks_exact', stat:'1st Inn Ks', idir:s.label, name:ts+' Ks', moreOdds:s.odds, precompProb:noVigN(ao,s.odds), marketId:s.marketId, selId:s.selId, label:'Exactly '+s.label })); }); }
             });
         });
@@ -5945,6 +5946,7 @@
                 if (sd.pitchesOU) { var op=gp(eid,'1inn_pitches_ou',ts,'over'), up=gp(eid,'1inn_pitches_ou',ts,'under'); if (op&&up) hh += '<div class="prl-1inn-mkt"><div class="prl-1inn-mkt-name">Pitches ' + sd.pitchesOU.line + '</div><div class="prl-1inn-btns">' + btnOdds(op,'O') + btnOdds(up,'U') + '</div></div>'; }
                 if (sd.pitchesRanges && sd.pitchesRanges.length) { hh += '<div class="prl-1inn-mkt"><div class="prl-1inn-mkt-name">Pitches Range</div><div class="prl-1inn-range-btns">'; sd.pitchesRanges.forEach(function(s){ hh += btn(gp(eid,'1inn_pitches_range',ts,s.label), s.label + ' ' + parlayFmtOdds(s.odds)); }); hh += '</div></div>'; }
                 if (sd.battersOU) { var op=gp(eid,'1inn_batters_ou',ts,'over'), up=gp(eid,'1inn_batters_ou',ts,'under'); if (op&&up) hh += '<div class="prl-1inn-mkt"><div class="prl-1inn-mkt-name">Batters ' + sd.battersOU.line + '</div><div class="prl-1inn-btns">' + btnOdds(op,'O') + btnOdds(up,'U') + '</div></div>'; }
+                if (sd.strikeoutsYN) { var yp=gp(eid,'1inn_ks_yn',ts,'yes'), np=gp(eid,'1inn_ks_yn',ts,'no'); if (yp&&np) hh += '<div class="prl-1inn-mkt"><div class="prl-1inn-mkt-name">Strikeout</div><div class="prl-1inn-btns"><button class="prl-1inn-btn yes-btn' + (parlayPicks[String(yp.id)]?' active':'') + '" onclick="parlayTogglePick('+yp.id+',\'more\')">Yes ' + parlayFmtOdds(yp.moreOdds) + '</button><button class="prl-1inn-btn no-btn' + (parlayPicks[String(np.id)]?' active':'') + '" onclick="parlayTogglePick('+np.id+',\'more\')">No ' + parlayFmtOdds(np.moreOdds) + '</button></div></div>'; }
                 if (sd.strikeoutsExact && sd.strikeoutsExact.length) { hh += '<div class="prl-1inn-mkt"><div class="prl-1inn-mkt-name">Strikeouts</div><div class="prl-1inn-btns">'; sd.strikeoutsExact.forEach(function(s){ hh += btn(gp(eid,'1inn_ks_exact',ts,s.label), s.label + ' Ks ' + parlayFmtOdds(s.odds)); }); hh += '</div></div>'; }
                 return hh;
             }
@@ -7254,7 +7256,7 @@
             '1inn_run_yn':'1st Inn Score', '1inn_walks_ou':'1st Inn Walks',
             '1inn_pitches_ou':'1st Inn Pitches', '1inn_pitches_range':'1st Inn Pitches',
             '1inn_batters_ou':'1st Inn Batters', '1inn_hr_yn':'1st Inn HR',
-            '1inn_ks':'1st Inn Ks', '1inn_ks_exact':'1st Inn Ks',
+            '1inn_ks':'1st Inn Ks', '1inn_ks_yn':'1st Inn Ks', '1inn_ks_exact':'1st Inn Ks',
             team_ml:'Moneyline', team_runline:'Run Line', team_total:'Total',
             ufc_ml:'Fighter ML', ufc_total:'Fight Total',
         };
@@ -7385,7 +7387,7 @@
             '1inn_run_yn':'1st Inn Score', '1inn_walks_ou':'1st Inn Walks',
             '1inn_pitches_ou':'1st Inn Pitches', '1inn_pitches_range':'1st Inn Pitches',
             '1inn_batters_ou':'1st Inn Batters', '1inn_hr_yn':'1st Inn HR',
-            '1inn_ks':'1st Inn Ks', '1inn_ks_exact':'1st Inn Ks',
+            '1inn_ks':'1st Inn Ks', '1inn_ks_yn':'1st Inn Ks', '1inn_ks_exact':'1st Inn Ks',
             // Team markets (fallback — label usually set directly)
             team_ml:'Moneyline', team_runline:'Run Line', team_total:'Total',
             // UFC
@@ -7485,7 +7487,7 @@
             if (isTeamMkt) {
                 var _lbl = leg.label || mkt;
                 if (mkt.startsWith('1inn_') && _lbl && !_lbl.toLowerCase().includes('1st')) {
-                    var _1pfx = {'1inn_runs_ou':'1st Inn Runs','1inn_walks_ou':'1st Inn Walks','1inn_pitches_ou':'1st Inn Pitches','1inn_batters_ou':'1st Inn Batters','1inn_hits_ou':'1st Inn Hits','1inn_runs_exact':'1st Inn Runs','1inn_hits_exact':'1st Inn Hits','1inn_pitches_range':'1st Inn Pitches','1inn_ks_exact':'1st Inn Ks','1inn_hr_yn':'1st Inn HR','1inn_run_yn':'1st Inn Scores'};
+                    var _1pfx = {'1inn_runs_ou':'1st Inn Runs','1inn_walks_ou':'1st Inn Walks','1inn_pitches_ou':'1st Inn Pitches','1inn_batters_ou':'1st Inn Batters','1inn_hits_ou':'1st Inn Hits','1inn_runs_exact':'1st Inn Runs','1inn_hits_exact':'1st Inn Hits','1inn_pitches_range':'1st Inn Pitches','1inn_ks_yn':'1st Inn Ks','1inn_ks_exact':'1st Inn Ks','1inn_hr_yn':'1st Inn HR','1inn_run_yn':'1st Inn Scores'};
                     var _pfx = _1pfx[mkt];
                     if (_pfx) _lbl = _pfx + ' · ' + _lbl;
                 }
@@ -7893,7 +7895,7 @@
 
     // 1inn half resolver (client-side mirror of place.js get1innHalf).
     // Returns 'top' | 'bottom' | null. Uses team short name + awayShort/homeShort.
-    var _INN1_PITCHING_C = { '1inn_pitches_ou':1,'1inn_pitches_range':1,'1inn_batters_ou':1,'1inn_ks_exact':1 };
+    var _INN1_PITCHING_C = { '1inn_pitches_ou':1,'1inn_pitches_range':1,'1inn_batters_ou':1,'1inn_ks_yn':1,'1inn_ks_exact':1 };
     var _INN1_GAME_C     = { '1inn_ml':1,'1inn_runs_ou':1,'1inn_walks_ou':1 };
     function get1innHalfClient(market, teamShort, awayShort, homeShort) {
         if (_INN1_GAME_C[market]) return null;

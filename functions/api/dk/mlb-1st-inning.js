@@ -220,16 +220,27 @@ function parseFirstInn(responses, eventId, homeTeam, awayTeam, homeShort, awaySh
     }
   }
 
-  // --- 12855: Strikeouts Exact per team ---
+  // --- 12855: Strikeouts per team — yes/no AND exact count both live in this subcat ---
   const ksData = bySubcat.get('12855');
   if (ksData) {
     const smap = groupSelsByMkt(ksData);
     for (const [mktId, sels] of smap) {
       const mkt  = (ksData.markets || []).find(m => String(m.id) === mktId);
       const side = mkt ? teamSide(mkt, sels) : null;
-      if (!side || game[side].strikeoutsExact) continue;
-      const exact = sels.map(s => ({ label: s.label, odds: parseOdds(s.displayOdds?.american), selId: String(s.id), marketId: mktId })).filter(s => s.odds);
-      if (exact.length) game[side].strikeoutsExact = exact;
+      if (!side) continue;
+      const mktName = (mkt?.marketType?.name || mkt?.name || '').toLowerCase();
+      if (mktName.includes('exact')) {
+        if (!game[side].strikeoutsExact) {
+          const exact = sels.map(s => ({ label: s.label, odds: parseOdds(s.displayOdds?.american), selId: String(s.id), marketId: mktId })).filter(s => s.odds);
+          if (exact.length) game[side].strikeoutsExact = exact;
+        }
+      } else {
+        if (!game[side].strikeoutsYN) {
+          const yes = sels.find(s => s.outcomeType === 'Yes' || s.label === 'Yes');
+          const no  = sels.find(s => s.outcomeType === 'No'  || s.label === 'No');
+          if (yes && no) game[side].strikeoutsYN = { yesOdds: parseOdds(yes.displayOdds?.american), noOdds: parseOdds(no.displayOdds?.american), yesSelId: String(yes.id), noSelId: String(no.id), marketId: mktId };
+        }
+      }
     }
   }
 
