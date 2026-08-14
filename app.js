@@ -6224,23 +6224,26 @@
         parlaySlipsPage = page;
         var container = document.getElementById('parlay-slips-view');
         if (container) container.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted);font-size:13px">Loading…</div>';
-        fetch('/api/parlays/my-slips?page=' + page, { credentials: 'include' })
-            .then(function(r) {
-                if (!r.ok) throw new Error('HTTP ' + r.status);
-                return r.json();
-            })
-            .then(function(d) {
-                if (!d.ok) throw new Error('API error: ' + (d.error || 'unknown'));
-                settledLegStats = {};
-                parlaySlipsTotal = d.total || 0;
-                parlayRenderSlips(d.slips);
-                fetchSettledLegStats();
-            })
-            .catch(function(e) {
-                console.error('my-slips failed:', e);
-                var container = document.getElementById('parlay-slips-view');
-                if (container) container.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted);font-size:13px">Failed to load slips (' + (e.message || 'network error') + ') — try again.</div>';
-            });
+        // Fetch slips + RS game IDs in parallel so icons are ready at render time
+        Promise.all([
+            fetch('/api/parlays/my-slips?page=' + page, { credentials: 'include' }).then(function(r) { return r.json(); }),
+            fetch('/api/real/game-ids?sport=baseball_mlb', { credentials: 'include' }).then(function(r) { return r.json(); }).catch(function() { return {}; }),
+            fetch('/api/real/game-ids?sport=basketball_wnba', { credentials: 'include' }).then(function(r) { return r.json(); }).catch(function() { return {}; }),
+        ]).then(function(results) {
+            var d = results[0], mlbIds = results[1], wnbaIds = results[2];
+            if (!d.ok) throw new Error('API error: ' + (d.error || 'unknown'));
+            // Seed rsGameIds from cache so parlayLegRsUrl works on first render
+            var _ids = Object.assign({}, (mlbIds && mlbIds.gameIds) || {}, (wnbaIds && wnbaIds.gameIds) || {});
+            Object.keys(_ids).forEach(function(gk) { if (!rsGameIds[gk]) rsGameIds[gk] = _ids[gk]; });
+            settledLegStats = {};
+            parlaySlipsTotal = d.total || 0;
+            parlayRenderSlips(d.slips);
+            fetchSettledLegStats();
+        }).catch(function(e) {
+            console.error('my-slips failed:', e);
+            var container = document.getElementById('parlay-slips-view');
+            if (container) container.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted);font-size:13px">Failed to load slips (' + (e.message || 'network error') + ') — try again.</div>';
+        });
     }
 
     window.parlaySlipsGoPage = function(page) {
