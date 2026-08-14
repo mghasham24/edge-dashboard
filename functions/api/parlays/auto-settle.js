@@ -1257,20 +1257,40 @@ async function handleRequest({ request, env }) {
   return cacheAndReturn({ settled: totalSettled, legsFilled, dnpRefunds, report });
 }
 
-async function safeHandleRequest(ctx) {
+// For cron POST calls: return immediately and run heavy work via waitUntil so
+// the client (alert-cron with 25s timeout) never disconnects before we're done.
+// For GET (admin debug / last_run): run synchronously so results come back inline.
+export async function onRequestPost(ctx) {
+  const { request, env, waitUntil } = ctx;
+  const url     = new URL(request.url);
+  const cronKey = url.searchParams.get('_cron_key');
+  // Quick auth — same logic as handleRequest
+  if (!env.CRON_SECRET || cronKey !== env.CRON_SECRET) {
+    const session = await getSession(request, env.DB);
+    const userRow = session
+      ? await env.DB.prepare('SELECT is_admin FROM users WHERE id=?').bind(session.user_id).first()
+      : null;
+    if (!userRow?.is_admin) return err('Unauthorized', 401);
+  }
+  // Background execution — detached from the HTTP response so a client timeout
+  // (or CF killing the outbound fetch) never aborts the settling work mid-run.
+  waitUntil(
+    handleRequest(ctx).catch(async e => {
+      const now = Math.floor(Date.now() / 1000);
+      try {
+        await env.DB.prepare(
+          "INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES('auto_settle_error',?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at"
+        ).bind(JSON.stringify({ ts: now, error: e.message, stack: (e.stack || '').slice(0, 800) }), now).run();
+      } catch(_) {}
+    })
+  );
+  return ok({ status: 'processing' });
+}
+
+export async function onRequestGet(ctx) {
   try {
     return await handleRequest(ctx);
   } catch (e) {
-    const now = Math.floor(Date.now() / 1000);
-    try {
-      await ctx.env.DB.prepare(
-        "INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES('auto_settle_error',?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at"
-      ).bind(JSON.stringify({ ts: now, error: e.message, stack: (e.stack || '').slice(0, 800) }), now).run();
-    } catch(_) {}
-    const okFn = (await import('../../_lib/response.js')).ok;
-    return okFn({ settled: 0, error: e.message });
+    return ok({ settled: 0, error: e.message });
   }
 }
-
-export const onRequestPost = safeHandleRequest;
-export const onRequestGet  = safeHandleRequest;
