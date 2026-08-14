@@ -6399,7 +6399,7 @@
 
     function startLiveSlipTracking() {
         stopLiveSlipTracking();
-        var liveToday2 = new Date().toISOString().slice(0, 10);
+        var liveToday2 = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
         var hasLive = PARLAY_SLIPS.some(function(s) {
             if (s.status !== 'active' && s.status !== 'lost') return false;
             return (s.legs || []).some(function(l) {
@@ -6846,8 +6846,12 @@
                 // Always show live bars for today's legs; settled legs on old dates keep their static display
                 if (leg.status !== 'pending' && !(leg.status === 'lost' && leg.game_date === liveToday)) return;
                 var gd  = leg.game_date || liveToday;
+                // Never fetch a future date's schedule for live stats — cap to today so
+                // legs with a wrong-date game_date (e.g. stored as tomorrow due to DK cache)
+                // still get live inning/score updates from today's games.
+                if (gd > liveToday) gd = liveToday;
                 var mkt = leg.market_type || '';
-                var legObj = { parlayId: s.id, legIndex: li, playerName: leg.player_name, marketType: mkt, threshold: parseFloat(leg.threshold) || 0, direction: leg.direction, isTeam: mkt.startsWith('team_'), sport: leg.sport || '' };
+                var legObj = { parlayId: s.id, legIndex: li, playerName: leg.player_name, marketType: mkt, threshold: parseFloat(leg.threshold) || 0, direction: leg.direction, isTeam: mkt.startsWith('team_'), sport: leg.sport || '', eventName: leg.event_name || '' };
                 if (WNBA_MKT_SET[mkt] || leg.sport === 'wnba') {
                     if (!wnbaNeededByDate[gd]) wnbaNeededByDate[gd] = [];
                     wnbaNeededByDate[gd].push(legObj);
@@ -7005,7 +7009,24 @@
                         var field    = MLB_FIELD[n.marketType];
                         var val      = (stats && field && stats[field] !== undefined) ? stats[field] : null;
                         var gamePk   = playerGamePk[norm];
-                        var gameInfo = gamePk ? gameInfoMap[gamePk] : (earliestPreview ? { state: 'Preview', startET: earliestPreview } : null);
+                        var gameInfo = gamePk ? gameInfoMap[gamePk] : null;
+                        // Player not found in any boxscore — try matching game via event_name (e.g. "TEX @ LA")
+                        // Handles pitchers not yet entered, or name mismatches.
+                        if (!gameInfo && n.eventName) {
+                            var _evM = n.eventName.match(/^(.+?)\s+@\s+(.+)$/);
+                            if (_evM) {
+                                var _ea = _evM[1].trim().split(/\s+/)[0].toUpperCase();
+                                var _eh = _evM[2].trim().split(/\s+/)[0].toUpperCase();
+                                Object.keys(gameInfoMap).some(function(pk) {
+                                    var gi = gameInfoMap[pk];
+                                    var aOk = gi.awayAbbr === _ea || gi.awayAbbr.startsWith(_ea) || _ea.startsWith(gi.awayAbbr);
+                                    var hOk = gi.homeAbbr === _eh || gi.homeAbbr.startsWith(_eh) || _eh.startsWith(gi.homeAbbr);
+                                    if (aOk && hOk) { gameInfo = gi; return true; }
+                                    return false;
+                                });
+                            }
+                        }
+                        if (!gameInfo) gameInfo = earliestPreview ? { state: 'Preview', startET: earliestPreview } : null;
                         if (gameInfo && gamePk && playerSide[norm]) {
                             var tAbbr = playerSide[norm] === 'away' ? gameInfo.awayAbbr : gameInfo.homeAbbr;
                             gameInfo = Object.assign({}, gameInfo, { playerTeamAbbr: tAbbr });
@@ -7316,8 +7337,34 @@
         var payoutCls = s.status === 'won' ? ' won' : '';
         var settled = s.status === 'won' || s.status === 'lost';
         var legsArr = s.legs || [];
-        var mult = s.stake_rax > 0 ? (s.payout_rax / s.stake_rax).toFixed(2) + 'x' : '';
+
+        // Compute original and adjusted payout when legs pushed (status='void' on a leg = push)
+        function legImpliedProb(leg) {
+            var o = leg.american_odds || 0;
+            if (o > 0) return 100 / (o + 100);
+            if (o < 0) return Math.abs(o) / (Math.abs(o) + 100);
+            return 0.5;
+        }
+        var pushedLegs  = legsArr.filter(function(l) { return l.status === 'void'; });
+        var activeLegs  = legsArr.filter(function(l) { return l.status !== 'void'; });
+        var hasPush     = pushedLegs.length > 0 && legsArr.length > 1;
+        var origPayoutRax = s.payout_rax;
+        var adjPayoutRax  = s.payout_rax;
+        if (hasPush) {
+            var origProb = legsArr.reduce(function(acc, l) { return acc * legImpliedProb(l); }, 1);
+            if (origProb > 0) origPayoutRax = Math.min(Math.floor(s.stake_rax * 0.70 / origProb), 10000);
+            if (s.status === 'won') {
+                adjPayoutRax = s.payout_rax; // auto-settle already recalculated
+            } else if (activeLegs.length < 2) {
+                adjPayoutRax = s.stake_rax; // voided → full refund
+            } else {
+                var adjProb = activeLegs.reduce(function(acc, l) { return acc * legImpliedProb(l); }, 1);
+                if (adjProb > 0) adjPayoutRax = Math.min(Math.floor(s.stake_rax * 0.70 / adjProb), 10000);
+            }
+        }
+        var mult = s.stake_rax > 0 ? ((hasPush ? adjPayoutRax : s.payout_rax) / s.stake_rax).toFixed(2) + 'x' : '';
         var today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+        var yesterday = new Date(Date.now() - 86400000).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
 
         var legsHtml = '';
         var MKT_SHORT = {
@@ -7351,8 +7398,8 @@
             var thresh = leg.threshold != null ? leg.threshold : '';
             var mkt = leg.market_type || '';
             var isTeamMkt = mkt.startsWith('team_') || mkt.startsWith('1inn_');
-            var legResultCls = leg.status === 'won' ? ' leg-won' : leg.status === 'lost' ? ' leg-lost' : leg.status === 'push' ? ' leg-push' : '';
-            var legIcon = leg.status === 'won' ? '<span class="pslip-ri win">✓</span>' : leg.status === 'lost' ? '<span class="pslip-ri loss">✗</span>' : leg.status === 'push' ? '<span class="pslip-ri push">—</span>' : '';
+            var legResultCls = leg.status === 'won' ? ' leg-won' : leg.status === 'lost' ? ' leg-lost' : (leg.status === 'push' || leg.status === 'void') ? ' leg-push' : '';
+            var legIcon = leg.status === 'won' ? '<span class="pslip-ri win">✓</span>' : leg.status === 'lost' ? '<span class="pslip-ri loss">✗</span>' : (leg.status === 'push' || leg.status === 'void') ? '<span class="pslip-ri push">—</span>' : '';
             var resultVal = leg.result_value != null ? ' (' + leg.result_value + ')' : '';
 
             var words = (leg.player_name || '').split(' ');
@@ -7453,7 +7500,7 @@
             var isLiveParlay2 = s.status === 'active' || s.status === 'lost';
             var showStatus = isLiveParlay2 &&
                              (leg.status === 'pending' || leg.status === 'lost') &&
-                             (leg.game_date || '') === today;
+                             (!leg.game_date || leg.game_date >= yesterday);
             var isNflTeamPending = leg.sport === 'nfl' && isTeamMkt && isLiveParlay2 && leg.status === 'pending';
             var timeHtml = '';
             if (showStatus || isNflTeamPending) {
@@ -7567,7 +7614,12 @@
                 '<div class="pslip-amounts">' +
                     '<span class="pslip-stake">' + Number(s.stake_rax).toLocaleString() + '</span>' +
                     '<span class="pslip-arrow">→</span>' +
-                    '<span class="pslip-payout' + payoutCls + '">' + Number(s.payout_rax).toLocaleString() + ' ' + RAX_ICON + '</span>' +
+                    (hasPush && origPayoutRax !== adjPayoutRax
+                        ? '<span class="pslip-payout-stack">' +
+                              '<span class="pslip-payout-orig">' + Number(origPayoutRax).toLocaleString() + ' ' + RAX_ICON + '</span>' +
+                              '<span class="pslip-payout' + payoutCls + '">' + Number(adjPayoutRax).toLocaleString() + ' ' + RAX_ICON + '</span>' +
+                          '</span>'
+                        : '<span class="pslip-payout' + payoutCls + '">' + Number(s.payout_rax).toLocaleString() + ' ' + RAX_ICON + '</span>') +
                     multBadge +
                 '</div>' +
             '</div>' +

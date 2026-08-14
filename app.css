@@ -3211,6 +3211,8 @@
     .pslip-arrow { font-size:12px; color:var(--muted2) }
     .pslip-payout { font-size:13px; font-weight:700; color:var(--muted); font-variant-numeric:tabular-nums }
     .pslip-payout.won { color:var(--green) }
+    .pslip-payout-stack { display:flex; flex-direction:column; align-items:flex-end; gap:1px }
+    .pslip-payout-orig { font-size:11px; font-weight:600; color:var(--muted); opacity:.5; text-decoration:line-through; font-variant-numeric:tabular-nums }
     .pslip-mult { font-size:11px; font-weight:700; background:rgba(79,110,247,.15); color:var(--accent); border:1px solid rgba(79,110,247,.25); border-radius:10px; padding:1px 7px }
     .pslip-user-badge { font-size:11px; color:var(--muted); font-family:var(--mono) }
     .pslip-legs-list { display:flex; flex-direction:column; gap:8px }

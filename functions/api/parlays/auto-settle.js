@@ -139,6 +139,7 @@ function resolveTeamLeg(leg, finalGames) {
   if (mkt === 'team_ml') return teamScore > oppScore ? 'won' : 'lost';
   if (mkt === 'team_runline') {
     const line = parseFloat(leg.threshold ?? 0);
+    if (teamScore + line === oppScore) return 'void'; // push — scratch this leg
     return (teamScore + line > oppScore) ? 'won' : 'lost';
   }
   return null;
