@@ -792,6 +792,34 @@ async function runCron(env, ctx) {
       } catch(e) {}
     }
 
+    // ── 5d. Low deposit-card alert ────────────────────────
+    if (env.ADMIN_CHAT_ID && env.TELEGRAM_BOT_TOKEN) {
+      try {
+        const LOW_CARD_THRESHOLD = 10;
+        const ALERT_COOLDOWN     = 60 * 60; // 1 hour between alerts
+        const cardRow = await env.DB.prepare(
+          'SELECT COUNT(*) as cnt FROM deposit_cards WHERE assigned_to_parlay_id IS NULL'
+        ).first();
+        const freeCards = cardRow?.cnt ?? 0;
+        if (freeCards < LOW_CARD_THRESHOLD) {
+          const lastAlert = await env.DB.prepare(
+            "SELECT fetched_at FROM odds_cache WHERE cache_key='low_card_alert_sent'"
+          ).first();
+          if (!lastAlert || (now - lastAlert.fetched_at) > ALERT_COOLDOWN) {
+            await sendTelegram(
+              env.ADMIN_CHAT_ID,
+              `⚠️ <b>Low Deposit Cards</b>\n\n${freeCards} free cards remaining in the parlay pool.\n\nBuy more 2025 MLB deposit cards from the RS marketplace.`,
+              env.TELEGRAM_BOT_TOKEN
+            );
+            await env.DB.prepare(
+              "INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES('low_card_alert_sent',?,?) " +
+              "ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at"
+            ).bind(String(freeCards), now).run();
+          }
+        }
+      } catch(e) {}
+    }
+
     // 1. Load all verified, enabled users
     const users = await env.DB.prepare(
       `SELECT ns.user_id, ns.telegram_chat_id, ns.min_ev, ns.sports, ns.one_side, ns.unit_size
