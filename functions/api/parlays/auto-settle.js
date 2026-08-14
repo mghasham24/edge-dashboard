@@ -914,62 +914,64 @@ async function handleRequest({ request, env }) {
     nflGamesMap[date]  = nflGames;
     ufcMap[date]       = ufcResults;
 
-    if (hasMlbOnDate(date)) {
-      const fetch1inn    = has1innOnDate(date);
-      const fetch1innPbp = has1innPbpOnDate(date);
-      const allStats  = {};
-      const linescore1 = {};
-      const pbp1      = {};
+    // MLB boxscores and WNBA stats are fetched in parallel to avoid sequential timeout
+    const [mlbBlock, wnbaStats] = await Promise.all([
+      // ── MLB block ──────────────────────────────────────────────────────────
+      (async () => {
+        if (!hasMlbOnDate(date)) return null;
+        const fetch1inn    = has1innOnDate(date);
+        const fetch1innPbp = has1innPbpOnDate(date);
+        const allStats   = {};
+        const linescore1 = {};
+        const pbp1       = {};
 
-      // Final games: full stats + linescore/pbp for 1inn
-      if (mlbGames.length) {
-        await Promise.all(mlbGames.map(async g => {
-          const [bs, ls, pbp] = await Promise.all([
-            getMlbBoxscore(g.gamePk).catch(() => null),
-            fetch1inn    ? getMlbLinescore(g.gamePk).catch(() => null)   : Promise.resolve(null),
-            fetch1innPbp ? getMlbPlayByPlay(g.gamePk).catch(() => null)  : Promise.resolve(null),
-          ]);
-          if (bs)  Object.assign(allStats, extractMlbPlayerStats(bs));
-          if (ls)  linescore1[g.gamePk] = ls;
-          if (pbp) pbp1[g.gamePk]       = pbp;
-        }));
-      }
-
-      // Live games past inning 1: fetch linescore/pbp so 1inn parlays settle mid-game
-      let live1innGames = [];
-      if (fetch1inn) {
-        live1innGames = await getMlbLive1innDoneGames(date).catch(() => []);
-        const newLive = live1innGames.filter(g => !mlbGames.some(fg => fg.gamePk === g.gamePk));
-        if (newLive.length) {
-          await Promise.all(newLive.map(async g => {
-            const [ls, pbp] = await Promise.all([
-              getMlbLinescore(g.gamePk).catch(() => null),
+        if (mlbGames.length) {
+          await Promise.all(mlbGames.map(async g => {
+            const [bs, ls, pbp] = await Promise.all([
+              getMlbBoxscore(g.gamePk).catch(() => null),
+              fetch1inn    ? getMlbLinescore(g.gamePk).catch(() => null)  : Promise.resolve(null),
               fetch1innPbp ? getMlbPlayByPlay(g.gamePk).catch(() => null) : Promise.resolve(null),
             ]);
+            if (bs)  Object.assign(allStats, extractMlbPlayerStats(bs));
             if (ls)  linescore1[g.gamePk] = ls;
             if (pbp) pbp1[g.gamePk]       = pbp;
           }));
         }
-        mlb1innGamesMap[date] = [...mlbGames, ...newLive];
-      } else {
-        mlb1innGamesMap[date] = mlbGames;
-      }
 
-      mlbStatsMap[date]      = allStats;
-      mlbLinescore1Map[date] = linescore1;
-      mlbPbpMap[date]        = pbp1;
+        let mlb1innGames = mlbGames;
+        if (fetch1inn) {
+          const live = await getMlbLive1innDoneGames(date).catch(() => []);
+          const newLive = live.filter(g => !mlbGames.some(fg => fg.gamePk === g.gamePk));
+          if (newLive.length) {
+            await Promise.all(newLive.map(async g => {
+              const [ls, pbp] = await Promise.all([
+                getMlbLinescore(g.gamePk).catch(() => null),
+                fetch1innPbp ? getMlbPlayByPlay(g.gamePk).catch(() => null) : Promise.resolve(null),
+              ]);
+              if (ls)  linescore1[g.gamePk] = ls;
+              if (pbp) pbp1[g.gamePk]       = pbp;
+            }));
+          }
+          mlb1innGames = [...mlbGames, ...newLive];
+        }
+        return { allStats, linescore1, pbp1, mlb1innGames };
+      })(),
+      // ── WNBA stats block ───────────────────────────────────────────────────
+      hasWnbaOnDate(date) ? getWnbaPlayerStats(date, proxyKey) : Promise.resolve({}),
+    ]);
+
+    if (mlbBlock) {
+      mlbStatsMap[date]      = mlbBlock.allStats;
+      mlbLinescore1Map[date] = mlbBlock.linescore1;
+      mlbPbpMap[date]        = mlbBlock.pbp1;
+      mlb1innGamesMap[date]  = mlbBlock.mlb1innGames;
     } else {
       mlbStatsMap[date]      = {};
       mlbLinescore1Map[date] = {};
       mlbPbpMap[date]        = {};
       mlb1innGamesMap[date]  = [];
     }
-
-    if (hasWnbaOnDate(date)) {
-      wnbaStatsMap[date] = await getWnbaPlayerStats(date, proxyKey);
-    } else {
-      wnbaStatsMap[date] = {};
-    }
+    wnbaStatsMap[date] = wnbaStats || {};
   }));
 
   if (debug) {
