@@ -98,6 +98,33 @@ async function counterOffer(offerId, counterAmount, authInfo, sessionToken) {
   return { ok: true };
 }
 
+// Fetch all MLB card IDs currently owned by edgebot.
+// Used by Phase 0b: when a deposit card leaves edgebot's inventory, the user
+// accepted the counter-offer and received the card — activate the parlay directly.
+const EDGEBOT_USER = 'V3yGgkkJ';
+async function fetchEdgebotMLBCards(authInfo, sessionToken) {
+  const hdrs = buildHeaders(authInfo, sessionToken);
+  const owned = new Set();
+  for (let offset = 0; offset < 500; offset += 10) {
+    try {
+      const res = await fetch(
+        `https://web.realapp.com/collectingcards/mlb/season/2025/entity/play/user/${EDGEBOT_USER}/cards` +
+        `?includeRecommendations=true&rarity=all&view=rating&offset=${offset}`,
+        { headers: hdrs, signal: AbortSignal.timeout(8000) }
+      );
+      if (!res.ok) break;
+      const data = await res.json();
+      const cards = data.cards || [];
+      if (!cards.length) break;
+      for (const c of cards) {
+        const id = c.id ?? c.cardId;
+        if (id != null) owned.add(Number(id));
+      }
+      if (cards.length < 10) break;
+    } catch { break; }
+  }
+  return owned;
+}
 
 async function handleRequest({ request, env }) {
   const url = new URL(request.url);
@@ -218,6 +245,29 @@ async function handleRequest({ request, env }) {
     directActivated.add(row.rs_offer_id);
   }
 
+  // Phase 0b: Card ownership check.
+  // When a user accepts edgebot's counter-offer, RS transfers the card before the offer
+  // status reliably reflects "accepted" through pagination. Checking card ownership directly
+  // is more reliable — if the deposit card is no longer in edgebot's inventory the user
+  // received it, so activate the parlay.
+  let ownershipActivated = 0;
+  const ownershipCheckRows = directCheckRows.filter(r => !directActivated.has(r.rs_offer_id));
+  if (ownershipCheckRows.length > 0) {
+    try {
+      const edgebotOwned = await fetchEdgebotMLBCards(authInfo, sessionToken);
+      for (const row of ownershipCheckRows) {
+        if (row.deposit_card_id == null) continue;
+        if (!edgebotOwned.has(Number(row.deposit_card_id))) {
+          await activateParlay(row.id, row.deposit_card_id, row.rs_offer_id ?? null, row.stake_rax);
+          ownershipActivated++;
+          directActivated.add(row.rs_offer_id); // prevent Phase 1 from double-processing
+        }
+      }
+    } catch (e) {
+      errors.push({ action: 'ownership_check', error: e.message });
+    }
+  }
+
   let incomingOpen, incomingAccepted, outgoingAccepted, outgoingRejected, outgoingOpen;
   try {
     [incomingOpen, incomingAccepted, outgoingAccepted, outgoingRejected, outgoingOpen] = await Promise.all([
@@ -299,7 +349,7 @@ async function handleRequest({ request, env }) {
 
     const receivedRax = Math.floor(amount * 0.9);
     const result = await env.DB.prepare(
-      "UPDATE parlays SET status='active', rs_offer_id=?, received_rax=?, deposited_at=? " +
+      "UPDATE parlays SET status='active', rs_offer_id=COALESCE(?, rs_offer_id), received_rax=?, deposited_at=? " +
       "WHERE id=? AND deposit_card_id=? AND status IN ('pending_deposit','expired','void')"
     ).bind(offerId, receivedRax, now, parlayId, cardId).run();
     if (result.meta.changes > 0) {
@@ -431,7 +481,7 @@ async function handleRequest({ request, env }) {
     "DELETE FROM deposit_cards WHERE assigned_to_parlay_id IN (SELECT id FROM parlays WHERE status IN ('expired','void'))"
   ).run();
 
-  const result = { ts: now, checked: allSettled.length + incomingOpen.length, accepted, countered, pending: pending.length, errors };
+  const result = { ts: now, checked: allSettled.length + incomingOpen.length, accepted, countered, ownershipActivated, pending: pending.length, errors };
   try {
     await env.DB.prepare(
       'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at'
