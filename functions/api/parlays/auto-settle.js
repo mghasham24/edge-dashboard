@@ -876,9 +876,13 @@ async function handleRequest({ request, env }) {
     const mkt = leg.market_type;
     if (mkt.startsWith('1inn_'))                                 return 'mlb';
     if ((mkt in MLB_STAT_FIELD) && !WNBA_PROP_TYPES.has(mkt))   return 'mlb';
-    // For team legs, use player_name to detect sport regardless of stored sport field
-    // (place.js sometimes stores wrong sport when user mixes sport tabs)
     if (mkt === 'team_ml' || mkt === 'team_runline' || mkt === 'team_total') {
+      // Stored sport field is authoritative — use it first to avoid cross-sport nickname collisions
+      // (e.g. "Cardinals" exists in both MLB and NFL; "Giants" in both MLB and NFL)
+      if (s === 'nfl'  || s === 'american_football_nfl')  return 'nfl';
+      if (s === 'wnba' || s === 'basketball_wnba')         return 'wnba';
+      if (s === 'mlb'  || s === 'baseball_mlb')            return 'mlb';
+      // Fall back to nickname detection only for old legs with missing/wrong sport field
       if (isNflTeamLeg(leg))  return 'nfl';
       if (isWnbaTeamLeg(leg)) return 'wnba';
       return 'mlb';
