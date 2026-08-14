@@ -98,32 +98,19 @@ async function counterOffer(offerId, counterAmount, authInfo, sessionToken) {
   return { ok: true };
 }
 
-// Fetch all MLB card IDs currently owned by edgebot.
-// Used by Phase 0b: when a deposit card leaves edgebot's inventory, the user
-// accepted the counter-offer and received the card — activate the parlay directly.
+// Fetch the current owner of a single card via its detail endpoint.
+// Returns the RS userId string of whoever owns the card, or null on failure.
 const EDGEBOT_USER = 'V3yGgkkJ';
-async function fetchEdgebotMLBCards(authInfo, sessionToken) {
-  const hdrs = buildHeaders(authInfo, sessionToken);
-  const owned = new Set();
-  for (let offset = 0; offset < 500; offset += 10) {
-    try {
-      const res = await fetch(
-        `https://web.realapp.com/collectingcards/mlb/season/2025/entity/play/user/${EDGEBOT_USER}/cards` +
-        `?includeRecommendations=true&rarity=all&view=rating&offset=${offset}`,
-        { headers: hdrs, signal: AbortSignal.timeout(8000) }
-      );
-      if (!res.ok) break;
-      const data = await res.json();
-      const cards = data.cards || [];
-      if (!cards.length) break;
-      for (const c of cards) {
-        const id = c.id ?? c.cardId;
-        if (id != null) owned.add(Number(id));
-      }
-      if (cards.length < 10) break;
-    } catch { break; }
-  }
-  return owned;
+async function fetchCardOwner(cardId, authInfo, sessionToken) {
+  try {
+    const res = await fetch(
+      `https://web.realapp.com/collectingcards/${cardId}`,
+      { headers: buildHeaders(authInfo, sessionToken), signal: AbortSignal.timeout(8000) }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.card?.userId ?? data?.card?.user?.id ?? null;
+  } catch { return null; }
 }
 
 async function handleRequest({ request, env }) {
@@ -246,25 +233,17 @@ async function handleRequest({ request, env }) {
   }
 
   // Phase 0b: Card ownership check.
-  // When a user accepts edgebot's counter-offer, RS transfers the card before the offer
-  // status reliably reflects "accepted" through pagination. Checking card ownership directly
-  // is more reliable — if the deposit card is no longer in edgebot's inventory the user
-  // received it, so activate the parlay.
+  // Fetch the current owner of each pending deposit card directly from the RS card endpoint.
+  // When a user accepts edgebot's counter-offer the card transfers immediately — card.userId
+  // reflects the new owner before the offer status reliably appears as "accepted" via pagination.
   let ownershipActivated = 0;
-  const ownershipCheckRows = directCheckRows.filter(r => !directActivated.has(r.rs_offer_id));
-  if (ownershipCheckRows.length > 0) {
-    try {
-      const edgebotOwned = await fetchEdgebotMLBCards(authInfo, sessionToken);
-      for (const row of ownershipCheckRows) {
-        if (row.deposit_card_id == null) continue;
-        if (!edgebotOwned.has(Number(row.deposit_card_id))) {
-          await activateParlay(row.id, row.deposit_card_id, row.rs_offer_id ?? null, row.stake_rax);
-          ownershipActivated++;
-          directActivated.add(row.rs_offer_id); // prevent Phase 1 from double-processing
-        }
-      }
-    } catch (e) {
-      errors.push({ action: 'ownership_check', error: e.message });
+  const ownershipCheckRows = directCheckRows.filter(r => r.deposit_card_id != null && !directActivated.has(r.rs_offer_id));
+  for (const row of ownershipCheckRows) {
+    const ownerId = await fetchCardOwner(row.deposit_card_id, authInfo, sessionToken);
+    if (ownerId !== null && ownerId !== EDGEBOT_USER) {
+      await activateParlay(row.id, row.deposit_card_id, row.rs_offer_id ?? null, row.stake_rax);
+      ownershipActivated++;
+      directActivated.add(row.rs_offer_id);
     }
   }
 
