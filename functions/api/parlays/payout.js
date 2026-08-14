@@ -84,30 +84,44 @@ async function solveTurnstile(capsolverKey) {
   throw new Error('CapSolver timeout — no result after 15s');
 }
 
-// Returns up to `limit` candidate card IDs from the winner's unowned cards, cheapest first.
+// Returns { candidates, debugLog }.
+// candidates: up to `limit` unowned card IDs, cheapest first.
+// debugLog: per-category result for debugging.
 async function findUnownedCards(rsUserId, authInfo, sessionToken, limit = 5) {
   const candidates = [];
+  const debugLog   = [];
   for (const [sport, season, entity] of CARD_TARGETS) {
     if (candidates.length >= limit) break;
+    const cat = `${sport}/${season}`;
     try {
       const url =
         `https://web.realapp.com/collectingcards/${sport}/season/${season}/entity/${entity}` +
         `/user/${rsUserId}/cards?filterCustomType=unowned&includeRecommendations=false&rarity=all&view=rating`;
       const res = await fetch(url, {
         headers: buildHeaders(authInfo, sessionToken),
-        signal:  AbortSignal.timeout(8000),
+        signal:  AbortSignal.timeout(5000),
       });
-      if (!res.ok) continue;
-      const data  = await res.json();
+      const rawText = await res.text();
+      if (!res.ok) {
+        debugLog.push({ cat, status: res.status, body: rawText.slice(0, 200) });
+        continue;
+      }
+      let data;
+      try { data = JSON.parse(rawText); } catch { debugLog.push({ cat, status: res.status, parseErr: true, body: rawText.slice(0, 200) }); continue; }
       const cards = Array.isArray(data) ? data : (data.cards || data.items || []);
+      const before = candidates.length;
       for (const card of cards) {
         const id = card.id ?? card.cardId ?? null;
         if (id) candidates.push(id);
         if (candidates.length >= limit) break;
       }
-    } catch { continue; }
+      debugLog.push({ cat, status: res.status, total: cards.length, added: candidates.length - before, topKeys: Object.keys(Array.isArray(data) ? (data[0] || {}) : data).slice(0, 8) });
+    } catch (e) {
+      debugLog.push({ cat, err: e.message });
+      continue;
+    }
   }
-  return candidates;
+  return { candidates, debugLog };
 }
 
 async function postOffer(cardId, offerAmount, turnstileToken, authInfo, sessionToken) {
@@ -152,15 +166,17 @@ export async function onRequestPost({ request, env }) {
 
   const now = Math.floor(Date.now() / 1000);
 
-  // Pull up to 2 pending entries — sequential processing keeps us within CF 30s wall clock
+  // Pull up to 2 pending entries — enforce 5-min minimum between retries so we don't
+  // hammer RS's 500 offers/day limit. On 429, last_attempt_at is set 1h into the future
+  // (now + 3600) so the entry is skipped for ~65 min before the next pickup.
   const { results: queue } = await env.DB.prepare(
     'SELECT q.id, q.parlay_id, q.user_id, q.offer_amount, q.attempts, ' +
     'ra.rs_user_id ' +
     'FROM payout_queue q ' +
     'LEFT JOIN real_auth ra ON ra.user_id = q.user_id ' +
-    'WHERE q.status = ? ' +
+    'WHERE q.status = ? AND (q.last_attempt_at IS NULL OR q.last_attempt_at < ?) ' +
     'ORDER BY q.created_at ASC LIMIT 2'
-  ).bind('pending').all();
+  ).bind('pending', now - 300).all();
 
   if (!queue.length) return ok({ processed: 0 });
 
@@ -184,9 +200,13 @@ export async function onRequestPost({ request, env }) {
     // then exclude any cards currently in the deposit pool. A deposit pool card appearing
     // in outgoingAccepted (payout accepted) shares a card ID with an active deposit card,
     // which causes deposit-check to false-activate a parlay from the payout offer.
-    let candidates = [];
-    try { candidates = await findUnownedCards(entry.rs_user_id, authInfo, sessionToken); }
-    catch (e) { candidates = []; }
+    let candidates = [], cardDebugLog = [];
+    try {
+      const found = await findUnownedCards(entry.rs_user_id, authInfo, sessionToken, 5);
+      candidates    = found.candidates;
+      cardDebugLog  = found.debugLog;
+    }
+    catch (e) { cardDebugLog = [{ err: e.message }]; }
 
     if (candidates.length) {
       try {
@@ -197,9 +217,10 @@ export async function onRequestPost({ request, env }) {
     }
 
     if (!candidates.length) {
+      const debugNote = JSON.stringify({ ts: Math.floor(Date.now()/1000), log: cardDebugLog }).slice(0, 500);
       await env.DB.prepare(
         'UPDATE payout_queue SET notes=? WHERE id=?'
-      ).bind('No unowned cards found across MLB/NBA/NHL — will retry next run', entry.id).run();
+      ).bind('No unowned cards — debug: ' + debugNote, entry.id).run();
       results.push({ parlayId: entry.parlay_id, result: 'no_card' });
       continue; // stays pending; retried next cron run
     }
@@ -228,12 +249,19 @@ export async function onRequestPost({ request, env }) {
         rsOfferId = await postOffer(cardId, entry.offer_amount, turnstileToken, authInfo, sessionToken);
       } catch (e) {
         lastError = e.message;
-        // Skip this card and try the next — any card-specific RS error (wrong price,
-        // already listed, open offer, rate limit, etc.) should not kill the whole payout.
-        // Only Turnstile failures (handled above) are truly global and stop the run.
+        const note = 'Card ' + cardId + ' skipped: ' + e.message.slice(0, 200);
+        // 429 = RS daily offer limit hit — push last_attempt_at 1h into the future so
+        // this entry is skipped for ~65 min (query requires last_attempt_at < now-300).
+        if (e.message.includes('429')) {
+          await env.DB.prepare(
+            'UPDATE payout_queue SET notes=?, last_attempt_at=? WHERE id=?'
+          ).bind(note, now + 3600, entry.id).run();
+          lastError = null; // signal: already handled, stop trying other cards too
+          break;
+        }
         await env.DB.prepare(
           'UPDATE payout_queue SET notes=? WHERE id=?'
-        ).bind('Card ' + cardId + ' skipped: ' + e.message.slice(0, 200), entry.id).run();
+        ).bind(note, entry.id).run();
         continue;
       }
 
