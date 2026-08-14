@@ -6452,6 +6452,18 @@
         var state   = gameInfo && gameInfo.state;
         var timeEl  = document.getElementById('pst-'  + parlayId + '-' + legIndex);
         var barEl   = document.getElementById('prog-' + parlayId + '-' + legIndex);
+        var infoEl  = document.getElementById('pinf-' + parlayId + '-' + legIndex);
+
+        // Update team + matchup info for player prop legs
+        if (infoEl && !isTeam && gameInfo) {
+            var awAbbr = gameInfo.awayAbbr || '', hwAbbr = gameInfo.homeAbbr || '';
+            var matchupTxt = (awAbbr && hwAbbr) ? (awAbbr + ' vs ' + hwAbbr) : '';
+            if (gameInfo.playerTeamAbbr && matchupTxt) {
+                infoEl.textContent = gameInfo.playerTeamAbbr + ' · ' + matchupTxt;
+            } else if (matchupTxt) {
+                infoEl.textContent = matchupTxt;
+            }
+        }
 
         // Update the inline time chip
         if (timeEl) {
@@ -6658,12 +6670,14 @@
                         .then(function(d) { return { eventId: ev.id, d: d }; })
                         .catch(function() { return null; });
                 })).then(function(results) {
-                    var playerStats = {};
-                    var playerEvtId = {};
+                    var playerStats    = {};
+                    var playerEvtId    = {};
+                    var playerTeamAbbr = {};
                     results.forEach(function(res) {
                         if (!res || !res.d) return;
                         var bxPlayers = (res.d.boxscore && res.d.boxscore.players) || [];
                         bxPlayers.forEach(function(teamBlock) {
+                            var blkAbbr = (teamBlock.team && teamBlock.team.abbreviation) ? teamBlock.team.abbreviation.toUpperCase() : '';
                             (teamBlock.statistics || []).forEach(function(sb) {
                                 var names  = sb.names || sb.labels || [];
                                 var ptsIdx = names.indexOf('PTS');
@@ -6683,6 +6697,7 @@
                                     var pts = getStat(ptsIdx), reb = getStat(rebIdx), ast = getStat(astIdx), fg3m = getStat(fg3Idx);
                                     playerStats[name] = { pts: pts, reb: reb, ast: ast, fg3m: fg3m, pra: pts+reb+ast, pa: pts+ast, pr: pts+reb, ra: reb+ast };
                                     playerEvtId[name] = res.eventId;
+                                    if (blkAbbr) playerTeamAbbr[name] = blkAbbr;
                                 });
                             });
                         });
@@ -6694,6 +6709,9 @@
                         var val      = (stats && stats[n.marketType] !== undefined) ? stats[n.marketType] : null;
                         var evtId    = playerEvtId[norm];
                         var gameInfo = evtId ? eventInfoMap[evtId] : (earliestPrev ? { state: 'Preview', startET: earliestPrev } : null);
+                        if (gameInfo && evtId && playerTeamAbbr[norm]) {
+                            gameInfo = Object.assign({}, gameInfo, { playerTeamAbbr: playerTeamAbbr[norm] });
+                        }
                         updateLegStatus(n.parlayId, n.legIndex, val, n.threshold, n.direction, n.marketType, gameInfo, false);
                     });
 
@@ -6821,7 +6839,7 @@
         var neededByDate     = {};  // MLB
         var wnbaNeededByDate = {};  // WNBA
         var nflNeededByDate  = {};  // NFL
-        var liveToday = new Date().toISOString().slice(0, 10);
+        var liveToday = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
         PARLAY_SLIPS.forEach(function(s) {
             if (s.status !== 'active' && s.status !== 'voided' && s.status !== 'void' && s.status !== 'lost') return;
             (s.legs || []).forEach(function(leg, li) {
@@ -6948,6 +6966,7 @@
                 })).then(function(results) {
                     var playerStats  = {};
                     var playerGamePk = {};
+                    var playerSide   = {};
                     results.forEach(function(res) {
                         if (!res || !res.bs) return;
                         ['away', 'home'].forEach(function(side) {
@@ -6975,6 +6994,7 @@
                                     pitcherHits: ph, earnedRuns: er, pitcherWalks: pbb, hwer: ph + pbb + er,
                                 };
                                 playerGamePk[name] = res.pk;
+                                playerSide[name] = side;
                             });
                         });
                     });
@@ -6986,6 +7006,10 @@
                         var val      = (stats && field && stats[field] !== undefined) ? stats[field] : null;
                         var gamePk   = playerGamePk[norm];
                         var gameInfo = gamePk ? gameInfoMap[gamePk] : (earliestPreview ? { state: 'Preview', startET: earliestPreview } : null);
+                        if (gameInfo && gamePk && playerSide[norm]) {
+                            var tAbbr = playerSide[norm] === 'away' ? gameInfo.awayAbbr : gameInfo.homeAbbr;
+                            gameInfo = Object.assign({}, gameInfo, { playerTeamAbbr: tAbbr });
+                        }
                         updateLegStatus(n.parlayId, n.legIndex, val, n.threshold, n.direction, n.marketType, gameInfo, false);
                     });
                 });
@@ -7293,7 +7317,7 @@
         var settled = s.status === 'won' || s.status === 'lost';
         var legsArr = s.legs || [];
         var mult = s.stake_rax > 0 ? (s.payout_rax / s.stake_rax).toFixed(2) + 'x' : '';
-        var today = new Date().toISOString().slice(0, 10);
+        var today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
 
         var legsHtml = '';
         var MKT_SHORT = {
@@ -7498,10 +7522,22 @@
 
             var legRsUrl = parlayLegRsUrl(leg);
             var legRsBtn = legRsUrl ? '<a href="' + escHtml(legRsUrl) + '" target="_blank" rel="noopener" class="rs-icon-btn" title="View game on Real Sports" onclick="event.stopPropagation()" style="margin-left:2px;flex-shrink:0">' + RS_LOGO_SVG + '</a>' : '';
+            // Prop info (matchup abbreviation) shown for MLB/WNBA player prop legs
+            var propInfoHtml = '';
+            if (!isTeamMkt && showStatus) {
+                var evtMProp = (leg.event_name || '').match(/^(.+?)\s+@\s+(.+)$/);
+                if (evtMProp) {
+                    var awayPropPart = evtMProp[1].trim().split(/\s+/)[0];
+                    var homePropPart = evtMProp[2].trim().split(/\s+/)[0];
+                    propInfoHtml = '<span class="pslip-prop-info" id="pinf-' + s.id + '-' + li + '">' + escHtml(awayPropPart + ' vs ' + homePropPart) + '</span>';
+                } else {
+                    propInfoHtml = '<span class="pslip-prop-info" id="pinf-' + s.id + '-' + li + '"></span>';
+                }
+            }
             legsHtml += '<div class="pslip-leg' + legResultCls + '">' +
                 avatarHtml +
                 '<div class="pslip-leg-body">' +
-                    '<div class="pslip-leg-top"><span class="pslip-leg-name">' + escHtml(leg.player_name) + '</span>' + legRsBtn + timeHtml + legIcon + '</div>' +
+                    '<div class="pslip-leg-top"><span class="pslip-leg-name">' + escHtml(leg.player_name) + '</span>' + propInfoHtml + legRsBtn + timeHtml + legIcon + '</div>' +
                     '<div class="pslip-leg-sub"><span class="pslip-market">' + statLine + '</span> · <span class="pslip-odds">' + escHtml(odds) + '</span></div>' +
                     progHtml +
                 '</div>' +
