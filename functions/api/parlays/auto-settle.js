@@ -1255,5 +1255,20 @@ async function handleRequest({ request, env }) {
   return cacheAndReturn({ settled: totalSettled, legsFilled, dnpRefunds, report });
 }
 
-export const onRequestPost = handleRequest;
-export const onRequestGet  = handleRequest;
+async function safeHandleRequest(ctx) {
+  try {
+    return await handleRequest(ctx);
+  } catch (e) {
+    const now = Math.floor(Date.now() / 1000);
+    try {
+      await ctx.env.DB.prepare(
+        "INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES('auto_settle_error',?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at"
+      ).bind(JSON.stringify({ ts: now, error: e.message, stack: (e.stack || '').slice(0, 800) }), now).run();
+    } catch(_) {}
+    const okFn = (await import('../../_lib/response.js')).ok;
+    return okFn({ settled: 0, error: e.message });
+  }
+}
+
+export const onRequestPost = safeHandleRequest;
+export const onRequestGet  = safeHandleRequest;
