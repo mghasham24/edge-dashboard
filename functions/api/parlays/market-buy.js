@@ -4,9 +4,12 @@
 // Only buys listings where numBids === 0 AND buyNowPrice === 10.
 // Paginates listings until enough eligible cards are found or all pages exhausted.
 // Called every 5 min by alert-cron.
+// GET ?peek=1 (admin session) — inspect raw marketplace listing structure without buying.
+// GET ?debug_log=1 (cron key) — return last market_buy_debug from odds_cache.
 
-import { hashidsEncode } from '../../_lib/hashids.js';
-import { ok, err }       from '../../_lib/response.js';
+import { getSessionOrCron } from '../../_lib/auth.js';
+import { hashidsEncode }    from '../../_lib/hashids.js';
+import { ok, err }          from '../../_lib/response.js';
 
 const RS_DEVICE_UUID  = '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e';
 const POOL_TARGET     = 50;
@@ -19,23 +22,64 @@ const LISTING_BASE    = 'https://web.realapp.com/cardmarketplacelistings?cohort=
 function buildHeaders(authInfo, sessionToken) {
   return {
     'Accept':             'application/json',
+    'Accept-Language':    'en-US,en;q=0.9',
     'Content-Type':       'application/json',
-    'Origin':             'https://www.realapp.com',
-    'Referer':            'https://www.realapp.com/',
+    'Origin':             'https://www.realsports.io',
+    'Referer':            'https://www.realsports.io/',
     'User-Agent':         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5.2 Safari/605.1.15',
+    'sec-fetch-dest':     'empty',
+    'sec-fetch-mode':     'cors',
+    'sec-fetch-site':     'cross-site',
     'real-auth-info':     authInfo,
     'real-session-token': sessionToken || '',
     'real-device-uuid':   RS_DEVICE_UUID,
     'real-device-type':   'desktop_web',
-    'real-device-name':   '5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5.2 Safari/605.1.15',
+    'real-device-name':   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5.2 Safari/605.1.15',
     'real-version':       '35',
     'real-request-token': hashidsEncode(Date.now()),
   };
 }
 
 async function handleRequest({ request, env }) {
-  const url   = new URL(request.url);
-  const cronOk = env.CRON_SECRET && url.searchParams.get('_cron_key') === env.CRON_SECRET;
+  const url     = new URL(request.url);
+  const cronOk  = env.CRON_SECRET && url.searchParams.get('_cron_key') === env.CRON_SECRET;
+  const session = cronOk ? null : await getSessionOrCron(request, env);
+
+  // GET ?debug_log=1 — return last run result (cron key only)
+  if (request.method === 'GET' && url.searchParams.has('debug_log')) {
+    if (!cronOk) return err('Unauthorized', 401);
+    const row = await env.DB.prepare("SELECT data FROM odds_cache WHERE cache_key='market_buy_debug'").first();
+    const freeRow = await env.DB.prepare('SELECT COUNT(*) as cnt FROM deposit_cards WHERE assigned_to_parlay_id IS NULL').first();
+    return new Response(JSON.stringify({ freeCount: freeRow?.cnt ?? 0, lastRun: row ? JSON.parse(row.data) : null }, null, 2), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  // GET ?peek=1 — fetch raw listing structure without buying (admin session)
+  if (request.method === 'GET' && url.searchParams.has('peek')) {
+    if (!session?.is_admin) return err('Admin required', 403);
+    const authInfo     = env.EDGEBOT_AUTH_INFO;
+    const sessionToken = env.EDGEBOT_SESSION_TOKEN || '';
+    if (!authInfo) return err('EDGEBOT_AUTH_INFO not configured', 500);
+    const freeRow = await env.DB.prepare('SELECT COUNT(*) as cnt FROM deposit_cards WHERE assigned_to_parlay_id IS NULL').first();
+    const res = await fetch(`${LISTING_BASE}&limit=5&offset=0`, {
+      headers: buildHeaders(authInfo, sessionToken), signal: AbortSignal.timeout(10000),
+    });
+    const raw = await res.text();
+    let data;
+    try { data = JSON.parse(raw); } catch(_) { data = raw.slice(0, 500); }
+    const listings = Array.isArray(data) ? data : (data.listings || data.data || []);
+    return new Response(JSON.stringify({
+      freeCount: freeRow?.cnt ?? 0,
+      httpStatus: res.status,
+      isArray: Array.isArray(data),
+      topKeys: data && typeof data === 'object' && !Array.isArray(data) ? Object.keys(data) : null,
+      listingCount: listings.length,
+      firstListing: listings[0] || null,
+      firstKeys: listings[0] ? Object.keys(listings[0]) : [],
+    }, null, 2), { headers: { 'Content-Type': 'application/json' } });
+  }
+
   if (!cronOk) return err('Unauthorized', 401);
 
   const authInfo     = env.EDGEBOT_AUTH_INFO;
@@ -81,7 +125,7 @@ async function handleRequest({ request, env }) {
     pagesScanned++;
     totalScanned += page_listings.length;
     for (const l of page_listings) {
-      if (l.numBids === 0 && Number(l.buyNowPrice) === BID_AMOUNT) eligible.push(l);
+      if (Number(l.numBids) === 0 && Number(l.buyNowPrice) === BID_AMOUNT) eligible.push(l);
     }
     if (eligible.length >= needed) break;  // enough found — stop paginating
     if (page_listings.length < PAGE_SIZE)  break;  // last page
