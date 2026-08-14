@@ -82,10 +82,6 @@ const INN1_PBP_MKTS = new Set([
   '1inn_batters_ou', '1inn_hr_yn', '1inn_ks_exact',
 ]);
 
-function roundOfferAmount(amount) {
-  const ones = amount % 10;
-  return ones >= 8 ? Math.ceil(amount / 10) * 10 : Math.floor(amount / 10) * 10;
-}
 
 function normalizeName(name) {
   return name.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
@@ -473,6 +469,7 @@ function extractMlbPlayerStats(boxscore) {
       const pitching = p.stats?.pitching || {};
       const merged   = { ...batting, ...pitching };
       const h  = parseInt(batting.hits       || 0);
+      merged.hits = h; // always batting hits — pitching spread overwrites otherwise (position players who pitch)
       const d  = parseInt(batting.doubles    || 0);
       const tri = parseInt(batting.triples   || 0);
       const hr  = parseInt(batting.homeRuns  || 0);
@@ -499,15 +496,9 @@ function extractMlbPlayerStats(boxscore) {
 
 // ── ESPN helpers (WNBA + NFL + UFC) ──────────────────────────────────────────
 
-async function getEspnFinalGames(baseUrl, date) {
+async function getEspnFinalGames(baseUrl, date, db = null, proxyKey = '') {
   const yyyymmdd = date.replace(/-/g, '');
-  try {
-    const res = await fetch(`${baseUrl}/scoreboard?dates=${yyyymmdd}`, {
-      headers: ESPN_HEADERS,
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
+  function parseEvents(data) {
     return (data.events || [])
       .filter(e => {
         const st = e.competitions?.[0]?.status?.type;
@@ -528,6 +519,55 @@ async function getEspnFinalGames(baseUrl, date) {
         };
       })
       .filter(g => !isNaN(g.homeScore) && !isNaN(g.awayScore));
+  }
+  try {
+    const isNfl = baseUrl === ESPN_NFL;
+    // NFL: ESPN blocks CF IPs — route through VPS proxy (same as WNBA).
+    // Fetch regular season and preseason in parallel; VPS proxies the request from a non-CF IP.
+    let urls;
+    if (isNfl && proxyKey) {
+      const base = `${VPS_HOST}/espn-nfl/scoreboard?dates=${yyyymmdd}&key=${encodeURIComponent(proxyKey)}`;
+      urls = [base, base + '&seasontype=1'];
+    } else {
+      urls = isNfl
+        ? [`${baseUrl}/scoreboard?dates=${yyyymmdd}`, `${baseUrl}/scoreboard?dates=${yyyymmdd}&seasontype=1`]
+        : [`${baseUrl}/scoreboard?dates=${yyyymmdd}`];
+    }
+
+    const responses = await Promise.all(urls.map(url =>
+      fetch(url, { headers: isNfl && proxyKey ? {} : ESPN_HEADERS, signal: AbortSignal.timeout(10000) })
+        .then(async r => ({ ok: r.ok, status: r.status, data: r.ok ? await r.json() : null, url }))
+        .catch(e => ({ ok: false, status: 0, data: null, url, err: e.message }))
+    ));
+
+    // Store NFL debug info in D1
+    if (isNfl && db) {
+      const now = Math.floor(Date.now() / 1000);
+      const debugInfo = responses.map(r => ({
+        url: r.url, status: r.status, ok: r.ok,
+        totalEvents: (r.data?.events || []).length,
+        finalEvents: r.ok ? parseEvents(r.data).length : 0,
+        err: r.err || null,
+        sample: (r.data?.events || []).slice(0, 2).map(e => ({
+          name: e.name, status: e.competitions?.[0]?.status?.type?.name,
+          completed: e.competitions?.[0]?.status?.type?.completed,
+        })),
+      }));
+      await db.prepare(
+        'INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at'
+      ).bind(`nfl_espn_debug_${yyyymmdd}`, JSON.stringify({ ts: now, date: yyyymmdd, responses: debugInfo }), now).run().catch(() => {});
+    }
+
+    // Merge + deduplicate by eventId
+    const seen = new Set();
+    const allGames = [];
+    for (const r of responses) {
+      if (!r.ok || !r.data) continue;
+      for (const g of parseEvents(r.data)) {
+        if (!seen.has(g.eventId)) { seen.add(g.eventId); allGames.push(g); }
+      }
+    }
+    return allGames;
   } catch(e) { return []; }
 }
 
@@ -722,7 +762,7 @@ async function handleRequest({ request, env }) {
     const [mlbGames, wnbaGames, nflGames, ufcResults, wnbaStats] = await Promise.all([
       getMlbFinalGames(debugDate),
       getWnbaFinalGames(debugDate, proxyKey),
-      getEspnFinalGames(ESPN_NFL, debugDate),
+      getEspnFinalGames(ESPN_NFL, debugDate, env.DB, proxyKey),
       getUfcResults(debugDate),
       getWnbaPlayerStats(debugDate, proxyKey),
     ]);
@@ -789,11 +829,43 @@ async function handleRequest({ request, env }) {
   const eligibleLegs = allLegs.filter(l => l.game_date <= todayUtc);
   if (!eligibleLegs.length) return cacheAndReturn({ settled: 0, reason: 'all_games_future', todayUtc });
 
+  // NFL team nicknames — used to detect NFL team legs regardless of stored sport field
+  const NFL_NICKNAMES = new Set([
+    'bears','bengals','bills','broncos','browns','buccaneers','cardinals','chargers',
+    'chiefs','colts','commanders','cowboys','dolphins','eagles','falcons','49ers',
+    'giants','jaguars','jets','lions','packers','panthers','patriots','raiders',
+    'rams','ravens','saints','seahawks','steelers','texans','titans','vikings',
+  ]);
+  // WNBA team nicknames
+  const WNBA_NICKNAMES = new Set([
+    'aces','dream','fever','liberty','lynx','mercury','mystics','sky','sparks','storm','sun','wings',
+  ]);
+
+  function isNflTeamLeg(leg) {
+    const mkt = leg.market_type;
+    if (mkt !== 'team_ml' && mkt !== 'team_runline' && mkt !== 'team_total') return false;
+    const name = (leg.player_name || '').toLowerCase();
+    return NFL_NICKNAMES.has(name.split(/[\s@]+/).find(w => NFL_NICKNAMES.has(w)) || '');
+  }
+  function isWnbaTeamLeg(leg) {
+    const mkt = leg.market_type;
+    if (mkt !== 'team_ml' && mkt !== 'team_runline' && mkt !== 'team_total') return false;
+    const name = (leg.player_name || '').toLowerCase();
+    return WNBA_NICKNAMES.has(name.split(/[\s@]+/).find(w => WNBA_NICKNAMES.has(w)) || '');
+  }
+
   function legSportOf(leg) {
     const s   = leg.sport || '';
     const mkt = leg.market_type;
     if (mkt.startsWith('1inn_'))                                 return 'mlb';
     if ((mkt in MLB_STAT_FIELD) && !WNBA_PROP_TYPES.has(mkt))   return 'mlb';
+    // For team legs, use player_name to detect sport regardless of stored sport field
+    // (place.js sometimes stores wrong sport when user mixes sport tabs)
+    if (mkt === 'team_ml' || mkt === 'team_runline' || mkt === 'team_total') {
+      if (isNflTeamLeg(leg))  return 'nfl';
+      if (isWnbaTeamLeg(leg)) return 'wnba';
+      return 'mlb';
+    }
     if (s === 'wnba' || s === 'basketball_wnba')                 return 'wnba';
     if (s === 'nfl'  || s === 'american_football_nfl')           return 'nfl';
     if (s === 'ufc')                                             return 'ufc';
@@ -832,7 +904,7 @@ async function handleRequest({ request, env }) {
     const [mlbGames, wnbaGames, nflGames, ufcResults] = await Promise.all([
       hasMlbOnDate(date)  ? getMlbFinalGames(date)             : Promise.resolve([]),
       hasWnbaOnDate(date) ? getWnbaFinalGames(date, proxyKey)  : Promise.resolve([]),
-      hasNflOnDate(date)  ? getEspnFinalGames(ESPN_NFL, date)  : Promise.resolve([]),
+      hasNflOnDate(date)  ? getEspnFinalGames(ESPN_NFL, date, env.DB, proxyKey)  : Promise.resolve([]),
       hasUfcOnDate(date)  ? getUfcResults(date)                : Promise.resolve({}),
     ]);
 
@@ -1102,7 +1174,7 @@ async function handleRequest({ request, env }) {
         env.DB.prepare("UPDATE parlays SET status='voided', settled_at=? WHERE id=?").bind(now, parlay.id),
         env.DB.prepare(
           'INSERT OR IGNORE INTO payout_queue (parlay_id, user_id, rs_username, payout_rax, offer_amount, created_at) VALUES (?,?,?,?,?,?)'
-        ).bind(parlay.id, parlay.user_id, parlay.rs_username, finalPayout, roundOfferAmount(finalPayout), now),
+        ).bind(parlay.id, parlay.user_id, parlay.rs_username, finalPayout, finalPayout, now),
       ]);
     } else {
       // Won — update payout_rax in case it was recalculated after a scratch
@@ -1110,7 +1182,7 @@ async function handleRequest({ request, env }) {
         env.DB.prepare("UPDATE parlays SET status='won', payout_rax=?, settled_at=? WHERE id=?").bind(finalPayout, now, parlay.id),
         env.DB.prepare(
           'INSERT OR IGNORE INTO payout_queue (parlay_id, user_id, rs_username, payout_rax, offer_amount, created_at) VALUES (?,?,?,?,?,?)'
-        ).bind(parlay.id, parlay.user_id, parlay.rs_username, finalPayout, roundOfferAmount(finalPayout), now),
+        ).bind(parlay.id, parlay.user_id, parlay.rs_username, finalPayout, finalPayout, now),
       ]);
     }
 
@@ -1173,7 +1245,7 @@ async function handleRequest({ request, env }) {
         ...legUpdates,
         env.DB.prepare(
           'INSERT OR IGNORE INTO payout_queue (parlay_id, user_id, rs_username, payout_rax, offer_amount, created_at) VALUES (?,?,?,?,?,?)'
-        ).bind(p.id, p.user_id, p.rs_username, p.stake_rax, roundOfferAmount(p.stake_rax), now),
+        ).bind(p.id, p.user_id, p.rs_username, p.stake_rax, p.stake_rax, now),
       ]);
       dnpRefunds.push(p.id);
     }

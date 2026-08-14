@@ -15,6 +15,7 @@ const SECRET    = process.env.DK_PROXY_KEY;
 const PROXY_URL = process.env.PROXY_URL;
 const DK_BASE   = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
 const ESPN_WNBA = 'https://site.api.espn.com/apis/site/v2/sports/basketball/wnba';
+const ESPN_NFL  = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl';
 
 if (!SECRET) { console.error('DK_PROXY_KEY env var required'); process.exit(1); }
 
@@ -79,6 +80,25 @@ const server = http.createServer(async (req, res) => {
         `${ESPN_WNBA}/scoreboard?dates=${dates}`,
         { headers: ESPN_HEADERS, signal: AbortSignal.timeout(10000) }
       );
+      const body = await espnRes.text();
+      res.writeHead(espnRes.status, { 'Content-Type': 'application/json' });
+      res.end(body);
+    } catch(e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: e.message }));
+    }
+    return;
+  }
+
+  // ── ESPN NFL scoreboard ────────────────────────────────────────────────────
+  // GET /espn-nfl/scoreboard?dates=YYYYMMDD[&seasontype=1]&key=SECRET
+  if (url.pathname === '/espn-nfl/scoreboard') {
+    const dates      = url.searchParams.get('dates');
+    const seasontype = url.searchParams.get('seasontype');
+    if (!dates) { res.writeHead(400); res.end('Missing dates param'); return; }
+    const espnUrl = `${ESPN_NFL}/scoreboard?dates=${dates}${seasontype ? `&seasontype=${seasontype}` : ''}`;
+    try {
+      const espnRes = await fetch(espnUrl, { headers: ESPN_HEADERS, signal: AbortSignal.timeout(10000) });
       const body = await espnRes.text();
       res.writeHead(espnRes.status, { 'Content-Type': 'application/json' });
       res.end(body);
