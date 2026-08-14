@@ -12,6 +12,7 @@
 //   6. Mark parlay status='active', store offer ID + received_rax
 
 import { hashidsEncode } from '../../_lib/hashids.js';
+import { getSession }   from '../../_lib/session.js';
 import { ok, err }       from '../../_lib/response.js';
 
 const RS_DEVICE_UUID = '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e';
@@ -34,9 +35,9 @@ function buildHeaders(authInfo, sessionToken) {
 }
 
 // Paginate RS offers. For accepted views the offer can be many pages back (offset=30+ has happened).
-// We paginate up to 50 offers (5 pages) and stop when all offers on a page are older than 24h.
+// We paginate up to 200 offers (20 pages) and stop when all offers on a page are older than 24h.
 async function fetchOffers(authInfo, sessionToken, view, status) {
-  const maxPages = status === 'accepted' ? 5 : 1;
+  const maxPages = status === 'accepted' ? 50 : 1;
   const cutoff   = Date.now() - 86400000; // 24h ago — don't look further back
   const all = [];
   for (let page = 0; page < maxPages; page++) {
@@ -48,6 +49,7 @@ async function fetchOffers(authInfo, sessionToken, view, status) {
         { headers: buildHeaders(authInfo, sessionToken), signal: AbortSignal.timeout(10000) }
       );
     } catch { break; }
+    if (res.status === 401 || res.status === 403) throw new Error('RS auth ' + res.status + ' — session token expired');
     if (!res.ok) break;
     const data = await res.json();
     const offers = Array.isArray(data) ? data : (data.offers || []);
@@ -96,13 +98,26 @@ async function counterOffer(offerId, counterAmount, authInfo, sessionToken) {
   return { ok: true };
 }
 
+
 async function handleRequest({ request, env }) {
   const url = new URL(request.url);
-  if (!env.CRON_SECRET || url.searchParams.get('_cron_key') !== env.CRON_SECRET) {
-    return err('Unauthorized', 401);
+  const cronOk = env.CRON_SECRET && url.searchParams.get('_cron_key') === env.CRON_SECRET;
+  const debug  = url.searchParams.has('debug');
+
+  if (!cronOk) {
+    if (debug) {
+      // Allow admin session for read-only debug scan
+      const session = await getSession(request, env.DB);
+      const user = session
+        ? await env.DB.prepare('SELECT is_admin FROM users WHERE id=?').bind(session.user_id).first()
+        : null;
+      if (!user?.is_admin) return err('Unauthorized', 401);
+    } else {
+      return err('Unauthorized', 401);
+    }
   }
 
-  const authInfo     = env.EDGEBOT_AUTH_INFO;
+  const authInfo = env.EDGEBOT_AUTH_INFO;
   const sessionToken = env.EDGEBOT_SESSION_TOKEN || '';
   if (!authInfo) return err('EDGEBOT_AUTH_INFO not configured', 500);
 
@@ -164,8 +179,6 @@ async function handleRequest({ request, env }) {
     if (row.deposit_card_id) voidedMap[row.deposit_card_id] = { parlayId: row.id, stakeRax: row.stake_rax };
   }
 
-  const debug = url.searchParams.has('debug');
-
   let incomingOpen, incomingAccepted, outgoingAccepted, outgoingRejected, outgoingOpen;
   try {
     [incomingOpen, incomingAccepted, outgoingAccepted, outgoingRejected, outgoingOpen] = await Promise.all([
@@ -175,23 +188,61 @@ async function handleRequest({ request, env }) {
       fetchOffers(authInfo, sessionToken, 'outgoing', 'rejected'),
       fetchOffers(authInfo, sessionToken, 'outgoing', 'open'),
     ]);
-  } catch (e) { return err('RS fetch error: ' + e.message, 502); }
+  } catch (e) {
+    const failResult = { ts: now, error: 'RS fetch error: ' + e.message, checked: 0, accepted: 0, countered: 0, pending: pending.length };
+    try { await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at').bind('deposit_check_debug', JSON.stringify(failResult), now).run(); } catch(_) {}
+    if (e.message?.startsWith('RS auth') && env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_ALERT_CHAT_ID) {
+      await fetch('https://api.telegram.org/bot' + env.TELEGRAM_BOT_TOKEN + '/sendMessage', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: env.TELEGRAM_ALERT_CHAT_ID, text: '⚠️ deposit-check: RS auth expired — ' + pending.length + ' parlays stuck.\n\nUpdate EDGEBOT_AUTH_INFO + EDGEBOT_SESSION_TOKEN via wrangler.', parse_mode: 'HTML' }),
+      }).catch(() => {});
+    }
+    return err('RS fetch error: ' + e.message, 502);
+  }
 
   // RS may return the card under different field names depending on offer type.
   function getCardId(offer) {
-    return offer.cardId ?? offer.card?.id ?? offer.card_id ?? null;
+    return offer.cardId ?? offer.card?.id ?? offer.card_id ??
+           offer.marketplaceCardId ?? offer.marketplace_card_id ??
+           offer.item?.id ?? offer.itemId ?? offer.listingCardId ??
+           offer.cardMarketplaceId ??
+           (Array.isArray(offer.linkedCardIds) && offer.linkedCardIds.length > 0 ? offer.linkedCardIds[0] : null) ??
+           null;
   }
 
   if (debug) {
+    const allKnownCards = new Set([
+      ...Object.keys(fullMap), ...Object.keys(expiredMap), ...Object.keys(voidedMap)
+    ].map(Number));
     const scans = await Promise.all([
-      ['incoming','open'],['incoming','accepted'],['incoming','rejected'],['incoming','expired'],
-      ['outgoing','open'],['outgoing','accepted'],['outgoing','rejected'],['outgoing','expired'],
+      ['incoming','open'],['incoming','accepted'],['incoming','rejected'],['incoming','expired'],['incoming','completed'],
+      ['outgoing','open'],['outgoing','accepted'],['outgoing','rejected'],['outgoing','expired'],['outgoing','completed'],
     ].map(async ([view, status]) => {
       const list = await fetchOffers(authInfo, sessionToken, view, status);
       const relevant = list.filter(o => { const c = getCardId(o); return fullMap[c] || expiredMap[c] || voidedMap[c]; });
-      return { view, status, count: list.length, relevant: relevant.map(o => ({ id: o.id, cardId: getCardId(o), amount: o.amount, counterAmount: o.counterAmount, status: o.status })) };
+      // For outgoing/accepted: show full raw offer (stripped of card detail) to diagnose counter-offer structure
+      const isOutAccepted = view === 'outgoing' && status === 'accepted';
+      const rawSample = list.slice(0, isOutAccepted ? 5 : 2).map(o => {
+        const cardId = getCardId(o);
+        const slim = { id: o.id, amount: o.amount, counterAmount: o.counterAmount, status: o.status,
+          cardId: o.cardId, linkedCardIds: o.linkedCardIds, card_id: o.card_id,
+          resolvedCardId: cardId, isKnown: allKnownCards.has(Number(cardId)) };
+        if (isOutAccepted) {
+          // Include all top-level scalar fields for counter-offer diagnosis
+          Object.keys(o).forEach(k => { if (typeof o[k] !== 'object') slim[k] = o[k]; });
+        }
+        return slim;
+      });
+      return { view, status, count: list.length,
+        relevant: relevant.map(o => ({ id: o.id, cardId: getCardId(o), amount: o.amount, counterAmount: o.counterAmount, status: o.status })),
+        rawSample };
     }));
-    return new Response(JSON.stringify({ pending: allPending.map(p => ({ id: p.id, stake_rax: p.stake_rax, deposit_card_id: p.deposit_card_id, expires_at: p.expires_at })), cardMap, fullMap, scans }, null, 2), { headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({
+      pending: allPending.map(p => ({ id: p.id, stake_rax: p.stake_rax, deposit_card_id: p.deposit_card_id, expires_at: p.expires_at })),
+      expiredMapKeys: Object.keys(expiredMap),
+      voidedMapKeys: Object.keys(voidedMap),
+      cardMap, fullMap, scans
+    }, null, 2), { headers: { 'Content-Type': 'application/json' } });
   }
 
   let accepted = 0;
@@ -199,21 +250,27 @@ async function handleRequest({ request, env }) {
   const errors = [];
 
   async function activateParlay(parlayId, cardId, offerId, amount) {
-    // Idempotency: if this offer already activated a different parlay, skip.
-    // This prevents a re-inserted card from matching a stale accepted offer a second time.
     const alreadyUsed = await env.DB.prepare(
       "SELECT id FROM parlays WHERE rs_offer_id=? AND id != ? AND status NOT IN ('pending_deposit','expired','void') LIMIT 1"
     ).bind(offerId, parlayId).first();
-    if (alreadyUsed) return;
+    if (alreadyUsed) {
+      errors.push({ parlayId, offerId, action: 'activate_skip', reason: 'offer_already_used_by_parlay_' + alreadyUsed.id });
+      return;
+    }
 
     const receivedRax = Math.floor(amount * 0.9);
-    // AND deposit_card_id=? ensures the parlay actually owns this card before activating.
     const result = await env.DB.prepare(
       "UPDATE parlays SET status='active', rs_offer_id=?, received_rax=?, deposited_at=? " +
       "WHERE id=? AND deposit_card_id=? AND status IN ('pending_deposit','expired','void')"
     ).bind(offerId, receivedRax, now, parlayId, cardId).run();
     if (result.meta.changes > 0) {
       await env.DB.prepare('DELETE FROM deposit_cards WHERE card_id=?').bind(cardId).run();
+    } else {
+      // UPDATE matched 0 rows — log current parlay state so we can diagnose the mismatch
+      const row = await env.DB.prepare(
+        'SELECT id, status, deposit_card_id, rs_offer_id FROM parlays WHERE id=?'
+      ).bind(parlayId).first().catch(() => null);
+      errors.push({ parlayId, cardId, offerId, action: 'activate_no_change', parlayRow: row });
     }
   }
 
@@ -252,8 +309,9 @@ async function handleRequest({ request, env }) {
       match.stakeRax,
     );
 
+    const beforeAccepted = accepted;
     await activateParlay(match.parlayId, cardId, offerId, effectiveAmount);
-    accepted++;
+    if (accepted === beforeAccepted) accepted++; // activateParlay doesn't return a value; count Phase 1 attempts
   }
 
   // Phase 2: Process open offers — counter if under stake, accept if exact or over.
