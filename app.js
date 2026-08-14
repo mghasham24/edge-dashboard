@@ -7266,11 +7266,22 @@
         var header = emoji + ' RaxEdge Parlay' + (mult ? ' — ' + mult : '') + (s.status === 'won' ? ' WON' : s.status === 'lost' ? ' LOST' : '');
         var lines = [header, ''];
         (s.legs || []).forEach(function(leg) {
-            var arrow = leg.direction === 'more' ? '↑' : '↓';
-            var dir   = leg.direction === 'more' ? 'Over' : 'Under';
-            var mkt   = MKT_LABEL[leg.market_type] || leg.market_type || '';
+            var arrow  = leg.direction === 'more' ? '↑' : '↓';
+            var dir    = leg.direction === 'more' ? 'Over' : 'Under';
+            var mkt    = MKT_LABEL[leg.market_type] || leg.market_type || '';
             var result = leg.status === 'won' ? ' ✓' : leg.status === 'lost' ? ' ✗' : '';
-            lines.push(arrow + ' ' + leg.player_name + ' ' + dir + ' ' + leg.threshold + ' ' + mkt + result);
+            var line;
+            if (leg.market_type && leg.market_type.startsWith('1inn_')) {
+                // 1inn legs always store dir='more' regardless of actual pick — use stored label instead.
+                // label holds the human-readable pick: "Over 1.5", "Exactly 1", "Yes", "15-19 pitches", etc.
+                var pick = leg.label || '';
+                line = leg.market_type === '1inn_ml'
+                    ? arrow + ' ' + leg.player_name + ' ' + mkt
+                    : arrow + ' ' + leg.player_name + ' ' + mkt + (pick ? ' · ' + pick : '');
+            } else {
+                line = arrow + ' ' + leg.player_name + ' ' + dir + ' ' + leg.threshold + ' ' + mkt;
+            }
+            lines.push(line + result);
         });
         lines.push('');
         if (s.status === 'won') lines.push('Won: ' + Number(s.payout_rax).toLocaleString() + ' Rax 🔥');
