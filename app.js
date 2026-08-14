@@ -7288,46 +7288,68 @@
         }
     };
 
+    var _PARLAY_LEG_MLB_KW = {
+        ARI:'Diamondbacks', ATL:'Braves',    BAL:'Orioles',   BOS:'Red Sox',
+        CHC:'Cubs',         CWS:'White Sox', CIN:'Reds',      CLE:'Guardians',
+        COL:'Rockies',      DET:'Tigers',    HOU:'Astros',    KC:'Royals',
+        LAA:'Angels',       LAD:'Dodgers',   MIA:'Marlins',   MIL:'Brewers',
+        MIN:'Twins',        NYM:'Mets',      NYY:'Yankees',   OAK:'Athletics',
+        PHI:'Phillies',     PIT:'Pirates',   SD:'Padres',     SEA:'Mariners',
+        SF:'Giants',        STL:'Cardinals', TB:'Rays',       TEX:'Rangers',
+        TOR:'Blue Jays',    WAS:'Nationals', WSH:'Nationals',
+    };
+    var _PARLAY_LEG_WNBA_KW = {
+        ATL:'Dream',  CHI:'Sky',      CON:'Sun',   DAL:'Wings',
+        IND:'Fever',  LV:'Aces',      LA:'Sparks', MIN:'Lynx',
+        NY:'Liberty', PHX:'Mercury',  SEA:'Storm', WAS:'Mystics',
+        GS:'Valkyries', GSV:'Valkyries', TOR:'Tempo', POR:'Fire',
+    };
+
     function parlayLegRsUrl(leg) {
-        // Prefer stored game key (full team names, e.g. "Seattle Mariners @ San Diego Padres")
-        var storedKey = leg.event_name || '';
+        var legSport   = leg.sport || 'mlb';
+        var rsSportKey = legSport === 'wnba' ? 'basketball_wnba' : 'baseball_mlb';
+        var storedKey  = leg.event_name || '';
+
+        // Direct match on stored full-name key
         if (storedKey && rsGameIds[storedKey]) {
-            return getRealSportsUrl(rsGameIds[storedKey], 'baseball_mlb', null, storedKey);
+            return getRealSportsUrl(rsGameIds[storedKey], rsSportKey, null, storedKey);
         }
-        // Fuzzy: old slips stored "Player · AWY @ HME" — extract the team part after ' · '
-        var dotIdx2 = storedKey.indexOf(' · ');
+
+        // Extract team fragment (handle legacy "Player · AWY @ HME" format)
+        var dotIdx2  = storedKey.indexOf(' · ');
         var gamePart = dotIdx2 >= 0 ? storedKey.slice(dotIdx2 + 3) : storedKey;
+
         if (gamePart && gamePart.indexOf(' @ ') !== -1) {
-            var kParts = gamePart.split(' @ ');
-            var awayFrag = kParts[0].trim().toLowerCase();
-            var homeFrag = kParts[1].trim().toLowerCase();
+            var kParts    = gamePart.split(' @ ');
+            var awayFrag  = kParts[0].trim().toLowerCase();
+            var homeFrag  = kParts[1].trim().toLowerCase();
+
+            // Pass 1: substring match (works for full/partial names and some abbreviations)
             if (awayFrag && homeFrag) {
                 var allKeys = Object.keys(rsGameIds);
                 for (var ki = 0; ki < allKeys.length; ki++) {
                     var kl = allKeys[ki].toLowerCase();
                     if (kl.indexOf(awayFrag) !== -1 && kl.indexOf(homeFrag) !== -1) {
-                        return getRealSportsUrl(rsGameIds[allKeys[ki]], 'baseball_mlb', null, allKeys[ki]);
+                        return getRealSportsUrl(rsGameIds[allKeys[ki]], rsSportKey, null, allKeys[ki]);
                     }
                 }
             }
-        }
-        // 1inn legs store event_name as short form ("STL @ CHC"). Expand via MLB abbreviation
-        // table to match rsGameIds keys like "St. Louis Cardinals @ Chicago Cubs".
-        if (gamePart && gamePart.indexOf(' @ ') !== -1) {
-            var _MLB_KW = { ARI:'Diamondbacks',ATL:'Braves',BAL:'Orioles',BOS:'Red Sox',CHC:'Cubs',CWS:'White Sox',CIN:'Reds',CLE:'Guardians',COL:'Rockies',DET:'Tigers',HOU:'Astros',KC:'Royals',LAA:'Angels',LAD:'Dodgers',MIA:'Marlins',MIL:'Brewers',MIN:'Twins',NYM:'Mets',NYY:'Yankees',OAK:'Athletics',PHI:'Phillies',PIT:'Pirates',SD:'Padres',SEA:'Mariners',SF:'Giants',STL:'Cardinals',TB:'Rays',TEX:'Rangers',TOR:'Blue Jays',WSH:'Nationals' };
-            var _kp2 = gamePart.split(' @ ');
-            var _awKw = (_MLB_KW[_kp2[0].trim().toUpperCase()] || '').toLowerCase();
-            var _hwKw = (_MLB_KW[_kp2[1].trim().toUpperCase()] || '').toLowerCase();
+
+            // Pass 2: abbreviation expansion (MLB short codes like STL, CWS; WNBA like LV, CON)
+            var _KW   = legSport === 'wnba' ? _PARLAY_LEG_WNBA_KW : _PARLAY_LEG_MLB_KW;
+            var _awKw = (_KW[kParts[0].trim().toUpperCase()] || '').toLowerCase();
+            var _hwKw = (_KW[kParts[1].trim().toUpperCase()] || '').toLowerCase();
             if (_awKw && _hwKw) {
-                var _kwKeys = Object.keys(rsGameIds);
-                for (var _ki2 = 0; _ki2 < _kwKeys.length; _ki2++) {
-                    var _kl2 = _kwKeys[_ki2].toLowerCase();
-                    if (_kl2.indexOf(_awKw) !== -1 && _kl2.indexOf(_hwKw) !== -1) {
-                        return getRealSportsUrl(rsGameIds[_kwKeys[_ki2]], 'baseball_mlb', null, _kwKeys[_ki2]);
+                var kwKeys = Object.keys(rsGameIds);
+                for (var ki2 = 0; ki2 < kwKeys.length; ki2++) {
+                    var kl2 = kwKeys[ki2].toLowerCase();
+                    if (kl2.indexOf(_awKw) !== -1 && kl2.indexOf(_hwKw) !== -1) {
+                        return getRealSportsUrl(rsGameIds[kwKeys[ki2]], rsSportKey, null, kwKeys[ki2]);
                     }
                 }
             }
         }
+
         // Fall back to live player pool lookup (only works if Build tab loaded this session)
         var pools = [
             { players: PARLAY_PLAYERS,      games: PARLAY_GAMES,      sport: 'mlb'  },
@@ -7336,7 +7358,7 @@
             { players: PARLAY_PLAYERS_NFL,  games: PARLAY_GAMES_NFL,  sport: 'nfl'  },
         ];
         for (var pi = 0; pi < pools.length; pi++) {
-            var pool = pools[pi];
+            var pool   = pools[pi];
             var player = pool.players.find(function(pp) { return pp.name === leg.player_name; });
             if (!player) continue;
             var game = pool.games.find(function(g) { return g.eventId === player.eventId; });
