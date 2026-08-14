@@ -234,7 +234,7 @@ function parseHRMarkets(data, eventId, homeShort, awayShort, timeStr, startMs) {
       const seasonHR   = player.statistic?.value ?? null;
       const fairProb   = sel.trueOdds > 0 ? 1 / sel.trueOdds : null;
       players.push({
-        name: player.name, team, opp, time: timeStr, startMs,
+        name: player.name, team, opp, isHome, time: timeStr, startMs,
         market: HR_INFO.market, stat: HR_INFO.stat, type: 'milestone',
         threshold: mv === 1 ? 0.5 : 1.5,
         milestoneLabel: mv === 1 ? '1+' : '2+',

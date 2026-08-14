@@ -5122,13 +5122,13 @@
                         name: entry.name, initials: initials,
                         color: parlayTeamColor(entry.team),
                         headshot: entry.headshot || null,
-                        team: entry.team, opp: entry.opp, time: entry.time,
-                        commenceMs: entry.startMs || 0,
+                        team: entry.team, opp: entry.opp, isHome: entry.isHome,
+                        time: entry.time, commenceMs: entry.startMs || 0,
                         market: entry.market, stat: entry.stat,
                         type: 'milestone',
                         line: entry.threshold,
                         milestoneLabel: entry.milestoneLabel,
-                        seasonHR: entry.seasonHR || null,
+                        seasonHR: entry.seasonHR != null ? entry.seasonHR : null,
                         precompProb: entry.fairProb || null,
                         moreOdds: entry.americanOdds, lessOdds: null,
                         moreSelId: entry.selectionId, lessSelId: null,
@@ -5995,6 +5995,94 @@
         grid.innerHTML = html;
     }
 
+    function renderHRGameCards(players) {
+        // Group milestone entries by eventId → by playerName → collect 1+ and 2+ separately
+        var byEvent = {};
+        players.forEach(function(p) {
+            if (!byEvent[p.eventId]) byEvent[p.eventId] = { time: p.time, commenceMs: p.commenceMs || 0, byName: {} };
+            var ev = byEvent[p.eventId];
+            if (!ev.byName[p.name]) {
+                ev.byName[p.name] = { isHome: p.isHome, team: p.team, headshot: p.headshot, initials: p.initials, color: p.color, seasonHR: p.seasonHR, one: null, two: null };
+            }
+            if (p.milestoneLabel === '1+') ev.byName[p.name].one = p;
+            else                           ev.byName[p.name].two = p;
+        });
+
+        var eventIds = Object.keys(byEvent).sort(function(a, b) {
+            return (byEvent[a].commenceMs || 0) - (byEvent[b].commenceMs || 0);
+        });
+
+        function renderPlayerRow(pg) {
+            var p1 = pg.one, p2 = pg.two;
+            var ref = p1 || p2;
+            if (!ref) return '';
+            var logo = dkTeamLogo(ref.team);
+            var logoHtml = logo
+                ? '<img class="hr-row-logo" src="' + escHtml(logo) + '" onerror="this.style.display=\'none\'">'
+                : '<div class="hr-row-logo" style="background:' + escHtml(parlayTeamColor(ref.team)) + ';border-radius:50%"></div>';
+            var sel1 = p1 ? parlayPicks[p1.id] : null;
+            var sel2 = p2 ? parlayPicks[p2.id] : null;
+            var btn1 = p1
+                ? '<button class="hr-mil-btn' + (sel1 ? ' active' : '') + '" onclick="parlayTogglePick(' + p1.id + ',\'more\')">' +
+                    '<span class="hr-mil-lbl">1+</span><span class="hr-mil-odds">' + escHtml(parlayFmtOdds(p1.moreOdds)) + '</span>' +
+                  '</button>'
+                : '<div class="hr-mil-empty">—</div>';
+            var btn2 = p2
+                ? '<button class="hr-mil-btn' + (sel2 ? ' active' : '') + '" onclick="parlayTogglePick(' + p2.id + ',\'more\')">' +
+                    '<span class="hr-mil-lbl">2+</span><span class="hr-mil-odds">' + escHtml(parlayFmtOdds(p2.moreOdds)) + '</span>' +
+                  '</button>'
+                : '<div class="hr-mil-empty">—</div>';
+            var hrLabel = pg.seasonHR != null ? '<span class="hr-row-stat">HR: ' + pg.seasonHR + '</span>' : '';
+            // Headshot + fallback avatar as adjacent siblings (parlayHeadshotFail uses nextElementSibling)
+            var color = pg.color || parlayTeamColor(pg.team || '');
+            var hsHtml = pg.headshot
+                ? '<img class="hr-row-hs" src="' + escHtml(pg.headshot) + '" alt="" onerror="parlayHeadshotFail(this)">' +
+                  '<div class="hr-row-hs-ph" style="display:none;background:' + escHtml(color) + '">' + escHtml(pg.initials || '') + '</div>'
+                : '<div class="hr-row-hs-ph" style="background:' + escHtml(color) + '">' + escHtml(pg.initials || '') + '</div>';
+            return '<div class="hr-player-row">' +
+                logoHtml +
+                hsHtml +
+                '<div class="hr-row-name">' + escHtml(ref.name) + hrLabel + '</div>' +
+                '<div class="hr-row-btns">' + btn1 + btn2 + '</div>' +
+            '</div>';
+        }
+
+        function renderTeamSection(teamName, teamPlayers, isAway) {
+            if (!teamPlayers.length) return '';
+            var logo = dkTeamLogo(teamName);
+            var logoHtml = logo
+                ? '<img class="hr-sec-logo" src="' + escHtml(logo) + '" onerror="this.style.display=\'none\'">'
+                : '';
+            var cls = isAway ? ' hr-away' : ' hr-home';
+            return '<div class="hr-team-section' + cls + '">' +
+                '<div class="hr-team-hdr">' + logoHtml + '<span>' + escHtml(teamName) + '</span></div>' +
+                teamPlayers.map(renderPlayerRow).join('') +
+            '</div>';
+        }
+
+        return eventIds.map(function(eventId) {
+            var ev = byEvent[eventId];
+            var all = Object.values(ev.byName);
+            var awayTeam = '', homeTeam = '';
+            all.forEach(function(pg) {
+                if (!awayTeam && pg.isHome === false) awayTeam = pg.team;
+                if (!homeTeam && pg.isHome === true)  homeTeam = pg.team;
+            });
+            var awayPlayers = all.filter(function(pg) { return pg.isHome === false; });
+            var homePlayers = all.filter(function(pg) { return pg.isHome === true; });
+            var timeStr = parlayFmtTime(ev.commenceMs, ev.time);
+            return '<div class="hr-game-card">' +
+                '<div class="hr-game-hdr">' +
+                    '<span>' + escHtml(awayTeam) + ' @ ' + escHtml(homeTeam) + '</span>' +
+                    '<span class="hr-game-time">' + escHtml(timeStr) + '</span>' +
+                '</div>' +
+                renderTeamSection(awayTeam, awayPlayers, true) +
+                (awayPlayers.length && homePlayers.length ? '<div class="hr-divider"></div>' : '') +
+                renderTeamSection(homeTeam, homePlayers, false) +
+            '</div>';
+        }).join('');
+    }
+
     function parlayRenderGrid() {
         var grid = document.getElementById('parlay-player-grid');
         if (!grid) return;
@@ -6062,6 +6150,14 @@
             grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">' + msg + '</div>';
             return;
         }
+
+        // Home Runs — game-grouped layout (away on top, home on bottom, per-player row)
+        if (parlayCategory === 'home_runs') {
+            grid.style.cssText = 'display:flex;flex-direction:column;overflow-y:auto;gap:12px;padding:12px;box-sizing:border-box;flex:1;min-height:0';
+            grid.innerHTML = renderHRGameCards(players);
+            return;
+        }
+
         grid.innerHTML = players.map(function(p) {
             var sel     = parlayPicks[p.id];
             var isMilestone = p.type === 'milestone';
@@ -6228,27 +6324,36 @@
         parlayRenderGrid();
     }
 
+    var _parlaySearchTimer = null;
     function parlayOnSearch(val) {
         parlaySearchQuery = val;
         var input = document.getElementById('parlay-search-input');
         var clear = document.getElementById('parlay-search-clear');
         if (input && input.value !== val) input.value = val;
         if (clear) clear.style.display = val ? 'flex' : 'none';
+        var catChanged = false;
         if (val && parlayCategory !== 'search') {
             parlayPrevCategory = parlayCategory;
             parlayCategory = 'search';
+            catChanged = true;
         } else if (!val && parlayCategory === 'search') {
             parlayCategory = parlayPrevCategory;
+            catChanged = true;
         }
-        var nav = document.getElementById('parlay-cat-nav');
-        if (nav) {
-            var row = nav.querySelector('.parlay-cat-row');
-            var savedScroll = row ? row.scrollLeft : 0;
-            nav.innerHTML = parlayBuildNavHtml();
-            var newRow = nav.querySelector('.parlay-cat-row');
-            if (newRow) newRow.scrollLeft = savedScroll;
+        // Rebuild nav immediately only when category changes (clears/activates search)
+        if (catChanged) {
+            var nav = document.getElementById('parlay-cat-nav');
+            if (nav) {
+                var row = nav.querySelector('.parlay-cat-row');
+                var savedScroll = row ? row.scrollLeft : 0;
+                nav.innerHTML = parlayBuildNavHtml();
+                var newRow = nav.querySelector('.parlay-cat-row');
+                if (newRow) newRow.scrollLeft = savedScroll;
+            }
         }
-        parlayRenderGrid();
+        // Debounce grid re-render to avoid repainting on every keystroke
+        clearTimeout(_parlaySearchTimer);
+        _parlaySearchTimer = setTimeout(parlayRenderGrid, 150);
     }
 
     function parlaySetView(v) {
