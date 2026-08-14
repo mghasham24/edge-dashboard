@@ -6016,25 +6016,28 @@
             var p1 = pg.one, p2 = pg.two;
             var ref = p1 || p2;
             if (!ref) return '';
-            var logo = dkTeamLogo(ref.team);
+            // Use slipTeamLogo with explicit 'mlb' so MIA → Marlins, not Dolphins
+            var logo = slipTeamLogo(ref.team, 'mlb');
             var logoHtml = logo
                 ? '<img class="hr-row-logo" src="' + escHtml(logo) + '" onerror="this.style.display=\'none\'">'
-                : '<div class="hr-row-logo" style="background:' + escHtml(parlayTeamColor(ref.team)) + ';border-radius:50%"></div>';
+                : '<div class="hr-row-logo-ph" style="background:' + escHtml(parlayTeamColor(ref.team)) + '"></div>';
             var sel1 = p1 ? parlayPicks[p1.id] : null;
             var sel2 = p2 ? parlayPicks[p2.id] : null;
             var btn1 = p1
                 ? '<button class="hr-mil-btn' + (sel1 ? ' active' : '') + '" onclick="parlayTogglePick(' + p1.id + ',\'more\')">' +
-                    '<span class="hr-mil-lbl">1+</span><span class="hr-mil-odds">' + escHtml(parlayFmtOdds(p1.moreOdds)) + '</span>' +
+                    '<span class="hr-mil-lbl">1+ HR</span>' +
+                    '<span class="hr-mil-odds">' + escHtml(parlayFmtOdds(p1.moreOdds)) + '</span>' +
                   '</button>'
                 : '<div class="hr-mil-empty">—</div>';
             var btn2 = p2
                 ? '<button class="hr-mil-btn' + (sel2 ? ' active' : '') + '" onclick="parlayTogglePick(' + p2.id + ',\'more\')">' +
-                    '<span class="hr-mil-lbl">2+</span><span class="hr-mil-odds">' + escHtml(parlayFmtOdds(p2.moreOdds)) + '</span>' +
+                    '<span class="hr-mil-lbl">2+ HR</span>' +
+                    '<span class="hr-mil-odds">' + escHtml(parlayFmtOdds(p2.moreOdds)) + '</span>' +
                   '</button>'
                 : '<div class="hr-mil-empty">—</div>';
-            var hrLabel = pg.seasonHR != null ? '<span class="hr-row-stat">HR: ' + pg.seasonHR + '</span>' : '';
-            // Headshot + fallback avatar as adjacent siblings (parlayHeadshotFail uses nextElementSibling)
+            var hrStat = pg.seasonHR != null ? ' · HR: ' + pg.seasonHR : '';
             var color = pg.color || parlayTeamColor(pg.team || '');
+            // Headshot + fallback avatar as adjacent siblings (parlayHeadshotFail uses nextElementSibling)
             var hsHtml = pg.headshot
                 ? '<img class="hr-row-hs" src="' + escHtml(pg.headshot) + '" alt="" onerror="parlayHeadshotFail(this)">' +
                   '<div class="hr-row-hs-ph" style="display:none;background:' + escHtml(color) + '">' + escHtml(pg.initials || '') + '</div>'
@@ -6042,14 +6045,14 @@
             return '<div class="hr-player-row">' +
                 logoHtml +
                 hsHtml +
-                '<div class="hr-row-name">' + escHtml(ref.name) + hrLabel + '</div>' +
+                '<div class="hr-row-name">' + escHtml(ref.name) + '<span class="hr-row-stat">' + escHtml(hrStat) + '</span></div>' +
                 '<div class="hr-row-btns">' + btn1 + btn2 + '</div>' +
             '</div>';
         }
 
         function renderTeamSection(teamName, teamPlayers, isAway) {
             if (!teamPlayers.length) return '';
-            var logo = dkTeamLogo(teamName);
+            var logo = slipTeamLogo(teamName, 'mlb');
             var logoHtml = logo
                 ? '<img class="hr-sec-logo" src="' + escHtml(logo) + '" onerror="this.style.display=\'none\'">'
                 : '';
