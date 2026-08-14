@@ -4897,7 +4897,7 @@
         { key:'rbis',         label:'RBIs' },
         { key:'runs',         label:'Runs' },
         { key:'hrbi',         label:'H+R+RBI' },
-        { key:'home_runs',    label:'Home Runs' },
+        { key:'home_runs',    label:'Home Runs',  adminOnly: true },
         { key:'pitcher_ks',   label:'Pitcher Ks' },
         { key:'outs_ou',      label:'Outs' },
         { key:'singles',      label:'Singles' },
