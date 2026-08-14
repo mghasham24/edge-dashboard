@@ -7990,8 +7990,10 @@
                     }
                     // 1inn_ml + 1inn_run_yn (same team): winning the inning requires scoring — nearly identical
                     // 1inn_ml + 1inn_hits_ou over (same team): scoring requires hits — highly correlated
+                    // Note: all 1inn buttons pass dir='more' regardless of over/under/yes/no — direction
+                    // is encoded in the player object's idir field, not the dir parameter.
                     if (newP.market === '1inn_ml' || newP.market === '1inn_run_yn' ||
-                        (newP.market === '1inn_hits_ou' && dir === 'over')) {
+                        (newP.market === '1inn_hits_ou' && newP.idir === 'over')) {
                         var newMtchupI = newP.awayShort && newP.homeShort ? newP.awayShort + '@' + newP.homeShort : null;
                         if (newMtchupI && newP.team) {
                             var innCorrConflict = Object.keys(parlayPicks).some(function(k) {
@@ -8001,9 +8003,8 @@
                                 if (exMtchup !== newMtchupI || !ex.team || ex.team !== newP.team) return false;
                                 if ((newP.market === '1inn_ml' && ex.market === '1inn_run_yn') ||
                                     (newP.market === '1inn_run_yn' && ex.market === '1inn_ml')) return true;
-                                var exDir = parlayPicks[k];
-                                if (newP.market === '1inn_ml' && ex.market === '1inn_hits_ou' && exDir === 'over') return true;
-                                if (newP.market === '1inn_hits_ou' && dir === 'over' && ex.market === '1inn_ml') return true;
+                                if (newP.market === '1inn_ml' && ex.market === '1inn_hits_ou' && ex.idir === 'over') return true;
+                                if (newP.market === '1inn_hits_ou' && newP.idir === 'over' && ex.market === '1inn_ml') return true;
                                 return false;
                             });
                             if (innCorrConflict) {
