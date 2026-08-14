@@ -6066,13 +6066,21 @@
         return eventIds.map(function(eventId) {
             var ev = byEvent[eventId];
             var all = Object.values(ev.byName);
-            var awayTeam = '', homeTeam = '';
+            // Group players by team name — more reliable than isHome strict-boolean check
+            // (DK milestone venueRole may not equal 'HomePlayer' exactly)
+            var teamMap = {};
             all.forEach(function(pg) {
-                if (!awayTeam && pg.isHome === false) awayTeam = pg.team;
-                if (!homeTeam && pg.isHome === true)  homeTeam = pg.team;
+                if (!teamMap[pg.team]) teamMap[pg.team] = { isHome: pg.isHome, players: [] };
+                teamMap[pg.team].players.push(pg);
             });
-            var awayPlayers = all.filter(function(pg) { return pg.isHome === false; });
-            var homePlayers = all.filter(function(pg) { return pg.isHome === true; });
+            // Sort teams: away (isHome falsy) first, home (isHome truthy) second
+            var teams = Object.values(teamMap).sort(function(a, b) {
+                return (a.isHome ? 1 : 0) - (b.isHome ? 1 : 0);
+            });
+            var awayTeam    = (teams[0] && teams[0].players[0]) ? teams[0].players[0].team : '';
+            var homeTeam    = (teams[1] && teams[1].players[0]) ? teams[1].players[0].team : '';
+            var awayPlayers = teams[0] ? teams[0].players : [];
+            var homePlayers = teams[1] ? teams[1].players : [];
             var timeStr = parlayFmtTime(ev.commenceMs, ev.time);
             return '<div class="hr-game-card">' +
                 '<div class="hr-game-hdr">' +
