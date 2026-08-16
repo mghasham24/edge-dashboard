@@ -5864,8 +5864,11 @@
 
     function parlayCalcPayout(s) {
         if (Object.keys(parlayPicks).length < 2) return null;
-        var raw = Math.min(Math.floor(s * 0.70 / parlayTrueProb()), 10000);
-        return Math.floor((raw + 2) / 10) * 10;
+        var prob   = parlayTrueProb();
+        var raw    = Math.min(Math.floor(s * 0.70 / prob), 10000);
+        var payout = Math.floor((raw + 2) / 10) * 10;
+        if (0.70 / prob > 2.5) payout = Math.max(0, payout - 10);
+        return payout;
     }
 
     function parlayAvatarHtml(p, size, fsize) {

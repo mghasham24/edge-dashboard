@@ -156,7 +156,9 @@ export async function onRequestPost({ request, env }) {
       'aces','dream','fever','liberty','lynx','mercury','mystics','sky','sparks','storm','sun','wings',
     ]);
     let legSport = VALID_SPORTS.includes(leg.sport) ? leg.sport : 'mlb';
-    if (TEAM_MARKETS.has(leg.marketType)) {
+    if (TEAM_MARKETS.has(leg.marketType) && !VALID_SPORTS.includes(leg.sport)) {
+      // Only use nickname detection when sport is not explicitly provided.
+      // Cardinals (MLB) and Giants (MLB) share names with NFL teams — trust the passed sport field.
       const words = (leg.playerName || '').toLowerCase().split(/[\s@]+/);
       if (words.some(w => NFL_NICKNAMES.has(w)))        legSport = 'nfl';
       else if (words.some(w => WNBA_NICKNAMES.has(w)))  legSport = 'wnba';
@@ -331,13 +333,12 @@ export async function onRequestPost({ request, env }) {
   }
 
   // Payout math — mirrors parlayCalcPayout() in the frontend exactly.
-  // Per-leg multiplier cap prevents extreme payouts on very long-odds parlays.
-  const LEG_CAPS   = [0, 0, 4.5, 9.0, 18.0, 36.0];
-  const legCapMult = LEG_CAPS[normalized.length] || 4.5;
-  const trueProb   = normalized.reduce((acc, l) => acc * l.impliedProb, 1);
-  const rawPayout  = Math.min(Math.floor(stake * 0.70 / trueProb), 10000);
-  const legCap     = Math.floor(legCapMult * stake / 10) * 10;
-  const payoutRax  = Math.min(rawPayout, legCap);
+  // Hard cap: 10,000 Rax. Max stake formula ensures payout never exceeds 10k.
+  // Parlays over 2.5x are docked 10 Rax to cover deposit card acquisition cost.
+  const trueProb  = normalized.reduce((acc, l) => acc * l.impliedProb, 1);
+  const rawPayout = Math.min(Math.floor(stake * 0.70 / trueProb), 10000);
+  let payoutRax = Math.floor((rawPayout + 2) / 10) * 10;
+  if (0.70 / trueProb > 2.5) payoutRax = Math.max(0, payoutRax - 10);
 
   // Daily caps (admins bypass)
   if (!isAdmin) {
