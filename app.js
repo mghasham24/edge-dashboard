@@ -4916,15 +4916,17 @@
         pitch:['pitcher_ks','outs_ou','hits_allowed','er_allowed','bb_allowed','hwer'],
     };
     var WNBA_CATS = [
-        { key:'pts',   label:'Points' },
-        { key:'reb',   label:'Rebounds' },
-        { key:'ast',   label:'Assists' },
-        { key:'fg3m',  label:'Threes' },
-        { key:'pra',   label:'PRA' },
-        { key:'pa',    label:'Pts+Ast' },
-        { key:'pr',    label:'Pts+Reb' },
-        { key:'ra',    label:'Reb+Ast' },
-        { key:'teams', label:'Teams' },
+        { key:'pts',           label:'Points' },
+        { key:'reb',           label:'Rebounds' },
+        { key:'ast',           label:'Assists' },
+        { key:'fg3m',          label:'Threes' },
+        { key:'pra',           label:'PRA' },
+        { key:'pa',            label:'Pts+Ast' },
+        { key:'pr',            label:'Pts+Reb' },
+        { key:'ra',            label:'Reb+Ast' },
+        { key:'double_double', label:'Dbl-Dbl' },
+        { key:'triple_double', label:'Trpl-Dbl' },
+        { key:'teams',         label:'Teams' },
     ];
     var NFL_CATS = [
         { key: 'teams', label: 'Teams' },
@@ -4932,13 +4934,22 @@
     var UFC_CATS = [
         { key: 'fights', label: 'Fights' },
     ];
-    var WNBA_MKT_SET = { pts:1, reb:1, ast:1, fg3m:1, pra:1, pa:1, pr:1, ra:1 };
-    var parlayActiveSport = 'mlb'; // 'mlb' | 'wnba' | 'nfl' | 'ufc'
+    var SOCCER_CATS = [
+        { key: 'goalscorer', label: 'Goalscorer' },
+        { key: 'sot',        label: 'Shots on Target' },
+        { key: 'assists',    label: 'Assists' },
+        { key: 'saves',      label: 'GK Saves' },
+        { key: 'offsides',   label: 'Offsides' },
+        { key: 'fouls_won',  label: 'Fouls Won' },
+    ];
+    var WNBA_MKT_SET = { pts:1, reb:1, ast:1, fg3m:1, pra:1, pa:1, pr:1, ra:1, double_double:1, triple_double:1 };
+    var parlayActiveSport = 'mlb'; // 'mlb' | 'wnba' | 'nfl' | 'ufc' | 'soccer'
 
-    var PARLAY_PLAYERS      = [];  // filled by loadParlayPlayers()
-    var PARLAY_PLAYERS_WNBA = [];  // filled by loadParlayPlayers() when sport=wnba
-    var PARLAY_PLAYERS_NFL  = [];  // team picks only for NFL
-    var PARLAY_PLAYERS_UFC  = [];  // fighter ML/total picks for UFC
+    var PARLAY_PLAYERS        = [];  // filled by loadParlayPlayers()
+    var PARLAY_PLAYERS_WNBA   = [];  // filled by loadParlayPlayers() when sport=wnba
+    var PARLAY_PLAYERS_NFL    = [];  // team picks only for NFL
+    var PARLAY_PLAYERS_UFC    = [];  // fighter ML/total picks for UFC
+    var PARLAY_PLAYERS_SOCCER = [];  // soccer player props (admin-only)
     var PARLAY_GAMES        = [];  // filled by loadParlayLines() for MLB
     var PARLAY_GAMES_WNBA   = [];  // filled by loadParlayLines() for WNBA
     var PARLAY_GAMES_NFL    = [];  // filled by loadParlayLines() for NFL
@@ -5138,6 +5149,31 @@
                 return;
             }
 
+            // Yes/No markets (Double-Double, Triple-Double, Goalscorer) — single Yes card per player
+            if (meta.type === 'yn') {
+                var ynEntry = g.more[0];
+                if (!ynEntry) return;
+                var ynWords = ynEntry.name.split(' ');
+                var ynInit = ((ynWords[0][0]||'')+(ynWords.length>1?ynWords[ynWords.length-1][0]||'':'')).toUpperCase();
+                result.push({
+                    id: nextId++,
+                    name: ynEntry.name, initials: ynInit,
+                    color: parlayTeamColor(ynEntry.team),
+                    headshot: ynEntry.headshot || null,
+                    team: ynEntry.team, opp: ynEntry.opp,
+                    time: ynEntry.time, commenceMs: ynEntry.startMs || 0,
+                    market: ynEntry.market, stat: ynEntry.stat,
+                    type: 'yn', line: null,
+                    espnSlug: ynEntry.espnSlug || null,
+                    league: ynEntry.league || null,
+                    gameDate: ynEntry.gameDate || null,
+                    moreOdds: ynEntry.americanOdds, lessOdds: null,
+                    moreSelId: ynEntry.selectionId, lessSelId: null,
+                    marketId: ynEntry.marketId, eventId: ynEntry.eventId, subcatId: ynEntry.subcatId,
+                });
+                return;
+            }
+
             var moreEntry = g.more.find(function(e) { return e.mainLine; }) || g.more[0];
             var lessEntry = g.less.find(function(e) { return e.mainLine; }) || g.less[0];
             if (!moreEntry || !lessEntry) return;
@@ -5152,6 +5188,9 @@
                 team:       meta.team, opp: meta.opp, time: meta.time,
                 commenceMs: meta.startMs || 0,
                 market:     meta.market, stat: meta.stat,
+                espnSlug:   moreEntry.espnSlug || null,
+                league:     moreEntry.league || null,
+                gameDate:   moreEntry.gameDate || null,
                 line:       moreEntry.threshold,
                 type:       'ou',
                 moreOdds:   moreEntry.americanOdds, lessOdds: lessEntry.americanOdds,
@@ -5167,14 +5206,15 @@
         var sport = parlayActiveSport;
         // NFL is team-only — no player props, go straight to lines
         if (sport === 'nfl') { parlayRenderGrid(); return; }
-        var cache = sport === 'wnba' ? PARLAY_PLAYERS_WNBA : PARLAY_PLAYERS;
+        var cache = sport === 'soccer' ? PARLAY_PLAYERS_SOCCER : sport === 'wnba' ? PARLAY_PLAYERS_WNBA : PARLAY_PLAYERS;
         var _preloadSport = sport;
 
-        // Check if RS IDs already in memory (persists for page session)
-        var hasRsIds = Object.keys(parlayRsIdCache).some(function(k) { return k.startsWith(_preloadSport + ':'); });
+        // Soccer has no RS IDs — skip RS ID lookup entirely
+        var hasRsIds = sport === 'soccer' || Object.keys(parlayRsIdCache).some(function(k) { return k.startsWith(_preloadSport + ':'); });
 
         // Helper: fetch and cache RS IDs
         function fetchRsIds() {
+            if (_preloadSport === 'soccer') return Promise.resolve();
             return fetch('/api/parlays/player-rs-ids?sport=' + _preloadSport, { credentials: 'include' })
                 .then(function(r) { return r.json(); })
                 .then(function(d) {
@@ -5203,7 +5243,7 @@
         parlayPlayersLoading = true;
         var grid = document.getElementById('parlay-player-grid');
         if (grid) grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">Loading props…</div>';
-        var url = sport === 'wnba' ? '/api/dk/wnba-props' : '/api/dk/mlb-props';
+        var url = sport === 'soccer' ? '/api/dk/soccer-props' : sport === 'wnba' ? '/api/dk/wnba-props' : '/api/dk/mlb-props';
 
         Promise.all([
             fetch(url).then(function(r) { return r.json(); }),
@@ -5216,8 +5256,9 @@
                     if (grid) grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">No props available today</div>';
                     return;
                 }
-                var players = buildParlayPlayersFromDk(d.players, sport === 'wnba' ? 100000 : 1);
-                if (sport === 'wnba') PARLAY_PLAYERS_WNBA = players;
+                var players = buildParlayPlayersFromDk(d.players, sport === 'soccer' ? 200000 : sport === 'wnba' ? 100000 : 1);
+                if (sport === 'soccer') PARLAY_PLAYERS_SOCCER = players;
+                else if (sport === 'wnba') PARLAY_PLAYERS_WNBA = players;
                 else {
                     var _teamPicks = PARLAY_PLAYERS.filter(function(p) { return p.isTeamMarket; });
                     PARLAY_PLAYERS = _teamPicks.concat(players);
@@ -5470,6 +5511,7 @@
                PARLAY_PLAYERS_WNBA.find(function(x) { return x.id === n; }) ||
                PARLAY_PLAYERS_NFL.find(function(x) { return x.id === n; }) ||
                PARLAY_PLAYERS_UFC.find(function(x) { return x.id === n; }) ||
+               PARLAY_PLAYERS_SOCCER.find(function(x) { return x.id === n; }) ||
                PARLAY_1INN_PLAYERS.find(function(x) { return x.id === n; }) ||
                null;
     }
@@ -5536,7 +5578,44 @@
                     }
                 }
             }
+            // Method of Victory — ufc_method_ko / ufc_method_sub / ufc_method_dec
+            if (fight.mov) {
+                var movDefs = [
+                    { key:'ko',  label:'KO/TKO' },
+                    { key:'sub', label:'Submission' },
+                    { key:'dec', label:'Decision' },
+                ];
+                [
+                    { side:'away', fighter:fight.away, headshot:awayHeadshot },
+                    { side:'home', fighter:fight.home, headshot:homeHeadshot },
+                ].forEach(function(f) {
+                    var sideOdds = fight.mov[f.side] || {};
+                    movDefs.forEach(function(mi) {
+                        var odds = sideOdds[mi.key];
+                        if (!odds) return;
+                        var pRaw = odds > 0 ? 100/(odds+100) : Math.abs(odds)/(Math.abs(odds)+100);
+                        var pickId = teamPickIdCounter--;
+                        PARLAY_PLAYERS_UFC.push({
+                            id:pickId, isTeamMarket:true,
+                            market:'ufc_method_'+mi.key,
+                            stat:mi.label,
+                            name:f.fighter+' by '+mi.label,
+                            team:f.fighter, opp:null, oppOdds:null,
+                            precompProb:pRaw,
+                            moreOdds:odds, lessOdds:null,
+                            headshot:f.headshot, fightId:fight.id, eventId:fight.id,
+                            time:fmtTime, startMs:fight.cm ? new Date(fight.cm).getTime() : 0,
+                            initials:(f.fighter.split(' ').map(function(w){return w[0]||'';}).join('').toUpperCase().slice(0,2)),
+                            isFighter:true,
+                        });
+                    });
+                });
+            }
         });
+    }
+
+    function _ufcGroupKey(label) {
+        return (label || 'ufc').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
     }
 
     function loadParlayUfc() {
@@ -5548,23 +5627,82 @@
             grid.style.cssText = 'display:flex;flex-direction:column;overflow-y:auto;gap:8px;padding:12px;box-sizing:border-box;flex:1;min-height:0';
             grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">Loading fights…</div>';
         }
-        fetch('/api/fd/ufc', { credentials: 'same-origin' })
-            .then(function(r) { return r.json(); })
-            .then(function(d) {
-                parlayGamesUfcLoading = false;
-                if (!d.ok || !d.fights || !Object.keys(d.fights).length) {
-                    if (grid) grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">No UFC fights available</div>';
-                    return;
-                }
-                PARLAY_GAMES_UFC = Object.entries(d.fights).map(function(e) { return Object.assign({ gameKey:e[0] }, e[1]); });
-                PARLAY_GAMES_UFC.sort(function(a,b){ return (a.cm?new Date(a.cm).getTime():9e12)-(b.cm?new Date(b.cm).getTime():9e12); });
-                buildUfcPicks();
-                parlayRenderUfcCards();
-            })
-            .catch(function() {
-                parlayGamesUfcLoading = false;
-                if (grid) grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">Failed to load fights — try again</div>';
+        Promise.all([
+            fetch('/api/fd/ufc', { credentials: 'same-origin' }).then(function(r) { return r.json(); }).catch(function() { return { ok: false }; }),
+            fetch('/api/dk/contender-series', { credentials: 'same-origin' }).then(function(r) { return r.json(); }).catch(function() { return { ok: false }; }),
+        ]).then(function(results) {
+            parlayGamesUfcLoading = false;
+            var mainData = results[0], csData = results[1];
+            var allFights = [];
+
+            if (mainData && mainData.ok && mainData.fights) {
+                Object.entries(mainData.fights).forEach(function(e) {
+                    allFights.push(Object.assign({ gameKey: e[0] }, e[1]));
+                });
+            }
+            if (csData && csData.ok && csData.fights) {
+                Object.entries(csData.fights).forEach(function(e) {
+                    var f = Object.assign({ gameKey: e[0] }, e[1]);
+                    if (!f.eventGroup) f.eventGroup = 'Contender Series';
+                    allFights.push(f);
+                });
+            }
+
+            if (!allFights.length) {
+                if (grid) grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">No UFC fights available</div>';
+                return;
+            }
+
+            // Sort chronologically
+            allFights.sort(function(a, b) {
+                return (a.cm ? new Date(a.cm).getTime() : 9e12) - (b.cm ? new Date(b.cm).getTime() : 9e12);
             });
+
+            // Tag each fight with a stable cat key from its eventGroup
+            allFights.forEach(function(f) {
+                f.eventGroup = f.eventGroup || 'UFC';
+                f._catKey = _ufcGroupKey(f.eventGroup);
+            });
+
+            PARLAY_GAMES_UFC = allFights;
+
+            // Build UFC_CATS by walking the already chrono-sorted allFights array.
+            // First appearance of each group key = earliest date = correct tab order.
+            // This naturally interleaves DWCS/Contender Series with UFC events by date.
+            var seenGroups = {};
+            var newCats    = [];
+            allFights.forEach(function(f) {
+                if (!seenGroups[f._catKey]) {
+                    seenGroups[f._catKey] = true;
+                    newCats.push({ key: f._catKey, label: f.eventGroup });
+                }
+            });
+            UFC_CATS = newCats.length ? newCats : [{ key: 'fights', label: 'Fights' }];
+
+            // Update active category if it's still the pre-load placeholder
+            if (parlayActiveSport === 'ufc' && (parlayCategory === 'fights' || !parlayCategory)) {
+                parlayCategory     = UFC_CATS[0].key;
+                parlayPrevCategory = UFC_CATS[0].key;
+            }
+            // Rebuild nav to show event tabs
+            if (parlayActiveSport === 'ufc') {
+                var nav = document.getElementById('parlay-cat-nav');
+                if (nav) nav.innerHTML = parlayBuildNavHtml();
+            }
+
+            buildUfcPicks();
+            // Drop slip picks for fights DK no longer offers (fight started / line pulled)
+            var _validFightIds = {};
+            PARLAY_PLAYERS_UFC.forEach(function(p) { if (p.fightId) _validFightIds[p.fightId] = true; });
+            Object.keys(parlayPicks).forEach(function(k) {
+                var p = findParlayPlayer(k);
+                if (p && p.fightId && !_validFightIds[p.fightId]) delete parlayPicks[k];
+            });
+            parlayRenderUfcCards();
+        }).catch(function() {
+            parlayGamesUfcLoading = false;
+            if (grid) grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">Failed to load fights — try again</div>';
+        });
     }
 
     function parlayRenderUfcCards() {
@@ -5576,16 +5714,26 @@
             return;
         }
         var pickIdx = {};
+        var movPickIdx = {};
         PARLAY_PLAYERS_UFC.forEach(function(p) {
-            var key = p.eventId + '|' + p.market;
-            if (!pickIdx[key]) pickIdx[key] = [];
-            pickIdx[key].push(p);
+            if (p.market && p.market.startsWith('ufc_method_')) {
+                var method = p.market.replace('ufc_method_', '');
+                movPickIdx[p.eventId + '|' + p.team + '|' + method] = p;
+            } else {
+                var key = p.eventId + '|' + p.market;
+                if (!pickIdx[key]) pickIdx[key] = [];
+                pickIdx[key].push(p);
+            }
         });
         var nowMs = Date.now();
         function fighterAvHtml(name, sdid, initials, isPicked) {
             return '';
         }
-        var html = PARLAY_GAMES_UFC.map(function(fight) {
+        var activeFights = PARLAY_GAMES_UFC.filter(function(f) {
+            if (!parlayCategory || parlayCategory === 'fights') return true;
+            return f._catKey === parlayCategory;
+        });
+        var html = activeFights.map(function(fight) {
             if (fight.cm && new Date(fight.cm).getTime() < nowMs) return '';
             var mlPicks  = pickIdx[fight.id + '|ufc_ml']    || [];
             var totPicks = pickIdx[fight.id + '|ufc_total'] || [];
@@ -5633,6 +5781,35 @@
                 h += '<button class="pgc-btn under' + underSel + '" onclick="parlayTogglePick(' + underPick.id + ',\'less\')">Under ' + underPick.line + ' ' + parlayFmtOdds(underPick.moreOdds) + '</button>';
                 h += '</div>';
             }
+            // Method of Victory subsection
+            var movSides = [
+                { fighter: fight.away, sideOdds: (fight.mov || {}).away || {} },
+                { fighter: fight.home, sideOdds: (fight.mov || {}).home || {} },
+            ];
+            var hasMov = movSides.some(function(s) { return s.sideOdds.ko || s.sideOdds.sub || s.sideOdds.dec; });
+            if (hasMov) {
+                h += '<div style="padding:0 12px 10px;display:flex;flex-direction:column;gap:5px">';
+                h += '<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding-top:2px">Method of Victory</span>';
+                movSides.forEach(function(s) {
+                    if (!s.sideOdds.ko && !s.sideOdds.sub && !s.sideOdds.dec) return;
+                    var fLast = s.fighter.split(' ').pop();
+                    h += '<div style="display:flex;align-items:center;gap:4px">';
+                    h += '<span style="font-size:10px;font-weight:600;color:var(--muted2);min-width:44px;flex-shrink:0">' + escHtml(fLast) + '</span>';
+                    [['ko','KO'],['sub','Sub'],['dec','Dec']].forEach(function(ml) {
+                        var method = ml[0], methodLabel = ml[1];
+                        var odds = s.sideOdds[method];
+                        var pick = movPickIdx[fight.id + '|' + s.fighter + '|' + method];
+                        var isSel = pick && parlayPicks[String(pick.id)] ? ' active' : '';
+                        if (!odds || !pick) {
+                            h += '<div style="flex:1"></div>';
+                        } else {
+                            h += '<button class="pgc-btn' + isSel + '" style="flex:1;font-size:10px;padding:5px 2px;min-width:0" onclick="parlayTogglePick(' + pick.id + ',\'more\')">' + escHtml(methodLabel) + ' ' + parlayFmtOdds(odds) + '</button>';
+                        }
+                    });
+                    h += '</div>';
+                });
+                h += '</div>';
+            }
             h += '</div>';
             return h;
         }).filter(Boolean).join('');
@@ -5668,39 +5845,27 @@
                     var pOther = parlayToProb(p.oppOdds);
                     legProb = pOwn / (pOwn + pOther);
                 }
-            } else {
-                if (!p.lessOdds) return acc;
+            } else if (p.lessOdds) {
                 var pMore = parlayToProb(p.moreOdds);
                 var pLess = parlayToProb(p.lessOdds);
                 legProb = dir === 'more' ? pMore / (pMore + pLess) : pLess / (pMore + pLess);
+            } else {
+                // One-sided line (milestone: 1+ HR, etc.) — no less-side; use raw odds prob
+                legProb = parlayToProb(p.moreOdds);
             }
             return acc * legProb;
         }, 1);
     }
 
     function parlayMaxStake() {
-        var n = Object.keys(parlayPicks).length;
-        if (n < 2) return 50000;
-        var LEG_CAPS = [0, 0, 4.5, 9.0, 18.0, 36.0];
-        var legCapMult = LEG_CAPS[n] || 4.5;
-        var trueProb = parlayTrueProb();
-        // When true multiplier exceeds leg cap, leg cap is binding — max stake is where
-        // leg-capped payout hits 10k. Otherwise 10k raw payout cap is the limit.
-        if (0.70 / trueProb > legCapMult) {
-            return Math.ceil(10000 / legCapMult);
-        }
-        return Math.floor(10000 * trueProb / 0.70);
+        if (Object.keys(parlayPicks).length < 2) return 50000;
+        return Math.floor(10000 * parlayTrueProb() / 0.70);
     }
 
     function parlayCalcPayout(s) {
-        var n = Object.keys(parlayPicks).length;
-        if (n < 2) return null;
+        if (Object.keys(parlayPicks).length < 2) return null;
         var raw = Math.min(Math.floor(s * 0.70 / parlayTrueProb()), 10000);
-        var rounded = Math.floor((raw + 2) / 10) * 10;
-        // Per-leg-count cap: 2→4.5x, 3→9x, 4→18x, 5→36x
-        var LEG_CAPS = [0, 0, 4.5, 9.0, 18.0, 36.0];
-        var cap = Math.floor((LEG_CAPS[n] || 4.5) * s / 10) * 10;
-        return Math.min(rounded, cap);
+        return Math.floor((raw + 2) / 10) * 10;
     }
 
     function parlayAvatarHtml(p, size, fsize) {
@@ -5763,6 +5928,7 @@
     var parlayRsSearchFlight = {}; // sport:playerName → true (in-flight)
 
     function parlayBgSearchPlayer(playerName, sport) {
+        if (sport === 'soccer') return; // RS has no soccer player market lookup
         var k = sport + ':' + playerName;
         if (parlayRsIdCache[k] || parlayRsSearchFlight[k]) return;
         parlayRsSearchFlight[k] = true;
@@ -6137,7 +6303,7 @@
 
         // Reset all teams-tab inline overrides — restores CSS display:grid etc.
         grid.style.cssText = '';
-        var playerPool = parlayActiveSport === 'wnba' ? PARLAY_PLAYERS_WNBA : parlayActiveSport === 'nfl' ? PARLAY_PLAYERS_NFL : PARLAY_PLAYERS;
+        var playerPool = parlayActiveSport === 'soccer' ? PARLAY_PLAYERS_SOCCER : parlayActiveSport === 'wnba' ? PARLAY_PLAYERS_WNBA : parlayActiveSport === 'nfl' ? PARLAY_PLAYERS_NFL : PARLAY_PLAYERS;
         if (!playerPool.filter(function(p){return !p.isTeamMarket;}).length && !parlayPlayersLoading) { loadParlayPlayers(); return; }
         if (parlayPlayersLoading) {
             grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">Loading props…</div>';
@@ -6172,12 +6338,19 @@
         grid.innerHTML = players.map(function(p) {
             var sel     = parlayPicks[p.id];
             var isMilestone = p.type === 'milestone';
-            var cls     = sel ? (isMilestone || sel === 'more' ? ' sel-more' : ' sel-less') : '';
+            var isYN        = p.type === 'yn';
+            var cls     = sel ? (isMilestone || isYN || sel === 'more' ? ' sel-more' : ' sel-less') : '';
             var matchup = escHtml(p.team) + ' vs ' + escHtml(p.opp) + ' · ' + escHtml(parlayFmtTime(p.commenceMs || p.startMs || 0, p.time));
             var btns;
             if (isMilestone) {
+                var _milUnit = (p.market === 'home_runs') ? ' HR' : '';
                 btns = '<button class="parlay-pick-btn p-more milestone-btn' + (sel ? ' active' : '') + '" onclick="parlayTogglePick(' + p.id + ',\'more\')">' +
-                    '<span class="parlay-btn-label">' + escHtml(p.milestoneLabel) + ' HR</span>' +
+                    '<span class="parlay-btn-label">' + escHtml(p.milestoneLabel) + escHtml(_milUnit) + '</span>' +
+                    '<span class="parlay-btn-odds">' + parlayFmtOdds(p.moreOdds) + '</span>' +
+                '</button>';
+            } else if (isYN) {
+                btns = '<button class="parlay-pick-btn p-more milestone-btn' + (sel ? ' active' : '') + '" onclick="parlayTogglePick(' + p.id + ',\'more\')">' +
+                    '<span class="parlay-btn-label">Yes</span>' +
                     '<span class="parlay-btn-odds">' + parlayFmtOdds(p.moreOdds) + '</span>' +
                 '</button>';
             } else {
@@ -6194,7 +6367,8 @@
             var avatarStyle = 'background:linear-gradient(135deg,' + p.color + ',' + p.color + 'aa)';
             var topStyle = 'background:linear-gradient(160deg,' + p.color + '55,' + p.color + '22)';
             var headshotHtml = p.headshot
-                ? '<img class="parlay-card-headshot" src="' + escHtml(p.headshot) + '" alt="" onerror="parlayHeadshotFail(this)">'
+                ? '<img class="parlay-card-headshot" src="' + escHtml(p.headshot) + '" alt="" onerror="parlayHeadshotFail(this)">' +
+                  '<div class="parlay-card-avatar" style="' + avatarStyle + ';display:none">' + escHtml(p.initials) + '</div>'
                 : '<div class="parlay-card-avatar" style="' + avatarStyle + '">' + escHtml(p.initials) + '</div>';
             var rsPlayerId = parlayRsIdCache[parlayActiveSport + ':' + p.name];
             var rsPlayerIdNum = rsPlayerId ? parseInt(rsPlayerId, 10) : 0;
@@ -6204,7 +6378,9 @@
                 : '';
             var statNumHtml = isMilestone
                 ? escHtml(p.milestoneLabel) + (p.seasonHR != null ? '<span style="font-size:11px;font-weight:600;color:var(--muted);margin-left:4px">HR: ' + escHtml(String(p.seasonHR)) + '</span>' : '')
-                : escHtml(String(p.line));
+                : isYN
+                    ? escHtml(p.stat)
+                    : escHtml(String(p.line));
             return '<div class="parlay-card' + cls + '">' +
                 '<div class="parlay-card-top" style="' + topStyle + '">' +
                     '<div class="parlay-team-badge">' + escHtml(p.team) + '</div>' +
@@ -6235,14 +6411,15 @@
     function parlayBuildNavHtml() {
         var isAdmin = currentUser && currentUser.is_admin;
         var sportTog = '<div class="parlay-sport-tog">' +
-            '<button class="parlay-sport-btn' + (parlayActiveSport === 'mlb'  ? ' active' : '') + '" onclick="setParlayActiveSport(\'mlb\')">MLB</button>' +
-            '<button class="parlay-sport-btn' + (parlayActiveSport === 'wnba' ? ' active' : '') + '" onclick="setParlayActiveSport(\'wnba\')">WNBA</button>' +
-            '<button class="parlay-sport-btn' + (parlayActiveSport === 'nfl'  ? ' active' : '') + '" onclick="setParlayActiveSport(\'nfl\')">NFL</button>' +
-            (isAdmin ? '<button class="parlay-sport-btn' + (parlayActiveSport === 'ufc'  ? ' active' : '') + '" onclick="setParlayActiveSport(\'ufc\')">UFC</button>' : '') +
+            '<button class="parlay-sport-btn' + (parlayActiveSport === 'mlb'    ? ' active' : '') + '" onclick="setParlayActiveSport(\'mlb\')">MLB</button>' +
+            '<button class="parlay-sport-btn' + (parlayActiveSport === 'wnba'   ? ' active' : '') + '" onclick="setParlayActiveSport(\'wnba\')">WNBA</button>' +
+            '<button class="parlay-sport-btn' + (parlayActiveSport === 'nfl'    ? ' active' : '') + '" onclick="setParlayActiveSport(\'nfl\')">NFL</button>' +
+            '<button class="parlay-sport-btn' + (parlayActiveSport === 'ufc'    ? ' active' : '') + '" onclick="setParlayActiveSport(\'ufc\')">UFC</button>' +
+            (isAdmin ? '<button class="parlay-sport-btn' + (parlayActiveSport === 'soccer' ? ' active' : '') + '" onclick="setParlayActiveSport(\'soccer\')">FC</button>' : '') +
         '</div>';
 
         if (parlayActiveSport !== 'mlb') {
-            var cats = parlayActiveSport === 'wnba' ? WNBA_CATS : parlayActiveSport === 'nfl' ? NFL_CATS : UFC_CATS;
+            var cats = parlayActiveSport === 'wnba' ? WNBA_CATS : parlayActiveSport === 'nfl' ? NFL_CATS : parlayActiveSport === 'ufc' ? UFC_CATS : parlayActiveSport === 'soccer' ? SOCCER_CATS : UFC_CATS;
             cats = cats.filter(function(c) { return !c.adminOnly || isAdmin; });
             var searchTab = parlaySearchQuery
                 ? '<button class="parlay-cat-btn' + (parlayCategory === 'search' ? ' active' : '') + '" data-cat="search" onclick="parlaySetCategory(\'search\')">Player</button>'
@@ -6289,7 +6466,7 @@
             parlayCategory     = 'hits';
             parlayPrevCategory = 'hits';
         } else {
-            var cats = sport === 'wnba' ? WNBA_CATS : sport === 'nfl' ? NFL_CATS : sport === 'ufc' ? UFC_CATS : PARLAY_CATS;
+            var cats = sport === 'wnba' ? WNBA_CATS : sport === 'nfl' ? NFL_CATS : sport === 'ufc' ? UFC_CATS : sport === 'soccer' ? SOCCER_CATS : PARLAY_CATS;
             var isAdmin = currentUser && currentUser.is_admin;
             cats = cats.filter(function(c) { return !c.adminOnly || isAdmin; });
             parlayCategory     = cats[0].key;
@@ -6844,6 +7021,8 @@
                                 var rebIdx = names.indexOf('REB');
                                 var astIdx = names.indexOf('AST');
                                 var fg3Idx = names.indexOf('3PT');
+                                var stlIdx = names.indexOf('STL') >= 0 ? names.indexOf('STL') : names.indexOf('STEALS');
+                                var blkIdx = names.indexOf('BLK') >= 0 ? names.indexOf('BLK') : names.indexOf('BLOCKS');
                                 (sb.athletes || []).forEach(function(a) {
                                     var name = normSlipName((a.athlete && a.athlete.displayName) || '');
                                     if (!name) return;
@@ -6855,7 +7034,8 @@
                                         return parseInt(String(v).split('-')[0], 10) || 0;
                                     }
                                     var pts = getStat(ptsIdx), reb = getStat(rebIdx), ast = getStat(astIdx), fg3m = getStat(fg3Idx);
-                                    playerStats[name] = { pts: pts, reb: reb, ast: ast, fg3m: fg3m, pra: pts+reb+ast, pa: pts+ast, pr: pts+reb, ra: reb+ast };
+                                    var stl = getStat(stlIdx), blk = getStat(blkIdx);
+                                    playerStats[name] = { pts: pts, reb: reb, ast: ast, fg3m: fg3m, stl: stl, blk: blk, pra: pts+reb+ast, pa: pts+ast, pr: pts+reb, ra: reb+ast };
                                     playerEvtId[name] = res.eventId;
                                     if (blkAbbr) playerTeamAbbr[name] = blkAbbr;
                                 });
@@ -7370,7 +7550,8 @@
             (s.legs || []).forEach(function(leg, li) {
                 if ((leg.market_type || '').startsWith('team_')) return;
                 var livePlayer = PARLAY_PLAYERS.find(function(pp) { return pp.name === leg.player_name; }) ||
-                                 PARLAY_PLAYERS_WNBA.find(function(pp) { return pp.name === leg.player_name; });
+                                 PARLAY_PLAYERS_WNBA.find(function(pp) { return pp.name === leg.player_name; }) ||
+                                 PARLAY_PLAYERS_SOCCER.find(function(pp) { return pp.name === leg.player_name; });
                 if (leg.headshot_url || (livePlayer && livePlayer.headshot)) return;
                 loadSlipHeadshotAsync('slipav-' + s.id + '-' + li, leg.player_name);
             });
@@ -7439,6 +7620,12 @@
                     var pick = leg.label || (leg.threshold != null ? String(leg.threshold) : '');
                     line = arrow + ' ' + leg.player_name + ' (1IN)' + (pick ? ' · ' + pick : '');
                 }
+            } else if (leg.market_type === 'ufc_ml') {
+                line = arrow + ' ' + leg.player_name + ' Win';
+            } else if (leg.market_type === 'ufc_total') {
+                line = arrow + ' ' + leg.player_name;
+            } else if (leg.market_type && leg.market_type.startsWith('ufc_method_')) {
+                line = arrow + ' ' + leg.player_name;
             } else {
                 line = arrow + ' ' + leg.player_name + ' ' + dir + ' ' + leg.threshold + ' ' + mkt;
             }
@@ -7525,10 +7712,11 @@
 
         // Fall back to live player pool lookup (only works if Build tab loaded this session)
         var pools = [
-            { players: PARLAY_PLAYERS,      games: PARLAY_GAMES,      sport: 'mlb'  },
-            { players: PARLAY_1INN_PLAYERS, games: PARLAY_1INN_GAMES, sport: 'mlb'  },
-            { players: PARLAY_PLAYERS_WNBA, games: PARLAY_GAMES_WNBA, sport: 'wnba' },
-            { players: PARLAY_PLAYERS_NFL,  games: PARLAY_GAMES_NFL,  sport: 'nfl'  },
+            { players: PARLAY_PLAYERS,        games: PARLAY_GAMES,      sport: 'mlb'    },
+            { players: PARLAY_1INN_PLAYERS,   games: PARLAY_1INN_GAMES, sport: 'mlb'    },
+            { players: PARLAY_PLAYERS_WNBA,   games: PARLAY_GAMES_WNBA, sport: 'wnba'   },
+            { players: PARLAY_PLAYERS_NFL,    games: PARLAY_GAMES_NFL,  sport: 'nfl'    },
+            { players: PARLAY_PLAYERS_SOCCER, games: [],                sport: 'soccer' },
         ];
         for (var pi = 0; pi < pools.length; pi++) {
             var pool   = pools[pi];
@@ -7685,7 +7873,8 @@
             } else {
                 // Player prop: prefer live DK headshot over stored URL
                 var livePlayer = PARLAY_PLAYERS.find(function(pp) { return pp.name === leg.player_name; }) ||
-                                 PARLAY_PLAYERS_WNBA.find(function(pp) { return pp.name === leg.player_name; });
+                                 PARLAY_PLAYERS_WNBA.find(function(pp) { return pp.name === leg.player_name; }) ||
+                                 PARLAY_PLAYERS_SOCCER.find(function(pp) { return pp.name === leg.player_name; });
                 var headshotSrc = (livePlayer && livePlayer.headshot) || leg.headshot_url || null;
                 var avInnerId = 'slipav-' + s.id + '-' + li;
                 var fallbackHtml = '<span>' + escHtml(initials) + '</span>';
@@ -7705,6 +7894,13 @@
                     if (_pfx) _lbl = _pfx + ' · ' + _lbl;
                 }
                 statLine = escHtml(_lbl + resultVal);
+            } else if (mkt === 'ufc_ml') {
+                statLine = escHtml('Fighter Win' + resultVal);
+            } else if (mkt === 'ufc_total') {
+                statLine = escHtml((dir === 'more' ? 'Over ' : 'Under ') + thresh + ' Rounds' + resultVal);
+            } else if (mkt.startsWith('ufc_method_')) {
+                var _movLabel = {'ufc_method_ko':'KO/TKO','ufc_method_sub':'Submission','ufc_method_dec':'Decision'}[mkt] || mkt.replace('ufc_method_','');
+                statLine = escHtml('by ' + _movLabel + resultVal);
             } else {
                 statLine = escHtml((dir === 'more' ? 'Over ' : 'Under ') + thresh + ' ' + (MKT_SHORT[mkt] || mkt) + resultVal);
             }
@@ -7745,10 +7941,10 @@
             var isLiveParlay = s.status === 'active' || s.status === 'lost';
             if (isTeamMkt && isLiveParlay && leg.status === 'pending') {
                 progHtml = '<div class="pslip-team-bs-wrap" id="prog-' + s.id + '-' + li + '"></div>';
-            } else if (!isTeamMkt && leg.status === 'pending' && isLiveParlay) {
+            } else if (!isTeamMkt && !mkt.startsWith('ufc_') && leg.status === 'pending' && isLiveParlay) {
                 // Pending legs always get a live-updating bar — no date check (avoids UTC/ET midnight issues)
                 progHtml = '<div class="pslip-prog-wrap" id="prog-' + s.id + '-' + li + '">' + initBar + '</div>';
-            } else if (!isTeamMkt && (leg.status === 'won' || leg.status === 'lost')) {
+            } else if (!isTeamMkt && !mkt.startsWith('ufc_') && (leg.status === 'won' || leg.status === 'lost')) {
                 // Settled legs — always give an ID so fetchSettledLegStats can update in-place
                 var rv  = leg.result_value != null ? parseFloat(leg.result_value) : (settledLegStats[s.id + '-' + li] != null ? settledLegStats[s.id + '-' + li] : null);
                 var thr = parseFloat(thresh) || 1;
@@ -7972,7 +8168,7 @@
         var body = document.getElementById('parlay-slip-body');
         if (body) {
             if (count === 0) {
-                body.innerHTML = '<div class="parlay-slip-empty"><div style="font-size:30px;opacity:.4">' + (parlayActiveSport === 'wnba' ? '🏀' : parlayActiveSport === 'nfl' ? '🏈' : '⚾') + '</div><div style="line-height:1.5">Pick More or Less on any player to build your slip</div></div>';
+                body.innerHTML = '<div class="parlay-slip-empty"><div style="font-size:30px;opacity:.4">' + (parlayActiveSport === 'wnba' ? '🏀' : parlayActiveSport === 'nfl' ? '🏈' : parlayActiveSport === 'soccer' ? '⚽' : '⚾') + '</div><div style="line-height:1.5">Pick More or Less on any player to build your slip</div></div>';
             } else {
                 body.innerHTML = ids.map(function(id) {
                     var p        = findParlayPlayer(id);
@@ -7990,10 +8186,23 @@
                             var rlS = p.line > 0 ? '+' : '';
                             lineStr  = escHtml(p.stat || 'Run Line') + ' ' + rlS + p.line;
                             dirLabel = escHtml(p.team) + ' Cover';
+                        } else if (p.market === 'ufc_ml') {
+                            lineStr  = 'Fighter ML';
+                            dirLabel = escHtml(p.team) + ' Win';
+                        } else if (p.market === 'ufc_total') {
+                            lineStr  = 'Rounds O/U ' + p.line;
+                            dirLabel = p.initials === 'O' ? 'Over' : 'Under';
+                        } else if (p.market && p.market.startsWith('ufc_method_')) {
+                            lineStr  = 'Method of Victory';
+                            dirLabel = escHtml(p.stat || '');
                         } else {
                             lineStr  = 'Total ' + p.line;
                             dirLabel = p.initials === 'O' ? 'Over' : 'Under';
                         }
+                    } else if (p.type === 'yn') {
+                        dirLabel = 'Yes';
+                        matchup  = escHtml(p.team) + ' vs ' + escHtml(p.opp);
+                        lineStr  = escHtml(p.stat);
                     } else {
                         dirLabel = dir === 'more' ? '▲ More' : '▼ Less';
                         matchup  = escHtml(p.team) + ' vs ' + escHtml(p.opp);
@@ -8140,6 +8349,44 @@
                         showConfirm('This game has already started — picks are locked.', function() {});
                         return;
                     }
+                    // MLB: block highly correlated same-player props before the generic name check
+                    if (newP.name && !newP.isTeamMarket && !newP.fightId && newP.market) {
+                        var _mlbCorrPairs = [
+                            ['pitcher_ks',  'outs_ou',      'Pitcher Ks are a subset of outs — these picks are correlated.'],
+                            ['hwer',        'er_allowed',   'HWER already includes earned runs — these picks are correlated.'],
+                            ['hwer',        'hits_allowed', 'HWER already includes hits allowed — these picks are correlated.'],
+                            ['hwer',        'bb_allowed',   'HWER already includes walks allowed — these picks are correlated.'],
+                            ['hits',        'total_bases',  'Total bases are driven by hits — these picks are correlated.'],
+                            ['hits',        'singles',      'Singles are a subset of hits — these picks are correlated.'],
+                            ['hits',        'doubles',      'Doubles are a subset of hits — these picks are correlated.'],
+                        ];
+                        var _mlbCorrMsg = null;
+                        for (var _mci = 0; _mci < _mlbCorrPairs.length && !_mlbCorrMsg; _mci++) {
+                            var _mp = _mlbCorrPairs[_mci];
+                            var _mlbHit = Object.keys(parlayPicks).some(function(k) {
+                                var ex = findParlayPlayer(k);
+                                if (!ex || ex.isTeamMarket || ex.name !== newP.name) return false;
+                                return (newP.market === _mp[0] && ex.market === _mp[1]) ||
+                                       (newP.market === _mp[1] && ex.market === _mp[0]);
+                            });
+                            if (_mlbHit) _mlbCorrMsg = _mp[2];
+                        }
+                        if (_mlbCorrMsg) { showConfirm(_mlbCorrMsg, function() {}); return; }
+                    }
+                    // Soccer: block Goalscorer + Shots on Target for same player (correlated)
+                    if (newP.name && !newP.isTeamMarket && !newP.fightId &&
+                        (newP.market === 'goalscorer' || newP.market === 'sot')) {
+                        var _soccerCorrHit = Object.keys(parlayPicks).some(function(k) {
+                            var ex = findParlayPlayer(k);
+                            if (!ex || ex.isTeamMarket || ex.name !== newP.name) return false;
+                            return (newP.market === 'goalscorer' && ex.market === 'sot') ||
+                                   (newP.market === 'sot' && ex.market === 'goalscorer');
+                        });
+                        if (_soccerCorrHit) {
+                            showConfirm('Goalscorer and Shots on Target for the same player are correlated — can\'t combine these.', function() {});
+                            return;
+                        }
+                    }
                     // Block same player/team appearing twice
                     var duplicate = Object.keys(parlayPicks).some(function(k) {
                         var existing = findParlayPlayer(k);
@@ -8154,15 +8401,57 @@
                         showConfirm('Can\'t add the same player or pick twice', function() {});
                         return;
                     }
-                    // UFC: block any two picks from the same fight
+                    // UFC: block win-correlated picks (ML + MOV) from same fight; also block Under+finish and Over+decision
                     if (newP.fightId) {
-                        var _ufcConflict = Object.keys(parlayPicks).some(function(k) {
-                            var ex = findParlayPlayer(k);
-                            return ex && ex.fightId === newP.fightId;
-                        });
-                        if (_ufcConflict) {
-                            showConfirm('Only one pick per fight allowed.', function() {});
-                            return;
+                        var _isWinMkt = function(p) { return p.market === 'ufc_ml' || (p.market && p.market.startsWith('ufc_method_')); };
+                        var _isTotalMkt = function(p) { return p.market === 'ufc_total'; };
+                        if (_isWinMkt(newP)) {
+                            var _ufcWinConflict = Object.keys(parlayPicks).some(function(k) {
+                                var ex = findParlayPlayer(k);
+                                return ex && ex.fightId === newP.fightId && _isWinMkt(ex);
+                            });
+                            if (_ufcWinConflict) {
+                                showConfirm('Only one win-based pick per fight allowed.', function() {});
+                                return;
+                            }
+                            // Block method+rounds correlation: KO/Sub with Under, Decision with Over
+                            var _method = newP.market;
+                            var _finishMethod = _method === 'ufc_method_ko' || _method === 'ufc_method_sub';
+                            var _decMethod    = _method === 'ufc_method_dec';
+                            var _corrTotal = Object.keys(parlayPicks).some(function(k) {
+                                var ex = findParlayPlayer(k);
+                                if (!ex || ex.fightId !== newP.fightId || !_isTotalMkt(ex)) return false;
+                                if (_finishMethod && ex.initials === 'U') return true;
+                                if (_decMethod    && ex.initials === 'O') return true;
+                                return false;
+                            });
+                            if (_corrTotal) {
+                                showConfirm('This combination is highly correlated and not allowed (finish + Under, or Decision + Over).', function() {});
+                                return;
+                            }
+                        }
+                        if (_isTotalMkt(newP)) {
+                            var _ufcTotalConflict = Object.keys(parlayPicks).some(function(k) {
+                                var ex = findParlayPlayer(k);
+                                return ex && ex.fightId === newP.fightId && _isTotalMkt(ex);
+                            });
+                            if (_ufcTotalConflict) {
+                                showConfirm('Can\'t pick both Over and Under on the same fight.', function() {});
+                                return;
+                            }
+                            // Block rounds+method correlation: Under with KO/Sub, Over with Decision
+                            var _dir = newP.initials;
+                            var _corrMethod = Object.keys(parlayPicks).some(function(k) {
+                                var ex = findParlayPlayer(k);
+                                if (!ex || ex.fightId !== newP.fightId || !_isWinMkt(ex)) return false;
+                                if (_dir === 'U' && (ex.market === 'ufc_method_ko' || ex.market === 'ufc_method_sub')) return true;
+                                if (_dir === 'O' && ex.market === 'ufc_method_dec') return true;
+                                return false;
+                            });
+                            if (_corrMethod) {
+                                showConfirm('This combination is highly correlated and not allowed (finish + Under, or Decision + Over).', function() {});
+                                return;
+                            }
                         }
                     }
                     // 1inn same-half block: use matchup (awayShort@homeShort) as game key since
@@ -8228,6 +8517,37 @@
                                 showConfirm('Cannot combine 1st inning ML with a correlated same-team prop — these picks are nearly identical bets.', function() {});
                                 return;
                             }
+                        }
+                    }
+                    // 1inn_ml (winner) + 1inn_run_yn:No for OPPONENT same game: opponent not scoring makes winning the inning easier — correlated
+                    if ((newP.market === '1inn_ml' || (newP.market === '1inn_run_yn' && newP.idir === 'no')) &&
+                        newP.awayShort && newP.homeShort && newP.team) {
+                        var newMtchupOpp = newP.awayShort + '@' + newP.homeShort;
+                        var innOppConflict = Object.keys(parlayPicks).some(function(k) {
+                            var ex = findParlayPlayer(k);
+                            if (!ex || !ex.market) return false;
+                            var exMtchup = ex.awayShort && ex.homeShort ? ex.awayShort + '@' + ex.homeShort : null;
+                            if (exMtchup !== newMtchupOpp || !ex.team || ex.team === newP.team) return false;
+                            if (newP.market === '1inn_ml' && ex.market === '1inn_run_yn' && ex.idir === 'no') return true;
+                            if (newP.market === '1inn_run_yn' && newP.idir === 'no' && ex.market === '1inn_ml') return true;
+                            if (newP.market === '1inn_ml' && ex.market === '1inn_runs_exact' && ex.idir === '0') return true;
+                            if (newP.market === '1inn_runs_exact' && newP.idir === '0' && ex.market === '1inn_ml') return true;
+                            return false;
+                        });
+                        if (innOppConflict) {
+                            showConfirm('Cannot combine 1st inning ML winner with the opponent\'s "Does Not Score" — if the opponent scores 0 it\'s much easier to win the inning. These picks are correlated.', function() {});
+                            return;
+                        }
+                    }
+                    // HR milestone: block same player 1+ and 2+ in same parlay (2+ subsumes 1+, leg is redundant)
+                    if (newP.market === 'home_runs' && newP.name && newP.eventId) {
+                        var hrSamePlayer = Object.keys(parlayPicks).some(function(k) {
+                            var ex = findParlayPlayer(k);
+                            return ex && ex.market === 'home_runs' && ex.name === newP.name && ex.eventId === newP.eventId;
+                        });
+                        if (hrSamePlayer) {
+                            showConfirm('Can\'t combine the same player\'s 1+ and 2+ HR — 2+ already covers 1+, so the extra leg adds no value.', function() {});
+                            return;
                         }
                     }
                     // Correlation check: player prop + team ML/RL from same game
@@ -8326,10 +8646,13 @@
                 var pOwnT   = p.moreOdds > 0 ? 100/(p.moreOdds+100) : Math.abs(p.moreOdds)/(Math.abs(p.moreOdds)+100);
                 var pOtherT = p.oppOdds  > 0 ? 100/(p.oppOdds+100)  : Math.abs(p.oppOdds)/(Math.abs(p.oppOdds)+100);
                 prob = pOwnT / (pOwnT + pOtherT);
-            } else {
+            } else if (p.lessOdds) {
                 var pMoreP = p.moreOdds > 0 ? 100/(p.moreOdds+100) : Math.abs(p.moreOdds)/(Math.abs(p.moreOdds)+100);
                 var pLessP = p.lessOdds > 0 ? 100/(p.lessOdds+100) : Math.abs(p.lessOdds)/(Math.abs(p.lessOdds)+100);
                 prob = dir === 'more' ? pMoreP/(pMoreP+pLessP) : pLessP/(pMoreP+pLessP);
+            } else {
+                // One-sided line (milestone: 1+ HR, etc.) — use raw American odds prob
+                prob = p.moreOdds > 0 ? 100/(p.moreOdds+100) : Math.abs(p.moreOdds)/(Math.abs(p.moreOdds)+100);
             }
 
             // Stored label (shown in saved slip view)
@@ -8348,6 +8671,8 @@
                 }
             } else if (p.type === 'milestone') {
                 lbl = (p.milestoneLabel || '') + ' ' + (p.stat || 'HR') + ' (' + (odds > 0 ? '+' : '') + odds + ')';
+            } else if (p.type === 'yn') {
+                lbl = escHtml(p.stat) + ' Yes (' + (odds > 0 ? '+' : '') + odds + ')';
             } else {
                 lbl = (dir === 'more' ? '▲ More ' : '▼ Less ') + p.line;
             }
@@ -8373,7 +8698,7 @@
                 americanOdds: odds,
                 impliedProb:  prob,
                 label:        lbl,
-                sport:        parlayActiveSport,
+                sport:        parlayActiveSport === 'soccer' ? ('soccer_' + (p.espnSlug || '')) : parlayActiveSport,
                 gameDate:     (function(ms){ return ms ? new Date(ms).toLocaleDateString('en-CA', { timeZone: 'America/New_York' }) : new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' }); })(p.commenceMs || p.startMs || 0),
                 eventName:    _gameKey,
                 selectionId:  p.isTeamMarket ? (p.selId || String(p.id)) : (dir === 'more' ? p.moreSelId : p.lessSelId),
