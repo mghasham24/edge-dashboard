@@ -10,7 +10,7 @@ import { ok, err }       from '../../_lib/response.js';
 const RS_DEVICE_UUID = '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e';
 const EDGEBOT_USER   = 'V3yGgkkJ';
 
-// All sport/season combos to scan for edgebot's cards
+// All sport/season combos to scan for deposit account's cards
 const CARD_SOURCES = [
   { sport: 'mlb', season: 2025 },
 ];

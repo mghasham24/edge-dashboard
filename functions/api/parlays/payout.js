@@ -19,10 +19,10 @@ const CAPSOLVER_SITEKEY = '0x4AAAAAADHHMQ4l_2uyXqiu';
 // Sports/seasons tried in order when searching for a winner's unowned card.
 // Matches the full CARD_SPORTS list in card-reconcile.js so no category is missed.
 const CARD_TARGETS = [
+  ['mlb', '2025', 'play'],
   ['mlb', '2026', 'play'],
   ['nba', '2026', 'play'],
   ['nhl', '2026', 'play'],
-  ['mlb', '2025', 'play'],
   ['nba', '2025', 'play'],
   ['nhl', '2025', 'play'],
   ['mlb', '2024', 'play'],
@@ -85,13 +85,17 @@ async function solveTurnstile(capsolverKey) {
 }
 
 // Returns { candidates, debugLog }.
-// candidates: up to `limit` unowned card IDs, cheapest first.
+// candidates: up to PER_CAT fresh card IDs per sport/season (not in skippedIds), capped at MAX_TOTAL.
 // debugLog: per-category result for debugging.
-async function findUnownedCards(rsUserId, authInfo, sessionToken, limit = 5) {
+const CARDS_PER_CAT = 5;
+const CARDS_MAX     = 25;
+const CARDS_FETCH   = 40; // fetch this many per category so we have headroom after skipping
+
+async function findUnownedCards(rsUserId, authInfo, sessionToken, skippedIds = new Set()) {
   const candidates = [];
   const debugLog   = [];
   for (const [sport, season, entity] of CARD_TARGETS) {
-    if (candidates.length >= limit) break;
+    if (candidates.length >= CARDS_MAX) break;
     const cat = `${sport}/${season}`;
     try {
       const url =
@@ -110,12 +114,16 @@ async function findUnownedCards(rsUserId, authInfo, sessionToken, limit = 5) {
       try { data = JSON.parse(rawText); } catch { debugLog.push({ cat, status: res.status, parseErr: true, body: rawText.slice(0, 200) }); continue; }
       const cards = Array.isArray(data) ? data : (data.cards || data.items || []);
       const before = candidates.length;
-      for (const card of cards) {
+      let added = 0;
+      for (const card of cards.slice(0, CARDS_FETCH)) {
         const id = card.id ?? card.cardId ?? null;
-        if (id) candidates.push(id);
-        if (candidates.length >= limit) break;
+        if (!id || skippedIds.has(id)) continue; // skip already-tried "listed" cards
+        candidates.push(id);
+        added++;
+        if (added >= CARDS_PER_CAT) break;
+        if (candidates.length >= CARDS_MAX) break;
       }
-      debugLog.push({ cat, status: res.status, total: cards.length, added: candidates.length - before, topKeys: Object.keys(Array.isArray(data) ? (data[0] || {}) : data).slice(0, 8) });
+      debugLog.push({ cat, status: res.status, total: cards.length, added, skippedTotal: skippedIds.size });
     } catch (e) {
       debugLog.push({ cat, err: e.message });
       continue;
@@ -157,6 +165,67 @@ export async function onRequestPost({ request, env }) {
   if (!env.CRON_SECRET || url.searchParams.get('_cron_key') !== env.CRON_SECRET)
     return err('Unauthorized', 401);
 
+  const now = Math.floor(Date.now() / 1000);
+
+  // ?debug_cards=RSUID — raw card lookup for a given RS user ID (MLB 2025 first)
+  const debugCardsUser = url.searchParams.get('debug_cards');
+  if (debugCardsUser) {
+    const authInfo     = env.EDGEBOT_AUTH_INFO;
+    const sessionToken = env.EDGEBOT_SESSION_TOKEN;
+    if (!authInfo || !sessionToken) return err('EDGEBOT credentials not configured', 500);
+    const results = [];
+    for (const [sport, season, entity] of CARD_TARGETS.slice(0, 4)) {
+      const cat = `${sport}/${season}`;
+      try {
+        const res = await fetch(
+          `https://web.realapp.com/collectingcards/${sport}/season/${season}/entity/${entity}/user/${debugCardsUser}/cards?filterCustomType=unowned&includeRecommendations=false&rarity=all&view=rating`,
+          { headers: buildHeaders(authInfo, sessionToken), signal: AbortSignal.timeout(8000) }
+        );
+        const text = await res.text();
+        let data; try { data = JSON.parse(text); } catch { data = text; }
+        const cards = Array.isArray(data) ? data : (data.cards || data.items || data.results || []);
+        results.push({ cat, status: res.status, total: cards.length, topKeys: Object.keys(cards[0] || {}).slice(0, 12), top5: cards.slice(0, 5) });
+      } catch(e) {
+        results.push({ cat, error: e.message });
+      }
+    }
+    return ok({ rsUserId: debugCardsUser, results });
+  }
+
+  // ?unpause=1 — clear any active payout ban pause
+  if (url.searchParams.get('unpause') === '1') {
+    await env.DB.prepare(
+      "DELETE FROM odds_cache WHERE cache_key='payout:paused_until'"
+    ).run().catch(() => {});
+    return ok({ unpaused: true });
+  }
+
+  // ?pause_hours=N — manually pause payouts for N hours (default 24)
+  const pauseHoursParam = url.searchParams.get('pause_hours');
+  if (pauseHoursParam !== null) {
+    const hours = Math.max(1, Math.min(72, parseInt(pauseHoursParam, 10) || 24));
+    const resumesAt = now + hours * 3600;
+    await env.DB.prepare(
+      "INSERT OR REPLACE INTO odds_cache (cache_key, data, fetched_at) VALUES ('payout:paused_until', ?, ?)"
+    ).bind(String(resumesAt), now).run();
+    return ok({ paused: true, hours, resumesAt });
+  }
+
+  // Check global payout pause (set automatically on 403 ban or manually)
+  try {
+    const pauseRow = await env.DB.prepare(
+      "SELECT data FROM odds_cache WHERE cache_key='payout:paused_until'"
+    ).first();
+    if (pauseRow) {
+      const resumesAt = parseInt(pauseRow.data, 10);
+      if (resumesAt > now) {
+        return ok({ paused: true, resumesAt, resumesIn: resumesAt - now });
+      }
+      // Pause expired — clean it up
+      await env.DB.prepare("DELETE FROM odds_cache WHERE cache_key='payout:paused_until'").run().catch(() => {});
+    }
+  } catch (_) {}
+
   const authInfo     = env.EDGEBOT_AUTH_INFO;
   const sessionToken = env.EDGEBOT_SESSION_TOKEN;
   const capsolverKey = env.CAPSOLVER_API_KEY;
@@ -164,13 +233,11 @@ export async function onRequestPost({ request, env }) {
   if (!authInfo || !sessionToken) return err('EDGEBOT_AUTH_INFO / EDGEBOT_SESSION_TOKEN not configured', 500);
   if (!capsolverKey)              return err('CAPSOLVER_API_KEY not configured', 500);
 
-  const now = Math.floor(Date.now() / 1000);
-
   // Pull up to 2 pending entries — enforce 5-min minimum between retries so we don't
   // hammer RS's 500 offers/day limit. On 429, last_attempt_at is set 1h into the future
   // (now + 3600) so the entry is skipped for ~65 min before the next pickup.
   const { results: queue } = await env.DB.prepare(
-    'SELECT q.id, q.parlay_id, q.user_id, q.offer_amount, q.attempts, ' +
+    'SELECT q.id, q.parlay_id, q.user_id, q.offer_amount, q.attempts, q.skipped_cards, ' +
     'ra.rs_user_id ' +
     'FROM payout_queue q ' +
     'LEFT JOIN real_auth ra ON ra.user_id = q.user_id ' +
@@ -196,13 +263,16 @@ export async function onRequestPost({ request, env }) {
       continue;
     }
 
-    // Step 1 — find up to 5 cheapest unowned cards in winner's RS portfolio,
-    // then exclude any cards currently in the deposit pool. A deposit pool card appearing
-    // in outgoingAccepted (payout accepted) shares a card ID with an active deposit card,
-    // which causes deposit-check to false-activate a parlay from the payout offer.
+    // Load already-skipped "listed" card IDs so we don't re-try them this run.
+    const skippedSet = new Set(
+      entry.skipped_cards ? JSON.parse(entry.skipped_cards) : []
+    );
+
+    // Step 1 — find fresh unowned cards in winner's RS portfolio (excluding already-skipped),
+    // then exclude any cards currently in the deposit pool.
     let candidates = [], cardDebugLog = [];
     try {
-      const found = await findUnownedCards(entry.rs_user_id, authInfo, sessionToken, 5);
+      const found = await findUnownedCards(entry.rs_user_id, authInfo, sessionToken, skippedSet);
       candidates    = found.candidates;
       cardDebugLog  = found.debugLog;
     }
@@ -217,17 +287,17 @@ export async function onRequestPost({ request, env }) {
     }
 
     if (!candidates.length) {
-      const debugNote = JSON.stringify({ ts: Math.floor(Date.now()/1000), log: cardDebugLog }).slice(0, 500);
+      const debugNote = JSON.stringify({ ts: Math.floor(Date.now()/1000), skipped: skippedSet.size, log: cardDebugLog }).slice(0, 500);
       await env.DB.prepare(
         'UPDATE payout_queue SET notes=? WHERE id=?'
-      ).bind('No unowned cards — debug: ' + debugNote, entry.id).run();
-      results.push({ parlayId: entry.parlay_id, result: 'no_card' });
+      ).bind('No fresh cards (skipped=' + skippedSet.size + ') — debug: ' + debugNote, entry.id).run();
+      results.push({ parlayId: entry.parlay_id, result: 'no_card', skipped: skippedSet.size });
       continue; // stays pending; retried next cron run
     }
 
     // Step 2+3 — try each candidate card until one goes through.
     // Each attempt needs a fresh Turnstile token since they are single-use.
-    // "Listed in marketplace" → skip to next card. Any other error → stop and mark failed.
+    // "Listed in marketplace" → add to skipped_cards, persist, continue to next card.
     let entrySent = false;
     let lastError = null;
 
@@ -237,8 +307,8 @@ export async function onRequestPost({ request, env }) {
       catch (e) {
         // Turnstile failure is global — no point trying more cards this run
         await env.DB.prepare(
-          'UPDATE payout_queue SET notes=? WHERE id=?'
-        ).bind('Turnstile solve failed: ' + e.message, entry.id).run();
+          'UPDATE payout_queue SET notes=?, skipped_cards=? WHERE id=?'
+        ).bind('Turnstile solve failed: ' + e.message, JSON.stringify([...skippedSet]), entry.id).run();
         results.push({ parlayId: entry.parlay_id, result: 'turnstile_failed', error: e.message });
         lastError = null; // signal: already handled
         break;
@@ -250,15 +320,41 @@ export async function onRequestPost({ request, env }) {
       } catch (e) {
         lastError = e.message;
         const note = 'Card ' + cardId + ' skipped: ' + e.message.slice(0, 200);
+
+        // 400 "banned from the marketplace" or 403 = edgebot ban — set global 24h pause
+        // so no more Turnstile credits are burned while the ban is active. Queue stays pending.
+        if (e.message.includes('banned from the marketplace') || e.message.includes('403')) {
+          const resumesAt = now + 86400;
+          await env.DB.prepare(
+            "INSERT OR REPLACE INTO odds_cache (cache_key, data, fetched_at) VALUES ('payout:paused_until', ?, ?)"
+          ).bind(String(resumesAt), now).run().catch(() => {});
+          await env.DB.prepare(
+            'UPDATE payout_queue SET notes=?, last_attempt_at=?, skipped_cards=? WHERE id=?'
+          ).bind('Edgebot banned (403) — payouts paused 24h. ' + note, resumesAt, JSON.stringify([...skippedSet]), entry.id).run();
+          results.push({ parlayId: entry.parlay_id, result: 'banned', resumesAt });
+          lastError = null;
+          break;
+        }
+
         // 429 = RS daily offer limit hit — push last_attempt_at 1h into the future so
         // this entry is skipped for ~65 min (query requires last_attempt_at < now-300).
         if (e.message.includes('429')) {
           await env.DB.prepare(
-            'UPDATE payout_queue SET notes=?, last_attempt_at=? WHERE id=?'
-          ).bind(note, now + 3600, entry.id).run();
+            'UPDATE payout_queue SET notes=?, last_attempt_at=?, skipped_cards=? WHERE id=?'
+          ).bind(note, now + 3600, JSON.stringify([...skippedSet]), entry.id).run();
           lastError = null; // signal: already handled, stop trying other cards too
           break;
         }
+
+        // "Listed in marketplace" — mark card as skipped so it's excluded on future runs.
+        if (e.message.includes('listed in the marketplace') || e.message.includes('listed')) {
+          skippedSet.add(cardId);
+          await env.DB.prepare(
+            'UPDATE payout_queue SET notes=?, skipped_cards=? WHERE id=?'
+          ).bind(note, JSON.stringify([...skippedSet]), entry.id).run();
+          continue;
+        }
+
         await env.DB.prepare(
           'UPDATE payout_queue SET notes=? WHERE id=?'
         ).bind(note, entry.id).run();
@@ -275,15 +371,19 @@ export async function onRequestPost({ request, env }) {
     }
 
     if (!entrySent && lastError !== null) {
-      // All candidate cards failed (listed, restricted, etc.) — stay pending, retry next run
+      // All candidate cards failed (non-listed errors) — stay pending, retry next run
       results.push({ parlayId: entry.parlay_id, result: 'all_skipped' });
     }
+
+    // If this entry triggered a ban pause, stop processing the rest of the queue too
+    if (results.some(r => r.result === 'banned')) break;
   }
 
   const sent       = results.filter(r => r.result === 'sent').length;
+  const banned     = results.filter(r => r.result === 'banned').length;
   const noCard     = results.filter(r => r.result === 'no_card').length;
   const allSkipped = results.filter(r => r.result === 'all_skipped').length;
-  const failed     = results.filter(r => !['sent', 'no_card', 'all_skipped'].includes(r.result)).length;
+  const failed     = results.filter(r => !['sent', 'no_card', 'all_skipped', 'banned'].includes(r.result)).length;
 
-  return ok({ processed: queue.length, sent, noCard, allSkipped, failed, results });
+  return ok({ processed: queue.length, sent, banned, noCard, allSkipped, failed, results });
 }

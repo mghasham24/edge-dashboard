@@ -226,7 +226,7 @@ function parseHRMarkets(data, eventId, homeShort, awayShort, timeStr, startMs) {
       if (!player) continue;
       const odds = parseOdds(sel.displayOdds?.american);
       if (!odds) continue;
-      const dkPlayerId = player.id || null;
+      const dkPlayerId = player.id || player.metadata?.playerId || null;
       const headshot   = dkPlayerId ? `/api/dk/player-image?id=${dkPlayerId}&size=lg` : null;
       const isHome     = player.venueRole === 'HomePlayer';
       const team       = isHome ? homeShort : awayShort;

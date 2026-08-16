@@ -102,7 +102,7 @@ export async function onRequestGet(context) {
       if (Object.keys(ml).length < 2) continue;
 
       const gameKey = away + ' @ ' + home;
-      fights[gameKey] = { id: eid, home, away, cm: event.startEventDate || null, ml };
+      fights[gameKey] = { id: eid, home, away, cm: event.startEventDate || null, ml, eventGroup: 'Contender Series' };
     }
 
     const body = JSON.stringify({ ok: true, fights });

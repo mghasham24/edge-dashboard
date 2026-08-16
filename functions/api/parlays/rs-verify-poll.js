@@ -106,6 +106,12 @@ export async function onRequestPost({ request, env }) {
       if (!chanRes.ok) {
         const body = await chanRes.text().catch(() => '');
         try { await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at').bind('edgebot_debug', JSON.stringify({ error: 'channels_fetch_failed', status: chanRes.status, body: body.slice(0,300), ts: now }), now).run(); } catch(_) {}
+        if ((chanRes.status === 401 || chanRes.status === 403) && env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_ALERT_CHAT_ID) {
+          await fetch('https://api.telegram.org/bot' + env.TELEGRAM_BOT_TOKEN + '/sendMessage', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: env.TELEGRAM_ALERT_CHAT_ID, text: '⚠️ rs-verify-poll: edgebot RS session expired (' + chanRes.status + ') — users sending "parlay" won\'t get a code.\n\nUpdate EDGEBOT_AUTH_INFO + EDGEBOT_SESSION_TOKEN via wrangler.', parse_mode: 'HTML' }),
+          }).catch(() => {});
+        }
         return ok({ skipped: 'channels fetch failed', status: chanRes.status });
       }
       channelData = await chanRes.json();

@@ -9,11 +9,6 @@
 import { getSession } from '../../_lib/session.js';
 import { ok, err }    from '../../_lib/response.js';
 
-// Mirrors roundOfferAmount in auto-settle.js
-function roundOfferAmount(amount) {
-  const ones = amount % 10;
-  return ones >= 8 ? Math.ceil(amount / 10) * 10 : Math.floor(amount / 10) * 10;
-}
 
 export async function onRequestPost({ request, env }) {
   const session = await getSession(request, env.DB);
@@ -89,7 +84,7 @@ export async function onRequestPost({ request, env }) {
       env.DB.prepare("UPDATE parlays SET status='voided', settled_at=? WHERE id=?").bind(now, parlayId),
       env.DB.prepare(
         'INSERT OR IGNORE INTO payout_queue (parlay_id, user_id, rs_username, payout_rax, offer_amount, created_at) VALUES (?,?,?,?,?,?)'
-      ).bind(parlayId, parlay.user_id, parlay.rs_username, finalPayout, roundOfferAmount(finalPayout), now),
+      ).bind(parlayId, parlay.user_id, parlay.rs_username, finalPayout, finalPayout, now),
       env.DB.prepare(
         "UPDATE deposit_cards SET assigned_to_parlay_id=NULL, assigned_at=NULL WHERE assigned_to_parlay_id=?"
       ).bind(parlayId),
@@ -106,7 +101,7 @@ export async function onRequestPost({ request, env }) {
       'INSERT OR IGNORE INTO payout_queue ' +
       '(parlay_id, user_id, rs_username, payout_rax, offer_amount, created_at) ' +
       'VALUES (?, ?, ?, ?, ?, ?)'
-    ).bind(parlayId, parlay.user_id, parlay.rs_username, finalPayout, roundOfferAmount(finalPayout), now),
+    ).bind(parlayId, parlay.user_id, parlay.rs_username, finalPayout, finalPayout, now),
     env.DB.prepare(
       "UPDATE deposit_cards SET assigned_to_parlay_id=NULL, assigned_at=NULL WHERE assigned_to_parlay_id=?"
     ).bind(parlayId),

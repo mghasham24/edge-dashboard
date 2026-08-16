@@ -6713,24 +6713,35 @@
     }
 
     function loadSlipHeadshotAsync(elemId, playerName) {
+        function showFallback(el) {
+            if (!el) return;
+            var fb = el.dataset.fallback;
+            if (fb) el.innerHTML = fb;
+        }
         if (SLIP_HEADSHOT_CACHE[playerName]) {
-            if (SLIP_HEADSHOT_CACHE[playerName] !== 'none') {
-                var el = document.getElementById(elemId);
-                if (el) el.innerHTML = '<img src="' + escHtml(SLIP_HEADSHOT_CACHE[playerName]) + '" alt="" onerror="this.parentNode.innerHTML=this.parentNode.dataset.fallback">';
-            }
+            var el = document.getElementById(elemId);
+            if (SLIP_HEADSHOT_CACHE[playerName] === 'none') { showFallback(el); return; }
+            if (el) el.innerHTML = '<img src="' + escHtml(SLIP_HEADSHOT_CACHE[playerName]) + '" alt="" onerror="this.parentNode.innerHTML=this.parentNode.dataset.fallback||\'\';">';
             return;
         }
         fetch('https://statsapi.mlb.com/api/v1/people/search?names=' + encodeURIComponent(playerName) + '&sportId=1', { signal: AbortSignal.timeout(5000) })
             .then(function(r) { return r.json(); })
             .then(function(d) {
                 var person = d.people && d.people[0];
-                if (!person || !person.id) { SLIP_HEADSHOT_CACHE[playerName] = 'none'; return; }
+                if (!person || !person.id) {
+                    SLIP_HEADSHOT_CACHE[playerName] = 'none';
+                    showFallback(document.getElementById(elemId));
+                    return;
+                }
                 var url = '/api/headshot?id=' + person.id;
                 SLIP_HEADSHOT_CACHE[playerName] = url;
                 var el = document.getElementById(elemId);
-                if (el) el.innerHTML = '<img src="' + escHtml(url) + '" alt="" onerror="this.parentNode.innerHTML=this.parentNode.dataset.fallback">';
+                if (el) el.innerHTML = '<img src="' + escHtml(url) + '" alt="" onerror="this.parentNode.innerHTML=this.parentNode.dataset.fallback||\'\';">';
             })
-            .catch(function() { SLIP_HEADSHOT_CACHE[playerName] = 'none'; });
+            .catch(function() {
+                SLIP_HEADSHOT_CACHE[playerName] = 'none';
+                showFallback(document.getElementById(elemId));
+            });
     }
 
     function stopLiveSlipTracking() {
@@ -7588,6 +7599,7 @@
         var MKT_LABEL = {
             hits:'Hits', total_bases:'Total Bases', rbis:'RBIs', runs:'Runs', hrbi:'H+R+RBI',
             singles:'Singles', stolen_bases:'Stolen Bases', doubles:'Doubles', walks:'Walks',
+            home_runs:'Home Runs',
             pitcher_ks:'Pitcher Ks', outs_ou:'Outs',
             hits_allowed:'Hits Allowed', er_allowed:'Earned Runs', bb_allowed:'Walks Allowed', hwer:'H+W+ER',
             pts:'Points', reb:'Rebounds', ast:'Assists', fg3m:'Threes', pra:'PRA', pa:'Pts+Ast', pr:'Pts+Reb', ra:'Reb+Ast',
@@ -7777,6 +7789,7 @@
             // MLB batter
             hits:'Hits', total_bases:'Total Bases', rbis:'RBIs', runs:'Runs', hrbi:'H+R+RBI',
             singles:'Singles', stolen_bases:'Stolen Bases', doubles:'Doubles', walks:'Walks',
+            home_runs:'Home Runs',
             // MLB pitcher
             pitcher_ks:'Pitcher Ks', outs_ou:'Outs',
             hits_allowed:'Hits Allowed', er_allowed:'Earned Runs', bb_allowed:'Walks Allowed', hwer:'H+W+ER',
@@ -7874,17 +7887,17 @@
                     avatarHtml = '<div class="pslip-avatar"><div class="pslip-av-inner" style="background:hsl(' + hue + ',40%,22%)"><span>' + escHtml(initials) + '</span></div></div>';
                 }
             } else {
-                // Player prop: prefer live DK headshot over stored URL
+                // Player prop: try DK headshot first; if it 404s, fall through to MLB Stats API async lookup
                 var livePlayer = PARLAY_PLAYERS.find(function(pp) { return pp.name === leg.player_name; }) ||
                                  PARLAY_PLAYERS_WNBA.find(function(pp) { return pp.name === leg.player_name; }) ||
                                  PARLAY_PLAYERS_SOCCER.find(function(pp) { return pp.name === leg.player_name; });
                 var headshotSrc = (livePlayer && livePlayer.headshot) || leg.headshot_url || null;
                 var avInnerId = 'slipav-' + s.id + '-' + li;
-                var fallbackHtml = '<span>' + escHtml(initials) + '</span>';
+                var fallbackHtml = '<span style="background:hsl(' + hue + ',40%,22%)">' + escHtml(initials) + '</span>';
                 if (headshotSrc) {
-                    avatarHtml = '<div class="pslip-avatar"><div class="pslip-av-inner" id="' + avInnerId + '"><img src="' + escHtml(headshotSrc) + '" alt="" onerror="this.parentNode.innerHTML=\'<span>' + escHtml(initials) + '</span>\'"></div>' + dirBadge + '</div>';
+                    avatarHtml = '<div class="pslip-avatar"><div class="pslip-av-inner" id="' + avInnerId + '" data-name="' + escHtml(leg.player_name) + '" data-fallback="' + escHtml(fallbackHtml) + '"><img src="' + escHtml(headshotSrc) + '" alt="" onerror="loadSlipHeadshotAsync(this.parentNode.id,this.parentNode.dataset.name)"></div>' + dirBadge + '</div>';
                 } else {
-                    avatarHtml = '<div class="pslip-avatar"><div class="pslip-av-inner" id="' + avInnerId + '" style="background:hsl(' + hue + ',40%,22%)" data-fallback="' + escHtml(fallbackHtml) + '">' + fallbackHtml + '</div>' + dirBadge + '</div>';
+                    avatarHtml = '<div class="pslip-avatar"><div class="pslip-av-inner" id="' + avInnerId + '" data-name="' + escHtml(leg.player_name) + '" data-fallback="' + escHtml(fallbackHtml) + '" style="background:hsl(' + hue + ',40%,22%)">' + fallbackHtml + '</div>' + dirBadge + '</div>';
                 }
             }
 
@@ -7897,6 +7910,9 @@
                     if (_pfx) _lbl = _pfx + ' · ' + _lbl;
                 }
                 statLine = escHtml(_lbl + resultVal);
+            } else if (mkt === 'home_runs') {
+                var hrLbl = leg.label ? leg.label.split(' (')[0] : (parseFloat(thresh) < 1 ? '1+ Home Run' : '2+ Home Runs');
+                statLine = escHtml(hrLbl + resultVal);
             } else if (mkt === 'ufc_ml') {
                 statLine = escHtml('Fighter Win' + resultVal);
             } else if (mkt === 'ufc_total') {

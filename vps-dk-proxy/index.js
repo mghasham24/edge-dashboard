@@ -14,8 +14,9 @@ const PORT      = parseInt(process.env.PORT || '3003');
 const SECRET    = process.env.DK_PROXY_KEY;
 const PROXY_URL = process.env.PROXY_URL;
 const DK_BASE   = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
-const ESPN_WNBA = 'https://site.api.espn.com/apis/site/v2/sports/basketball/wnba';
-const ESPN_NFL  = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl';
+const ESPN_WNBA   = 'https://site.api.espn.com/apis/site/v2/sports/basketball/wnba';
+const ESPN_NFL    = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl';
+const ESPN_SOCCER = 'https://site.api.espn.com/apis/site/v2/sports/soccer';
 
 if (!SECRET) { console.error('DK_PROXY_KEY env var required'); process.exit(1); }
 
@@ -117,6 +118,119 @@ const server = http.createServer(async (req, res) => {
     try {
       const espnRes = await fetch(
         `${ESPN_WNBA}/summary?event=${event}`,
+        { headers: ESPN_HEADERS, signal: AbortSignal.timeout(10000) }
+      );
+      const body = await espnRes.text();
+      res.writeHead(espnRes.status, { 'Content-Type': 'application/json' });
+      res.end(body);
+    } catch(e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: e.message }));
+    }
+    return;
+  }
+
+  // ── ESPN MMA competition status (method/result from core API) ─────────────
+  // GET /espn-mma/comp-status?event=EVENT_ID&comp=COMP_ID&key=SECRET
+  // Returns status object with result.name = "decision---unanimous" | "tko---punches" | etc.
+  if (url.pathname === '/espn-mma/comp-status') {
+    const event = url.searchParams.get('event');
+    const comp  = url.searchParams.get('comp');
+    if (!event || !comp) { res.writeHead(400); res.end('Missing event or comp param'); return; }
+    try {
+      const espnRes = await fetch(
+        `https://sports.core.api.espn.com/v2/sports/mma/leagues/ufc/events/${event}/competitions/${comp}/status?lang=en&region=us`,
+        { headers: ESPN_HEADERS, signal: AbortSignal.timeout(10000) }
+      );
+      const body = await espnRes.text();
+      res.writeHead(espnRes.status, { 'Content-Type': 'application/json' });
+      res.end(body);
+    } catch(e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: e.message }));
+    }
+    return;
+  }
+
+  // ── ESPN MMA scoreboard ────────────────────────────────────────────────────
+  // GET /espn-mma/scoreboard?dates=YYYYMMDD&key=SECRET
+  if (url.pathname === '/espn-mma/scoreboard') {
+    const dates = url.searchParams.get('dates');
+    if (!dates) { res.writeHead(400); res.end('Missing dates param'); return; }
+    try {
+      const espnRes = await fetch(
+        `https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard?dates=${dates}`,
+        { headers: ESPN_HEADERS, signal: AbortSignal.timeout(10000) }
+      );
+      const body = await espnRes.text();
+      res.writeHead(espnRes.status, { 'Content-Type': 'application/json' });
+      res.end(body);
+    } catch(e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: e.message }));
+    }
+    return;
+  }
+
+  // ── DK event subcategory proxy (MOV, alt lines per event) ────────────────
+  // GET /dk-event-subcat?event=EVENT_ID&subcat=SUBCAT_ID&key=SECRET
+  if (url.pathname === '/dk-event-subcat') {
+    const event  = url.searchParams.get('event');
+    const subcat = url.searchParams.get('subcat');
+    if (!event || !subcat) { res.writeHead(400); res.end('Missing event or subcat param'); return; }
+    const mq = encodeURIComponent(
+      `$filter=eventId eq '${event}' AND clientMetadata/subCategoryId eq '${subcat}' AND tags/all(t: t ne 'SportcastBetBuilder')`
+    );
+    const targetUrl = `${DK_BASE}/controldata/event/eventSubcategory/v1/markets?isBatchable=false&templateVars=${event}%2C${subcat}&marketsQuery=${mq}&include=MarketSplits&entity=markets`;
+    try {
+      const fetchOpts = { headers: DK_HEADERS, signal: AbortSignal.timeout(10000) };
+      if (proxyDispatcher) fetchOpts.dispatcher = proxyDispatcher;
+      const dkRes = await fetch(targetUrl, fetchOpts);
+      const body  = await dkRes.text();
+      res.writeHead(dkRes.status, { 'Content-Type': 'application/json' });
+      res.end(body);
+    } catch(e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: e.message }));
+    }
+    return;
+  }
+
+  // ── ESPN Soccer scoreboard ────────────────────────────────────────────────
+  // GET /espn-soccer/scoreboard?league=eng.1&dates=YYYYMMDD&key=SECRET
+  // league slug examples: eng.1 (EPL), esp.1 (La Liga), ita.1 (Serie A),
+  //   fra.1 (Ligue 1), ger.1 (Bundesliga), usa.1 (MLS), UEFA.CHAMPIONS (UCL)
+  if (url.pathname === '/espn-soccer/scoreboard') {
+    const league = url.searchParams.get('league');
+    const dates  = url.searchParams.get('dates');
+    if (!league || !dates) { res.writeHead(400); res.end('Missing league or dates param'); return; }
+    try {
+      const espnRes = await fetch(
+        `${ESPN_SOCCER}/${league}/scoreboard?dates=${dates}`,
+        { headers: ESPN_HEADERS, signal: AbortSignal.timeout(10000) }
+      );
+      const body = await espnRes.text();
+      res.writeHead(espnRes.status, { 'Content-Type': 'application/json' });
+      res.end(body);
+    } catch(e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: e.message }));
+    }
+    return;
+  }
+
+  // ── ESPN Soccer game summary (rosters + player stats) ─────────────────────
+  // GET /espn-soccer/summary?league=eng.1&event=EVENT_ID&key=SECRET
+  // Returns full summary including rosters[].roster[].stats with:
+  //   totalGoals, goalAssists, shotsOnTarget, totalShots,
+  //   saves, foulsCommitted, foulsSuffered, offsides
+  if (url.pathname === '/espn-soccer/summary') {
+    const league = url.searchParams.get('league');
+    const event  = url.searchParams.get('event');
+    if (!league || !event) { res.writeHead(400); res.end('Missing league or event param'); return; }
+    try {
+      const espnRes = await fetch(
+        `${ESPN_SOCCER}/${league}/summary?event=${event}`,
         { headers: ESPN_HEADERS, signal: AbortSignal.timeout(10000) }
       );
       const body = await espnRes.text();

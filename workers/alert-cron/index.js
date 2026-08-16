@@ -735,7 +735,7 @@ async function runCron(env, ctx) {
       try {
         await fetch(`${env.SITE_URL}/api/parlays/deposit-check?_cron_key=${env.CRON_SECRET}`, {
           method: 'POST',
-          signal: AbortSignal.timeout(20000),
+          signal: AbortSignal.timeout(50000),
         });
       } catch(e) {}
       try {

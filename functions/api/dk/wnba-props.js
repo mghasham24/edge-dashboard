@@ -8,18 +8,24 @@ import { getSessionOrCron } from '../../_lib/auth.js';
 const DK_BASE   = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
 const DK_LEAGUE = '94682'; // WNBA
 const CACHE_TTL = 300;     // 5 min
-const CACHE_KEY = 'dk_wnba_props_v3';
+const CACHE_KEY = 'dk_wnba_props_v4';
 
 // Confirmed WNBA DK subcategory IDs (from DevTools 2026-07-28).
 const SUBCAT_MAP = {
-  '12488': { market: 'pts',  stat: 'Points',     type: 'ou' },
-  '12492': { market: 'reb',  stat: 'Rebounds',   type: 'ou' },
-  '12495': { market: 'ast',  stat: 'Assists',    type: 'ou' },
-  '12497': { market: 'fg3m', stat: 'Threes',     type: 'ou' },
-  '5001':  { market: 'pra',  stat: 'PRA',        type: 'ou' },
-  '9973':  { market: 'pa',   stat: 'Pts+Ast',    type: 'ou' },
-  '9976':  { market: 'pr',   stat: 'Pts+Reb',    type: 'ou' },
-  '9974':  { market: 'ra',   stat: 'Reb+Ast',    type: 'ou' },
+  '12488': { market: 'pts',           stat: 'Points',        type: 'ou' },
+  '12492': { market: 'reb',           stat: 'Rebounds',      type: 'ou' },
+  '12495': { market: 'ast',           stat: 'Assists',       type: 'ou' },
+  '12497': { market: 'fg3m',          stat: 'Threes',        type: 'ou' },
+  '5001':  { market: 'pra',           stat: 'PRA',           type: 'ou' },
+  '9973':  { market: 'pa',            stat: 'Pts+Ast',       type: 'ou' },
+  '9976':  { market: 'pr',            stat: 'Pts+Reb',       type: 'ou' },
+  '9974':  { market: 'ra',            stat: 'Reb+Ast',       type: 'ou' },
+};
+// Yes/No subcats — fetched per-event (DK event-level endpoint only, no league-level).
+// Confirmed subcat IDs from DevTools 2026-08-16.
+const SUBCAT_MAP_YN = {
+  '13762': { market: 'double_double', stat: 'Double-Double', type: 'yn' },
+  '13759': { market: 'triple_double', stat: 'Triple-Double', type: 'yn' },
 };
 
 const DK_HEADERS = {
@@ -34,6 +40,11 @@ function subcatUrl(subcatId) {
   const eq = encodeURIComponent(`$filter=leagueId eq '${DK_LEAGUE}' AND clientMetadata/Subcategories/any(s: s/Id eq '${subcatId}')`);
   const mq = encodeURIComponent(`$filter=clientMetadata/subCategoryId eq '${subcatId}' AND tags/all(t: t ne 'SportcastBetBuilder')`);
   return `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${DK_LEAGUE}%2C${subcatId}&eventsQuery=${eq}&marketsQuery=${mq}&include=Events&entity=events`;
+}
+
+function eventSubcatUrl(eventId, subcatId) {
+  const mq = encodeURIComponent(`$filter=eventId eq '${eventId}' AND clientMetadata/subCategoryId eq '${subcatId}' AND tags/all(t: t ne 'SportcastBetBuilder')`);
+  return `${DK_BASE}/controldata/event/eventSubcategory/v1/markets?isBatchable=false&templateVars=${eventId}%2C${subcatId}&marketsQuery=${mq}&entity=markets`;
 }
 
 function todayET() {
@@ -130,6 +141,51 @@ async function fetchSubcat(subcatId, info) {
   return { players: parseSubcat(data, subcatId, info), events: data.events || [] };
 }
 
+// Parses a DK event-level YN (Yes/No) subcat response into player pick entries.
+// game = { eventId, home, away, homeShort, awayShort, startMs, time }
+function parseSubcatYN(data, game, subcatId, info) {
+  const players = [];
+  const marketsById = new Map((data.markets || []).map(m => [String(m.id), m]));
+  for (const sel of (data.selections || [])) {
+    if (sel.outcomeType !== 'Yes') continue;
+    marketsById.get(String(sel.marketId)); // just confirming market exists
+    const player = (sel.participants || [])[0];
+    if (!player) continue;
+    const american = sel.displayOdds?.american;
+    const odds = parseOdds(american) ?? (sel.trueOdds >= 2
+      ? Math.round((sel.trueOdds - 1) * 100)
+      : Math.round(-100 / (sel.trueOdds - 1)));
+    if (!odds || !isFinite(odds)) continue;
+    const isHome = player.venueRole === 'HomePlayer';
+    const team   = isHome ? (game.homeShort || game.home) : (game.awayShort || game.away);
+    const opp    = isHome ? (game.awayShort || game.away) : (game.homeShort || game.home);
+    players.push({
+      name: player.name, team, opp, time: game.time || '', startMs: game.startMs || 0,
+      market: info.market, stat: info.stat,
+      threshold: null, label: 'Yes', direction: 'more',
+      americanOdds: odds, type: 'yn',
+      marketId: String(sel.marketId), selectionId: String(sel.id),
+      eventId: game.eventId, subcatId: String(subcatId),
+      mainLine: true,
+      headshot: player.id ? `/api/dk/player-image?id=${player.id}&size=lg` : null,
+      dkPlayerId: player.id || null,
+    });
+  }
+  return players;
+}
+
+async function fetchSubcatYN(game, subcatId, info) {
+  try {
+    const res = await fetch(eventSubcatUrl(game.eventId, subcatId), {
+      headers: DK_HEADERS,
+      signal:  AbortSignal.timeout(10000),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return parseSubcatYN(data, game, subcatId, info);
+  } catch(_) { return []; }
+}
+
 export async function onRequestGet(context) {
   const { request, env } = context;
   const session = await getSessionOrCron(request, env);
@@ -193,20 +249,41 @@ export async function onRequestGet(context) {
   const results = await Promise.allSettled(entries.map(([subcatId, info]) => fetchSubcat(subcatId, info)));
 
   const allPlayers = [];
-  const wnbaGames = [];
+  const wnbaGames  = [];
+  const seenEventIds = new Set();
   for (const r of results) {
-    if (r.status === 'fulfilled') {
-      allPlayers.push(...r.value.players);
-      if (!wnbaGames.length) {
-        for (const e of (r.value.events || [])) {
-          const parts    = e.participants || [];
-          const homePart = parts.find(p => p.venueRole === 'Home');
-          const awayPart = parts.find(p => p.venueRole === 'Away');
-          if (homePart?.name && awayPart?.name) {
-            wnbaGames.push({ eventId: String(e.id), home: homePart.name, away: awayPart.name });
-          }
-        }
-      }
+    if (r.status !== 'fulfilled') continue;
+    allPlayers.push(...r.value.players);
+    for (const e of (r.value.events || [])) {
+      const eid = String(e.id);
+      if (seenEventIds.has(eid)) continue;
+      seenEventIds.add(eid);
+      const parts    = e.participants || [];
+      const homePart = parts.find(p => p.venueRole === 'Home');
+      const awayPart = parts.find(p => p.venueRole === 'Away');
+      if (!homePart?.name || !awayPart?.name) continue;
+      const startMs = e.startEventDate ? new Date(e.startEventDate).getTime() : 0;
+      const timeStr = startMs
+        ? new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' }).format(new Date(startMs))
+        : '';
+      wnbaGames.push({
+        eventId:   eid,
+        home:      homePart.name, away:      awayPart.name,
+        homeShort: homePart.metadata?.shortName || homePart.name,
+        awayShort: awayPart.metadata?.shortName || awayPart.name,
+        startMs,   time: timeStr,
+      });
+    }
+  }
+
+  // Second pass: fetch Yes/No subcats (DD, TD) per event in parallel
+  if (wnbaGames.length) {
+    const ynEntries = Object.entries(SUBCAT_MAP_YN);
+    const ynResults = await Promise.allSettled(
+      wnbaGames.flatMap(game => ynEntries.map(([subcatId, info]) => fetchSubcatYN(game, subcatId, info)))
+    );
+    for (const r of ynResults) {
+      if (r.status === 'fulfilled') allPlayers.push(...r.value);
     }
   }
 

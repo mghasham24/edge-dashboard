@@ -37,21 +37,31 @@ function buildHeaders(authInfo, sessionToken) {
 // Paginate RS offers. For accepted views the offer can be many pages back (offset=30+ has happened).
 // We paginate up to 200 offers (20 pages) and stop when all offers on a page are older than 24h.
 async function fetchOffers(authInfo, sessionToken, view, status) {
-  const maxPages = status === 'accepted' ? 50 : 1;
+  const maxPages = status === 'accepted' ? 10 : 1;
   const cutoff   = Date.now() - 86400000; // 24h ago — don't look further back
   const all = [];
   for (let page = 0; page < maxPages; page++) {
     const offset = page * 10;
     let res;
+    const ac = new AbortController();
+    const abortTimer = setTimeout(() => ac.abort(), 6000);
     try {
       res = await fetch(
         `https://web.realapp.com/cardmarketplace/user/offers?offset=${offset}&status=${status}&view=${view}`,
-        { headers: buildHeaders(authInfo, sessionToken), signal: AbortSignal.timeout(10000) }
+        { headers: buildHeaders(authInfo, sessionToken), signal: ac.signal }
       );
-    } catch { break; }
+      clearTimeout(abortTimer);
+    } catch { clearTimeout(abortTimer); break; }
     if (res.status === 401 || res.status === 403) throw new Error('RS auth ' + res.status + ' — session token expired');
     if (!res.ok) break;
-    const data = await res.json();
+    let data;
+    try {
+      const text = await Promise.race([
+        res.text(),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('body timeout')), 5000)),
+      ]);
+      data = JSON.parse(text);
+    } catch { break; }
     const offers = Array.isArray(data) ? data : (data.offers || []);
     if (!offers.length) break;
     all.push(...offers);
@@ -71,7 +81,7 @@ async function acceptOffer(offerId, authInfo, sessionToken) {
       method:  'PUT',
       headers: buildHeaders(authInfo, sessionToken),
       body:    JSON.stringify({}),
-      signal:  AbortSignal.timeout(10000),
+      signal:  (() => { const c = new AbortController(); setTimeout(() => c.abort(), 10000); return c.signal; })(),
     }
   );
   if (!res.ok) {
@@ -88,7 +98,7 @@ async function counterOffer(offerId, counterAmount, authInfo, sessionToken) {
       method:  'PUT',
       headers: buildHeaders(authInfo, sessionToken),
       body:    JSON.stringify({ counterAmount }),
-      signal:  AbortSignal.timeout(10000),
+      signal:  (() => { const c = new AbortController(); setTimeout(() => c.abort(), 10000); return c.signal; })(),
     }
   );
   if (!res.ok) {
@@ -105,7 +115,7 @@ async function fetchCardOwner(cardId, authInfo, sessionToken) {
   try {
     const res = await fetch(
       `https://web.realapp.com/collectingcards/${cardId}`,
-      { headers: buildHeaders(authInfo, sessionToken), signal: AbortSignal.timeout(8000) }
+      { headers: buildHeaders(authInfo, sessionToken), signal: (() => { const c = new AbortController(); setTimeout(() => c.abort(), 8000); return c.signal; })() }
     );
     if (!res.ok) return null;
     const data = await res.json();
@@ -131,11 +141,11 @@ async function handleRequest({ request, env }) {
     }
   }
 
+  const now = Math.floor(Date.now() / 1000);
+
   const authInfo = env.EDGEBOT_AUTH_INFO;
   const sessionToken = env.EDGEBOT_SESSION_TOKEN || '';
   if (!authInfo) return err('EDGEBOT_AUTH_INFO not configured', 500);
-
-  const now = Math.floor(Date.now() / 1000);
 
   // GRACE must match EXPIRE_BUFFER: parlays stay in cardMap until the cron actually expires
   // them in D1, so there's no window where an accepted offer is invisible to the matcher.
@@ -208,7 +218,7 @@ async function handleRequest({ request, env }) {
     try {
       const res = await fetch(
         `https://web.realapp.com/cardmarketplaceoffers/${offerId}`,
-        { headers: buildHeaders(authInfo, sessionToken), signal: AbortSignal.timeout(8000) }
+        { headers: buildHeaders(authInfo, sessionToken), signal: (() => { const c = new AbortController(); setTimeout(() => c.abort(), 8000); return c.signal; })() }
       );
       if (!res.ok) return null;
       return await res.json();
@@ -248,13 +258,17 @@ async function handleRequest({ request, env }) {
   }
 
   let incomingOpen, incomingAccepted, outgoingAccepted, outgoingRejected, outgoingOpen;
+  const hardTimeout = new Promise((_, rej) => setTimeout(() => rej(new Error('RS fetch hard timeout 25s')), 25000));
   try {
-    [incomingOpen, incomingAccepted, outgoingAccepted, outgoingRejected, outgoingOpen] = await Promise.all([
-      fetchOffers(authInfo, sessionToken, 'incoming', 'open'),
-      fetchOffers(authInfo, sessionToken, 'incoming', 'accepted'),
-      fetchOffers(authInfo, sessionToken, 'outgoing', 'accepted'),
-      fetchOffers(authInfo, sessionToken, 'outgoing', 'rejected'),
-      fetchOffers(authInfo, sessionToken, 'outgoing', 'open'),
+    [incomingOpen, incomingAccepted, outgoingAccepted, outgoingRejected, outgoingOpen] = await Promise.race([
+      Promise.all([
+        fetchOffers(authInfo, sessionToken, 'incoming', 'open'),
+        fetchOffers(authInfo, sessionToken, 'incoming', 'accepted'),
+        fetchOffers(authInfo, sessionToken, 'outgoing', 'accepted'),
+        fetchOffers(authInfo, sessionToken, 'outgoing', 'rejected'),
+        fetchOffers(authInfo, sessionToken, 'outgoing', 'open'),
+      ]),
+      hardTimeout,
     ]);
   } catch (e) {
     const failResult = { ts: now, error: 'RS fetch error: ' + e.message, checked: 0, accepted: 0, countered: 0, pending: pending.length };

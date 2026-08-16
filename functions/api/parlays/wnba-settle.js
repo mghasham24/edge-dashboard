@@ -9,7 +9,8 @@ const WNBA_STAT_FIELD = {
   pts: 'pts', reb: 'reb', ast: 'ast', fg3m: 'fg3m',
   pra: 'pra', pa: 'pa', pr: 'pr', ra: 'ra',
 };
-const WNBA_PROP_TYPES = new Set(Object.keys(WNBA_STAT_FIELD));
+const DD_TD_CATS = ['pts', 'reb', 'ast', 'stl', 'blk'];
+const WNBA_PROP_TYPES = new Set([...Object.keys(WNBA_STAT_FIELD), 'double_double', 'triple_double']);
 
 function norm(name) {
   return name.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
@@ -105,6 +106,14 @@ export async function onRequestPost({ request, env }) {
 
     const stats = normStats[norm(leg.player_name)];
     if (!stats) { legOutcomes[leg.id] = null; continue; }
+
+    if (mkt === 'double_double' || mkt === 'triple_double') {
+      const needed = mkt === 'double_double' ? 2 : 3;
+      const count = DD_TD_CATS.filter(cat => (stats[cat] ?? 0) >= 10).length;
+      legOutcomes[leg.id] = count >= needed ? 'won' : 'lost';
+      continue;
+    }
+
     const field = WNBA_STAT_FIELD[mkt];
     if (!field) { legOutcomes[leg.id] = null; continue; }
     const statVal = stats[field];

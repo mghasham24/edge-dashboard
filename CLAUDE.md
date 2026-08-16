@@ -171,6 +171,41 @@ RS auth token can be sourced two ways:
 | Stripe events not updating plan | Check `processed_webhook_events` for duplicates; confirm `subscription.deleted` event fires |
 | D1 schema missing table | Run `npx wrangler d1 execute edge-db --remote --file=migrations/0001_initial.sql` |
 
+## Parlay Ops
+
+### Payout Queue Status
+```sql
+SELECT id, rs_username, payout_rax, status, attempts,
+       (strftime('%s','now') - last_attempt_at) AS secs_since_attempt, notes
+FROM payout_queue ORDER BY id DESC LIMIT 20;
+```
+
+### Stuck Entry Debug (replace ? with entry id)
+```sql
+SELECT id, status, attempts, last_attempt_at,
+       (strftime('%s','now') - last_attempt_at) AS secs_since_attempt,
+       skipped_cards, notes
+FROM payout_queue WHERE id=?;
+```
+
+### Payout Pause / Unpause
+- Check: `SELECT data FROM odds_cache WHERE cache_key='payout:paused_until'`
+- Unpause: `GET /api/parlays/payout?_cron_key=CRON_SECRET&unpause=1`
+- Manual pause N hours: `GET /api/parlays/payout?_cron_key=CRON_SECRET&pause_hours=24`
+
+### Edgebot Session Token
+- `EDGEBOT_SESSION_TOKEN` CF env var. Expires → deposit-check 401 → no offers accepted.
+- Rotate: grab `real-session-token` from RS DevTools Network tab → `npx wrangler pages secret put EDGEBOT_SESSION_TOKEN --project-name=edge-dashboard`
+
+### Debug Card Candidates for a Payout Entry
+- `GET /api/parlays/payout?_cron_key=CRON_SECRET&debug_cards=RS_USER_HASH_ID`
+- Known RS hash IDs: humanshield = `43QN6pjn`, realblackmamba = `R3XE7eQn`
+
+### Clear Stuck Skipped Cards (if all categories exhausted)
+```sql
+UPDATE payout_queue SET skipped_cards=NULL WHERE id=?;
+```
+
 ## Audit 1 — Completed (reference only)
 All Audit 1 items are done: rate limiting on login/forgot, hashPassword extracted to `_lib/password.js`, annual plan ($39/yr), trial-ending nudge, PWA service worker, `getSession` extracted to `_lib/session.js`, Stripe helpers to `_lib/stripe.js`, index.html split into app.js + app.css, email plaintext alts, BLOCKED_PREFIXES regex, PostHog error tracking, refresh spinner, empty state for 0 EV lines, referral credit race fix, and more. Do not re-suggest these.
 
