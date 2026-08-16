@@ -32,6 +32,11 @@ export async function onRequestGet({ request }) {
     const body        = await res.arrayBuffer();
     const contentType = res.headers.get('content-type') || 'image/webp';
 
+    // DK returns a generic silhouette (~1-3 KB) for players not in their DFS system.
+    // Real player photos are always larger — treat tiny responses as not found so the
+    // frontend onerror fallback (initials avatar) is shown instead of a blank silhouette.
+    if (body.byteLength < 4000) return new Response('Not found', { status: 404 });
+
     return new Response(body, {
       status: 200,
       headers: {
