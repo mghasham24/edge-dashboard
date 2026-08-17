@@ -1406,9 +1406,13 @@ async function handleRequest({ request, env }) {
     // MLB player prop
     const playerStats = (mlbStatsMap[leg.game_date] || {})[normForLookup(leg.player_name)];
     if (!playerStats) {
-      // If the player's specific game is already Final, they were scratched — void immediately
+      // Player absent from boxscore — scratched/DNP. Determine if game is final.
+      // Try matchup parse first (works for team-format event_name); fall back to
+      // "any final game exists on this date" for player-prop event_name format.
       const matchup = parse1innMatchup(leg.event_name);
-      const gameFinal = matchup ? !!match1innGame(matchup, mlbGamesMap[leg.game_date] || []) : false;
+      const gameFinal = matchup
+        ? !!match1innGame(matchup, mlbGamesMap[leg.game_date] || [])
+        : (mlbGamesMap[leg.game_date] || []).length > 0;
       legOutcomes[leg.id] = (gameFinal || leg.game_date < staleDate) ? 'void' : null;
       continue;
     }

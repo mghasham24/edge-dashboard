@@ -106,6 +106,7 @@ export async function onRequestPost({ request, env }) {
 
     const stats = normStats[norm(leg.player_name)];
     if (!stats) { legOutcomes[leg.id] = null; continue; }
+    if (stats.dnp) { legOutcomes[leg.id] = 'void'; continue; }
 
     if (mkt === 'double_double' || mkt === 'triple_double') {
       const needed = mkt === 'double_double' ? 2 : 3;

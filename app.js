@@ -7041,6 +7041,7 @@
                                     var name = normSlipName((a.athlete && a.athlete.displayName) || '');
                                     if (!name) return;
                                     var s = a.stats || [];
+                                    var isDnp = a.didNotPlay === true || (s.length === 1 && typeof s[0] === 'string' && s[0].toUpperCase().indexOf('DNP') >= 0);
                                     function getStat(idx) {
                                         if (idx < 0) return 0;
                                         var v = s[idx];
@@ -7049,7 +7050,7 @@
                                     }
                                     var pts = getStat(ptsIdx), reb = getStat(rebIdx), ast = getStat(astIdx), fg3m = getStat(fg3Idx);
                                     var stl = getStat(stlIdx), blk = getStat(blkIdx);
-                                    playerStats[name] = { pts: pts, reb: reb, ast: ast, fg3m: fg3m, stl: stl, blk: blk, pra: pts+reb+ast, pa: pts+ast, pr: pts+reb, ra: reb+ast };
+                                    playerStats[name] = { pts: pts, reb: reb, ast: ast, fg3m: fg3m, stl: stl, blk: blk, pra: pts+reb+ast, pa: pts+ast, pr: pts+reb, ra: reb+ast, dnp: isDnp };
                                     playerEvtId[name] = res.eventId;
                                     if (blkAbbr) playerTeamAbbr[name] = blkAbbr;
                                 });
