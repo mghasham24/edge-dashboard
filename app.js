@@ -6718,25 +6718,40 @@
             var fb = el.dataset.fallback;
             if (fb) el.innerHTML = fb;
         }
+        function showImg(el, url) {
+            if (!el) return;
+            el.innerHTML = '<img src="' + escHtml(url) + '" alt="" onerror="this.parentNode.innerHTML=this.parentNode.dataset.fallback||\'\';">';
+        }
         if (SLIP_HEADSHOT_CACHE[playerName]) {
             var el = document.getElementById(elemId);
             if (SLIP_HEADSHOT_CACHE[playerName] === 'none') { showFallback(el); return; }
-            if (el) el.innerHTML = '<img src="' + escHtml(SLIP_HEADSHOT_CACHE[playerName]) + '" alt="" onerror="this.parentNode.innerHTML=this.parentNode.dataset.fallback||\'\';">';
+            showImg(el, SLIP_HEADSHOT_CACHE[playerName]);
             return;
         }
-        fetch('https://statsapi.mlb.com/api/v1/people/search?names=' + encodeURIComponent(playerName) + '&sportId=1', { signal: AbortSignal.timeout(5000) })
+        // Check live player pools first — may have loaded since the slip rendered
+        var lp = PARLAY_PLAYERS.find(function(x) { return x.name === playerName; }) ||
+                 PARLAY_PLAYERS_WNBA.find(function(x) { return x.name === playerName; }) ||
+                 PARLAY_PLAYERS_NFL.find(function(x) { return x.name === playerName; }) ||
+                 PARLAY_PLAYERS_SOCCER.find(function(x) { return x.name === playerName; });
+        if (lp && lp.headshot) {
+            SLIP_HEADSHOT_CACHE[playerName] = lp.headshot;
+            showImg(document.getElementById(elemId), lp.headshot);
+            return;
+        }
+        // ESPN search fallback
+        fetch('https://site.api.espn.com/apis/search/v2?query=' + encodeURIComponent(playerName) + '&limit=3&type=player&sport=baseball', { signal: AbortSignal.timeout(5000) })
             .then(function(r) { return r.json(); })
             .then(function(d) {
-                var person = d.people && d.people[0];
-                if (!person || !person.id) {
+                var results = d.results || [];
+                var hit = results.find(function(r) { return r.type === 'player' && r.id; });
+                if (!hit) {
                     SLIP_HEADSHOT_CACHE[playerName] = 'none';
                     showFallback(document.getElementById(elemId));
                     return;
                 }
-                var url = '/api/headshot?id=' + person.id;
+                var url = 'https://a.espncdn.com/i/headshots/mlb/players/full/' + hit.id + '.png';
                 SLIP_HEADSHOT_CACHE[playerName] = url;
-                var el = document.getElementById(elemId);
-                if (el) el.innerHTML = '<img src="' + escHtml(url) + '" alt="" onerror="this.parentNode.innerHTML=this.parentNode.dataset.fallback||\'\';">';
+                showImg(document.getElementById(elemId), url);
             })
             .catch(function() {
                 SLIP_HEADSHOT_CACHE[playerName] = 'none';
