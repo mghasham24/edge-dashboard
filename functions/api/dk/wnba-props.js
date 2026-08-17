@@ -238,11 +238,13 @@ export async function onRequestGet(context) {
   const now     = Math.floor(Date.now() / 1000);
   const nocache = url.searchParams.has('nocache');
 
+  let stalePayload = null;
   try {
     const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(CACHE_KEY).first();
     if (!nocache && cached && (now - cached.fetched_at) < CACHE_TTL) {
       return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
     }
+    if (cached) stalePayload = cached.data;
   } catch(e) {}
 
   const entries = Object.entries(SUBCAT_MAP);
@@ -289,11 +291,24 @@ export async function onRequestGet(context) {
 
   const payload = JSON.stringify({ ok: true, players: allPlayers, count: allPlayers.length, games: wnbaGames, ts: now });
 
-  context.waitUntil(
-    env.DB.prepare(
-      'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at'
-    ).bind(CACHE_KEY, payload, now).run().catch(() => {})
-  );
+  if (allPlayers.length > 0) {
+    context.waitUntil(
+      env.DB.prepare(
+        'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at'
+      ).bind(CACHE_KEY, payload, now).run().catch(() => {})
+    );
+    return new Response(payload, { headers: { 'Content-Type': 'application/json' } });
+  }
+
+  // DK returned empty — serve stale cache rather than caching the empty response
+  if (stalePayload) {
+    try {
+      const parsed = JSON.parse(stalePayload);
+      if (parsed.players && parsed.players.length > 0) {
+        return new Response(stalePayload, { headers: { 'Content-Type': 'application/json' } });
+      }
+    } catch(e) {}
+  }
 
   return new Response(payload, { headers: { 'Content-Type': 'application/json' } });
 }

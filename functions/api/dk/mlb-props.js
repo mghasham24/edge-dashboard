@@ -286,13 +286,15 @@ export async function onRequestGet(context) {
     });
   }
 
-  // Serve from cache if fresh
+  // Serve from cache if fresh; keep stale data as fallback for empty DK responses
   const nocache = url.searchParams.has('nocache');
+  let stalePayload = null;
   try {
     const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(CACHE_KEY).first();
     if (!nocache && cached && (now - cached.fetched_at) < CACHE_TTL) {
       return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
     }
+    if (cached) stalePayload = cached.data;
   } catch(e) {}
 
   // Step 1: fetch hits first — its events array gives us today's game metadata for the Runs fetch
@@ -350,12 +352,25 @@ export async function onRequestGet(context) {
 
   const payload = JSON.stringify({ ok: true, players: allPlayers, count: allPlayers.length, games, ts: now });
 
-  // Cache so next request within TTL is instant
-  context.waitUntil(
-    env.DB.prepare(
-      'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at'
-    ).bind(CACHE_KEY, payload, now).run().catch(() => {})
-  );
+  if (allPlayers.length > 0) {
+    // Good data — update cache
+    context.waitUntil(
+      env.DB.prepare(
+        'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at'
+      ).bind(CACHE_KEY, payload, now).run().catch(() => {})
+    );
+    return new Response(payload, { headers: { 'Content-Type': 'application/json' } });
+  }
+
+  // DK returned empty — serve stale cache rather than caching the empty response
+  if (stalePayload) {
+    try {
+      const parsed = JSON.parse(stalePayload);
+      if (parsed.players && parsed.players.length > 0) {
+        return new Response(stalePayload, { headers: { 'Content-Type': 'application/json' } });
+      }
+    } catch(e) {}
+  }
 
   return new Response(payload, { headers: { 'Content-Type': 'application/json' } });
 }
