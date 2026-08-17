@@ -359,13 +359,24 @@ async function handleRequest({ request, env }) {
   // Phase 1: Process accepted incoming offers + any outgoing offers whose card matches a
   // known deposit card. outgoingAccepted normally contains payout offers sent to winners,
   // but when edgebot counters an incoming deposit offer and the user accepts that counter,
-  // RS may resolve it in outgoingAccepted rather than incomingAccepted. Filtering to known
-  // deposit cards prevents payout offers from false-activating a parlay.
+  // RS may resolve it in outgoingAccepted rather than incomingAccepted.
+  //
+  // IMPORTANT: only match outgoing offers whose ID was previously tracked as a counter-offer
+  // (rs_offer_id in parlays). Without this, a payout offer edgebot sent on a card that was
+  // later added to the deposit pool would falsely activate a new parlay (parlay 1952 incident).
+  const trackedOfferIds = new Set([
+    ...allPending,
+    ...(recentExpiredRows.results || []),
+    ...(voidedDepositRows.results || []),
+  ].filter(r => r.rs_offer_id != null).map(r => r.rs_offer_id));
+
   const processedIds = new Set();
   const seenSettled = new Set();
   const depositCardOutgoing = outgoingAccepted.filter(o => {
     const cid = getCardId(o);
-    return cid && (fullMap[cid] || expiredMap[cid] || voidedMap[cid]);
+    if (!cid || !o.id) return false;
+    if (!(fullMap[cid] || expiredMap[cid] || voidedMap[cid])) return false;
+    return trackedOfferIds.has(o.id); // only counter-offers edgebot made for a parlay
   });
   const allSettled = [...incomingAccepted, ...depositCardOutgoing].filter(o => {
     if (!o.id || seenSettled.has(o.id)) return false;
