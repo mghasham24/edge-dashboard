@@ -3222,7 +3222,7 @@
     .pslip-leg.leg-lost .pslip-leg-name { color:#ef4444; text-decoration:line-through }
     .pslip-leg.leg-push .pslip-leg-name { color:#f59e0b }
     .pslip-avatar { position:relative; flex-shrink:0 }
-    .pslip-av-inner { width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:800; color:#fff; overflow:hidden; background:var(--bg3) }
+    .pslip-av-inner { width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:800; color:#fff; overflow:hidden; background:var(--bg3) }
     .pslip-av-inner img { width:100%; height:100%; object-fit:cover; object-position:center 25% }
     .pslip-av-dir { position:absolute; bottom:-2px; right:-2px; width:14px; height:14px; border-radius:50%; font-size:8px; font-weight:800; display:flex; align-items:center; justify-content:center; border:2px solid var(--bg2) }
     .pslip-av-dir.more { background:var(--green); color:#fff }
