@@ -8,7 +8,7 @@ import { getSessionOrCron } from '../../_lib/auth.js';
 
 const SPORT_SLUG      = { mlb: 'mlb', wnba: 'wnba', nfl: 'nfl', ufc: 'ufc' };
 const SYNC_CACHE_KEY  = { mlb: 'real_sync_mlb_v12', wnba: 'real_sync_wnba_v12' };
-const PROPS_CACHE_KEY = { mlb: 'dk_mlb_props_v11',  wnba: 'dk_wnba_props_v3' };
+const PROPS_CACHE_KEY = { mlb: 'dk_mlb_props_v13',  wnba: 'dk_wnba_props_v4' };
 const LB_CACHE_KEY    = { mlb: 'otd_lb_v24_player_mlb_2025', wnba: 'otd_lb_v24_player_wnba_2025' };
 
 // Strip accents: "Azurá Stevens" → "Azura Stevens"
