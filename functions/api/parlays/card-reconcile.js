@@ -214,8 +214,16 @@ async function handleRequest({ request, env }) {
       samplePool: poolRows.slice(0, 5).map(r => r.card_id),
     }), now).run();
   } catch(_) {}
+  // D1 batch limit is 100 statements — chunk to 50 to stay safe with large card pools.
+  async function batchChunked(stmts) {
+    const CHUNK = 50;
+    for (let i = 0; i < stmts.length; i += CHUNK) {
+      await env.DB.batch(stmts.slice(i, i + CHUNK));
+    }
+  }
+
   if (ownedPoolIds.length) {
-    await env.DB.batch(
+    await batchChunked(
       ownedPoolIds.map(id =>
         env.DB.prepare('UPDATE deposit_cards SET verified_at=?, freed_at=NULL WHERE card_id=?').bind(now, id)
       )
@@ -233,7 +241,7 @@ async function handleRequest({ request, env }) {
 
   const newCardIds = [...owned].filter(id => !poolCardIds.has(id) && !recentlyUsed.has(id));
   if (newCardIds.length) {
-    await env.DB.batch(
+    await batchChunked(
       newCardIds.map(id =>
         env.DB.prepare('INSERT OR IGNORE INTO deposit_cards (card_id, verified_at) VALUES (?,?)').bind(id, now)
       )
