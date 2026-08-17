@@ -40,7 +40,7 @@ function buildHeaders(authInfo, sessionToken) {
 // RS collectingcards URL takes the RS user ID in the path, same as sync-cards.js.
 const EDGEBOT_USER = 'V3yGgkkJ';
 const PAGE_SIZE    = 10;
-const MAX_PAGES    = 50; // safety cap per sport/season (50 × 10 = 500 cards max)
+const MAX_PAGES    = 30; // 30 × 10 = 300 cards max — fetched in parallel so all fire at once
 
 async function fetchCardPage(sport, season, offset, hdrs) {
   try {
@@ -56,24 +56,24 @@ async function fetchCardPage(sport, season, offset, hdrs) {
   } catch (e) { return { ids: [], httpStatus: 0, error: e.message }; }
 }
 
-// Fetch all cards for one sport/season. Pages sequentially until partial page (<10) or cap.
-// RS never returns cardCount, so we must use the partial-page signal to detect the last page.
+// Fetch all cards for one sport/season in parallel to avoid CF's 30s wall clock.
+// Sequential paging at 1-2s per page would timeout with large card pools (179+ cards = 18 pages).
+// RS returns an empty array for out-of-range offsets so parallel over-fetch is safe.
 async function fetchAllForSport(sport, season, hdrs) {
-  const first = await fetchCardPage(sport, season, 0, hdrs);
-  const allIds = [...first.ids];
-
-  if (first.ids.length >= PAGE_SIZE) {
-    let offset = PAGE_SIZE;
-    for (let p = 0; p < MAX_PAGES; p++) {
-      const page = await fetchCardPage(sport, season, offset, hdrs);
-      if (!page.ids.length) break;       // empty page = done
-      allIds.push(...page.ids);
-      if (page.ids.length < PAGE_SIZE) break; // partial page = last page
-      offset += PAGE_SIZE;
-    }
+  const settled = await Promise.allSettled(
+    Array.from({ length: MAX_PAGES }, (_, i) =>
+      fetchCardPage(sport, season, i * PAGE_SIZE, hdrs)
+    )
+  );
+  const allIds = [];
+  let httpStatus = 0;
+  for (let i = 0; i < settled.length; i++) {
+    if (settled[i].status !== 'fulfilled') continue;
+    const { ids, httpStatus: hs } = settled[i].value;
+    if (i === 0) httpStatus = hs;
+    allIds.push(...ids);
   }
-
-  return { ids: allIds, httpStatus: first.httpStatus };
+  return { ids: allIds, httpStatus };
 }
 
 // Fetch all cards edgebot owns across all configured sports.
