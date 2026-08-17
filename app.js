@@ -8718,7 +8718,14 @@
                 americanOdds: odds,
                 impliedProb:  prob,
                 label:        lbl,
-                sport:        parlayActiveSport === 'soccer' ? ('soccer_' + (p.espnSlug || '')) : parlayActiveSport,
+                sport:        (function() {
+                    var pid = p.id;
+                    if (PARLAY_PLAYERS_UFC.some(function(x) { return x.id === pid; }))    return 'ufc';
+                    if (PARLAY_PLAYERS_WNBA.some(function(x) { return x.id === pid; }))   return 'wnba';
+                    if (PARLAY_PLAYERS_NFL.some(function(x) { return x.id === pid; }))    return 'nfl';
+                    if (PARLAY_PLAYERS_SOCCER.some(function(x) { return x.id === pid; })) return 'soccer_' + (p.espnSlug || '');
+                    return 'mlb';
+                })(),
                 gameDate:     (function(ms){ return ms ? new Date(ms).toLocaleDateString('en-CA', { timeZone: 'America/New_York' }) : new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' }); })(p.commenceMs || p.startMs || 0),
                 eventName:    _gameKey,
                 selectionId:  p.isTeamMarket ? (p.selId || String(p.id)) : (dir === 'more' ? p.moreSelId : p.lessSelId),

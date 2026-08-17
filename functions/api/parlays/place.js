@@ -156,13 +156,16 @@ export async function onRequestPost({ request, env }) {
       'aces','dream','fever','liberty','lynx','mercury','mystics','sky','sparks','storm','sun','wings',
     ]);
     let legSport = VALID_SPORTS.includes(leg.sport) ? leg.sport : 'mlb';
-    if (TEAM_MARKETS.has(leg.marketType) && !VALID_SPORTS.includes(leg.sport)) {
-      // Only use nickname detection when sport is not explicitly provided.
-      // Cardinals (MLB) and Giants (MLB) share names with NFL teams — trust the passed sport field.
+    if (TEAM_MARKETS.has(leg.marketType)) {
+      // Always derive sport from team nickname for team-market legs.
+      // Cardinals (MLB) and Giants (MLB) share nicknames with NFL teams — use sent sport as tiebreaker.
       const words = (leg.playerName || '').toLowerCase().split(/[\s@]+/);
-      if (words.some(w => NFL_NICKNAMES.has(w)))        legSport = 'nfl';
-      else if (words.some(w => WNBA_NICKNAMES.has(w)))  legSport = 'wnba';
-      else                                               legSport = 'mlb';
+      const isNfl  = words.some(w => NFL_NICKNAMES.has(w));
+      const isWnba = words.some(w => WNBA_NICKNAMES.has(w));
+      if (isWnba && !isNfl)                            legSport = 'wnba';
+      else if (isNfl && !isWnba && leg.sport !== 'mlb') legSport = 'nfl'; // Cardinals/Giants MLB: trust 'mlb' from frontend
+      else if (!isNfl && !isWnba)                       legSport = 'mlb';
+      // else: ambiguous — legSport already set from leg.sport above
     }
 
     normalized.push({
