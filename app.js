@@ -4944,6 +4944,7 @@
     ];
     var WNBA_MKT_SET = { pts:1, reb:1, ast:1, fg3m:1, pra:1, pa:1, pr:1, ra:1, double_double:1, triple_double:1 };
     var parlayActiveSport = 'mlb'; // 'mlb' | 'wnba' | 'nfl' | 'ufc' | 'soccer'
+    var PARLAY_HEADSHOT_CACHE = {}; // playerName → ESPN URL or 'none'
 
     var PARLAY_PLAYERS        = [];  // filled by loadParlayPlayers()
     var PARLAY_PLAYERS_WNBA   = [];  // filled by loadParlayPlayers() when sport=wnba
@@ -5887,9 +5888,31 @@
     }
 
     function parlayHeadshotFail(img) {
-        img.style.display = 'none';
-        var av = img.nextElementSibling;
-        if (av) av.style.display = 'flex';
+        var name  = img.dataset.name;
+        var sport = img.dataset.sport || 'mlb';
+        var av    = img.nextElementSibling;
+        if (!name || PARLAY_HEADSHOT_CACHE[name] === 'none') {
+            img.style.display = 'none'; if (av) av.style.display = 'flex'; return;
+        }
+        if (PARLAY_HEADSHOT_CACHE[name] && PARLAY_HEADSHOT_CACHE[name] !== 'none') {
+            img.src = PARLAY_HEADSHOT_CACHE[name];
+            img.onerror = function() { img.style.display = 'none'; if (av) av.style.display = 'flex'; };
+            return;
+        }
+        var espnSport  = sport === 'wnba' ? 'basketball' : 'baseball';
+        var espnLeague = sport === 'wnba' ? 'wnba' : 'mlb';
+        img.onerror = null;
+        fetch('https://site.api.espn.com/apis/search/v2?query=' + encodeURIComponent(name) + '&limit=3&type=player&sport=' + espnSport, { signal: AbortSignal.timeout(5000) })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                var hit = (d.results || []).find(function(r) { return r.type === 'player' && r.id; });
+                if (!hit) { PARLAY_HEADSHOT_CACHE[name] = 'none'; img.style.display = 'none'; if (av) av.style.display = 'flex'; return; }
+                var url = 'https://a.espncdn.com/i/headshots/' + espnLeague + '/players/full/' + hit.id + '.png';
+                PARLAY_HEADSHOT_CACHE[name] = url;
+                img.src = url;
+                img.onerror = function() { img.style.display = 'none'; if (av) av.style.display = 'flex'; };
+            })
+            .catch(function() { PARLAY_HEADSHOT_CACHE[name] = 'none'; img.style.display = 'none'; if (av) av.style.display = 'flex'; });
     }
 
     function parlayGameRsUrl(game, sport) {
@@ -6370,9 +6393,9 @@
             var avatarStyle = 'background:linear-gradient(135deg,' + p.color + ',' + p.color + 'aa)';
             var topStyle = 'background:linear-gradient(160deg,' + p.color + '55,' + p.color + '22)';
             var headshotHtml = p.headshot
-                ? '<img class="parlay-card-headshot" src="' + escHtml(p.headshot) + '" alt="" onerror="parlayHeadshotFail(this)">' +
+                ? '<img class="parlay-card-headshot" data-name="' + escHtml(p.name) + '" data-sport="' + escHtml(parlayActiveSport) + '" src="' + escHtml(p.headshot) + '" alt="" onerror="parlayHeadshotFail(this)">' +
                   '<div class="parlay-card-avatar" style="' + avatarStyle + ';display:none">' + escHtml(p.initials) + '</div>'
-                : '<div class="parlay-card-avatar" style="' + avatarStyle + '">' + escHtml(p.initials) + '</div>';
+                : '<div class="parlay-card-avatar" id="bcard-av-' + p.id + '" data-name="' + escHtml(p.name) + '" style="' + avatarStyle + '">' + escHtml(p.initials) + '</div>';
             var rsPlayerId = parlayRsIdCache[parlayActiveSport + ':' + p.name];
             var rsPlayerIdNum = rsPlayerId ? parseInt(rsPlayerId, 10) : 0;
             var playerUrl  = (rsPlayerIdNum > 0) ? ('https://www.realapp.com/' + rsUrlHash(2, RS_SPORT_CODE[parlayActiveSport] || 0, 0, rsPlayerIdNum)) : null;
@@ -6401,6 +6424,40 @@
                 '</div>' +
             '</div>';
         }).join('');
+        // Async: ESPN headshots for cards where DK returned no player image
+        var _espnSport  = parlayActiveSport;
+        var _espnLeague = _espnSport === 'wnba' ? 'wnba' : 'mlb';
+        var _espnQSport = _espnSport === 'wnba' ? 'basketball' : 'baseball';
+        var _seenEspn   = {};
+        players.forEach(function(p) {
+            if (p.headshot || _seenEspn[p.name]) return;
+            _seenEspn[p.name] = true;
+            (function(pid, name, initials, color) {
+                var cached = PARLAY_HEADSHOT_CACHE[name];
+                if (cached) {
+                    if (cached === 'none') return;
+                    var av = document.getElementById('bcard-av-' + pid);
+                    if (!av) return;
+                    var avSt = 'background:linear-gradient(135deg,' + color + ',' + color + 'aa);display:none';
+                    av.outerHTML = '<img class="parlay-card-headshot" data-name="' + escHtml(name) + '" data-sport="' + escHtml(_espnSport) + '" src="' + escHtml(cached) + '" alt="" onerror="parlayHeadshotFail(this)"><div class="parlay-card-avatar" style="' + avSt + '">' + escHtml(initials) + '</div>';
+                    return;
+                }
+                fetch('https://site.api.espn.com/apis/search/v2?query=' + encodeURIComponent(name) + '&limit=3&type=player&sport=' + _espnQSport, { signal: AbortSignal.timeout(5000) })
+                    .then(function(r) { return r.json(); })
+                    .then(function(d) {
+                        var hit = (d.results || []).find(function(r) { return r.type === 'player' && r.id; });
+                        if (!hit) { PARLAY_HEADSHOT_CACHE[name] = 'none'; return; }
+                        var url = 'https://a.espncdn.com/i/headshots/' + _espnLeague + '/players/full/' + hit.id + '.png';
+                        PARLAY_HEADSHOT_CACHE[name] = url;
+                        var av = document.getElementById('bcard-av-' + pid);
+                        if (!av) return;
+                        var avSt = 'background:linear-gradient(135deg,' + color + ',' + color + 'aa);display:none';
+                        av.outerHTML = '<img class="parlay-card-headshot" data-name="' + escHtml(name) + '" data-sport="' + escHtml(_espnSport) + '" src="' + escHtml(url) + '" alt="" onerror="parlayHeadshotFail(this)"><div class="parlay-card-avatar" style="' + avSt + '">' + escHtml(initials) + '</div>';
+                    })
+                    .catch(function() { PARLAY_HEADSHOT_CACHE[name] = 'none'; });
+            })(p.id, p.name, p.initials, p.color);
+        });
+
         // Kick off background RS player ID lookups for any uncached players
         var _bgSport = parlayActiveSport;
         var _seen = {};
