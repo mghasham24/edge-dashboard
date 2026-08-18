@@ -2113,6 +2113,19 @@
     /* Admin sub-nav */
     .admin-sub-btn { background:var(--bg3); border:1.5px solid var(--border2); color:var(--muted); font-family:var(--sans); font-size:12px; font-weight:700; padding:6px 16px; border-radius:6px; cursor:pointer; letter-spacing:.04em; transition:border-color .13s,color .13s }
     .admin-sub-btn.active { border-color:var(--accent); color:var(--accent) }
+    /* Payout queue buttons */
+    .pq-complete-btn,.pq-open-btn,.pq-sent-btn,.pq-skip-btn { display:inline-flex; align-items:center; padding:7px 14px; border-radius:6px; font-size:12px; font-weight:700; font-family:var(--sans); cursor:pointer; text-decoration:none; border:none; transition:background .13s }
+    .pq-complete-btn { background:var(--accent); color:#fff }
+    .pq-complete-btn:hover { opacity:.88 }
+    .pq-complete-btn:disabled { opacity:.5; cursor:default }
+    .pq-open-btn { background:rgba(34,197,94,.15); color:var(--green); border:1.5px solid rgba(34,197,94,.3) }
+    .pq-open-btn:hover { background:rgba(34,197,94,.25) }
+    .pq-sent-btn { background:rgba(34,197,94,.12); color:var(--green); border:1.5px solid rgba(34,197,94,.25) }
+    .pq-sent-btn:hover { background:rgba(34,197,94,.22) }
+    .pq-sent-btn:disabled { opacity:.5; cursor:default }
+    .pq-skip-btn { background:var(--bg3); color:var(--muted); border:1px solid var(--border2) }
+    .pq-skip-btn:hover { color:var(--fg) }
+    .pq-skip-btn:disabled { opacity:.5; cursor:default }
     /* Performance section */
     .perf-controls { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:14px }
     .perf-presets { display:flex; gap:5px }

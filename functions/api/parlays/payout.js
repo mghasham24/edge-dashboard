@@ -211,6 +211,9 @@ export async function onRequestPost({ request, env }) {
     return ok({ paused: true, hours, resumesAt });
   }
 
+  // Manual mode — auto-offer disabled; all payouts go through admin payout-queue UI
+  if (env.PAYOUT_MANUAL === '1') return ok({ paused: true, reason: 'manual_mode' });
+
   // Check global payout pause (set automatically on 403 ban or manually)
   try {
     const pauseRow = await env.DB.prepare(

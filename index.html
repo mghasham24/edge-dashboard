@@ -12,7 +12,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Barlow:wght@400;500;600;700&display=swap">
-    <link rel="stylesheet" href="/app.css?v=159">
+    <link rel="stylesheet" href="/app.css?v=160">
     <script src="https://www.google.com/recaptcha/api.js?render=6Let4qMsAAAAAFhvh6wy6Ai_Ruzq2j4MIlMhqRnl"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/hashids/2.3.0/hashids.min.js"></script>
     <script>
@@ -504,6 +504,7 @@
                 <div style="display:flex;gap:6px">
                     <button class="admin-sub-btn active" id="admin-sub-users" onclick="adminShowSection('users')">Users</button>
                     <button class="admin-sub-btn" id="admin-sub-perf" onclick="adminShowSection('perf')">Performance</button>
+                    <button class="admin-sub-btn" id="admin-sub-payouts" onclick="adminShowSection('payouts')">Payouts</button>
                 </div>
             </div>
             <div class="admin-stats">
@@ -632,6 +633,15 @@
                     </table>
                 </div>
             </div><!-- /admin-perf-section -->
+
+            <!-- Payouts section -->
+            <div id="admin-payouts-section" style="display:none">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+                    <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2)">Payout Queue</div>
+                    <button onclick="loadAdminPayouts()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:5px;cursor:pointer;letter-spacing:.04em">Refresh</button>
+                </div>
+                <div id="admin-payouts-list" style="font-size:13px;color:var(--muted)">Loading…</div>
+            </div><!-- /admin-payouts-section -->
         </div>
 
         <!-- Referral Panel -->
@@ -909,7 +919,7 @@
     <!-- end #dashboard -->
 
     <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script>
-    <script src="/app.js?v=703"></script>
+    <script src="/app.js?v=704"></script>
     <div id="app-version-badge" style="position:fixed;bottom:6px;right:10px;font-size:9px;font-weight:600;color:var(--muted2);font-family:var(--mono);letter-spacing:.03em;pointer-events:none;z-index:1">v686</div>
 </body>
 </html>

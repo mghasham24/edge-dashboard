@@ -12969,22 +12969,26 @@
     }
 
     function adminShowSection(section) {
-        var usersEl = document.getElementById('admin-users-section');
-        var perfEl  = document.getElementById('admin-perf-section');
-        var uBtn    = document.getElementById('admin-sub-users');
-        var pBtn    = document.getElementById('admin-sub-perf');
+        var usersEl   = document.getElementById('admin-users-section');
+        var perfEl    = document.getElementById('admin-perf-section');
+        var payoutsEl = document.getElementById('admin-payouts-section');
+        var uBtn      = document.getElementById('admin-sub-users');
+        var pBtn      = document.getElementById('admin-sub-perf');
+        var qBtn      = document.getElementById('admin-sub-payouts');
+        [usersEl, perfEl, payoutsEl].forEach(function(el) { if (el) el.style.display = 'none'; });
+        [uBtn, pBtn, qBtn].forEach(function(b) { if (b) b.classList.remove('active'); });
         if (section === 'perf') {
-            if (usersEl) usersEl.style.display = 'none';
-            if (perfEl)  perfEl.style.display  = '';
-            if (uBtn)    uBtn.classList.remove('active');
-            if (pBtn)    pBtn.classList.add('active');
+            if (perfEl) perfEl.style.display = '';
+            if (pBtn)   pBtn.classList.add('active');
             if (!(document.getElementById('perf-from') && document.getElementById('perf-from').value))
                 perfSetRange(7, document.querySelector('.perf-preset-btn'));
+        } else if (section === 'payouts') {
+            if (payoutsEl) payoutsEl.style.display = '';
+            if (qBtn)      qBtn.classList.add('active');
+            loadAdminPayouts();
         } else {
             if (usersEl) usersEl.style.display = '';
-            if (perfEl)  perfEl.style.display  = 'none';
             if (uBtn)    uBtn.classList.add('active');
-            if (pBtn)    pBtn.classList.remove('active');
         }
     }
 
@@ -13089,6 +13093,126 @@
             var pro = (data.plans || []).find(function(p) { return p.plan === 'pro'; });
             document.getElementById('adm-pro').textContent = pro ? pro.c : 0;
         } catch (e) {}
+    }
+
+    async function loadAdminPayouts() {
+        var el = document.getElementById('admin-payouts-list');
+        if (!el) return;
+        el.innerHTML = '<span style="color:var(--muted)">Loading…</span>';
+        try {
+            var res  = await fetch('/api/parlays/payout-queue?action=list', { credentials: 'same-origin' });
+            var data = await res.json();
+            if (!data.ok) { el.innerHTML = '<span style="color:#ef4444">Error loading payouts</span>'; return; }
+            var queue = data.queue || [];
+            if (!queue.length) { el.innerHTML = '<span style="color:var(--muted)">No payout queue entries</span>'; return; }
+            var RAX = 'Ⓡ';
+            var statusColor = { pending: 'var(--orange,#f59e0b)', sent: 'var(--green)', failed: '#ef4444' };
+            el.innerHTML = queue.map(function(q) {
+                var status   = q.status || 'pending';
+                var isPend   = status === 'pending';
+                var hasCard  = !!q.card_url;
+                var actionsHtml = '';
+                if (isPend && hasCard) {
+                    actionsHtml =
+                        '<a href="' + escHtml(q.card_url) + '" target="_blank" rel="noopener" class="pq-open-btn" id="pq-open-' + q.id + '">Open in RS</a>' +
+                        '<button class="pq-sent-btn" onclick="markPayoutSent(' + q.id + ',this)">Mark Sent</button>' +
+                        '<button class="pq-skip-btn" onclick="skipPayoutCard(' + q.id + ',this)">Try Another Card</button>';
+                } else if (isPend) {
+                    actionsHtml = '<button class="pq-complete-btn" onclick="completePayout(' + q.id + ',this)">Complete Payout</button>';
+                }
+                var cardHtml = hasCard
+                    ? '<a href="' + escHtml(q.card_url) + '" target="_blank" rel="noopener" style="color:var(--accent);font-size:11px">Card #' + escHtml(String(q.target_card_id)) + ' ↗</a>'
+                    : '<span style="color:var(--muted2);font-size:11px">—</span>';
+                var noteHtml = q.notes ? '<div style="font-size:10px;color:var(--muted2);margin-top:3px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escHtml(q.notes) + '">' + escHtml(q.notes.slice(0, 80)) + '</div>' : '';
+                return '<div class="pq-row" id="pq-row-' + q.id + '" style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:10px">' +
+                    '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">' +
+                        '<div>' +
+                            '<div style="font-size:13px;font-weight:600;color:var(--fg)">@' + escHtml(q.rs_username || '?') + '</div>' +
+                            '<div style="margin-top:4px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">' +
+                                '<span style="font-size:12px;color:var(--muted)">Parlay #' + q.parlay_id + '</span>' +
+                                '<span style="font-size:11px;font-weight:700;letter-spacing:.04em;color:' + (statusColor[status] || 'var(--muted)') + ';text-transform:uppercase">' + escHtml(status) + '</span>' +
+                            '</div>' +
+                            noteHtml +
+                        '</div>' +
+                        '<div style="text-align:right;flex-shrink:0">' +
+                            '<div style="font-size:18px;font-weight:700;color:var(--fg)">' + Number(q.payout_rax || 0).toLocaleString() + ' ' + RAX + '</div>' +
+                            '<div style="font-size:11px;color:var(--muted2)">Offer <strong style="color:var(--fg)">' + Number(q.offer_amount || 0).toLocaleString() + '</strong> ' + RAX + ' in RS</div>' +
+                            '<div style="margin-top:6px">' + cardHtml + '</div>' +
+                        '</div>' +
+                    '</div>' +
+                    (actionsHtml ? '<div class="pq-actions" id="pq-actions-' + q.id + '" style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">' + actionsHtml + '</div>' : '') +
+                '</div>';
+            }).join('');
+        } catch (e) {
+            if (el) el.innerHTML = '<span style="color:#ef4444">Failed: ' + escHtml(e.message) + '</span>';
+        }
+    }
+
+    async function completePayout(queueId, btn) {
+        btn.disabled = true;
+        btn.textContent = 'Finding card…';
+        try {
+            var res  = await fetch('/api/parlays/payout-queue?action=prepare&id=' + queueId, { method: 'POST', credentials: 'same-origin' });
+            var data = await res.json();
+            if (!data.ok || !data.cardUrl) {
+                btn.textContent = data.error || 'No card found';
+                btn.disabled = false;
+                return;
+            }
+            window.open(data.cardUrl, '_blank');
+            var actEl = document.getElementById('pq-actions-' + queueId);
+            if (actEl) {
+                var RAX = 'Ⓡ';
+                actEl.innerHTML =
+                    '<a href="' + escHtml(data.cardUrl) + '" target="_blank" rel="noopener" class="pq-open-btn">Open in RS ↗</a>' +
+                    '<button class="pq-sent-btn" onclick="markPayoutSent(' + queueId + ',this)">Mark Sent</button>' +
+                    '<button class="pq-skip-btn" onclick="skipPayoutCard(' + queueId + ',this)">Try Another Card</button>';
+                var row = document.getElementById('pq-row-' + queueId);
+                if (row) {
+                    var noteEl = row.querySelector('.pq-offer-note');
+                    if (!noteEl) {
+                        var amtDiv = document.createElement('div');
+                        amtDiv.className = 'pq-offer-note';
+                        amtDiv.style.cssText = 'font-size:12px;color:var(--green);font-weight:600;margin-top:4px';
+                        amtDiv.textContent = 'Enter ' + Number(data.offerAmount).toLocaleString() + ' ' + RAX + ' in RS offer screen';
+                        actEl.parentNode.insertBefore(amtDiv, actEl);
+                    }
+                }
+            }
+        } catch (e) {
+            btn.textContent = 'Error: ' + e.message;
+            btn.disabled = false;
+        }
+    }
+
+    async function skipPayoutCard(queueId, btn) {
+        btn.disabled = true;
+        btn.textContent = 'Skipping…';
+        try {
+            var res  = await fetch('/api/parlays/payout-queue?action=skip_card&id=' + queueId, { method: 'POST', credentials: 'same-origin' });
+            var data = await res.json();
+            if (data.ok) {
+                var actEl = document.getElementById('pq-actions-' + queueId);
+                if (actEl) actEl.innerHTML = '<button class="pq-complete-btn" onclick="completePayout(' + queueId + ',this)">Complete Payout</button>';
+            }
+        } catch (e) {
+            btn.disabled = false;
+            btn.textContent = 'Error';
+        }
+    }
+
+    async function markPayoutSent(queueId, btn) {
+        btn.disabled = true;
+        btn.textContent = 'Saving…';
+        try {
+            var res  = await fetch('/api/parlays/payout-queue?action=mark_sent&id=' + queueId, { method: 'POST', credentials: 'same-origin' });
+            var data = await res.json();
+            if (data.ok) loadAdminPayouts();
+            else { btn.textContent = 'Error'; btn.disabled = false; }
+        } catch (e) {
+            btn.textContent = 'Error';
+            btn.disabled = false;
+        }
     }
 
     async function loadAdminUsers(q, offset, append) {
