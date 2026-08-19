@@ -61,15 +61,17 @@ async function findUnownedCard(rsUserId, authInfo, sessionToken, skipIds) {
   return null;
 }
 
-async function requireAdmin(request, db) {
-  const session = await getSession(request, db);
+async function isAuthorized(request, env) {
+  const url = new URL(request.url);
+  if (env.CRON_SECRET && url.searchParams.get('_cron_key') === env.CRON_SECRET) return true;
+  const session = await getSession(request, env.DB);
   if (!session) return false;
-  const user = await db.prepare('SELECT is_admin FROM users WHERE id=?').bind(session.user_id).first();
+  const user = await env.DB.prepare('SELECT is_admin FROM users WHERE id=?').bind(session.user_id).first();
   return !!user?.is_admin;
 }
 
 async function handleRequest({ request, env }) {
-  if (!(await requireAdmin(request, env.DB))) return err('Unauthorized', 401);
+  if (!(await isAuthorized(request, env))) return err('Unauthorized', 401);
 
   const url    = new URL(request.url);
   const action = url.searchParams.get('action') || 'list';
