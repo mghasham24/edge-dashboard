@@ -1,4 +1,6 @@
 node_modules/
 .env
 browser-state.json
+chrome-profile/
+safari-storage.json
 error-*.png

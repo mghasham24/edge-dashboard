@@ -1,14 +1,12 @@
 {
   "name": "payout-bot",
-  "version": "1.0.0",
-  "description": "Playwright payout bot for RaxEdge — runs headed on Mac, looks like a human",
+  "version": "2.0.0",
+  "description": "Payout bot — drives real Safari via AppleScript, no browser automation fingerprint",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "install-browser": "npx playwright install chromium"
+    "start": "node index.js"
   },
   "dependencies": {
-    "dotenv": "^16.4.5",
-    "playwright": "^1.46.0"
+    "dotenv": "^16.4.5"
   }
 }
