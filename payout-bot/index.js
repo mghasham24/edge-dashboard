@@ -293,22 +293,26 @@ async function runTest(cardUrl, amount) {
   }
 }
 
-// ── Main queue loop ────────────────────────────────────────────────────────────
-async function main() {
-  console.log('Fetching pending payouts...');
+const LOCK_FILE    = path.join(__dirname, '.daemon.lock');
+const CHECK_EVERY  = 5 * 60 * 1000; // 5 minutes between queue checks
+
+const ts = () => new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+// ── Shared queue processing (used by main + daemon) ────────────────────────────
+async function processQueue() {
   let queue;
   try { queue = await fetchQueue(); }
-  catch (e) { console.error('Queue error:', e.message); return; }
+  catch (e) { console.error(`[${ts()}] Queue error:`, e.message); return 0; }
 
-  if (!queue.length) { console.log('No pending payouts.'); return; }
+  if (!queue.length) { console.log(`[${ts()}] No pending payouts.`); return 0; }
 
-  console.log(`${queue.length} payout(s) to process:\n`);
+  console.log(`[${ts()}] ${queue.length} pending payout(s):\n`);
   queue.forEach(e => console.log(`  #${e.id}  @${e.rs_username}  ${Number(e.offer_amount).toLocaleString()} Rax`));
 
   let sent = 0;
   for (let i = 0; i < queue.length; i++) {
     const entry = queue[i];
-    console.log(`\n[${i + 1}/${queue.length}] #${entry.id} — @${entry.rs_username} — ${Number(entry.offer_amount).toLocaleString()} Rax`);
+    console.log(`\n[${ts()}] [${i + 1}/${queue.length}] #${entry.id} — @${entry.rs_username} — ${Number(entry.offer_amount).toLocaleString()} Rax`);
 
     let cardUrl = entry.card_url, offerAmount = entry.offer_amount;
     if (!cardUrl) {
@@ -336,7 +340,43 @@ async function main() {
     }
   }
 
-  console.log(`\n✓ Done — ${sent}/${queue.length} offers sent.`);
+  console.log(`\n[${ts()}] ✓ Done — ${sent}/${queue.length} offers sent.`);
+  return sent;
+}
+
+// ── One-shot main ──────────────────────────────────────────────────────────────
+async function main() {
+  await processQueue();
+}
+
+// ── Daemon mode: run forever, check every 5 minutes ───────────────────────────
+async function runDaemon() {
+  // Stale-safe lock: check if prior PID is still alive
+  if (fs.existsSync(LOCK_FILE)) {
+    const pid = parseInt(fs.readFileSync(LOCK_FILE, 'utf8').trim(), 10);
+    try {
+      process.kill(pid, 0); // throws if process doesn't exist
+      console.error(`Daemon already running (PID ${pid}). Exiting.`);
+      process.exit(0);
+    } catch {
+      fs.unlinkSync(LOCK_FILE); // stale lock — clean up
+    }
+  }
+
+  fs.writeFileSync(LOCK_FILE, String(process.pid));
+  const cleanup = () => { try { fs.unlinkSync(LOCK_FILE); } catch {} process.exit(0); };
+  process.on('SIGINT', cleanup);
+  process.on('SIGTERM', cleanup);
+
+  console.log(`\n Payout bot daemon started (PID ${process.pid})`);
+  console.log(` Checking every ${CHECK_EVERY / 60000} minutes. Ctrl+C to stop.\n`);
+
+  while (true) {
+    console.log(`[${ts()}] Checking queue...`);
+    await processQueue();
+    console.log(`[${ts()}] Sleeping ${CHECK_EVERY / 60000} min...\n`);
+    await sleep(CHECK_EVERY);
+  }
 }
 
 // ── Entry point ────────────────────────────────────────────────────────────────
@@ -348,6 +388,8 @@ if (args[0] === '--test') {
     process.exit(1);
   }
   runTest(cardUrl, amount).catch(e => { console.error('Fatal:', e.message); process.exit(1); });
+} else if (args[0] === '--daemon') {
+  runDaemon().catch(e => { console.error('Fatal:', e.message); process.exit(1); });
 } else {
   main().catch(e => { console.error('Fatal:', e.message); process.exit(1); });
 }
