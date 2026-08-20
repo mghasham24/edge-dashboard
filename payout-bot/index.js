@@ -268,9 +268,9 @@ async function processOffer(cardUrl, offerAmount, dryRun = false) {
 
   await sleep(300);
 
-  // There are 2 "Offer" buttons: context-menu one + modal submit one.
-  // Take the LAST visible one — that's the submit button inside the modal.
-  const submitStr = await safariWaitFor(`
+  // Focus the submit Offer button (last visible one = modal submit, not context-menu)
+  // then press Space via System Events — real OS keystroke, no coordinate math needed.
+  await safariWaitFor(`
 (function() {
   var btns = Array.from(document.querySelectorAll('button')).filter(function(b) {
     if (b.textContent.trim().toLowerCase() !== 'offer') return false;
@@ -278,14 +278,18 @@ async function processOffer(cardUrl, offerAmount, dryRun = false) {
     return r.width > 0 && r.height > 0;
   });
   if (!btns.length) return null;
-  var btn = btns[btns.length - 1];
-  var r = btn.getBoundingClientRect();
-  return (r.x + r.width / 2) + ',' + (r.y + r.height / 2);
+  btns[btns.length - 1].focus();
+  return 'focused';
 })()
 `);
-  const [btnX, btnY] = submitStr.split(',').map(Number);
-  const submitOrigin = await viewportOrigin();
-  await systemClick(submitOrigin.x + btnX, submitOrigin.y + btnY);
+  await sleep(150);
+  await runOSA(`
+tell application "Safari" to activate
+delay 0.1
+tell application "System Events"
+  key code 49
+end tell
+`);
   await sleep(1500);
 
   await safariCloseTab();
