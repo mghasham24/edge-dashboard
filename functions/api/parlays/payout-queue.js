@@ -87,12 +87,28 @@ async function handleRequest({ request, env }) {
       'FROM payout_queue q LEFT JOIN real_auth ra ON ra.user_id = q.user_id ' +
       'ORDER BY q.created_at DESC LIMIT 100'
     ).all();
+
+    const rows = results || [];
+    const parlayIds = [...new Set(rows.map(r => r.parlay_id).filter(Boolean))];
+    let legsByParlay = {};
+    if (parlayIds.length > 0) {
+      const ph = parlayIds.map(() => '?').join(',');
+      const { results: legs } = await env.DB.prepare(
+        `SELECT parlay_id, player_name, market_type, label, direction, threshold, american_odds, status, result_value, event_name, sport FROM parlay_legs WHERE parlay_id IN (${ph}) ORDER BY id`
+      ).bind(...parlayIds).all();
+      for (const leg of (legs || [])) {
+        if (!legsByParlay[leg.parlay_id]) legsByParlay[leg.parlay_id] = [];
+        legsByParlay[leg.parlay_id].push(leg);
+      }
+    }
+
     return ok({
-      queue: (results || []).map(r => ({
+      queue: rows.map(r => ({
         ...r,
         card_url: r.target_card_id
           ? 'https://www.realapp.com/' + rsUrlEncode(20, 0, 0, r.target_card_id)
           : null,
+        legs: legsByParlay[r.parlay_id] || [],
       })),
     });
   }

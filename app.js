@@ -13107,10 +13107,22 @@
             if (!queue.length) { el.innerHTML = '<span style="color:var(--muted)">No payout queue entries</span>'; return; }
             var RAX = 'Ⓡ';
             var statusColor = { pending: 'var(--orange,#f59e0b)', sent: 'var(--green)', failed: '#ef4444' };
+            var MKT_SHORT = {
+                hits:'Hits', total_bases:'Total Bases', rbis:'RBIs', runs:'Runs', hrbi:'H+R+RBI',
+                singles:'Singles', stolen_bases:'Stolen Bases', doubles:'Doubles', walks:'Walks', home_runs:'HRs',
+                pitcher_ks:'Ks', outs_ou:'Outs', hits_allowed:'Hits Alld', er_allowed:'ERs', bb_allowed:'BBs Alld',
+                pts:'Pts', reb:'Reb', ast:'Ast', fg3m:'3s', pra:'PRA', pa:'Pts+Ast', pr:'Pts+Reb', ra:'Reb+Ast',
+                points:'Pts', assists:'Ast', rebounds:'Reb', steals:'Stl', blocks:'Blk', threes:'3s',
+                '1inn_ml':'1st Inn ML', '1inn_runs_ou':'1st Inn Runs', '1inn_run_yn':'1st Inn Score',
+                team_ml:'ML', team_runline:'RL', team_total:'Total', ufc_ml:'ML', ufc_total:'Fight Total',
+            };
             el.innerHTML = queue.map(function(q) {
                 var status   = q.status || 'pending';
                 var isPend   = status === 'pending';
                 var hasCard  = !!q.card_url;
+                var legs     = q.legs || [];
+                var isRefund = legs.length > 0 && legs.every(function(l) { return l.status === 'void' || l.status === 'push'; });
+
                 var actionsHtml = '';
                 if (isPend && hasCard) {
                     actionsHtml =
@@ -13120,14 +13132,52 @@
                 } else if (isPend) {
                     actionsHtml = '<button class="pq-complete-btn" onclick="completePayout(' + q.id + ',this)">Complete Payout</button>';
                 }
+
                 var cardHtml = hasCard
                     ? '<a href="' + escHtml(q.card_url) + '" target="_blank" rel="noopener" style="color:var(--accent);font-size:11px">Card #' + escHtml(String(q.target_card_id)) + ' ↗</a>'
                     : '<span style="color:var(--muted2);font-size:11px">—</span>';
                 var noteHtml = q.notes ? '<div style="font-size:10px;color:var(--muted2);margin-top:3px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escHtml(q.notes) + '">' + escHtml(q.notes.slice(0, 80)) + '</div>' : '';
+
+                // Copy button — copies the bot test command
+                var copyStr = hasCard
+                    ? 'node index.js --test ' + q.card_url + ' ' + (q.offer_amount || 0)
+                    : '@' + (q.rs_username || '') + ' · ' + Number(q.offer_amount || 0).toLocaleString() + ' Ⓡ offer';
+                var copyBtn = '<button onclick="(function(btn,s){navigator.clipboard.writeText(s).then(function(){var t=btn.textContent;btn.textContent=\'Copied!\';setTimeout(function(){btn.textContent=t;},1200);});})(this,' + JSON.stringify(copyStr) + ')" style="background:none;border:1px solid var(--border);border-radius:5px;padding:3px 8px;font-size:10px;color:var(--muted);cursor:pointer">Copy</button>';
+
+                // Legs (for wins, not refunds)
+                var legsHtml = '';
+                if (!isRefund && legs.length > 0) {
+                    legsHtml = '<div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px;display:flex;flex-direction:column;gap:5px">' +
+                        legs.map(function(leg) {
+                            var icon = leg.status === 'won'  ? '<span style="color:var(--green);font-weight:700;width:14px;display:inline-block">✓</span>'
+                                     : leg.status === 'lost' ? '<span style="color:#ef4444;font-weight:700;width:14px;display:inline-block">✗</span>'
+                                     : (leg.status === 'void' || leg.status === 'push') ? '<span style="color:var(--muted);font-weight:700;width:14px;display:inline-block">—</span>'
+                                     : '<span style="color:var(--muted2);width:14px;display:inline-block">·</span>';
+                            var mkt  = MKT_SHORT[leg.market_type] || leg.market_type || '';
+                            var dir  = leg.direction === 'more' ? '↑' : leg.direction === 'less' ? '↓' : '';
+                            var thr  = leg.threshold != null ? leg.threshold : '';
+                            var odds = leg.american_odds > 0 ? '+' + leg.american_odds : (leg.american_odds || '');
+                            var name = escHtml(leg.player_name || leg.event_name || '');
+                            var rv   = leg.result_value != null ? ' <span style="color:var(--muted2)">(' + leg.result_value + ')</span>' : '';
+                            return '<div style="display:flex;align-items:center;gap:6px;font-size:11px">' +
+                                icon +
+                                '<span style="color:var(--fg);font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + name + '</span>' +
+                                '<span style="color:var(--muted);white-space:nowrap">' + escHtml(mkt) + (thr !== '' ? ' ' + dir + thr : '') + rv + '</span>' +
+                                '<span style="color:var(--muted2);font-size:10px;white-space:nowrap">' + escHtml(String(odds)) + '</span>' +
+                            '</div>';
+                        }).join('') +
+                    '</div>';
+                } else if (isRefund) {
+                    legsHtml = '<div style="margin-top:8px;font-size:11px;color:var(--muted);border-top:1px solid var(--border);padding-top:8px">All legs pushed — refund</div>';
+                }
+
                 return '<div class="pq-row" id="pq-row-' + q.id + '" style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:10px">' +
                     '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">' +
-                        '<div>' +
-                            '<div style="font-size:13px;font-weight:600;color:var(--fg)">@' + escHtml(q.rs_username || '?') + '</div>' +
+                        '<div style="flex:1;min-width:0">' +
+                            '<div style="display:flex;align-items:center;gap:8px">' +
+                                '<span style="font-size:13px;font-weight:600;color:var(--fg)">@' + escHtml(q.rs_username || '?') + '</span>' +
+                                copyBtn +
+                            '</div>' +
                             '<div style="margin-top:4px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">' +
                                 '<span style="font-size:12px;color:var(--muted)">Parlay #' + q.parlay_id + '</span>' +
                                 '<span style="font-size:11px;font-weight:700;letter-spacing:.04em;color:' + (statusColor[status] || 'var(--muted)') + ';text-transform:uppercase">' + escHtml(status) + '</span>' +
@@ -13140,6 +13190,7 @@
                             '<div style="margin-top:6px">' + cardHtml + '</div>' +
                         '</div>' +
                     '</div>' +
+                    legsHtml +
                     (actionsHtml ? '<div class="pq-actions" id="pq-actions-' + q.id + '" style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">' + actionsHtml + '</div>' : '') +
                 '</div>';
             }).join('');
