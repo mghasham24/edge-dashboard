@@ -13233,15 +13233,34 @@
         }
     }
 
+    function copyText(text) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            return navigator.clipboard.writeText(text);
+        }
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        return Promise.resolve();
+    }
+
     async function copyPayoutCmd(btn) {
         var queueId     = btn.dataset.qid;
         var offerAmount = btn.dataset.amount;
         var cardUrl     = btn.dataset.cardurl;
         var orig = btn.textContent;
         if (cardUrl) {
-            await navigator.clipboard.writeText('node index.js --test ' + cardUrl + ' ' + offerAmount);
-            btn.textContent = 'Copied!';
-            setTimeout(function() { btn.textContent = orig; }, 1200);
+            try {
+                await copyText('node index.js --test ' + cardUrl + ' ' + offerAmount);
+                btn.textContent = 'Copied!';
+                setTimeout(function() { btn.textContent = orig; }, 1200);
+            } catch (e) {
+                btn.textContent = 'Failed';
+                setTimeout(function() { btn.textContent = orig; }, 1500);
+            }
             return;
         }
         btn.textContent = 'Finding…';
@@ -13251,10 +13270,10 @@
             var data = await res.json();
             if (!data.ok || !data.cardUrl) {
                 btn.textContent = data.error || 'No card';
-                btn.disabled = false;
+                setTimeout(function() { btn.textContent = orig; btn.disabled = false; }, 2000);
                 return;
             }
-            await navigator.clipboard.writeText('node index.js --test ' + data.cardUrl + ' ' + offerAmount);
+            await copyText('node index.js --test ' + data.cardUrl + ' ' + offerAmount);
             btn.dataset.cardurl = data.cardUrl;
             btn.textContent = 'Copied!';
             var actEl = document.getElementById('pq-actions-' + queueId);
@@ -13267,7 +13286,7 @@
             setTimeout(function() { btn.textContent = orig; btn.disabled = false; }, 1500);
         } catch (e) {
             btn.textContent = 'Error';
-            btn.disabled = false;
+            setTimeout(function() { btn.textContent = orig; btn.disabled = false; }, 1500);
         }
     }
 
