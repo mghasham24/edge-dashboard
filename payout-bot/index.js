@@ -266,26 +266,26 @@ async function processOffer(cardUrl, offerAmount, dryRun = false) {
     return true;
   }
 
-  // Wait for submit button to be visible (48h selection may briefly re-render)
-  await safariWaitFor(`
-(function() {
-  var btns = Array.from(document.querySelectorAll('button'));
-  var btn = btns.find(function(b) { return b.textContent.trim().toLowerCase() === 'offer'; });
-  if (!btn) return null;
-  var r = btn.getBoundingClientRect();
-  return r.width > 0 ? 'ready' : null;
-})()
-`);
-  await sleep(200);
+  await sleep(300);
 
-  // JS-click the Offer submit button
-  await safariEval(`
+  // There are 2 "Offer" buttons: context-menu one + modal submit one.
+  // Take the LAST visible one — that's the submit button inside the modal.
+  const submitStr = await safariWaitFor(`
 (function() {
-  var btns = Array.from(document.querySelectorAll('button'));
-  var btn = btns.find(function(b) { return b.textContent.trim().toLowerCase() === 'offer'; });
-  if (btn) btn.click();
+  var btns = Array.from(document.querySelectorAll('button')).filter(function(b) {
+    if (b.textContent.trim().toLowerCase() !== 'offer') return false;
+    var r = b.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  });
+  if (!btns.length) return null;
+  var btn = btns[btns.length - 1];
+  var r = btn.getBoundingClientRect();
+  return (r.x + r.width / 2) + ',' + (r.y + r.height / 2);
 })()
 `);
+  const [btnX, btnY] = submitStr.split(',').map(Number);
+  const submitOrigin = await viewportOrigin();
+  await systemClick(submitOrigin.x + btnX, submitOrigin.y + btnY);
   await sleep(1500);
 
   await safariCloseTab();
