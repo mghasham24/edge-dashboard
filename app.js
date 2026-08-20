@@ -13139,7 +13139,7 @@
                 var noteHtml = q.notes ? '<div style="font-size:10px;color:var(--muted2);margin-top:3px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escHtml(q.notes) + '">' + escHtml(q.notes.slice(0, 80)) + '</div>' : '';
 
                 // Copy button — fetches card if needed, then copies bot test command
-                var copyBtn = '<button onclick="copyPayoutCmd(' + q.id + ',' + (q.offer_amount || 0) + ',' + JSON.stringify(q.card_url || '') + ',this)" style="background:none;border:1px solid var(--border);border-radius:5px;padding:3px 8px;font-size:10px;color:var(--muted);cursor:pointer">Copy cmd</button>';
+                var copyBtn = '<button onclick="copyPayoutCmd(this)" data-qid="' + q.id + '" data-amount="' + (q.offer_amount || 0) + '" data-cardurl="' + escHtml(q.card_url || '') + '" style="background:none;border:1px solid var(--border);border-radius:5px;padding:3px 8px;font-size:10px;color:var(--muted);cursor:pointer">Copy cmd</button>';
 
                 // Legs (for wins, not refunds)
                 var legsHtml = '';
@@ -13233,7 +13233,10 @@
         }
     }
 
-    async function copyPayoutCmd(queueId, offerAmount, cardUrl, btn) {
+    async function copyPayoutCmd(btn) {
+        var queueId     = btn.dataset.qid;
+        var offerAmount = btn.dataset.amount;
+        var cardUrl     = btn.dataset.cardurl;
         var orig = btn.textContent;
         if (cardUrl) {
             await navigator.clipboard.writeText('node index.js --test ' + cardUrl + ' ' + offerAmount);
@@ -13252,8 +13255,8 @@
                 return;
             }
             await navigator.clipboard.writeText('node index.js --test ' + data.cardUrl + ' ' + offerAmount);
+            btn.dataset.cardurl = data.cardUrl;
             btn.textContent = 'Copied!';
-            // Update actions row to show card controls
             var actEl = document.getElementById('pq-actions-' + queueId);
             if (actEl) {
                 actEl.innerHTML =
