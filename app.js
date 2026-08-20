@@ -13138,11 +13138,8 @@
                     : '<span style="color:var(--muted2);font-size:11px">—</span>';
                 var noteHtml = q.notes ? '<div style="font-size:10px;color:var(--muted2);margin-top:3px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escHtml(q.notes) + '">' + escHtml(q.notes.slice(0, 80)) + '</div>' : '';
 
-                // Copy button — copies the bot test command
-                var copyStr = hasCard
-                    ? 'node index.js --test ' + q.card_url + ' ' + (q.offer_amount || 0)
-                    : '@' + (q.rs_username || '') + ' · ' + Number(q.offer_amount || 0).toLocaleString() + ' Ⓡ offer';
-                var copyBtn = '<button onclick="(function(btn,s){navigator.clipboard.writeText(s).then(function(){var t=btn.textContent;btn.textContent=\'Copied!\';setTimeout(function(){btn.textContent=t;},1200);});})(this,' + JSON.stringify(copyStr) + ')" style="background:none;border:1px solid var(--border);border-radius:5px;padding:3px 8px;font-size:10px;color:var(--muted);cursor:pointer">Copy</button>';
+                // Copy button — fetches card if needed, then copies bot test command
+                var copyBtn = '<button onclick="copyPayoutCmd(' + q.id + ',' + (q.offer_amount || 0) + ',' + JSON.stringify(q.card_url || '') + ',this)" style="background:none;border:1px solid var(--border);border-radius:5px;padding:3px 8px;font-size:10px;color:var(--muted);cursor:pointer">Copy cmd</button>';
 
                 // Legs (for wins, not refunds)
                 var legsHtml = '';
@@ -13232,6 +13229,41 @@
             }
         } catch (e) {
             btn.textContent = 'Error: ' + e.message;
+            btn.disabled = false;
+        }
+    }
+
+    async function copyPayoutCmd(queueId, offerAmount, cardUrl, btn) {
+        var orig = btn.textContent;
+        if (cardUrl) {
+            await navigator.clipboard.writeText('node index.js --test ' + cardUrl + ' ' + offerAmount);
+            btn.textContent = 'Copied!';
+            setTimeout(function() { btn.textContent = orig; }, 1200);
+            return;
+        }
+        btn.textContent = 'Finding…';
+        btn.disabled = true;
+        try {
+            var res  = await fetch('/api/parlays/payout-queue?action=prepare&id=' + queueId, { method: 'POST', credentials: 'same-origin' });
+            var data = await res.json();
+            if (!data.ok || !data.cardUrl) {
+                btn.textContent = data.error || 'No card';
+                btn.disabled = false;
+                return;
+            }
+            await navigator.clipboard.writeText('node index.js --test ' + data.cardUrl + ' ' + offerAmount);
+            btn.textContent = 'Copied!';
+            // Update actions row to show card controls
+            var actEl = document.getElementById('pq-actions-' + queueId);
+            if (actEl) {
+                actEl.innerHTML =
+                    '<a href="' + escHtml(data.cardUrl) + '" target="_blank" rel="noopener" class="pq-open-btn">Open in RS ↗</a>' +
+                    '<button class="pq-sent-btn" onclick="markPayoutSent(' + queueId + ',this)">Mark Sent</button>' +
+                    '<button class="pq-skip-btn" onclick="skipPayoutCard(' + queueId + ',this)">Try Another Card</button>';
+            }
+            setTimeout(function() { btn.textContent = orig; btn.disabled = false; }, 1500);
+        } catch (e) {
+            btn.textContent = 'Error';
             btn.disabled = false;
         }
     }
