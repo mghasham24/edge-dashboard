@@ -118,7 +118,7 @@ async function handleRequest({ request, env }) {
     if (!id) return err('id required', 400);
 
     const entry = await env.DB.prepare(
-      'SELECT q.id, q.offer_amount, q.skipped_cards, ra.rs_user_id ' +
+      'SELECT q.id, q.user_id, q.offer_amount, q.skipped_cards, ra.rs_user_id ' +
       'FROM payout_queue q LEFT JOIN real_auth ra ON ra.user_id = q.user_id WHERE q.id=?'
     ).bind(id).first();
     if (!entry)            return err('Not found', 404);
@@ -129,6 +129,14 @@ async function handleRequest({ request, env }) {
     if (!authInfo) return err('EDGEBOT_AUTH_INFO not configured', 500);
 
     const skippedIds = new Set(entry.skipped_cards ? JSON.parse(entry.skipped_cards) : []);
+
+    // Exclude cards already targeted for other entries of the same user
+    try {
+      const { results: others } = await env.DB.prepare(
+        'SELECT target_card_id FROM payout_queue WHERE user_id=? AND id!=? AND target_card_id IS NOT NULL'
+      ).bind(entry.user_id, id).all();
+      for (const r of (others || [])) skippedIds.add(r.target_card_id);
+    } catch (_) {}
 
     // Exclude cards in the deposit pool
     try {

@@ -266,14 +266,19 @@ async function processOffer(cardUrl, offerAmount, dryRun = false) {
     return true;
   }
 
-  // JS-click the Offer submit button
-  await safariEval(`
+  // Real OS mouse click on the Offer submit button (isTrusted: true)
+  const btnStr = await safariWaitFor(`
 (function() {
   var btns = Array.from(document.querySelectorAll('button'));
   var btn = btns.find(function(b) { return b.textContent.trim().toLowerCase() === 'offer'; });
-  if (btn) btn.click();
+  if (!btn) return null;
+  var r = btn.getBoundingClientRect();
+  if (r.width === 0) return null;
+  return (r.x + r.width / 2) + ',' + (r.y + r.height / 2);
 })()
 `);
+  const [btnX, btnY] = btnStr.split(',').map(Number);
+  await systemClick(origin.x + btnX, origin.y + btnY);
   await sleep(1500);
 
   await safariCloseTab();
