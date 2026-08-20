@@ -165,6 +165,15 @@ async function handleRequest({ request, env }) {
     return ok({ marked: true, changed: result.meta?.changes ?? 1 });
   }
 
+  // ── Mark attempt: increment attempt counter ───────────────────────────────
+  if (action === 'mark_attempt') {
+    if (!id) return err('id required', 400);
+    await env.DB.prepare(
+      'UPDATE payout_queue SET attempts = attempts + 1, last_attempt_at = ? WHERE id = ?'
+    ).bind(now, id).run();
+    return ok({ marked: true });
+  }
+
   // ── Skip card: mark the current target_card_id as skipped ─────────────────
   if (action === 'skip_card') {
     if (!id) return err('id required', 400);

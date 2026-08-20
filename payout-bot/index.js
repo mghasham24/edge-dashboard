@@ -38,7 +38,12 @@ async function api(p, method = 'GET') {
 async function fetchQueue() {
   const d = await api('/api/parlays/payout-queue?action=list');
   if (!d.ok) throw new Error('Queue fetch failed: ' + JSON.stringify(d));
-  return (d.queue || []).filter(e => e.status === 'pending').slice(0, MAX_PER_RUN);
+  return (d.queue || [])
+    .filter(e => e.status === 'pending' && (e.attempts || 0) < 3)
+    .slice(0, MAX_PER_RUN);
+}
+async function markAttempt(id) {
+  await api(`/api/parlays/payout-queue?action=mark_attempt&id=${id}`, 'POST').catch(() => {});
 }
 async function prepareEntry(id) {
   const d = await api(`/api/parlays/payout-queue?action=prepare&id=${id}`, 'POST');
@@ -266,30 +271,36 @@ async function processOffer(cardUrl, offerAmount, dryRun = false) {
     return true;
   }
 
-  await sleep(300);
+  await sleep(400);
 
-  // Focus the submit Offer button (last visible one = modal submit, not context-menu)
-  // then press Space via System Events — real OS keystroke, no coordinate math needed.
-  await safariWaitFor(`
+  // Scroll the submit button into center of viewport so coordinates are reliable
+  await safariEval(`
 (function() {
   var btns = Array.from(document.querySelectorAll('button')).filter(function(b) {
-    if (b.textContent.trim().toLowerCase() !== 'offer') return false;
+    return b.textContent.toLowerCase().includes('offer');
+  });
+  if (btns.length) btns[btns.length - 1].scrollIntoView({ block: 'center', inline: 'center' });
+})()
+`);
+  await sleep(300);
+
+  // Get its position, then real-OS-click it
+  const submitStr = await safariWaitFor(`
+(function() {
+  var btns = Array.from(document.querySelectorAll('button')).filter(function(b) {
+    if (!b.textContent.toLowerCase().includes('offer')) return false;
     var r = b.getBoundingClientRect();
     return r.width > 0 && r.height > 0;
   });
   if (!btns.length) return null;
-  btns[btns.length - 1].focus();
-  return 'focused';
+  var r = btns[btns.length - 1].getBoundingClientRect();
+  return r.x + r.width / 2 + ',' + (r.y + r.height / 2);
 })()
 `);
-  await sleep(150);
-  await runOSA(`
-tell application "Safari" to activate
-delay 0.1
-tell application "System Events"
-  key code 49
-end tell
-`);
+  const [btnX, btnY] = submitStr.split(',').map(Number);
+  const submitOrigin = await viewportOrigin();
+  console.log(`  Offer submit at screen (${Math.round(submitOrigin.x + btnX)}, ${Math.round(submitOrigin.y + btnY)})`);
+  await systemClick(submitOrigin.x + btnX, submitOrigin.y + btnY);
   await sleep(1500);
 
   await safariCloseTab();
@@ -344,9 +355,10 @@ async function processQueue() {
     try {
       const ok = await processOffer(cardUrl, offerAmount);
       if (ok) { await markSent(entry.id); console.log('  ✓ Offer sent'); sent++; }
-      else console.log('  ✗ Skipped (card value too low)');
+      else { await markAttempt(entry.id); console.log('  ✗ Skipped (card value too low)'); }
     } catch (e) {
       console.error('  ✗ Error:', e.message);
+      await markAttempt(entry.id);
     }
 
     if (i < queue.length - 1) {
