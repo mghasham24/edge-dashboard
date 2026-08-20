@@ -13156,11 +13156,16 @@
                             var odds = leg.american_odds > 0 ? '+' + leg.american_odds : (leg.american_odds || '');
                             var name = escHtml(leg.player_name || leg.event_name || '');
                             var rv   = leg.result_value != null ? ' <span style="color:var(--muted2)">(' + leg.result_value + ')</span>' : '';
+                            var gameDate = leg.game_date ? (function(d) {
+                                var parts = d.split('-');
+                                return parts.length === 3 ? (parts[1] + '/' + parts[2]) : d;
+                            })(leg.game_date) : '';
                             return '<div style="display:flex;align-items:center;gap:6px;font-size:11px">' +
                                 icon +
                                 '<span style="color:var(--fg);font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + name + '</span>' +
                                 '<span style="color:var(--muted);white-space:nowrap">' + escHtml(mkt) + (thr !== '' ? ' ' + dir + thr : '') + rv + '</span>' +
                                 '<span style="color:var(--muted2);font-size:10px;white-space:nowrap">' + escHtml(String(odds)) + '</span>' +
+                                (gameDate ? '<span style="color:var(--muted2);font-size:10px;white-space:nowrap">' + escHtml(gameDate) + '</span>' : '') +
                             '</div>';
                         }).join('') +
                     '</div>';
