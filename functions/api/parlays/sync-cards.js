@@ -12,7 +12,16 @@ const EDGEBOT_USER   = 'V3yGgkkJ';
 
 // All sport/season combos to scan for deposit account's cards
 const CARD_SOURCES = [
+  { sport: 'mlb', season: 2026 },
   { sport: 'mlb', season: 2025 },
+  { sport: 'mlb', season: 2024 },
+  { sport: 'nba', season: 2026 },
+  { sport: 'nba', season: 2025 },
+  { sport: 'nba', season: 2024 },
+  { sport: 'nhl', season: 2026 },
+  { sport: 'nhl', season: 2025 },
+  { sport: 'nhl', season: 2024 },
+  { sport: 'nfl', season: 2024 },
 ];
 
 function buildHeaders(authInfo) {
