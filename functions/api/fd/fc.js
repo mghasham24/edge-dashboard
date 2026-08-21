@@ -62,15 +62,12 @@ function fail(status, msg) {
 
 export async function onRequestGet(context) {
   const { request, env } = context;
-  const session = await getSessionOrCron(request, env);
-  if (!session) return fail(401, 'Not authenticated');
-  if (session.plan !== 'pro' && !session.is_admin) return fail(403, 'Pro plan required');
 
   const reqUrl = new URL(request.url);
   const debugMode = reqUrl.searchParams.get('debug');
   const freshMode = reqUrl.searchParams.get('fresh'); // ?fresh=1 skips cache read (used on initial tab load)
 
-  // debug=5: probe FD competition page for EPL to see if it works from CF
+  // debug=5: probe FD competition page for EPL to see if it works from CF (no auth needed)
   if (debugMode === '5') {
     const AK = 'FhMFpcPWXMeyZxOx';
     const fdHeaders = { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15' };
@@ -92,6 +89,10 @@ export async function onRequestGet(context) {
     }));
     return new Response(JSON.stringify({ results }), { headers: { 'Content-Type': 'application/json' } });
   }
+
+  const session = await getSessionOrCron(request, env);
+  if (!session) return fail(401, 'Not authenticated');
+  if (session.plan !== 'pro' && !session.is_admin) return fail(403, 'Pro plan required');
 
   const now = Math.floor(Date.now() / 1000);
   const cacheKey = 'fd_fc';
