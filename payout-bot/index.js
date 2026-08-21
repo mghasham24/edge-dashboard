@@ -272,67 +272,28 @@ async function processOffer(cardUrl, offerAmount, dryRun = false) {
     return true;
   }
 
-  await sleep(400);
+  await sleep(300);
 
-  // Find the submit button inside the offer modal (the container that holds the slider).
-  // Walk up from the slider to find the modal container, then take the bottommost button in it.
-  const submitStr = await safariWaitFor(`
+  // Same pattern as 48h click: TreeWalker finds raw text nodes (not button.textContent
+  // which includes all children and fails when button has icon spans).
+  // Take the LAST "Offer" text node inside a button — modal submit comes after page buttons in DOM.
+  await safariEval(`
 (function() {
-  var slider = document.querySelector('input[type="range"]');
-  if (!slider) return null;
-  var container = slider.parentElement;
-  for (var i = 0; i < 12; i++) {
-    if (!container || container === document.body) return null;
-    var btns = Array.from(container.querySelectorAll('button')).map(function(b) {
-      var r = b.getBoundingClientRect();
-      return { b: b, r: r };
-    }).filter(function(x) { return x.r.width > 50 && x.r.height > 30; });
-    if (btns.length >= 1) {
-      btns.sort(function(a, b) { return b.r.y - a.r.y; });
-      var btn = btns[0].b;
-      btn.scrollIntoView({ block: 'center', inline: 'center' });
-      var r = btn.getBoundingClientRect();
-      return r.x + r.width / 2 + ',' + (r.y + r.height / 2) + ',' + btn.textContent.trim().slice(0, 20);
+  var w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  var n, last = null;
+  while (n = w.nextNode()) {
+    if (n.textContent.trim() !== 'Offer') continue;
+    var el = n.parentElement;
+    for (var i = 0; i < 5; i++) {
+      if (!el) break;
+      if (el.tagName === 'BUTTON') { last = el; break; }
+      el = el.parentElement;
     }
-    container = container.parentElement;
   }
-  return null;
+  if (last) last.click();
 })()
 `);
-  const parts = submitStr.split(',');
-  const [btnX, btnY, btnLabel] = [parseFloat(parts[0]), parseFloat(parts[1]), parts.slice(2).join(',')];
-  const submitOrigin = await viewportOrigin();
-  const screenX = Math.round(submitOrigin.x + btnX);
-  const screenY = Math.round(submitOrigin.y + btnY);
-  console.log(`  Submit btn "${btnLabel}" viewport=(${Math.round(btnX)},${Math.round(btnY)}) screen=(${screenX},${screenY})`);
-  await systemClick(screenX, screenY);
-  await sleep(800);
-
-  // Check if modal is still open (slider still present = click missed)
-  const stillOpen = await safariEval(`document.querySelector('input[type="range"]') ? '1' : '0'`);
-  if (stillOpen === '1') {
-    console.log('  OS click missed — JS click fallback');
-    await safariEval(`
-(function() {
-  var slider = document.querySelector('input[type="range"]');
-  if (!slider) return;
-  var container = slider.parentElement;
-  for (var i = 0; i < 12; i++) {
-    if (!container || container === document.body) return;
-    var btns = Array.from(container.querySelectorAll('button')).filter(function(b) {
-      return b.getBoundingClientRect().width > 50;
-    });
-    if (btns.length >= 1) {
-      btns.sort(function(a, b) { return b.getBoundingClientRect().y - a.getBoundingClientRect().y; });
-      btns[0].click();
-      return;
-    }
-    container = container.parentElement;
-  }
-})()
-`);
-  }
-  await sleep(700);
+  await sleep(1500);
 
   await safariCloseTab();
   return true;
@@ -390,6 +351,7 @@ async function processQueue() {
     } catch (e) {
       console.error('  ✗ Error:', e.message);
       await markAttempt(entry.id);
+      await safariCloseTab();
     }
 
     if (i < queue.length - 1) {
