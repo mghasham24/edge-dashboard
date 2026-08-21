@@ -274,22 +274,29 @@ async function processOffer(cardUrl, offerAmount, dryRun = false) {
 
   await sleep(400);
 
-  // Find the bottommost visible button (the submit Offer is always at the bottom of the modal)
-  // No text matching — avoids any localization or whitespace mismatch
+  // Find the submit button inside the offer modal (the container that holds the slider).
+  // Walk up from the slider to find the modal container, then take the bottommost button in it.
   const submitStr = await safariWaitFor(`
 (function() {
-  var btns = Array.from(document.querySelectorAll('button')).map(function(b) {
-    var r = b.getBoundingClientRect();
-    return { b: b, r: r };
-  }).filter(function(x) {
-    return x.r.width > 50 && x.r.height > 30;
-  });
-  if (!btns.length) return null;
-  btns.sort(function(a, b) { return b.r.y - a.r.y; });
-  var btn = btns[0].b;
-  btn.scrollIntoView({ block: 'center', inline: 'center' });
-  var r = btn.getBoundingClientRect();
-  return r.x + r.width / 2 + ',' + (r.y + r.height / 2) + ',' + (btn.textContent.trim().slice(0, 20));
+  var slider = document.querySelector('input[type="range"]');
+  if (!slider) return null;
+  var container = slider.parentElement;
+  for (var i = 0; i < 12; i++) {
+    if (!container || container === document.body) return null;
+    var btns = Array.from(container.querySelectorAll('button')).map(function(b) {
+      var r = b.getBoundingClientRect();
+      return { b: b, r: r };
+    }).filter(function(x) { return x.r.width > 50 && x.r.height > 30; });
+    if (btns.length >= 1) {
+      btns.sort(function(a, b) { return b.r.y - a.r.y; });
+      var btn = btns[0].b;
+      btn.scrollIntoView({ block: 'center', inline: 'center' });
+      var r = btn.getBoundingClientRect();
+      return r.x + r.width / 2 + ',' + (r.y + r.height / 2) + ',' + btn.textContent.trim().slice(0, 20);
+    }
+    container = container.parentElement;
+  }
+  return null;
 })()
 `);
   const parts = submitStr.split(',');
@@ -307,12 +314,21 @@ async function processOffer(cardUrl, offerAmount, dryRun = false) {
     console.log('  OS click missed — JS click fallback');
     await safariEval(`
 (function() {
-  var btns = Array.from(document.querySelectorAll('button')).map(function(b) {
-    return { b: b, y: b.getBoundingClientRect().y };
-  }).filter(function(x) { return x.b.getBoundingClientRect().width > 50; });
-  if (!btns.length) return;
-  btns.sort(function(a, b) { return b.y - a.y; });
-  btns[0].b.click();
+  var slider = document.querySelector('input[type="range"]');
+  if (!slider) return;
+  var container = slider.parentElement;
+  for (var i = 0; i < 12; i++) {
+    if (!container || container === document.body) return;
+    var btns = Array.from(container.querySelectorAll('button')).filter(function(b) {
+      return b.getBoundingClientRect().width > 50;
+    });
+    if (btns.length >= 1) {
+      btns.sort(function(a, b) { return b.getBoundingClientRect().y - a.getBoundingClientRect().y; });
+      btns[0].click();
+      return;
+    }
+    container = container.parentElement;
+  }
 })()
 `);
   }
