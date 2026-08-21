@@ -40,6 +40,7 @@ async function fetchQueue() {
   if (!d.ok) throw new Error('Queue fetch failed: ' + JSON.stringify(d));
   return (d.queue || [])
     .filter(e => e.status === 'pending' && (e.attempts || 0) < 3)
+    .sort((a, b) => (a.attempts || 0) - (b.attempts || 0))
     .slice(0, MAX_PER_RUN);
 }
 async function markAttempt(id) {
