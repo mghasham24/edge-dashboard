@@ -70,6 +70,29 @@ export async function onRequestGet(context) {
   const debugMode = reqUrl.searchParams.get('debug');
   const freshMode = reqUrl.searchParams.get('fresh'); // ?fresh=1 skips cache read (used on initial tab load)
 
+  // debug=5: probe FD competition page for EPL to see if it works from CF
+  if (debugMode === '5') {
+    const AK = 'FhMFpcPWXMeyZxOx';
+    const fdHeaders = { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15' };
+    const tests = [
+      `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=COMPETITION&competitionId=10932509&_ak=${AK}&timezone=America/New_York`,
+      `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=LEAGUE&leagueId=10932509&_ak=${AK}&timezone=America/New_York`,
+      `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=CUSTOM&customPageId=soccer-epl&_ak=${AK}&timezone=America/New_York`,
+      `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=CUSTOM&customPageId=epl&_ak=${AK}&timezone=America/New_York`,
+    ];
+    const results = await Promise.all(tests.map(async url => {
+      try {
+        const r = await fetch(url, { headers: fdHeaders, signal: AbortSignal.timeout(8000) });
+        let body = '';
+        try { const t = await r.text(); body = t.slice(0, 500); } catch {}
+        return { url: url.split('?')[1], status: r.status, body };
+      } catch(e) {
+        return { url: url.split('?')[1], error: e.message };
+      }
+    }));
+    return new Response(JSON.stringify({ results }), { headers: { 'Content-Type': 'application/json' } });
+  }
+
   const now = Math.floor(Date.now() / 1000);
   const cacheKey = 'fd_fc';
 
