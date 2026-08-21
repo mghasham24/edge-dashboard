@@ -274,23 +274,16 @@ async function processOffer(cardUrl, offerAmount, dryRun = false) {
 
   await sleep(300);
 
-  // Same pattern as 48h click: TreeWalker finds raw text nodes (not button.textContent
-  // which includes all children and fails when button has icon spans).
-  // Take the LAST "Offer" text node inside a button — modal submit comes after page buttons in DOM.
+  // Exact same pattern as 48h: find the last text node "Offer", click its parent.
+  // No button-tag check — element may be a div with click handler, not <button>.
   await safariEval(`
 (function() {
   var w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   var n, last = null;
   while (n = w.nextNode()) {
-    if (n.textContent.trim() !== 'Offer') continue;
-    var el = n.parentElement;
-    for (var i = 0; i < 5; i++) {
-      if (!el) break;
-      if (el.tagName === 'BUTTON') { last = el; break; }
-      el = el.parentElement;
-    }
+    if (n.textContent.trim() === 'Offer') last = n;
   }
-  if (last) last.click();
+  if (last) last.parentElement.click();
 })()
 `);
   await sleep(1500);
