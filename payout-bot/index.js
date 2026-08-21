@@ -348,7 +348,7 @@ async function processQueue() {
     }
 
     if (i < queue.length - 1) {
-      const wait = rand(30, 90);
+      const wait = rand(10, 20);
       console.log(`  Waiting ${wait}s before next offer...`);
       await sleep(wait * 1000);
     }
