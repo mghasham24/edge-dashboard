@@ -45,10 +45,13 @@ function parseAmerican(str) {
   return isFinite(n) ? n : null;
 }
 
-function isToday_ET(dateStr) {
+function isWithin3Days_ET(dateStr) {
   if (!dateStr) return false;
   const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
-  return fmt.format(new Date(dateStr)) === fmt.format(new Date());
+  const gameStr  = fmt.format(new Date(dateStr));
+  const todayStr = fmt.format(new Date());
+  const maxStr   = fmt.format(new Date(Date.now() + 3 * 86400000));
+  return gameStr >= todayStr && gameStr <= maxStr;
 }
 
 function fail(status, msg) {
@@ -108,7 +111,7 @@ export async function onRequestGet(context) {
         if (debugMode === '1' && !d.events) events.push({ _warn: `league ${leagueId} no events key`, keys: Object.keys(d) });
 
         for (const ev of d.events || []) {
-          if (!isToday_ET(ev.startEventDate)) continue;
+          if (!isWithin3Days_ET(ev.startEventDate)) continue;
           const t = new Date(ev.startEventDate).getTime();
           if (t < nowMs - 4 * 60 * 60 * 1000) continue;
 
