@@ -274,34 +274,30 @@ async function processOffer(cardUrl, offerAmount, dryRun = false) {
 
   await sleep(400);
 
-  // Scroll submit button into view, get its center in viewport coordinates
-  await safariEval(`
-(function() {
-  var btns = Array.from(document.querySelectorAll('button')).filter(function(b) {
-    return b.textContent.toLowerCase().includes('offer');
-  });
-  if (btns.length) btns[btns.length - 1].scrollIntoView({ block: 'center', inline: 'center' });
-})()
-`);
-  await sleep(300);
-
+  // Find the bottommost visible button (the submit Offer is always at the bottom of the modal)
+  // No text matching — avoids any localization or whitespace mismatch
   const submitStr = await safariWaitFor(`
 (function() {
-  var btns = Array.from(document.querySelectorAll('button')).filter(function(b) {
-    if (!b.textContent.toLowerCase().includes('offer')) return false;
+  var btns = Array.from(document.querySelectorAll('button')).map(function(b) {
     var r = b.getBoundingClientRect();
-    return r.width > 0 && r.height > 0;
+    return { b: b, r: r };
+  }).filter(function(x) {
+    return x.r.width > 50 && x.r.height > 30;
   });
   if (!btns.length) return null;
-  var r = btns[btns.length - 1].getBoundingClientRect();
-  return r.x + r.width / 2 + ',' + (r.y + r.height / 2);
+  btns.sort(function(a, b) { return b.r.y - a.r.y; });
+  var btn = btns[0].b;
+  btn.scrollIntoView({ block: 'center', inline: 'center' });
+  var r = btn.getBoundingClientRect();
+  return r.x + r.width / 2 + ',' + (r.y + r.height / 2) + ',' + (btn.textContent.trim().slice(0, 20));
 })()
 `);
-  const [btnX, btnY] = submitStr.split(',').map(Number);
+  const parts = submitStr.split(',');
+  const [btnX, btnY, btnLabel] = [parseFloat(parts[0]), parseFloat(parts[1]), parts.slice(2).join(',')];
   const submitOrigin = await viewportOrigin();
   const screenX = Math.round(submitOrigin.x + btnX);
   const screenY = Math.round(submitOrigin.y + btnY);
-  console.log(`  Offer submit: viewport=(${Math.round(btnX)},${Math.round(btnY)}) origin=(${submitOrigin.x},${submitOrigin.y}) screen=(${screenX},${screenY})`);
+  console.log(`  Submit btn "${btnLabel}" viewport=(${Math.round(btnX)},${Math.round(btnY)}) screen=(${screenX},${screenY})`);
   await systemClick(screenX, screenY);
   await sleep(800);
 
@@ -311,10 +307,12 @@ async function processOffer(cardUrl, offerAmount, dryRun = false) {
     console.log('  OS click missed — JS click fallback');
     await safariEval(`
 (function() {
-  var btns = Array.from(document.querySelectorAll('button')).filter(function(b) {
-    return b.textContent.toLowerCase().includes('offer');
-  });
-  if (btns.length) btns[btns.length - 1].click();
+  var btns = Array.from(document.querySelectorAll('button')).map(function(b) {
+    return { b: b, y: b.getBoundingClientRect().y };
+  }).filter(function(x) { return x.b.getBoundingClientRect().width > 50; });
+  if (!btns.length) return;
+  btns.sort(function(a, b) { return b.y - a.y; });
+  btns[0].b.click();
 })()
 `);
   }
