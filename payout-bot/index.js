@@ -274,7 +274,7 @@ async function processOffer(cardUrl, offerAmount, dryRun = false) {
 
   await sleep(400);
 
-  // Scroll the submit button into center of viewport so coordinates are reliable
+  // Scroll submit button into view, get its center in viewport coordinates
   await safariEval(`
 (function() {
   var btns = Array.from(document.querySelectorAll('button')).filter(function(b) {
@@ -285,7 +285,6 @@ async function processOffer(cardUrl, offerAmount, dryRun = false) {
 `);
   await sleep(300);
 
-  // Get its position, then real-OS-click it
   const submitStr = await safariWaitFor(`
 (function() {
   var btns = Array.from(document.querySelectorAll('button')).filter(function(b) {
@@ -300,9 +299,26 @@ async function processOffer(cardUrl, offerAmount, dryRun = false) {
 `);
   const [btnX, btnY] = submitStr.split(',').map(Number);
   const submitOrigin = await viewportOrigin();
-  console.log(`  Offer submit at screen (${Math.round(submitOrigin.x + btnX)}, ${Math.round(submitOrigin.y + btnY)})`);
-  await systemClick(submitOrigin.x + btnX, submitOrigin.y + btnY);
-  await sleep(1500);
+  const screenX = Math.round(submitOrigin.x + btnX);
+  const screenY = Math.round(submitOrigin.y + btnY);
+  console.log(`  Offer submit: viewport=(${Math.round(btnX)},${Math.round(btnY)}) origin=(${submitOrigin.x},${submitOrigin.y}) screen=(${screenX},${screenY})`);
+  await systemClick(screenX, screenY);
+  await sleep(800);
+
+  // Check if modal is still open (slider still present = click missed)
+  const stillOpen = await safariEval(`document.querySelector('input[type="range"]') ? '1' : '0'`);
+  if (stillOpen === '1') {
+    console.log('  OS click missed — JS click fallback');
+    await safariEval(`
+(function() {
+  var btns = Array.from(document.querySelectorAll('button')).filter(function(b) {
+    return b.textContent.toLowerCase().includes('offer');
+  });
+  if (btns.length) btns[btns.length - 1].click();
+})()
+`);
+  }
+  await sleep(700);
 
   await safariCloseTab();
   return true;
