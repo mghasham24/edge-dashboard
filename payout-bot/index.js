@@ -35,16 +35,21 @@ async function api(p, method = 'GET') {
   const res  = await fetch(`${RAXEDGE_URL}${p}${sep}_cron_key=${CRON_SECRET}`, { method });
   return res.json();
 }
+const MAX_ATTEMPTS = 10;
+
 async function fetchQueue() {
   const d = await api('/api/parlays/payout-queue?action=list');
   if (!d.ok) throw new Error('Queue fetch failed: ' + JSON.stringify(d));
   return (d.queue || [])
-    .filter(e => e.status === 'pending' && (e.attempts || 0) < 3)
+    .filter(e => e.status === 'pending' && (e.attempts || 0) < MAX_ATTEMPTS)
     .sort((a, b) => (a.attempts || 0) - (b.attempts || 0))
     .slice(0, MAX_PER_RUN);
 }
 async function markAttempt(id) {
   await api(`/api/parlays/payout-queue?action=mark_attempt&id=${id}`, 'POST').catch(() => {});
+}
+async function skipCard(id) {
+  await api(`/api/parlays/payout-queue?action=skip_card&id=${id}`, 'POST').catch(() => {});
 }
 async function prepareEntry(id) {
   const d = await api(`/api/parlays/payout-queue?action=prepare&id=${id}`, 'POST');
@@ -286,9 +291,41 @@ async function processOffer(cardUrl, offerAmount, dryRun = false) {
   if (last) last.parentElement.click();
 })()
 `);
-  await sleep(1500);
+
+  // Wait for RS to process — success = modal closes (slider disappears),
+  // error = modal stays open or RS shows an error toast.
+  await sleep(2000);
+  const postSubmit = await safariEval(`
+(function() {
+  // Slider gone = modal closed = success
+  var slider = document.querySelector('input[type="range"]');
+  if (!slider) return 'success';
+  // Slider still visible — scan for known RS error text nodes
+  var w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  var n;
+  var ERR = ['already have an open offer', 'already placed an offer',
+             'cannot place', 'limit reached', 'not eligible',
+             'something went wrong', 'offer failed'];
+  while (n = w.nextNode()) {
+    var t = n.textContent.trim().toLowerCase();
+    for (var i = 0; i < ERR.length; i++) {
+      if (t.includes(ERR[i]) && n.parentElement.getBoundingClientRect().width > 0)
+        return 'error:' + n.textContent.trim().slice(0, 200);
+    }
+  }
+  return 'modal_still_open';
+})()
+`);
 
   await safariCloseTab();
+
+  if (postSubmit && postSubmit.startsWith('error:')) {
+    throw new Error('RS rejected offer: ' + postSubmit.slice(6));
+  }
+  if (postSubmit === 'modal_still_open') {
+    throw new Error('Offer modal did not close after submit — possible RS error (unknown)');
+  }
+
   return true;
 }
 
@@ -340,7 +377,13 @@ async function processQueue() {
     try {
       const ok = await processOffer(cardUrl, offerAmount);
       if (ok) { await markSent(entry.id); console.log('  ✓ Offer sent'); sent++; }
-      else { await markAttempt(entry.id); console.log('  ✗ Skipped (card value too low)'); }
+      else {
+        // Slider max < offer amount — this card is confirmed too low-value.
+        // Skip it so prepare finds a different card next run.
+        await skipCard(entry.id);
+        await markAttempt(entry.id);
+        console.log('  ✗ Skipped (card value too low — added to skip list)');
+      }
     } catch (e) {
       console.error('  ✗ Error:', e.message);
       await markAttempt(entry.id);

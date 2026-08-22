@@ -92,11 +92,16 @@ export async function onRequestPost({ request, env }) {
     return ok({ parlayId, result: 'voided', payoutRax: finalPayout, pushedLegs: pushedLegs.length });
   }
 
-  // Won — update payout_rax in case it was recalculated after a push
+  // Won — update payout_rax in case it was recalculated after a push.
+  // Auto-settle any legs still pending as 'won' (legs not explicitly passed stay pending otherwise,
+  // which hides the entry in the admin payout UI).
   await env.DB.batch([
     env.DB.prepare(
       "UPDATE parlays SET status='won', payout_rax=?, settled_at=? WHERE id=?"
     ).bind(finalPayout, now, parlayId),
+    env.DB.prepare(
+      "UPDATE parlay_legs SET status='won', settled_at=? WHERE parlay_id=? AND status='pending'"
+    ).bind(now, parlayId),
     env.DB.prepare(
       'INSERT OR IGNORE INTO payout_queue ' +
       '(parlay_id, user_id, rs_username, payout_rax, offer_amount, created_at) ' +
