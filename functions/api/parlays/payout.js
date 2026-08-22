@@ -211,8 +211,12 @@ export async function onRequestPost({ request, env }) {
     return ok({ paused: true, hours, resumesAt });
   }
 
+  // Batch mode: called from the once-daily scheduled trigger in alert-cron.
+  // Bypasses PAYOUT_MANUAL so the daily run still processes the queue.
+  const isBatch = url.searchParams.get('batch') === '1';
+
   // Manual mode — auto-offer disabled; all payouts go through admin payout-queue UI
-  if (env.PAYOUT_MANUAL === '1') return ok({ paused: true, reason: 'manual_mode' });
+  if (env.PAYOUT_MANUAL === '1' && !isBatch) return ok({ paused: true, reason: 'manual_mode' });
 
   // Check global payout pause (set automatically on 403 ban or manually)
   try {
@@ -245,7 +249,7 @@ export async function onRequestPost({ request, env }) {
     'FROM payout_queue q ' +
     'LEFT JOIN real_auth ra ON ra.user_id = q.user_id ' +
     'WHERE q.status = ? AND (q.last_attempt_at IS NULL OR q.last_attempt_at < ?) ' +
-    'ORDER BY q.created_at ASC LIMIT 2'
+    'ORDER BY q.created_at ASC LIMIT ' + (isBatch ? '5' : '2')
   ).bind('pending', now - 300).all();
 
   if (!queue.length) return ok({ processed: 0 });
