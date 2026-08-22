@@ -1,14 +1,13 @@
 import { getSessionOrCron } from '../../_lib/auth.js';
 // functions/api/fd/fc.js
-// EPL Asian Handicap odds via The Odds API (DK bookmaker as reference).
-// DK native: Akamai-blocked from CF datacenter IPs.
-// FD native: content-managed-page returns 400 for soccer competition from all CF regions.
-// Cache 5 minutes in D1 to conserve Odds API credits.
-//
-// REQUIRES: ODDS_API_KEY env var with a plan that includes soccer_epl odds.
-// Current key returns 401 for soccer_epl — upgrade at the-odds-api.com.
+// EPL Asian Handicap odds via DK native, proxied through Hetzner VPS.
+// DK native is Akamai-blocked from CF datacenter IPs — VPS at vps.raxedge.com:3003 bypasses this.
+// VPS endpoint: GET /dk-soccer?league=40253&subcat=17968&key=VPS_DK_KEY
+// Cache 5 minutes in D1.
 
-const ODDS_SPORT = 'soccer_epl';
+const VPS_HOST   = 'http://vps.raxedge.com:3003';
+const DK_LEAGUE  = '40253'; // EPL
+const DK_SUBCAT  = '17968'; // Asian Handicap
 const CACHE_TTL  = 300; // 5 minutes
 
 const noGames = () => new Response(JSON.stringify({ ok: true, games: {} }), {
@@ -45,89 +44,43 @@ export async function onRequestGet(context) {
     } catch(e) {}
   }
 
-  const apiKey = env.ODDS_API_KEY;
-  if (!apiKey) return noGames();
+  const vpsKey = env.VPS_DK_KEY || 'rax-dk-9x3m7p2q';
+  if (!vpsKey) return noGames();
 
-  const oddsUrl = `https://api.the-odds-api.com/v4/sports/${ODDS_SPORT}/odds/?apiKey=${apiKey}&regions=us&markets=spreads&oddsFormat=american&dateFormat=iso`;
+  const vpsUrl = `${VPS_HOST}/dk-soccer?league=${DK_LEAGUE}&subcat=${DK_SUBCAT}&key=${encodeURIComponent(vpsKey)}`;
 
   let raw;
   try {
-    const r = await fetch(oddsUrl, { signal: AbortSignal.timeout(10000) });
-    if (r.status === 401 || r.status === 422) return noGames(); // plan/quota — fail silently
+    const r = await fetch(vpsUrl, { signal: AbortSignal.timeout(20000) });
     if (!r.ok) {
       if (debugMode === '1') {
         const body = await r.text().catch(() => '');
-        return new Response(JSON.stringify({ oddsApiStatus: r.status, body }), { headers: { 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({ vpsStatus: r.status, body }), { headers: { 'Content-Type': 'application/json' } });
       }
       return noGames();
     }
     raw = await r.json();
   } catch(e) {
+    if (debugMode === '1') {
+      return new Response(JSON.stringify({ error: e.message }), { headers: { 'Content-Type': 'application/json' } });
+    }
     return noGames();
   }
 
-  if (!Array.isArray(raw)) return noGames();
+  if (!raw || !raw.ok || !raw.games) return noGames();
 
   if (debugMode === '1') {
-    return new Response(JSON.stringify({ count: raw.length, events: raw.slice(0, 3) }), {
+    const games = raw.games || {};
+    return new Response(JSON.stringify({ count: Object.keys(games).length, games: Object.fromEntries(Object.entries(games).slice(0, 3)) }), {
       headers: { 'Content-Type': 'application/json' }
     });
-  }
-
-  const nowMs = Date.now();
-  const gamesMap = {};
-
-  for (const ev of raw) {
-    const commenceMs = new Date(ev.commence_time).getTime();
-    if (commenceMs < nowMs - 4 * 60 * 60 * 1000) continue;
-
-    const homeTeam = ev.home_team;
-    const awayTeam = ev.away_team;
-    if (!homeTeam || !awayTeam) continue;
-
-    const dk = ev.bookmakers?.find(b => b.key === 'draftkings')
-            || ev.bookmakers?.find(b => b.key === 'fanduel')
-            || ev.bookmakers?.[0];
-    if (!dk) continue;
-
-    const market = dk.markets?.find(m => m.key === 'spreads');
-    if (!market?.outcomes?.length) continue;
-
-    const hm  = market.outcomes.find(o => o.name === homeTeam && Number(o.point) === -0.5)?.price ?? null;
-    const hp  = market.outcomes.find(o => o.name === homeTeam && Number(o.point) ===  0.5)?.price ?? null;
-    const awm = market.outcomes.find(o => o.name === awayTeam && Number(o.point) === -0.5)?.price ?? null;
-    const awp = market.outcomes.find(o => o.name === awayTeam && Number(o.point) ===  0.5)?.price ?? null;
-
-    if (debugMode === '2') {
-      gamesMap[awayTeam + ' @ ' + homeTeam] = {
-        homeTeam, awayTeam, book: dk.key, hm, hp, awm, awp,
-        allOutcomes: market.outcomes.map(o => ({ name: o.name, point: o.point, price: o.price }))
-      };
-      continue;
-    }
-
-    if (!hm && !hp && !awm && !awp) continue;
-
-    const spreadsObj = { Home: {}, Away: {} };
-    if (hm  != null) spreadsObj.Home['-0.5'] = hm;
-    if (hp  != null) spreadsObj.Home['0.5']  = hp;
-    if (awm != null) spreadsObj.Away['-0.5'] = awm;
-    if (awp != null) spreadsObj.Away['0.5']  = awp;
-
-    gamesMap[awayTeam + ' @ ' + homeTeam] = {
-      id: ev.id, away: awayTeam, home: homeTeam,
-      cm: ev.commence_time, league: 'EPL',
-      hm, hp, awm, awp, spreads: spreadsObj,
-    };
   }
 
   if (debugMode === '2') {
-    return new Response(JSON.stringify({ ok: true, games: gamesMap }), {
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return new Response(JSON.stringify(raw), { headers: { 'Content-Type': 'application/json' } });
   }
 
-  const body = JSON.stringify({ ok: true, games: gamesMap });
+  const body = JSON.stringify({ ok: true, games: raw.games });
   try {
     await env.DB.prepare(
       'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at'
