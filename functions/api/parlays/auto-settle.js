@@ -1412,7 +1412,9 @@ async function handleRequest({ request, env }) {
       const matchup = parse1innMatchup(leg.event_name);
       const gameFinal = matchup
         ? !!match1innGame(matchup, mlbGamesMap[leg.game_date] || [])
-        : (mlbGamesMap[leg.game_date] || []).length > 0;
+        // Only use "any game final" heuristic for past dates — never void same-day legs
+        // based on other games finishing while west-coast games are still live.
+        : (leg.game_date < todayUtc && (mlbGamesMap[leg.game_date] || []).length > 0);
       legOutcomes[leg.id] = (gameFinal || leg.game_date < staleDate) ? 'void' : null;
       continue;
     }
@@ -1464,9 +1466,14 @@ async function handleRequest({ request, env }) {
       parlayResult = anyLost ? 'lost' : 'won';
       finalPayout  = parlay.payout_rax;
     } else if (activeLegs.length < 2) {
-      // 2-leg slip with one scratch (or all scratched) — full stake refund
-      parlayResult = 'voided';
-      finalPayout  = parlay.stake_rax;
+      // 1 or 0 active legs remain after scratches — refund only if no active leg lost
+      if (anyLost) {
+        parlayResult = 'lost';
+        finalPayout  = 0;
+      } else {
+        parlayResult = 'voided';
+        finalPayout  = parlay.stake_rax;
+      }
     } else if (anyLost) {
       // Scratch on the slip but another leg also lost — just a loss
       parlayResult = 'lost';
