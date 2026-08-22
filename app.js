@@ -6766,7 +6766,8 @@
     var parlaySlipsTotal = 0;
 
     function normSlipName(n) {
-        return n.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+        return n.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
+            .replace(/\s+(?:jr\.?|sr\.?|ii|iii|iv)$/, '');
     }
 
     function loadSlipHeadshotAsync(elemId, playerName) {
