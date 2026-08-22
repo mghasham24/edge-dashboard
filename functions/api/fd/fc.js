@@ -59,7 +59,14 @@ export async function onRequestGet(context) {
   }
 
   if (debugMode === '1') {
-    return new Response(JSON.stringify({ count: raw.length, events: raw }), {
+    // Also probe sport list to confirm API key works and soccer_epl is available
+    let sportsCheck = null;
+    try {
+      const sr = await fetch(`https://api.the-odds-api.com/v4/sports/?apiKey=${apiKey}`, { signal: AbortSignal.timeout(8000) });
+      const sports = await sr.json();
+      sportsCheck = Array.isArray(sports) ? sports.filter(s => s.key?.startsWith('soccer')).map(s => s.key) : sports;
+    } catch(e) { sportsCheck = { error: e.message }; }
+    return new Response(JSON.stringify({ count: raw.length, events: raw.slice(0,3), soccerSports: sportsCheck }), {
       headers: { 'Content-Type': 'application/json' }
     });
   }
