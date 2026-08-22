@@ -1023,7 +1023,7 @@ async function handleRequest({ request, env }) {
   // per-leg outcomes get filled in even after the parlay is decided.
   const { results: allLegs } = await env.DB.prepare(
     "SELECT pl.id, pl.parlay_id, pl.player_name, pl.market_id, pl.threshold, " +
-    "pl.direction, pl.game_date, pl.market_type, pl.status, pl.sport, " +
+    "pl.direction, pl.game_date, pl.game_start_ms, pl.market_type, pl.status, pl.sport, " +
     "pl.label, pl.event_name, pl.implied_prob, p.status AS parlay_status " +
     "FROM parlay_legs pl " +
     "JOIN parlays p ON p.id = pl.parlay_id " +
@@ -1412,9 +1412,13 @@ async function handleRequest({ request, env }) {
       const matchup = parse1innMatchup(leg.event_name);
       const gameFinal = matchup
         ? !!match1innGame(matchup, mlbGamesMap[leg.game_date] || [])
-        // Only use "any game final" heuristic for past dates — never void same-day legs
-        // based on other games finishing while west-coast games are still live.
-        : (leg.game_date < todayUtc && (mlbGamesMap[leg.game_date] || []).length > 0);
+        // For player props (no matchup), only declare game final once 4 hours have elapsed
+        // since that specific game's start time. This prevents voiding west-coast players
+        // while their game is still live — even after midnight UTC when other games on the
+        // same calendar date have already finished.
+        : (leg.game_start_ms
+            ? Date.now() > leg.game_start_ms + 4 * 60 * 60 * 1000
+            : leg.game_date < staleDate);
       legOutcomes[leg.id] = (gameFinal || leg.game_date < staleDate) ? 'void' : null;
       continue;
     }
