@@ -1,58 +1,11 @@
 import { getSessionOrCron } from '../../_lib/auth.js';
 // functions/api/fd/fc.js
-// Fetches DraftKings real-time soccer Asian Handicap ±0.5 spread odds for top European leagues
-// Subcat 13170 = actual 2-way ±0.5 AH (Home -0.5 / Away +0.5), exact same market as Real Sports
-// Step 1: For each target league, get today's events from DK league endpoint
-// Step 2: For each event, fetch subcat 13170 to get actual ±0.5 prices
+// EPL Asian Handicap odds via The Odds API (DK bookmaker as reference).
+// DK/FD native endpoints are blocked from CF datacenter IPs for soccer (Akamai / competition page 400).
+// Cache 5 minutes in D1 to conserve Odds API credits.
 
-const DK_BASE = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
-const DK_SUBCAT = '20020'; // Soccer Asian Handicap ±0.5 (2-way, no draw)
-const CACHE_TTL = 4; // 4s ensures the 5s frontend poller always gets a fresh DK fetch
-
-// DK league IDs for target European soccer leagues (confirmed via API discovery)
-const DK_SOCCER_LEAGUES = {
-  '40253': 'EPL',
-  '40031': 'La Liga',
-  '40030': 'Serie A',
-  '40032': 'Ligue 1',
-  '40481': 'Bundesliga',
-  '89345': 'MLS',
-  '40685': 'UCL',
-};
-
-function dkLeagueEventsUrl(leagueId) {
-  // eventsQuery: no subcat filter so live events aren't dropped when AH is suspended
-  // marketsQuery: still references subcat so the endpoint has required context
-  const eq = encodeURIComponent(`$filter=leagueId eq '${leagueId}'`);
-  const mq = encodeURIComponent(
-    `$filter=clientMetadata/subCategoryId eq '${DK_SUBCAT}' AND tags/all(t: t ne 'SportcastBetBuilder')`
-  );
-  return `${DK_BASE}/controldata/league/leagueSubcategory/v1/markets?isBatchable=false&templateVars=${leagueId}&eventsQuery=${eq}&marketsQuery=${mq}&include=Events&entity=events`;
-}
-
-function dkEventSubcatUrl(eventId) {
-  // Fetch subcat 13170 (Asian Handicap) — returns ALL AH lines for this event, not just ±0.5
-  const mq = encodeURIComponent(
-    `$filter=eventId eq '${eventId}' AND clientMetadata/subCategoryId eq '${DK_SUBCAT}' AND tags/all(t: t ne 'SportcastBetBuilder')`
-  );
-  return `${DK_BASE}/controldata/event/eventSubcategory/v1/markets?isBatchable=false&templateVars=${eventId}%2C${DK_SUBCAT}&marketsQuery=${mq}&include=MarketSplits&entity=markets`;
-}
-
-function parseAmerican(str) {
-  if (!str) return null;
-  const s = String(str).replace(/\u2212/g, '-').replace(/[^0-9+\-]/g, '');
-  const n = parseInt(s, 10);
-  return isFinite(n) ? n : null;
-}
-
-function isWithin3Days_ET(dateStr) {
-  if (!dateStr) return false;
-  const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
-  const gameStr  = fmt.format(new Date(dateStr));
-  const todayStr = fmt.format(new Date());
-  const maxStr   = fmt.format(new Date(Date.now() + 3 * 86400000));
-  return gameStr >= todayStr && gameStr <= maxStr;
-}
+const ODDS_SPORT = 'soccer_epl';
+const CACHE_TTL  = 300; // 5 minutes
 
 function fail(status, msg) {
   return new Response(JSON.stringify({ error: msg }), {
@@ -62,44 +15,15 @@ function fail(status, msg) {
 
 export async function onRequestGet(context) {
   const { request, env } = context;
-
-  const reqUrl = new URL(request.url);
-  const debugMode = reqUrl.searchParams.get('debug');
-  const freshMode = reqUrl.searchParams.get('fresh'); // ?fresh=1 skips cache read (used on initial tab load)
-
-  // debug=5: probe various endpoints for EPL event list (no auth needed)
-  if (debugMode === '5') {
-    const AK = 'FhMFpcPWXMeyZxOx';
-    const fdH = { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15' };
-    // Try various FD endpoints + ESPN public API
-    const tests = [
-      // FD custom page slugs for soccer
-      `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=CUSTOM&customPageId=soccer&_ak=${AK}&timezone=America/New_York`,
-      `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=CUSTOM&customPageId=football&_ak=${AK}&timezone=America/New_York`,
-      `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=CUSTOM&customPageId=soccer-today&_ak=${AK}&timezone=America/New_York`,
-      // FD event-type based (eventTypeId for soccer from event-page data)
-      `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=SPORT&sport=SOCCER&_ak=${AK}&timezone=America/New_York`,
-      // ESPN public soccer API — no auth required, no CORS issues from CF
-      `https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard`,
-    ];
-    const results = await Promise.all(tests.map(async url => {
-      try {
-        const r = await fetch(url, { headers: fdH, signal: AbortSignal.timeout(8000) });
-        let body = '';
-        try { const t = await r.text(); body = t.slice(0, 400); } catch {}
-        return { url, status: r.status, body };
-      } catch(e) {
-        return { url, error: e.message };
-      }
-    }));
-    return new Response(JSON.stringify({ results }), { headers: { 'Content-Type': 'application/json' } });
-  }
-
   const session = await getSessionOrCron(request, env);
   if (!session) return fail(401, 'Not authenticated');
   if (session.plan !== 'pro' && !session.is_admin) return fail(403, 'Pro plan required');
 
-  const now = Math.floor(Date.now() / 1000);
+  const reqUrl   = new URL(request.url);
+  const debugMode = reqUrl.searchParams.get('debug');
+  const freshMode = reqUrl.searchParams.get('fresh');
+
+  const now      = Math.floor(Date.now() / 1000);
   const cacheKey = 'fd_fc';
 
   if (!debugMode && !freshMode) {
@@ -113,154 +37,99 @@ export async function onRequestGet(context) {
     } catch(e) {}
   }
 
+  const apiKey = env.ODDS_API_KEY;
+  if (!apiKey) return fail(500, 'ODDS_API_KEY not configured');
 
-  const headers = {
-    'Accept': 'application/json, text/plain, */*',
-    'Accept-Language': 'en-US,en;q=0.9',
-    'Accept-Encoding': 'gzip, deflate, br',
-    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15',
-    'Origin': 'https://sportsbook.draftkings.com',
-    'Referer': 'https://sportsbook.draftkings.com/leagues/soccer/epl',
-    'Sec-Fetch-Dest': 'empty',
-    'Sec-Fetch-Mode': 'cors',
-    'Sec-Fetch-Site': 'same-site',
-    'Connection': 'keep-alive',
-  };
+  const oddsUrl = `https://api.the-odds-api.com/v4/sports/${ODDS_SPORT}/odds/?apiKey=${apiKey}&regions=us&markets=spreads&oddsFormat=american&dateFormat=iso`;
+
+  let raw;
+  try {
+    const r = await fetch(oddsUrl, { signal: AbortSignal.timeout(10000) });
+    if (!r.ok) {
+      const body = await r.text().catch(() => '');
+      return fail(r.status, `Odds API error: ${body.slice(0, 200)}`);
+    }
+    raw = await r.json();
+  } catch(e) {
+    return fail(502, `Odds API fetch failed: ${e.message}`);
+  }
+
+  if (!Array.isArray(raw)) {
+    return fail(502, 'Unexpected Odds API response');
+  }
+
+  if (debugMode === '1') {
+    return new Response(JSON.stringify({ count: raw.length, events: raw }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
 
   const nowMs = Date.now();
+  const gamesMap = {};
 
+  for (const ev of raw) {
+    // Skip games that started more than 4 hours ago (live but likely decided)
+    const commenceMs = new Date(ev.commence_time).getTime();
+    if (commenceMs < nowMs - 4 * 60 * 60 * 1000) continue;
 
+    const homeTeam = ev.home_team;
+    const awayTeam = ev.away_team;
+    if (!homeTeam || !awayTeam) continue;
 
-  try {
-    // Step 1: Fetch all leagues in parallel
-    const leagueEntries = Object.entries(DK_SOCCER_LEAGUES);
-    const leagueResults = await Promise.all(leagueEntries.map(async ([leagueId, leagueLabel]) => {
-      const events = [];
-      try {
-        const r = await fetch(dkLeagueEventsUrl(leagueId), { headers });
-        if (!r.ok) {
-          if (debugMode === '1') events.push({ _error: `league ${leagueId} status ${r.status}` });
-          return events;
-        }
-        const d = await r.json();
-        if (debugMode === '1' && !d.events) events.push({ _warn: `league ${leagueId} no events key`, keys: Object.keys(d) });
+    // Find DK bookmaker, fallback to first available
+    const dk = ev.bookmakers?.find(b => b.key === 'draftkings')
+            || ev.bookmakers?.find(b => b.key === 'fanduel')
+            || ev.bookmakers?.[0];
+    if (!dk) continue;
 
-        for (const ev of d.events || []) {
-          if (!isWithin3Days_ET(ev.startEventDate)) continue;
-          const t = new Date(ev.startEventDate).getTime();
-          if (t < nowMs - 4 * 60 * 60 * 1000) continue;
+    const market = dk.markets?.find(m => m.key === 'spreads');
+    if (!market?.outcomes?.length) continue;
 
-          let home, away;
-          const parts_arr = ev.participants || [];
-          const homeP = parts_arr.find(p => p.venueRole === 'Home');
-          const awayP = parts_arr.find(p => p.venueRole === 'Away');
-          if (homeP && awayP) {
-            home = homeP.name; away = awayP.name;
-          } else {
-            const parts = (ev.name || '').split(' vs ');
-            if (parts.length !== 2) continue;
-            home = parts[0].trim(); away = parts[1].trim();
-          }
-
-          events.push({ eventId: ev.id, home, away, league: leagueLabel, openDate: ev.startEventDate });
-        }
-      } catch(e) {}
-      return events;
-    }));
-
-    const todayEvents = leagueResults.flat();
-
-    if (debugMode === '1') {
-      return new Response(JSON.stringify({ todayEventsFound: todayEvents.length, events: todayEvents }), {
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-
-    if (!todayEvents.length) {
-      return new Response(JSON.stringify({ ok: true, games: {} }), {
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-
-    // Step 2: Fetch all event spread lines in parallel
-
-    // Load previous cache to freeze odds when DK suspends the AH market (halftime, live suspension)
-    let prevGames = {};
-    try {
-      const prev = await env.DB.prepare('SELECT data FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
-      if (prev) prevGames = JSON.parse(prev.data).games || {};
-    } catch(e) {}
-
-    const gamesMap = {};
-
-    await Promise.all(todayEvents.map(async (ev) => {
-      const gameKey = ev.away + ' @ ' + ev.home;
-      try {
-        const r = await fetch(dkEventSubcatUrl(ev.eventId), { headers });
-        if (!r.ok) return;
-        const d = await r.json();
-
-        const spreads = { Home: {}, Away: {} };
-        for (const sel of d.selections || []) {
-          const pts = sel.points;
-          const ot = sel.outcomeType;
-          const price = parseAmerican(sel.displayOdds && sel.displayOdds.american);
-          if (price == null || pts == null) continue;
-          if (ot !== 'Home' && ot !== 'Away') continue;
-          spreads[ot][String(pts)] = price;
-        }
-
-        const homeMinus = spreads.Home['-0.5'] || null;
-        const homePlus  = spreads.Home['0.5']  || null;
-        const awayMinus = spreads.Away['-0.5'] || null;
-        const awayPlus  = spreads.Away['0.5']  || null;
-
-        if (debugMode === '2') {
-          const allSels = (d.selections || []).map(s => ({ label: s.label, outcomeType: s.outcomeType, points: s.points, odds: s.displayOdds && s.displayOdds.american }));
-          gamesMap[gameKey] = { home: ev.home, away: ev.away, hm: homeMinus, hp: homePlus, awm: awayMinus, awp: awayPlus, spreads, allSels };
-          return;
-        }
-
-        if (!Object.keys(spreads.Home).length && !Object.keys(spreads.Away).length) {
-          // DK suspended the AH market — freeze last known odds so the game stays in cache
-          const frozen = prevGames[gameKey] || prevGames[ev.away + ' @ ' + ev.home] || null;
-          if (frozen && (Object.keys(frozen.spreads?.Home || {}).length || Object.keys(frozen.spreads?.Away || {}).length)) {
-            gamesMap[gameKey] = { ...frozen, id: parseInt(ev.eventId), away: ev.away, home: ev.home, cm: ev.openDate, live: true };
-          }
-          return;
-        }
-
-        gamesMap[gameKey] = {
-          id: parseInt(ev.eventId),
-          away: ev.away,
-          home: ev.home,
-          cm: ev.openDate,
-          league: ev.league,
-          hm: homeMinus,
-          hp: homePlus,
-          awm: awayMinus,
-          awp: awayPlus,
-          spreads
-        };
-      } catch(e) {}
-    }));
+    // Extract ±0.5 AH prices for home and away
+    const hm  = market.outcomes.find(o => o.name === homeTeam && Number(o.point) === -0.5)?.price ?? null;
+    const hp  = market.outcomes.find(o => o.name === homeTeam && Number(o.point) ===  0.5)?.price ?? null;
+    const awm = market.outcomes.find(o => o.name === awayTeam && Number(o.point) === -0.5)?.price ?? null;
+    const awp = market.outcomes.find(o => o.name === awayTeam && Number(o.point) ===  0.5)?.price ?? null;
 
     if (debugMode === '2') {
-      return new Response(JSON.stringify({ ok: true, games: gamesMap }), {
-        headers: { 'Content-Type': 'application/json' }
-      });
+      const allOutcomes = market.outcomes.map(o => ({ name: o.name, point: o.point, price: o.price }));
+      gamesMap[awayTeam + ' @ ' + homeTeam] = { homeTeam, awayTeam, book: dk.key, hm, hp, awm, awp, allOutcomes };
+      continue;
     }
 
-    const body = JSON.stringify({ ok: true, games: gamesMap });
-    try {
-      await env.DB.prepare(
-        'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at'
-      ).bind(cacheKey, body, now).run();
-    } catch(e) {}
+    if (!hm && !hp && !awm && !awp) continue;
 
-    return new Response(body, { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+    const spreadsObj = { Home: {}, Away: {} };
+    if (hm  != null) spreadsObj.Home['-0.5'] = hm;
+    if (hp  != null) spreadsObj.Home['0.5']  = hp;
+    if (awm != null) spreadsObj.Away['-0.5'] = awm;
+    if (awp != null) spreadsObj.Away['0.5']  = awp;
 
-  } catch(e) {
-    return fail(500, e.message);
+    const gameKey = awayTeam + ' @ ' + homeTeam;
+    gamesMap[gameKey] = {
+      id:      ev.id,
+      away:    awayTeam,
+      home:    homeTeam,
+      cm:      ev.commence_time,
+      league:  'EPL',
+      hm, hp, awm, awp,
+      spreads: spreadsObj,
+    };
   }
+
+  if (debugMode === '2') {
+    return new Response(JSON.stringify({ ok: true, games: gamesMap }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  const body = JSON.stringify({ ok: true, games: gamesMap });
+
+  try {
+    await env.DB.prepare(
+      'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at'
+    ).bind(cacheKey, body, now).run();
+  } catch(e) {}
+
+  return new Response(body, { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
 }
