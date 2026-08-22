@@ -13116,11 +13116,15 @@
                 '1inn_ml':'1st Inn ML', '1inn_runs_ou':'1st Inn Runs', '1inn_run_yn':'1st Inn Score',
                 team_ml:'ML', team_runline:'RL', team_total:'Total', ufc_ml:'ML', ufc_total:'Fight Total',
             };
+            var FINAL_LEG = new Set(['won','lost','void','push']);
             el.innerHTML = queue.map(function(q) {
                 var status   = q.status || 'pending';
                 var isPend   = status === 'pending';
                 var hasCard  = !!q.card_url;
                 var legs     = q.legs || [];
+                // Only show entries where all legs have settled (or no leg data at all)
+                var allSettled = legs.length === 0 || legs.every(function(l) { return FINAL_LEG.has(l.status); });
+                if (!allSettled) return '';
                 var isRefund = legs.length > 0 && legs.every(function(l) { return l.status === 'void' || l.status === 'push'; });
 
                 var actionsHtml = '';
@@ -13141,9 +13145,9 @@
                 // Copy button — fetches card if needed, then copies bot test command
                 var copyBtn = '<button onclick="copyPayoutCmd(this)" data-qid="' + q.id + '" data-amount="' + (q.offer_amount || 0) + '" data-cardurl="' + escHtml(q.card_url || '') + '" style="background:none;border:1px solid var(--border);border-radius:5px;padding:3px 8px;font-size:10px;color:var(--muted);cursor:pointer">Copy cmd</button>';
 
-                // Legs (for wins, not refunds)
+                // Legs — shown for both wins and refunds
                 var legsHtml = '';
-                if (!isRefund && legs.length > 0) {
+                if (legs.length > 0) {
                     legsHtml = '<div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px;display:flex;flex-direction:column;gap:5px">' +
                         legs.map(function(leg) {
                             var icon = leg.status === 'won'  ? '<span style="color:var(--green);font-weight:700;width:14px;display:inline-block">✓</span>'
@@ -13168,9 +13172,8 @@
                                 (gameDate ? '<span style="color:var(--muted2);font-size:10px;white-space:nowrap">' + escHtml(gameDate) + '</span>' : '') +
                             '</div>';
                         }).join('') +
-                    '</div>';
-                } else if (isRefund) {
-                    legsHtml = '<div style="margin-top:8px;font-size:11px;color:var(--muted);border-top:1px solid var(--border);padding-top:8px">All legs pushed — refund</div>';
+                    '</div>' +
+                    (isRefund ? '<div style="margin-top:6px;font-size:10px;color:var(--muted2);padding-left:20px">All legs pushed/voided — refund</div>' : '');
                 }
 
                 return '<div class="pq-row" id="pq-row-' + q.id + '" style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:10px">' +
