@@ -16404,6 +16404,10 @@
                 'Hotspur': 'Tottenham Hotspur',
                 'Hotspurs': 'Tottenham Hotspur',
                 'Villa': 'Aston Villa',
+                'Wolves': 'Wolverhampton Wanderers',
+                'Bees': 'Brentford',
+                'Saints': 'Southampton',
+                'Toffees': 'Everton',
             };
             if (FC_NICKS.hasOwnProperty(abbrevOrName)) return FC_NICKS[abbrevOrName];
         }
@@ -16799,6 +16803,10 @@
                            || gameMarkets['Match Result'] || gameMarkets['1X2']
                            || gameMarkets['Home/Draw/Away'] || gameMarkets['Game Winner'];
                 }
+                // Soccer FC/WC: RS uses 'Match Result' (2-outcome "Win" / "Win or Draw") as the ±0.5 AH equivalent
+                if (!mktData && (sport === 'soccer_fc' || sport === 'soccer_wc') && r.mkt === 'Spread') {
+                    mktData = gameMarkets['Match Result'] || gameMarkets['Asian Handicap'] || gameMarkets['Handicap'];
+                }
                 var outcomes = mktData ? (mktData.outcomes || mktData) : null;
                 if (!outcomes || !outcomes.length) return;
 
@@ -16864,6 +16872,12 @@ if (!match && r.mkt === 'Spread' && (sport === 'soccer_fc' || sport === 'soccer_
                     // but the line field is extracted from the raw label before substitution and preserves it.
                     var fcMinusO = outcomes.find(function(o) { return o.line === -0.5 || (o.label && o.label.indexOf('-0.5') !== -1); });
                     var fcPlusO  = outcomes.find(function(o) { return o.line === 0.5  || (o.label && o.label.indexOf('+0.5') !== -1); });
+                    // RS 'Match Result' format: "Win or Draw" = +0.5 equiv, "Win" (only) = -0.5 equiv
+                    if (!fcMinusO && !fcPlusO) {
+                        var _wod = outcomes.find(function(o) { return o.label && /win or draw/i.test(o.label); });
+                        var _won = _wod ? outcomes.find(function(o) { return o !== _wod && o.label && /\bwin\b/i.test(o.label); }) : null;
+                        if (_wod && _won) { fcPlusO = _wod; fcMinusO = _won; }
+                    }
                     if (fcMinusO || fcPlusO) {
                         var fcTeamLow = r.side.toLowerCase();
                         var _wcLblAliases = { 'usa': 'united states', 'united states': 'usa', "côte d'ivoire": 'ivory coast', 'ivory coast': "côte d'ivoire", 'curaçao': 'curacao', 'curacao': 'curaçao' };
