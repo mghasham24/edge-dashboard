@@ -23,6 +23,30 @@ export async function onRequestGet(context) {
   const debugMode = reqUrl.searchParams.get('debug');
   const freshMode = reqUrl.searchParams.get('fresh');
 
+  // debug=3: probe Odds API key and sport availability (no auth — diagnostic only)
+  if (debugMode === '3') {
+    const apiKey3 = env.ODDS_API_KEY;
+    if (!apiKey3) return fail(500, 'ODDS_API_KEY not configured');
+    try {
+      const [eplRes, sportsRes] = await Promise.all([
+        fetch(`https://api.the-odds-api.com/v4/sports/soccer_epl/odds/?apiKey=${apiKey3}&regions=us&markets=spreads&oddsFormat=american`, { signal: AbortSignal.timeout(10000) }),
+        fetch(`https://api.the-odds-api.com/v4/sports/?apiKey=${apiKey3}`, { signal: AbortSignal.timeout(10000) }),
+      ]);
+      const epl = await eplRes.json().catch(() => null);
+      const allSports = await sportsRes.json().catch(() => null);
+      const soccerSports = Array.isArray(allSports) ? allSports.filter(s => s.key?.startsWith('soccer')).map(s => ({ key: s.key, active: s.active })) : allSports;
+      return new Response(JSON.stringify({
+        eplStatus: eplRes.status,
+        eplCount:  Array.isArray(epl) ? epl.length : null,
+        eplSample: Array.isArray(epl) ? epl.slice(0,2) : epl,
+        sportsStatus: sportsRes.status,
+        soccerSports,
+      }), { headers: { 'Content-Type': 'application/json' } });
+    } catch(e) {
+      return fail(500, e.message);
+    }
+  }
+
   const now      = Math.floor(Date.now() / 1000);
   const cacheKey = 'fd_fc';
 
