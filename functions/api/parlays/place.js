@@ -335,6 +335,24 @@ export async function onRequestPost({ request, env }) {
     }
   }
 
+  // UFC correlated parlay block: Fighter Win + Under rounds for the same fight.
+  // If Fighter A wins quickly they also cover the under — the outcomes share the same event,
+  // giving the bettor far better true odds than the parlay price implies.
+  const ufcMlLegs    = normalized.filter(l => l.marketType === 'ufc_ml');
+  const ufcUnderLegs = normalized.filter(l => l.marketType === 'ufc_total' && l.direction === 'less');
+  for (const ml of ufcMlLegs) {
+    const fighter = (ml.playerName || '').toLowerCase();
+    for (const under of ufcUnderLegs) {
+      const fight = (under.eventName || '').toLowerCase();
+      if (fighter && fight && fight.includes(fighter)) {
+        return err(
+          'Correlated picks: ' + ml.playerName + ' Fighter Win + Under rounds are not combinable — a quick finish covers both.',
+          400
+        );
+      }
+    }
+  }
+
   // Payout math — mirrors parlayCalcPayout() in the frontend exactly.
   // Hard cap: 10,000 Rax. Max stake formula ensures payout never exceeds 10k.
   // Parlays over 2.5x are docked 10 Rax to cover deposit card acquisition cost.
