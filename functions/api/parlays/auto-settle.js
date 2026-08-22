@@ -1451,8 +1451,19 @@ async function handleRequest({ request, env }) {
     const resolvedLegs = outcomes.filter(o => o.outcome !== null);
     const anyLostEarly = resolvedLegs.some(o => o.outcome === 'lost');
 
+    // Check for already-settled lost legs from prior auto-settle passes.
+    // Without this, a multi-pass settlement (NFL/WNBA legs lose first, then a MLB
+    // leg settles as void in a later pass) incorrectly refunds the parlay.
+    let priorLost = false;
+    try {
+      const pr = await env.DB.prepare(
+        "SELECT 1 FROM parlay_legs WHERE parlay_id=? AND status='lost' LIMIT 1"
+      ).bind(parlay.id).first();
+      priorLost = !!pr;
+    } catch(e) {}
+
     // Future legs count the same as unresolved today-legs — parlay can't finish while they exist
-    if ((stillWaiting.length || futurePendingLegs.length) && !anyLostEarly) {
+    if ((stillWaiting.length || futurePendingLegs.length) && !(anyLostEarly || priorLost)) {
       report.push({ parlayId: parlay.id, status: 'waiting', waiting: [...stillWaiting.map(o => o.player), ...futurePendingLegs.map(l => l.player_name)] });
       continue;
     }
@@ -1460,7 +1471,7 @@ async function handleRequest({ request, env }) {
     const voidedLegs   = resolvedLegs.filter(o => o.outcome === 'void');
     const activeLegs   = resolvedLegs.filter(o => o.outcome !== 'void');
     const anyVoid      = voidedLegs.length > 0;
-    const anyLost      = activeLegs.some(o => o.outcome === 'lost');
+    const anyLost      = activeLegs.some(o => o.outcome === 'lost') || priorLost;
 
     // Determine result and final payout
     let parlayResult, finalPayout;

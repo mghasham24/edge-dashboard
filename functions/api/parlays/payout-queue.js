@@ -83,8 +83,11 @@ async function handleRequest({ request, env }) {
     const { results } = await env.DB.prepare(
       'SELECT q.id, q.parlay_id, q.rs_username, q.payout_rax, q.offer_amount, ' +
       'q.status, q.target_card_id, q.rs_offer_id, q.attempts, q.notes, ' +
-      'q.created_at, q.sent_at, q.skipped_cards, ra.rs_user_id ' +
-      'FROM payout_queue q LEFT JOIN real_auth ra ON ra.user_id = q.user_id ' +
+      'q.created_at, q.sent_at, q.skipped_cards, ra.rs_user_id, p.status AS parlay_status ' +
+      'FROM payout_queue q ' +
+      'LEFT JOIN real_auth ra ON ra.user_id = q.user_id ' +
+      'LEFT JOIN parlays p ON p.id = q.parlay_id ' +
+      'WHERE p.status IN (\'won\',\'voided\') OR q.status = \'sent\' ' +
       'ORDER BY q.created_at DESC LIMIT 100'
     ).all();
 

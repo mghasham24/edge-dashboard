@@ -13118,14 +13118,27 @@
             };
             var FINAL_LEG = new Set(['won','lost','void','push']);
             el.innerHTML = queue.map(function(q) {
-                var status   = q.status || 'pending';
-                var isPend   = status === 'pending';
+                var pqStatus     = q.status || 'pending';
+                var parlayStatus = q.parlay_status || '';
+                var isPend   = pqStatus === 'pending';
                 var hasCard  = !!q.card_url;
                 var legs     = q.legs || [];
                 // Only show entries where all legs have settled (or no leg data at all)
                 var allSettled = legs.length === 0 || legs.every(function(l) { return FINAL_LEG.has(l.status); });
                 if (!allSettled) return '';
-                var isRefund = legs.length > 0 && legs.every(function(l) { return l.status === 'void' || l.status === 'push'; });
+                // Skip slips with any lost leg — those are losses, not payouts
+                var hasLostLeg = legs.some(function(l) { return l.status === 'lost'; });
+                if (hasLostLeg && parlayStatus !== 'won') return '';
+                var isRefund = parlayStatus === 'voided' || (legs.length > 0 && legs.every(function(l) { return l.status === 'void' || l.status === 'push'; }));
+                // Badge label and color
+                var badgeLabel = pqStatus === 'sent' ? 'PAID'
+                    : isRefund ? 'REFUND'
+                    : parlayStatus === 'won' ? 'WON'
+                    : pqStatus.toUpperCase();
+                var badgeColor = pqStatus === 'sent' ? 'var(--muted)'
+                    : isRefund ? 'var(--orange,#f59e0b)'
+                    : parlayStatus === 'won' ? 'var(--green)'
+                    : 'var(--muted)';
 
                 var actionsHtml = '';
                 if (isPend && hasCard) {
@@ -13185,7 +13198,7 @@
                             '</div>' +
                             '<div style="margin-top:4px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">' +
                                 '<span style="font-size:12px;color:var(--muted)">Parlay #' + q.parlay_id + '</span>' +
-                                '<span style="font-size:11px;font-weight:700;letter-spacing:.04em;color:' + (statusColor[status] || 'var(--muted)') + ';text-transform:uppercase">' + escHtml(status) + '</span>' +
+                                '<span style="font-size:11px;font-weight:700;letter-spacing:.04em;color:' + badgeColor + ';text-transform:uppercase">' + escHtml(badgeLabel) + '</span>' +
                             '</div>' +
                             noteHtml +
                         '</div>' +
