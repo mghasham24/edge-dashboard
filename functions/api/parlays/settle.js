@@ -25,7 +25,7 @@ export async function onRequestPost({ request, env }) {
     return err('parlayId (integer) and result ("won" | "lost") required', 400);
 
   const parlay = await env.DB.prepare(
-    'SELECT id, user_id, stake_rax, payout_rax, rs_username, status FROM parlays WHERE id=?'
+    'SELECT id, user_id, stake_rax, received_rax, payout_rax, rs_username, status FROM parlays WHERE id=?'
   ).bind(parlayId).first();
 
   if (!parlay)                    return err('Parlay not found', 404);
@@ -71,7 +71,7 @@ export async function onRequestPost({ request, env }) {
     if (activeLegs.length < 2) {
       // 2-leg with 1 push, or all legs pushed → voided, full stake refund
       parlayStatus = 'voided';
-      finalPayout  = parlay.stake_rax;
+      finalPayout  = parlay.received_rax ?? parlay.stake_rax;
     } else {
       // Recalculate payout from surviving legs only (no leg caps, matches auto-settle)
       const newTrueProb = activeLegs.reduce((acc, l) => acc * l.implied_prob, 1);

@@ -1015,7 +1015,7 @@ async function handleRequest({ request, env }) {
 
   // 1. Load active parlays
   const { results: parlays } = await env.DB.prepare(
-    "SELECT id, user_id, payout_rax, stake_rax, rs_username FROM parlays WHERE status='active'"
+    "SELECT id, user_id, payout_rax, stake_rax, received_rax, rs_username FROM parlays WHERE status='active'"
   ).all();
   if (!parlays.length) return cacheAndReturn({ settled: 0, reason: 'no_active_parlays' });
 
@@ -1487,7 +1487,7 @@ async function handleRequest({ request, env }) {
         finalPayout  = 0;
       } else {
         parlayResult = 'voided';
-        finalPayout  = parlay.stake_rax;
+        finalPayout  = parlay.received_rax ?? parlay.stake_rax;
       }
     } else if (anyLost) {
       // Scratch on the slip but another leg also lost — just a loss
@@ -1550,7 +1550,7 @@ async function handleRequest({ request, env }) {
   const dnpRefunds = [];
   try {
     const recentLost = await env.DB.prepare(
-      "SELECT id, user_id, stake_rax, rs_username FROM parlays WHERE status='lost' AND settled_at > ?"
+      "SELECT id, user_id, stake_rax, received_rax, rs_username FROM parlays WHERE status='lost' AND settled_at > ?"
     ).bind(now - 3 * 86400).all();
 
     for (const p of (recentLost.results || [])) {
@@ -1587,7 +1587,7 @@ async function handleRequest({ request, env }) {
         ...legUpdates,
         env.DB.prepare(
           'INSERT OR IGNORE INTO payout_queue (parlay_id, user_id, rs_username, payout_rax, offer_amount, created_at) VALUES (?,?,?,?,?,?)'
-        ).bind(p.id, p.user_id, p.rs_username, p.stake_rax, p.stake_rax, now),
+        ).bind(p.id, p.user_id, p.rs_username, p.received_rax ?? p.stake_rax, p.received_rax ?? p.stake_rax, now),
       ]);
       dnpRefunds.push(p.id);
     }
