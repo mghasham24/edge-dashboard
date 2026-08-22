@@ -15,9 +15,6 @@ function fail(status, msg) {
 
 export async function onRequestGet(context) {
   const { request, env } = context;
-  const session = await getSessionOrCron(request, env);
-  if (!session) return fail(401, 'Not authenticated');
-  if (session.plan !== 'pro' && !session.is_admin) return fail(403, 'Pro plan required');
 
   const reqUrl   = new URL(request.url);
   const debugMode = reqUrl.searchParams.get('debug');
@@ -46,6 +43,10 @@ export async function onRequestGet(context) {
       return fail(500, e.message);
     }
   }
+
+  const session = await getSessionOrCron(request, env);
+  if (!session) return fail(401, 'Not authenticated');
+  if (session.plan !== 'pro' && !session.is_admin) return fail(403, 'Pro plan required');
 
   const now      = Math.floor(Date.now() / 1000);
   const cacheKey = 'fd_fc';
