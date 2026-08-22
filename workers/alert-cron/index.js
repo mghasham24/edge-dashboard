@@ -726,30 +726,15 @@ async function runCron(env, ctx) {
           signal: AbortSignal.timeout(25000),
         });
       } catch(e) {}
-      // Once-daily payout batch — runs the first alert-cron tick at or after 10 AM ET.
-      // Uses midnightET as the unique key so it fires exactly once per ET calendar day.
-      if (_etH >= 10) {
-        const _dailyPayoutKey = 'payout:daily:' + midnightET;
+      // Daily payout window: 10 AM – 12 PM ET. Every 60s tick during this window calls
+      // the payout bot (5 entries per call, batch=1 bypasses PAYOUT_MANUAL). The 2-hour
+      // window handles up to 600 entries and allows natural 5-min retries on skipped cards.
+      if (_etH >= 10 && _etH < 12) {
         try {
-          const _alreadyRan = await env.DB.prepare(
-            "SELECT 1 FROM odds_cache WHERE cache_key=?"
-          ).bind(_dailyPayoutKey).first();
-          if (!_alreadyRan) {
-            await env.DB.prepare(
-              "INSERT OR IGNORE INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?)"
-            ).bind(_dailyPayoutKey, '1', now).run();
-            // Drain the pending queue — loop until empty (max 30 calls × 5 entries = 150)
-            for (let _pi = 0; _pi < 30; _pi++) {
-              try {
-                const _pr = await fetch(
-                  `${env.SITE_URL}/api/parlays/payout?_cron_key=${env.CRON_SECRET}&batch=1`,
-                  { method: 'POST', signal: AbortSignal.timeout(30000) }
-                );
-                const _pd = await _pr.json().catch(() => ({}));
-                if (!_pd.processed) break;
-              } catch(e) { break; }
-            }
-          }
+          await fetch(
+            `${env.SITE_URL}/api/parlays/payout?_cron_key=${env.CRON_SECRET}&batch=1`,
+            { method: 'POST', signal: AbortSignal.timeout(30000) }
+          );
         } catch(e) {}
       }
       try {
