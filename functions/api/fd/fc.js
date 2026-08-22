@@ -67,24 +67,29 @@ export async function onRequestGet(context) {
   const debugMode = reqUrl.searchParams.get('debug');
   const freshMode = reqUrl.searchParams.get('fresh'); // ?fresh=1 skips cache read (used on initial tab load)
 
-  // debug=5: probe FD competition page for EPL to see if it works from CF (no auth needed)
+  // debug=5: probe various endpoints for EPL event list (no auth needed)
   if (debugMode === '5') {
     const AK = 'FhMFpcPWXMeyZxOx';
-    const fdHeaders = { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15' };
+    const fdH = { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15' };
+    // Try various FD endpoints + ESPN public API
     const tests = [
-      `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=COMPETITION&competitionId=10932509&_ak=${AK}&timezone=America/New_York`,
-      `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=LEAGUE&leagueId=10932509&_ak=${AK}&timezone=America/New_York`,
-      `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=CUSTOM&customPageId=soccer-epl&_ak=${AK}&timezone=America/New_York`,
-      `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=CUSTOM&customPageId=epl&_ak=${AK}&timezone=America/New_York`,
+      // FD custom page slugs for soccer
+      `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=CUSTOM&customPageId=soccer&_ak=${AK}&timezone=America/New_York`,
+      `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=CUSTOM&customPageId=football&_ak=${AK}&timezone=America/New_York`,
+      `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=CUSTOM&customPageId=soccer-today&_ak=${AK}&timezone=America/New_York`,
+      // FD event-type based (eventTypeId for soccer from event-page data)
+      `https://sbapi.nj.sportsbook.fanduel.com/api/content-managed-page?page=SPORT&sport=SOCCER&_ak=${AK}&timezone=America/New_York`,
+      // ESPN public soccer API — no auth required, no CORS issues from CF
+      `https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard`,
     ];
     const results = await Promise.all(tests.map(async url => {
       try {
-        const r = await fetch(url, { headers: fdHeaders, signal: AbortSignal.timeout(8000) });
+        const r = await fetch(url, { headers: fdH, signal: AbortSignal.timeout(8000) });
         let body = '';
-        try { const t = await r.text(); body = t.slice(0, 500); } catch {}
-        return { url: url.split('?')[1], status: r.status, body };
+        try { const t = await r.text(); body = t.slice(0, 400); } catch {}
+        return { url, status: r.status, body };
       } catch(e) {
-        return { url: url.split('?')[1], error: e.message };
+        return { url, error: e.message };
       }
     }));
     return new Response(JSON.stringify({ results }), { headers: { 'Content-Type': 'application/json' } });
