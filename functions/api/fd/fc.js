@@ -3,12 +3,12 @@ import { getSessionOrCron } from '../../_lib/auth.js';
 // EPL Asian Handicap odds via DK native, proxied through Hetzner VPS.
 // DK native is Akamai-blocked from CF datacenter IPs — VPS at vps.raxedge.com:3003 bypasses this.
 // VPS endpoint: GET /dk-soccer?league=40253&subcat=17968&key=VPS_DK_KEY
-// Cache 5 minutes in D1.
+// Cache 60s in D1 — short TTL keeps live in-play DK AH prices current.
 
 const VPS_HOST   = 'http://vps.raxedge.com:3003';
 const DK_LEAGUE  = '40253'; // EPL
 const DK_SUBCAT  = '17968'; // Asian Handicap
-const CACHE_TTL  = 300; // 5 minutes
+const CACHE_TTL  = 60; // 60 seconds
 
 const noGames = () => new Response(JSON.stringify({ ok: true, games: {} }), {
   headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }
