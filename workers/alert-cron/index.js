@@ -726,17 +726,6 @@ async function runCron(env, ctx) {
           signal: AbortSignal.timeout(25000),
         });
       } catch(e) {}
-      // Daily payout window: 10 AM – 12 PM ET. Every 60s tick during this window calls
-      // the payout bot (5 entries per call, batch=1 bypasses PAYOUT_MANUAL). The 2-hour
-      // window handles up to 600 entries and allows natural 5-min retries on skipped cards.
-      if (_etH >= 10 && _etH < 12) {
-        try {
-          await fetch(
-            `${env.SITE_URL}/api/parlays/payout?_cron_key=${env.CRON_SECRET}&batch=1`,
-            { method: 'POST', signal: AbortSignal.timeout(30000) }
-          );
-        } catch(e) {}
-      }
       try {
         await fetch(`${env.SITE_URL}/api/parlays/deposit-check?_cron_key=${env.CRON_SECRET}`, {
           method: 'POST',
