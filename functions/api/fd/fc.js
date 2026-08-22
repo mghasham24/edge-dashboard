@@ -1,11 +1,19 @@
 import { getSessionOrCron } from '../../_lib/auth.js';
 // functions/api/fd/fc.js
 // EPL Asian Handicap odds via The Odds API (DK bookmaker as reference).
-// DK/FD native endpoints are blocked from CF datacenter IPs for soccer (Akamai / competition page 400).
+// DK native: Akamai-blocked from CF datacenter IPs.
+// FD native: content-managed-page returns 400 for soccer competition from all CF regions.
 // Cache 5 minutes in D1 to conserve Odds API credits.
+//
+// REQUIRES: ODDS_API_KEY env var with a plan that includes soccer_epl odds.
+// Current key returns 401 for soccer_epl — upgrade at the-odds-api.com.
 
 const ODDS_SPORT = 'soccer_epl';
 const CACHE_TTL  = 300; // 5 minutes
+
+const noGames = () => new Response(JSON.stringify({ ok: true, games: {} }), {
+  headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }
+});
 
 function fail(status, msg) {
   return new Response(JSON.stringify({ error: msg }), {
@@ -15,38 +23,13 @@ function fail(status, msg) {
 
 export async function onRequestGet(context) {
   const { request, env } = context;
-
-  const reqUrl   = new URL(request.url);
-  const debugMode = reqUrl.searchParams.get('debug');
-  const freshMode = reqUrl.searchParams.get('fresh');
-
-  // debug=3: probe Odds API key and sport availability (no auth — diagnostic only)
-  if (debugMode === '3') {
-    const apiKey3 = env.ODDS_API_KEY;
-    if (!apiKey3) return fail(500, 'ODDS_API_KEY not configured');
-    try {
-      const [eplRes, sportsRes] = await Promise.all([
-        fetch(`https://api.the-odds-api.com/v4/sports/soccer_epl/odds/?apiKey=${apiKey3}&regions=us&markets=spreads&oddsFormat=american`, { signal: AbortSignal.timeout(10000) }),
-        fetch(`https://api.the-odds-api.com/v4/sports/?apiKey=${apiKey3}`, { signal: AbortSignal.timeout(10000) }),
-      ]);
-      const epl = await eplRes.json().catch(() => null);
-      const allSports = await sportsRes.json().catch(() => null);
-      const soccerSports = Array.isArray(allSports) ? allSports.filter(s => s.key?.startsWith('soccer')).map(s => ({ key: s.key, active: s.active })) : allSports;
-      return new Response(JSON.stringify({
-        eplStatus: eplRes.status,
-        eplCount:  Array.isArray(epl) ? epl.length : null,
-        eplSample: Array.isArray(epl) ? epl.slice(0,2) : epl,
-        sportsStatus: sportsRes.status,
-        soccerSports,
-      }), { headers: { 'Content-Type': 'application/json' } });
-    } catch(e) {
-      return fail(500, e.message);
-    }
-  }
-
   const session = await getSessionOrCron(request, env);
   if (!session) return fail(401, 'Not authenticated');
   if (session.plan !== 'pro' && !session.is_admin) return fail(403, 'Pro plan required');
+
+  const reqUrl    = new URL(request.url);
+  const debugMode = reqUrl.searchParams.get('debug');
+  const freshMode = reqUrl.searchParams.get('fresh');
 
   const now      = Math.floor(Date.now() / 1000);
   const cacheKey = 'fd_fc';
@@ -63,35 +46,30 @@ export async function onRequestGet(context) {
   }
 
   const apiKey = env.ODDS_API_KEY;
-  if (!apiKey) return fail(500, 'ODDS_API_KEY not configured');
+  if (!apiKey) return noGames();
 
   const oddsUrl = `https://api.the-odds-api.com/v4/sports/${ODDS_SPORT}/odds/?apiKey=${apiKey}&regions=us&markets=spreads&oddsFormat=american&dateFormat=iso`;
 
   let raw;
   try {
     const r = await fetch(oddsUrl, { signal: AbortSignal.timeout(10000) });
+    if (r.status === 401 || r.status === 422) return noGames(); // plan/quota — fail silently
     if (!r.ok) {
-      const body = await r.text().catch(() => '');
-      return fail(r.status, `Odds API error: ${body.slice(0, 200)}`);
+      if (debugMode === '1') {
+        const body = await r.text().catch(() => '');
+        return new Response(JSON.stringify({ oddsApiStatus: r.status, body }), { headers: { 'Content-Type': 'application/json' } });
+      }
+      return noGames();
     }
     raw = await r.json();
   } catch(e) {
-    return fail(502, `Odds API fetch failed: ${e.message}`);
+    return noGames();
   }
 
-  if (!Array.isArray(raw)) {
-    return fail(502, 'Unexpected Odds API response');
-  }
+  if (!Array.isArray(raw)) return noGames();
 
   if (debugMode === '1') {
-    // Also probe sport list to confirm API key works and soccer_epl is available
-    let sportsCheck = null;
-    try {
-      const sr = await fetch(`https://api.the-odds-api.com/v4/sports/?apiKey=${apiKey}`, { signal: AbortSignal.timeout(8000) });
-      const sports = await sr.json();
-      sportsCheck = Array.isArray(sports) ? sports.filter(s => s.key?.startsWith('soccer')).map(s => s.key) : sports;
-    } catch(e) { sportsCheck = { error: e.message }; }
-    return new Response(JSON.stringify({ count: raw.length, events: raw.slice(0,3), soccerSports: sportsCheck }), {
+    return new Response(JSON.stringify({ count: raw.length, events: raw.slice(0, 3) }), {
       headers: { 'Content-Type': 'application/json' }
     });
   }
@@ -100,7 +78,6 @@ export async function onRequestGet(context) {
   const gamesMap = {};
 
   for (const ev of raw) {
-    // Skip games that started more than 4 hours ago (live but likely decided)
     const commenceMs = new Date(ev.commence_time).getTime();
     if (commenceMs < nowMs - 4 * 60 * 60 * 1000) continue;
 
@@ -108,7 +85,6 @@ export async function onRequestGet(context) {
     const awayTeam = ev.away_team;
     if (!homeTeam || !awayTeam) continue;
 
-    // Find DK bookmaker, fallback to first available
     const dk = ev.bookmakers?.find(b => b.key === 'draftkings')
             || ev.bookmakers?.find(b => b.key === 'fanduel')
             || ev.bookmakers?.[0];
@@ -117,15 +93,16 @@ export async function onRequestGet(context) {
     const market = dk.markets?.find(m => m.key === 'spreads');
     if (!market?.outcomes?.length) continue;
 
-    // Extract ±0.5 AH prices for home and away
     const hm  = market.outcomes.find(o => o.name === homeTeam && Number(o.point) === -0.5)?.price ?? null;
     const hp  = market.outcomes.find(o => o.name === homeTeam && Number(o.point) ===  0.5)?.price ?? null;
     const awm = market.outcomes.find(o => o.name === awayTeam && Number(o.point) === -0.5)?.price ?? null;
     const awp = market.outcomes.find(o => o.name === awayTeam && Number(o.point) ===  0.5)?.price ?? null;
 
     if (debugMode === '2') {
-      const allOutcomes = market.outcomes.map(o => ({ name: o.name, point: o.point, price: o.price }));
-      gamesMap[awayTeam + ' @ ' + homeTeam] = { homeTeam, awayTeam, book: dk.key, hm, hp, awm, awp, allOutcomes };
+      gamesMap[awayTeam + ' @ ' + homeTeam] = {
+        homeTeam, awayTeam, book: dk.key, hm, hp, awm, awp,
+        allOutcomes: market.outcomes.map(o => ({ name: o.name, point: o.point, price: o.price }))
+      };
       continue;
     }
 
@@ -137,15 +114,10 @@ export async function onRequestGet(context) {
     if (awm != null) spreadsObj.Away['-0.5'] = awm;
     if (awp != null) spreadsObj.Away['0.5']  = awp;
 
-    const gameKey = awayTeam + ' @ ' + homeTeam;
-    gamesMap[gameKey] = {
-      id:      ev.id,
-      away:    awayTeam,
-      home:    homeTeam,
-      cm:      ev.commence_time,
-      league:  'EPL',
-      hm, hp, awm, awp,
-      spreads: spreadsObj,
+    gamesMap[awayTeam + ' @ ' + homeTeam] = {
+      id: ev.id, away: awayTeam, home: homeTeam,
+      cm: ev.commence_time, league: 'EPL',
+      hm, hp, awm, awp, spreads: spreadsObj,
     };
   }
 
@@ -156,7 +128,6 @@ export async function onRequestGet(context) {
   }
 
   const body = JSON.stringify({ ok: true, games: gamesMap });
-
   try {
     await env.DB.prepare(
       'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at'
