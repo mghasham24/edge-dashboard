@@ -160,8 +160,10 @@ export async function onRequestGet(context) {
     ];
     if (realSport === 'soccer') {
       fetchPromises.push(fetch('https://web.realapp.com/home/ucl/next?cohort=0', { headers: buildHeaders(rsAuthToken, rsDeviceUuid) }));
+      fetchPromises.push(fetch('https://web.realapp.com/home/epl/next?cohort=0', { headers: buildHeaders(rsAuthToken, rsDeviceUuid) }));
+      fetchPromises.push(fetch('https://web.realapp.com/home/epl/live?cohort=0', { headers: buildHeaders(rsAuthToken, rsDeviceUuid) }));
     }
-    const [gamesRes, liveRes, uclRes] = await Promise.all(fetchPromises);
+    const [gamesRes, liveRes, uclRes, eplRes, eplLiveRes] = await Promise.all(fetchPromises);
 
     const gamesStatus = gamesRes.status;
     const gamesText = await gamesRes.text();
@@ -207,6 +209,25 @@ export async function onRequestGet(context) {
           }
         }
       } catch(e) {}
+    }
+
+    // Merge EPL games — RS keeps EPL under its own sport key ('epl'), separate from generic 'soccer'
+    for (const eplFetchRes of [eplRes, eplLiveRes]) {
+      if (eplFetchRes && eplFetchRes.ok) {
+        try {
+          const eplData = await eplFetchRes.json();
+          const eplGames = extractGames(eplData);
+          const seenIds = new Set(games.map(g => g.id || g.gameId));
+          for (const g of eplGames) {
+            const id = g.id || g.gameId;
+            if (id && !seenIds.has(id)) {
+              g._rsSport = 'epl';
+              games.push(g);
+              seenIds.add(id);
+            }
+          }
+        } catch(e) {}
+      }
     }
 
     if (debugMode === '3') {
