@@ -22,7 +22,7 @@ export async function onRequestGet({ request, env }) {
     'rs_offer_id, received_rax, expires_at, created_at, deposited_at, settled_at ' +
     'FROM parlays ' +
     "WHERE NOT (status = 'pending_deposit' AND created_at < ?) " +
-    'ORDER BY created_at DESC LIMIT 500'
+    'ORDER BY created_at DESC LIMIT 5000'
   ).bind(pendingCutoff).all();
 
   if (!parlays.length) return ok({ slips: [] });
@@ -33,7 +33,7 @@ export async function onRequestGet({ request, env }) {
     'FROM parlay_legs pl ' +
     'WHERE pl.parlay_id IN (' +
     "  SELECT id FROM parlays WHERE NOT (status='pending_deposit' AND created_at<?) " +
-    '  ORDER BY created_at DESC LIMIT 500' +
+    '  ORDER BY created_at DESC LIMIT 5000' +
     ') ORDER BY pl.id ASC'
   ).bind(pendingCutoff).all();
 
