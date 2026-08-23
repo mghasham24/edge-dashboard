@@ -4975,6 +4975,11 @@
     var parlayActiveSport = 'mlb'; // 'mlb' | 'wnba' | 'nfl' | 'ufc' | 'soccer'
     var PARLAY_HEADSHOT_CACHE = {}; // playerName → RS/ESPN URL, 'none', or 'pending'
     var PARLAY_RS_HS_FLIGHT = {}; // playerName → [cb, ...] while RS search is in-flight
+    // Static overrides for players whose RS/ESPN search name differs from DK/RS bet name
+    var HEADSHOT_OVERRIDES = {
+        'Axel Ojeda': 'https://media.realapp.com/assets/players/default/large/be14f1d9457329c9200113fc87d81ae0.webp',
+    };
+    Object.keys(HEADSHOT_OVERRIDES).forEach(function(n) { PARLAY_HEADSHOT_CACHE[n] = HEADSHOT_OVERRIDES[n]; });
 
     var PARLAY_PLAYERS        = [];  // filled by loadParlayPlayers()
     var PARLAY_PLAYERS_WNBA   = [];  // filled by loadParlayPlayers() when sport=wnba
