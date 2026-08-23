@@ -1,5 +1,6 @@
 // GET /api/parlays/all-slips — admin only
-// Returns all users' parlays with legs + rs_username for admin oversight tab.
+// Default: returns 300 most recent parlays.
+// With ?q=username: searches all parlays by rs_username (up to 200 results).
 import { getSession } from '../../_lib/session.js';
 import { ok, err }    from '../../_lib/response.js';
 import { rsUrlEncode } from '../../_lib/hashids.js';
@@ -14,28 +15,55 @@ export async function onRequestGet({ request, env }) {
 
   if (!user || !user.is_admin) return err('Forbidden', 403);
 
-  const now = Math.floor(Date.now() / 1000);
+  const url          = new URL(request.url);
+  const searchQuery  = (url.searchParams.get('q') || '').trim();
+  const now          = Math.floor(Date.now() / 1000);
   const pendingCutoff = now - 1800;
 
-  const { results: parlays } = await env.DB.prepare(
-    'SELECT id, user_id, rs_username, status, legs_count, stake_rax, payout_rax, deposit_card_id, ' +
-    'rs_offer_id, received_rax, expires_at, created_at, deposited_at, settled_at ' +
-    'FROM parlays ' +
-    "WHERE NOT (status = 'pending_deposit' AND created_at < ?) " +
-    'ORDER BY created_at DESC LIMIT 5000'
-  ).bind(pendingCutoff).all();
+  let parlays, legs;
 
-  if (!parlays.length) return ok({ slips: [] });
+  if (searchQuery) {
+    // Server-side username search — scans all parlays, no recency filter
+    const like = '%' + searchQuery + '%';
+    ({ results: parlays } = await env.DB.prepare(
+      'SELECT id, user_id, rs_username, status, legs_count, stake_rax, payout_rax, deposit_card_id, ' +
+      'rs_offer_id, received_rax, expires_at, created_at, deposited_at, settled_at ' +
+      'FROM parlays ' +
+      "WHERE rs_username LIKE ? AND NOT (status='pending_deposit' AND created_at<?) " +
+      'ORDER BY created_at DESC LIMIT 200'
+    ).bind(like, pendingCutoff).all());
 
-  const { results: legs } = await env.DB.prepare(
-    'SELECT pl.id, pl.parlay_id, pl.player_name, pl.label, pl.threshold, pl.direction, ' +
-    'pl.american_odds, pl.status, pl.result_value, pl.market_type, pl.headshot_url, pl.game_date, pl.event_name, pl.sport, pl.game_start_ms ' +
-    'FROM parlay_legs pl ' +
-    'WHERE pl.parlay_id IN (' +
-    "  SELECT id FROM parlays WHERE NOT (status='pending_deposit' AND created_at<?) " +
-    '  ORDER BY created_at DESC LIMIT 5000' +
-    ') ORDER BY pl.id ASC'
-  ).bind(pendingCutoff).all();
+    if (!parlays.length) return ok({ slips: [], searched: true });
+
+    const ids = parlays.map(p => p.id).join(',');
+    ({ results: legs } = await env.DB.prepare(
+      'SELECT pl.id, pl.parlay_id, pl.player_name, pl.label, pl.threshold, pl.direction, ' +
+      'pl.american_odds, pl.status, pl.result_value, pl.market_type, pl.headshot_url, pl.game_date, pl.event_name, pl.sport, pl.game_start_ms ' +
+      'FROM parlay_legs pl ' +
+      'WHERE pl.parlay_id IN (' + ids + ') ORDER BY pl.id ASC'
+    ).all());
+  } else {
+    // Default: 300 most recent non-expired-pending parlays
+    ({ results: parlays } = await env.DB.prepare(
+      'SELECT id, user_id, rs_username, status, legs_count, stake_rax, payout_rax, deposit_card_id, ' +
+      'rs_offer_id, received_rax, expires_at, created_at, deposited_at, settled_at ' +
+      'FROM parlays ' +
+      "WHERE NOT (status = 'pending_deposit' AND created_at < ?) " +
+      'ORDER BY created_at DESC LIMIT 300'
+    ).bind(pendingCutoff).all());
+
+    if (!parlays.length) return ok({ slips: [] });
+
+    ({ results: legs } = await env.DB.prepare(
+      'SELECT pl.id, pl.parlay_id, pl.player_name, pl.label, pl.threshold, pl.direction, ' +
+      'pl.american_odds, pl.status, pl.result_value, pl.market_type, pl.headshot_url, pl.game_date, pl.event_name, pl.sport, pl.game_start_ms ' +
+      'FROM parlay_legs pl ' +
+      'WHERE pl.parlay_id IN (' +
+      "  SELECT id FROM parlays WHERE NOT (status='pending_deposit' AND created_at<?) " +
+      '  ORDER BY created_at DESC LIMIT 300' +
+      ') ORDER BY pl.id ASC'
+    ).bind(pendingCutoff).all());
+  }
 
   const legMap = {};
   for (const leg of legs) {

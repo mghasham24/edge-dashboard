@@ -6407,7 +6407,7 @@
                 : isYN
                     ? escHtml(p.stat)
                     : escHtml(String(p.line));
-            return '<div class="parlay-card' + cls + '">' +
+            return '<div class="parlay-card' + cls + '" data-pid="' + p.id + '">' +
                 '<div class="parlay-card-top" style="' + topStyle + '">' +
                     '<div class="parlay-team-badge">' + escHtml(p.team) + '</div>' +
                     cardRsRow +
@@ -6728,9 +6728,32 @@
         renderAllSlipsCards();
     };
 
+    var allSlipsSearchTimer = null;
     window.parlayAllSlipsSearch = function(v) {
         allSlipsSearch = v;
-        renderAllSlipsCards();
+        clearTimeout(allSlipsSearchTimer);
+        if (!v.trim()) {
+            // Empty — render from cached data
+            renderAllSlipsCards();
+            return;
+        }
+        // Debounce 400ms then hit server for full username search
+        allSlipsSearchTimer = setTimeout(function() {
+            var cardsEl = document.getElementById('aslip-cards');
+            if (cardsEl) cardsEl.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">Searching…</div>';
+            fetch('/api/parlays/all-slips?q=' + encodeURIComponent(v.trim()), { credentials: 'include' })
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    if (!cardsEl) return;
+                    var results = (d.ok && d.slips) ? d.slips : [];
+                    cardsEl.innerHTML = results.length
+                        ? results.map(function(s) { return parlaySlipCard(s, true); }).join('')
+                        : '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">No slips match.</div>';
+                })
+                .catch(function() {
+                    if (cardsEl) cardsEl.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">Search failed — try again.</div>';
+                });
+        }, 400);
     };
 
     function loadAllSlips() {
@@ -8423,6 +8446,19 @@
         parlayRenderPill();
     }
 
+    // Targeted card update — avoids re-rendering the entire grid on every pick toggle.
+    // Falls back to parlayRenderGrid() for card types that don't carry data-pid (UFC, teams, etc.)
+    function parlayUpdateCardDOM(key) {
+        var cardEl = document.querySelector('.parlay-player-grid [data-pid="' + key + '"]');
+        if (!cardEl) { parlayRenderGrid(); return; }
+        var newSel = parlayPicks[key];
+        cardEl.className = 'parlay-card' + (newSel === 'more' ? ' sel-more' : newSel === 'less' ? ' sel-less' : '');
+        cardEl.querySelectorAll('.p-more, .p-less, .milestone-btn').forEach(function(b) {
+            var isMore = b.classList.contains('p-more') || b.classList.contains('milestone-btn');
+            b.classList.toggle('active', isMore ? newSel === 'more' : newSel === 'less');
+        });
+    }
+
     // 1inn half resolver (client-side mirror of place.js get1innHalf).
     // Returns 'top' | 'bottom' | null. Uses team short name + awayShort/homeShort.
     var _INN1_PITCHING_C = { '1inn_pitches_ou':1,'1inn_pitches_range':1,'1inn_batters_ou':1,'1inn_ks_exact':1 };
@@ -8688,12 +8724,17 @@
             }
             parlayPicks[key] = dir;
         }
-        parlayRenderAll();
+        parlayUpdateCardDOM(key);
+        parlayRenderSlip();
+        parlayRenderPill();
     }
 
     function parlayRemovePick(id) {
-        delete parlayPicks[String(id)];
-        parlayRenderAll();
+        var key = String(id);
+        delete parlayPicks[key];
+        parlayUpdateCardDOM(key);
+        parlayRenderSlip();
+        parlayRenderPill();
     }
 
     function parlaysClear() {
