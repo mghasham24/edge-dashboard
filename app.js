@@ -6039,7 +6039,6 @@
             .then(function(d) {
                 var players = (d && d.players) || [];
                 var match = players.find(function(p) { return p.name && p.name.toLowerCase() === name.toLowerCase(); });
-                if (!match && players.length) match = players[0];
                 var hash = match && match.avatar;
                 _done(hash ? 'https://media.realapp.com/assets/players/default/large/' + hash + '.webp' : null);
             })
@@ -7105,7 +7104,7 @@
             showImg(el, SLIP_HEADSHOT_CACHE[playerName]);
             return;
         }
-        // Soccer: use RS headshot cache (in-memory + localStorage) then RS search
+        // Soccer: RS headshot first, ESPN soccer search fallback (for RS name mismatches like "Axel Ojeda" → "Agustin Ojeda")
         if (legSport.startsWith('soccer_')) {
             var _rsm2 = PARLAY_HEADSHOT_CACHE[playerName];
             if (_rsm2 && _rsm2 !== 'none' && _rsm2 !== 'pending') {
@@ -7120,10 +7119,25 @@
                 showImg(document.getElementById(elemId), _ls2);
                 return;
             }
-            _fetchRsSoccerHeadshot(playerName, function(url) {
-                SLIP_HEADSHOT_CACHE[playerName] = url || 'none';
-                if (url) showImg(document.getElementById(elemId), url);
-                else showFallback(document.getElementById(elemId));
+            _fetchRsSoccerHeadshot(playerName, function(rsUrl) {
+                if (rsUrl) {
+                    SLIP_HEADSHOT_CACHE[playerName] = rsUrl;
+                    showImg(document.getElementById(elemId), rsUrl);
+                    return;
+                }
+                // RS had no exact name match — try ESPN soccer search with team disambiguation
+                fetch('https://site.api.espn.com/apis/search/v2?query=' + encodeURIComponent(playerName) + '&limit=5&type=player&sport=soccer', { signal: AbortSignal.timeout(5000) })
+                    .then(function(r) { return r.json(); })
+                    .then(function(d) {
+                        var group = (d.results || []).find(function(r) { return r.type === 'player'; });
+                        var hit = _pickEspnHit(group && group.contents, team);
+                        var espnId = hit ? (hit.uid || '').split('~a:')[1] : '';
+                        if (!espnId) { SLIP_HEADSHOT_CACHE[playerName] = 'none'; showFallback(document.getElementById(elemId)); return; }
+                        var url = 'https://a.espncdn.com/combiner/i?img=/i/headshots/soccer/players/full/' + espnId + '.png&w=350&h=254';
+                        SLIP_HEADSHOT_CACHE[playerName] = url;
+                        showImg(document.getElementById(elemId), url);
+                    })
+                    .catch(function() { SLIP_HEADSHOT_CACHE[playerName] = 'none'; showFallback(document.getElementById(elemId)); });
             });
             return;
         }
@@ -7225,11 +7239,10 @@
         if (infoEl && !isTeam && gameInfo) {
             var awAbbr = gameInfo.awayAbbr || '', hwAbbr = gameInfo.homeAbbr || '';
             var matchupTxt = (awAbbr && hwAbbr) ? (awAbbr + ' vs ' + hwAbbr) : '';
-            if (gameInfo.playerTeamAbbr && matchupTxt) {
-                infoEl.textContent = gameInfo.playerTeamAbbr + ' · ' + matchupTxt;
-            } else if (matchupTxt) {
-                infoEl.textContent = matchupTxt;
-            }
+            var _dateLbl = infoEl.dataset.date || '';
+            var _base = gameInfo.playerTeamAbbr && matchupTxt ? (gameInfo.playerTeamAbbr + ' · ' + matchupTxt) : matchupTxt;
+            var _full = _base + (_base && _dateLbl ? ' · ' + _dateLbl : (!_base ? _dateLbl : ''));
+            if (_full) infoEl.textContent = _full;
         }
 
         // Update the inline time chip
@@ -8648,13 +8661,23 @@
             // Prop info (matchup abbreviation) shown for MLB/WNBA player prop legs
             var propInfoHtml = '';
             if (!isTeamMkt && showStatus) {
+                var _gdRaw = leg.game_date || '';
+                var _gdFmt = '';
+                if (_gdRaw) {
+                    var _gdP = _gdRaw.split('-');
+                    if (_gdP.length === 3) {
+                        var _gdMo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(_gdP[1],10)-1];
+                        if (_gdMo) _gdFmt = _gdMo + ' ' + parseInt(_gdP[2], 10);
+                    }
+                }
                 var evtMProp = (leg.event_name || '').match(/^(.+?)\s+@\s+(.+)$/);
                 if (evtMProp) {
                     var awayPropPart = evtMProp[1].trim().split(/\s+/)[0];
                     var homePropPart = evtMProp[2].trim().split(/\s+/)[0];
-                    propInfoHtml = '<span class="pslip-prop-info" id="pinf-' + s.id + '-' + li + '">' + escHtml(awayPropPart + ' vs ' + homePropPart) + '</span>';
+                    var _initMatchup = awayPropPart + ' vs ' + homePropPart + (_gdFmt ? ' · ' + _gdFmt : '');
+                    propInfoHtml = '<span class="pslip-prop-info" id="pinf-' + s.id + '-' + li + '" data-date="' + escHtml(_gdFmt) + '">' + escHtml(_initMatchup) + '</span>';
                 } else {
-                    propInfoHtml = '<span class="pslip-prop-info" id="pinf-' + s.id + '-' + li + '"></span>';
+                    propInfoHtml = '<span class="pslip-prop-info" id="pinf-' + s.id + '-' + li + '" data-date="' + escHtml(_gdFmt) + '"></span>';
                 }
             }
             legsHtml += '<div class="pslip-leg' + legResultCls + '">' +
