@@ -8,7 +8,7 @@ import { getSessionOrCron } from '../../_lib/auth.js';
 const DK_BASE   = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
 const DK_LEAGUE = '94682'; // WNBA
 const CACHE_TTL = 300;     // 5 min
-const CACHE_KEY = 'dk_wnba_props_v4';
+const CACHE_KEY = 'dk_wnba_props_v5';
 
 // Confirmed WNBA DK subcategory IDs (from DevTools 2026-07-28).
 const SUBCAT_MAP = {
@@ -247,6 +247,14 @@ export async function onRequestGet(context) {
     if (cached) stalePayload = cached.data;
   } catch(e) {}
 
+  const playerIdCache = {};
+  try {
+    const { results: pidRows } = await env.DB.prepare(
+      "SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE 'dkpid:wnba:%'"
+    ).all();
+    for (const row of pidRows) playerIdCache[row.cache_key.slice('dkpid:wnba:'.length)] = row.data;
+  } catch(e) {}
+
   const entries = Object.entries(SUBCAT_MAP);
   const results = await Promise.allSettled(entries.map(([subcatId, info]) => fetchSubcat(subcatId, info)));
 
@@ -287,6 +295,29 @@ export async function onRequestGet(context) {
     for (const r of ynResults) {
       if (r.status === 'fulfilled') allPlayers.push(...r.value);
     }
+  }
+
+  const newPidEntries = {};
+  for (const p of allPlayers) {
+    const key = p.name?.toLowerCase();
+    if (!key) continue;
+    if (p.dkPlayerId) {
+      if (!playerIdCache[key]) newPidEntries[key] = String(p.dkPlayerId);
+    } else if (playerIdCache[key]) {
+      p.dkPlayerId = playerIdCache[key];
+      p.headshot   = `/api/dk/player-image?id=${playerIdCache[key]}&size=lg`;
+    }
+  }
+  if (Object.keys(newPidEntries).length > 0) {
+    context.waitUntil(
+      env.DB.batch(
+        Object.entries(newPidEntries).map(([name, id]) =>
+          env.DB.prepare(
+            'INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at'
+          ).bind('dkpid:wnba:' + name, id, now)
+        )
+      ).catch(() => {})
+    );
   }
 
   const payload = JSON.stringify({ ok: true, players: allPlayers, count: allPlayers.length, games: wnbaGames, ts: now });

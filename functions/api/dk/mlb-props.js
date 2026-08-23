@@ -8,7 +8,7 @@ import { getSessionOrCron } from '../../_lib/auth.js';
 const DK_BASE   = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
 const DK_LEAGUE = '84240';
 const CACHE_TTL = 300; // 5 min
-const CACHE_KEY = 'dk_mlb_props_v13';
+const CACHE_KEY = 'dk_mlb_props_v14';
 
 // Standard subcategories — available at league level
 const SUBCAT_MAP = {
@@ -297,6 +297,15 @@ export async function onRequestGet(context) {
     if (cached) stalePayload = cached.data;
   } catch(e) {}
 
+  // Load cached player name → DK player ID so players missing IDs from the live API still get headshots
+  const playerIdCache = {};
+  try {
+    const { results: pidRows } = await env.DB.prepare(
+      "SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE 'dkpid:mlb:%'"
+    ).all();
+    for (const row of pidRows) playerIdCache[row.cache_key.slice('dkpid:mlb:'.length)] = row.data;
+  } catch(e) {}
+
   // Step 1: fetch hits first — its events array gives us today's game metadata for the Runs fetch
   const hitsResult = await fetchSubcat('6719', SUBCAT_MAP['6719']).catch(() => ({ players: [], events: [] }));
   const today = todayET();
@@ -340,6 +349,32 @@ export async function onRequestGet(context) {
   const allPlayers = [...hitsResult.players];
   for (const r of [...otherResults, ...runsResults, ...hrResults]) {
     if (r.status === 'fulfilled') allPlayers.push(...(r.value.players ?? r.value));
+  }
+
+  // Fill in headshots for players whose DK ID wasn't in the live API response
+  const newPidEntries = {};
+  for (const p of allPlayers) {
+    const key = p.name?.toLowerCase();
+    if (!key) continue;
+    if (p.dkPlayerId) {
+      // Fresh ID from live API — save it if we didn't already have it
+      if (!playerIdCache[key]) newPidEntries[key] = String(p.dkPlayerId);
+    } else if (playerIdCache[key]) {
+      // No ID from live API but found in cache — backfill
+      p.dkPlayerId = playerIdCache[key];
+      p.headshot   = `/api/dk/player-image?id=${playerIdCache[key]}&size=lg`;
+    }
+  }
+  if (Object.keys(newPidEntries).length > 0) {
+    context.waitUntil(
+      env.DB.batch(
+        Object.entries(newPidEntries).map(([name, id]) =>
+          env.DB.prepare(
+            'INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at'
+          ).bind('dkpid:mlb:' + name, id, now)
+        )
+      ).catch(() => {})
+    );
   }
 
   // Include DK event full team names so player-rs-ids can map eventId → RS game ID
