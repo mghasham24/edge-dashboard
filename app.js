@@ -7020,6 +7020,12 @@
                     cardsEl.innerHTML = results.length
                         ? results.map(function(s) { return parlaySlipCard(s, true); }).join('')
                         : '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">No slips match.</div>';
+                    if (results.length) {
+                        PARLAY_SLIPS = results;
+                        startLiveSlipTracking();
+                        settledLegStats = {};
+                        fetchSettledLegStats();
+                    }
                 })
                 .catch(function() {
                     if (cardsEl) cardsEl.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">Search failed — try again.</div>';
