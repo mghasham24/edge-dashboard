@@ -6109,9 +6109,18 @@
         var hwLc = (game.homeTeam || game.homeShort || '').toLowerCase();
         if (awLc && hwLc) {
             var _gak = Object.keys(rsGameIds);
+            // Full-name substring match
             for (var _gj = 0; _gj < _gak.length; _gj++) {
                 var _gkl = _gak[_gj].toLowerCase();
                 if (_gkl.indexOf(awLc) !== -1 && _gkl.indexOf(hwLc) !== -1) return rsGameIds[_gak[_gj]];
+            }
+            // Nickname match — last word of each full name ("Atlanta Braves" → "braves")
+            var awNick = awLc.split(' ').pop(), hwNick = hwLc.split(' ').pop();
+            if (awNick !== awLc && hwNick !== hwLc) {
+                for (var _gnk = 0; _gnk < _gak.length; _gnk++) {
+                    var _gnkl = _gak[_gnk].toLowerCase();
+                    if (_gnkl.indexOf(awNick) !== -1 && _gnkl.indexOf(hwNick) !== -1) return rsGameIds[_gak[_gnk]];
+                }
             }
         }
         return null;
@@ -8371,8 +8380,7 @@
             return getRealSportsUrl(rsGameIds[en], legSport, null, en);
         }
 
-        // 3. Fuzzy match — handles "Team A @ Team B" substrings in event_name
-        //    (covers 1inn legs stored as "ATL @ MIL" and similar short forms)
+        // 3. Fuzzy match — handles both short ("ATL @ MIL") and full ("Atlanta Braves @ Milwaukee Brewers") names
         var gamePart = en.indexOf(' · ') !== -1 ? en.slice(en.indexOf(' · ') + 3) : en;
         if (gamePart && gamePart.indexOf(' @ ') !== -1) {
             var frags   = gamePart.split(' @ ');
@@ -8380,10 +8388,22 @@
             var hwFrag  = frags[1].trim().toLowerCase();
             if (awFrag && hwFrag) {
                 var allKeys = Object.keys(rsGameIds);
+                // Full-fragment substring match (works for short codes and city names)
                 for (var i = 0; i < allKeys.length; i++) {
                     var kl = allKeys[i].toLowerCase();
                     if (kl.indexOf(awFrag) !== -1 && kl.indexOf(hwFrag) !== -1) {
                         return getRealSportsUrl(rsGameIds[allKeys[i]], legSport, null, allKeys[i]);
+                    }
+                }
+                // Nickname match — last word of each name ("Atlanta Braves" → "braves")
+                // handles DK full names vs RS abbreviated keys ("atl braves @ mil brewers")
+                var awNick = awFrag.split(' ').pop(), hwNick = hwFrag.split(' ').pop();
+                if (awNick !== awFrag && hwNick !== hwFrag) {
+                    for (var ni = 0; ni < allKeys.length; ni++) {
+                        var nkl = allKeys[ni].toLowerCase();
+                        if (nkl.indexOf(awNick) !== -1 && nkl.indexOf(hwNick) !== -1) {
+                            return getRealSportsUrl(rsGameIds[allKeys[ni]], legSport, null, allKeys[ni]);
+                        }
                     }
                 }
             }
