@@ -1311,9 +1311,26 @@ async function handleRequest({ request, env }) {
     }
 
     if (sport === 'soccer') {
-      const espnSlug    = (leg.sport || '').replace('soccer_', '');
-      const slugData    = (soccerMap[leg.game_date] || {})[espnSlug] || {};
-      const playerStats = (slugData.stats || {})[normForLookup(leg.player_name)];
+      const espnSlug = (leg.sport || '').replace('soccer_', '');
+      const slugData = (soccerMap[leg.game_date] || {})[espnSlug] || {};
+      const statsMap = slugData.stats || {};
+      const playerKey = normForLookup(leg.player_name);
+      let playerStats = statsMap[playerKey];
+      // Fallback 1: prefix match — "nicolas fernandez mercau" stored, ESPN has "nicolas fernandez"
+      if (!playerStats) {
+        for (const [en, es] of Object.entries(statsMap)) {
+          if (playerKey.startsWith(en) || en.startsWith(playerKey)) { playerStats = es; break; }
+        }
+      }
+      // Fallback 2: last-name match — DK "axel ojeda" vs ESPN "agustin ojeda" (different first name)
+      if (!playerStats) {
+        const lastName = playerKey.split(' ').pop();
+        if (lastName && lastName.length > 3) {
+          for (const [en, es] of Object.entries(statsMap)) {
+            if (en.endsWith(lastName)) { playerStats = es; break; }
+          }
+        }
+      }
       if (!playerStats) {
         const gameFinal = (slugData.games || []).length > 0;
         legOutcomes[leg.id] = (gameFinal || leg.game_date < staleDate) ? 'void' : null;
