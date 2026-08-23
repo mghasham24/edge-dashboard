@@ -1451,15 +1451,17 @@ async function handleRequest({ request, env }) {
     const resolvedLegs = outcomes.filter(o => o.outcome !== null);
     const anyLostEarly = resolvedLegs.some(o => o.outcome === 'lost');
 
-    // Check for already-settled lost legs from prior auto-settle passes.
-    // Without this, a multi-pass settlement (NFL/WNBA legs lose first, then a MLB
-    // leg settles as void in a later pass) incorrectly refunds the parlay.
+    // Check for already-settled lost or void legs from prior auto-settle passes.
+    // Without this, a void that settles in pass N (before the winning legs settle in pass M)
+    // never triggers payout recalculation — the parlay finalizes with the original 3-leg payout.
     let priorLost = false;
+    let priorVoidLegs = [];
     try {
-      const pr = await env.DB.prepare(
-        "SELECT 1 FROM parlay_legs WHERE parlay_id=? AND status='lost' LIMIT 1"
-      ).bind(parlay.id).first();
-      priorLost = !!pr;
+      const priorSettled = await env.DB.prepare(
+        "SELECT id, implied_prob, status FROM parlay_legs WHERE parlay_id=? AND status IN ('lost','void')"
+      ).bind(parlay.id).all();
+      priorLost     = priorSettled.results.some(l => l.status === 'lost');
+      priorVoidLegs = priorSettled.results.filter(l => l.status === 'void');
     } catch(e) {}
 
     // Future legs count the same as unresolved today-legs — parlay can't finish while they exist
@@ -1470,8 +1472,12 @@ async function handleRequest({ request, env }) {
 
     const voidedLegs   = resolvedLegs.filter(o => o.outcome === 'void');
     const activeLegs   = resolvedLegs.filter(o => o.outcome !== 'void');
-    const anyVoid      = voidedLegs.length > 0;
+    // anyVoid: a leg went void either this pass OR in a prior pass
+    const anyVoid      = voidedLegs.length > 0 || priorVoidLegs.length > 0;
     const anyLost      = activeLegs.some(o => o.outcome === 'lost') || priorLost;
+    // Total non-void winning legs = active legs this pass (prior voids are already excluded
+    // from pendingLegs since their status is no longer 'pending')
+    const totalActiveLegs = activeLegs.length;
 
     // Determine result and final payout
     let parlayResult, finalPayout;
@@ -1480,7 +1486,7 @@ async function handleRequest({ request, env }) {
       // No scratches — normal settlement
       parlayResult = anyLost ? 'lost' : 'won';
       finalPayout  = parlay.is_free_play ? Math.min(parlay.payout_rax, 3000) : parlay.payout_rax;
-    } else if (activeLegs.length < 2) {
+    } else if (totalActiveLegs < 2) {
       // 1 or 0 active legs remain after scratches — refund only if no active leg lost
       if (anyLost) {
         parlayResult = 'lost';
@@ -1494,7 +1500,8 @@ async function handleRequest({ request, env }) {
       parlayResult = 'lost';
       finalPayout  = 0;
     } else {
-      // All remaining legs won — recalculate payout without the voided legs
+      // All remaining legs won — recalculate payout using only the active (non-void) legs.
+      // activeLegs contains this-pass legs; priorVoidLegs are already excluded from pendingLegs.
       const newTrueProb = activeLegs.reduce((acc, o) => {
         const leg = allLegs.find(l => l.id === o.legId);
         return acc * (leg ? parseFloat(leg.implied_prob) : 1);
