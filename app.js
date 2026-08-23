@@ -6592,23 +6592,39 @@
             '</div>';
         };
 
-        // Soccer: league-grouped rendering with section headers
+        // Soccer: league-grouped rendering with section headers + league jump nav
         if (parlayActiveSport === 'soccer') {
             grid.style.cssText = 'display:flex;flex-direction:column;overflow-y:auto;gap:0;padding:12px 12px 0;box-sizing:border-box;flex:1;min-height:0';
             var _fcLgOrder = ['EPL', 'La Liga', 'Serie A', 'Ligue 1', 'Bundesliga'];
             var _fcByLg = {};
             players.forEach(function(p) { var lg = p.league || 'Other'; if (!_fcByLg[lg]) _fcByLg[lg] = []; _fcByLg[lg].push(p); });
             var _fcOut = '';
+            var _fcPresentLeagues = [];
             _fcLgOrder.concat(Object.keys(_fcByLg).filter(function(lg) { return _fcLgOrder.indexOf(lg) === -1; })).forEach(function(lg) {
                 var _lgPs = _fcByLg[lg];
                 if (!_lgPs || !_lgPs.length) return;
+                _fcPresentLeagues.push(lg);
+                var _slug = lg.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
                 var _lgu = _fcLeagueLogoMap[lg] || '';
                 var _lgl = _lgu ? '<img src="' + escHtml(_lgu) + '" style="width:18px;height:18px;object-fit:contain" onerror="this.style.display=\'none\'">' : '';
-                _fcOut += '<div class="fc-parlay-section"><div class="fc-parlay-section-hdr">' + _lgl + '<span>' + escHtml(lg) + '</span></div>' +
+                _fcOut += '<div class="fc-parlay-section" id="fc-ps-' + escHtml(_slug) + '"><div class="fc-parlay-section-hdr">' + _lgl + '<span>' + escHtml(lg) + '</span></div>' +
                     '<div class="fc-parlay-section-grid">' + _lgPs.map(_mkCard).join('') + '</div></div>';
             });
             grid.innerHTML = _fcOut;
+            // Populate league jump nav
+            var _lgNav = document.getElementById('fc-parlay-league-nav');
+            if (_lgNav) {
+                _lgNav.style.display = 'flex';
+                _lgNav.innerHTML = _fcPresentLeagues.map(function(lg) {
+                    var _slug = lg.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+                    var _lgu = _fcLeagueLogoMap[lg] || '';
+                    var _lgl = _lgu ? '<img src="' + escHtml(_lgu) + '" style="width:14px;height:14px;object-fit:contain" onerror="this.style.display=\'none\'">' : '';
+                    return '<button class="fc-parlay-lg-btn" onclick="scrollToFcLeague(\'' + escHtml(_slug) + '\')">' + _lgl + escHtml(lg) + '</button>';
+                }).join('');
+            }
         } else {
+            var _lgNavHide = document.getElementById('fc-parlay-league-nav');
+            if (_lgNavHide) _lgNavHide.style.display = 'none';
             grid.innerHTML = players.map(_mkCard).join('');
         }
 
@@ -6732,6 +6748,20 @@
         }
 
         return sportTog + groupRow + subCatRow;
+    }
+
+    function scrollToFcLeague(slug) {
+        var grid = document.getElementById('parlay-player-grid');
+        var section = document.getElementById('fc-ps-' + slug);
+        if (!grid || !section) return;
+        grid.scrollTo({ top: section.offsetTop, behavior: 'smooth' });
+        // Flash active state on button
+        var nav = document.getElementById('fc-parlay-league-nav');
+        if (nav) {
+            nav.querySelectorAll('.fc-parlay-lg-btn').forEach(function(b) { b.classList.remove('active'); });
+            var btn = nav.querySelector('[onclick*="' + slug + '"]');
+            if (btn) { btn.classList.add('active'); setTimeout(function() { btn.classList.remove('active'); }, 600); }
+        }
     }
 
     function setParlayActiveSport(sport) {
@@ -9360,6 +9390,7 @@
                         '<input class="parlay-search-input" id="parlay-search-input" type="text" placeholder="Search players…" oninput="parlayOnSearch(this.value)" value="' + escHtml(parlaySearchQuery) + '">' +
                         '<button class="parlay-search-clear" id="parlay-search-clear" onclick="parlayOnSearch(\'\')" style="display:' + (parlaySearchQuery ? 'flex' : 'none') + '">✕</button>' +
                     '</div>' +
+                    '<div class="fc-parlay-league-nav" id="fc-parlay-league-nav" style="display:none"></div>' +
                     '<div class="parlay-player-grid" id="parlay-player-grid"></div>' +
                 '</div>' +
                 '<div class="parlay-slip-panel">' +
