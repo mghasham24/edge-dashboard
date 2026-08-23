@@ -7613,10 +7613,15 @@
                 if (!slugsSeen[slug]) { slugsSeen[slug] = true; leagueSlugs.push(slug); }
             });
 
+            var liveToday3 = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
             var fmt = date.replace(/-/g, '');
+            // For today: omit dates param so ESPN returns the live scoreboard (more reliable for STATUS_IN_PROGRESS).
+            // For past dates: still pass dates= to get final boxscores.
             Promise.all(leagueSlugs.map(function(slug) {
-                return fetch('https://site.api.espn.com/apis/site/v2/sports/soccer/' + slug + '/scoreboard?dates=' + fmt,
-                    { signal: AbortSignal.timeout(8000), cache: 'no-cache' })
+                var url = date === liveToday3
+                    ? 'https://site.api.espn.com/apis/site/v2/sports/soccer/' + slug + '/scoreboard'
+                    : 'https://site.api.espn.com/apis/site/v2/sports/soccer/' + slug + '/scoreboard?dates=' + fmt;
+                return fetch(url, { signal: AbortSignal.timeout(8000), cache: 'no-cache' })
                     .then(function(r) { return r.json(); })
                     .then(function(d) { return { slug: slug, events: d.events || [] }; })
                     .catch(function() { return { slug: slug, events: [] }; });
@@ -7628,8 +7633,8 @@
                     var liveGames = [], previewGames = [];
                     (lr.events || []).forEach(function(ev) {
                         var sName = (ev.status && ev.status.type && ev.status.type.name) || '';
-                        var isFinal = sName === 'STATUS_FINAL';
-                        var isLive  = sName === 'STATUS_IN_PROGRESS' || sName === 'STATUS_HALFTIME';
+                        var isFinal = sName === 'STATUS_FINAL' || sName === 'STATUS_FULL_TIME';
+                        var isLive  = sName === 'STATUS_IN_PROGRESS' || sName === 'STATUS_HALFTIME' || sName === 'STATUS_SECOND_HALF' || sName === 'STATUS_END_PERIOD' || sName.startsWith('STATUS_IN_PROGRESS');
                         var state   = isFinal ? 'Final' : (isLive ? 'Live' : 'Preview');
                         var clock   = (ev.status && ev.status.displayClock) || '';
                         var matchLabel = sName === 'STATUS_HALFTIME' ? 'HT'
