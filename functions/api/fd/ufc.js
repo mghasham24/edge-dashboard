@@ -66,14 +66,17 @@ export async function onRequestGet(context) {
 
     if (debugRaw) {
       const ev0 = (data.events || [])[0] || null;
+      // Also dump fighter sdid values to check ID format
+      const sdidSample = (data.selections || []).slice(0, 20).map(s => ({
+        label: s.label,
+        participant: s.participants?.[0] ? { name: s.participants[0].name, metadata: s.participants[0].metadata } : null,
+      }));
       const sample = {
         topLevelKeys:   Object.keys(data),
-        leagues:        (data.leagues || []).slice(0, 10),
         firstEventKeys: ev0 ? Object.keys(ev0) : [],
-        firstEvent:     ev0 ? { id: ev0.id, leagueId: ev0.leagueId, name: ev0.name, startEventDate: ev0.startEventDate, tags: ev0.tags, metadata: ev0.metadata, seoIdentifier: ev0.seoIdentifier } : null,
+        firstEvent:     ev0 ? { id: ev0.id, name: ev0.name } : null,
         eventCount:     (data.events || []).length,
-        marketCount:    (data.markets || []).length,
-        leagueIdUnique: [...new Set((data.events || []).map(e => e.leagueId))],
+        sdidSample,
       };
       return new Response(JSON.stringify({ ok: true, _sample: sample }), {
         headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },

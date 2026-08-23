@@ -5525,8 +5525,8 @@
             if (!awayOdds || !homeOdds) return;
             var awayId = teamPickIdCounter--;
             var homeId = teamPickIdCounter--;
-            var awayHeadshot = fight.away_sdid ? 'https://a.espncdn.com/i/headshots/mma/players/full/' + fight.away_sdid + '.png' : null;
-            var homeHeadshot = fight.home_sdid ? 'https://a.espncdn.com/i/headshots/mma/players/full/' + fight.home_sdid + '.png' : null;
+            var awayHeadshot = null; // ESPN ID resolved async via PARLAY_HEADSHOT_CACHE / loadSlipHeadshotAsync
+            var homeHeadshot = null;
             var fmtTime = fight.cm ? (function() {
                 try { return new Date(fight.cm).toLocaleString('en-US', { weekday:'short', hour:'numeric', minute:'2-digit', timeZone:'America/New_York', timeZoneName:'short' }); } catch(e) { return ''; }
             })() : '';
@@ -5727,8 +5727,11 @@
             }
         });
         var nowMs = Date.now();
-        function fighterAvHtml(name, sdid, initials, isPicked) {
-            return '';
+        function fighterAvHtml(name, initials, isPicked, avId) {
+            var ring = isPicked ? 'outline:2px solid #ef4444;outline-offset:2px;' : '';
+            var avBase = 'width:64px;height:64px;border-radius:50%;overflow:hidden;background:var(--bg3);flex-shrink:0;position:relative;' + ring;
+            var initHtml = '<span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:var(--muted)">' + escHtml(initials) + '</span>';
+            return '<div id="' + avId + '" data-fighter-name="' + escHtml(name.toLowerCase()) + '" style="' + avBase + '">' + initHtml + '</div>';
         }
         var activeFights = PARLAY_GAMES_UFC.filter(function(f) {
             if (!parlayCategory || parlayCategory === 'fights') return true;
@@ -5753,7 +5756,7 @@
             // Fighter header row
             h += '<div style="padding:12px 12px 8px;display:flex;align-items:flex-start;gap:8px;justify-content:space-between">';
             h += '<div style="display:flex;flex-direction:column;align-items:center;gap:5px;flex:1;min-width:0">';
-            h += fighterAvHtml(fight.away, fight.away_sdid, awayInit, !!awaySel);
+            h += fighterAvHtml(fight.away, awayInit, !!awaySel, 'ufc-av-' + fight.id + '-away');
             h += '<span style="font-size:11px;font-weight:700;text-align:center;color:var(--fg);line-height:1.2;max-width:84px;word-break:break-word">' + escHtml(fight.away) + '</span>';
             h += '</div>';
             h += '<div style="display:flex;flex-direction:column;align-items:center;gap:3px;padding-top:10px">';
@@ -5761,7 +5764,7 @@
             h += '<span style="font-size:9px;color:var(--muted);text-align:center;max-width:70px">' + escHtml(fmtTime) + '</span>';
             h += '</div>';
             h += '<div style="display:flex;flex-direction:column;align-items:center;gap:5px;flex:1;min-width:0">';
-            h += fighterAvHtml(fight.home, fight.home_sdid, homeInit, !!homeSel);
+            h += fighterAvHtml(fight.home, homeInit, !!homeSel, 'ufc-av-' + fight.id + '-home');
             h += '<span style="font-size:11px;font-weight:700;text-align:center;color:var(--fg);line-height:1.2;max-width:84px;word-break:break-word">' + escHtml(fight.home) + '</span>';
             h += '</div>';
             h += '</div>';
@@ -5815,6 +5818,43 @@
             return h;
         }).filter(Boolean).join('');
         grid.innerHTML = html || '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">No upcoming UFC fights</div>';
+
+        // Async: load UFC fighter headshots via ESPN search (sport=mma)
+        var _ufcSeen = {};
+        grid.querySelectorAll('[data-fighter-name]').forEach(function(avEl) {
+            var name = avEl.getAttribute('data-fighter-name');
+            if (!name || _ufcSeen[name]) return;
+            _ufcSeen[name] = true;
+            var cacheKey = 'ufc:' + name;
+            var cached = PARLAY_HEADSHOT_CACHE[cacheKey];
+            if (cached) {
+                if (cached !== 'none') _applyUfcHeadshot(avEl, cached);
+                return;
+            }
+            fetch('https://site.api.espn.com/apis/search/v2?query=' + encodeURIComponent(name) + '&limit=3&type=player&sport=mma', { signal: AbortSignal.timeout(5000) })
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    var group = (d.results || []).find(function(r) { return r.type === 'player'; });
+                    var hit = group && group.contents && group.contents[0];
+                    var espnId = hit ? (hit.uid || '').split('~a:')[1] : '';
+                    if (!espnId) { PARLAY_HEADSHOT_CACHE[cacheKey] = 'none'; return; }
+                    var url = 'https://a.espncdn.com/combiner/i?img=/i/headshots/mma/players/full/' + espnId + '.png&w=350&h=254';
+                    PARLAY_HEADSHOT_CACHE[cacheKey] = url;
+                    grid.querySelectorAll('[data-fighter-name="' + name + '"]').forEach(function(el) { _applyUfcHeadshot(el, url); });
+                })
+                .catch(function() { PARLAY_HEADSHOT_CACHE[cacheKey] = 'none'; });
+        });
+    }
+
+    function _applyUfcHeadshot(avEl, url) {
+        var span = avEl.querySelector('span');
+        var img = document.createElement('img');
+        img.src = url;
+        img.alt = '';
+        img.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:top center';
+        img.addEventListener('error', function() { img.remove(); if (span) span.style.display = ''; });
+        if (span) span.style.display = 'none';
+        avEl.insertBefore(img, span || null);
     }
 
     function parlayFmtTime(startMs, timeStr) {
@@ -6387,7 +6427,10 @@
                     : escHtml(String(p.line));
             return '<div class="parlay-card' + cls + '" data-pid="' + p.id + '">' +
                 '<div class="parlay-card-top" style="' + topStyle + '">' +
-                    '<div class="parlay-team-badge">' + escHtml(p.team) + '</div>' +
+                    (p.isFighter ? '' :
+                    '<div class="parlay-team-badge">' +
+                        (p.team ? '<img src="https://a.espncdn.com/combiner/i?img=/i/teamlogos/' + (parlayActiveSport === 'wnba' ? 'wnba' : 'mlb') + '/500/' + escHtml(p.team.toLowerCase()) + '.png&h=80&w=80" alt="' + escHtml(p.team) + '" onerror="this.outerHTML=\'<span>' + escHtml(p.team) + '</span>\'">' : '') +
+                    '</div>') +
                     cardRsRow +
                     headshotHtml +
                 '</div>' +
@@ -6423,9 +6466,13 @@
                 fetch('https://site.api.espn.com/apis/search/v2?query=' + encodeURIComponent(name) + '&limit=3&type=player&sport=' + _espnQSport, { signal: AbortSignal.timeout(5000) })
                     .then(function(r) { return r.json(); })
                     .then(function(d) {
-                        var hit = (d.results || []).find(function(r) { return r.type === 'player' && r.id; });
+                        // ESPN search: results[].contents[] — uid contains "~a:{numericId}"
+                        var group = (d.results || []).find(function(r) { return r.type === 'player'; });
+                        var hit = group && group.contents && group.contents[0];
                         if (!hit) { PARLAY_HEADSHOT_CACHE[name] = 'none'; return; }
-                        var url = 'https://a.espncdn.com/i/headshots/' + _espnLeague + '/players/full/' + hit.id + '.png';
+                        var espnId = (hit.uid || '').split('~a:')[1] || '';
+                        if (!espnId) { PARLAY_HEADSHOT_CACHE[name] = 'none'; return; }
+                        var url = 'https://a.espncdn.com/combiner/i?img=/i/headshots/' + _espnLeague + '/players/full/' + espnId + '.png&w=350&h=254';
                         PARLAY_HEADSHOT_CACHE[name] = url;
                         var av = document.getElementById('bcard-av-' + pid);
                         if (!av) return;
@@ -6775,7 +6822,10 @@
             .replace(/\s+(?:jr\.?|sr\.?|ii|iii|iv)$/, '');
     }
 
-    function loadSlipHeadshotAsync(elemId, playerName) {
+    function loadSlipHeadshotAsync(elemId, playerName, sport) {
+        var legSport  = sport || (document.getElementById(elemId) ? document.getElementById(elemId).dataset.sport : '') || 'mlb';
+        var espnSport  = legSport === 'wnba' ? 'basketball' : legSport === 'ufc' ? 'mma' : 'baseball';
+        var espnLeague = legSport === 'wnba' ? 'wnba'       : legSport === 'ufc' ? 'mma' : 'mlb';
         function showFallback(el) {
             if (!el) return;
             var fb = el.dataset.fallback;
@@ -6801,18 +6851,20 @@
             showImg(document.getElementById(elemId), lp.headshot);
             return;
         }
-        // ESPN search fallback
-        fetch('https://site.api.espn.com/apis/search/v2?query=' + encodeURIComponent(playerName) + '&limit=3&type=player&sport=baseball', { signal: AbortSignal.timeout(5000) })
+        // ESPN search fallback — called from browser, not CF
+        fetch('https://site.api.espn.com/apis/search/v2?query=' + encodeURIComponent(playerName) + '&limit=3&type=player&sport=' + espnSport, { signal: AbortSignal.timeout(5000) })
             .then(function(r) { return r.json(); })
             .then(function(d) {
-                var results = d.results || [];
-                var hit = results.find(function(r) { return r.type === 'player' && r.id; });
-                if (!hit) {
+                // ESPN search: results[].contents[] — uid contains "~a:{numericId}"
+                var group = (d.results || []).find(function(r) { return r.type === 'player'; });
+                var hit = group && group.contents && group.contents[0];
+                var espnId = hit ? (hit.uid || '').split('~a:')[1] : '';
+                if (!espnId) {
                     SLIP_HEADSHOT_CACHE[playerName] = 'none';
                     showFallback(document.getElementById(elemId));
                     return;
                 }
-                var url = 'https://a.espncdn.com/i/headshots/mlb/players/full/' + hit.id + '.png';
+                var url = 'https://a.espncdn.com/combiner/i?img=/i/headshots/' + espnLeague + '/players/full/' + espnId + '.png&w=350&h=254';
                 SLIP_HEADSHOT_CACHE[playerName] = url;
                 showImg(document.getElementById(elemId), url);
             })
@@ -7638,7 +7690,7 @@
                 '</div>';
         }
         container.innerHTML = slips.map(function(s) { return parlaySlipCard(s, false); }).join('') + paginationHtml;
-        // Async: load MLB headshots for any legs that didn't have a stored/live URL
+        // Async: load headshots for any legs that didn't have a stored/live URL
         slips.forEach(function(s) {
             (s.legs || []).forEach(function(leg, li) {
                 if ((leg.market_type || '').startsWith('team_')) return;
@@ -7646,7 +7698,7 @@
                                  PARLAY_PLAYERS_WNBA.find(function(pp) { return pp.name === leg.player_name; }) ||
                                  PARLAY_PLAYERS_SOCCER.find(function(pp) { return pp.name === leg.player_name; });
                 if (leg.headshot_url || (livePlayer && livePlayer.headshot)) return;
-                loadSlipHeadshotAsync('slipav-' + s.id + '-' + li, leg.player_name);
+                loadSlipHeadshotAsync('slipav-' + s.id + '-' + li, leg.player_name, leg.sport || 'mlb');
             });
         });
         startLiveSlipTracking();
@@ -7974,9 +8026,9 @@
                 var avInnerId = 'slipav-' + s.id + '-' + li;
                 var fallbackHtml = '<span style="background:hsl(' + hue + ',40%,22%)">' + escHtml(initials) + '</span>';
                 if (headshotSrc) {
-                    avatarHtml = '<div class="pslip-avatar"><div class="pslip-av-inner" id="' + avInnerId + '" data-name="' + escHtml(leg.player_name) + '" data-fallback="' + escHtml(fallbackHtml) + '"><img src="' + escHtml(headshotSrc) + '" alt="" onerror="loadSlipHeadshotAsync(this.parentNode.id,this.parentNode.dataset.name)"></div>' + dirBadge + '</div>';
+                    avatarHtml = '<div class="pslip-avatar"><div class="pslip-av-inner" id="' + avInnerId + '" data-name="' + escHtml(leg.player_name) + '" data-sport="' + escHtml(leg.sport || 'mlb') + '" data-fallback="' + escHtml(fallbackHtml) + '"><img src="' + escHtml(headshotSrc) + '" alt="" onerror="loadSlipHeadshotAsync(this.parentNode.id,this.parentNode.dataset.name,this.parentNode.dataset.sport)"></div>' + dirBadge + '</div>';
                 } else {
-                    avatarHtml = '<div class="pslip-avatar"><div class="pslip-av-inner" id="' + avInnerId + '" data-name="' + escHtml(leg.player_name) + '" data-fallback="' + escHtml(fallbackHtml) + '" style="background:hsl(' + hue + ',40%,22%)">' + fallbackHtml + '</div>' + dirBadge + '</div>';
+                    avatarHtml = '<div class="pslip-avatar"><div class="pslip-av-inner" id="' + avInnerId + '" data-name="' + escHtml(leg.player_name) + '" data-sport="' + escHtml(leg.sport || 'mlb') + '" data-fallback="' + escHtml(fallbackHtml) + '" style="background:hsl(' + hue + ',40%,22%)">' + fallbackHtml + '</div>' + dirBadge + '</div>';
                 }
             }
 

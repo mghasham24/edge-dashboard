@@ -1,14 +1,16 @@
 // functions/api/dk/mlb-props.js
 // GET /api/dk/mlb-props
 // Returns MLB player prop options for the parlays builder.
-// Headshots served via /api/dk/player-image?id={dkPlayerId} (proxied through our CF worker).
+// Headshots use ESPN combiner CDN (espn_player_ids:mlb D1 cache, refreshed every 24hr).
 
 import { getSessionOrCron } from '../../_lib/auth.js';
+import { buildPlayerMap } from '../espn/player-ids.js';
+import STATIC_ESPN_IDS from '../espn/mlb-ids.json' assert { type: 'json' };
 
 const DK_BASE   = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
 const DK_LEAGUE = '84240';
 const CACHE_TTL = 300; // 5 min
-const CACHE_KEY = 'dk_mlb_props_v14';
+const CACHE_KEY = 'dk_mlb_props_v15';
 
 // Standard subcategories — available at league level
 const SUBCAT_MAP = {
@@ -297,13 +299,17 @@ export async function onRequestGet(context) {
     if (cached) stalePayload = cached.data;
   } catch(e) {}
 
-  // Load cached player name → DK player ID so players missing IDs from the live API still get headshots
-  const playerIdCache = {};
+  // Load ESPN player ID map — D1 cache (24hr TTL) with static JSON fallback
+  const ESPN_ID_TTL = 86400;
+  let espnPlayers = STATIC_ESPN_IDS;
+  let espnStale   = true;
   try {
-    const { results: pidRows } = await env.DB.prepare(
-      "SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE 'dkpid:mlb:%'"
-    ).all();
-    for (const row of pidRows) playerIdCache[row.cache_key.slice('dkpid:mlb:'.length)] = row.data;
+    const ec = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?')
+      .bind('espn_player_ids:mlb').first();
+    if (ec) {
+      espnPlayers = { ...STATIC_ESPN_IDS, ...JSON.parse(ec.data).players };
+      espnStale   = (now - ec.fetched_at) >= ESPN_ID_TTL;
+    }
   } catch(e) {}
 
   // Step 1: fetch hits first — its events array gives us today's game metadata for the Runs fetch
@@ -351,29 +357,21 @@ export async function onRequestGet(context) {
     if (r.status === 'fulfilled') allPlayers.push(...(r.value.players ?? r.value));
   }
 
-  // Fill in headshots for players whose DK ID wasn't in the live API response
-  const newPidEntries = {};
+  // Apply ESPN headshots; background-refresh ID map if stale
   for (const p of allPlayers) {
-    const key = p.name?.toLowerCase();
-    if (!key) continue;
-    if (p.dkPlayerId) {
-      // Fresh ID from live API — save it if we didn't already have it
-      if (!playerIdCache[key]) newPidEntries[key] = String(p.dkPlayerId);
-    } else if (playerIdCache[key]) {
-      // No ID from live API but found in cache — backfill
-      p.dkPlayerId = playerIdCache[key];
-      p.headshot   = `/api/dk/player-image?id=${playerIdCache[key]}&size=lg`;
-    }
+    const espnId = espnPlayers[p.name?.toLowerCase()];
+    p.headshot = espnId
+      ? `https://a.espncdn.com/combiner/i?img=/i/headshots/mlb/players/full/${espnId}.png&w=350&h=254`
+      : null;
   }
-  if (Object.keys(newPidEntries).length > 0) {
+  if (espnStale) {
     context.waitUntil(
-      env.DB.batch(
-        Object.entries(newPidEntries).map(([name, id]) =>
-          env.DB.prepare(
-            'INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at'
-          ).bind('dkpid:mlb:' + name, id, now)
-        )
-      ).catch(() => {})
+      buildPlayerMap('baseball', 'mlb').then(players => {
+        if (!players) return;
+        return env.DB.prepare(
+          'INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at'
+        ).bind('espn_player_ids:mlb', JSON.stringify({ players }), now).run();
+      }).catch(() => {})
     );
   }
 
