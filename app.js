@@ -11868,7 +11868,8 @@
                         var gid = String(game.id);
                         var pid = gid + '-h2h';
                         var awayGetsMinus;
-                        if (game.awm != null && game.hm != null) { awayGetsMinus = game.awm <= game.hm; }
+                        if (game.hp != null && game.awp != null) { awayGetsMinus = game.hp <= game.awp; }
+                        else if (game.awm != null && game.hm != null) { awayGetsMinus = game.awm <= game.hm; }
                         else if (game.awm != null) { awayGetsMinus = true; }
                         else { awayGetsMinus = false; }
                         [[away, 'A'], [home, 'B']].forEach(function(pair) {
@@ -14824,11 +14825,11 @@
                     var pid = gid + '-h2h';
                     // Determine correct ±0.5 pairing using DK prices.
                     // Lower American odds for the -0.5 line = more likely to win = DK's -0.5 team.
-                    // This ensures the initial display is always a proper -0.5/+0.5 pair, not -0.5/-0.5.
+                    // Team with cheaper +0.5 (W or D) is the draw side — use that to assign ±0.5.
                     var awayGetsMinus;
-                    if (game.awm != null && game.hm != null) {
-                        awayGetsMinus = game.awm <= game.hm;
-                    } else if (game.awm != null) { awayGetsMinus = true; }
+                    if (game.hp != null && game.awp != null) { awayGetsMinus = game.hp <= game.awp; }
+                    else if (game.awm != null && game.hm != null) { awayGetsMinus = game.awm <= game.hm; }
+                    else if (game.awm != null) { awayGetsMinus = true; }
                     else { awayGetsMinus = false; }
                     [[away, 'A'], [home, 'B']].forEach(function(pair) {
                         var teamName = pair[0], ps = pair[1];
@@ -15450,24 +15451,46 @@
             } else if (r.mkt === 'Spread' && (r._sport_key === 'soccer_fc' || currentSport === 'soccer_fc' || r._sport_key === 'soccer_wc' || currentSport === 'soccer_wc')) {
                 // FC: find -0.5 and +0.5 outcomes — also check o.line since RS team-key substitution
                 // can strip the ±0.5 suffix from the label, but line is extracted from the raw label.
-                var fcMinusO2 = outcomes.find(function(o) { return o.line === -0.5 || (o.label && o.label.indexOf('-0.5') !== -1); });
-                var fcPlusO2  = outcomes.find(function(o) { return o.line === 0.5  || (o.label && o.label.indexOf('+0.5') !== -1); });
+                var fcMinusO2 = outcomes.find(function(o) {
+                    if (o.line === -0.5) return true;
+                    if (o.label && o.label.indexOf('-0.5') !== -1) return true;
+                    // RS "Match Result" format: "X Win" (no "or Draw") = must win outright = -0.5
+                    if (o.label) { var ll = o.label.toLowerCase(); return ll.indexOf('win') !== -1 && ll.indexOf('win or draw') === -1 && ll.indexOf('draw') === -1; }
+                    return false;
+                });
+                var fcPlusO2  = outcomes.find(function(o) {
+                    if (o.line === 0.5) return true;
+                    if (o.label && o.label.indexOf('+0.5') !== -1) return true;
+                    // RS "Match Result" format: "X Win or Draw" = draw counts = +0.5
+                    if (o.label) { var ll = o.label.toLowerCase(); return ll.indexOf('win or draw') !== -1; }
+                    return false;
+                });
                 if (fcMinusO2 || fcPlusO2) {
                     var fcTw2 = r.side.toLowerCase().split(' ').filter(function(w) { return w.length > 2; });
                     function fcLbl2(o) {
                         if (!o || !o.label) return false;
                         var lbl = o.label.toLowerCase().replace(/[+-]?\d+\.?\d*\s*$/, '').trim();
-                        return fcTw2.some(function(w) { return lbl.indexOf(w) !== -1 || w.indexOf(lbl) !== -1; });
+                        // Full word match
+                        if (fcTw2.some(function(w) { return lbl.indexOf(w) !== -1 || w.indexOf(lbl) !== -1; })) return true;
+                        // Abbreviation match: first token of RS label vs start of team name words
+                        var abbr = lbl.split(/\s+/)[0];
+                        if (abbr && abbr.length >= 2) { return fcTw2.some(function(w) { return w.startsWith(abbr); }); }
+                        return false;
                     }
                     if (fcLbl2(fcMinusO2)) {
                         match = fcMinusO2;
                     } else if (fcLbl2(fcPlusO2)) {
                         match = fcPlusO2;
                     } else if (fcMinusO2 && fcPlusO2) {
-                        var _hm2 = r._dkSpreads && r._dkSpreads.Home && r._dkSpreads.Home['-0.5'];
-                        var _am2 = r._dkSpreads && r._dkSpreads.Away && r._dkSpreads.Away['-0.5'];
-                        var hFav2 = _hm2 != null && _am2 != null ? _hm2 <= _am2 : _hm2 != null;
-                        match = (r.ps === 'B' === hFav2) ? fcMinusO2 : fcPlusO2;
+                        // Use +0.5 prices: team with cheaper +0.5 (more likely W or D) is the +0.5 side
+                        var _hp2 = r._dkSpreads && r._dkSpreads.Home && r._dkSpreads.Home['0.5'];
+                        var _ap2 = r._dkSpreads && r._dkSpreads.Away && r._dkSpreads.Away['0.5'];
+                        if (_hp2 != null && _ap2 != null) {
+                            var homeHasPlusHalf2 = _hp2 <= _ap2;
+                            match = (r.ps === 'B') === homeHasPlusHalf2 ? fcPlusO2 : fcMinusO2;
+                        } else {
+                            match = (r.ps === 'B') ? fcPlusO2 : fcMinusO2;
+                        }
                     } else {
                         match = fcMinusO2 || fcPlusO2;
                     }
@@ -15492,6 +15515,11 @@
                 if (r.mkt === 'Spread' && (r._sport_key === 'soccer_fc' || currentSport === 'soccer_fc' || r._sport_key === 'soccer_wc' || currentSport === 'soccer_wc') && r._dkSpreads) {
                     var fcOutType2 = r.ps === 'B' ? 'Home' : 'Away';
                     var rsLine2 = match.line;
+                    // Infer line from RS "Win or Draw" / "Win" labels when explicit line is missing
+                    if (rsLine2 == null && match.label) {
+                        var _rl2 = match.label.toLowerCase();
+                        rsLine2 = _rl2.indexOf('win or draw') !== -1 ? 0.5 : (_rl2.indexOf('win') !== -1 ? -0.5 : null);
+                    }
                     var dkSpr2 = (r._dkSpreads && r._dkSpreads[fcOutType2]) || {};
                     var dkPrice3 = rsLine2 != null ? dkSpr2[String(rsLine2)] : null;
                     if (dkPrice3 != null) { r.am = dkPrice3; r.pt = rsLine2; }
@@ -15579,7 +15607,8 @@
                             var gid = String(game.id);
                             var pid = gid + '-h2h';
                             var awayGetsMinus;
-                            if (game.awm != null && game.hm != null) { awayGetsMinus = game.awm <= game.hm; }
+                            if (game.hp != null && game.awp != null) { awayGetsMinus = game.hp <= game.awp; }
+                            else if (game.awm != null && game.hm != null) { awayGetsMinus = game.awm <= game.hm; }
                             else if (game.awm != null) { awayGetsMinus = true; }
                             else { awayGetsMinus = false; }
                             [[away, 'A'], [home, 'B']].forEach(function(pair) {
@@ -17151,20 +17180,27 @@ if (!match && r.mkt === 'Spread' && (sport === 'soccer_fc' || sport === 'soccer_
                         function fcLabelMatch(o) {
                             if (!o || !o.label) return false;
                             var lbl = o.label.toLowerCase().replace(/[+-]?\d+\.?\d*\s*$/, '').trim();
-                            return fcTeamWords.some(function(w) { return lbl.indexOf(w) !== -1 || w.indexOf(lbl) !== -1; });
+                            // Full word match
+                            if (fcTeamWords.some(function(w) { return lbl.indexOf(w) !== -1 || w.indexOf(lbl) !== -1; })) return true;
+                            // Abbreviation match: first token of RS label vs start of any team name word
+                            var abbr = lbl.split(/\s+/)[0];
+                            if (abbr && abbr.length >= 2) { return fcTeamWords.some(function(w) { return w.startsWith(abbr); }); }
+                            return false;
                         }
                         if (fcLabelMatch(fcMinusO)) {
                             match = fcMinusO;
                         } else if (fcLabelMatch(fcPlusO)) {
                             match = fcPlusO;
                         } else if (fcMinusO && fcPlusO) {
-                            // Name matching failed — use DK favorite as tiebreaker:
-                            // the team with the lower (more negative) DK -0.5 price is the assigned -0.5 side
-                            var _hm = r._dkSpreads && r._dkSpreads.Home && r._dkSpreads.Home['-0.5'];
-                            var _am = r._dkSpreads && r._dkSpreads.Away && r._dkSpreads.Away['-0.5'];
-                            var homeFavored = _hm != null && _am != null ? _hm <= _am : _hm != null;
-                            var fcIsHomeRow = r.ps === 'B';
-                            match = (fcIsHomeRow === homeFavored) ? fcMinusO : fcPlusO;
+                            // Use +0.5 prices: team with cheaper +0.5 (more likely W or D) is the +0.5 side
+                            var _hp = r._dkSpreads && r._dkSpreads.Home && r._dkSpreads.Home['0.5'];
+                            var _ap = r._dkSpreads && r._dkSpreads.Away && r._dkSpreads.Away['0.5'];
+                            if (_hp != null && _ap != null) {
+                                var homeHasPlusHalf = _hp <= _ap;
+                                match = (r.ps === 'B') === homeHasPlusHalf ? fcPlusO : fcMinusO;
+                            } else {
+                                match = r.ps === 'B' ? fcPlusO : fcMinusO;
+                            }
                         } else {
                             match = fcMinusO || fcPlusO;
                         }
@@ -17280,9 +17316,9 @@ if (!match && r.mkt === 'Spread' && (sport === 'soccer_fc' || sport === 'soccer_
                         var rsLine = match.line; // e.g. -1.5, -0.5, 0.5, 1.5
                         // WC uses "X Win or Draw" / "Y Win" labels (no ±0.5 literals).
                         // Infer line from label: "draw" in label = +0.5, "win" only = -0.5.
-                        if (rsLine == null && sport === 'soccer_wc') {
+                        if (rsLine == null && (sport === 'soccer_wc' || sport === 'soccer_fc')) {
                             var _wcRaw = match.rawLabel || match.label || '';
-                            rsLine = /draw/i.test(_wcRaw) ? 0.5 : (/win/i.test(_wcRaw) ? -0.5 : null);
+                            rsLine = /win or draw/i.test(_wcRaw) ? 0.5 : (/win/i.test(_wcRaw) ? -0.5 : /draw/i.test(_wcRaw) ? 0.5 : null);
                         }
                         var dkSpr = (r._dkSpreads && r._dkSpreads[fcOutType]) || {};
                         var dkPrice2 = rsLine != null ? dkSpr[String(rsLine)] : null;
@@ -17619,12 +17655,11 @@ if (!match && r.mkt === 'Spread' && (sport === 'soccer_fc' || sport === 'soccer_
                     var cm = game.cm ? new Date(game.cm) : null;
                     var gid = String(game.id);
                     var pid = gid + '-h2h';
-                    // Determine correct ±0.5 pairing using DK prices.
-                    // Lower American odds for the -0.5 line = more likely to win = DK's -0.5 team.
+                    // Team with cheaper +0.5 (W or D) is the draw side — use that to assign ±0.5.
                     var awayGetsMinus;
-                    if (game.awm != null && game.hm != null) {
-                        awayGetsMinus = game.awm <= game.hm;
-                    } else if (game.awm != null) { awayGetsMinus = true; }
+                    if (game.hp != null && game.awp != null) { awayGetsMinus = game.hp <= game.awp; }
+                    else if (game.awm != null && game.hm != null) { awayGetsMinus = game.awm <= game.hm; }
+                    else if (game.awm != null) { awayGetsMinus = true; }
                     else { awayGetsMinus = false; }
                     [[away, 'A'], [home, 'B']].forEach(function(pair) {
                         var teamName = pair[0], ps = pair[1];
