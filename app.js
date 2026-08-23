@@ -4972,7 +4972,8 @@
     ];
     var WNBA_MKT_SET = { pts:1, reb:1, ast:1, fg3m:1, pra:1, pa:1, pr:1, ra:1, double_double:1, triple_double:1 };
     var parlayActiveSport = 'mlb'; // 'mlb' | 'wnba' | 'nfl' | 'ufc' | 'soccer'
-    var PARLAY_HEADSHOT_CACHE = {}; // playerName → ESPN URL or 'none'
+    var PARLAY_HEADSHOT_CACHE = {}; // playerName → RS/ESPN URL, 'none', or 'pending'
+    var PARLAY_RS_HS_FLIGHT = {}; // playerName → [cb, ...] while RS search is in-flight
 
     var PARLAY_PLAYERS        = [];  // filled by loadParlayPlayers()
     var PARLAY_PLAYERS_WNBA   = [];  // filled by loadParlayPlayers() when sport=wnba
@@ -5970,31 +5971,52 @@
         return fallback;
     }
 
+    // Fetch RS avatar hash for a soccer player via /api/real/otd?action=search.
+    // Calls cb(url) with the RS large headshot URL, or cb(null) if not found.
+    // Safe: D1-cached at 1hr in otd.js, staggered by caller, never constructs guessed URLs.
+    function _fetchRsSoccerHeadshot(name, cb) {
+        var cached = PARLAY_HEADSHOT_CACHE[name];
+        if (cached === 'none') { cb(null); return; }
+        if (cached && cached !== 'pending') { cb(cached); return; }
+        // Already in-flight — queue callback
+        if (PARLAY_RS_HS_FLIGHT[name]) { PARLAY_RS_HS_FLIGHT[name].push(cb); return; }
+        PARLAY_RS_HS_FLIGHT[name] = [cb];
+        PARLAY_HEADSHOT_CACHE[name] = 'pending';
+        var _done = function(url) {
+            PARLAY_HEADSHOT_CACHE[name] = url || 'none';
+            var cbs = PARLAY_RS_HS_FLIGHT[name] || [];
+            delete PARLAY_RS_HS_FLIGHT[name];
+            cbs.forEach(function(fn) { fn(url || null); });
+        };
+        fetch('/api/real/otd?action=search&q=' + encodeURIComponent(name) + '&sport=soccer', {
+            credentials: 'same-origin', signal: AbortSignal.timeout(8000)
+        })
+            .then(function(r) { return r.ok ? r.json() : null; })
+            .then(function(d) {
+                var players = (d && d.players) || [];
+                var match = players.find(function(p) { return p.name && p.name.toLowerCase() === name.toLowerCase(); });
+                if (!match && players.length) match = players[0];
+                var hash = match && match.avatar;
+                _done(hash ? 'https://media.realapp.com/assets/players/default/large/' + hash + '.webp' : null);
+            })
+            .catch(function() { _done(null); });
+    }
+
     function parlayHeadshotFail(img) {
         var av = img.nextElementSibling;
         var sport = img.dataset && img.dataset.sport;
         var name  = img.dataset && img.dataset.name;
-        // Soccer: DK player images are unreliable — try ESPN before showing initials
-        if (sport === 'soccer' && name && !PARLAY_HEADSHOT_CACHE[name]) {
-            PARLAY_HEADSHOT_CACHE[name] = 'pending';
+        // Soccer: DK player images unreliable — fetch RS headshot via search (D1-cached, safe)
+        if (sport === 'soccer' && name && PARLAY_HEADSHOT_CACHE[name] !== 'none') {
             img.style.display = 'none';
             if (av) av.style.display = 'flex';
-            fetch('https://site.api.espn.com/apis/search/v2?query=' + encodeURIComponent(name) + '&limit=3&type=player&sport=soccer', { signal: AbortSignal.timeout(5000) })
-                .then(function(r) { return r.json(); })
-                .then(function(d) {
-                    var group = (d.results || []).find(function(r) { return r.type === 'player'; });
-                    var hit = group && group.contents && group.contents[0];
-                    if (!hit) { PARLAY_HEADSHOT_CACHE[name] = 'none'; return; }
-                    var espnId = (hit.uid || '').split('~a:')[1] || '';
-                    if (!espnId) { PARLAY_HEADSHOT_CACHE[name] = 'none'; return; }
-                    var url = 'https://a.espncdn.com/combiner/i?img=/i/headshots/soccer/players/full/' + espnId + '.png&w=350&h=254';
-                    PARLAY_HEADSHOT_CACHE[name] = url;
-                    img.src = url;
-                    img.style.display = '';
-                    img.onerror = function() { img.style.display = 'none'; if (av) av.style.display = 'flex'; PARLAY_HEADSHOT_CACHE[name] = 'none'; };
-                    if (av) av.style.display = 'none';
-                })
-                .catch(function() { PARLAY_HEADSHOT_CACHE[name] = 'none'; });
+            _fetchRsSoccerHeadshot(name, function(url) {
+                if (!url) return;
+                img.src = url;
+                img.style.display = '';
+                img.onerror = function() { img.style.display = 'none'; if (av) av.style.display = 'flex'; };
+                if (av) av.style.display = 'none';
+            });
             return;
         }
         img.style.display = 'none';
@@ -6560,22 +6582,48 @@
             grid.innerHTML = players.map(_mkCard).join('');
         }
 
-        // Async: ESPN headshots for cards rendered with initials avatar (no DK headshot)
-        var _espnSport  = parlayActiveSport;
-        var _espnLeague = _espnSport === 'wnba' ? 'wnba' : _espnSport === 'soccer' ? 'soccer' : 'mlb';
-        var _espnQSport = _espnSport === 'wnba' ? 'basketball' : _espnSport === 'soccer' ? 'soccer' : 'baseball';
+        // Async: load headshots for cards rendered with initials avatar (no DK headshot).
+        // Soccer uses RS player search (D1-cached, staggered 300ms). Others use ESPN.
+        var _hsSport    = parlayActiveSport;
+        var _espnLeague = _hsSport === 'wnba' ? 'wnba' : 'mlb';
+        var _espnQSport = _hsSport === 'wnba' ? 'basketball' : 'baseball';
         var _seenEspn   = {};
+        var _hsIdx      = 0;
         players.forEach(function(p) {
-            if (p.headshot || _seenEspn[p.name]) return; // p.headshot set → DK img rendered, parlayHeadshotFail handles ESPN fallback
+            if (p.headshot || _seenEspn[p.name]) return; // p.headshot → DK img rendered; parlayHeadshotFail handles RS fallback
             _seenEspn[p.name] = true;
+            var _idx = _hsIdx++;
             (function(pid, name, initials, color) {
+                // Soccer: RS avatar search, staggered to avoid hammering RS
+                if (_hsSport === 'soccer') {
+                    var cached = PARLAY_HEADSHOT_CACHE[name];
+                    if (cached && cached !== 'pending') {
+                        if (cached === 'none') return;
+                        var _av0 = document.getElementById('bcard-av-' + pid);
+                        if (!_av0) return;
+                        var _st0 = 'background:linear-gradient(135deg,' + color + ',' + color + 'aa);display:none';
+                        _av0.outerHTML = '<img class="parlay-card-headshot" data-name="' + escHtml(name) + '" data-sport="soccer" src="' + escHtml(cached) + '" alt="" onerror="parlayHeadshotFail(this)"><div class="parlay-card-avatar" style="' + _st0 + '">' + escHtml(initials) + '</div>';
+                        return;
+                    }
+                    setTimeout(function() {
+                        _fetchRsSoccerHeadshot(name, function(url) {
+                            if (!url) return;
+                            var av = document.getElementById('bcard-av-' + pid);
+                            if (!av) return;
+                            var avSt = 'background:linear-gradient(135deg,' + color + ',' + color + 'aa);display:none';
+                            av.outerHTML = '<img class="parlay-card-headshot" data-name="' + escHtml(name) + '" data-sport="soccer" src="' + escHtml(url) + '" alt="" onerror="parlayHeadshotFail(this)"><div class="parlay-card-avatar" style="' + avSt + '">' + escHtml(initials) + '</div>';
+                        });
+                    }, _idx * 300);
+                    return;
+                }
+                // Non-soccer: ESPN search
                 var cached = PARLAY_HEADSHOT_CACHE[name];
                 if (cached) {
                     if (cached === 'none' || cached === 'pending') return;
                     var av = document.getElementById('bcard-av-' + pid);
                     if (!av) return;
                     var avSt = 'background:linear-gradient(135deg,' + color + ',' + color + 'aa);display:none';
-                    av.outerHTML = '<img class="parlay-card-headshot" data-name="' + escHtml(name) + '" data-sport="' + escHtml(_espnSport) + '" src="' + escHtml(cached) + '" alt="" onerror="parlayHeadshotFail(this)"><div class="parlay-card-avatar" style="' + avSt + '">' + escHtml(initials) + '</div>';
+                    av.outerHTML = '<img class="parlay-card-headshot" data-name="' + escHtml(name) + '" data-sport="' + escHtml(_hsSport) + '" src="' + escHtml(cached) + '" alt="" onerror="parlayHeadshotFail(this)"><div class="parlay-card-avatar" style="' + avSt + '">' + escHtml(initials) + '</div>';
                     return;
                 }
                 fetch('https://site.api.espn.com/apis/search/v2?query=' + encodeURIComponent(name) + '&limit=3&type=player&sport=' + _espnQSport, { signal: AbortSignal.timeout(5000) })
@@ -6591,7 +6639,7 @@
                         var av = document.getElementById('bcard-av-' + pid);
                         if (!av) return;
                         var avSt = 'background:linear-gradient(135deg,' + color + ',' + color + 'aa);display:none';
-                        av.outerHTML = '<img class="parlay-card-headshot" data-name="' + escHtml(name) + '" data-sport="' + escHtml(_espnSport) + '" src="' + escHtml(url) + '" alt="" onerror="parlayHeadshotFail(this)"><div class="parlay-card-avatar" style="' + avSt + '">' + escHtml(initials) + '</div>';
+                        av.outerHTML = '<img class="parlay-card-headshot" data-name="' + escHtml(name) + '" data-sport="' + escHtml(_hsSport) + '" src="' + escHtml(url) + '" alt="" onerror="parlayHeadshotFail(this)"><div class="parlay-card-avatar" style="' + avSt + '">' + escHtml(initials) + '</div>';
                     })
                     .catch(function() { PARLAY_HEADSHOT_CACHE[name] = 'none'; });
             })(p.id, p.name, p.initials, p.color);
