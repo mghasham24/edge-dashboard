@@ -6321,6 +6321,21 @@
         var grid = document.getElementById('parlay-player-grid');
         if (!grid) return;
 
+        // Sanitize any stale DK status suffixes in cached player names/initials
+        var _pools = [PARLAY_PLAYERS, PARLAY_PLAYERS_WNBA];
+        _pools.forEach(function(pool) {
+            pool.forEach(function(p) {
+                if (!p.name || p._dkCleaned) return;
+                p._dkCleaned = true;
+                var clean = cleanDkPlayerName(p.name);
+                if (clean !== p.name) {
+                    p.name = clean;
+                    var w = clean.split(' ');
+                    p.initials = ((w[0][0] || '') + (w.length > 1 ? w[w.length - 1][0] || '' : '')).toUpperCase();
+                }
+            });
+        });
+
         // UFC tab — fight cards with fighter headshots
         if (parlayActiveSport === 'ufc') {
             if (!PARLAY_PLAYERS_UFC.length && !parlayGamesUfcLoading) { loadParlayUfc(); return; }
