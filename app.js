@@ -5108,7 +5108,20 @@
         return 'hsl(' + (Math.abs(h) % 360) + ',48%,28%)';
     }
 
+    var DK_STATUS_RE = /\s+\([LOQDP]\)$/i;
+    function cleanDkPlayerName(n) { return n ? n.replace(DK_STATUS_RE, '').trim() : n; }
+
+    // Map DK team abbreviations → ESPN logo path segment (handles non-standard/renamed teams)
+    var MLB_LOGO_ABBR = { "a's": 'oak', 'ath': 'oak', 'cws': 'cws', 'sd': 'sd', 'sf': 'sf', 'kc': 'kc', 'tb': 'tb' };
+    function toMlbLogoAbbr(team) {
+        if (!team) return '';
+        var lc = team.toLowerCase().replace(/[^a-z0-9]/g, '');
+        return MLB_LOGO_ABBR[team.toLowerCase()] || MLB_LOGO_ABBR[lc] || team.toLowerCase();
+    }
+
     function buildParlayPlayersFromDk(apiPlayers, idStart) {
+        // Strip DK lineup status suffixes like "(L)", "(O)" from player names
+        apiPlayers.forEach(function(p) { if (p.name) p.name = cleanDkPlayerName(p.name); });
         // Group by player+market, pick the MainPointLine (or first) O/U pair per player
         var byKey = {};
         apiPlayers.forEach(function(p) {
@@ -5852,7 +5865,7 @@
         img.src = url;
         img.alt = '';
         img.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:top center';
-        img.addEventListener('error', function() { img.remove(); if (span) span.style.display = ''; });
+        img.addEventListener('error', function() { img.remove(); if (span) span.style.display = 'flex'; });
         if (span) span.style.display = 'none';
         avEl.insertBefore(img, span || null);
     }
@@ -6429,7 +6442,7 @@
                 '<div class="parlay-card-top" style="' + topStyle + '">' +
                     (p.isFighter ? '' :
                     '<div class="parlay-team-badge">' +
-                        (p.team ? '<img src="https://a.espncdn.com/combiner/i?img=/i/teamlogos/' + (parlayActiveSport === 'wnba' ? 'wnba' : 'mlb') + '/500/' + escHtml(p.team.toLowerCase()) + '.png&h=80&w=80" alt="' + escHtml(p.team) + '" onerror="this.outerHTML=\'<span>' + escHtml(p.team) + '</span>\'">' : '') +
+                        (p.team ? '<img src="https://a.espncdn.com/combiner/i?img=/i/teamlogos/' + (parlayActiveSport === 'wnba' ? 'wnba' : 'mlb') + '/500/' + escHtml(parlayActiveSport === 'wnba' ? p.team.toLowerCase() : toMlbLogoAbbr(p.team)) + '.png&h=80&w=80" alt="' + escHtml(p.team) + '" data-fallback="' + escHtml(p.team) + '" onerror="this.outerHTML=\'<span>\'+this.dataset.fallback+\'</span>\'">' : '') +
                     '</div>') +
                     cardRsRow +
                     headshotHtml +
@@ -9204,6 +9217,7 @@
             '<div class="parlay-mobile-backdrop" id="parlay-mobile-backdrop" onclick="parlayCloseDrawer()"></div>';
         parlayRenderAll();
         parlayAttachScrollHide();
+        parlayAttachDrawerDrag();
     }
 
     function parlayAttachScrollHide() {
@@ -9212,24 +9226,82 @@
         var lastY = 0;
         var hidden = false;
         grid.addEventListener('scroll', function() {
+            if (window.innerWidth > 768) return;
             var y = grid.scrollTop;
             var goingDown = y > lastY;
             lastY = y;
-            var hdr = document.querySelector('.subheader-sticky');
-            var tabs = document.querySelector('.parlay-view-tabs');
+            var hdr        = document.querySelector('.subheader-sticky');
+            var tabs       = document.querySelector('.parlay-view-tabs');
+            var catNav     = document.getElementById('parlay-cat-nav');
             var parlayPanel = document.getElementById('parlays-panel');
             if (goingDown && y > 50 && !hidden) {
                 hidden = true;
                 if (hdr) hdr.style.transform = 'translateY(-100%)';
-                if (tabs) { tabs.style.overflow = 'hidden'; tabs.style.maxHeight = '0'; tabs.style.paddingTop = '0'; tabs.style.paddingBottom = '0'; tabs.style.borderBottomWidth = '0'; tabs.style.transition = 'max-height .22s ease, padding .22s ease'; }
+                if (tabs) { tabs.style.transition = 'max-height .22s ease, padding .22s ease'; tabs.style.overflow = 'hidden'; tabs.style.maxHeight = '0'; tabs.style.paddingTop = '0'; tabs.style.paddingBottom = '0'; tabs.style.borderBottomWidth = '0'; }
+                if (catNav) { catNav.style.transition = 'max-height .22s ease'; catNav.style.overflow = 'hidden'; catNav.style.maxHeight = '0'; catNav.style.borderBottomWidth = '0'; }
                 if (parlayPanel) parlayPanel.style.top = '0px';
             } else if (!goingDown && y < 30 && hidden) {
                 hidden = false;
                 if (hdr) hdr.style.transform = '';
                 var hdrH = hdr ? hdr.offsetHeight : 56;
                 if (tabs) { tabs.style.overflow = ''; tabs.style.maxHeight = ''; tabs.style.paddingTop = ''; tabs.style.paddingBottom = ''; tabs.style.borderBottomWidth = ''; }
+                if (catNav) { catNav.style.overflow = ''; catNav.style.maxHeight = ''; catNav.style.borderBottomWidth = ''; }
                 if (parlayPanel) parlayPanel.style.top = hdrH + 'px';
             }
+        });
+    }
+
+    function parlayAttachDrawerDrag() {
+        var slip = document.querySelector('.parlay-slip-panel');
+        if (!slip) return;
+        var handle = slip.querySelector('.parlay-drawer-handle');
+        var header = slip.querySelector('.parlay-slip-header');
+        var startY = 0, curY = 0, dragging = false;
+
+        function onStart(e) {
+            if (!slip.classList.contains('drawer-open')) return;
+            startY = curY = e.touches[0].clientY;
+            dragging = true;
+            slip.style.transition = 'none';
+        }
+        function onMove(e) {
+            if (!dragging) return;
+            curY = e.touches[0].clientY;
+            var dy = curY - startY;
+            if (dy > 0) slip.style.transform = 'translateY(' + dy + 'px)';
+        }
+        function onEnd(e) {
+            if (!dragging) return;
+            dragging = false;
+            var dy = (e.changedTouches ? e.changedTouches[0].clientY : curY) - startY;
+            slip.style.transition = 'transform .25s';
+            if (dy > 80) {
+                slip.style.transform = 'translateY(100%)';
+                function done() {
+                    slip.removeEventListener('transitionend', done);
+                    slip.style.transition = '';
+                    slip.style.transform = '';
+                    slip.classList.remove('drawer-open');
+                    var bd = document.getElementById('parlay-mobile-backdrop');
+                    if (bd) bd.classList.remove('visible');
+                }
+                slip.addEventListener('transitionend', done);
+            } else {
+                slip.style.transform = 'translateY(0)';
+                function snap() {
+                    slip.removeEventListener('transitionend', snap);
+                    slip.style.transition = '';
+                    slip.style.transform = '';
+                }
+                slip.addEventListener('transitionend', snap);
+            }
+        }
+
+        [handle, header].forEach(function(el) {
+            if (!el) return;
+            el.addEventListener('touchstart', onStart, { passive: true });
+            el.addEventListener('touchmove',  onMove,  { passive: true });
+            el.addEventListener('touchend',   onEnd);
         });
     }
 
