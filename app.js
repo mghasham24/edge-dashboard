@@ -7671,9 +7671,12 @@
                 gamesBySlugDate[r.slug][r.date] = r.events;
             });
 
-            // Match a leg to a specific game by team abbreviation extracted from event_name ("NYC vs NE")
+            // Match a leg to a specific game by team abbreviation extracted from event_name ("NYC vs NE").
+            // If event_name is "Player Name · market_type" (no "vs"), return empty so any game matches.
             function teamsFromEvent(eventName) {
-                var parts = (eventName || '').toUpperCase().split(/\s+VS\.?\s+/);
+                var upper = (eventName || '').toUpperCase();
+                if (upper.indexOf(' VS') < 0) return { t1: '', t2: '' };
+                var parts = upper.split(/\s+VS\.?\s+/);
                 return { t1: (parts[0] || '').trim(), t2: (parts[1] || '').trim() };
             }
             function abbrMatch(gi, t1, t2) {
