@@ -5972,6 +5972,31 @@
 
     function parlayHeadshotFail(img) {
         var av = img.nextElementSibling;
+        var sport = img.dataset && img.dataset.sport;
+        var name  = img.dataset && img.dataset.name;
+        // Soccer: DK player images are unreliable — try ESPN before showing initials
+        if (sport === 'soccer' && name && !PARLAY_HEADSHOT_CACHE[name]) {
+            PARLAY_HEADSHOT_CACHE[name] = 'pending';
+            img.style.display = 'none';
+            if (av) av.style.display = 'flex';
+            fetch('https://site.api.espn.com/apis/search/v2?query=' + encodeURIComponent(name) + '&limit=3&type=player&sport=soccer', { signal: AbortSignal.timeout(5000) })
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    var group = (d.results || []).find(function(r) { return r.type === 'player'; });
+                    var hit = group && group.contents && group.contents[0];
+                    if (!hit) { PARLAY_HEADSHOT_CACHE[name] = 'none'; return; }
+                    var espnId = (hit.uid || '').split('~a:')[1] || '';
+                    if (!espnId) { PARLAY_HEADSHOT_CACHE[name] = 'none'; return; }
+                    var url = 'https://a.espncdn.com/combiner/i?img=/i/headshots/soccer/players/full/' + espnId + '.png&w=350&h=254';
+                    PARLAY_HEADSHOT_CACHE[name] = url;
+                    img.src = url;
+                    img.style.display = '';
+                    img.onerror = function() { img.style.display = 'none'; if (av) av.style.display = 'flex'; PARLAY_HEADSHOT_CACHE[name] = 'none'; };
+                    if (av) av.style.display = 'none';
+                })
+                .catch(function() { PARLAY_HEADSHOT_CACHE[name] = 'none'; });
+            return;
+        }
         img.style.display = 'none';
         if (av) av.style.display = 'flex';
     }
@@ -6425,6 +6450,16 @@
             var msg = parlaySearchQuery ? 'No players match "' + escHtml(parlaySearchQuery) + '"' : 'No props in this category today';
             grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">' + msg + '</div>';
             return;
+        }
+
+        // Soccer: sort by league (EPL first)
+        if (parlayActiveSport === 'soccer') {
+            var _leagueOrd = { 'EPL': 0, 'La Liga': 1, 'Serie A': 2, 'Ligue 1': 3, 'Bundesliga': 4 };
+            players = players.slice().sort(function(a, b) {
+                var ai = _leagueOrd[a.league] != null ? _leagueOrd[a.league] : 99;
+                var bi = _leagueOrd[b.league] != null ? _leagueOrd[b.league] : 99;
+                return ai - bi;
+            });
         }
 
         // Home Runs — game-grouped layout (away on top, home on bottom, per-player row)
