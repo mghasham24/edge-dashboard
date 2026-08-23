@@ -527,13 +527,14 @@ async function placeLegsAndRespond(db, parlayId, cardId, legs, stake, payoutRax,
     db.prepare(
       'INSERT INTO parlay_legs (parlay_id, sport, event_id, event_name, game_date, subcat_id, ' +
       'market_type, market_id, selection_id, player_name, label, threshold, direction, ' +
-      'american_odds, implied_prob, headshot_url, game_start_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      'american_odds, implied_prob, headshot_url, game_start_ms, rs_game_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     ).bind(
       parlayId, leg.sport,
       leg.eventId, leg.eventName, leg.gameDate, leg.subcatId,
       leg.marketType, leg.marketId, leg.selectionId, leg.playerName,
       leg.label, leg.threshold, leg.direction, leg.americanOdds, leg.impliedProb,
-      leg.headshotUrl, leg.gameStartMs || null
+      leg.headshotUrl, leg.gameStartMs || null,
+      leg.rsGameId || null
     )
   ));
 

@@ -6095,6 +6095,28 @@
         return null;
     }
 
+    // Returns numeric RS game ID (not URL) — used at bet placement to store rs_game_id
+    function parlayGameRsId(game) {
+        if (!game) return null;
+        var keys = [
+            (game.awayTeam || '') + ' @ ' + (game.homeTeam || ''),
+            (game.awayShort || '') + ' @ ' + (game.homeShort || ''),
+        ];
+        for (var _gi = 0; _gi < keys.length; _gi++) {
+            if (keys[_gi] && rsGameIds[keys[_gi]]) return rsGameIds[keys[_gi]];
+        }
+        var awLc = (game.awayTeam || game.awayShort || '').toLowerCase();
+        var hwLc = (game.homeTeam || game.homeShort || '').toLowerCase();
+        if (awLc && hwLc) {
+            var _gak = Object.keys(rsGameIds);
+            for (var _gj = 0; _gj < _gak.length; _gj++) {
+                var _gkl = _gak[_gj].toLowerCase();
+                if (_gkl.indexOf(awLc) !== -1 && _gkl.indexOf(hwLc) !== -1) return rsGameIds[_gak[_gj]];
+            }
+        }
+        return null;
+    }
+
     function parlayPlayerRsUrl(p) {
         var sport = parlayActiveSport;
         var games = sport === 'wnba' ? PARLAY_GAMES_WNBA : sport === 'nfl' ? PARLAY_GAMES_NFL : PARLAY_GAMES;
@@ -6897,11 +6919,12 @@
             fetch('/api/real/game-ids?sport=baseball_mlb', { credentials: 'include' }).then(function(r) { return r.json(); }).catch(function() { return {}; }),
             fetch('/api/real/game-ids?sport=basketball_wnba', { credentials: 'include' }).then(function(r) { return r.json(); }).catch(function() { return {}; }),
             fetch('/api/real/game-ids?sport=football_nfl', { credentials: 'include' }).then(function(r) { return r.json(); }).catch(function() { return {}; }),
+            fetch('/api/real/game-ids?sport=soccer_fc', { credentials: 'include' }).then(function(r) { return r.json(); }).catch(function() { return {}; }),
         ]).then(function(results) {
-            var d = results[0], mlbIds = results[1], wnbaIds = results[2], nflIds = results[3];
+            var d = results[0], mlbIds = results[1], wnbaIds = results[2], nflIds = results[3], socIds = results[4];
             if (!d.ok) throw new Error('API error: ' + (d.error || 'unknown'));
             // Seed rsGameIds from cache so parlayLegRsUrl works on first render
-            var _ids = Object.assign({}, (mlbIds && mlbIds.gameIds) || {}, (wnbaIds && wnbaIds.gameIds) || {}, (nflIds && nflIds.gameIds) || {});
+            var _ids = Object.assign({}, (mlbIds && mlbIds.gameIds) || {}, (wnbaIds && wnbaIds.gameIds) || {}, (nflIds && nflIds.gameIds) || {}, (socIds && socIds.gameIds) || {});
             Object.keys(_ids).forEach(function(gk) { if (!rsGameIds[gk]) rsGameIds[gk] = _ids[gk]; });
             settledLegStats = {};
             parlaySlipsTotal = d.total || 0;
@@ -7249,45 +7272,23 @@
             var _full = _base + (_base && _dateLbl ? ' · ' + _dateLbl : (!_base ? _dateLbl : ''));
             if (_full) infoEl.textContent = _full;
 
-            // Wire up RS button placeholder if URL wasn't resolved at render time
-            var _rsBtnEl2 = document.getElementById('rsb-' + parlayId + '-' + legIndex);
-            if (_rsBtnEl2 && !_rsBtnEl2.href) {
-                var _rsSportEl2 = _rsBtnEl2.dataset.sport || 'mlb';
-                var _rsKey2 = _rsSportEl2 === 'wnba' ? 'basketball_wnba' : 'baseball_mlb';
-                var _rsKW2  = _rsSportEl2 === 'wnba' ? _PARLAY_LEG_WNBA_KW : _PARLAY_LEG_MLB_KW;
-                var _rUrl2  = null;
-                if (awAbbr && hwAbbr) {
-                    var _awKw2 = (_rsKW2[awAbbr] || '').toLowerCase();
-                    var _hwKw2 = (_rsKW2[hwAbbr] || '').toLowerCase();
-                    if (_awKw2 && _hwKw2) {
-                        var _rsAllKeys = Object.keys(rsGameIds);
-                        for (var _rki = 0; _rki < _rsAllKeys.length; _rki++) {
-                            var _rkl = _rsAllKeys[_rki].toLowerCase();
-                            if (_rkl.indexOf(_awKw2) !== -1 && _rkl.indexOf(_hwKw2) !== -1) {
-                                _rUrl2 = getRealSportsUrl(rsGameIds[_rsAllKeys[_rki]], _rsKey2, null, _rsAllKeys[_rki]);
-                                break;
-                            }
+            // Wire up RS button if URL couldn't be resolved at render time
+            // (only needed for old legs without rs_game_id where rsGameIds was empty at render)
+            if (awAbbr && hwAbbr) {
+                var _rsBtnEl2 = document.getElementById('rsb-' + parlayId + '-' + legIndex);
+                if (_rsBtnEl2 && !_rsBtnEl2.href) {
+                    var _rsSport2 = _rsBtnEl2.dataset.sport || 'baseball_mlb';
+                    var _awFrag2  = awAbbr.toLowerCase(), _hwFrag2 = hwAbbr.toLowerCase();
+                    var _rsAll2   = Object.keys(rsGameIds);
+                    for (var _ri2 = 0; _ri2 < _rsAll2.length; _ri2++) {
+                        var _rl2 = _rsAll2[_ri2].toLowerCase();
+                        if (_rl2.indexOf(_awFrag2) !== -1 && _rl2.indexOf(_hwFrag2) !== -1) {
+                            var _rUrl2 = getRealSportsUrl(rsGameIds[_rsAll2[_ri2]], _rsSport2, null, _rsAll2[_ri2]);
+                            if (_rUrl2) { _rsBtnEl2.href = _rUrl2; _rsBtnEl2.style.display = ''; }
+                            break;
                         }
                     }
                 }
-                // Fallback: single-team lookup via data-team on the avatar element
-                if (!_rUrl2) {
-                    var _avEl2 = document.getElementById('slipav-' + parlayId + '-' + legIndex);
-                    var _legTeam2 = _avEl2 ? (_avEl2.dataset.team || '') : '';
-                    if (_legTeam2) {
-                        var _tKw2 = (_rsKW2[_legTeam2.toUpperCase()] || '').toLowerCase();
-                        if (_tKw2) {
-                            var _tkKeys = Object.keys(rsGameIds);
-                            for (var _tki = 0; _tki < _tkKeys.length; _tki++) {
-                                if (_tkKeys[_tki].toLowerCase().indexOf(_tKw2) !== -1) {
-                                    _rUrl2 = getRealSportsUrl(rsGameIds[_tkKeys[_tki]], _rsKey2, null, _tkKeys[_tki]);
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-                if (_rUrl2) { _rsBtnEl2.href = _rUrl2; _rsBtnEl2.style.display = ''; }
             }
         }
 
@@ -8356,94 +8357,45 @@
         }
     };
 
-    var _PARLAY_LEG_MLB_KW = {
-        ARI:'Diamondbacks', ATL:'Braves',    BAL:'Orioles',   BOS:'Red Sox',
-        CHC:'Cubs',         CWS:'White Sox', CIN:'Reds',      CLE:'Guardians',
-        COL:'Rockies',      DET:'Tigers',    HOU:'Astros',    KC:'Royals',
-        LAA:'Angels',       LAD:'Dodgers',   MIA:'Marlins',   MIL:'Brewers',
-        MIN:'Twins',        NYM:'Mets',      NYY:'Yankees',   OAK:'Athletics',
-        PHI:'Phillies',     PIT:'Pirates',   SD:'Padres',     SEA:'Mariners',
-        SF:'Giants',        STL:'Cardinals', TB:'Rays',       TEX:'Rangers',
-        TOR:'Blue Jays',    WAS:'Nationals', WSH:'Nationals',
-    };
-    var _PARLAY_LEG_WNBA_KW = {
-        ATL:'Dream',  CHI:'Sky',      CON:'Sun',   DAL:'Wings',
-        IND:'Fever',  LV:'Aces',      LA:'Sparks', MIN:'Lynx',
-        NY:'Liberty', PHX:'Mercury',  SEA:'Storm', WAS:'Mystics',
-        GS:'Valkyries', GSV:'Valkyries', TOR:'Tempo', POR:'Fire',
-    };
-
     function parlayLegRsUrl(leg) {
-        var legSport   = leg.sport || 'mlb';
-        var rsSportKey = legSport === 'wnba' ? 'basketball_wnba' : 'baseball_mlb';
-        var storedKey  = leg.event_name || '';
+        var legSport = leg.sport || 'baseball_mlb';
+        var en       = leg.event_name || '';
 
-        // Direct match on stored full-name key
-        if (storedKey && rsGameIds[storedKey]) {
-            return getRealSportsUrl(rsGameIds[storedKey], rsSportKey, null, storedKey);
+        // 1. rs_game_id stored at placement — direct, always works
+        if (leg.rs_game_id) {
+            return getRealSportsUrl(leg.rs_game_id, legSport, null, en);
         }
 
-        // Extract team fragment (handle legacy "Player · AWY @ HME" format)
-        var dotIdx2  = storedKey.indexOf(' · ');
-        var gamePart = dotIdx2 >= 0 ? storedKey.slice(dotIdx2 + 3) : storedKey;
+        // 2. Direct event_name match against pre-seeded rsGameIds
+        if (en && rsGameIds[en]) {
+            return getRealSportsUrl(rsGameIds[en], legSport, null, en);
+        }
 
+        // 3. Fuzzy match — handles "Team A @ Team B" substrings in event_name
+        //    (covers 1inn legs stored as "ATL @ MIL" and similar short forms)
+        var gamePart = en.indexOf(' · ') !== -1 ? en.slice(en.indexOf(' · ') + 3) : en;
         if (gamePart && gamePart.indexOf(' @ ') !== -1) {
-            var kParts    = gamePart.split(' @ ');
-            var awayFrag  = kParts[0].trim().toLowerCase();
-            var homeFrag  = kParts[1].trim().toLowerCase();
-            // For "STL Cardinals @ PHI Phillies" format, also grab just the first word (the abbrev)
-            var awayAbbr  = kParts[0].trim().split(/\s+/)[0].toUpperCase();
-            var homeAbbr  = kParts[1].trim().split(/\s+/)[0].toUpperCase();
-
-            // Pass 1: substring match on full frags (works for full city names and some abbreviations)
-            if (awayFrag && homeFrag) {
+            var frags   = gamePart.split(' @ ');
+            var awFrag  = frags[0].trim().toLowerCase();
+            var hwFrag  = frags[1].trim().toLowerCase();
+            if (awFrag && hwFrag) {
                 var allKeys = Object.keys(rsGameIds);
-                for (var ki = 0; ki < allKeys.length; ki++) {
-                    var kl = allKeys[ki].toLowerCase();
-                    if (kl.indexOf(awayFrag) !== -1 && kl.indexOf(homeFrag) !== -1) {
-                        return getRealSportsUrl(rsGameIds[allKeys[ki]], rsSportKey, null, allKeys[ki]);
-                    }
-                }
-            }
-
-            // Pass 2: abbreviation expansion — handles "STL Cardinals @ PHI Phillies" where first
-            // word is the DK abbreviation and KW map converts it to the RS team name keyword
-            var _KW   = legSport === 'wnba' ? _PARLAY_LEG_WNBA_KW : _PARLAY_LEG_MLB_KW;
-            // Try first-word abbreviation first (handles "STL Cardinals"), fallback to full trim (handles bare "STL")
-            var _awKw = (_KW[awayAbbr] || _KW[kParts[0].trim().toUpperCase()] || '').toLowerCase();
-            var _hwKw = (_KW[homeAbbr] || _KW[kParts[1].trim().toUpperCase()] || '').toLowerCase();
-            if (_awKw && _hwKw) {
-                var kwKeys = Object.keys(rsGameIds);
-                for (var ki2 = 0; ki2 < kwKeys.length; ki2++) {
-                    var kl2 = kwKeys[ki2].toLowerCase();
-                    if (kl2.indexOf(_awKw) !== -1 && kl2.indexOf(_hwKw) !== -1) {
-                        return getRealSportsUrl(rsGameIds[kwKeys[ki2]], rsSportKey, null, kwKeys[ki2]);
+                for (var i = 0; i < allKeys.length; i++) {
+                    var kl = allKeys[i].toLowerCase();
+                    if (kl.indexOf(awFrag) !== -1 && kl.indexOf(hwFrag) !== -1) {
+                        return getRealSportsUrl(rsGameIds[allKeys[i]], legSport, null, allKeys[i]);
                     }
                 }
             }
         }
 
-        // Pass 3: use leg.team abbreviation to find the game in rsGameIds directly
-        if (leg.team) {
-            var _kw3 = legSport === 'wnba' ? _PARLAY_LEG_WNBA_KW : _PARLAY_LEG_MLB_KW;
-            var _teamKw3 = (_kw3[leg.team.toUpperCase()] || '').toLowerCase();
-            if (_teamKw3) {
-                var _allK3 = Object.keys(rsGameIds);
-                for (var _ki3 = 0; _ki3 < _allK3.length; _ki3++) {
-                    if (_allK3[_ki3].toLowerCase().indexOf(_teamKw3) !== -1) {
-                        return getRealSportsUrl(rsGameIds[_allK3[_ki3]], rsSportKey, null, _allK3[_ki3]);
-                    }
-                }
-            }
-        }
-
-        // Fall back to live player pool lookup (only works if Build tab loaded this session)
+        // 4. Live player pool fallback (only if Build tab was loaded this session)
         var pools = [
-            { players: PARLAY_PLAYERS,        games: PARLAY_GAMES,      sport: 'mlb'    },
-            { players: PARLAY_1INN_PLAYERS,   games: PARLAY_1INN_GAMES, sport: 'mlb'    },
-            { players: PARLAY_PLAYERS_WNBA,   games: PARLAY_GAMES_WNBA, sport: 'wnba'   },
-            { players: PARLAY_PLAYERS_NFL,    games: PARLAY_GAMES_NFL,  sport: 'nfl'    },
-            { players: PARLAY_PLAYERS_SOCCER, games: [],                sport: 'soccer' },
+            { players: PARLAY_PLAYERS,        games: PARLAY_GAMES,      sport: 'baseball_mlb'    },
+            { players: PARLAY_1INN_PLAYERS,   games: PARLAY_1INN_GAMES, sport: 'baseball_mlb'    },
+            { players: PARLAY_PLAYERS_WNBA,   games: PARLAY_GAMES_WNBA, sport: 'basketball_wnba' },
+            { players: PARLAY_PLAYERS_NFL,    games: PARLAY_GAMES_NFL,  sport: 'football_nfl'    },
+            { players: PARLAY_PLAYERS_SOCCER, games: [],                sport: 'soccer_fc'       },
         ];
         for (var pi = 0; pi < pools.length; pi++) {
             var pool   = pools[pi];
@@ -8722,14 +8674,11 @@
             }
 
             var legRsUrl = parlayLegRsUrl(leg);
-            var _legSport2 = leg.sport || 'mlb';
+            var _legSport2 = leg.sport || 'baseball_mlb';
             var _legRsBtnId = 'rsb-' + s.id + '-' + li;
-            // For MLB/WNBA legs where URL couldn't be resolved at render time (old-format event_name),
-            // render a hidden placeholder — updateLegStatus will wire up the href from live team abbrevs.
-            var _needsRsPlaceholder = !legRsUrl && (_legSport2 === 'mlb' || _legSport2 === 'wnba');
             var legRsBtn = legRsUrl
                 ? '<a id="' + _legRsBtnId + '" href="' + escHtml(legRsUrl) + '" target="_blank" rel="noopener" class="rs-icon-btn" title="View game on Real Sports" onclick="event.stopPropagation()" style="margin-left:2px;flex-shrink:0" data-sport="' + escHtml(_legSport2) + '">' + RS_LOGO_SVG + '</a>'
-                : (_needsRsPlaceholder ? '<a id="' + _legRsBtnId + '" class="rs-icon-btn" target="_blank" rel="noopener" title="View game on Real Sports" onclick="event.stopPropagation()" style="display:none;margin-left:2px;flex-shrink:0" data-sport="' + escHtml(_legSport2) + '">' + RS_LOGO_SVG + '</a>' : '');
+                : '<a id="' + _legRsBtnId + '" class="rs-icon-btn" target="_blank" rel="noopener" title="View game on Real Sports" onclick="event.stopPropagation()" style="display:none;margin-left:2px;flex-shrink:0" data-sport="' + escHtml(_legSport2) + '">' + RS_LOGO_SVG + '</a>';
             // Prop info (matchup abbreviation) shown for MLB/WNBA player prop legs
             var propInfoHtml = '';
             if (!isTeamMkt && showStatus) {
@@ -9534,6 +9483,7 @@
                 })(),
                 gameDate:     (function(ms){ return ms ? new Date(ms).toLocaleDateString('en-CA', { timeZone: 'America/New_York' }) : new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' }); })(p.commenceMs || p.startMs || 0),
                 eventName:    _gameKey,
+                rsGameId:     parlayGameRsId(_pg),
                 selectionId:  p.isTeamMarket ? (p.selId || String(p.id)) : (dir === 'more' ? p.moreSelId : p.lessSelId),
                 marketId:     p.marketId,
                 subcatId:     p.subcatId || 0,

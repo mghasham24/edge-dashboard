@@ -6,7 +6,9 @@
 import { getSessionOrCron } from '../../_lib/auth.js';
 
 const CACHE_VERSION = 'v12';
-const SUPPORTED = new Set(['baseball_mlb', 'basketball_wnba', 'football_nfl', 'icehockey_nhl', 'basketball_nba']);
+const SUPPORTED = new Set(['baseball_mlb', 'basketball_wnba', 'football_nfl', 'icehockey_nhl', 'basketball_nba', 'soccer_fc', 'soccer_wc']);
+// sync.js stores soccer under 'soccer' not 'soccer_fc' — map here to match the cache key
+const REAL_SPORT = { 'soccer_fc': 'soccer', 'soccer_wc': 'soccer' };
 
 export async function onRequestGet(ctx) {
   const { request, env } = ctx;
@@ -26,7 +28,8 @@ export async function onRequestGet(ctx) {
     });
   }
 
-  const cacheKey = `real_sync_${sport}_${CACHE_VERSION}`;
+  const realSport = REAL_SPORT[sport] || sport;
+  const cacheKey = `real_sync_${realSport}_${CACHE_VERSION}`;
   const row = await env.DB.prepare('SELECT data FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
   if (!row) {
     return new Response(JSON.stringify({ ok: true, gameIds: {} }), {
