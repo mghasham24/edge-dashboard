@@ -39,6 +39,13 @@ export async function onRequestGet(ctx) {
   const cacheKey = `real_sync_${realSport}_${CACHE_VERSION}`;
   const row = await env.DB.prepare('SELECT data FROM odds_cache WHERE cache_key=?').bind(cacheKey).first();
   if (!row) {
+    // Cache cold — trigger RS sync in background so next load has data
+    if (env.CRON_SECRET) {
+      const syncUrl = new URL('/api/real/sync', new URL(request.url).origin);
+      syncUrl.searchParams.set('sport', sport);
+      syncUrl.searchParams.set('_cron_key', env.CRON_SECRET);
+      ctx.waitUntil(fetch(syncUrl.toString(), { signal: AbortSignal.timeout(25000) }).catch(() => {}));
+    }
     return new Response(JSON.stringify({ ok: true, gameIds: {} }), {
       headers: { 'Content-Type': 'application/json' },
     });
