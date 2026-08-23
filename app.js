@@ -6469,7 +6469,8 @@
             return;
         }
 
-        grid.innerHTML = players.map(function(p) {
+        // Card renderer — used by flat grid and soccer league sections
+        var _mkCard = function(p) {
             var sel     = parlayPicks[p.id];
             var isMilestone = p.type === 'milestone';
             var isYN        = p.type === 'yn';
@@ -6512,15 +6513,18 @@
                 : '';
             var statNumHtml = isMilestone
                 ? escHtml(p.milestoneLabel) + (p.seasonHR != null ? '<span style="font-size:11px;font-weight:600;color:var(--muted);margin-left:4px">HR: ' + escHtml(String(p.seasonHR)) + '</span>' : '')
-                : isYN
-                    ? escHtml(p.stat)
-                    : escHtml(String(p.line));
+                : isYN ? escHtml(p.stat) : escHtml(String(p.line));
+            // Team badge: soccer uses TEAM_LOGO_URLS, others use ESPN combiner path
+            var _tBadge = '';
+            if (!p.isFighter && p.team) {
+                var _tUrl = parlayActiveSport === 'soccer'
+                    ? (TEAM_LOGO_URLS[p.team] || '')
+                    : 'https://a.espncdn.com/combiner/i?img=/i/teamlogos/' + (parlayActiveSport === 'wnba' ? 'wnba' : 'mlb') + '/500/' + (parlayActiveSport === 'wnba' ? p.team.toLowerCase() : toMlbLogoAbbr(p.team)) + '.png&h=80&w=80';
+                _tBadge = _tUrl ? '<img src="' + escHtml(_tUrl) + '" alt="' + escHtml(p.team) + '" data-fallback="' + escHtml(p.team) + '" onerror="this.outerHTML=\'<span>\'+this.dataset.fallback+\'</span>\'">' : '';
+            }
             return '<div class="parlay-card' + cls + '" data-pid="' + p.id + '">' +
                 '<div class="parlay-card-top" style="' + topStyle + '">' +
-                    (p.isFighter ? '' :
-                    '<div class="parlay-team-badge">' +
-                        (p.team ? '<img src="https://a.espncdn.com/combiner/i?img=/i/teamlogos/' + (parlayActiveSport === 'wnba' ? 'wnba' : 'mlb') + '/500/' + escHtml(parlayActiveSport === 'wnba' ? p.team.toLowerCase() : toMlbLogoAbbr(p.team)) + '.png&h=80&w=80" alt="' + escHtml(p.team) + '" data-fallback="' + escHtml(p.team) + '" onerror="this.outerHTML=\'<span>\'+this.dataset.fallback+\'</span>\'">' : '') +
-                    '</div>') +
+                    (p.isFighter ? '' : '<div class="parlay-team-badge">' + _tBadge + '</div>') +
                     cardRsRow +
                     headshotHtml +
                 '</div>' +
@@ -6534,19 +6538,40 @@
                     '<div class="parlay-btns">' + btns + '</div>' +
                 '</div>' +
             '</div>';
-        }).join('');
-        // Async: ESPN headshots for cards where DK returned no player image
+        };
+
+        // Soccer: league-grouped rendering with section headers
+        if (parlayActiveSport === 'soccer') {
+            grid.style.cssText = 'display:flex;flex-direction:column;overflow-y:auto;gap:0;padding:12px 12px 0;box-sizing:border-box;flex:1;min-height:0';
+            var _fcLgOrder = ['EPL', 'La Liga', 'Serie A', 'Ligue 1', 'Bundesliga'];
+            var _fcByLg = {};
+            players.forEach(function(p) { var lg = p.league || 'Other'; if (!_fcByLg[lg]) _fcByLg[lg] = []; _fcByLg[lg].push(p); });
+            var _fcOut = '';
+            _fcLgOrder.concat(Object.keys(_fcByLg).filter(function(lg) { return _fcLgOrder.indexOf(lg) === -1; })).forEach(function(lg) {
+                var _lgPs = _fcByLg[lg];
+                if (!_lgPs || !_lgPs.length) return;
+                var _lgu = _fcLeagueLogoMap[lg] || '';
+                var _lgl = _lgu ? '<img src="' + escHtml(_lgu) + '" style="width:18px;height:18px;object-fit:contain" onerror="this.style.display=\'none\'">' : '';
+                _fcOut += '<div class="fc-parlay-section"><div class="fc-parlay-section-hdr">' + _lgl + '<span>' + escHtml(lg) + '</span></div>' +
+                    '<div class="fc-parlay-section-grid">' + _lgPs.map(_mkCard).join('') + '</div></div>';
+            });
+            grid.innerHTML = _fcOut;
+        } else {
+            grid.innerHTML = players.map(_mkCard).join('');
+        }
+
+        // Async: ESPN headshots for cards rendered with initials avatar (no DK headshot)
         var _espnSport  = parlayActiveSport;
         var _espnLeague = _espnSport === 'wnba' ? 'wnba' : _espnSport === 'soccer' ? 'soccer' : 'mlb';
         var _espnQSport = _espnSport === 'wnba' ? 'basketball' : _espnSport === 'soccer' ? 'soccer' : 'baseball';
         var _seenEspn   = {};
         players.forEach(function(p) {
-            if (p.headshot || _seenEspn[p.name]) return;
+            if (p.headshot || _seenEspn[p.name]) return; // p.headshot set → DK img rendered, parlayHeadshotFail handles ESPN fallback
             _seenEspn[p.name] = true;
             (function(pid, name, initials, color) {
                 var cached = PARLAY_HEADSHOT_CACHE[name];
                 if (cached) {
-                    if (cached === 'none') return;
+                    if (cached === 'none' || cached === 'pending') return;
                     var av = document.getElementById('bcard-av-' + pid);
                     if (!av) return;
                     var avSt = 'background:linear-gradient(135deg,' + color + ',' + color + 'aa);display:none';
@@ -6556,7 +6581,6 @@
                 fetch('https://site.api.espn.com/apis/search/v2?query=' + encodeURIComponent(name) + '&limit=3&type=player&sport=' + _espnQSport, { signal: AbortSignal.timeout(5000) })
                     .then(function(r) { return r.json(); })
                     .then(function(d) {
-                        // ESPN search: results[].contents[] — uid contains "~a:{numericId}"
                         var group = (d.results || []).find(function(r) { return r.type === 'player'; });
                         var hit = group && group.contents && group.contents[0];
                         if (!hit) { PARLAY_HEADSHOT_CACHE[name] = 'none'; return; }

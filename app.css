@@ -3082,6 +3082,10 @@
     .parlay-filter-tab:hover { color:var(--text); border-color:var(--muted) }
     .parlay-filter-tab.active { background:var(--accent-dim); border-color:var(--accent); color:var(--accent) }
     .parlay-player-grid { flex:1; overflow-y:auto; padding:16px; display:grid; grid-template-columns:repeat(3,1fr); gap:12px; align-content:start }
+    .fc-parlay-section { margin-bottom:20px }
+    .fc-parlay-section-hdr { display:flex; align-items:center; gap:8px; padding:0 0 8px; border-bottom:1px solid var(--border2); margin-bottom:10px }
+    .fc-parlay-section-hdr span { font-size:13px; font-weight:700; color:var(--muted); letter-spacing:.04em; text-transform:uppercase }
+    .fc-parlay-section-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; align-content:start }
     .parlay-card { background:var(--bg2); border:1.5px solid var(--border2); border-radius:12px; display:flex; flex-direction:column; transition:border-color .15s }
     .parlay-card:hover { border-color:var(--muted) }
     .parlay-card.sel-more { border-color:var(--green); box-shadow:0 0 0 1px var(--green) inset }
@@ -3406,6 +3410,7 @@
         .parlay-mobile-pill .pmp-mult { flex:1; color:var(--accent); font-size:15px; padding-left:4px }
         .parlay-mobile-pill .pmp-chevron { background:var(--accent); color:#fff; padding:8px 18px; border-radius:20px; letter-spacing:.2px }
         .parlay-player-grid { grid-template-columns:repeat(2,1fr); gap:8px; padding:10px; padding-bottom:10px }
+        .fc-parlay-section-grid { grid-template-columns:repeat(2,1fr); gap:8px }
         .parlay-card-top { height:70px }
         .parlay-card-avatar { width:44px; height:44px; font-size:15px }
         .parlay-card-body { padding:7px 9px 9px }
