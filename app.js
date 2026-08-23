@@ -7004,8 +7004,19 @@
         allSlipsSearch = v;
         clearTimeout(allSlipsSearchTimer);
         if (!v.trim()) {
-            // Empty — render from cached data
-            renderAllSlipsCards();
+            // Re-fetch all slips from server so the reset view is always fresh and correctly sorted
+            var _resetEl = document.getElementById('aslip-cards');
+            if (_resetEl) _resetEl.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">Loading…</div>';
+            fetch('/api/parlays/all-slips', { credentials: 'include' })
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    if (d.ok && d.slips) ALL_SLIPS_DATA = d.slips;
+                    allSlipsFilter = 'all';
+                    renderAllSlipsCards();
+                    settledLegStats = {};
+                    fetchSettledLegStats();
+                })
+                .catch(function() { renderAllSlipsCards(); });
             return;
         }
         // Debounce 400ms then hit server for full username search
