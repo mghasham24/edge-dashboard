@@ -10,7 +10,7 @@ import STATIC_ESPN_IDS from '../espn/mlb-ids.json' assert { type: 'json' };
 const DK_BASE   = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
 const DK_LEAGUE = '84240';
 const CACHE_TTL = 300; // 5 min
-const CACHE_KEY = 'dk_mlb_props_v16';
+const CACHE_KEY = 'dk_mlb_props_v17';
 
 // Standard subcategories — available at league level
 const SUBCAT_MAP = {
@@ -190,11 +190,11 @@ function parseEventMarkets(data, eventId, homeShort, awayShort, timeStr, startMs
     const mktId  = String(mkt.id);
     const mainLine = (over.tags || []).includes('MainPointLine');
     players.push(
-      { name: player.name, team, opp, time: timeStr, startMs, market: info.market, stat: info.stat,
+      { name: cleanDkName(player.name), team, opp, time: timeStr, startMs, market: info.market, stat: info.stat,
         threshold: line, label: `Over ${line}`, direction: 'more', americanOdds: oddsOver,
         marketId: mktId, selectionId: String(over.id), eventId: String(eventId),
         subcatId, mainLine, headshot, dkPlayerId },
-      { name: player.name, team, opp, time: timeStr, startMs, market: info.market, stat: info.stat,
+      { name: cleanDkName(player.name), team, opp, time: timeStr, startMs, market: info.market, stat: info.stat,
         threshold: line, label: `Under ${line}`, direction: 'less', americanOdds: oddsUnder,
         marketId: mktId, selectionId: String(under.id), eventId: String(eventId),
         subcatId, mainLine, headshot, dkPlayerId }
@@ -240,7 +240,7 @@ function parseHRMarkets(data, eventId, homeShort, awayShort, timeStr, startMs) {
       const seasonHR   = player.statistic?.value ?? null;
       const fairProb   = sel.trueOdds > 0 ? 1 / sel.trueOdds : null;
       players.push({
-        name: player.name, team, opp, isHome, time: timeStr, startMs,
+        name: cleanDkName(player.name), team, opp, isHome, time: timeStr, startMs,
         market: HR_INFO.market, stat: HR_INFO.stat, type: 'milestone',
         threshold: mv === 1 ? 0.5 : 1.5,
         milestoneLabel: mv === 1 ? '1+' : '2+',
