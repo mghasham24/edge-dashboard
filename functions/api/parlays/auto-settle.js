@@ -831,7 +831,7 @@ async function getSoccerPlayerStats(espnSlug, espnEventIds, proxyKey) {
           if (!name) continue;
           const raw = {};
           for (const s of (a.stats || [])) raw[s.name] = s.value ?? 0;
-          if (!(raw.appearances > 0)) continue; // didn't play
+          if (!(raw.appearances > 0) && !(raw.minutesPlayed > 0)) continue; // didn't play
           stats[name] = {
             totalGoals:    raw.totalGoals    ?? 0,
             shotsOnTarget: raw.shotsOnTarget ?? 0,
