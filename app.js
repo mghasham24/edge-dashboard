@@ -7250,26 +7250,44 @@
             if (_full) infoEl.textContent = _full;
 
             // Wire up RS button placeholder if URL wasn't resolved at render time
-            if (awAbbr && hwAbbr) {
-                var _rsBtnEl = document.getElementById('rsb-' + parlayId + '-' + legIndex);
-                if (_rsBtnEl && !_rsBtnEl.href) {
-                    var _rsSportEl = _rsBtnEl.dataset.sport || 'mlb';
-                    var _rsKey2 = _rsSportEl === 'wnba' ? 'basketball_wnba' : 'baseball_mlb';
-                    var _rsKW2  = _rsSportEl === 'wnba' ? _PARLAY_LEG_WNBA_KW : _PARLAY_LEG_MLB_KW;
-                    var _awKw2  = (_rsKW2[awAbbr] || '').toLowerCase();
-                    var _hwKw2  = (_rsKW2[hwAbbr] || '').toLowerCase();
+            var _rsBtnEl2 = document.getElementById('rsb-' + parlayId + '-' + legIndex);
+            if (_rsBtnEl2 && !_rsBtnEl2.href) {
+                var _rsSportEl2 = _rsBtnEl2.dataset.sport || 'mlb';
+                var _rsKey2 = _rsSportEl2 === 'wnba' ? 'basketball_wnba' : 'baseball_mlb';
+                var _rsKW2  = _rsSportEl2 === 'wnba' ? _PARLAY_LEG_WNBA_KW : _PARLAY_LEG_MLB_KW;
+                var _rUrl2  = null;
+                if (awAbbr && hwAbbr) {
+                    var _awKw2 = (_rsKW2[awAbbr] || '').toLowerCase();
+                    var _hwKw2 = (_rsKW2[hwAbbr] || '').toLowerCase();
                     if (_awKw2 && _hwKw2) {
                         var _rsAllKeys = Object.keys(rsGameIds);
                         for (var _rki = 0; _rki < _rsAllKeys.length; _rki++) {
                             var _rkl = _rsAllKeys[_rki].toLowerCase();
                             if (_rkl.indexOf(_awKw2) !== -1 && _rkl.indexOf(_hwKw2) !== -1) {
-                                var _rUrl2 = getRealSportsUrl(rsGameIds[_rsAllKeys[_rki]], _rsKey2, null, _rsAllKeys[_rki]);
-                                if (_rUrl2) { _rsBtnEl.href = _rUrl2; _rsBtnEl.style.display = ''; }
+                                _rUrl2 = getRealSportsUrl(rsGameIds[_rsAllKeys[_rki]], _rsKey2, null, _rsAllKeys[_rki]);
                                 break;
                             }
                         }
                     }
                 }
+                // Fallback: single-team lookup via data-team on the avatar element
+                if (!_rUrl2) {
+                    var _avEl2 = document.getElementById('slipav-' + parlayId + '-' + legIndex);
+                    var _legTeam2 = _avEl2 ? (_avEl2.dataset.team || '') : '';
+                    if (_legTeam2) {
+                        var _tKw2 = (_rsKW2[_legTeam2.toUpperCase()] || '').toLowerCase();
+                        if (_tKw2) {
+                            var _tkKeys = Object.keys(rsGameIds);
+                            for (var _tki = 0; _tki < _tkKeys.length; _tki++) {
+                                if (_tkKeys[_tki].toLowerCase().indexOf(_tKw2) !== -1) {
+                                    _rUrl2 = getRealSportsUrl(rsGameIds[_tkKeys[_tki]], _rsKey2, null, _tkKeys[_tki]);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                if (_rUrl2) { _rsBtnEl2.href = _rUrl2; _rsBtnEl2.style.display = ''; }
             }
         }
 
@@ -8400,6 +8418,20 @@
                     var kl2 = kwKeys[ki2].toLowerCase();
                     if (kl2.indexOf(_awKw) !== -1 && kl2.indexOf(_hwKw) !== -1) {
                         return getRealSportsUrl(rsGameIds[kwKeys[ki2]], rsSportKey, null, kwKeys[ki2]);
+                    }
+                }
+            }
+        }
+
+        // Pass 3: use leg.team abbreviation to find the game in rsGameIds directly
+        if (leg.team) {
+            var _kw3 = legSport === 'wnba' ? _PARLAY_LEG_WNBA_KW : _PARLAY_LEG_MLB_KW;
+            var _teamKw3 = (_kw3[leg.team.toUpperCase()] || '').toLowerCase();
+            if (_teamKw3) {
+                var _allK3 = Object.keys(rsGameIds);
+                for (var _ki3 = 0; _ki3 < _allK3.length; _ki3++) {
+                    if (_allK3[_ki3].toLowerCase().indexOf(_teamKw3) !== -1) {
+                        return getRealSportsUrl(rsGameIds[_allK3[_ki3]], rsSportKey, null, _allK3[_ki3]);
                     }
                 }
             }
