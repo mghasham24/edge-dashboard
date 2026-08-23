@@ -1451,17 +1451,19 @@ async function handleRequest({ request, env }) {
     const resolvedLegs = outcomes.filter(o => o.outcome !== null);
     const anyLostEarly = resolvedLegs.some(o => o.outcome === 'lost');
 
-    // Check for already-settled lost or void legs from prior auto-settle passes.
-    // Without this, a void that settles in pass N (before the winning legs settle in pass M)
-    // never triggers payout recalculation — the parlay finalizes with the original 3-leg payout.
+    // Load all already-settled legs for this parlay (lost/void/won from prior passes).
+    // This is critical for multi-pass settlement: a void in pass N and a win in pass M
+    // would otherwise make anyVoid=false in pass M, paying the original N-leg payout unchanged.
     let priorLost = false;
     let priorVoidLegs = [];
+    let priorWonLegs  = [];
     try {
       const priorSettled = await env.DB.prepare(
-        "SELECT id, implied_prob, status FROM parlay_legs WHERE parlay_id=? AND status IN ('lost','void')"
+        "SELECT id, implied_prob, status FROM parlay_legs WHERE parlay_id=? AND status IN ('lost','void','won')"
       ).bind(parlay.id).all();
       priorLost     = priorSettled.results.some(l => l.status === 'lost');
       priorVoidLegs = priorSettled.results.filter(l => l.status === 'void');
+      priorWonLegs  = priorSettled.results.filter(l => l.status === 'won');
     } catch(e) {}
 
     // Future legs count the same as unresolved today-legs — parlay can't finish while they exist
@@ -1473,11 +1475,18 @@ async function handleRequest({ request, env }) {
     const voidedLegs   = resolvedLegs.filter(o => o.outcome === 'void');
     const activeLegs   = resolvedLegs.filter(o => o.outcome !== 'void');
     // anyVoid: a leg went void either this pass OR in a prior pass
-    const anyVoid      = voidedLegs.length > 0 || priorVoidLegs.length > 0;
-    const anyLost      = activeLegs.some(o => o.outcome === 'lost') || priorLost;
-    // Total non-void winning legs = active legs this pass (prior voids are already excluded
-    // from pendingLegs since their status is no longer 'pending')
-    const totalActiveLegs = activeLegs.length;
+    const anyVoid = voidedLegs.length > 0 || priorVoidLegs.length > 0;
+    const anyLost = activeLegs.some(o => o.outcome === 'lost') || priorLost;
+
+    // All non-void winning legs across every pass: this-pass active + prior-won
+    const allWonLegProbs = [
+      ...activeLegs.map(o => {
+        const leg = allLegs.find(l => l.id === o.legId);
+        return leg ? parseFloat(leg.implied_prob) : null;
+      }).filter(p => p !== null),
+      ...priorWonLegs.map(l => parseFloat(l.implied_prob)),
+    ];
+    const totalWonLegs = allWonLegProbs.length;
 
     // Determine result and final payout
     let parlayResult, finalPayout;
@@ -1486,7 +1495,7 @@ async function handleRequest({ request, env }) {
       // No scratches — normal settlement
       parlayResult = anyLost ? 'lost' : 'won';
       finalPayout  = parlay.is_free_play ? Math.min(parlay.payout_rax, 3000) : parlay.payout_rax;
-    } else if (totalActiveLegs < 2) {
+    } else if (totalWonLegs < 2) {
       // 1 or 0 active legs remain after scratches — refund only if no active leg lost
       if (anyLost) {
         parlayResult = 'lost';
@@ -1500,12 +1509,8 @@ async function handleRequest({ request, env }) {
       parlayResult = 'lost';
       finalPayout  = 0;
     } else {
-      // All remaining legs won — recalculate payout using only the active (non-void) legs.
-      // activeLegs contains this-pass legs; priorVoidLegs are already excluded from pendingLegs.
-      const newTrueProb = activeLegs.reduce((acc, o) => {
-        const leg = allLegs.find(l => l.id === o.legId);
-        return acc * (leg ? parseFloat(leg.implied_prob) : 1);
-      }, 1);
+      // All remaining legs won — recalculate payout using only the non-void legs' implied probs
+      const newTrueProb = allWonLegProbs.reduce((acc, p) => acc * p, 1);
       parlayResult = 'won';
       finalPayout  = Math.min(Math.floor(parlay.stake_rax * 0.70 / newTrueProb), parlay.is_free_play ? 3000 : 10000);
     }
