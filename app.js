@@ -7512,7 +7512,22 @@
                 if (!liveEvents.length) {
                     var earliest = previewTimes.length ? new Date(Math.min.apply(null, previewTimes)).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' }) : null;
                     var fakePreview = earliest ? { state: 'Preview', startET: earliest } : null;
-                    propNeeded.forEach(function(n) { updateLegStatus(n.parlayId, n.legIndex, null, n.threshold, n.direction, n.marketType, fakePreview, false); });
+                    var evInfoList = Object.keys(eventInfoMap).map(function(k) { return eventInfoMap[k]; });
+                    propNeeded.forEach(function(n) {
+                        // Find matching event by comparing leg event_name abbrevs against ESPN team abbrevs
+                        var evInfo = null;
+                        var enLc = (n.eventName || '').toLowerCase();
+                        if (enLc) {
+                            for (var _ei = 0; _ei < evInfoList.length; _ei++) {
+                                var ev = evInfoList[_ei];
+                                var aw = ev.awayAbbr ? ev.awayAbbr.toLowerCase() : '';
+                                var hw = ev.homeAbbr ? ev.homeAbbr.toLowerCase() : '';
+                                if (aw && hw && enLc.indexOf(aw) !== -1 && enLc.indexOf(hw) !== -1) { evInfo = ev; break; }
+                            }
+                        }
+                        var gi = evInfo ? Object.assign({}, evInfo, { state: 'Preview', startET: earliest || evInfo.startET }) : fakePreview;
+                        updateLegStatus(n.parlayId, n.legIndex, null, n.threshold, n.direction, n.marketType, gi, false);
+                    });
                     return;
                 }
 
@@ -8419,6 +8434,20 @@
                         var nkl = allKeys[ni].toLowerCase();
                         if (nkl.indexOf(awNick) !== -1 && nkl.indexOf(hwNick) !== -1) {
                             return getRealSportsUrl(rsGameIds[allKeys[ni]], legSport, null, allKeys[ni]);
+                        }
+                    }
+                }
+                // WNBA code→nickname: FD uses 3-char codes (LVA/TOR) but RS stores team nicknames (Aces/Tempo)
+                if (legSport === 'wnba' || legSport === 'basketball_wnba') {
+                    var _WN = { lva:'aces', tor:'tempo', was:'mystics', por:'fire', ind:'fever', chi:'sky',
+                                atl:'dream', con:'sun', nyl:'liberty', sea:'storm', dal:'wings',
+                                min:'lynx', pho:'mercury', la:'sparks', lal:'sparks' };
+                    var awRS = _WN[awFrag] || awFrag, hwRS = _WN[hwFrag] || hwFrag;
+                    if (awRS !== awFrag || hwRS !== hwFrag) {
+                        for (var wi = 0; wi < allKeys.length; wi++) {
+                            var wkl = allKeys[wi].toLowerCase();
+                            if (wkl.indexOf(awRS) !== -1 && wkl.indexOf(hwRS) !== -1)
+                                return getRealSportsUrl(rsGameIds[allKeys[wi]], legSport, null, allKeys[wi]);
                         }
                     }
                 }
