@@ -7,8 +7,15 @@ import { getSessionOrCron } from '../../_lib/auth.js';
 
 const CACHE_VERSION = 'v12';
 const SUPPORTED = new Set(['baseball_mlb', 'basketball_wnba', 'football_nfl', 'icehockey_nhl', 'basketball_nba', 'soccer_fc', 'soccer_wc']);
-// sync.js stores soccer under 'soccer' not 'soccer_fc' — map here to match the cache key
-const REAL_SPORT = { 'soccer_fc': 'soccer', 'soccer_wc': 'soccer' };
+// Must match SPORT_MAP in sync.js — maps full sport param to the realSport used in the cache key
+const REAL_SPORT = {
+  'baseball_mlb':    'mlb',
+  'basketball_nba':  'nba',
+  'basketball_wnba': 'wnba',
+  'icehockey_nhl':   'nhl',
+  'soccer_fc':       'soccer',
+  'soccer_wc':       'soccer',
+};
 
 export async function onRequestGet(ctx) {
   const { request, env } = ctx;
