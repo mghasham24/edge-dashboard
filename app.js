@@ -8350,8 +8350,11 @@
             var kParts    = gamePart.split(' @ ');
             var awayFrag  = kParts[0].trim().toLowerCase();
             var homeFrag  = kParts[1].trim().toLowerCase();
+            // For "STL Cardinals @ PHI Phillies" format, also grab just the first word (the abbrev)
+            var awayAbbr  = kParts[0].trim().split(/\s+/)[0].toUpperCase();
+            var homeAbbr  = kParts[1].trim().split(/\s+/)[0].toUpperCase();
 
-            // Pass 1: substring match (works for full/partial names and some abbreviations)
+            // Pass 1: substring match on full frags (works for full city names and some abbreviations)
             if (awayFrag && homeFrag) {
                 var allKeys = Object.keys(rsGameIds);
                 for (var ki = 0; ki < allKeys.length; ki++) {
@@ -8362,10 +8365,12 @@
                 }
             }
 
-            // Pass 2: abbreviation expansion (MLB short codes like STL, CWS; WNBA like LV, CON)
+            // Pass 2: abbreviation expansion — handles "STL Cardinals @ PHI Phillies" where first
+            // word is the DK abbreviation and KW map converts it to the RS team name keyword
             var _KW   = legSport === 'wnba' ? _PARLAY_LEG_WNBA_KW : _PARLAY_LEG_MLB_KW;
-            var _awKw = (_KW[kParts[0].trim().toUpperCase()] || '').toLowerCase();
-            var _hwKw = (_KW[kParts[1].trim().toUpperCase()] || '').toLowerCase();
+            // Try first-word abbreviation first (handles "STL Cardinals"), fallback to full trim (handles bare "STL")
+            var _awKw = (_KW[awayAbbr] || _KW[kParts[0].trim().toUpperCase()] || '').toLowerCase();
+            var _hwKw = (_KW[homeAbbr] || _KW[kParts[1].trim().toUpperCase()] || '').toLowerCase();
             if (_awKw && _hwKw) {
                 var kwKeys = Object.keys(rsGameIds);
                 for (var ki2 = 0; ki2 < kwKeys.length; ki2++) {
