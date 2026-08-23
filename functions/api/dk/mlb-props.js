@@ -10,7 +10,7 @@ import STATIC_ESPN_IDS from '../espn/mlb-ids.json' assert { type: 'json' };
 const DK_BASE   = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
 const DK_LEAGUE = '84240';
 const CACHE_TTL = 300; // 5 min
-const CACHE_KEY = 'dk_mlb_props_v17';
+const CACHE_KEY = 'dk_mlb_props_v18';
 
 // Standard subcategories — available at league level
 const SUBCAT_MAP = {
@@ -64,7 +64,7 @@ function parseOdds(american) {
 }
 
 // DK appends lineup status like " (L)", " (O)", " (Q)", " (D)", " (P)" to player names
-const DK_STATUS_RE = /\s+\([LOQDP]\)$/i;
+const DK_STATUS_RE = /(\s+\([^)]*\))+$/;
 function cleanDkName(name) { return name ? name.replace(DK_STATUS_RE, '').trim() : name; }
 
 function parseSubcat(data, subcatId, info) {

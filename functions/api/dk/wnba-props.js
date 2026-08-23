@@ -10,7 +10,7 @@ import STATIC_ESPN_IDS from '../espn/wnba-ids.json' assert { type: 'json' };
 const DK_BASE   = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
 const DK_LEAGUE = '94682'; // WNBA
 const CACHE_TTL = 300;     // 5 min
-const CACHE_KEY = 'dk_wnba_props_v7';
+const CACHE_KEY = 'dk_wnba_props_v8';
 
 // Confirmed WNBA DK subcategory IDs (from DevTools 2026-07-28).
 const SUBCAT_MAP = {
@@ -60,7 +60,7 @@ function parseOdds(american) {
   return isFinite(n) ? n : null;
 }
 
-const DK_STATUS_RE = /\s+\([LOQDP]\)$/i;
+const DK_STATUS_RE = /(\s+\([^)]*\))+$/;
 function cleanDkName(name) { return name ? name.replace(DK_STATUS_RE, '').trim() : name; }
 
 function parseSubcat(data, subcatId, info) {

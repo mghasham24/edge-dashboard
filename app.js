@@ -5108,7 +5108,7 @@
         return 'hsl(' + (Math.abs(h) % 360) + ',48%,28%)';
     }
 
-    var DK_STATUS_RE = /\s+\([LOQDP]\)$/i;
+    var DK_STATUS_RE = /(\s+\([^)]*\))+$/;
     function cleanDkPlayerName(n) { return n ? n.replace(DK_STATUS_RE, '').trim() : n; }
 
     // Map DK team abbreviations → ESPN logo path segment (handles non-standard/renamed teams)
@@ -6321,18 +6321,15 @@
         var grid = document.getElementById('parlay-player-grid');
         if (!grid) return;
 
-        // Sanitize any stale DK status suffixes in cached player names/initials
+        // Recompute initials for any cached player where they contain '(' (stale DK suffix)
         var _pools = [PARLAY_PLAYERS, PARLAY_PLAYERS_WNBA];
         _pools.forEach(function(pool) {
             pool.forEach(function(p) {
-                if (!p.name || p._dkCleaned) return;
-                p._dkCleaned = true;
-                var clean = cleanDkPlayerName(p.name);
-                if (clean !== p.name) {
-                    p.name = clean;
-                    var w = clean.split(' ');
-                    p.initials = ((w[0][0] || '') + (w.length > 1 ? w[w.length - 1][0] || '' : '')).toUpperCase();
-                }
+                if (!p.initials || p.initials.indexOf('(') === -1) return;
+                var clean = cleanDkPlayerName(p.name || '');
+                p.name = clean;
+                var w = clean.split(' ');
+                p.initials = ((w[0][0] || '') + (w.length > 1 ? w[w.length - 1][0] || '' : '')).toUpperCase();
             });
         });
 
