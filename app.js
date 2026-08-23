@@ -5888,31 +5888,9 @@
     }
 
     function parlayHeadshotFail(img) {
-        var name  = img.dataset.name;
-        var sport = img.dataset.sport || 'mlb';
-        var av    = img.nextElementSibling;
-        if (!name || PARLAY_HEADSHOT_CACHE[name] === 'none') {
-            img.style.display = 'none'; if (av) av.style.display = 'flex'; return;
-        }
-        if (PARLAY_HEADSHOT_CACHE[name] && PARLAY_HEADSHOT_CACHE[name] !== 'none') {
-            img.src = PARLAY_HEADSHOT_CACHE[name];
-            img.onerror = function() { img.style.display = 'none'; if (av) av.style.display = 'flex'; };
-            return;
-        }
-        var espnSport  = sport === 'wnba' ? 'basketball' : 'baseball';
-        var espnLeague = sport === 'wnba' ? 'wnba' : 'mlb';
-        img.onerror = null;
-        fetch('https://site.api.espn.com/apis/search/v2?query=' + encodeURIComponent(name) + '&limit=3&type=player&sport=' + espnSport, { signal: AbortSignal.timeout(5000) })
-            .then(function(r) { return r.json(); })
-            .then(function(d) {
-                var hit = (d.results || []).find(function(r) { return r.type === 'player' && r.id; });
-                if (!hit) { PARLAY_HEADSHOT_CACHE[name] = 'none'; img.style.display = 'none'; if (av) av.style.display = 'flex'; return; }
-                var url = 'https://a.espncdn.com/i/headshots/' + espnLeague + '/players/full/' + hit.id + '.png';
-                PARLAY_HEADSHOT_CACHE[name] = url;
-                img.src = url;
-                img.onerror = function() { img.style.display = 'none'; if (av) av.style.display = 'flex'; };
-            })
-            .catch(function() { PARLAY_HEADSHOT_CACHE[name] = 'none'; img.style.display = 'none'; if (av) av.style.display = 'flex'; });
+        var av = img.nextElementSibling;
+        img.style.display = 'none';
+        if (av) av.style.display = 'flex';
     }
 
     function parlayGameRsUrl(game, sport) {
