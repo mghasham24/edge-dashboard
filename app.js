@@ -6757,7 +6757,10 @@
         var grid = document.getElementById('parlay-player-grid');
         var section = document.getElementById('fc-ps-' + slug);
         if (!grid || !section) return;
-        grid.scrollTo({ top: section.offsetTop, behavior: 'smooth' });
+        var gridRect    = grid.getBoundingClientRect();
+        var sectionRect = section.getBoundingClientRect();
+        var target = sectionRect.top - gridRect.top + grid.scrollTop;
+        grid.scrollTo({ top: target, behavior: 'smooth' });
         // Flash active state on button
         var nav = document.getElementById('fc-parlay-league-nav');
         if (nav) {
