@@ -7289,12 +7289,28 @@
                     var _rsSport2 = _rsBtnEl2.dataset.sport || 'baseball_mlb';
                     var _awFrag2  = awAbbr.toLowerCase(), _hwFrag2 = hwAbbr.toLowerCase();
                     var _rsAll2   = Object.keys(rsGameIds);
+                    var _rsFound2 = false;
                     for (var _ri2 = 0; _ri2 < _rsAll2.length; _ri2++) {
                         var _rl2 = _rsAll2[_ri2].toLowerCase();
                         if (_rl2.indexOf(_awFrag2) !== -1 && _rl2.indexOf(_hwFrag2) !== -1) {
                             var _rUrl2 = getRealSportsUrl(rsGameIds[_rsAll2[_ri2]], _rsSport2, null, _rsAll2[_ri2]);
-                            if (_rUrl2) { _rsBtnEl2.href = _rUrl2; _rsBtnEl2.style.display = ''; }
+                            if (_rUrl2) { _rsBtnEl2.href = _rUrl2; _rsBtnEl2.style.display = ''; _rsFound2 = true; }
                             break;
+                        }
+                    }
+                    // Nickname fallback: "Los Angeles Dodgers" → "dodgers" matches "la dodgers"
+                    if (!_rsFound2 && gameInfo.awayName && gameInfo.homeName) {
+                        var _awNick2 = gameInfo.awayName.toLowerCase().split(' ').pop();
+                        var _hwNick2 = gameInfo.homeName.toLowerCase().split(' ').pop();
+                        if (_awNick2 && _hwNick2) {
+                            for (var _ri3 = 0; _ri3 < _rsAll2.length; _ri3++) {
+                                var _rl3 = _rsAll2[_ri3].toLowerCase();
+                                if (_rl3.indexOf(_awNick2) !== -1 && _rl3.indexOf(_hwNick2) !== -1) {
+                                    var _rUrl3 = getRealSportsUrl(rsGameIds[_rsAll2[_ri3]], _rsSport2, null, _rsAll2[_ri3]);
+                                    if (_rUrl3) { _rsBtnEl2.href = _rUrl3; _rsBtnEl2.style.display = ''; }
+                                    break;
+                                }
+                            }
                         }
                     }
                 }
