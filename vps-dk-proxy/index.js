@@ -14,6 +14,14 @@ const PORT      = parseInt(process.env.PORT || '3003');
 const SECRET    = process.env.DK_PROXY_KEY;
 const PROXY_URL = process.env.PROXY_URL;
 const DK_BASE   = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
+const DK_LEAGUE_NAMES = { '40253':'EPL','40031':'La Liga','40030':'Serie A','40032':'Ligue 1','40481':'Bundesliga' };
+
+function parseAmerican(str) {
+  if (!str) return null;
+  const s = String(str).replace(/−/g, '-').replace(/[^0-9+\-]/g, '');
+  const n = parseInt(s, 10);
+  return isFinite(n) ? n : null;
+}
 const ESPN_WNBA   = 'https://site.api.espn.com/apis/site/v2/sports/basketball/wnba';
 const ESPN_NFL    = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl';
 const ESPN_SOCCER = 'https://site.api.espn.com/apis/site/v2/sports/soccer';
@@ -235,6 +243,116 @@ const server = http.createServer(async (req, res) => {
       );
       const body = await espnRes.text();
       res.writeHead(espnRes.status, { 'Content-Type': 'application/json' });
+      res.end(body);
+    } catch(e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: e.message }));
+    }
+    return;
+  }
+
+  // ── DK Soccer league markets (spread lines per league/subcat) ────────────
+  // GET /dk-soccer?league=40253&subcat=13170&key=SECRET
+  // Returns { ok:true, games: { "Away @ Home": { away,home,cm,id,awm,hm,awp,hp,spreads,league } } }
+  if (url.pathname === '/dk-soccer') {
+    const league = url.searchParams.get('league');
+    const subcat = url.searchParams.get('subcat') || '13170';
+    if (!league) { res.writeHead(400); res.end('Missing league param'); return; }
+
+    try {
+      const baseFetchOpts = () => {
+        const opts = { headers: DK_HEADERS, signal: AbortSignal.timeout(10000) };
+        if (proxyDispatcher) opts.dispatcher = proxyDispatcher;
+        return opts;
+      };
+
+      const evRes = await fetch(dkUrl(league, subcat), baseFetchOpts());
+      if (!evRes.ok) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, games: {} }));
+        return;
+      }
+      const evData = await evRes.json();
+
+      const nowMs = Date.now();
+      const events = (evData.events || []).filter(e => {
+        if (!e.startEventDate) return false;
+        const t = new Date(e.startEventDate).getTime();
+        return t > nowMs - 6 * 60 * 60 * 1000; // include games started up to 6h ago
+      });
+
+      if (!events.length) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, games: {} }));
+        return;
+      }
+
+      const leagueName = DK_LEAGUE_NAMES[league] || 'EPL';
+      const games = {};
+
+      await Promise.all(events.map(async (event) => {
+        const away = (event.participants || []).find(p => p.venueRole === 'Away');
+        const home = (event.participants || []).find(p => p.venueRole === 'Home');
+        if (!away || !home) return;
+
+        const gameKey = away.name + ' @ ' + home.name;
+        const mq = encodeURIComponent(
+          `$filter=eventId eq '${event.id}' AND clientMetadata/subCategoryId eq '${subcat}' AND tags/all(t: t ne 'SportcastBetBuilder')`
+        );
+        const mktUrl = `${DK_BASE}/controldata/event/eventSubcategory/v1/markets?isBatchable=false` +
+          `&templateVars=${event.id}%2C${subcat}&marketsQuery=${mq}&include=MarketSplits&entity=markets`;
+
+        const spreads = { Home: {}, Away: {} };
+        let awm = null, hm = null, awp = null, hp = null;
+
+        try {
+          const mktRes = await fetch(mktUrl, baseFetchOpts());
+          if (mktRes.ok) {
+            const mktData = await mktRes.json();
+            (mktData.selections || []).forEach(sel => {
+              const price = parseAmerican(sel.displayOdds && sel.displayOdds.american);
+              if (price == null || sel.points == null) return;
+              const t = sel.outcomeType;
+              if (t === 'Away' || t === 'Home') spreads[t][String(sel.points)] = price;
+            });
+            awm = spreads.Away['-0.5'] != null ? spreads.Away['-0.5'] : null;
+            hm  = spreads.Home['-0.5'] != null ? spreads.Home['-0.5'] : null;
+            awp = spreads.Away['0.5']  != null ? spreads.Away['0.5']  : null;
+            hp  = spreads.Home['0.5']  != null ? spreads.Home['0.5']  : null;
+          }
+        } catch(e) {}
+
+        games[gameKey] = {
+          away: away.name, home: home.name,
+          cm: event.startEventDate,
+          id: String(event.id),
+          awm, hm, awp, hp, spreads,
+          league: leagueName
+        };
+      }));
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, games }));
+    } catch(e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: e.message }));
+    }
+    return;
+  }
+
+  // ── DK event live scores ───────────────────────────────────────────────────
+  // GET /dk-events?eventIds=ID1,ID2,...&key=SECRET
+  // Proxies DK pagedata/event/v1/events — returns raw DK JSON with live score data
+  if (url.pathname === '/dk-events') {
+    const eventIds = url.searchParams.get('eventIds');
+    if (!eventIds) { res.writeHead(400); res.end('Missing eventIds param'); return; }
+    const targetUrl = `${DK_BASE}/pagedata/event/v1/events?eventIds=${encodeURIComponent(eventIds)}`;
+    try {
+      const fetchOpts = { headers: DK_HEADERS, signal: AbortSignal.timeout(10000) };
+      if (proxyDispatcher) fetchOpts.dispatcher = proxyDispatcher;
+      const dkRes = await fetch(targetUrl, fetchOpts);
+      const body  = await dkRes.text();
+      res.writeHead(dkRes.status, { 'Content-Type': 'application/json' });
       res.end(body);
     } catch(e) {
       res.writeHead(500, { 'Content-Type': 'application/json' });

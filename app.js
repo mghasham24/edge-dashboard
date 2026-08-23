@@ -1986,6 +1986,25 @@
                 hdr.appendChild(_gnBadge);
             }
 
+            // FC live score badge
+            var _fcLiveRow = currentSport === 'soccer_fc' ? gameRows[0] : null;
+            var _fcLive = _fcLiveRow && _fcLiveRow._live;
+            if (_fcLive && (_fcLive.isLive || _fcLive.homeScore != null)) {
+                var _liveBadge = document.createElement('span');
+                _liveBadge.className = 'gh-badge';
+                var _hs = _fcLive.homeScore != null ? _fcLive.homeScore : '?';
+                var _as = _fcLive.awayScore != null ? _fcLive.awayScore : '?';
+                var _per = _fcLive.period || '';
+                var _perShort = _per === 'Halftime' || _per === 'Half Time' || _per === 'HT' ? 'HT'
+                    : _per === '2nd Half' ? '2H' : _per === '1st Half' ? '1H' : _per;
+                var _gtMins = _fcLive.gameTime != null ? Math.floor(_fcLive.gameTime / 60) : null;
+                var _scoreStr = _as + '-' + _hs; // away-home order matches card layout
+                var _timeStr = _perShort === 'HT' ? 'HT' : (_gtMins != null ? _gtMins + '\'' : _perShort);
+                _liveBadge.textContent = _scoreStr + (_timeStr ? ' ' + _timeStr : '');
+                _liveBadge.style.cssText = 'flex-shrink:0;margin-right:4px;background:rgba(255,60,60,0.18);color:#f87171;font-size:10px;font-weight:700;letter-spacing:.04em;border:1px solid rgba(248,113,113,0.3)';
+                hdr.appendChild(_liveBadge);
+            }
+
             var arrow = document.createElement('span');
             arrow.className = 'gc-arrow' + (isC ? '' : ' up');
             arrow.id = 'gc-arrow-' + gi;
@@ -11861,7 +11880,8 @@
                             if (initAm == null) return;
                             rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName,
                                 am: initAm, pt: initPt, pid: pid, ps: ps, gid: gid, league: game.league || '',
-                                _sport_key: 'soccer_fc', _dkSpreads: game.spreads || { Home: {}, Away: {} } });
+                                _sport_key: 'soccer_fc', _dkSpreads: game.spreads || { Home: {}, Away: {} },
+                                _live: game.live || null });
                         });
                     });
                     rawRowsBySport[s.key] = rows;
@@ -14819,7 +14839,8 @@
                         if (initAm == null) return;
                         rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName,
                             am: initAm, pt: initPt, pid: pid, ps: ps, gid: gid, league: game.league || '',
-                            _dkSpreads: game.spreads || { Home: {}, Away: {} } });
+                            _dkSpreads: game.spreads || { Home: {}, Away: {} },
+                            _live: game.live || null });
                     });
                 });
                 rawRows = rows;
@@ -15570,7 +15591,8 @@
                                 if (initAm == null) return;
                                 fcRows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName,
                                     am: initAm, pt: initPt, pid: pid, ps: ps, gid: gid, league: game.league || '',
-                                    _sport_key: 'soccer_fc', _dkSpreads: game.spreads || { Home: {}, Away: {} } });
+                                    _sport_key: 'soccer_fc', _dkSpreads: game.spreads || { Home: {}, Away: {} },
+                                    _live: game.live || null });
                             });
                         });
                         rawRowsBySport[s.key] = fcRows;
@@ -17613,7 +17635,8 @@ if (!match && r.mkt === 'Spread' && (sport === 'soccer_fc' || sport === 'soccer_
                         if (initAm == null) return;
                         rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName,
                             am: initAm, pt: initPt, pid: pid, ps: ps, gid: gid, league: game.league || '',
-                            _sport_key: 'soccer_fc', _dkHm: game.hm, _dkHp: game.hp, _dkAwm: game.awm, _dkAwp: game.awp });
+                            _sport_key: 'soccer_fc', _dkHm: game.hm, _dkHp: game.hp, _dkAwm: game.awm, _dkAwp: game.awp,
+                            _live: game.live || null });
                     });
                 });
                 rawRows = rows;
@@ -17634,6 +17657,7 @@ if (!match && r.mkt === 'Spread' && (sport === 'soccer_fc' || sport === 'soccer_
                         if (dk != null) { r.am = dk; r.pt = yl; }
                     }
                     if (game.league) r.league = game.league;
+                    r._live = game.live || null;
                 });
                 rawRowsBySport[sport] = rawRows;
             }

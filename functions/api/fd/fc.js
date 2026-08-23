@@ -1,14 +1,14 @@
 import { getSessionOrCron } from '../../_lib/auth.js';
 // functions/api/fd/fc.js
-// EPL Asian Handicap odds via DK native, proxied through Hetzner VPS.
+// EPL Spread odds (subcat 13170) via DK native, proxied through Hetzner VPS.
 // DK native is Akamai-blocked from CF datacenter IPs — VPS at vps.raxedge.com:3003 bypasses this.
-// VPS endpoint: GET /dk-soccer?league=40253&subcat=17968&key=VPS_DK_KEY
-// Cache 60s in D1 — short TTL keeps live in-play DK AH prices current.
+// VPS /dk-soccer: fetches league events + per-event spread markets, returns { ok, games }
+// VPS /dk-events: proxies DK pagedata events endpoint for live score data (period, score)
 
-const VPS_HOST   = 'http://vps.raxedge.com:3003';
-const DK_LEAGUE  = '40253'; // EPL
-const DK_SUBCAT  = '17968'; // Asian Handicap
-const CACHE_TTL  = 60; // 60 seconds
+const VPS_HOST  = 'http://vps.raxedge.com:3003';
+const DK_LEAGUE = '40253'; // EPL
+const DK_SUBCAT = '13170'; // Spread
+const CACHE_TTL = 60; // 60 seconds
 
 const noGames = () => new Response(JSON.stringify({ ok: true, games: {} }), {
   headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }
@@ -18,6 +18,30 @@ function fail(status, msg) {
   return new Response(JSON.stringify({ error: msg }), {
     status, headers: { 'Content-Type': 'application/json' }
   });
+}
+
+function parseLiveEvents(dkEventsRaw) {
+  // Parse DK pagedata/event/v1/events response for live score data
+  // Returns { eventId: { period, gameTime, homeScore, awayScore, isLive } }
+  const result = {};
+  try {
+    const events = dkEventsRaw.events || dkEventsRaw.eventList || [];
+    events.forEach(ev => {
+      const id = String(ev.id || ev.eventId || '');
+      if (!id) return;
+      const live = ev.competition || ev.eventStatus || {};
+      const period    = live.period || live.displayPeriod || '';
+      const gameTime  = live.gameTime  != null ? live.gameTime  : (live.clock != null ? live.clock : null);
+      const homeScore = live.homeScore != null ? live.homeScore : (live.homeTeamScore != null ? live.homeTeamScore : null);
+      const awayScore = live.awayScore != null ? live.awayScore : (live.awayTeamScore != null ? live.awayTeamScore : null);
+      const isLive    = ev.status === 'inprogress' || (ev.eventStatus && ev.eventStatus.state === 'inprogress')
+                     || (period && period !== '' && homeScore != null);
+      if (isLive || homeScore != null) {
+        result[id] = { period, gameTime, homeScore, awayScore, isLive: !!isLive };
+      }
+    });
+  } catch(e) {}
+  return result;
 }
 
 export async function onRequestGet(context) {
@@ -31,7 +55,7 @@ export async function onRequestGet(context) {
   const freshMode = reqUrl.searchParams.get('fresh');
 
   const now      = Math.floor(Date.now() / 1000);
-  const cacheKey = 'fd_fc';
+  const cacheKey = 'fd_fc_v2';
 
   if (!debugMode && !freshMode) {
     try {
@@ -47,11 +71,11 @@ export async function onRequestGet(context) {
   const vpsKey = env.VPS_DK_KEY || 'rax-dk-9x3m7p2q';
   if (!vpsKey) return noGames();
 
-  const vpsUrl = `${VPS_HOST}/dk-soccer?league=${DK_LEAGUE}&subcat=${DK_SUBCAT}&key=${encodeURIComponent(vpsKey)}`;
+  const soccerUrl = `${VPS_HOST}/dk-soccer?league=${DK_LEAGUE}&subcat=${DK_SUBCAT}&key=${encodeURIComponent(vpsKey)}`;
 
   let raw;
   try {
-    const r = await fetch(vpsUrl, { signal: AbortSignal.timeout(20000) });
+    const r = await fetch(soccerUrl, { signal: AbortSignal.timeout(20000) });
     if (!r.ok) {
       if (debugMode === '1') {
         const body = await r.text().catch(() => '');
@@ -80,7 +104,33 @@ export async function onRequestGet(context) {
     return new Response(JSON.stringify(raw), { headers: { 'Content-Type': 'application/json' } });
   }
 
-  const body = JSON.stringify({ ok: true, games: raw.games });
+  // Fetch live score data for all events in parallel
+  const eventIds = Object.values(raw.games).map(g => g.id).filter(Boolean);
+  let liveMap = {};
+
+  if (eventIds.length) {
+    try {
+      const eventsUrl = `${VPS_HOST}/dk-events?eventIds=${encodeURIComponent(eventIds.join(','))}&key=${encodeURIComponent(vpsKey)}`;
+      const evRes = await fetch(eventsUrl, { signal: AbortSignal.timeout(8000) });
+      if (evRes.ok) {
+        const evRaw = await evRes.json();
+        liveMap = parseLiveEvents(evRaw);
+      }
+    } catch(e) {}
+  }
+
+  if (debugMode === '3') {
+    return new Response(JSON.stringify({ liveMap, eventIds }), { headers: { 'Content-Type': 'application/json' } });
+  }
+
+  // Merge live data into game objects
+  const enrichedGames = {};
+  Object.entries(raw.games).forEach(([gameKey, game]) => {
+    const liveData = game.id ? liveMap[game.id] : null;
+    enrichedGames[gameKey] = { ...game, live: liveData || null };
+  });
+
+  const body = JSON.stringify({ ok: true, games: enrichedGames });
   try {
     await env.DB.prepare(
       'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at'
