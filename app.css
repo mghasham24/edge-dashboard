@@ -3258,8 +3258,8 @@
     .pslip-leg-body { flex:1; min-width:0 }
     .pslip-leg-top { display:flex; align-items:center; gap:4px; flex-wrap:wrap }
     .pslip-leg-name { font-size:13px; font-weight:700; min-width:0 }
-    .pslip-prop-info { font-size:11px; color:var(--muted); white-space:nowrap; flex:1 }
-    .pslip-leg-time { font-size:10px; font-weight:600; padding:1px 6px; border-radius:10px; white-space:nowrap }
+    .pslip-prop-info { font-size:11px; color:var(--muted); white-space:nowrap }
+    .pslip-leg-time { font-size:10px; font-weight:600; padding:1px 6px; border-radius:10px; white-space:nowrap; margin-left:auto }
     .pslip-leg-time.live { background:rgba(239,68,68,.15); color:#ef4444 }
     .pslip-leg-time.pregame { background:var(--bg3); color:var(--muted) }
     .pslip-leg-time.final { background:var(--bg3); color:var(--muted2) }
