@@ -363,6 +363,15 @@
         'Brentford':'https://a.espncdn.com/i/teamlogos/soccer/500/337.png',
         'Nottm Forest':'https://a.espncdn.com/i/teamlogos/soccer/500/393.png','Nottingham Forest':'https://a.espncdn.com/i/teamlogos/soccer/500/393.png',
         'Leicester':'https://a.espncdn.com/i/teamlogos/soccer/500/375.png','Leicester City':'https://a.espncdn.com/i/teamlogos/soccer/500/375.png',
+        'Southampton':'https://a.espncdn.com/i/teamlogos/soccer/500/362.png',
+        'Ipswich':'https://a.espncdn.com/i/teamlogos/soccer/500/335.png','Ipswich Town':'https://a.espncdn.com/i/teamlogos/soccer/500/335.png',
+        'Leeds':'https://a.espncdn.com/i/teamlogos/soccer/500/357.png','Leeds United':'https://a.espncdn.com/i/teamlogos/soccer/500/357.png',
+        'Burnley':'https://a.espncdn.com/i/teamlogos/soccer/500/346.png',
+        'Luton':'https://a.espncdn.com/i/teamlogos/soccer/500/378.png','Luton Town':'https://a.espncdn.com/i/teamlogos/soccer/500/378.png',
+        'Sheffield United':'https://a.espncdn.com/i/teamlogos/soccer/500/399.png',
+        'Sunderland':'https://a.espncdn.com/i/teamlogos/soccer/500/404.png',
+        'Middlesbrough':'https://a.espncdn.com/i/teamlogos/soccer/500/384.png',
+        'West Brom':'https://a.espncdn.com/i/teamlogos/soccer/500/481.png','West Bromwich Albion':'https://a.espncdn.com/i/teamlogos/soccer/500/481.png',
         'Barcelona':'https://a.espncdn.com/i/teamlogos/soccer/500/83.png',
         'Real Madrid':'https://a.espncdn.com/i/teamlogos/soccer/500/86.png',
         'Atletico Madrid':'https://a.espncdn.com/i/teamlogos/soccer/500/1068.png',
@@ -6493,8 +6502,8 @@
         }).join('');
         // Async: ESPN headshots for cards where DK returned no player image
         var _espnSport  = parlayActiveSport;
-        var _espnLeague = _espnSport === 'wnba' ? 'wnba' : 'mlb';
-        var _espnQSport = _espnSport === 'wnba' ? 'basketball' : 'baseball';
+        var _espnLeague = _espnSport === 'wnba' ? 'wnba' : _espnSport === 'soccer' ? 'soccer' : 'mlb';
+        var _espnQSport = _espnSport === 'wnba' ? 'basketball' : _espnSport === 'soccer' ? 'soccer' : 'baseball';
         var _seenEspn   = {};
         players.forEach(function(p) {
             if (p.headshot || _seenEspn[p.name]) return;
