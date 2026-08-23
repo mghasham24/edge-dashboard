@@ -7248,6 +7248,29 @@
             var _base = gameInfo.playerTeamAbbr && matchupTxt ? (gameInfo.playerTeamAbbr + ' · ' + matchupTxt) : matchupTxt;
             var _full = _base + (_base && _dateLbl ? ' · ' + _dateLbl : (!_base ? _dateLbl : ''));
             if (_full) infoEl.textContent = _full;
+
+            // Wire up RS button placeholder if URL wasn't resolved at render time
+            if (awAbbr && hwAbbr) {
+                var _rsBtnEl = document.getElementById('rsb-' + parlayId + '-' + legIndex);
+                if (_rsBtnEl && !_rsBtnEl.href) {
+                    var _rsSportEl = _rsBtnEl.dataset.sport || 'mlb';
+                    var _rsKey2 = _rsSportEl === 'wnba' ? 'basketball_wnba' : 'baseball_mlb';
+                    var _rsKW2  = _rsSportEl === 'wnba' ? _PARLAY_LEG_WNBA_KW : _PARLAY_LEG_MLB_KW;
+                    var _awKw2  = (_rsKW2[awAbbr] || '').toLowerCase();
+                    var _hwKw2  = (_rsKW2[hwAbbr] || '').toLowerCase();
+                    if (_awKw2 && _hwKw2) {
+                        var _rsAllKeys = Object.keys(rsGameIds);
+                        for (var _rki = 0; _rki < _rsAllKeys.length; _rki++) {
+                            var _rkl = _rsAllKeys[_rki].toLowerCase();
+                            if (_rkl.indexOf(_awKw2) !== -1 && _rkl.indexOf(_hwKw2) !== -1) {
+                                var _rUrl2 = getRealSportsUrl(rsGameIds[_rsAllKeys[_rki]], _rsKey2, null, _rsAllKeys[_rki]);
+                                if (_rUrl2) { _rsBtnEl.href = _rUrl2; _rsBtnEl.style.display = ''; }
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // Update the inline time chip
@@ -8667,7 +8690,14 @@
             }
 
             var legRsUrl = parlayLegRsUrl(leg);
-            var legRsBtn = legRsUrl ? '<a href="' + escHtml(legRsUrl) + '" target="_blank" rel="noopener" class="rs-icon-btn" title="View game on Real Sports" onclick="event.stopPropagation()" style="margin-left:2px;flex-shrink:0">' + RS_LOGO_SVG + '</a>' : '';
+            var _legSport2 = leg.sport || 'mlb';
+            var _legRsBtnId = 'rsb-' + s.id + '-' + li;
+            // For MLB/WNBA legs where URL couldn't be resolved at render time (old-format event_name),
+            // render a hidden placeholder — updateLegStatus will wire up the href from live team abbrevs.
+            var _needsRsPlaceholder = !legRsUrl && (_legSport2 === 'mlb' || _legSport2 === 'wnba');
+            var legRsBtn = legRsUrl
+                ? '<a id="' + _legRsBtnId + '" href="' + escHtml(legRsUrl) + '" target="_blank" rel="noopener" class="rs-icon-btn" title="View game on Real Sports" onclick="event.stopPropagation()" style="margin-left:2px;flex-shrink:0" data-sport="' + escHtml(_legSport2) + '">' + RS_LOGO_SVG + '</a>'
+                : (_needsRsPlaceholder ? '<a id="' + _legRsBtnId + '" class="rs-icon-btn" target="_blank" rel="noopener" title="View game on Real Sports" onclick="event.stopPropagation()" style="display:none;margin-left:2px;flex-shrink:0" data-sport="' + escHtml(_legSport2) + '">' + RS_LOGO_SVG + '</a>' : '');
             // Prop info (matchup abbreviation) shown for MLB/WNBA player prop legs
             var propInfoHtml = '';
             if (!isTeamMkt && showStatus) {
