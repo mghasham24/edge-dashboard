@@ -3152,6 +3152,10 @@
     .parlay-payout-amount { font-size:15px; font-weight:800; font-variant-numeric:tabular-nums; color:var(--muted2); transition:color .2s; font-family:var(--mono) }
     .parlay-payout-amount.active { color:var(--green) }
     .parlay-odds-line { text-align:center; font-size:10px; color:var(--muted2); min-height:13px }
+    .parlay-fp-btn { width:100%; padding:8px; border-radius:8px; border:1.5px dashed var(--accent); background:transparent; color:var(--accent); font-size:12px; font-weight:700; cursor:pointer; font-family:var(--sans); letter-spacing:.3px; transition:background .15s,color .15s }
+    .parlay-fp-btn.active { background:var(--accent); color:#fff; border-style:solid }
+    .parlay-fp-btn:hover:not(.active) { background:color-mix(in srgb,var(--accent) 10%,transparent) }
+    .pslip-free-play-badge { display:inline-flex; align-items:center; padding:1px 7px; border-radius:20px; font-size:9px; font-weight:800; letter-spacing:.8px; text-transform:uppercase; background:linear-gradient(135deg,#f59e0b,#d97706); color:#fff; margin-left:6px; vertical-align:middle }
     .parlay-place-btn { width:100%; padding:9px; border-radius:10px; border:none; font-size:13px; font-weight:800; cursor:pointer; text-transform:uppercase; letter-spacing:.8px; font-family:var(--sans); transition:opacity .13s,transform .1s }
     .parlay-place-btn:not(:disabled) { background:linear-gradient(135deg,#4ade80,#16a34a); color:#fff }
     .parlay-place-btn:not(:disabled):hover { opacity:.88 }

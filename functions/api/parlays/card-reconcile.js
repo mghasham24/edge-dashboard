@@ -158,8 +158,6 @@ async function handleRequest({ request, env }) {
     return err('pool query failed: ' + e.message, 500);
   }
 
-  if (!poolRows.length) return ok({ poolSize: 0, removed: 0, reason: 'pool_empty' });
-
   // 2. Fetch edgebot's actual RS card inventory
   let owned, sportStats;
   try {

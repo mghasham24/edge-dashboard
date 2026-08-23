@@ -80,7 +80,26 @@ function etTodayStart() {
   return Math.floor(Date.UTC(y, m - 1, da, offset) / 1000);
 }
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost(ctx) {
+  let creditConsumedForUserId = null;
+  try {
+    return await _place(ctx, (userId) => { creditConsumedForUserId = userId; });
+  } catch (e) {
+    // If the credit was consumed before the crash, restore it so the user doesn't lose it
+    if (creditConsumedForUserId) {
+      try {
+        await ctx.env.DB.prepare(
+          'UPDATE users SET free_play_credits=free_play_credits+1 WHERE id=?'
+        ).bind(creditConsumedForUserId).run();
+      } catch (_) {}
+    }
+    return new Response(JSON.stringify({ error: 'Server error: ' + e.message }), {
+      status: 500, headers: { 'Content-Type': 'application/json' },
+    });
+  }
+}
+
+async function _place({ request, env }, onCreditConsumed) {
   const session = await getSession(request, env.DB);
   if (!session) return err('Authentication required', 401);
 
@@ -110,7 +129,20 @@ export async function onRequestPost({ request, env }) {
   let body;
   try { body = await request.json(); } catch { return err('Invalid request body', 400); }
 
-  const { stake, legs } = body;
+  const { legs, freePlay } = body;
+  let { stake } = body;
+
+  const isFreePlay = freePlay === true;
+
+  if (isFreePlay) {
+    // Verify and atomically consume one free play credit
+    const creditRes = await env.DB.prepare(
+      'UPDATE users SET free_play_credits=free_play_credits-1 WHERE id=? AND free_play_credits>0'
+    ).bind(user.id).run();
+    if (creditRes.meta.changes === 0) return err('No free plays available', 400);
+    onCreditConsumed(user.id); // register for rollback on crash
+    stake = 100; // locked
+  }
 
   if (!Number.isInteger(stake) || stake < 100) return err('Minimum stake is 100 Rax', 400);
   if (stake > 50000) return err('Maximum stake is 50,000 Rax', 400);
@@ -360,6 +392,7 @@ export async function onRequestPost({ request, env }) {
   const rawPayout = Math.min(Math.floor(stake * 0.70 / trueProb), 10000);
   let payoutRax = Math.floor((rawPayout + 2) / 10) * 10;
   if (0.70 / trueProb > 2.5) payoutRax = Math.max(0, payoutRax - 10);
+  if (isFreePlay) payoutRax = Math.min(payoutRax, 3000);
 
   // Daily caps (admins bypass)
   if (!isAdmin) {
@@ -417,14 +450,25 @@ export async function onRequestPost({ request, env }) {
     }
   }
 
-  const cardId = await pickCard(env, now);
-  if (!cardId) return err('No deposit cards available — contact support', 503);
-  const expiresAt = now + 30 * 60;
-
   // Derive parlay-level sport from legs (use most common, or first)
   const sportCounts = {};
   for (const l of normalized) { sportCounts[l.sport] = (sportCounts[l.sport] || 0) + 1; }
   const parlayS = Object.entries(sportCounts).sort((a, b) => b[1] - a[1])[0][0];
+
+  // Free play path: no card deposit, goes straight to active
+  if (isFreePlay) {
+    const fpRes = await env.DB.prepare(
+      'INSERT INTO parlays (user_id, sport, legs_count, stake_rax, true_prob, payout_rax, ' +
+      'rs_username, is_free_play, status, received_rax, expires_at, deposited_at, created_at) ' +
+      "VALUES (?, ?, ?, 100, ?, ?, ?, 1, 'active', 0, 0, ?, ?)"
+    ).bind(user.id, parlayS, normalized.length, trueProb, payoutRax, user.rs_username, now, now).run();
+    const fpId = fpRes.meta.last_row_id;
+    return placeLegsAndRespond(env.DB, fpId, null, normalized, 100, payoutRax, null, user.rs_username, now, true);
+  }
+
+  const cardId = await pickCard(env, now);
+  if (!cardId) return err('No deposit cards available — contact support', 503);
+  const expiresAt = now + 30 * 60;
 
   // Insert parlay row
   const parlayRes = await env.DB.prepare(
@@ -468,13 +512,13 @@ export async function onRequestPost({ request, env }) {
       return err('No deposit cards available — try again shortly', 503);
     }
 
-    return placeLegsAndRespond(env.DB, newParlayId, retryCardId, normalized, stake, payoutRax, expiresAt, user.rs_username, now);
+    return placeLegsAndRespond(env.DB, newParlayId, retryCardId, normalized, stake, payoutRax, expiresAt, user.rs_username, now, false);
   }
 
-  return placeLegsAndRespond(env.DB, parlayId, cardId, normalized, stake, payoutRax, expiresAt, user.rs_username, now);
+  return placeLegsAndRespond(env.DB, parlayId, cardId, normalized, stake, payoutRax, expiresAt, user.rs_username, now, false);
 }
 
-async function placeLegsAndRespond(db, parlayId, cardId, legs, stake, payoutRax, expiresAt, rsUsername, now) {
+async function placeLegsAndRespond(db, parlayId, cardId, legs, stake, payoutRax, expiresAt, rsUsername, now, isFreePlay = false) {
   await db.batch(legs.map(leg =>
     db.prepare(
       'INSERT INTO parlay_legs (parlay_id, sport, event_id, event_name, game_date, subcat_id, ' +
@@ -490,6 +534,19 @@ async function placeLegsAndRespond(db, parlayId, cardId, legs, stake, payoutRax,
   ));
 
   const mult = (0.70 / legs.reduce((a, l) => a * l.impliedProb, 1)).toFixed(2);
+
+  if (isFreePlay) {
+    return ok({
+      parlayId,
+      payoutRax,
+      stake:      100,
+      legs:       legs.length,
+      multiplier: mult,
+      rsUsername,
+      freePlay:   true,
+      active:     true,
+    });
+  }
 
   return ok({
     parlayId,

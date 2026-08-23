@@ -401,17 +401,10 @@ async function processQueue() {
   return sent;
 }
 
-// ── One-shot main: loop until queue is fully clear ────────────────────────────
+// ── One-shot main: single pass through the queue ─────────────────────────────
 async function main() {
-  let total = 0;
-  while (true) {
-    const sent = await processQueue();
-    total += sent;
-    const remaining = await fetchQueue().catch(() => []);
-    if (!remaining.length) break;
-    if (sent === 0) { console.log('No progress — stopping.'); break; }
-  }
-  console.log(`\n✓ Queue clear — ${total} offers sent this run.`);
+  const sent = await processQueue();
+  console.log(`\n✓ Done — ${sent} offer(s) sent this run.`);
 }
 
 // ── Daemon mode: run forever, check every 5 minutes ───────────────────────────

@@ -1015,7 +1015,7 @@ async function handleRequest({ request, env }) {
 
   // 1. Load active parlays
   const { results: parlays } = await env.DB.prepare(
-    "SELECT id, user_id, payout_rax, stake_rax, received_rax, rs_username FROM parlays WHERE status='active'"
+    "SELECT id, user_id, payout_rax, stake_rax, received_rax, is_free_play, rs_username FROM parlays WHERE status='active'"
   ).all();
   if (!parlays.length) return cacheAndReturn({ settled: 0, reason: 'no_active_parlays' });
 
@@ -1479,7 +1479,7 @@ async function handleRequest({ request, env }) {
     if (!anyVoid) {
       // No scratches — normal settlement
       parlayResult = anyLost ? 'lost' : 'won';
-      finalPayout  = parlay.payout_rax;
+      finalPayout  = parlay.is_free_play ? Math.min(parlay.payout_rax, 3000) : parlay.payout_rax;
     } else if (activeLegs.length < 2) {
       // 1 or 0 active legs remain after scratches — refund only if no active leg lost
       if (anyLost) {
@@ -1500,7 +1500,7 @@ async function handleRequest({ request, env }) {
         return acc * (leg ? parseFloat(leg.implied_prob) : 1);
       }, 1);
       parlayResult = 'won';
-      finalPayout  = Math.min(Math.floor(parlay.stake_rax * 0.70 / newTrueProb), 10000);
+      finalPayout  = Math.min(Math.floor(parlay.stake_rax * 0.70 / newTrueProb), parlay.is_free_play ? 3000 : 10000);
     }
 
     for (const o of outcomes) {
@@ -1544,7 +1544,55 @@ async function handleRequest({ request, env }) {
     legsFilled++;
   }
 
-  // 7. Re-evaluate recently-lost parlays for DNP corrections.
+  // 7. Settle active parlays where all legs are already resolved (no pending legs left).
+  // This catches parlays that slipped through — e.g. legs were marked won/void individually
+  // but the parlay status was never updated because auto-settle saw no pending legs.
+  try {
+    const { results: orphaned } = await env.DB.prepare(
+      "SELECT p.id, p.user_id, p.rs_username, p.stake_rax, p.payout_rax, p.received_rax, p.is_free_play " +
+      "FROM parlays p " +
+      "WHERE p.status = 'active' " +
+      "AND NOT EXISTS (SELECT 1 FROM parlay_legs pl WHERE pl.parlay_id = p.id AND pl.status = 'pending')"
+    ).all();
+
+    for (const p of orphaned) {
+      const { results: legs } = await env.DB.prepare(
+        "SELECT status FROM parlay_legs WHERE parlay_id=?"
+      ).bind(p.id).all();
+      if (!legs.length) continue;
+
+      const anyLost   = legs.some(l => l.status === 'lost');
+      const activeLegs = legs.filter(l => l.status !== 'void' && l.status !== 'voided');
+
+      let result, finalPayout;
+      if (anyLost) {
+        result = 'lost'; finalPayout = 0;
+      } else if (activeLegs.length < 2) {
+        result = 'voided'; finalPayout = p.received_rax ?? p.stake_rax;
+      } else {
+        result = 'won';
+        finalPayout = p.is_free_play ? Math.min(p.payout_rax, 3000) : p.payout_rax;
+      }
+
+      if (result === 'lost') {
+        await env.DB.prepare("UPDATE parlays SET status='lost', settled_at=? WHERE id=?").bind(now, p.id).run();
+      } else if (result === 'voided') {
+        await env.DB.batch([
+          env.DB.prepare("UPDATE parlays SET status='voided', settled_at=? WHERE id=?").bind(now, p.id),
+          env.DB.prepare('INSERT OR IGNORE INTO payout_queue (parlay_id, user_id, rs_username, payout_rax, offer_amount, created_at) VALUES (?,?,?,?,?,?)').bind(p.id, p.user_id, p.rs_username, finalPayout, finalPayout, now),
+        ]);
+      } else {
+        await env.DB.batch([
+          env.DB.prepare("UPDATE parlays SET status='won', payout_rax=?, settled_at=? WHERE id=?").bind(finalPayout, now, p.id),
+          env.DB.prepare('INSERT OR IGNORE INTO payout_queue (parlay_id, user_id, rs_username, payout_rax, offer_amount, created_at) VALUES (?,?,?,?,?,?)').bind(p.id, p.user_id, p.rs_username, finalPayout, finalPayout, now),
+        ]);
+      }
+      totalSettled++;
+      report.push({ parlayId: p.id, result, source: 'orphan_cleanup' });
+    }
+  } catch(e) {}
+
+  // 9. Re-evaluate recently-lost parlays for DNP corrections.
   // If a WNBA parlay was settled as 'lost' because a player appeared in ESPN's box score
   // with empty stats (DNP), all legs now resolve to 'void' — refund the stake.
   const dnpRefunds = [];

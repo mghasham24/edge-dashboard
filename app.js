@@ -6629,8 +6629,10 @@
             Object.keys(_ids).forEach(function(gk) { if (!rsGameIds[gk]) rsGameIds[gk] = _ids[gk]; });
             settledLegStats = {};
             parlaySlipsTotal = d.total || 0;
+            parlayFreePlayCredits = d.freePlayCredits || 0;
             parlayRenderSlips(d.slips);
             fetchSettledLegStats();
+            parlayUpdateFreePlayToggle();
         }).catch(function(e) {
             console.error('my-slips failed:', e);
             var container = document.getElementById('parlay-slips-view');
@@ -6763,6 +6765,8 @@
     var liveSlipInterval = null;
     var settledLegStats = {}; // parlayId-legIndex → fetched final stat value
     var parlaySlipsPage  = 0;
+    var parlayFreePlayCredits = 0;
+    var parlayFreePlayActive  = false;
     var parlaySlipsTotal = 0;
 
     function normSlipName(n) {
@@ -8112,6 +8116,7 @@
             '<div class="pslip-top">' +
                 '<div class="pslip-top-left">' +
                     '<span class="pslip-status ' + cls + '">' + escHtml(label) + '</span>' +
+                    (s.is_free_play ? '<span class="pslip-free-play-badge">FREE PLAY</span>' : '') +
                     userBadge +
                     '<span class="pslip-date">' + escHtml(date) + '</span>' +
                 '</div>' +
@@ -8319,7 +8324,14 @@
             }
         }
 
-        var payout   = parlayCalcPayout(parlayStake);
+        parlayUpdatePayout();
+    }
+
+    function parlayUpdatePayout() {
+        var ids   = Object.keys(parlayPicks);
+        var count = ids.length;
+        var effectiveStake = parlayFreePlayActive ? 100 : parlayStake;
+        var payout   = parlayCalcPayout(effectiveStake);
         var payEl    = document.getElementById('parlay-payout-amount');
         var rowEl    = document.getElementById('parlay-payout-row');
         var oddsEl   = document.getElementById('parlay-odds-line');
@@ -8327,21 +8339,24 @@
         var placeBtn = document.getElementById('parlay-place-btn');
 
         if (payout !== null && payEl) {
-            var maxS = parlayMaxStake();
-            if (parlayStake > maxS) {
+            var maxS = parlayFreePlayActive ? 3000 : parlayMaxStake();
+            if (!parlayFreePlayActive && parlayStake > maxS) {
                 parlayStake = maxS;
                 var sInp = document.getElementById('parlay-stake-input');
                 if (sInp) sInp.value = parlayStake;
                 payout = parlayCalcPayout(parlayStake);
             }
-            var mult = parlayStake > 0 ? (payout / parlayStake).toFixed(2) : '0.00';
+            if (parlayFreePlayActive && payout > 3000) payout = 3000;
+            var mult = effectiveStake > 0 ? (payout / effectiveStake).toFixed(2) : '0.00';
             payEl.innerHTML = payout.toLocaleString() + ' ' + RAX_ICON_LG;
             payEl.classList.add('active');
             if (rowEl) rowEl.classList.add('has-value');
             if (oddsEl) oddsEl.textContent = mult + 'x parlay · ' + count + ' legs';
             if (placeBtn) placeBtn.disabled = false;
             var legMsg = count === 5 ? 'Max 5 legs' : count + ' legs · up to ' + (5 - count) + ' more';
-            if (noteEl) noteEl.innerHTML = legMsg + ' · max stake ' + maxS.toLocaleString() + ' ' + RAX_ICON;
+            if (noteEl) noteEl.innerHTML = parlayFreePlayActive
+                ? legMsg + ' · free play · max payout 3,000 ' + RAX_ICON
+                : legMsg + ' · max stake ' + maxS.toLocaleString() + ' ' + RAX_ICON;
         } else if (payEl) {
             payEl.textContent = '—';
             payEl.classList.remove('active');
@@ -8701,6 +8716,43 @@
         parlayRenderSlip();
     }
 
+    window.parlayToggleFreePlay = function() {
+        if (!parlayFreePlayCredits) {
+            var overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px';
+            var box = document.createElement('div');
+            box.style.cssText = 'background:#18181f;border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:24px;max-width:340px;width:100%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,.6)';
+            box.innerHTML = '<div style="font-size:28px;margin-bottom:12px">🎁</div>' +
+                '<p style="color:#f0eff5;font-size:15px;font-weight:700;margin-bottom:16px">Refer a Friend</p>' +
+                '<ol style="color:#a0a0b8;font-size:13px;line-height:1.8;margin-bottom:20px;text-align:left;padding-left:18px">' +
+                '<li>Refer a Real Sports user to RaxEdge Parlays by having them enter your Real Sports username on the account verification screen. <span style="color:var(--muted)">(Pro Chat, Auction Hub, DMs, group posts, etc.)</span></li>' +
+                '<li style="margin-top:8px">When they stake <strong style="color:#f0eff5">2,000 Rax</strong> total across parlays, you\'re credited a <strong style="color:#f0eff5">free 100 Rax parlay</strong> — no deposit needed. Max payout 3,000 Rax.</li>' +
+                '</ol>' +
+                '<button style="width:100%;padding:11px;border:none;background:#4f6ef7;color:#fff;border-radius:8px;cursor:pointer;font-size:14px;font-weight:700;font-family:inherit">Got it</button>';
+            box.querySelector('button').onclick = function() { document.body.removeChild(overlay); };
+            overlay.onclick = function(e) { if (e.target === overlay) document.body.removeChild(overlay); };
+            overlay.appendChild(box);
+            document.body.appendChild(overlay);
+            return;
+        }
+        parlayFreePlayActive = !parlayFreePlayActive;
+        parlayUpdateFreePlayToggle();
+        parlayUpdatePayout();
+    };
+
+    function parlayUpdateFreePlayToggle() {
+        var btn   = document.getElementById('parlay-fp-btn');
+        var input = document.getElementById('parlay-stake-input');
+        if (!btn) return;
+        btn.style.opacity = parlayFreePlayCredits ? '' : '.45';
+        btn.textContent = parlayFreePlayActive ? '✓ Free Play Active' : 'Use Free Play (' + parlayFreePlayCredits + ')';
+        btn.className = 'parlay-fp-btn' + (parlayFreePlayActive ? ' active' : '');
+        if (input) {
+            if (parlayFreePlayActive) { input.value = 100; input.disabled = true; input.style.opacity = '.5'; }
+            else { input.value = parlayStake; input.disabled = false; input.style.opacity = ''; }
+        }
+    }
+
     function parlaysPlace() {
         var ids = Object.keys(parlayPicks);
         if (ids.length < 2) return;
@@ -8814,23 +8866,39 @@
         var btn = document.getElementById('parlay-place-btn');
         if (btn) { btn.disabled = true; btn.textContent = 'Placing…'; }
 
+        var placeBody = { stake: parlayFreePlayActive ? 100 : parlayStake, legs: legs };
+        if (parlayFreePlayActive) placeBody.freePlay = true;
         fetch('/api/parlays/place', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ stake: parlayStake, legs: legs }),
+            body: JSON.stringify(placeBody),
         })
         .then(function(r) { return r.json(); })
         .then(function(d) {
             if (d.error) {
                 if (btn) { btn.disabled = false; btn.textContent = 'Place Parlay'; }
+                // If free play credit was consumed but placement failed, re-add it client-side
+                if (parlayFreePlayActive) parlayFreePlayCredits = Math.max(0, parlayFreePlayCredits);
                 showConfirm(d.error, function() {});
+                return;
+            }
+            if (d.active) {
+                // Free play — parlay is already active, no deposit needed
+                parlayFreePlayActive = false;
+                parlayFreePlayCredits = Math.max(0, parlayFreePlayCredits - 1);
+                parlaysClear();
+                var panel = document.getElementById('parlays-panel');
+                if (panel) {
+                    parlaySetView('slips');
+                    loadParlaySlips(0);
+                }
                 return;
             }
             parlayShowDepositScreen(d);
         })
-        .catch(function() {
+        .catch(function(e) {
             if (btn) { btn.disabled = false; btn.textContent = 'Place Parlay'; }
-            showConfirm('Network error — please try again.', function() {});
+            showConfirm('Network error — please try again. (' + (e && e.message ? e.message : 'unknown') + ')', function() {});
         });
     }
 
@@ -8867,6 +8935,7 @@
     function parlayCheckVerified() {
         if (parlayRsVerified !== null) {
             renderParlayPanel();
+            if (parlayRsVerified) loadParlaySlips(0);
             return;
         }
         var panel = document.getElementById('parlays-panel');
@@ -8878,6 +8947,7 @@
                 parlayRsUsername = d.rsUsername || null;
                 renderParlayPanel();
                 if (parlayRsVerified && parlayView === 'build') loadParlayPlayers();
+                if (parlayRsVerified) loadParlaySlips(0);
             })
             .catch(function() {
                 // Don't permanently lock parlayRsVerified=false on a transient error —
@@ -8919,6 +8989,14 @@
                                     '<input type="number" id="parlay-verify-code" placeholder="6-digit code" maxlength="6" style="flex:1;padding:10px 12px;border-radius:8px;border:1.5px solid var(--border2);background:var(--bg2);color:var(--text);font-size:15px;font-weight:700;letter-spacing:.08em;font-family:var(--mono,monospace);-moz-appearance:textfield;" oninput="this.value=this.value.replace(/[^0-9]/g,\'\').slice(0,6)">' +
                                     '<button onclick="parlaySubmitVerifyCode()" style="padding:10px 18px;border-radius:8px;background:var(--accent);color:#fff;font-size:13px;font-weight:700;border:none;cursor:pointer;white-space:nowrap;font-family:var(--sans)">Verify</button>' +
                                 '</div>' +
+                                '<div style="margin-top:10px;">' +
+                                    '<div style="font-size:12px;color:var(--text2);margin-bottom:5px;">Referred by (optional)</div>' +
+                                    '<div style="display:flex;align-items:center;border-radius:8px;border:1.5px solid var(--border2);background:var(--bg2);overflow:hidden;">' +
+                                        '<span style="padding:9px 10px 9px 12px;color:var(--text2);font-size:14px;font-family:var(--sans);user-select:none;">@</span>' +
+                                        '<input type="text" id="parlay-verify-referral" placeholder="Enter Real Sports username of who referred you" style="flex:1;border:none;outline:none;background:transparent;padding:9px 12px 9px 0;color:var(--text);font-size:14px;font-family:var(--sans);">' +
+                                    '</div>' +
+                                    '<div style="font-size:11px;color:var(--muted);margin-top:4px;">Don\'t include the @ symbol</div>' +
+                                '</div>' +
                                 '<div id="parlay-verify-error" style="font-size:12px;color:#e55;margin-top:6px;display:none;"></div>' +
                             '</div>' +
                         '</div>' +
@@ -8941,10 +9019,14 @@
         parlayVerifyLoading = true;
         var btn = input.nextElementSibling;
         if (btn) btn.textContent = 'Verifying…';
+        var referralInput = document.getElementById('parlay-verify-referral');
+        var referredBy = referralInput ? referralInput.value.trim() : '';
+        var body = { code: code };
+        if (referredBy) body.referredBy = referredBy;
         fetch('/api/parlays/rs-verify', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ code: code }),
+            body: JSON.stringify(body),
         })
             .then(function(r) { return r.json(); })
             .then(function(d) {
@@ -9025,10 +9107,11 @@
                     '</div>' +
                     '<div class="parlay-slip-body" id="parlay-slip-body"></div>' +
                     '<div class="parlay-slip-footer">' +
+                        '<button class="parlay-fp-btn" id="parlay-fp-btn" onclick="parlayToggleFreePlay()">' + (parlayFreePlayActive ? '✓ Free Play Active' : 'Use Free Play (' + parlayFreePlayCredits + ')') + '</button>' +
                         '<div class="parlay-footer-inputs">' +
                             '<div class="parlay-stake-wrap">' +
                                 '<span class="parlay-stake-unit">RAX</span>' +
-                                '<input type="number" class="parlay-stake-input" id="parlay-stake-input" value="' + parlayStake + '" min="80" max="50000" step="10" oninput="parlaysOnStakeInput(this)" onblur="parlaysOnStakeBlur(this)">' +
+                                '<input type="number" class="parlay-stake-input" id="parlay-stake-input" value="' + (parlayFreePlayActive ? 100 : parlayStake) + '" min="80" max="50000" step="10" oninput="parlaysOnStakeInput(this)" onblur="parlaysOnStakeBlur(this)"' + (parlayFreePlayActive ? ' disabled style="opacity:.5"' : '') + '>' +
                             '</div>' +
                             '<div class="parlay-payout-row" id="parlay-payout-row">' +
                                 '<span class="parlay-payout-label">To Win</span>' +

@@ -15,7 +15,7 @@ import { hashidsEncode } from '../../_lib/hashids.js';
 import { getSession }   from '../../_lib/session.js';
 import { ok, err }       from '../../_lib/response.js';
 
-const RS_DEVICE_UUID = '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e';
+const RS_DEVICE_UUID    = '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e';
 
 function buildHeaders(authInfo, sessionToken) {
   return {
@@ -331,6 +331,56 @@ async function handleRequest({ request, env }) {
   let countered = 0;
   const errors = [];
 
+  // Called after a parlay is activated. Checks if the referred user (parlay owner) has
+  // crossed 2k cumulative stake and credits the referrer with one free play + RS DM.
+  async function checkReferralMilestone(parlayId) {
+    const parlay = await env.DB.prepare(
+      'SELECT user_id FROM parlays WHERE id=?'
+    ).bind(parlayId).first();
+    if (!parlay) return;
+
+    const referred = await env.DB.prepare(
+      'SELECT parlay_referred_by_id, parlay_referral_rewarded FROM users WHERE id=?'
+    ).bind(parlay.user_id).first();
+    if (!referred || !referred.parlay_referred_by_id || referred.parlay_referral_rewarded) return;
+
+    // Sum all non-cancelled stake for this user
+    const totalRow = await env.DB.prepare(
+      "SELECT SUM(stake_rax) AS total FROM parlays WHERE user_id=? AND (is_free_play IS NULL OR is_free_play=0) AND status NOT IN ('pending_deposit','expired','void','cancelled')"
+    ).bind(parlay.user_id).first();
+    const total = totalRow?.total || 0;
+    if (total < 2000) return;
+
+    // Atomically mark rewarded + credit referrer — both in one batch
+    await env.DB.batch([
+      env.DB.prepare('UPDATE users SET parlay_referral_rewarded=1 WHERE id=? AND parlay_referral_rewarded=0')
+        .bind(parlay.user_id),
+      env.DB.prepare('UPDATE users SET free_play_credits=free_play_credits+1 WHERE id=?')
+        .bind(referred.parlay_referred_by_id),
+    ]);
+
+    // Queue milestone DM — rs-verify-poll picks it up next cron run with Turnstile+send
+    const referrerAuth = await env.DB.prepare(
+      'SELECT dm_channel_id FROM real_auth WHERE user_id=?'
+    ).bind(referred.parlay_referred_by_id).first();
+    if (!referrerAuth?.dm_channel_id) return;
+
+    const referredAuth = await env.DB.prepare(
+      'SELECT rs_username FROM real_auth WHERE user_id=?'
+    ).bind(parlay.user_id).first();
+    const referredName = referredAuth?.rs_username ? `@${referredAuth.rs_username}` : 'someone you referred';
+
+    const msg = `🎉 You just earned a FREE PLAY!\n\n${referredName} has placed over 2,000 Rax in parlays through your referral.\n\nHead to RaxEdge Parlays to use your free 100 Rax play. Good luck! 🔥`;
+
+    await env.DB.prepare(
+      'INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at'
+    ).bind(
+      'milestone_dm_pending_' + referred.parlay_referred_by_id,
+      JSON.stringify({ channelId: referrerAuth.dm_channel_id, msg }),
+      now
+    ).run().catch(() => {});
+  }
+
   async function activateParlay(parlayId, cardId, offerId, amount) {
     const alreadyUsed = await env.DB.prepare(
       "SELECT id FROM parlays WHERE rs_offer_id=? AND id != ? AND status NOT IN ('pending_deposit','expired','void') LIMIT 1"
@@ -347,6 +397,9 @@ async function handleRequest({ request, env }) {
     ).bind(offerId, receivedRax, now, parlayId, cardId).run();
     if (result.meta.changes > 0) {
       await env.DB.prepare('DELETE FROM deposit_cards WHERE card_id=?').bind(cardId).run();
+      // Check if this activation pushes the user's referred-by referrer over the 2k threshold.
+      // Fire-and-forget — never block the main deposit flow.
+      checkReferralMilestone(parlayId).catch(() => {});
     } else {
       // UPDATE matched 0 rows — log current parlay state so we can diagnose the mismatch
       const row = await env.DB.prepare(

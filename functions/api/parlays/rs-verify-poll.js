@@ -309,6 +309,90 @@ export async function onRequestPost({ request, env }) {
       sent.push({ channelId, rsUsername, rsUserId });
     }
 
+    // Send any pending referral DMs queued by rs-verify.js
+    // Uses the same Turnstile+send flow as verification codes above.
+    const { results: pendingDms } = await env.DB.prepare(
+      "SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE 'referral_dm_pending_%'"
+    ).all().catch(() => ({ results: [] }));
+
+    for (const row of pendingDms) {
+      let dmData;
+      try { dmData = JSON.parse(row.data); } catch { continue; }
+      const { channelId: dmChannelId, msg: dmMsg } = dmData;
+      if (!dmChannelId || !dmMsg) continue;
+
+      let dmTurnstile = null;
+      if (capsolverKey) {
+        try { dmTurnstile = await solveTurnstile(capsolverKey); }
+        catch(e) { sent.push({ skipped: 'referral_dm_turnstile_failed', dmChannelId, error: e.message }); continue; }
+      }
+
+      // Claim the entry by deleting it first — prevents two cron instances from sending the same DM
+      const del = await env.DB.prepare('DELETE FROM odds_cache WHERE cache_key=?').bind(row.cache_key).run().catch(() => ({ meta: { changes: 0 } }));
+      if (!del.meta?.changes) continue; // another cron already claimed it
+
+      try {
+        const dmRes = await fetch(`${RS_BASE}/messages/channels/${dmChannelId}/messages`, {
+          method:  'POST',
+          headers: {
+            ...buildHeaders(authInfo, sessionToken, true),
+            ...(dmTurnstile ? { 'real-turnstile-token': dmTurnstile } : {}),
+          },
+          body:   JSON.stringify({ text: dmMsg, parentMessageId: null }),
+          signal: AbortSignal.timeout(15000),
+        });
+        if (dmRes.ok) {
+          sent.push({ referralDm: true, dmChannelId, ok: true });
+        } else {
+          const body = await dmRes.text().catch(() => '');
+          sent.push({ referralDm: true, dmChannelId, status: dmRes.status, body: body.slice(0, 200) });
+        }
+      } catch(e) {
+        sent.push({ referralDm: true, dmChannelId, error: e.message });
+      }
+    }
+
+    // Send any pending milestone DMs queued by deposit-check.js (2k stake reached)
+    const { results: pendingMilestoneDms } = await env.DB.prepare(
+      "SELECT cache_key, data FROM odds_cache WHERE cache_key LIKE 'milestone_dm_pending_%'"
+    ).all().catch(() => ({ results: [] }));
+
+    for (const row of pendingMilestoneDms) {
+      let dmData;
+      try { dmData = JSON.parse(row.data); } catch { continue; }
+      const { channelId: dmChannelId, msg: dmMsg } = dmData;
+      if (!dmChannelId || !dmMsg) continue;
+
+      let dmTurnstile = null;
+      if (capsolverKey) {
+        try { dmTurnstile = await solveTurnstile(capsolverKey); }
+        catch(e) { sent.push({ skipped: 'milestone_dm_turnstile_failed', dmChannelId, error: e.message }); continue; }
+      }
+
+      const del = await env.DB.prepare('DELETE FROM odds_cache WHERE cache_key=?').bind(row.cache_key).run().catch(() => ({ meta: { changes: 0 } }));
+      if (!del.meta?.changes) continue;
+
+      try {
+        const dmRes = await fetch(`${RS_BASE}/messages/channels/${dmChannelId}/messages`, {
+          method:  'POST',
+          headers: {
+            ...buildHeaders(authInfo, sessionToken, true),
+            ...(dmTurnstile ? { 'real-turnstile-token': dmTurnstile } : {}),
+          },
+          body:   JSON.stringify({ text: dmMsg, parentMessageId: null }),
+          signal: AbortSignal.timeout(15000),
+        });
+        if (dmRes.ok) {
+          sent.push({ milestoneDm: true, dmChannelId, ok: true });
+        } else {
+          const body = await dmRes.text().catch(() => '');
+          sent.push({ milestoneDm: true, dmChannelId, status: dmRes.status, body: body.slice(0, 200) });
+        }
+      } catch(e) {
+        sent.push({ milestoneDm: true, dmChannelId, error: e.message });
+      }
+    }
+
     return ok({ processed: sent.length, sent });
 
   } catch(e) {

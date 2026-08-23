@@ -30,11 +30,15 @@ export async function onRequestGet({ request, env }) {
 
   const { results: parlays } = await env.DB.prepare(
     'SELECT id, status, legs_count, stake_rax, payout_rax, deposit_card_id, ' +
-    'rs_offer_id, received_rax, expires_at, created_at, deposited_at, settled_at ' +
+    'rs_offer_id, received_rax, is_free_play, expires_at, created_at, deposited_at, settled_at ' +
     `FROM parlays WHERE ${WHERE} ${ORDER} LIMIT ? OFFSET ?`
   ).bind(session.user_id, pendingCutoff, limit, offset).all();
 
-  if (!parlays.length) return ok({ slips: [], total, page });
+  const userRow = await env.DB.prepare(
+    'SELECT free_play_credits FROM users WHERE id=?'
+  ).bind(session.user_id).first();
+
+  if (!parlays.length) return ok({ slips: [], total, page, freePlayCredits: userRow?.free_play_credits ?? 0 });
 
   const ids = parlays.map(p => p.id);
   const placeholders = ids.map(() => '?').join(',');
@@ -55,11 +59,16 @@ export async function onRequestGet({ request, env }) {
     return new Response(JSON.stringify({ parlayIds: parlays.map(p => p.id), legCount: legs.length, legs }), { headers: { 'Content-Type': 'application/json' } });
   }
 
-  return ok({ slips: parlays.map(p => ({
-    ...p,
-    legs: legMap[p.id] || [],
-    deposit_card_url: (p.status === 'pending_deposit' && p.deposit_card_id)
-      ? 'https://www.realapp.com/' + rsUrlEncode(20, 0, 0, p.deposit_card_id)
-      : null,
-  })), total, page });
+  return ok({
+    slips: parlays.map(p => ({
+      ...p,
+      legs: legMap[p.id] || [],
+      deposit_card_url: (p.status === 'pending_deposit' && p.deposit_card_id)
+        ? 'https://www.realapp.com/' + rsUrlEncode(20, 0, 0, p.deposit_card_id)
+        : null,
+    })),
+    total,
+    page,
+    freePlayCredits: userRow?.free_play_credits ?? 0,
+  });
 }

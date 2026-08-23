@@ -28,7 +28,7 @@ export async function onRequestPost({ request, env }) {
     let body;
     try { body = await request.json(); } catch { return err('Invalid request body', 400); }
 
-    const { code } = body;
+    const { code, referredBy } = body;
     if (!code || typeof code !== 'string' || !/^\d{6}$/.test(code.trim())) {
       return err('Code must be 6 digits', 400);
     }
@@ -59,6 +59,41 @@ export async function onRequestPost({ request, env }) {
 
     // Consume the code — one-time use
     await env.DB.prepare('DELETE FROM rs_verify_codes WHERE code=?').bind(trimmed).run();
+
+    // Store referral — only if provided and not already set on this user.
+    // Look up the referrer by their RS username (must be a verified parlay user).
+    // Silently skip on any error so a bad referral code never blocks verification.
+    if (referredBy && typeof referredBy === 'string') {
+      try {
+        const referredByClean = referredBy.replace(/^@/, '').trim().toLowerCase();
+        // Don't allow self-referral
+        if (referredByClean && referredByClean !== codeRow.rs_username?.toLowerCase()) {
+          const referrerAuth = await env.DB.prepare(
+            'SELECT user_id, dm_channel_id FROM real_auth WHERE LOWER(rs_username)=? AND parlay_verified=1'
+          ).bind(referredByClean).first();
+          if (referrerAuth) {
+            // Only set once — COALESCE keeps existing value if already referred
+            await env.DB.prepare(
+              'UPDATE users SET parlay_referred_by_id=COALESCE(parlay_referred_by_id,?) WHERE id=?'
+            ).bind(referrerAuth.user_id, session.user_id).run();
+
+            // Queue a DM to the referrer — rs-verify-poll picks it up next cron run
+            // and sends it with the exact same Turnstile+send flow it uses for verify codes.
+            if (referrerAuth.dm_channel_id) {
+              const referredName = codeRow.rs_username ? `@${codeRow.rs_username}` : 'Someone';
+              const msg = `👋 ${referredName} just listed you as their referral!\n\nOnce they place 2,000+ Rax in parlays, you'll automatically earn a free 100 Rax play. 🔥\n\nKeep an eye on your parlays dashboard!`;
+              await env.DB.prepare(
+                'INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at'
+              ).bind(
+                'referral_dm_pending_' + referrerAuth.user_id,
+                JSON.stringify({ channelId: referrerAuth.dm_channel_id, msg }),
+                now
+              ).run().catch(() => {});
+            }
+          }
+        }
+      } catch(_) {}
+    }
 
     return ok({
       verified:   true,
