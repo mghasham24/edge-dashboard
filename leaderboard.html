@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Top Earners — RaxEdge Parlays</title>
+<meta name="description" content="See who's up the most on RaxEdge Parlays this week. Updated every 5 minutes.">
+<meta property="og:title" content="RaxEdge Parlays — Top Earners This Week">
+<meta property="og:description" content="Real Sports parlay leaderboard. Who's cashing?">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:      #0b0b12;
+    --surface: #13131e;
+    --border:  rgba(255,255,255,.08);
+    --accent:  #4f6ef7;
+    --green:   #22c55e;
+    --text:    #f0eff5;
+    --text2:   #a0a0be;
+    --muted:   #5a5a7a;
+    --gold:    #f59e0b;
+    --silver:  #94a3b8;
+    --bronze:  #cd7c43;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0 16px 48px;
+  }
+
+  /* Header */
+  .header {
+    width: 100%;
+    max-width: 480px;
+    padding: 40px 0 32px;
+    text-align: center;
+  }
+  .logo {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 20px;
+  }
+  .header h1 {
+    font-size: 26px;
+    font-weight: 800;
+    line-height: 1.15;
+    letter-spacing: -.3px;
+  }
+  .header h1 span { color: var(--accent); }
+  .subtitle {
+    margin-top: 8px;
+    font-size: 14px;
+    color: var(--text2);
+  }
+  .window-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 16px;
+    padding: 5px 12px;
+    border-radius: 20px;
+    background: rgba(79,110,247,.12);
+    border: 1px solid rgba(79,110,247,.25);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent);
+  }
+  .window-pill::before {
+    content: '';
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    flex-shrink: 0;
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%,100% { opacity: 1; }
+    50%      { opacity: .35; }
+  }
+
+  /* Board */
+  .board {
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px 16px;
+    transition: border-color .15s;
+  }
+  .row:hover { border-color: rgba(79,110,247,.3); }
+  .row.top1 { border-color: rgba(245,158,11,.3); background: rgba(245,158,11,.05); }
+  .row.top2 { border-color: rgba(148,163,184,.2); }
+  .row.top3 { border-color: rgba(205,124,67,.2); }
+
+  .rank {
+    width: 28px;
+    text-align: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .rank-num {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--muted);
+  }
+
+  .avatar {
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px;
+    font-weight: 800;
+    flex-shrink: 0;
+    background: rgba(79,110,247,.18);
+    color: var(--accent);
+  }
+  .row.top1 .avatar { background: rgba(245,158,11,.18); color: var(--gold); }
+  .row.top2 .avatar { background: rgba(148,163,184,.12); color: var(--silver); }
+  .row.top3 .avatar { background: rgba(205,124,67,.14); color: var(--bronze); }
+
+  .info { flex: 1; min-width: 0; }
+  .username {
+    font-size: 15px;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .record {
+    font-size: 12px;
+    color: var(--text2);
+    margin-top: 2px;
+  }
+  .record b { color: var(--green); }
+
+  .profit {
+    text-align: right;
+    flex-shrink: 0;
+  }
+  .profit-amount {
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--green);
+    font-variant-numeric: tabular-nums;
+  }
+  .profit-label {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 1px;
+    text-align: right;
+  }
+
+  /* Empty / loading states */
+  .state-card {
+    width: 100%;
+    max-width: 480px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 40px 24px;
+    text-align: center;
+    color: var(--text2);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  .state-card .emoji { font-size: 32px; display: block; margin-bottom: 12px; }
+
+  /* Skeleton rows */
+  .skeleton-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px 16px;
+  }
+  .skel {
+    background: rgba(255,255,255,.06);
+    border-radius: 6px;
+    animation: shimmer 1.4s ease-in-out infinite;
+  }
+  @keyframes shimmer {
+    0%,100% { opacity: .5; }
+    50%      { opacity: 1; }
+  }
+
+  /* Updated-at */
+  .updated-at {
+    width: 100%;
+    max-width: 480px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 14px;
+  }
+
+  /* CTA */
+  .cta {
+    width: 100%;
+    max-width: 480px;
+    margin-top: 32px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px 20px;
+    text-align: center;
+  }
+  .cta p {
+    font-size: 14px;
+    color: var(--text2);
+    line-height: 1.55;
+    margin-bottom: 16px;
+  }
+  .cta p strong { color: var(--text); }
+  .cta-btn {
+    display: inline-block;
+    padding: 12px 28px;
+    background: var(--accent);
+    color: #fff;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 700;
+    text-decoration: none;
+    letter-spacing: .2px;
+    transition: opacity .15s;
+  }
+  .cta-btn:hover { opacity: .88; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">RaxEdge Parlays</div>
+  <h1>Top Earners<br><span>This Week</span></h1>
+  <p class="subtitle">Real Sports parlay leaderboard</p>
+  <div class="window-pill">Rolling 7-day window · updates every 5 min</div>
+</div>
+
+<div class="board" id="board">
+  <!-- skeleton -->
+  <div class="skeleton-row">
+    <div class="skel" style="width:28px;height:28px;border-radius:50%"></div>
+    <div class="skel" style="width:38px;height:38px;border-radius:50%"></div>
+    <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+      <div class="skel" style="height:14px;width:60%"></div>
+      <div class="skel" style="height:11px;width:35%"></div>
+    </div>
+    <div class="skel" style="width:70px;height:18px"></div>
+  </div>
+  <div class="skeleton-row">
+    <div class="skel" style="width:28px;height:28px;border-radius:50%"></div>
+    <div class="skel" style="width:38px;height:38px;border-radius:50%"></div>
+    <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+      <div class="skel" style="height:14px;width:50%"></div>
+      <div class="skel" style="height:11px;width:30%"></div>
+    </div>
+    <div class="skel" style="width:58px;height:18px"></div>
+  </div>
+  <div class="skeleton-row">
+    <div class="skel" style="width:28px;height:28px;border-radius:50%"></div>
+    <div class="skel" style="width:38px;height:38px;border-radius:50%"></div>
+    <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+      <div class="skel" style="height:14px;width:55%"></div>
+      <div class="skel" style="height:11px;width:28%"></div>
+    </div>
+    <div class="skel" style="width:52px;height:18px"></div>
+  </div>
+</div>
+
+<div class="updated-at" id="updated-at"></div>
+
+<div class="cta">
+  <p>Place parlays on Real Sports market odds.<br><strong>Verify your account to get started.</strong></p>
+  <a class="cta-btn" href="https://raxedge.com">Join RaxEdge →</a>
+</div>
+
+<script>
+  const MEDALS = ['🥇', '🥈', '🥉'];
+
+  function fmt(n) {
+    return n.toLocaleString('en-US');
+  }
+
+  function rowClass(i) {
+    if (i === 0) return 'row top1';
+    if (i === 1) return 'row top2';
+    if (i === 2) return 'row top3';
+    return 'row';
+  }
+
+  function rankEl(i) {
+    if (i < 3) return '<div class="rank">' + MEDALS[i] + '</div>';
+    return '<div class="rank"><span class="rank-num">' + (i + 1) + '</span></div>';
+  }
+
+  function render(results) {
+    const board = document.getElementById('board');
+    if (!results.length) {
+      board.innerHTML = '<div class="state-card"><span class="emoji">📊</span>No results yet this week.<br>Be the first to cash a parlay!</div>';
+      return;
+    }
+    board.innerHTML = results.map((r, i) => `
+      <div class="${rowClass(i)}">
+        ${rankEl(i)}
+        <div class="avatar">${r.rs_username[0].toUpperCase()}</div>
+        <div class="info">
+          <div class="username">@${r.rs_username}</div>
+          <div class="record"><b>${r.wins}W</b> / ${r.losses}L</div>
+        </div>
+        <div class="profit">
+          <div class="profit-amount">+${fmt(r.net_profit)}</div>
+          <div class="profit-label">Rax profit</div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function timeAgo(ts) {
+    const diff = Math.floor(Date.now() / 1000) - ts;
+    if (diff < 60)  return 'just now';
+    if (diff < 120) return '1 minute ago';
+    return Math.floor(diff / 60) + ' minutes ago';
+  }
+
+  async function load() {
+    try {
+      const res  = await fetch('/api/parlays/leaderboard');
+      const data = await res.json();
+      render(data.results || []);
+      if (data.generatedAt) {
+        document.getElementById('updated-at').textContent = 'Updated ' + timeAgo(data.generatedAt);
+      }
+    } catch {
+      document.getElementById('board').innerHTML =
+        '<div class="state-card"><span class="emoji">⚠️</span>Could not load leaderboard.<br>Try refreshing.</div>';
+    }
+  }
+
+  load();
+  setInterval(load, 5 * 60 * 1000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
+</script>
+</body>
+</html>
