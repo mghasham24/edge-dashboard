@@ -187,7 +187,9 @@ async function _place({ request, env }, onCreditConsumed) {
     const WNBA_NICKNAMES = new Set([
       'aces','dream','fever','liberty','lynx','mercury','mystics','sky','sparks','storm','sun','wings',
     ]);
-    let legSport = VALID_SPORTS.includes(leg.sport) ? leg.sport : 'mlb';
+    // soccer_* slugs (e.g. soccer_eng.1) pass through as-is — not in VALID_SPORTS list.
+    let legSport = (leg.sport && leg.sport.startsWith('soccer_')) ? leg.sport
+      : VALID_SPORTS.includes(leg.sport) ? leg.sport : 'mlb';
     if (TEAM_MARKETS.has(leg.marketType)) {
       // Always derive sport from team nickname for team-market legs.
       // Cardinals (MLB) and Giants (MLB) share nicknames with NFL teams — use sent sport as tiebreaker.

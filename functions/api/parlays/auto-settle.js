@@ -1066,7 +1066,8 @@ async function handleRequest({ request, env }) {
     const s   = leg.sport || '';
     const mkt = leg.market_type;
     if (s.startsWith('soccer_'))                                 return 'soccer';
-    if (SOCCER_PROP_TYPES.has(mkt) && s.startsWith('soccer_'))  return 'soccer';
+    // Rescue: legs placed before the place.js soccer fix were stored as sport='mlb'.
+    if (SOCCER_PROP_TYPES.has(mkt))                              return 'soccer';
     if (mkt.startsWith('1inn_'))                                 return 'mlb';
     if ((mkt in MLB_STAT_FIELD) && !WNBA_PROP_TYPES.has(mkt))   return 'mlb';
     if (mkt === 'team_ml' || mkt === 'team_runline' || mkt === 'team_total') {
