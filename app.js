@@ -7598,138 +7598,205 @@
     }
 
     function fetchSoccerLiveStats(soccerNeededByDate) {
-        var dates = Object.keys(soccerNeededByDate);
-        if (!dates.length) return;
         var SOCCER_FIELD = { sot:'sot', assists:'assists', saves:'saves', offsides:'offsides', fouls_won:'fouls_won', goalscorer:'totalGoals' };
+        var liveToday = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
 
-        dates.forEach(function(date) {
-            var needed = soccerNeededByDate[date] || [];
-            if (!needed.length) return;
+        // Flatten all legs across dates, tagging each with its stored game_date
+        var allNeeded = [];
+        Object.keys(soccerNeededByDate).forEach(function(d) {
+            (soccerNeededByDate[d] || []).forEach(function(n) {
+                allNeeded.push({ leg: n, storedDate: d });
+            });
+        });
+        if (!allNeeded.length) return;
 
-            // Collect unique league slugs from leg.sport ('soccer_eng.1' → 'eng.1')
-            var slugsSeen = {}, leagueSlugs = [];
-            needed.forEach(function(n) {
-                var slug = (n.sport || '').replace('soccer_', '') || 'eng.1';
-                if (!slugsSeen[slug]) { slugsSeen[slug] = true; leagueSlugs.push(slug); }
+        // Collect unique slugs and unique dates to fetch
+        var slugsSeen = {}, leagueSlugs = [];
+        var extraDatesSeen = {}, extraDates = [];
+        allNeeded.forEach(function(item) {
+            var slug = (item.leg.sport || '').replace('soccer_', '') || 'eng.1';
+            if (!slugsSeen[slug]) { slugsSeen[slug] = true; leagueSlugs.push(slug); }
+            if (item.storedDate !== liveToday && !extraDatesSeen[item.storedDate]) {
+                extraDatesSeen[item.storedDate] = true; extraDates.push(item.storedDate);
+            }
+        });
+
+        // Build fetch list: always fetch today (no date param = most reliable for live status)
+        // + any extra dates where legs' stored game_date differs from today
+        var fetches = [];
+        leagueSlugs.forEach(function(slug) {
+            fetches.push({ slug: slug, date: liveToday,
+                url: 'https://site.api.espn.com/apis/site/v2/sports/soccer/' + slug + '/scoreboard' });
+            extraDates.forEach(function(d) {
+                fetches.push({ slug: slug, date: d,
+                    url: 'https://site.api.espn.com/apis/site/v2/sports/soccer/' + slug + '/scoreboard?dates=' + d.replace(/-/g, '') });
+            });
+        });
+
+        function parseEvent(ev) {
+            var sName = (ev.status && ev.status.type && ev.status.type.name) || '';
+            var isFinal = sName === 'STATUS_FINAL' || sName === 'STATUS_FULL_TIME';
+            var isLive  = sName === 'STATUS_IN_PROGRESS' || sName === 'STATUS_HALFTIME' ||
+                          sName === 'STATUS_SECOND_HALF' || sName === 'STATUS_END_PERIOD' ||
+                          sName.startsWith('STATUS_IN_PROGRESS');
+            var state   = isFinal ? 'Final' : (isLive ? 'Live' : 'Preview');
+            var clock   = (ev.status && ev.status.displayClock) || '';
+            var matchLabel = sName === 'STATUS_HALFTIME' ? 'HT'
+                : isFinal ? 'FT' : (isLive && clock) ? clock : '';
+            var startMs = ev.date ? new Date(ev.date).getTime() : 0;
+            var startET = startMs ? new Date(startMs).toLocaleTimeString('en-US',
+                { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' }) : '';
+            var comps = (ev.competitions && ev.competitions[0] && ev.competitions[0].competitors) || [];
+            var hC = comps.find(function(c) { return c.homeAway === 'home'; }) || {};
+            var aC = comps.find(function(c) { return c.homeAway === 'away'; }) || {};
+            return {
+                eventId: ev.id, state: state, inningLabel: matchLabel, startET: startET, startMs: startMs,
+                homeAbbr: ((hC.team && hC.team.abbreviation) || '').toUpperCase(),
+                awayAbbr: ((aC.team && aC.team.abbreviation) || '').toUpperCase(),
+                homeName: (hC.team && (hC.team.displayName || hC.team.name)) || '',
+                awayName: (aC.team && (aC.team.displayName || aC.team.name)) || '',
+            };
+        }
+
+        Promise.all(fetches.map(function(f) {
+            return fetch(f.url, { signal: AbortSignal.timeout(8000), cache: 'no-cache' })
+                .then(function(r) { return r.json(); })
+                .then(function(d) { return { slug: f.slug, date: f.date, events: (d.events || []).map(parseEvent) }; })
+                .catch(function() { return { slug: f.slug, date: f.date, events: [] }; });
+        })).then(function(results) {
+            // gamesBySlugDate[slug][date] = array of parsed game objects
+            var gamesBySlugDate = {};
+            results.forEach(function(r) {
+                if (!gamesBySlugDate[r.slug]) gamesBySlugDate[r.slug] = {};
+                gamesBySlugDate[r.slug][r.date] = r.events;
             });
 
-            var liveToday3 = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
-            var fmt = date.replace(/-/g, '');
-            // For today: omit dates param so ESPN returns the live scoreboard (more reliable for STATUS_IN_PROGRESS).
-            // For past dates: still pass dates= to get final boxscores.
-            Promise.all(leagueSlugs.map(function(slug) {
-                var url = date === liveToday3
-                    ? 'https://site.api.espn.com/apis/site/v2/sports/soccer/' + slug + '/scoreboard'
-                    : 'https://site.api.espn.com/apis/site/v2/sports/soccer/' + slug + '/scoreboard?dates=' + fmt;
-                return fetch(url, { signal: AbortSignal.timeout(8000), cache: 'no-cache' })
-                    .then(function(r) { return r.json(); })
-                    .then(function(d) { return { slug: slug, events: d.events || [] }; })
-                    .catch(function() { return { slug: slug, events: [] }; });
-            })).then(function(leagueResults) {
-                var eventsBySlug = {};
-                var previewTimes = [];
+            // Match a leg to a specific game by team abbreviation extracted from event_name ("NYC vs NE")
+            function teamsFromEvent(eventName) {
+                var parts = (eventName || '').toUpperCase().split(/\s+VS\.?\s+/);
+                return { t1: (parts[0] || '').trim(), t2: (parts[1] || '').trim() };
+            }
+            function abbrMatch(gi, t1, t2) {
+                if (!t1 && !t2) return true;
+                var ha = gi.homeAbbr, aa = gi.awayAbbr;
+                return (ha && t1 && (ha === t1 || ha.indexOf(t1) >= 0 || t1.indexOf(ha) >= 0)) ||
+                       (aa && t2 && (aa === t2 || aa.indexOf(t2) >= 0 || t2.indexOf(aa) >= 0)) ||
+                       (ha && t2 && (ha === t2 || ha.indexOf(t2) >= 0 || t2.indexOf(ha) >= 0)) ||
+                       (aa && t1 && (aa === t1 || aa.indexOf(t1) >= 0 || t1.indexOf(aa) >= 0));
+            }
+            function findGame(slug, storedDate, eventName) {
+                var teams = teamsFromEvent(eventName);
+                var t1 = teams.t1, t2 = teams.t2;
+                var todayGames    = (gamesBySlugDate[slug] && gamesBySlugDate[slug][liveToday]) || [];
+                var storedGames   = (gamesBySlugDate[slug] && gamesBySlugDate[slug][storedDate]) || [];
 
-                leagueResults.forEach(function(lr) {
-                    var liveGames = [], previewGames = [];
-                    (lr.events || []).forEach(function(ev) {
-                        var sName = (ev.status && ev.status.type && ev.status.type.name) || '';
-                        var isFinal = sName === 'STATUS_FINAL' || sName === 'STATUS_FULL_TIME';
-                        var isLive  = sName === 'STATUS_IN_PROGRESS' || sName === 'STATUS_HALFTIME' || sName === 'STATUS_SECOND_HALF' || sName === 'STATUS_END_PERIOD' || sName.startsWith('STATUS_IN_PROGRESS');
-                        var state   = isFinal ? 'Final' : (isLive ? 'Live' : 'Preview');
-                        var clock   = (ev.status && ev.status.displayClock) || '';
-                        var matchLabel = sName === 'STATUS_HALFTIME' ? 'HT'
-                            : isFinal ? 'FT'
-                            : (isLive && clock) ? clock
-                            : '';
-                        var startMs = ev.date ? new Date(ev.date).getTime() : 0;
-                        var startET = startMs ? new Date(startMs).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' }) : '';
-                        var comps   = (ev.competitions && ev.competitions[0] && ev.competitions[0].competitors) || [];
-                        var hC = comps.find(function(c) { return c.homeAway === 'home'; }) || {};
-                        var aC = comps.find(function(c) { return c.homeAway === 'away'; }) || {};
-                        var gi = {
-                            eventId: ev.id, state: state, inningLabel: matchLabel, startET: startET,
-                            homeAbbr: ((hC.team && hC.team.abbreviation) || '').toUpperCase(),
-                            awayAbbr: ((aC.team && aC.team.abbreviation) || '').toUpperCase(),
-                            homeName: (hC.team && (hC.team.displayName || hC.team.name)) || '',
-                            awayName: (aC.team && (aC.team.displayName || aC.team.name)) || '',
-                        };
-                        if (isLive || isFinal) liveGames.push(gi);
-                        else if (startMs) { previewTimes.push(startMs); previewGames.push(gi); }
-                    });
-                    eventsBySlug[lr.slug] = { live: liveGames, preview: previewGames };
-                });
+                // 1. Live game today matching these teams (regardless of stored date — handles DK off-by-one)
+                var liveMatch = todayGames.filter(function(g) { return g.state === 'Live'; })
+                    .find(function(g) { return abbrMatch(g, t1, t2); });
+                if (liveMatch) return liveMatch;
 
-                // Legs with no live game in their league → show pregame time
-                var earliestPreviewMs = previewTimes.length ? Math.min.apply(null, previewTimes) : 0;
-                var previewET = earliestPreviewMs ? new Date(earliestPreviewMs).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' }) : null;
-                var fakePreview = previewET ? { state: 'Preview', startET: previewET } : null;
+                // 2. Preview/scheduled game on stored date matching teams
+                var previewMatch = storedGames.filter(function(g) { return g.state === 'Preview'; })
+                    .find(function(g) { return abbrMatch(g, t1, t2); });
+                if (previewMatch) return previewMatch;
 
-                needed.forEach(function(n) {
-                    var slug = (n.sport || '').replace('soccer_', '') || 'eng.1';
-                    if (!(eventsBySlug[slug] && eventsBySlug[slug].live.length)) {
-                        updateLegStatus(n.parlayId, n.legIndex, null, n.threshold, n.direction, n.marketType, fakePreview, false);
+                // 3. Preview/scheduled today matching teams
+                var todayPreview = todayGames.filter(function(g) { return g.state === 'Preview'; })
+                    .find(function(g) { return abbrMatch(g, t1, t2); });
+                if (todayPreview) return todayPreview;
+
+                // 4. Final on stored date OR today — only if stored date ≤ today
+                if (storedDate <= liveToday) {
+                    var finalMatch = storedGames.filter(function(g) { return g.state === 'Final'; })
+                        .find(function(g) { return abbrMatch(g, t1, t2); });
+                    if (!finalMatch && storedDate !== liveToday) {
+                        finalMatch = todayGames.filter(function(g) { return g.state === 'Final'; })
+                            .find(function(g) { return abbrMatch(g, t1, t2); });
                     }
-                });
+                    if (finalMatch) return finalMatch;
+                }
 
-                // Fetch player stats for leagues with live/final games
-                var liveSlugs = leagueSlugs.filter(function(s) { return eventsBySlug[s] && eventsBySlug[s].live.length; });
-                if (!liveSlugs.length) return;
+                return null;
+            }
 
-                Promise.all(liveSlugs.map(function(slug) {
-                    var eventIds = eventsBySlug[slug].live.map(function(g) { return g.eventId; }).filter(Boolean);
-                    return Promise.all(eventIds.map(function(eid) {
-                        return fetch('https://site.api.espn.com/apis/site/v2/sports/soccer/' + slug + '/summary?event=' + eid,
-                            { signal: AbortSignal.timeout(8000), cache: 'no-cache' })
-                            .then(function(r) { return r.json(); })
-                            .catch(function() { return null; });
-                    })).then(function(summaries) { return { slug: slug, summaries: summaries }; });
-                })).then(function(slugResults) {
-                    var statsBySlug = {};
-                    slugResults.forEach(function(sr) {
-                        var map = {};
-                        (sr.summaries || []).forEach(function(d) {
-                            if (!d) return;
-                            (d.rosters || []).forEach(function(team) {
-                                (team.roster || []).forEach(function(a) {
-                                    if (!a.active) return;
-                                    var name = normSlipName((a.athlete && a.athlete.displayName) || '');
-                                    if (!name) return;
-                                    var raw = {};
-                                    (a.stats || []).forEach(function(s) { raw[s.name] = parseFloat(s.value) || 0; });
-                                    if (!(raw.appearances > 0)) return;
-                                    if (!map[name]) map[name] = { totalGoals:0, sot:0, assists:0, saves:0, offsides:0, fouls_won:0 };
-                                    map[name].totalGoals = Math.max(map[name].totalGoals, raw.totalGoals || 0);
-                                    map[name].sot        = Math.max(map[name].sot,        raw.shotsOnTarget || 0);
-                                    map[name].assists    = Math.max(map[name].assists,    raw.goalAssists || 0);
-                                    map[name].saves      = Math.max(map[name].saves,      raw.saves || 0);
-                                    map[name].offsides   = Math.max(map[name].offsides,   raw.offsides || 0);
-                                    map[name].fouls_won  = Math.max(map[name].fouls_won,  raw.foulsSuffered || 0);
-                                });
+            // Collect unique live/final event IDs per slug for summary fetch
+            var liveEventsBySlug = {}; // slug → { eventId: gi }
+            allNeeded.forEach(function(item) {
+                var slug = (item.leg.sport || '').replace('soccer_', '') || 'eng.1';
+                var gi = findGame(slug, item.storedDate, item.leg.eventName);
+                item._gi = gi;
+                if (gi && gi.state !== 'Preview') {
+                    if (!liveEventsBySlug[slug]) liveEventsBySlug[slug] = {};
+                    liveEventsBySlug[slug][gi.eventId] = gi;
+                }
+            });
+
+            // Legs with no live/final match → show pregame (use matched preview game time or null)
+            allNeeded.forEach(function(item) {
+                if (!item._gi || item._gi.state === 'Preview') {
+                    updateLegStatus(item.leg.parlayId, item.leg.legIndex, null,
+                        item.leg.threshold, item.leg.direction, item.leg.marketType, item._gi || null, false);
+                }
+            });
+
+            var liveSlugs = Object.keys(liveEventsBySlug);
+            if (!liveSlugs.length) return;
+
+            // Fetch player stats summaries for live/final games
+            Promise.all(liveSlugs.map(function(slug) {
+                var eventIds = Object.keys(liveEventsBySlug[slug]);
+                return Promise.all(eventIds.map(function(eid) {
+                    return fetch('https://site.api.espn.com/apis/site/v2/sports/soccer/' + slug + '/summary?event=' + eid,
+                        { signal: AbortSignal.timeout(8000), cache: 'no-cache' })
+                        .then(function(r) { return r.json(); })
+                        .catch(function() { return null; });
+                })).then(function(summaries) { return { slug: slug, summaries: summaries }; });
+            })).then(function(slugResults) {
+                var statsBySlug = {};
+                slugResults.forEach(function(sr) {
+                    var map = {};
+                    (sr.summaries || []).forEach(function(d) {
+                        if (!d) return;
+                        (d.rosters || []).forEach(function(team) {
+                            (team.roster || []).forEach(function(a) {
+                                if (!a.active) return;
+                                var name = normSlipName((a.athlete && a.athlete.displayName) || '');
+                                if (!name) return;
+                                var raw = {};
+                                (a.stats || []).forEach(function(s) { raw[s.name] = parseFloat(s.value) || 0; });
+                                if (!(raw.appearances > 0)) return;
+                                if (!map[name]) map[name] = { totalGoals:0, sot:0, assists:0, saves:0, offsides:0, fouls_won:0 };
+                                map[name].totalGoals = Math.max(map[name].totalGoals, raw.totalGoals || 0);
+                                map[name].sot        = Math.max(map[name].sot,        raw.shotsOnTarget || 0);
+                                map[name].assists    = Math.max(map[name].assists,    raw.goalAssists || 0);
+                                map[name].saves      = Math.max(map[name].saves,      raw.saves || 0);
+                                map[name].offsides   = Math.max(map[name].offsides,   raw.offsides || 0);
+                                map[name].fouls_won  = Math.max(map[name].fouls_won,  raw.foulsSuffered || 0);
                             });
                         });
-                        statsBySlug[sr.slug] = map;
                     });
-
-                    needed.forEach(function(n) {
-                        var slug = (n.sport || '').replace('soccer_', '') || 'eng.1';
-                        var leagueData = eventsBySlug[slug] || { live: [] };
-                        if (!leagueData.live.length) return;
-                        var stats = (statsBySlug[slug] || {})[normSlipName(n.playerName)];
-                        var field = SOCCER_FIELD[n.marketType];
-                        var val   = (stats && field && stats[field] !== undefined) ? stats[field] : null;
-                        var gameInfo = leagueData.live[0] || null;
-                        updateLegStatus(n.parlayId, n.legIndex, val, n.threshold, n.direction, n.marketType, gameInfo, false);
-                    });
-                }).catch(function() {
-                    // Stats failed — still update with correct game state from scoreboard
-                    needed.forEach(function(n) {
-                        var slug = (n.sport || '').replace('soccer_', '') || 'eng.1';
-                        var ld = eventsBySlug[slug] || { live: [] };
-                        if (ld.live.length) updateLegStatus(n.parlayId, n.legIndex, null, n.threshold, n.direction, n.marketType, ld.live[0], false);
-                    });
+                    statsBySlug[sr.slug] = map;
                 });
-            }).catch(function() {});
-        });
+
+                allNeeded.forEach(function(item) {
+                    var gi = item._gi;
+                    if (!gi || gi.state === 'Preview') return;
+                    var slug = (item.leg.sport || '').replace('soccer_', '') || 'eng.1';
+                    var stats = (statsBySlug[slug] || {})[normSlipName(item.leg.playerName)];
+                    var field = SOCCER_FIELD[item.leg.marketType];
+                    var val   = (stats && field && stats[field] !== undefined) ? stats[field] : null;
+                    updateLegStatus(item.leg.parlayId, item.leg.legIndex, val,
+                        item.leg.threshold, item.leg.direction, item.leg.marketType, gi, false);
+                });
+            }).catch(function() {
+                allNeeded.forEach(function(item) {
+                    var gi = item._gi;
+                    if (gi && gi.state !== 'Preview')
+                        updateLegStatus(item.leg.parlayId, item.leg.legIndex, null,
+                            item.leg.threshold, item.leg.direction, item.leg.marketType, gi, false);
+                });
+            });
+        }).catch(function() {});
     }
 
     function fetchLiveSlipStats() {
