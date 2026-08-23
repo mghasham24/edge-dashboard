@@ -5300,7 +5300,22 @@
                     return;
                 }
                 var players = buildParlayPlayersFromDk(d.players, sport === 'soccer' ? 200000 : sport === 'wnba' ? 100000 : 1);
-                if (sport === 'soccer') PARLAY_PLAYERS_SOCCER = players;
+                if (sport === 'soccer') {
+                    PARLAY_PLAYERS_SOCCER = players;
+                    // Warm the headshot cache for all soccer players immediately after data loads.
+                    // Staggered 100ms so the grid is already rendered before fetches complete,
+                    // but all searches are queued before the user can switch categories.
+                    var _seenHs = {}, _hsPreIdx = 0;
+                    players.forEach(function(p) {
+                        if (!p.name || _seenHs[p.name]) return;
+                        _seenHs[p.name] = true;
+                        var _cached = PARLAY_HEADSHOT_CACHE[p.name];
+                        if (_cached && _cached !== 'none' && _cached !== 'pending') return; // already in memory
+                        if (_rsHsLsGet(p.name)) return; // already in localStorage
+                        var _delay = _hsPreIdx++ * 100;
+                        setTimeout(function() { _fetchRsSoccerHeadshot(p.name, function() {}); }, _delay);
+                    });
+                }
                 else if (sport === 'wnba') PARLAY_PLAYERS_WNBA = players;
                 else {
                     var _teamPicks = PARLAY_PLAYERS.filter(function(p) { return p.isTeamMarket; });
@@ -6628,7 +6643,7 @@
                             var avSt = 'background:linear-gradient(135deg,' + color + ',' + color + 'aa);display:none';
                             av.outerHTML = '<img class="parlay-card-headshot" data-name="' + escHtml(name) + '" data-sport="soccer" src="' + escHtml(url) + '" alt="" onerror="parlayHeadshotFail(this)"><div class="parlay-card-avatar" style="' + avSt + '">' + escHtml(initials) + '</div>';
                         });
-                    }, _idx * 300);
+                    }, _idx * 100);
                     return;
                 }
                 // Non-soccer: ESPN search
