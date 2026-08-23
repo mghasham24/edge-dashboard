@@ -7752,12 +7752,12 @@
             (s.legs || []).forEach(function(leg, li) {
                 // Always show live bars for today's legs; settled legs on old dates keep their static display
                 if (leg.status !== 'pending' && !(leg.status === 'lost' && leg.game_date === liveToday)) return;
-                var gd  = leg.game_date || liveToday;
-                // Never fetch a future date's schedule for live stats — cap to today so
-                // legs with a wrong-date game_date (e.g. stored as tomorrow due to DK cache)
-                // still get live inning/score updates from today's games.
-                if (gd > liveToday) gd = liveToday;
+                var gdRaw = leg.game_date || liveToday;
                 var mkt = leg.market_type || '';
+                var isSoccer = (leg.sport && leg.sport.startsWith('soccer_')) || !!SOCCER_MKT_SET[mkt];
+                // Cap future dates to today for MLB/WNBA/NFL (DK cache sometimes stores tomorrow's date for today's game).
+                // Soccer game dates are accurate — don't cap or we'd match today's finished EPL games for tomorrow's props.
+                var gd = (!isSoccer && gdRaw > liveToday) ? liveToday : gdRaw;
                 var legObj = { parlayId: s.id, legIndex: li, playerName: leg.player_name, marketType: mkt, threshold: parseFloat(leg.threshold) || 0, direction: leg.direction, isTeam: mkt.startsWith('team_'), sport: leg.sport || '', eventName: leg.event_name || '' };
                 if (WNBA_MKT_SET[mkt] || leg.sport === 'wnba') {
                     if (!wnbaNeededByDate[gd]) wnbaNeededByDate[gd] = [];
@@ -7765,7 +7765,7 @@
                 } else if (leg.sport === 'nfl') {
                     if (!nflNeededByDate[gd]) nflNeededByDate[gd] = [];
                     nflNeededByDate[gd].push(legObj);
-                } else if ((legObj.sport && legObj.sport.startsWith('soccer_')) || SOCCER_MKT_SET[mkt]) {
+                } else if (isSoccer) {
                     if (!soccerNeededByDate[gd]) soccerNeededByDate[gd] = [];
                     soccerNeededByDate[gd].push(legObj);
                 } else {
