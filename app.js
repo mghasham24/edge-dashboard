@@ -6759,8 +6759,8 @@
         if (!grid || !section) return;
         var gridRect    = grid.getBoundingClientRect();
         var sectionRect = section.getBoundingClientRect();
-        var target = sectionRect.top - gridRect.top + grid.scrollTop;
-        grid.scrollTo({ top: target, behavior: 'smooth' });
+        var target = sectionRect.top - gridRect.top + grid.scrollTop - 12;
+        grid.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
         // Flash active state on button
         var nav = document.getElementById('fc-parlay-league-nav');
         if (nav) {
