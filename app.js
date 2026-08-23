@@ -7247,8 +7247,8 @@
                 }
                 timeEl.className = 'pslip-team-game';
             } else {
-                if (state === 'Live' && gameInfo.inningLabel) {
-                    timeEl.textContent = gameInfo.inningLabel;
+                if (state === 'Live') {
+                    timeEl.textContent = gameInfo.inningLabel || 'Live';
                     timeEl.className = 'pslip-leg-time live';
                 } else if (state === 'Final') {
                     timeEl.textContent = 'Final';
@@ -7689,28 +7689,21 @@
                         var map = {};
                         (sr.summaries || []).forEach(function(d) {
                             if (!d) return;
-                            (d.boxscore && d.boxscore.players || []).forEach(function(teamBlock) {
-                                (teamBlock.statistics || []).forEach(function(sb) {
-                                    var names = sb.names || sb.labels || [];
-                                    var iG   = names.indexOf('G');
-                                    var iA   = Math.max(names.indexOf('A'), names.indexOf('AST'));
-                                    var iSOT = names.indexOf('SOT') >= 0 ? names.indexOf('SOT') : names.indexOf('SoT');
-                                    var iSV  = names.indexOf('SV') >= 0 ? names.indexOf('SV') : Math.max(names.indexOf('SAVES'), names.indexOf('Saves'));
-                                    var iOFF = names.indexOf('OFF') >= 0 ? names.indexOf('OFF') : names.indexOf('Off');
-                                    var iFS  = names.indexOf('FS') >= 0 ? names.indexOf('FS') : names.indexOf('FD');
-                                    (sb.athletes || []).forEach(function(a) {
-                                        var name = normSlipName((a.athlete && a.athlete.displayName) || '');
-                                        if (!name) return;
-                                        var s = a.stats || [];
-                                        function sv(i) { if (i < 0 || i >= s.length) return 0; return parseInt(s[i], 10) || 0; }
-                                        if (!map[name]) map[name] = { totalGoals:0, sot:0, assists:0, saves:0, offsides:0, fouls_won:0 };
-                                        map[name].totalGoals = Math.max(map[name].totalGoals, sv(iG));
-                                        map[name].sot        = Math.max(map[name].sot,        sv(iSOT));
-                                        map[name].assists    = Math.max(map[name].assists,    sv(iA));
-                                        map[name].saves      = Math.max(map[name].saves,      sv(iSV));
-                                        map[name].offsides   = Math.max(map[name].offsides,   sv(iOFF));
-                                        map[name].fouls_won  = Math.max(map[name].fouls_won,  sv(iFS));
-                                    });
+                            (d.rosters || []).forEach(function(team) {
+                                (team.roster || []).forEach(function(a) {
+                                    if (!a.active) return;
+                                    var name = normSlipName((a.athlete && a.athlete.displayName) || '');
+                                    if (!name) return;
+                                    var raw = {};
+                                    (a.stats || []).forEach(function(s) { raw[s.name] = parseFloat(s.value) || 0; });
+                                    if (!(raw.appearances > 0)) return;
+                                    if (!map[name]) map[name] = { totalGoals:0, sot:0, assists:0, saves:0, offsides:0, fouls_won:0 };
+                                    map[name].totalGoals = Math.max(map[name].totalGoals, raw.totalGoals || 0);
+                                    map[name].sot        = Math.max(map[name].sot,        raw.shotsOnTarget || 0);
+                                    map[name].assists    = Math.max(map[name].assists,    raw.goalAssists || 0);
+                                    map[name].saves      = Math.max(map[name].saves,      raw.saves || 0);
+                                    map[name].offsides   = Math.max(map[name].offsides,   raw.offsides || 0);
+                                    map[name].fouls_won  = Math.max(map[name].fouls_won,  raw.foulsSuffered || 0);
                                 });
                             });
                         });
