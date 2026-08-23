@@ -7069,6 +7069,28 @@
             showImg(el, SLIP_HEADSHOT_CACHE[playerName]);
             return;
         }
+        // Soccer: use RS headshot cache (in-memory + localStorage) then RS search
+        if (legSport.startsWith('soccer_')) {
+            var _rsm2 = PARLAY_HEADSHOT_CACHE[playerName];
+            if (_rsm2 && _rsm2 !== 'none' && _rsm2 !== 'pending') {
+                SLIP_HEADSHOT_CACHE[playerName] = _rsm2;
+                showImg(document.getElementById(elemId), _rsm2);
+                return;
+            }
+            var _ls2 = _rsHsLsGet(playerName);
+            if (_ls2) {
+                PARLAY_HEADSHOT_CACHE[playerName] = _ls2;
+                SLIP_HEADSHOT_CACHE[playerName] = _ls2;
+                showImg(document.getElementById(elemId), _ls2);
+                return;
+            }
+            _fetchRsSoccerHeadshot(playerName, function(url) {
+                SLIP_HEADSHOT_CACHE[playerName] = url || 'none';
+                if (url) showImg(document.getElementById(elemId), url);
+                else showFallback(document.getElementById(elemId));
+            });
+            return;
+        }
         // Check live player pools first — may have loaded since the slip rendered
         var lp = PARLAY_PLAYERS.find(function(x) { return x.name === playerName; }) ||
                  PARLAY_PLAYERS_WNBA.find(function(x) { return x.name === playerName; }) ||
@@ -7922,6 +7944,13 @@
         slips.forEach(function(s) {
             (s.legs || []).forEach(function(leg, li) {
                 if ((leg.market_type || '').startsWith('team_')) return;
+                var isSoccer = (leg.sport || '').startsWith('soccer_');
+                if (isSoccer) {
+                    var _rsm = PARLAY_HEADSHOT_CACHE[leg.player_name];
+                    var alreadyHave = (_rsm && _rsm !== 'none' && _rsm !== 'pending') || !!_rsHsLsGet(leg.player_name);
+                    if (!alreadyHave) loadSlipHeadshotAsync('slipav-' + s.id + '-' + li, leg.player_name, leg.sport);
+                    return;
+                }
                 var livePlayer = PARLAY_PLAYERS.find(function(pp) { return pp.name === leg.player_name; }) ||
                                  PARLAY_PLAYERS_WNBA.find(function(pp) { return pp.name === leg.player_name; }) ||
                                  PARLAY_PLAYERS_SOCCER.find(function(pp) { return pp.name === leg.player_name; });
@@ -8157,6 +8186,9 @@
             // Basketball full-name keys
             points:'Points', assists:'Assists', rebounds:'Rebounds', steals:'Steals',
             blocks:'Blocks', threes:'Threes', turnovers:'Turnovers', minutes:'Minutes',
+            // Soccer
+            goalscorer:'Goalscorer', sot:'Shots on Target', assists:'Assists',
+            saves:'GK Saves', offsides:'Offsides', fouls_won:'Fouls Won',
             // 1st inning
             '1inn_ml':'1st Inn Winner', '1inn_runs_ou':'1st Inn Runs', '1inn_runs_exact':'1st Inn Runs',
             '1inn_hits_ou':'1st Inn Hits', '1inn_hits_exact':'1st Inn Hits',
@@ -8250,7 +8282,14 @@
                 var livePlayer = PARLAY_PLAYERS.find(function(pp) { return pp.name === leg.player_name; }) ||
                                  PARLAY_PLAYERS_WNBA.find(function(pp) { return pp.name === leg.player_name; }) ||
                                  PARLAY_PLAYERS_SOCCER.find(function(pp) { return pp.name === leg.player_name; });
-                var headshotSrc = (livePlayer && livePlayer.headshot) || leg.headshot_url || null;
+                var _legIsSoccer = (leg.sport || '').startsWith('soccer_');
+                var headshotSrc;
+                if (_legIsSoccer) {
+                    var _rsm = PARLAY_HEADSHOT_CACHE[leg.player_name];
+                    headshotSrc = (_rsm && _rsm !== 'none' && _rsm !== 'pending') ? _rsm : (_rsHsLsGet(leg.player_name) || null);
+                } else {
+                    headshotSrc = (livePlayer && livePlayer.headshot) || leg.headshot_url || null;
+                }
                 var avInnerId = 'slipav-' + s.id + '-' + li;
                 var fallbackHtml = '<span style="background:hsl(' + hue + ',40%,22%)">' + escHtml(initials) + '</span>';
                 if (headshotSrc) {
@@ -8279,6 +8318,8 @@
             } else if (mkt.startsWith('ufc_method_')) {
                 var _movLabel = {'ufc_method_ko':'KO/TKO','ufc_method_sub':'Submission','ufc_method_dec':'Decision'}[mkt] || mkt.replace('ufc_method_','');
                 statLine = escHtml('by ' + _movLabel + resultVal);
+            } else if (mkt === 'goalscorer') {
+                statLine = escHtml('Goalscorer Yes' + resultVal);
             } else {
                 statLine = escHtml((dir === 'more' ? 'Over ' : 'Under ') + thresh + ' ' + (MKT_SHORT[mkt] || mkt) + resultVal);
             }
