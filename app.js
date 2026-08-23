@@ -5996,6 +5996,23 @@
     function _rsHsLsGet(name) { try { return localStorage.getItem(_rsHsLsKey(name)); } catch(e) { return null; } }
     function _rsHsLsSet(name, url) { try { localStorage.setItem(_rsHsLsKey(name), url); } catch(e) {} }
 
+    // Pick the best ESPN search result by matching team name when multiple candidates exist.
+    // Prevents showing Dodgers Max Muncy for an Athletics Max Muncy prop, etc.
+    function _pickEspnHit(contents, teamName) {
+        if (!contents || !contents.length) return null;
+        if (teamName && contents.length > 1) {
+            var words = teamName.toLowerCase().split(/\s+/).filter(function(w) { return w.length > 3; });
+            if (words.length) {
+                var match = contents.find(function(c) {
+                    var desc = (c.description || '').toLowerCase();
+                    return words.some(function(w) { return desc.indexOf(w) !== -1; });
+                });
+                if (match) return match;
+            }
+        }
+        return contents[0];
+    }
+
     function _fetchRsSoccerHeadshot(name, cb) {
         var cached = PARLAY_HEADSHOT_CACHE[name];
         if (cached === 'none') { cb(null); return; }
@@ -6639,10 +6656,11 @@
         var _seenEspn   = {};
         var _hsIdx      = 0;
         players.forEach(function(p) {
-            if (p.headshot || _seenEspn[p.name]) return; // p.headshot → DK img rendered; parlayHeadshotFail handles RS fallback
-            _seenEspn[p.name] = true;
+            var _espnDeupKey = p.name + '|' + (p.team || '');
+            if (p.headshot || _seenEspn[_espnDeupKey]) return; // p.headshot → DK img rendered; parlayHeadshotFail handles RS fallback
+            _seenEspn[_espnDeupKey] = true;
             var _idx = _hsIdx++;
-            (function(pid, name, initials, color) {
+            (function(pid, name, initials, color, team) {
                 // Soccer: RS avatar search, staggered to avoid hammering RS
                 if (_hsSport === 'soccer') {
                     var cached = PARLAY_HEADSHOT_CACHE[name];
@@ -6679,7 +6697,7 @@
                     .then(function(r) { return r.json(); })
                     .then(function(d) {
                         var group = (d.results || []).find(function(r) { return r.type === 'player'; });
-                        var hit = group && group.contents && group.contents[0];
+                        var hit = _pickEspnHit(group && group.contents, team);
                         if (!hit) { PARLAY_HEADSHOT_CACHE[name] = 'none'; return; }
                         var espnId = (hit.uid || '').split('~a:')[1] || '';
                         if (!espnId) { PARLAY_HEADSHOT_CACHE[name] = 'none'; return; }
@@ -6691,7 +6709,7 @@
                         av.outerHTML = '<img class="parlay-card-headshot" data-name="' + escHtml(name) + '" data-sport="' + escHtml(_hsSport) + '" src="' + escHtml(url) + '" alt="" onerror="parlayHeadshotFail(this)"><div class="parlay-card-avatar" style="' + avSt + '">' + escHtml(initials) + '</div>';
                     })
                     .catch(function() { PARLAY_HEADSHOT_CACHE[name] = 'none'; });
-            })(p.id, p.name, p.initials, p.color);
+            })(p.id, p.name, p.initials, p.color, p.team);
         });
 
         // Kick off background RS player ID lookups for any uncached players
@@ -7050,7 +7068,7 @@
             .replace(/\s+(?:jr\.?|sr\.?|ii|iii|iv)$/, '');
     }
 
-    function loadSlipHeadshotAsync(elemId, playerName, sport) {
+    function loadSlipHeadshotAsync(elemId, playerName, sport, team) {
         var legSport  = sport || (document.getElementById(elemId) ? document.getElementById(elemId).dataset.sport : '') || 'mlb';
         var espnSport  = legSport === 'wnba' ? 'basketball' : legSport === 'ufc' ? 'mma' : 'baseball';
         var espnLeague = legSport === 'wnba' ? 'wnba'       : legSport === 'ufc' ? 'mma' : 'mlb';
@@ -7107,7 +7125,7 @@
             .then(function(d) {
                 // ESPN search: results[].contents[] — uid contains "~a:{numericId}"
                 var group = (d.results || []).find(function(r) { return r.type === 'player'; });
-                var hit = group && group.contents && group.contents[0];
+                var hit = _pickEspnHit(group && group.contents, team);
                 var espnId = hit ? (hit.uid || '').split('~a:')[1] : '';
                 if (!espnId) {
                     SLIP_HEADSHOT_CACHE[playerName] = 'none';
@@ -7955,7 +7973,7 @@
                                  PARLAY_PLAYERS_WNBA.find(function(pp) { return pp.name === leg.player_name; }) ||
                                  PARLAY_PLAYERS_SOCCER.find(function(pp) { return pp.name === leg.player_name; });
                 if (leg.headshot_url || (livePlayer && livePlayer.headshot)) return;
-                loadSlipHeadshotAsync('slipav-' + s.id + '-' + li, leg.player_name, leg.sport || 'mlb');
+                loadSlipHeadshotAsync('slipav-' + s.id + '-' + li, leg.player_name, leg.sport || 'mlb', leg.team);
             });
         });
         startLiveSlipTracking();
@@ -8293,7 +8311,7 @@
                 var avInnerId = 'slipav-' + s.id + '-' + li;
                 var fallbackHtml = '<span style="background:hsl(' + hue + ',40%,22%)">' + escHtml(initials) + '</span>';
                 if (headshotSrc) {
-                    avatarHtml = '<div class="pslip-avatar"><div class="pslip-av-inner" id="' + avInnerId + '" data-name="' + escHtml(leg.player_name) + '" data-sport="' + escHtml(leg.sport || 'mlb') + '" data-fallback="' + escHtml(fallbackHtml) + '"><img src="' + escHtml(headshotSrc) + '" alt="" onerror="loadSlipHeadshotAsync(this.parentNode.id,this.parentNode.dataset.name,this.parentNode.dataset.sport)"></div>' + dirBadge + '</div>';
+                    avatarHtml = '<div class="pslip-avatar"><div class="pslip-av-inner" id="' + avInnerId + '" data-name="' + escHtml(leg.player_name) + '" data-sport="' + escHtml(leg.sport || 'mlb') + '" data-team="' + escHtml(leg.team || '') + '" data-fallback="' + escHtml(fallbackHtml) + '"><img src="' + escHtml(headshotSrc) + '" alt="" onerror="loadSlipHeadshotAsync(this.parentNode.id,this.parentNode.dataset.name,this.parentNode.dataset.sport,this.parentNode.dataset.team)"></div>' + dirBadge + '</div>';
                 } else {
                     avatarHtml = '<div class="pslip-avatar"><div class="pslip-av-inner" id="' + avInnerId + '" data-name="' + escHtml(leg.player_name) + '" data-sport="' + escHtml(leg.sport || 'mlb') + '" data-fallback="' + escHtml(fallbackHtml) + '" style="background:hsl(' + hue + ',40%,22%)">' + fallbackHtml + '</div>' + dirBadge + '</div>';
                 }
