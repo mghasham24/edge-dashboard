@@ -10,7 +10,7 @@ import STATIC_ESPN_IDS from '../espn/mlb-ids.json' assert { type: 'json' };
 const DK_BASE   = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
 const DK_LEAGUE = '84240';
 const CACHE_TTL = 300; // 5 min
-const CACHE_KEY = 'dk_mlb_props_v15';
+const CACHE_KEY = 'dk_mlb_props_v16';
 
 // Standard subcategories — available at league level
 const SUBCAT_MAP = {
@@ -62,6 +62,10 @@ function parseOdds(american) {
   const n = parseInt(s, 10);
   return isFinite(n) ? n : null;
 }
+
+// DK appends lineup status like " (L)", " (O)", " (Q)", " (D)", " (P)" to player names
+const DK_STATUS_RE = /\s+\([LOQDP]\)$/i;
+function cleanDkName(name) { return name ? name.replace(DK_STATUS_RE, '').trim() : name; }
 
 function parseSubcat(data, subcatId, info) {
   const today = todayET();
@@ -119,14 +123,14 @@ function parseSubcat(data, subcatId, info) {
     const mainLine = (over.tags || []).includes('MainPointLine');
 
     players.push({
-      name: player.name, team, opp, time: timeStr, startMs,
+      name: cleanDkName(player.name), team, opp, time: timeStr, startMs,
       market: info.market, stat: info.stat,
       threshold: line, label: `Over ${line}`, direction: 'more',
       americanOdds: oddsOver,
       marketId: mktId, selectionId: String(over.id), eventId: String(mkt.eventId),
       subcatId, mainLine, headshot, dkPlayerId,
     }, {
-      name: player.name, team, opp, time: timeStr, startMs,
+      name: cleanDkName(player.name), team, opp, time: timeStr, startMs,
       market: info.market, stat: info.stat,
       threshold: line, label: `Under ${line}`, direction: 'less',
       americanOdds: oddsUnder,

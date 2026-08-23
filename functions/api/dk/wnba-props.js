@@ -10,7 +10,7 @@ import STATIC_ESPN_IDS from '../espn/wnba-ids.json' assert { type: 'json' };
 const DK_BASE   = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
 const DK_LEAGUE = '94682'; // WNBA
 const CACHE_TTL = 300;     // 5 min
-const CACHE_KEY = 'dk_wnba_props_v6';
+const CACHE_KEY = 'dk_wnba_props_v7';
 
 // Confirmed WNBA DK subcategory IDs (from DevTools 2026-07-28).
 const SUBCAT_MAP = {
@@ -59,6 +59,9 @@ function parseOdds(american) {
   const n = parseInt(s, 10);
   return isFinite(n) ? n : null;
 }
+
+const DK_STATUS_RE = /\s+\([LOQDP]\)$/i;
+function cleanDkName(name) { return name ? name.replace(DK_STATUS_RE, '').trim() : name; }
 
 function parseSubcat(data, subcatId, info) {
   const today = todayET();
@@ -115,14 +118,14 @@ function parseSubcat(data, subcatId, info) {
     const mainLine = (over.tags || []).includes('MainPointLine');
 
     players.push({
-      name: player.name, team, opp, time: timeStr, startMs,
+      name: cleanDkName(player.name), team, opp, time: timeStr, startMs,
       market: info.market, stat: info.stat,
       threshold: line, label: `Over ${line}`, direction: 'more',
       americanOdds: oddsOver,
       marketId: mktId, selectionId: String(over.id), eventId: String(mkt.eventId),
       subcatId, mainLine, headshot, dkPlayerId,
     }, {
-      name: player.name, team, opp, time: timeStr, startMs,
+      name: cleanDkName(player.name), team, opp, time: timeStr, startMs,
       market: info.market, stat: info.stat,
       threshold: line, label: `Under ${line}`, direction: 'less',
       americanOdds: oddsUnder,
@@ -162,7 +165,7 @@ function parseSubcatYN(data, game, subcatId, info) {
     const team   = isHome ? (game.homeShort || game.home) : (game.awayShort || game.away);
     const opp    = isHome ? (game.awayShort || game.away) : (game.homeShort || game.home);
     players.push({
-      name: player.name, team, opp, time: game.time || '', startMs: game.startMs || 0,
+      name: cleanDkName(player.name), team, opp, time: game.time || '', startMs: game.startMs || 0,
       market: info.market, stat: info.stat,
       threshold: null, label: 'Yes', direction: 'more',
       americanOdds: odds, type: 'yn',
