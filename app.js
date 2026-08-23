@@ -5913,13 +5913,15 @@
 
     function parlayMaxStake() {
         if (Object.keys(parlayPicks).length < 2) return 50000;
-        return Math.floor(10000 * parlayTrueProb() / 0.70);
+        // 0.9 = RS rake; 0.70 = house rake. Solve: stake*0.9*0.70/trueProb = 10000
+        return Math.floor(10000 * parlayTrueProb() / 0.63);
     }
 
     function parlayCalcPayout(s) {
         if (Object.keys(parlayPicks).length < 2) return null;
         var prob   = parlayTrueProb();
-        var raw    = Math.min(Math.floor(s * 0.70 / prob), 10000);
+        // Effective stake = s*0.9 (RS takes 10% commission on deposit)
+        var raw    = Math.min(Math.floor(s * 0.9 * 0.70 / prob), 10000);
         var payout = Math.floor((raw + 2) / 10) * 10;
         if (0.70 / prob > 2.5) payout = Math.max(0, payout - 10);
         return payout;
@@ -7926,14 +7928,14 @@
         var adjPayoutRax  = s.payout_rax;
         if (hasPush) {
             var origProb = legsArr.reduce(function(acc, l) { return acc * legImpliedProb(l); }, 1);
-            if (origProb > 0) origPayoutRax = Math.min(Math.floor(s.stake_rax * 0.70 / origProb), 10000);
+            if (origProb > 0) origPayoutRax = Math.min(Math.floor(s.stake_rax * 0.9 * 0.70 / origProb), 10000);
             if (s.status === 'won') {
                 adjPayoutRax = s.payout_rax; // auto-settle already recalculated
             } else if (activeLegs.length < 2) {
                 adjPayoutRax = s.stake_rax; // voided → full refund
             } else {
                 var adjProb = activeLegs.reduce(function(acc, l) { return acc * legImpliedProb(l); }, 1);
-                if (adjProb > 0) adjPayoutRax = Math.min(Math.floor(s.stake_rax * 0.70 / adjProb), 10000);
+                if (adjProb > 0) adjPayoutRax = Math.min(Math.floor(s.stake_rax * 0.9 * 0.70 / adjProb), 10000);
             }
         }
         var mult = s.stake_rax > 0 ? ((hasPush ? adjPayoutRax : s.payout_rax) / s.stake_rax).toFixed(2) + 'x' : '';

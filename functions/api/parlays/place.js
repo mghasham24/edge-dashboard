@@ -386,10 +386,12 @@ async function _place({ request, env }, onCreditConsumed) {
   }
 
   // Payout math — mirrors parlayCalcPayout() in the frontend exactly.
+  // RS takes 10% commission on deposit, so effective stake = stake * 0.9.
   // Hard cap: 10,000 Rax. Max stake formula ensures payout never exceeds 10k.
   // Parlays over 2.5x are docked 10 Rax to cover deposit card acquisition cost.
-  const trueProb  = normalized.reduce((acc, l) => acc * l.impliedProb, 1);
-  const rawPayout = Math.min(Math.floor(stake * 0.70 / trueProb), 10000);
+  const trueProb      = normalized.reduce((acc, l) => acc * l.impliedProb, 1);
+  const effectiveStake = Math.floor(stake * 0.9);
+  const rawPayout = Math.min(Math.floor(effectiveStake * 0.70 / trueProb), 10000);
   let payoutRax = Math.floor((rawPayout + 2) / 10) * 10;
   if (0.70 / trueProb > 2.5) payoutRax = Math.max(0, payoutRax - 10);
   if (isFreePlay) payoutRax = Math.min(payoutRax, 3000);

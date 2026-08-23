@@ -1509,10 +1509,12 @@ async function handleRequest({ request, env }) {
       parlayResult = 'lost';
       finalPayout  = 0;
     } else {
-      // All remaining legs won — recalculate payout using only the non-void legs' implied probs
-      const newTrueProb = allWonLegProbs.reduce((acc, p) => acc * p, 1);
+      // All remaining legs won — recalculate payout using only the non-void legs' implied probs.
+      // Use stake_rax * 0.9 to match placement formula (RS takes 10% commission on deposit).
+      const newTrueProb    = allWonLegProbs.reduce((acc, p) => acc * p, 1);
+      const effectiveStake = Math.floor(parlay.stake_rax * 0.9);
       parlayResult = 'won';
-      finalPayout  = Math.min(Math.floor(parlay.stake_rax * 0.70 / newTrueProb), parlay.is_free_play ? 3000 : 10000);
+      finalPayout  = Math.min(Math.floor(effectiveStake * 0.70 / newTrueProb), parlay.is_free_play ? 3000 : 10000);
     }
 
     for (const o of outcomes) {
