@@ -5974,16 +5974,24 @@
     // Fetch RS avatar hash for a soccer player via /api/real/otd?action=search.
     // Calls cb(url) with the RS large headshot URL, or cb(null) if not found.
     // Safe: D1-cached at 1hr in otd.js, staggered by caller, never constructs guessed URLs.
+    function _rsHsLsKey(name) { return 'rax_soc_hs:' + name; }
+    function _rsHsLsGet(name) { try { return localStorage.getItem(_rsHsLsKey(name)); } catch(e) { return null; } }
+    function _rsHsLsSet(name, url) { try { localStorage.setItem(_rsHsLsKey(name), url); } catch(e) {} }
+
     function _fetchRsSoccerHeadshot(name, cb) {
         var cached = PARLAY_HEADSHOT_CACHE[name];
         if (cached === 'none') { cb(null); return; }
         if (cached && cached !== 'pending') { cb(cached); return; }
+        // Check localStorage before hitting the API — cached forever
+        var ls = _rsHsLsGet(name);
+        if (ls) { PARLAY_HEADSHOT_CACHE[name] = ls; cb(ls); return; }
         // Already in-flight — queue callback
         if (PARLAY_RS_HS_FLIGHT[name]) { PARLAY_RS_HS_FLIGHT[name].push(cb); return; }
         PARLAY_RS_HS_FLIGHT[name] = [cb];
         PARLAY_HEADSHOT_CACHE[name] = 'pending';
         var _done = function(url) {
             PARLAY_HEADSHOT_CACHE[name] = url || 'none';
+            if (url) _rsHsLsSet(name, url); // persist forever
             var cbs = PARLAY_RS_HS_FLIGHT[name] || [];
             delete PARLAY_RS_HS_FLIGHT[name];
             cbs.forEach(function(fn) { fn(url || null); });
@@ -6523,8 +6531,15 @@
             }
             var avatarStyle = 'background:linear-gradient(135deg,' + p.color + ',' + p.color + 'aa)';
             var topStyle = 'background:linear-gradient(160deg,' + p.color + '55,' + p.color + '22)';
-            var headshotHtml = p.headshot
-                ? '<img class="parlay-card-headshot" data-name="' + escHtml(p.name) + '" data-sport="' + escHtml(parlayActiveSport) + '" src="' + escHtml(p.headshot) + '" alt="" onerror="parlayHeadshotFail(this)">' +
+            // For soccer: check localStorage cache first so returning visitors see photos immediately
+            var _cardHsUrl = p.headshot;
+            if (parlayActiveSport === 'soccer') {
+                var _memHs = PARLAY_HEADSHOT_CACHE[p.name];
+                _cardHsUrl = (_memHs && _memHs !== 'none' && _memHs !== 'pending') ? _memHs : (_rsHsLsGet(p.name) || null);
+                if (_cardHsUrl && !PARLAY_HEADSHOT_CACHE[p.name]) PARLAY_HEADSHOT_CACHE[p.name] = _cardHsUrl;
+            }
+            var headshotHtml = _cardHsUrl
+                ? '<img class="parlay-card-headshot" data-name="' + escHtml(p.name) + '" data-sport="' + escHtml(parlayActiveSport) + '" src="' + escHtml(_cardHsUrl) + '" alt="" onerror="parlayHeadshotFail(this)">' +
                   '<div class="parlay-card-avatar" style="' + avatarStyle + ';display:none">' + escHtml(p.initials) + '</div>'
                 : '<div class="parlay-card-avatar" id="bcard-av-' + p.id + '" data-name="' + escHtml(p.name) + '" style="' + avatarStyle + '">' + escHtml(p.initials) + '</div>';
             var rsPlayerId = parlayRsIdCache[parlayActiveSport + ':' + p.name];
