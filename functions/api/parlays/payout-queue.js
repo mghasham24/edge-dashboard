@@ -57,6 +57,8 @@ async function findUnownedCard(rsUserId, authInfo, sessionToken, skipIds) {
         if (!id || skipIds.has(id)) continue;
         if (card.untouchable === true) continue;
         if (card.prestige != null && card.prestige >= 1) continue;
+        const rarity = (card.rarityLabel || card.rarity || '').toLowerCase();
+        if (rarity === 'mystic' || rarity === 'legendary' || rarity === 'iconic') continue;
         return id;
       }
     } catch { continue; }
