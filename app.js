@@ -5247,6 +5247,7 @@
                 type:       'ou',
                 moreOdds:   moreEntry.americanOdds, lessOdds: lessEntry.americanOdds,
                 moreSelId:  moreEntry.selectionId,  lessSelId: lessEntry.selectionId,
+                awayShort:  moreEntry.awayShort || null, homeShort: moreEntry.homeShort || null,
                 marketId:   moreEntry.marketId, eventId: moreEntry.eventId, subcatId: moreEntry.subcatId,
             });
         });

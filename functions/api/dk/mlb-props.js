@@ -124,6 +124,7 @@ function parseSubcat(data, subcatId, info) {
 
     players.push({
       name: cleanDkName(player.name), team, opp, time: timeStr, startMs,
+      awayShort, homeShort,
       market: info.market, stat: info.stat,
       threshold: line, label: `Over ${line}`, direction: 'more',
       americanOdds: oddsOver,
@@ -131,6 +132,7 @@ function parseSubcat(data, subcatId, info) {
       subcatId, mainLine, headshot, dkPlayerId,
     }, {
       name: cleanDkName(player.name), team, opp, time: timeStr, startMs,
+      awayShort, homeShort,
       market: info.market, stat: info.stat,
       threshold: line, label: `Under ${line}`, direction: 'less',
       americanOdds: oddsUnder,
