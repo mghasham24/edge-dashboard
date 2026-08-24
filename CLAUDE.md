@@ -4,7 +4,7 @@
 Cloudflare Pages (static frontend) + Cloudflare Functions (API) + D1 (SQLite) + Workers (cron).
 
 ## Stack
-- **Frontend**: Three-file SPA — `index.html` (shell + script tags), `app.js` (~7.4k lines, all JS), `app.css` (~2.3k lines, all CSS).
+- **Frontend**: Three-file SPA — `index.html` (shell + script tags), `app.js` (~8k+ lines, all JS), `app.css` (~2.3k lines, all CSS).
 - **API**: `functions/api/` — Cloudflare Pages Functions (ES modules, `onRequest` / `onRequestGet` export).
 - **Shared helpers**: `functions/_lib/` — `auth.js`, `session.js`, `password.js`, `stripe.js`, `response.js`, `rateLimit.js`, `hashids.js`, `blockedDomains.js`.
 - **Database**: Cloudflare D1 (`edge-db`, id `ff9b93f1-81f8-4370-bd57-f634e0300443`). Schema in `migrations/0001_initial.sql`.
@@ -34,6 +34,12 @@ Cloudflare Pages (static frontend) + Cloudflare Functions (API) + D1 (SQLite) + 
 | `functions/api/fd/rfi.js` | FD RFI (run first innings) odds |
 | `functions/api/dk/nbaalts.js` | DK NBA alt lines |
 | `functions/api/dk/nhalalts.js` | DK NHL alt lines |
+| `functions/api/dk/mlb-props.js` | DK MLB player props (hits, total bases, RBIs, etc.) — groups O/U per player, stores `awayShort`/`homeShort` for correct event_name on slips |
+| `functions/api/dk/wnba-props.js` | DK WNBA player props |
+| `functions/api/dk/wnba-lines.js` | DK WNBA spread/ML/total |
+| `functions/api/dk/nfl-lines.js` | DK NFL spread/ML/total |
+| `functions/api/dk/mlb-lines.js` | DK MLB spread/ML/total |
+| `functions/api/dk/soccer-props.js` | DK soccer player props |
 | `functions/api/odds.js` | Odds API proxy — UFC only, with D1 caching and day-of-week block |
 | `functions/api/stripe/webhook.js` | All Stripe billing events |
 | `functions/api/stripe/checkout.js` | Stripe checkout session creation |
@@ -42,6 +48,27 @@ Cloudflare Pages (static frontend) + Cloudflare Functions (API) + D1 (SQLite) + 
 | `functions/api/admin/users.js` | Admin user management |
 | `functions/api/admin/stats.js` | Admin dashboard stats |
 | `functions/api/bets/taken.js` | Track bets taken by user (capped at 1000) |
+| `functions/api/real/game-ids.js` | Returns RS game IDs from D1 sync cache — used by My Slips to show RS icon on legs |
+| `functions/api/parlays/place.js` | Place a parlay slip — validates legs, deducts deposit, creates `parlays` + `parlay_legs` rows. Free play path: `is_free_play=1`, no deposit, payout capped at 3000 Rax |
+| `functions/api/parlays/my-slips.js` | Returns user's slips + legs + `free_play_credits` balance |
+| `functions/api/parlays/auto-settle.js` | Cron-triggered leg settler — MLB (statsapi), WNBA (ESPN), soccer (ESPN). Soccer name normalization: prefix match + last-name fallback for DK vs ESPN name differences |
+| `functions/api/parlays/payout.js` | Payout bot — accepts RS offers on winning slips. Reads `EDGEBOT_AUTH_INFO` + `EDGEBOT_SESSION_TOKEN` CF env vars |
+| `functions/api/parlays/deposit-check.js` | Verifies RS deposit arrived, marks slip active. Tracks cumulative stake for referral reward at 2k |
+| `functions/api/parlays/rs-verify.js` | RS username verification — links RS account to user, records referredBy, DMs referrer |
+| `functions/api/parlays/rs-verify-poll.js` | Polls RS verify status, solves captcha via `CAPSOLVER_API_KEY` |
+| `functions/api/parlays/win-notify.js` | Sends winning slip Telegram notification, solves captcha |
+| `functions/api/parlays/cancel.js` | Cancels a pending slip and refunds deposit |
+| `functions/api/parlays/settle.js` | Admin manual settle endpoint |
+| `functions/api/parlays/payout-queue.js` | Admin view of payout queue |
+| `functions/api/parlays/leaderboard.js` | Public parlay leaderboard |
+| `functions/api/parlays/all-slips.js` | Admin view of all slips |
+| `functions/api/parlays/market-buy.js` | RS market buy for payout flow |
+| `functions/api/parlays/offer-history.js` | RS offer history for payout tracking |
+| `functions/api/parlays/sync-cards.js` | Syncs RS card inventory for payout bot |
+| `functions/api/parlays/card-reconcile.js` | Reconciles payout card state |
+| `functions/api/parlays/player-rs-ids.js` | Maps player names to RS player IDs |
+| `functions/api/parlays/wnba-settle.js` | WNBA-specific settle logic |
+| `functions/api/parlays/contender-series.js` | Contender series parlay support |
 | `functions/api/alerts/settings.js` | Telegram alert preferences |
 | `functions/api/alerts/connect.js` | Telegram connection/verify |
 | `workers/alert-cron/index.js` | Telegram bet alert cron — runs every 60s on Cloudflare |
@@ -57,6 +84,12 @@ Cloudflare Pages (static frontend) + Cloudflare Functions (API) + D1 (SQLite) + 
 | `sw.js` | PWA service worker — app-shell cache, offline fallback. |
 | `tests/webhook.test.js` | Vitest test suite for Stripe webhook handler (12 tests). Run with `npx vitest`. |
 | `migrations/0001_initial.sql` | Full D1 schema snapshot — use to recreate DB from scratch |
+| `migrations/0002_parlays.sql` | `parlays`, `parlay_legs`, `payout_queue` tables |
+| `migrations/0003_rs_verify.sql` | RS username + verify columns on users |
+| `migrations/0004_verified_at.sql` | `verified_at` timestamp on users |
+| `migrations/0005_skipped_cards.sql` | `skipped_cards` on payout_queue for card cycling |
+| `migrations/0006_free_play.sql` | `free_play_credits`, `parlay_referred_by_id`, `parlay_referral_rewarded` on users; `is_free_play` on parlays |
+| `migrations/0007_rs_game_id.sql` | RS game ID storage for slip RS icon |
 
 ## Sports Model
 | Sport | Key | Free? | Source | Notes |
@@ -127,6 +160,10 @@ Cloudflare Pages (static frontend) + Cloudflare Functions (API) + D1 (SQLite) + 
 | `STRIPE_WEBHOOK_SECRET` | Webhook signature verification |
 | `STRIPE_ANNUAL_PRICE_ID` | Stripe price ID for $39/yr plan |
 | `RESEND_API_KEY` | Email (register, forgot) |
+| `STRIPE_MONTHLY_PRICE_ID` | Stripe price ID for $4.99/mo plan |
+| `EDGEBOT_AUTH_INFO` | Payout bot RS auth (JSON blob) — `payout.js` |
+| `EDGEBOT_SESSION_TOKEN` | Payout bot RS session cookie — expires regularly; rotate from RS DevTools → `npx wrangler pages secret put EDGEBOT_SESSION_TOKEN --project-name=edge-dashboard` |
+| `CAPSOLVER_API_KEY` | Captcha solver for `rs-verify-poll.js` and `win-notify.js` |
 
 ### Two Telegram Bots
 - **Main alerts bot** (`TELEGRAM_BOT_TOKEN` in CF Worker `alert-cron`) — sends bet EV alerts to users who connected Telegram in settings.
@@ -160,6 +197,10 @@ RS auth token can be sourced two ways:
 - **FD/DK fetches cost nothing**: They are native API calls. Never cite "Odds API credits" as a reason to cache or rate-limit FD or DK endpoints.
 - **Telegram bot token**: Stored in `TELEGRAM_BOT_TOKEN` env var. Rotate via BotFather if leaked. `workers/alert-cron` reads from `env.TELEGRAM_BOT_TOKEN`.
 - **Stripe webhook**: Uses `===` for signature comparison (not constant-time) — known issue, low exploitability, tracked in audit backlog.
+- **MLB slip polling date cap (removed v=779)**: There was a cap that forced `game_date` to today for non-soccer legs when the stored date was in the future. This caused tomorrow's game legs to show today's completed boxscore stats. Removed — polling now uses the stored `game_date` directly. If the date's schedule is all Preview, the slip correctly shows Preview and waits.
+- **Soccer auto-settle name mismatch**: DK and ESPN use different player names (e.g. "Axel Ojeda" vs "Agustin Ojeda", "Nicolas Fernandez Mercau" vs "Nicolás Fernández"). `auto-settle.js` has prefix-match + last-name fallback after exact lookup fails. If a soccer leg voids unexpectedly, check name normalization first.
+- **Soccer leg void rule**: A player who appeared for ≥1 minute (`appearances > 0 || minutesPlayed > 0` in ESPN stats) cannot void — only win or lose. Void is only valid for DNP (never entered).
+- **Free play credits**: `users.free_play_credits` column (migration 0006). Admin can set via D1: `UPDATE users SET free_play_credits=N WHERE id=?`. Frontend reads balance from `my-slips.js` response.
 
 ## Debugging Playbook
 | Symptom | First thing to check |
@@ -170,6 +211,9 @@ RS auth token can be sourced two ways:
 | Telegram alerts not sending | `TELEGRAM_BOT_TOKEN` in alert-cron env, or alert-cron not deployed (`wrangler deploy`) |
 | Stripe events not updating plan | Check `processed_webhook_events` for duplicates; confirm `subscription.deleted` event fires |
 | D1 schema missing table | Run `npx wrangler d1 execute edge-db --remote --file=migrations/0001_initial.sql` |
+| MLB slip shows wrong Final game | `game_date` cap was removed in v=779 — if recurring, check `fetchLiveSlipStats` in app.js around the `gdRaw` / `liveToday` comparison |
+| Soccer leg voided despite player playing | Check ESPN name vs DK name in `auto-settle.js` `getSoccerPlayerStats` — prefix/last-name fallback may be missing a case |
+| Payout bot not accepting offers | Check `EDGEBOT_SESSION_TOKEN` expiry — rotate from RS DevTools Network tab |
 
 ## Parlay Ops
 
