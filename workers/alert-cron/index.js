@@ -738,6 +738,14 @@ async function runCron(env, ctx) {
           signal: AbortSignal.timeout(30000),
         });
       } catch(e) {}
+      // Leaderboard rewards — Monday 8 AM ET only; endpoint guards day+hour internally
+      try {
+        await fetch(`${env.SITE_URL}/api/parlays/leaderboard-reward?_cron_key=${env.CRON_SECRET}`, {
+          method: 'POST',
+          signal: AbortSignal.timeout(20000),
+        });
+      } catch(e) {}
+
       // RS verify-poll — poll 3× per minute (~every 20s) since CF cron minimum is 1 min
       const _pollUrl = `${env.SITE_URL}/api/parlays/rs-verify-poll?_cron_key=${env.CRON_SECRET}`;
       const _doPoll = () => fetch(_pollUrl, { method: 'POST', signal: AbortSignal.timeout(15000) }).catch(() => {});
@@ -835,11 +843,13 @@ async function runCron(env, ctx) {
     const sportsNativeNeeded = NATIVE_SPORTS.filter(s => sportsNeeded.has(s.fdKey));
     const sportsOddsApiNeeded = ODDS_API_SPORTS.filter(s => sportsNeeded.has(s.fdKey));
     ctx.waitUntil(Promise.all([
+      // RS cache: always warm all native sports so My Slips RS buttons work regardless of who has alerts
+      ...NATIVE_SPORTS.map(s => warmRSCache(s.fdKey, env, now, RS_WARM_THRESHOLD)),
+      // FD cache + DK alt: only warm for sports with active user alerts
       ...sportsNativeNeeded.flatMap(s => {
         const dkAlt = DK_ALT_ENDPOINT_MAP[s.fdKey];
         return [
           warmFDCache(s.fdKey, s.cacheKey, env, now, FD_WARM_THRESHOLD),
-          warmRSCache(s.fdKey, env, now, RS_WARM_THRESHOLD),
           ...(dkAlt ? [warmFDCache(s.fdKey, dkAlt.cacheKey, env, now, FD_WARM_THRESHOLD, dkAlt.endpoint)] : []),
         ];
       }),
