@@ -6766,7 +6766,7 @@
             '<button class="parlay-sport-btn' + (parlayActiveSport === 'wnba'   ? ' active' : '') + '" onclick="setParlayActiveSport(\'wnba\')">WNBA</button>' +
             '<button class="parlay-sport-btn' + (parlayActiveSport === 'nfl'    ? ' active' : '') + '" onclick="setParlayActiveSport(\'nfl\')">NFL</button>' +
             '<button class="parlay-sport-btn' + (parlayActiveSport === 'ufc'    ? ' active' : '') + '" onclick="setParlayActiveSport(\'ufc\')">UFC</button>' +
-            (isAdmin ? '<button class="parlay-sport-btn' + (parlayActiveSport === 'soccer' ? ' active' : '') + '" onclick="setParlayActiveSport(\'soccer\')">FC</button>' : '') +
+            '<button class="parlay-sport-btn' + (parlayActiveSport === 'soccer' ? ' active' : '') + '" onclick="setParlayActiveSport(\'soccer\')">FC</button>' +
         '</div>';
 
         if (parlayActiveSport !== 'mlb') {
@@ -7792,7 +7792,7 @@
                 return { t1: (parts[0] || '').trim(), t2: (parts[1] || '').trim() };
             }
             function abbrMatch(gi, t1, t2) {
-                if (!t1 && !t2) return true;
+                if (!t1 && !t2) return false;
                 var ha = gi.homeAbbr, aa = gi.awayAbbr;
                 return (ha && t1 && (ha === t1 || ha.indexOf(t1) >= 0 || t1.indexOf(ha) >= 0)) ||
                        (aa && t2 && (aa === t2 || aa.indexOf(t2) >= 0 || t2.indexOf(aa) >= 0)) ||
@@ -7843,11 +7843,26 @@
                 if (gi && gi.state !== 'Preview') {
                     if (!liveEventsBySlug[slug]) liveEventsBySlug[slug] = {};
                     liveEventsBySlug[slug][gi.eventId] = gi;
+                } else if (!gi) {
+                    // No game matched (event_name empty or stored teams were wrong) — search all live/final games
+                    item._searchAll = true;
+                    var checkDates = [liveToday];
+                    if (item.storedDate !== liveToday) checkDates.push(item.storedDate);
+                    checkDates.forEach(function(d) {
+                        var gs = (gamesBySlugDate[slug] && gamesBySlugDate[slug][d]) || [];
+                        gs.forEach(function(g) {
+                            if (g.state !== 'Preview') {
+                                if (!liveEventsBySlug[slug]) liveEventsBySlug[slug] = {};
+                                liveEventsBySlug[slug][g.eventId] = g;
+                            }
+                        });
+                    });
                 }
             });
 
-            // Legs with no live/final match → show pregame (use matched preview game time or null)
+            // Legs with no live/final match → show pregame; skip _searchAll legs (handled after stats)
             allNeeded.forEach(function(item) {
+                if (item._searchAll) return;
                 if (!item._gi || item._gi.state === 'Preview') {
                     updateLegStatus(item.leg.parlayId, item.leg.legIndex, null,
                         item.leg.threshold, item.leg.direction, item.leg.marketType, item._gi || null, false);
@@ -7857,22 +7872,26 @@
             var liveSlugs = Object.keys(liveEventsBySlug);
             if (!liveSlugs.length) return;
 
-            // Fetch player stats summaries for live/final games
+            // Fetch player stats summaries — tag each result with its eid so we know which game it's from
             Promise.all(liveSlugs.map(function(slug) {
                 var eventIds = Object.keys(liveEventsBySlug[slug]);
                 return Promise.all(eventIds.map(function(eid) {
                     return fetch('https://site.api.espn.com/apis/site/v2/sports/soccer/' + slug + '/summary?event=' + eid,
                         { signal: AbortSignal.timeout(8000), cache: 'no-cache' })
                         .then(function(r) { return r.json(); })
-                        .catch(function() { return null; });
-                })).then(function(summaries) { return { slug: slug, summaries: summaries }; });
+                        .then(function(d) { return { eid: eid, data: d }; })
+                        .catch(function() { return { eid: eid, data: null }; });
+                })).then(function(results) { return { slug: slug, results: results }; });
             })).then(function(slugResults) {
                 var statsBySlug = {};
+                var playerGiBySlug = {}; // slug → { playerName → gi } for _searchAll lookup
                 slugResults.forEach(function(sr) {
                     var map = {};
-                    (sr.summaries || []).forEach(function(d) {
-                        if (!d) return;
-                        (d.rosters || []).forEach(function(team) {
+                    var giMap = {};
+                    (sr.results || []).forEach(function(r) {
+                        if (!r || !r.data) return;
+                        var gi = liveEventsBySlug[sr.slug] && liveEventsBySlug[sr.slug][r.eid];
+                        (r.data.rosters || []).forEach(function(team) {
                             (team.roster || []).forEach(function(a) {
                                 if (!a.active) return;
                                 var name = normSlipName((a.athlete && a.athlete.displayName) || '');
@@ -7887,16 +7906,22 @@
                                 map[name].saves      = Math.max(map[name].saves,      raw.saves || 0);
                                 map[name].offsides   = Math.max(map[name].offsides,   raw.offsides || 0);
                                 map[name].fouls_won  = Math.max(map[name].fouls_won,  raw.foulsSuffered || 0);
+                                if (gi && !giMap[name]) giMap[name] = gi;
                             });
                         });
                     });
                     statsBySlug[sr.slug] = map;
+                    playerGiBySlug[sr.slug] = giMap;
                 });
 
                 allNeeded.forEach(function(item) {
                     var gi = item._gi;
-                    if (!gi || gi.state === 'Preview') return;
                     var slug = (item.leg.sport || '').replace('soccer_', '') || 'eng.1';
+                    if (!gi && item._searchAll) {
+                        // Resolve game from which game this player actually appeared in
+                        gi = (playerGiBySlug[slug] || {})[normSlipName(item.leg.playerName)] || null;
+                    }
+                    if (!gi || gi.state === 'Preview') return;
                     var stats = (statsBySlug[slug] || {})[normSlipName(item.leg.playerName)];
                     var field = SOCCER_FIELD[item.leg.marketType];
                     var val   = (stats && field && stats[field] !== undefined) ? stats[field] : null;
@@ -9778,7 +9803,7 @@
                 '<button class="parlay-view-tab' + (parlayView === 'build' ? ' active' : '') + '" onclick="parlaySetView(\'build\')">Build</button>' +
                 '<button class="parlay-view-tab' + (parlayView === 'slips' ? ' active' : '') + '" onclick="parlaySetView(\'slips\')">My Slips</button>' +
                 (isAdmin ? '<button class="parlay-view-tab' + (parlayView === 'all-slips' ? ' active' : '') + '" onclick="parlaySetView(\'all-slips\')">All Slips</button>' : '') +
-                (isAdmin ? '<a class="parlay-view-tab" href="/leaderboard" target="_blank" rel="noopener" style="text-decoration:none">Leaderboard ↗</a>' : '') +
+                (isAdmin ? '<a class="parlay-view-tab" href="/leaderboard" target="_blank" rel="noopener" style="text-decoration:none;display:flex;align-items:center;justify-content:center;gap:4px">Leaderboard <span style="font-size:11px;opacity:.7">↗</span></a>' : '') +
             '</div>';
         if (parlayView === 'slips') {
             parlaySlipsPage = 0;
@@ -16051,16 +16076,16 @@
                 var fcMinusO2 = outcomes.find(function(o) {
                     if (o.line === -0.5) return true;
                     if (o.label && o.label.indexOf('-0.5') !== -1) return true;
-                    // RS "Match Result" format: "X Win" (no "or Draw") = must win outright = -0.5
-                    if (o.label) { var ll = o.label.toLowerCase(); return ll.indexOf('win') !== -1 && ll.indexOf('win or draw') === -1 && ll.indexOf('draw') === -1; }
-                    return false;
+                    // RS "Match Result": "X Win" = must win outright = -0.5. Check rawLabel since team-key substitution strips "Win" from label.
+                    var chk2m = (o.rawLabel || o.label || '').toLowerCase();
+                    return chk2m.indexOf('win') !== -1 && chk2m.indexOf('win or draw') === -1 && chk2m.indexOf('draw') === -1;
                 });
                 var fcPlusO2  = outcomes.find(function(o) {
                     if (o.line === 0.5) return true;
                     if (o.label && o.label.indexOf('+0.5') !== -1) return true;
-                    // RS "Match Result" format: "X Win or Draw" = draw counts = +0.5
-                    if (o.label) { var ll = o.label.toLowerCase(); return ll.indexOf('win or draw') !== -1; }
-                    return false;
+                    // RS "Match Result": "X Win or Draw" = draw counts = +0.5. Check rawLabel too.
+                    var chk2p = (o.rawLabel || o.label || '').toLowerCase();
+                    return chk2p.indexOf('win or draw') !== -1;
                 });
                 if (fcMinusO2 || fcPlusO2) {
                     var fcTw2 = r.side.toLowerCase().split(' ').filter(function(w) { return w.length > 2; });
@@ -17764,8 +17789,8 @@ if (!match && r.mkt === 'Spread' && (sport === 'soccer_fc' || sport === 'soccer_
                     var fcPlusO  = outcomes.find(function(o) { return o.line === 0.5  || (o.label && o.label.indexOf('+0.5') !== -1); });
                     // RS 'Match Result' format: "Win or Draw" = +0.5 equiv, "Win" (only) = -0.5 equiv
                     if (!fcMinusO && !fcPlusO) {
-                        var _wod = outcomes.find(function(o) { return o.label && /win or draw/i.test(o.label); });
-                        var _won = _wod ? outcomes.find(function(o) { return o !== _wod && o.label && /\bwin\b/i.test(o.label); }) : null;
+                        var _wod = outcomes.find(function(o) { var chk = o.rawLabel || o.label || ''; return /win or draw/i.test(chk); });
+                        var _won = _wod ? outcomes.find(function(o) { if (o === _wod) return false; var chk = o.rawLabel || o.label || ''; return /\bwin\b/i.test(chk) && !/win or draw/i.test(chk); }) : null;
                         if (_wod && _won) { fcPlusO = _wod; fcMinusO = _won; }
                     }
                     if (fcMinusO || fcPlusO) {
