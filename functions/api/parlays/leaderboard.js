@@ -40,7 +40,7 @@ export async function onRequestGet({ request, env }) {
     GROUP BY p.user_id
     HAVING net_profit > 0
     ORDER BY net_profit DESC
-    LIMIT 10
+    LIMIT 25
   `).bind(windowStart).all();
 
   const payload = JSON.stringify({ results, generatedAt: now, period, windowStart });
