@@ -54,7 +54,10 @@ async function findUnownedCard(rsUserId, authInfo, sessionToken, skipIds) {
       const cards = Array.isArray(data) ? data : (data.cards || data.items || []);
       for (const card of cards.slice(0, 30)) {
         const id = card.id ?? card.cardId ?? null;
-        if (id && !skipIds.has(id)) return id;
+        if (!id || skipIds.has(id)) continue;
+        if (card.untouchable === true) continue;
+        if (card.prestige != null && card.prestige >= 1) continue;
+        return id;
       }
     } catch { continue; }
   }

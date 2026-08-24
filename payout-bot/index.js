@@ -22,7 +22,7 @@ const execAsync = util.promisify(exec);
 
 const RAXEDGE_URL = (process.env.RAXEDGE_URL || 'https://raxedge.com').replace(/\/$/, '');
 const CRON_SECRET = process.env.CRON_SECRET;
-const MAX_PER_RUN = parseInt(process.env.MAX_PER_RUN || '12', 10);
+const MAX_PER_RUN = parseInt(process.env.MAX_PER_RUN || '50', 10);
 
 if (!CRON_SECRET) { console.error('CRON_SECRET not set in .env'); process.exit(1); }
 
