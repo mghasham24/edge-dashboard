@@ -3,7 +3,7 @@
 // Queries last week's top 3 (Mon–Sun), inserts payout_queue entries,
 // logs to leaderboard_reward_log, and DMs each winner on Telegram.
 
-import { getSessionOrCron } from '../../../_lib/auth.js';
+import { getSessionOrCron } from '../../_lib/auth.js';
 
 const REWARDS = [
   { rank: 1, amount: 5000 },
