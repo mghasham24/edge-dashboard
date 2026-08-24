@@ -1,24 +1,27 @@
 // GET /api/parlays/leaderboard — public, no auth required
-// Returns top earners over the last 7 days (rolling window).
-// Result cached in odds_cache for 5 minutes to protect D1.
+// ?period=weekly (default) — rolling 7-day window, cached 5 min
+// ?period=alltime          — all-time, cached 10 min
 
-const CACHE_TTL = 300;
+const CACHE_TTL = { weekly: 300, alltime: 600 };
 
-export async function onRequestGet({ env }) {
-  const now     = Math.floor(Date.now() / 1000);
-  const cacheKey = 'leaderboard:earnings:weekly';
+export async function onRequestGet({ request, env }) {
+  const { searchParams } = new URL(request.url);
+  const period   = searchParams.get('period') === 'alltime' ? 'alltime' : 'weekly';
+  const now      = Math.floor(Date.now() / 1000);
+  const cacheKey = 'leaderboard:earnings:' + period;
 
   const cached = await env.DB.prepare(
     'SELECT data, fetched_at FROM odds_cache WHERE cache_key=?'
   ).bind(cacheKey).first();
 
-  if (cached && (now - cached.fetched_at) < CACHE_TTL) {
+  if (cached && (now - cached.fetched_at) < CACHE_TTL[period]) {
     return new Response(cached.data, {
       headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60' },
     });
   }
 
-  const weekAgo = now - 604800;
+  const weekAgo  = now - 604800;
+  const windowStart = period === 'weekly' ? weekAgo : 0;
 
   const { results } = await env.DB.prepare(`
     SELECT
@@ -38,9 +41,9 @@ export async function onRequestGet({ env }) {
     HAVING net_profit > 0
     ORDER BY net_profit DESC
     LIMIT 10
-  `).bind(weekAgo).all();
+  `).bind(windowStart).all();
 
-  const payload = JSON.stringify({ results, generatedAt: now });
+  const payload = JSON.stringify({ results, generatedAt: now, period, windowStart });
 
   await env.DB.prepare(
     'INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at'

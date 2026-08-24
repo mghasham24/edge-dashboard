@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Top Earners — RaxEdge Parlays</title>
-<meta name="description" content="See who's up the most on RaxEdge Parlays this week. Updated every 5 minutes.">
-<meta property="og:title" content="RaxEdge Parlays — Top Earners This Week">
+<meta name="description" content="See who's up the most on RaxEdge Parlays. Updated every 5 minutes.">
+<meta property="og:title" content="RaxEdge Parlays — Top Earners">
 <meta property="og:description" content="Real Sports parlay leaderboard. Who's cashing?">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -35,11 +35,10 @@
     padding: 0 16px 48px;
   }
 
-  /* Header */
   .header {
     width: 100%;
     max-width: 480px;
-    padding: 40px 0 32px;
+    padding: 40px 0 28px;
     text-align: center;
   }
   .logo {
@@ -62,11 +61,44 @@
     font-size: 14px;
     color: var(--text2);
   }
+
+  /* Period toggle */
+  .toggle-wrap {
+    display: flex;
+    justify-content: center;
+    margin-top: 20px;
+  }
+  .toggle {
+    display: inline-flex;
+    background: rgba(255,255,255,.05);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 3px;
+    gap: 2px;
+  }
+  .toggle-btn {
+    padding: 7px 18px;
+    border-radius: 7px;
+    border: none;
+    background: transparent;
+    color: var(--text2);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .15s, color .15s;
+    font-family: inherit;
+  }
+  .toggle-btn.active {
+    background: var(--accent);
+    color: #fff;
+  }
+
+  /* Window info pill */
   .window-pill {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    margin-top: 16px;
+    margin-top: 14px;
     padding: 5px 12px;
     border-radius: 20px;
     background: rgba(79,110,247,.12);
@@ -75,8 +107,7 @@
     font-weight: 600;
     color: var(--accent);
   }
-  .window-pill::before {
-    content: '';
+  .window-pill .dot {
     width: 6px; height: 6px;
     border-radius: 50%;
     background: var(--green);
@@ -170,7 +201,6 @@
     text-align: right;
   }
 
-  /* Empty / loading states */
   .state-card {
     width: 100%;
     max-width: 480px;
@@ -185,7 +215,6 @@
   }
   .state-card .emoji { font-size: 32px; display: block; margin-bottom: 12px; }
 
-  /* Skeleton rows */
   .skeleton-row {
     display: flex;
     align-items: center;
@@ -205,7 +234,6 @@
     50%      { opacity: 1; }
   }
 
-  /* Updated-at */
   .updated-at {
     width: 100%;
     max-width: 480px;
@@ -215,7 +243,6 @@
     margin-top: 14px;
   }
 
-  /* CTA */
   .cta {
     width: 100%;
     max-width: 480px;
@@ -252,13 +279,21 @@
 
 <div class="header">
   <div class="logo">RaxEdge Parlays</div>
-  <h1>Top Earners<br><span>This Week</span></h1>
+  <h1>Top Earners<br><span id="header-span">This Week</span></h1>
   <p class="subtitle">Real Sports parlay leaderboard</p>
-  <div class="window-pill">Rolling 7-day window · updates every 5 min</div>
+  <div class="toggle-wrap">
+    <div class="toggle">
+      <button class="toggle-btn active" id="btn-weekly" onclick="setPeriod('weekly')">7 Days</button>
+      <button class="toggle-btn"        id="btn-alltime" onclick="setPeriod('alltime')">All Time</button>
+    </div>
+  </div>
+  <div class="window-pill" id="window-pill">
+    <span class="dot"></span>
+    <span id="pill-text">Loading…</span>
+  </div>
 </div>
 
 <div class="board" id="board">
-  <!-- skeleton -->
   <div class="skeleton-row">
     <div class="skel" style="width:28px;height:28px;border-radius:50%"></div>
     <div class="skel" style="width:38px;height:38px;border-radius:50%"></div>
@@ -297,9 +332,12 @@
 
 <script>
   const MEDALS = ['🥇', '🥈', '🥉'];
+  var activePeriod = 'weekly';
 
-  function fmt(n) {
-    return n.toLocaleString('en-US');
+  function fmt(n) { return n.toLocaleString('en-US'); }
+
+  function fmtDate(ts) {
+    return new Date(ts * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   }
 
   function rowClass(i) {
@@ -314,26 +352,44 @@
     return '<div class="rank"><span class="rank-num">' + (i + 1) + '</span></div>';
   }
 
-  function render(results) {
+  function updateHeader(period, windowStart, generatedAt) {
+    var span = document.getElementById('header-span');
+    var pill = document.getElementById('pill-text');
+    if (period === 'alltime') {
+      span.textContent = 'All Time';
+      pill.textContent = 'All time · updates every 10 min';
+    } else {
+      span.textContent = 'This Week';
+      var from = fmtDate(windowStart || (generatedAt - 604800));
+      var to   = fmtDate(generatedAt);
+      pill.textContent = from + ' – ' + to + ' · updates every 5 min';
+    }
+    document.getElementById('btn-weekly').classList.toggle('active',  period === 'weekly');
+    document.getElementById('btn-alltime').classList.toggle('active', period === 'alltime');
+  }
+
+  function render(results, period, windowStart, generatedAt) {
     const board = document.getElementById('board');
     if (!results.length) {
-      board.innerHTML = '<div class="state-card"><span class="emoji">📊</span>No results yet this week.<br>Be the first to cash a parlay!</div>';
-      return;
+      var msg = period === 'weekly' ? 'No results yet this week.<br>Be the first to cash a parlay!' : 'No all-time results yet.';
+      board.innerHTML = '<div class="state-card"><span class="emoji">📊</span>' + msg + '</div>';
+    } else {
+      board.innerHTML = results.map((r, i) => `
+        <div class="${rowClass(i)}">
+          ${rankEl(i)}
+          <div class="avatar">${r.rs_username[0].toUpperCase()}</div>
+          <div class="info">
+            <div class="username">@${r.rs_username}</div>
+            <div class="record"><b>${r.wins}W</b> / ${r.losses}L</div>
+          </div>
+          <div class="profit">
+            <div class="profit-amount">+${fmt(r.net_profit)}</div>
+            <div class="profit-label">Rax profit</div>
+          </div>
+        </div>
+      `).join('');
     }
-    board.innerHTML = results.map((r, i) => `
-      <div class="${rowClass(i)}">
-        ${rankEl(i)}
-        <div class="avatar">${r.rs_username[0].toUpperCase()}</div>
-        <div class="info">
-          <div class="username">@${r.rs_username}</div>
-          <div class="record"><b>${r.wins}W</b> / ${r.losses}L</div>
-        </div>
-        <div class="profit">
-          <div class="profit-amount">+${fmt(r.net_profit)}</div>
-          <div class="profit-label">Rax profit</div>
-        </div>
-      </div>
-    `).join('');
+    updateHeader(period, windowStart, generatedAt);
   }
 
   function timeAgo(ts) {
@@ -343,23 +399,46 @@
     return Math.floor(diff / 60) + ' minutes ago';
   }
 
-  async function load() {
+  async function load(period) {
     try {
-      const res  = await fetch('/api/parlays/leaderboard');
+      const res  = await fetch('/api/parlays/leaderboard?period=' + period);
       const data = await res.json();
-      render(data.results || []);
+      if (period !== activePeriod) return; // switched while fetching
+      render(data.results || [], data.period || period, data.windowStart, data.generatedAt);
       if (data.generatedAt) {
         document.getElementById('updated-at').textContent = 'Updated ' + timeAgo(data.generatedAt);
       }
     } catch {
+      if (period !== activePeriod) return;
       document.getElementById('board').innerHTML =
         '<div class="state-card"><span class="emoji">⚠️</span>Could not load leaderboard.<br>Try refreshing.</div>';
     }
   }
 
-  load();
-  setInterval(load, 5 * 60 * 1000);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
+  function setPeriod(period) {
+    if (period === activePeriod) return;
+    activePeriod = period;
+    document.getElementById('btn-weekly').classList.toggle('active',  period === 'weekly');
+    document.getElementById('btn-alltime').classList.toggle('active', period === 'alltime');
+    document.getElementById('header-span').textContent = period === 'alltime' ? 'All Time' : 'This Week';
+    document.getElementById('pill-text').textContent = 'Loading…';
+    document.getElementById('board').innerHTML = ['','',''].map(() => `
+      <div class="skeleton-row">
+        <div class="skel" style="width:28px;height:28px;border-radius:50%"></div>
+        <div class="skel" style="width:38px;height:38px;border-radius:50%"></div>
+        <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+          <div class="skel" style="height:14px;width:55%"></div>
+          <div class="skel" style="height:11px;width:32%"></div>
+        </div>
+        <div class="skel" style="width:64px;height:18px"></div>
+      </div>
+    `).join('');
+    load(period);
+  }
+
+  load('weekly');
+  setInterval(() => load(activePeriod), 5 * 60 * 1000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) load(activePeriod); });
 </script>
 </body>
 </html>
