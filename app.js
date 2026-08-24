@@ -7179,10 +7179,20 @@
             });
             return;
         }
+        // UFC: check build-panel headshot cache (keyed as 'ufc:NAME') before hitting ESPN
+        if (legSport === 'ufc') {
+            var _ufcC = PARLAY_HEADSHOT_CACHE['ufc:' + playerName];
+            if (_ufcC) {
+                if (_ufcC !== 'none') { SLIP_HEADSHOT_CACHE[playerName] = _ufcC; showImg(document.getElementById(elemId), _ufcC); }
+                else { SLIP_HEADSHOT_CACHE[playerName] = 'none'; showFallback(document.getElementById(elemId)); }
+                return;
+            }
+        }
         // Check live player pools first — may have loaded since the slip rendered
         var lp = PARLAY_PLAYERS.find(function(x) { return x.name === playerName; }) ||
                  PARLAY_PLAYERS_WNBA.find(function(x) { return x.name === playerName; }) ||
                  PARLAY_PLAYERS_NFL.find(function(x) { return x.name === playerName; }) ||
+                 PARLAY_PLAYERS_UFC.find(function(x) { return x.name === playerName; }) ||
                  PARLAY_PLAYERS_SOCCER.find(function(x) { return x.name === playerName; });
         if (lp && lp.headshot) {
             SLIP_HEADSHOT_CACHE[playerName] = lp.headshot;
@@ -7204,6 +7214,7 @@
                 }
                 var url = 'https://a.espncdn.com/combiner/i?img=/i/headshots/' + espnLeague + '/players/full/' + espnId + '.png&w=350&h=254';
                 SLIP_HEADSHOT_CACHE[playerName] = url;
+                if (legSport === 'ufc') PARLAY_HEADSHOT_CACHE['ufc:' + playerName] = url;
                 showImg(document.getElementById(elemId), url);
             })
             .catch(function() {
@@ -8626,10 +8637,14 @@
                                  PARLAY_PLAYERS_WNBA.find(function(pp) { return pp.name === leg.player_name; }) ||
                                  PARLAY_PLAYERS_SOCCER.find(function(pp) { return pp.name === leg.player_name; });
                 var _legIsSoccer = (leg.sport || '').startsWith('soccer_');
+                var _legIsUfc    = leg.sport === 'ufc';
                 var headshotSrc;
                 if (_legIsSoccer) {
                     var _rsm = PARLAY_HEADSHOT_CACHE[leg.player_name];
                     headshotSrc = (_rsm && _rsm !== 'none' && _rsm !== 'pending') ? _rsm : (_rsHsLsGet(leg.player_name) || null);
+                } else if (_legIsUfc) {
+                    var _ufcHs = SLIP_HEADSHOT_CACHE[leg.player_name] || PARLAY_HEADSHOT_CACHE['ufc:' + leg.player_name];
+                    headshotSrc = (_ufcHs && _ufcHs !== 'none') ? _ufcHs : (leg.headshot_url || null);
                 } else {
                     headshotSrc = (livePlayer && livePlayer.headshot) || leg.headshot_url || null;
                 }
