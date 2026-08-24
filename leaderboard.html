@@ -352,7 +352,11 @@
     return '<div class="rank"><span class="rank-num">' + (i + 1) + '</span></div>';
   }
 
-  function updateHeader(period, windowStart, generatedAt) {
+  function fmtWeekday(ts) {
+    return new Date(ts * 1000).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'America/New_York' });
+  }
+
+  function updateHeader(period, windowStart, windowEnd, generatedAt) {
     var span = document.getElementById('header-span');
     var pill = document.getElementById('pill-text');
     if (period === 'alltime') {
@@ -360,15 +364,15 @@
       pill.textContent = 'All time · updates every 10 min';
     } else {
       span.textContent = 'This Week';
-      var from = fmtDate(windowStart || (generatedAt - 604800));
-      var to   = fmtDate(generatedAt);
+      var from = fmtWeekday(windowStart);
+      var to   = fmtWeekday((windowEnd || (windowStart + 604800)) - 1); // Sun 11:59 PM
       pill.textContent = from + ' – ' + to + ' · updates every 5 min';
     }
     document.getElementById('btn-weekly').classList.toggle('active',  period === 'weekly');
     document.getElementById('btn-alltime').classList.toggle('active', period === 'alltime');
   }
 
-  function render(results, period, windowStart, generatedAt) {
+  function render(results, period, windowStart, windowEnd, generatedAt) {
     const board = document.getElementById('board');
     if (!results.length) {
       var msg = period === 'weekly' ? 'No results yet this week.<br>Be the first to cash a parlay!' : 'No all-time results yet.';
@@ -389,7 +393,7 @@
         </div>
       `).join('');
     }
-    updateHeader(period, windowStart, generatedAt);
+    updateHeader(period, windowStart, windowEnd, generatedAt);
   }
 
   function timeAgo(ts) {
@@ -404,7 +408,7 @@
       const res  = await fetch('/api/parlays/leaderboard?period=' + period);
       const data = await res.json();
       if (period !== activePeriod) return; // switched while fetching
-      render(data.results || [], data.period || period, data.windowStart, data.generatedAt);
+      render(data.results || [], data.period || period, data.windowStart, data.windowEnd, data.generatedAt);
       if (data.generatedAt) {
         document.getElementById('updated-at').textContent = 'Updated ' + timeAgo(data.generatedAt);
       }

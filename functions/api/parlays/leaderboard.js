@@ -1,8 +1,37 @@
 // GET /api/parlays/leaderboard — public, no auth required
-// ?period=weekly (default) — rolling 7-day window, cached 5 min
+// ?period=weekly (default) — fixed Mon 12:00 AM → Sun 11:59 PM ET week
 // ?period=alltime          — all-time, cached 10 min
 
 const CACHE_TTL = { weekly: 300, alltime: 600 };
+
+// Returns the start (Monday midnight ET) and end (next Monday midnight ET)
+// of the current ET calendar week as Unix seconds.
+function currentEtWeekWindow() {
+  const now = Date.now();
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    weekday: 'short',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false,
+  });
+  const parts = fmt.formatToParts(new Date(now));
+  const day = parts.find(p => p.type === 'weekday').value; // 'Sun'–'Sat'
+  const h   = parseInt(parts.find(p => p.type === 'hour').value);
+  const m   = parseInt(parts.find(p => p.type === 'minute').value);
+  const s   = parseInt(parts.find(p => p.type === 'second').value);
+
+  const nowSec     = Math.floor(now / 1000);
+  const etMidnight = nowSec - (h * 3600 + m * 60 + s);
+
+  const DAY = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const dayIdx         = DAY.indexOf(day);
+  const daysSinceMon   = dayIdx === 0 ? 6 : dayIdx - 1; // Mon=0 … Sun=6
+
+  const weekStart = etMidnight - daysSinceMon * 86400; // this Monday 00:00 ET
+  const weekEnd   = weekStart  + 7 * 86400;            // next Monday 00:00 ET
+
+  return { weekStart, weekEnd };
+}
 
 export async function onRequestGet({ request, env }) {
   const { searchParams } = new URL(request.url);
@@ -20,8 +49,13 @@ export async function onRequestGet({ request, env }) {
     });
   }
 
-  const weekAgo  = now - 604800;
-  const windowStart = period === 'weekly' ? weekAgo : 0;
+  let windowStart, windowEnd;
+  if (period === 'weekly') {
+    ({ weekStart: windowStart, weekEnd: windowEnd } = currentEtWeekWindow());
+  } else {
+    windowStart = 0;
+    windowEnd   = now + 86400; // effectively no upper bound
+  }
 
   const { results } = await env.DB.prepare(`
     SELECT
@@ -34,6 +68,7 @@ export async function onRequestGet({ request, env }) {
     WHERE p.status IN ('won','lost')
       AND (p.is_free_play IS NULL OR p.is_free_play = 0)
       AND p.deposited_at >= ?
+      AND p.deposited_at < ?
       AND p.deposited_at IS NOT NULL
       AND ra.rs_username IS NOT NULL
       AND ra.parlay_verified = 1
@@ -41,9 +76,9 @@ export async function onRequestGet({ request, env }) {
     HAVING net_profit > 0
     ORDER BY net_profit DESC
     LIMIT 25
-  `).bind(windowStart).all();
+  `).bind(windowStart, windowEnd).all();
 
-  const payload = JSON.stringify({ results, generatedAt: now, period, windowStart });
+  const payload = JSON.stringify({ results, generatedAt: now, period, windowStart, windowEnd });
 
   await env.DB.prepare(
     'INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at'

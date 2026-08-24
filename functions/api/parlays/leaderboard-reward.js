@@ -45,19 +45,19 @@ export async function onRequestPost({ request, env }) {
   const now = Math.floor(Date.now() / 1000);
   const et  = etParts(now * 1000);
 
-  // Only run on Monday 8 AM ET — cron guard
-  if (et.day !== 'Mon' || et.h !== 8) {
-    return new Response(JSON.stringify({ ok: false, reason: 'not Monday 8 AM ET', day: et.day, hour: et.h }), {
+  // Only run on Sunday 11 PM ET — locks in rankings at end of the fixed Mon–Sun week
+  if (et.day !== 'Sun' || et.h !== 23) {
+    return new Response(JSON.stringify({ ok: false, reason: 'not Sunday 11 PM ET', day: et.day, hour: et.h }), {
       headers: { 'Content-Type': 'application/json' },
     });
   }
 
-  // Compute last week's window: Sun midnight ET (= Mon midnight ET) back 7 days
-  const mondayMidnightET = now - (et.h * 3600 + et.m * 60 + et.s);
-  const windowEnd   = mondayMidnightET;
-  const windowStart = windowEnd - 604800;
+  // Compute current fixed Mon–Sun week window (same logic as leaderboard.js)
+  const etMidnight = now - (et.h * 3600 + et.m * 60 + et.s); // midnight today (Sunday) ET
+  const windowEnd   = etMidnight + 86400; // next Monday midnight ET = end of Sunday
+  const windowStart = windowEnd - 604800; // this Monday midnight ET
 
-  // Week key = ISO date of last Monday (start of the rewarded week)
+  // Week key = ISO date of this Monday (start of the week being rewarded)
   const weekKey = new Date(windowStart * 1000).toISOString().slice(0, 10);
 
   // Idempotency — if rank 1 already logged for this week, we already ran
