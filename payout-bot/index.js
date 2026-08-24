@@ -363,16 +363,12 @@ async function processQueue() {
     const entry = queue[i];
     console.log(`\n[${ts()}] [${i + 1}/${queue.length}] #${entry.id} — @${entry.rs_username} — ${Number(entry.offer_amount).toLocaleString()} Rax`);
 
-    let cardUrl = entry.card_url, offerAmount = entry.offer_amount;
-    if (!cardUrl) {
-      try {
-        const p = await prepareEntry(entry.id);
-        cardUrl = p.cardUrl; offerAmount = p.offerAmount;
-        console.log(`  Card: ${cardUrl}`);
-      } catch (e) { console.error('  ✗ No card:', e.message); continue; }
-    } else {
+    let cardUrl, offerAmount;
+    try {
+      const p = await prepareEntry(entry.id);
+      cardUrl = p.cardUrl; offerAmount = p.offerAmount;
       console.log(`  Card: ${cardUrl}`);
-    }
+    } catch (e) { console.error('  ✗ No card:', e.message); continue; }
 
     try {
       const ok = await processOffer(cardUrl, offerAmount);
