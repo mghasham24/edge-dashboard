@@ -7926,9 +7926,10 @@
                 var gdRaw = leg.game_date || liveToday;
                 var mkt = leg.market_type || '';
                 var isSoccer = (leg.sport && leg.sport.startsWith('soccer_')) || !!SOCCER_MKT_SET[mkt];
-                // Cap future dates to today for MLB/WNBA/NFL (DK cache sometimes stores tomorrow's date for today's game).
                 // Soccer game dates are accurate — don't cap or we'd match today's finished EPL games for tomorrow's props.
-                var gd = (!isSoccer && gdRaw > liveToday) ? liveToday : gdRaw;
+                // For MLB/WNBA/NFL, use the stored game_date as-is. If the date is in the future, the schedule API
+                // returns Preview games → the polling correctly shows "Preview" and waits for the game to start.
+                var gd = gdRaw;
                 var legObj = { parlayId: s.id, legIndex: li, playerName: leg.player_name, marketType: mkt, threshold: parseFloat(leg.threshold) || 0, direction: leg.direction, isTeam: mkt.startsWith('team_'), sport: leg.sport || '', eventName: leg.event_name || '' };
                 if (WNBA_MKT_SET[mkt] || leg.sport === 'wnba') {
                     if (!wnbaNeededByDate[gd]) wnbaNeededByDate[gd] = [];
