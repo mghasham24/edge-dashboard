@@ -1047,6 +1047,7 @@ async function handleRequest({ request, env }) {
   // WNBA team nicknames
   const WNBA_NICKNAMES = new Set([
     'aces','dream','fever','liberty','lynx','mercury','mystics','sky','sparks','storm','sun','wings',
+    'valkyries','fire','tempo', // 2026 expansion teams: GS Valkyries, Portland Fire, Toronto Tempo
   ]);
 
   function isNflTeamLeg(leg) {

@@ -186,6 +186,7 @@ async function _place({ request, env }, onCreditConsumed) {
     ]);
     const WNBA_NICKNAMES = new Set([
       'aces','dream','fever','liberty','lynx','mercury','mystics','sky','sparks','storm','sun','wings',
+      'valkyries','fire','tempo', // 2026 expansion teams: GS Valkyries, Portland Fire, Toronto Tempo
     ]);
     // soccer_* slugs (e.g. soccer_eng.1) pass through as-is — not in VALID_SPORTS list.
     let legSport = (leg.sport && leg.sport.startsWith('soccer_')) ? leg.sport
