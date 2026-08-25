@@ -12,10 +12,13 @@ function impliedProb(odds) {
   return Math.abs(odds) / (Math.abs(odds) + 100);
 }
 
-// Only assign cards confirmed owned by edgebot within the last 15 minutes.
+// Only assign cards reconcile-confirmed owned within the last 15 minutes.
 // Reconcile runs every 2 min — this survives ~7 consecutive failures before blocking.
 const VERIFY_MAX_AGE = 15 * 60;
-const EDGEBOT_USER   = 'V3yGgkkJ';
+// If the real-time ownership check can't reach RS (expired session, timeout), only trust
+// a card if reconcile confirmed it very recently (one reconcile interval = 6 min).
+const STRICT_AGE   = 6 * 60;
+const EDGEBOT_USER = 'V3yGgkkJ';
 const RS_DEVICE_UUID = '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e';
 
 // Returns true (edgebot owns it), false (someone else owns it), null (can't verify — trust verified_at).
@@ -40,17 +43,17 @@ async function verifyEdgebotOwns(cardId, authInfo, sessionToken) {
   } catch { return null; }
 }
 
-// Pick a verified, unassigned card (up to 3 attempts).
+// Pick a verified, unassigned card (up to 5 attempts).
 // If a card fails the ownership check it is removed from the pool and the next one is tried.
 // Returns card_id or null when none are available.
 async function pickCard(env, now) {
   const excluded = [];
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 5; i++) {
     const notIn = excluded.length
       ? ' AND card_id NOT IN (' + excluded.map(() => '?').join(',') + ')'
       : '';
     const row = await env.DB.prepare(
-      'SELECT card_id FROM deposit_cards WHERE assigned_to_parlay_id IS NULL AND freed_at IS NULL AND verified_at > ?' +
+      'SELECT card_id, verified_at FROM deposit_cards WHERE assigned_to_parlay_id IS NULL AND freed_at IS NULL AND verified_at > ?' +
       notIn + ' ORDER BY verified_at DESC LIMIT 1'
     ).bind(now - VERIFY_MAX_AGE, ...excluded).first();
     if (!row) break;
@@ -60,6 +63,12 @@ async function pickCard(env, now) {
       if (owned === false) {
         // Card confirmed not owned by edgebot — remove ghost from pool and try next
         await env.DB.prepare('DELETE FROM deposit_cards WHERE card_id=?').bind(row.card_id).run();
+        excluded.push(row.card_id);
+        continue;
+      }
+      if (owned === null && (now - (row.verified_at || 0)) > STRICT_AGE) {
+        // Can't reach RS to verify (expired session / timeout) and reconcile stamp is older than
+        // one reconcile interval — too risky to assign; try next card rather than give out a ghost.
         excluded.push(row.card_id);
         continue;
       }
@@ -247,19 +256,13 @@ async function _place({ request, env }, onCreditConsumed) {
   const groupGameCounts = {};
   for (const l of normalized) {
     const group = legGroup(l.marketType);
-    if (!group) continue;
-    // For batters: scope by game + team so two hitters from OPPOSITE teams are allowed.
-    // Same-team batters share a lineup/pitcher → still blocked.
+    if (!group || group === 'batter') continue; // batter same-game correlation allowed
     const gameKey = l.eventName || l.eventId;
-    const scopeKey = group === 'bball_player'
-      ? (l.playerName || gameKey)
-      : group === 'batter'
-      ? (gameKey + ':' + (l.team || 'unk'))
-      : gameKey;
+    const scopeKey = group === 'bball_player' ? (l.playerName || gameKey) : gameKey;
     const key = group + ':' + scopeKey;
     groupGameCounts[key] = (groupGameCounts[key] || 0) + 1;
     if (groupGameCounts[key] > 1) {
-      const label = group === 'batter' ? 'batter' : group === 'pitcher' ? 'pitcher' : 'player';
+      const label = group === 'pitcher' ? 'pitcher' : 'player';
       return err('Cannot combine multiple ' + label + ' picks from the same game — picks are correlated.', 400);
     }
   }
@@ -329,6 +332,35 @@ async function _place({ request, env }, onCreditConsumed) {
   // 1inn_ml + 1inn_runs_ou same game: PHI winning the inning guarantees runs were scored.
   for (const eid of inn1MlEids) {
     if (inn1RunsEids.has(eid)) return err('Cannot combine 1st inning ML with 1st inning Runs O/U from the same game — picks are correlated.', 400);
+  }
+  // 1inn_runs_ou Under + 1inn_runs_exact Exactly 0 (same game): both require NRFI — correlated.
+  // Also: two 1inn_runs_exact Exactly 0 from same game are correlated (both teams scoring 0 = NRFI).
+  const inn1RunsExactZeroEids = new Set(
+    normalized
+      .filter(l => l.marketType === '1inn_runs_exact' && (l.threshold === 0 || l.threshold === '0'))
+      .map(l => l.eventName || l.eventId)
+      .filter(Boolean)
+  );
+  const inn1RunsOuUnderEids = new Set(
+    normalized
+      .filter(l => l.marketType === '1inn_runs_ou' && l.direction === 'less')
+      .map(l => l.eventName || l.eventId)
+      .filter(Boolean)
+  );
+  for (const eid of inn1RunsExactZeroEids) {
+    if (inn1RunsOuUnderEids.has(eid))
+      return err('Cannot combine 1st inning Runs Under with Exactly 0 runs for the same game — picks are correlated (both require NRFI).', 400);
+  }
+  // Count Exactly 0 legs per game — two from same game is NRFI expressed twice
+  const inn1ExactZeroCounts = {};
+  for (const l of normalized) {
+    if (l.marketType !== '1inn_runs_exact') continue;
+    if (l.threshold !== 0 && l.threshold !== '0') continue;
+    const eid = l.eventName || l.eventId;
+    if (!eid) continue;
+    inn1ExactZeroCounts[eid] = (inn1ExactZeroCounts[eid] || 0) + 1;
+    if (inn1ExactZeroCounts[eid] > 1)
+      return err('Cannot combine Exactly 0 runs for multiple teams in the same game — picks are correlated (both require NRFI).', 400);
   }
   for (const l of normalized) {
     if (l.marketType.startsWith('1inn_')) continue;
@@ -402,32 +434,13 @@ async function _place({ request, env }, onCreditConsumed) {
   // Daily caps (admins bypass)
   if (!isAdmin) {
     const todayStart = etTodayStart();
-    const [exposureRow, userPayoutRow] = await Promise.all([
-      // House net loss today: sum(won payouts) - sum(lost stakes) for settled slips
-      env.DB.prepare(
-        "SELECT COALESCE(SUM(CASE WHEN status='won' THEN payout_rax ELSE -stake_rax END),0) AS net_loss " +
-        "FROM parlays WHERE created_at >= ? AND status IN ('won','lost')"
-      ).bind(todayStart).first(),
-      // User's total winnings today
-      env.DB.prepare(
-        "SELECT COALESCE(SUM(payout_rax),0) AS won_today FROM parlays " +
-        "WHERE user_id=? AND status='won' AND created_at>=?"
-      ).bind(user.id, todayStart).first(),
-    ]);
+    const exposureRow = await env.DB.prepare(
+      "SELECT COALESCE(SUM(CASE WHEN status='won' THEN payout_rax ELSE -stake_rax END),0) AS net_loss " +
+      "FROM parlays WHERE created_at >= ? AND status IN ('won','lost')"
+    ).bind(todayStart).first();
 
-    if ((exposureRow?.net_loss || 0) >= 100000) {
+    if ((exposureRow?.net_loss || 0) >= 200000) {
       return err('Parlays are temporarily unavailable — daily limit reached. Try again tomorrow.', 503);
-    }
-
-    const wonToday = userPayoutRow?.won_today || 0;
-    if (wonToday + payoutRax > 20000) {
-      const remaining = Math.max(0, 20000 - wonToday);
-      return err(
-        remaining > 0
-          ? 'Daily payout limit: you can win up to ' + remaining.toLocaleString() + ' more Rax today.'
-          : 'Daily payout limit reached. Try again tomorrow.',
-        400
-      );
     }
 
     // Duplicate slip guard: block placing the exact same picks twice on the same day.
