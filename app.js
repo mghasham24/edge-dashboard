@@ -2815,8 +2815,6 @@
         document.getElementById('collapse-btn').style.display = 'none';
         document.getElementById('refresh-btn').style.display = 'none';
         document.getElementById('alerts-panel').classList.add('visible');
-        var btn = document.getElementById('alerts-tab-btn');
-        if (btn) { btn.classList.add('active'); btn.textContent = '<- Dashboard'; }
         loadAlertsPanel();
     }
 
@@ -2829,8 +2827,6 @@
         document.getElementById('collapse-btn').style.display = 'none';
         document.getElementById('refresh-btn').style.display = '';
         document.getElementById('alerts-panel').classList.remove('visible');
-        var btn = document.getElementById('alerts-tab-btn');
-        if (btn) { btn.classList.remove('active'); btn.textContent = '🔔 Notify'; }
     }
 
     function showReferralTab() {
@@ -2889,6 +2885,25 @@
             btn.classList.add('active');
             btn.innerHTML = '← Dashboard';
             showEvTab();
+        }
+    }
+
+    function toggleAlertsTab(btn) {
+        if (!isPro()) {
+            showUpgradeModal('🔔 EV Alerts sends Discord DMs whenever a bet hits your threshold. Upgrade to Pro to unlock it.');
+            return;
+        }
+        var isActive = btn.classList.contains('active');
+        if (isActive) {
+            btn.classList.remove('active');
+            btn.textContent = '🔔 Notify';
+            hideAlertsTab();
+            loadOdds();
+        } else {
+            document.querySelectorAll('.sport-tab,.feature-tab,.ctrl-tab-btn').forEach(function(t) { t.classList.remove('active'); });
+            btn.classList.add('active');
+            btn.textContent = '← Dashboard';
+            showAlertsTab();
         }
     }
 
@@ -2968,7 +2983,7 @@
             var data = await res.json();
             var bets = data.bets || [];
 
-            // Sync Telegram-tapped bets into dashboard checkboxes (all sports)
+            // Sync Discord-tapped bets into dashboard checkboxes (all sports)
             var takenKeys = new Set(bets.map(function(b) { return b.game + '|' + b.market + '|' + b.side; }));
             var allSportRows = [];
             if (window.rawRowsBySport) Object.values(rawRowsBySport).forEach(function(sr) { allSportRows = allSportRows.concat(sr || []); });
@@ -3042,25 +3057,34 @@
         }
     });
 
-    async function connectTelegram() {
+    async function connectDiscord() {
         var btn = document.getElementById('alerts-connect-btn');
         var status = document.getElementById('alerts-connect-status');
+        var codeWrap = document.getElementById('alerts-discord-code-wrap');
         btn.disabled = true;
-        btn.textContent = 'Generating link…';
+        btn.innerHTML = 'Opening Discord…';
         status.style.display = 'none';
+        if (codeWrap) codeWrap.style.display = 'none';
 
         try {
             var res = await fetch('/api/alerts/connect', { method: 'POST', credentials: 'same-origin' });
             var data = await res.json();
-            if (!data.ok || !data.deepLink) throw new Error(data.error || 'Failed');
+            if (!data.ok || !data.code) throw new Error(data.error || 'Failed');
 
-            // Open Telegram deep link
-            window.open(data.deepLink, '_blank');
+            // Open Discord bot install page in a new tab
+            window.open('https://discord.com/oauth2/authorize?client_id=1541566305923113000&integration_type=1&scope=applications.commands', '_blank');
 
-            btn.textContent = 'Waiting for Telegram…';
-            status.textContent = 'Link opened — press Start in the bot chat, then come back here.';
-            status.style.display = '';
-            status.style.color = 'var(--muted)';
+            // Show step 2 — the code to DM
+            var codeEl = document.getElementById('alerts-discord-code');
+            var codeInline = document.getElementById('alerts-discord-code-inline');
+            var botNameEl = document.getElementById('alerts-discord-botname');
+            if (codeEl) codeEl.textContent = data.code;
+            if (codeInline) codeInline.textContent = '/connect ' + data.code;
+            if (botNameEl) botNameEl.textContent = data.botName || 'RaxEdge';
+            if (codeWrap) codeWrap.style.display = '';
+
+            btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057c.002.022.015.045.033.057a19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z"/></svg> Add to Discord';
+            btn.disabled = false;
 
             // Poll every 3s to check if verification completed (up to 10 min)
             if (_alertsConnectPoll) clearInterval(_alertsConnectPoll);
@@ -3075,33 +3099,30 @@
                         clearInterval(_alertsConnectPoll);
                         _alertsVerified = true;
                         updateAlertConnectUI(true);
-                        btn.disabled = false;
-                        btn.textContent = 'Open Telegram to Connect →';
+                        if (codeWrap) codeWrap.style.display = 'none';
                         status.style.display = 'none';
-                        try { posthog.capture('telegram_connected'); } catch(e) {}
+                        try { posthog.capture('discord_connected'); } catch(e) {}
                     }
                 } catch(e) {}
             }, 3000);
 
         } catch(e) {
             btn.disabled = false;
-            btn.textContent = 'Open Telegram to Connect →';
+            btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057c.002.022.015.045.033.057a19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z"/></svg> Add to Discord';
             status.textContent = 'Error: ' + e.message;
             status.style.display = '';
             status.style.color = 'var(--red)';
         }
     }
 
-    async function disconnectTelegram() {
-        showConfirm('Disconnect Telegram? You will stop receiving alerts.', async function() { await _doDisconnectTelegram(); });
-        return;
-    }
-    async function _doDisconnectTelegram() {
-        try {
-            await fetch('/api/alerts/connect', { method: 'DELETE', credentials: 'same-origin' });
-            _alertsVerified = false;
-            updateAlertConnectUI(false);
-        } catch(e) {}
+    async function disconnectDiscord() {
+        showConfirm('Disconnect Discord? You will stop receiving alerts.', async function() {
+            try {
+                await fetch('/api/alerts/connect', { method: 'DELETE', credentials: 'same-origin' });
+                _alertsVerified = false;
+                updateAlertConnectUI(false);
+            } catch(e) {}
+        });
     }
 
     async function saveAlertSettings() {
@@ -4925,7 +4946,7 @@
         { key:'rbis',         label:'RBIs' },
         { key:'runs',         label:'Runs' },
         { key:'hrbi',         label:'H+R+RBI' },
-        { key:'home_runs',    label:'Home Runs',  adminOnly: true },
+        { key:'home_runs',    label:'Home Runs' },
         { key:'pitcher_ks',   label:'Pitcher Ks' },
         { key:'outs_ou',      label:'Outs' },
         { key:'singles',      label:'Singles' },
@@ -4936,7 +4957,7 @@
         { key:'er_allowed',   label:'ER Allowed' },
         { key:'bb_allowed',   label:'BB Allowed' },
         { key:'hwer',         label:'H+W+ER' },
-        { key:'1st_inning',   label:'1st Inning',   adminOnly: true },
+        { key:'1st_inning',   label:'1st Inning' },
         { key:'teams',        label:'Teams' },
     ];
     var MLB_GROUPS = {
@@ -5301,6 +5322,11 @@
         Promise.all([
             fetch(url).then(function(r) { return r.json(); }),
             hasRsIds ? Promise.resolve() : fetchRsIds(),
+            // Soccer: always fetch RS game IDs so rs_game_id is stored correctly at placement
+            sport === 'soccer' ? fetch('/api/real/game-ids?sport=soccer_fc', { credentials: 'include' })
+                .then(function(r) { return r.json(); })
+                .then(function(d) { if (d.gameIds) Object.keys(d.gameIds).forEach(function(gk) { if (!rsGameIds[gk]) rsGameIds[gk] = d.gameIds[gk]; }); })
+                .catch(function(){}) : Promise.resolve(),
         ])
             .then(function(res) {
                 var d = res[0];
@@ -5967,15 +5993,15 @@
 
     function parlayMaxStake() {
         if (Object.keys(parlayPicks).length < 2) return 50000;
-        // 0.9 = RS rake; 0.70 = house rake. Solve: stake*0.9*0.70/trueProb = 10000
-        return Math.floor(10000 * parlayTrueProb() / 0.63);
+        // 0.9 = RS rake; 0.70 = house rake. Solve: stake*0.9*0.70/trueProb = 20000
+        return Math.floor(20000 * parlayTrueProb() / 0.63);
     }
 
     function parlayCalcPayout(s) {
         if (Object.keys(parlayPicks).length < 2) return null;
         var prob   = parlayTrueProb();
         // Effective stake = s*0.9 (RS takes 10% commission on deposit)
-        var raw    = Math.min(Math.floor(s * 0.9 * 0.70 / prob), 10000);
+        var raw    = Math.min(Math.floor(s * 0.9 * 0.70 / prob), 20000);
         var payout = Math.floor((raw + 2) / 10) * 10;
         if (0.70 / prob > 2.5) payout = Math.max(0, payout - 10);
         return payout;
@@ -6295,15 +6321,17 @@
             idx[p.eventId + '|' + p.market + '|' + (p.team||'') + '|' + p.idir] = p;
         });
         function gp(eid, mkt, team, idir) { return idx[eid+'|'+mkt+'|'+(team||'')+'|'+idir]; }
-        function btn(p, label) {
+        function btn(p, label, dir) {
             if (!p) return '';
+            var d = dir || 'more';
             var sel = parlayPicks[String(p.id)] ? ' active' : '';
-            return '<button class="prl-1inn-btn' + sel + '" onclick="parlayTogglePick(' + p.id + ',\'more\')">' + escHtml(label) + '</button>';
+            return '<button class="prl-1inn-btn' + sel + '" onclick="parlayTogglePick(' + p.id + ',\'' + d + '\')">' + escHtml(label) + '</button>';
         }
-        function btnOdds(p, prefix) {
+        function btnOdds(p, prefix, dir) {
             if (!p) return '';
+            var d = dir || 'more';
             var sel = parlayPicks[String(p.id)] ? ' active' : '';
-            return '<button class="prl-1inn-btn' + sel + '" onclick="parlayTogglePick(' + p.id + ',\'more\')">' + (prefix ? escHtml(prefix)+' ' : '') + parlayFmtOdds(p.moreOdds) + '</button>';
+            return '<button class="prl-1inn-btn' + sel + '" onclick="parlayTogglePick(' + p.id + ',\'' + d + '\')">' + (prefix ? escHtml(prefix)+' ' : '') + parlayFmtOdds(p.moreOdds) + '</button>';
         }
         var nowMs = Date.now();
         var html = games.map(function(game) {
@@ -6331,18 +6359,18 @@
             // Runs O/U
             if (game.runsOU) {
                 var op = gp(eid,'1inn_runs_ou','','over'), up = gp(eid,'1inn_runs_ou','','under');
-                if (op && up) h += '<div class="pgc-row"><span class="pgc-label">Runs O/U</span>' + btnOdds(op,'O '+game.runsOU.line) + btnOdds(up,'U '+game.runsOU.line) + '</div>';
+                if (op && up) h += '<div class="pgc-row"><span class="pgc-label">Runs O/U</span>' + btnOdds(op,'O '+game.runsOU.line,'more') + btnOdds(up,'U '+game.runsOU.line,'less') + '</div>';
             }
             // Walks O/U
             if (game.walksOU) {
                 var op = gp(eid,'1inn_walks_ou','','over'), up = gp(eid,'1inn_walks_ou','','under');
-                if (op && up) h += '<div class="pgc-row"><span class="pgc-label">Walks O/U</span>' + btnOdds(op,'O '+game.walksOU.line) + btnOdds(up,'U '+game.walksOU.line) + '</div>';
+                if (op && up) h += '<div class="pgc-row"><span class="pgc-label">Walks O/U</span>' + btnOdds(op,'O '+game.walksOU.line,'more') + btnOdds(up,'U '+game.walksOU.line,'less') + '</div>';
             }
             // Half-inning sections: TOP (away bats, home pitches) then BOTTOM (home bats, away pitches)
             var sd_a = game.away || {}, sd_h = game.home || {};
             function renderBatting(sd, ts) {
                 var hh = '';
-                if (sd.hitsOU) { var op=gp(eid,'1inn_hits_ou',ts,'over'), up=gp(eid,'1inn_hits_ou',ts,'under'); if (op&&up) hh += '<div class="prl-1inn-mkt"><div class="prl-1inn-mkt-name">Hits ' + sd.hitsOU.line + '</div><div class="prl-1inn-btns">' + btnOdds(op,'O') + btnOdds(up,'U') + '</div></div>'; }
+                if (sd.hitsOU) { var op=gp(eid,'1inn_hits_ou',ts,'over'), up=gp(eid,'1inn_hits_ou',ts,'under'); if (op&&up) hh += '<div class="prl-1inn-mkt"><div class="prl-1inn-mkt-name">Hits ' + sd.hitsOU.line + '</div><div class="prl-1inn-btns">' + btnOdds(op,'O','more') + btnOdds(up,'U','less') + '</div></div>'; }
                 if (sd.hitsExact && sd.hitsExact.length) { hh += '<div class="prl-1inn-mkt"><div class="prl-1inn-mkt-name">Hits Exact</div><div class="prl-1inn-btns">'; sd.hitsExact.forEach(function(s){ hh += btn(gp(eid,'1inn_hits_exact',ts,s.label), s.label + ' ' + parlayFmtOdds(s.odds)); }); hh += '</div></div>'; }
                 if (sd.hrYN) { var yp=gp(eid,'1inn_hr_yn',ts,'yes'), np=gp(eid,'1inn_hr_yn',ts,'no'); if (yp&&np) hh += '<div class="prl-1inn-mkt"><div class="prl-1inn-mkt-name">Home Run</div><div class="prl-1inn-btns"><button class="prl-1inn-btn yes-btn' + (parlayPicks[String(yp.id)]?' active':'') + '" onclick="parlayTogglePick('+yp.id+',\'more\')">Yes ' + parlayFmtOdds(yp.moreOdds) + '</button><button class="prl-1inn-btn no-btn' + (parlayPicks[String(np.id)]?' active':'') + '" onclick="parlayTogglePick('+np.id+',\'more\')">No ' + parlayFmtOdds(np.moreOdds) + '</button></div></div>'; }
                 if (sd.runScoredYN) { var yp=gp(eid,'1inn_run_yn',ts,'yes'), np=gp(eid,'1inn_run_yn',ts,'no'); if (yp&&np) hh += '<div class="prl-1inn-mkt"><div class="prl-1inn-mkt-name">Scores</div><div class="prl-1inn-btns"><button class="prl-1inn-btn yes-btn' + (parlayPicks[String(yp.id)]?' active':'') + '" onclick="parlayTogglePick('+yp.id+',\'more\')">Yes ' + parlayFmtOdds(yp.moreOdds) + '</button><button class="prl-1inn-btn no-btn' + (parlayPicks[String(np.id)]?' active':'') + '" onclick="parlayTogglePick('+np.id+',\'more\')">No ' + parlayFmtOdds(np.moreOdds) + '</button></div></div>'; }
@@ -6351,9 +6379,9 @@
             }
             function renderPitching(sd, ts) {
                 var hh = '';
-                if (sd.pitchesOU) { var op=gp(eid,'1inn_pitches_ou',ts,'over'), up=gp(eid,'1inn_pitches_ou',ts,'under'); if (op&&up) hh += '<div class="prl-1inn-mkt"><div class="prl-1inn-mkt-name">Pitches ' + sd.pitchesOU.line + '</div><div class="prl-1inn-btns">' + btnOdds(op,'O') + btnOdds(up,'U') + '</div></div>'; }
+                if (sd.pitchesOU) { var op=gp(eid,'1inn_pitches_ou',ts,'over'), up=gp(eid,'1inn_pitches_ou',ts,'under'); if (op&&up) hh += '<div class="prl-1inn-mkt"><div class="prl-1inn-mkt-name">Pitches ' + sd.pitchesOU.line + '</div><div class="prl-1inn-btns">' + btnOdds(op,'O','more') + btnOdds(up,'U','less') + '</div></div>'; }
                 if (sd.pitchesRanges && sd.pitchesRanges.length) { hh += '<div class="prl-1inn-mkt"><div class="prl-1inn-mkt-name">Pitches Range</div><div class="prl-1inn-range-btns">'; sd.pitchesRanges.forEach(function(s){ hh += btn(gp(eid,'1inn_pitches_range',ts,s.label), s.label + ' ' + parlayFmtOdds(s.odds)); }); hh += '</div></div>'; }
-                if (sd.battersOU) { var op=gp(eid,'1inn_batters_ou',ts,'over'), up=gp(eid,'1inn_batters_ou',ts,'under'); if (op&&up) hh += '<div class="prl-1inn-mkt"><div class="prl-1inn-mkt-name">Batters ' + sd.battersOU.line + '</div><div class="prl-1inn-btns">' + btnOdds(op,'O') + btnOdds(up,'U') + '</div></div>'; }
+                if (sd.battersOU) { var op=gp(eid,'1inn_batters_ou',ts,'over'), up=gp(eid,'1inn_batters_ou',ts,'under'); if (op&&up) hh += '<div class="prl-1inn-mkt"><div class="prl-1inn-mkt-name">Batters ' + sd.battersOU.line + '</div><div class="prl-1inn-btns">' + btnOdds(op,'O','more') + btnOdds(up,'U','less') + '</div></div>'; }
                 if (sd.strikeoutsExact && sd.strikeoutsExact.length) { hh += '<div class="prl-1inn-mkt"><div class="prl-1inn-mkt-name">Strikeouts</div><div class="prl-1inn-btns">'; sd.strikeoutsExact.forEach(function(s){ hh += btn(gp(eid,'1inn_ks_exact',ts,s.label), s.label + ' Ks ' + parlayFmtOdds(s.odds)); }); hh += '</div></div>'; }
                 return hh;
             }
@@ -6957,9 +6985,17 @@
         if (container) container.scrollIntoView({ behavior: 'smooth', block: 'start' });
     };
 
-    var ALL_SLIPS_DATA   = [];
-    var allSlipsFilter   = 'all';
-    var allSlipsSearch   = '';
+    var ALL_SLIPS_DATA      = [];
+    var allSlipsFilter      = 'all';
+    var allSlipsSportFilter = 'all';
+    var allSlipsSearch      = '';
+    var SPORT_LABELS = {
+        'mlb':'MLB','nba':'NBA','basketball_nba':'NBA','nhl':'NHL','icehockey_nhl':'NHL',
+        'wnba':'WNBA','basketball_wnba':'WNBA','nfl':'NFL','football_nfl':'NFL','ufc':'UFC',
+        'soccer_eng.1':'EPL','soccer_ita.1':'Serie A','soccer_esp.1':'La Liga',
+        'soccer_usa.1':'MLS','soccer_ger.1':'Bundesliga','soccer_fra.1':'Ligue 1',
+        'soccer_wc':'World Cup','soccer_fc':'FC'
+    };
 
     function renderAllSlipsCards() {
         var cardsEl = document.getElementById('aslip-cards');
@@ -6980,6 +7016,7 @@
             } else if (allSlipsFilter !== 'all' && s.status !== allSlipsFilter) {
                 return false;
             }
+            if (allSlipsSportFilter !== 'all' && !(s.legs || []).some(function(l) { return l.sport === allSlipsSportFilter; })) return false;
             if (q && !(s.rs_username || '').toLowerCase().includes(q)) return false;
             return true;
         });
@@ -6989,11 +7026,20 @@
         // Wire live stat tracking for the admin view — renderAllSlipsCards bypasses parlayRenderSlips
         PARLAY_SLIPS = ALL_SLIPS_DATA;
         startLiveSlipTracking();
-        // Update pill active state without destroying the input
+        // Update status pill active state
         var filters = ['live','all','active','won','lost','pending_deposit','expired','void'];
         filters.forEach(function(f) {
             var btn = document.getElementById('aslip-pill-' + f);
             if (btn) btn.className = 'aslip-filter-pill' + (allSlipsFilter === f ? ' active' : '');
+        });
+        // Update sport pill active state
+        var sportAllBtn = document.getElementById('aslip-sport-all');
+        if (sportAllBtn) sportAllBtn.className = 'aslip-filter-pill' + (allSlipsSportFilter === 'all' ? ' active' : '');
+        var sportSet2 = {};
+        ALL_SLIPS_DATA.forEach(function(s) { (s.legs||[]).forEach(function(l){ if(l.sport) sportSet2[l.sport]=true; }); });
+        Object.keys(sportSet2).forEach(function(sp) {
+            var btn = document.getElementById('aslip-sport-' + sp);
+            if (btn) btn.className = 'aslip-filter-pill' + (allSlipsSportFilter === sp ? ' active' : '');
         });
     }
 
@@ -7024,16 +7070,37 @@
                     labels[f] + ' <span class="aslip-count">' + count + '</span></button>';
             }).join('') +
         '</div>';
+        // Sport pills — derived from unique sports in loaded data
+        var sportSet = {};
+        ALL_SLIPS_DATA.forEach(function(s) { (s.legs||[]).forEach(function(l){ if(l.sport) sportSet[l.sport]=true; }); });
+        var sportKeys = Object.keys(sportSet).sort();
+        var sportPillsHtml = '';
+        if (sportKeys.length > 1) {
+            sportPillsHtml = '<div class="aslip-filters" style="margin-top:6px">' +
+                '<button class="aslip-filter-pill' + (allSlipsSportFilter === 'all' ? ' active' : '') + '" id="aslip-sport-all" onclick="parlayAllSlipsSportFilter(\'all\')">All Sports</button>' +
+                sportKeys.map(function(sp) {
+                    var label = SPORT_LABELS[sp] || sp;
+                    var cnt = ALL_SLIPS_DATA.filter(function(s){ return (s.legs||[]).some(function(l){ return l.sport===sp; }); }).length;
+                    return '<button class="aslip-filter-pill' + (allSlipsSportFilter === sp ? ' active' : '') + '" id="aslip-sport-' + sp + '" onclick="parlayAllSlipsSportFilter(\'' + sp + '\')">' +
+                        label + ' <span class="aslip-count">' + cnt + '</span></button>';
+                }).join('') +
+            '</div>';
+        }
         var searchHtml = '<div class="aslip-search-wrap" style="display:flex;gap:8px;align-items:center">' +
             '<input class="aslip-search" type="text" placeholder="Search by RS username…" oninput="parlayAllSlipsSearch(this.value)" style="flex:1">' +
             '<button onclick="loadAllSlips()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-size:12px;padding:6px 10px;border-radius:6px;cursor:pointer;white-space:nowrap">↻ Refresh</button>' +
         '</div>';
-        container.innerHTML = pillsHtml + searchHtml + '<div id="aslip-cards"></div>';
+        container.innerHTML = pillsHtml + sportPillsHtml + searchHtml + '<div id="aslip-cards"></div>';
         renderAllSlipsCards();
     }
 
     window.parlayAllSlipsFilter = function(f) {
         allSlipsFilter = f;
+        renderAllSlipsCards();
+    };
+
+    window.parlayAllSlipsSportFilter = function(sp) {
+        allSlipsSportFilter = sp;
         renderAllSlipsCards();
     };
 
@@ -7050,6 +7117,7 @@
                 .then(function(d) {
                     if (d.ok && d.slips) ALL_SLIPS_DATA = d.slips;
                     allSlipsFilter = 'all';
+                    allSlipsSportFilter = 'all';
                     renderAllSlipsCards();
                     settledLegStats = {};
                     fetchSettledLegStats();
@@ -7098,6 +7166,7 @@
                 }
                 ALL_SLIPS_DATA = d.slips;
                 allSlipsFilter = 'all';
+                allSlipsSportFilter = 'all';
                 renderAllSlipsView();
                 settledLegStats = {};
                 fetchSettledLegStats();
@@ -7749,7 +7818,9 @@
             var sName = (ev.status && ev.status.type && ev.status.type.name) || '';
             var isFinal = sName === 'STATUS_FINAL' || sName === 'STATUS_FULL_TIME';
             var isLive  = sName === 'STATUS_IN_PROGRESS' || sName === 'STATUS_HALFTIME' ||
-                          sName === 'STATUS_SECOND_HALF' || sName === 'STATUS_END_PERIOD' ||
+                          sName === 'STATUS_SECOND_HALF' || sName === 'STATUS_FIRST_HALF' ||
+                          sName === 'STATUS_END_PERIOD' || sName === 'STATUS_EXTRA_TIME' ||
+                          sName === 'STATUS_OVERTIME' || sName === 'STATUS_SHOOTOUT' ||
                           sName.startsWith('STATUS_IN_PROGRESS');
             var state   = isFinal ? 'Final' : (isLive ? 'Live' : 'Preview');
             var clock   = (ev.status && ev.status.displayClock) || '';
@@ -7896,6 +7967,9 @@
                                 if (!a.active) return;
                                 var name = normSlipName((a.athlete && a.athlete.displayName) || '');
                                 if (!name) return;
+                                // Record game association for ALL active roster players so matchup
+                                // shows even before a player has appeared (appearances=0).
+                                if (gi && !giMap[name]) giMap[name] = gi;
                                 var raw = {};
                                 (a.stats || []).forEach(function(s) { raw[s.name] = parseFloat(s.value) || 0; });
                                 if (!(raw.appearances > 0)) return;
@@ -7906,7 +7980,6 @@
                                 map[name].saves      = Math.max(map[name].saves,      raw.saves || 0);
                                 map[name].offsides   = Math.max(map[name].offsides,   raw.offsides || 0);
                                 map[name].fouls_won  = Math.max(map[name].fouls_won,  raw.foulsSuffered || 0);
-                                if (gi && !giMap[name]) giMap[name] = gi;
                             });
                         });
                     });
@@ -7918,11 +7991,30 @@
                     var gi = item._gi;
                     var slug = (item.leg.sport || '').replace('soccer_', '') || 'eng.1';
                     if (!gi && item._searchAll) {
-                        // Resolve game from which game this player actually appeared in
-                        gi = (playerGiBySlug[slug] || {})[normSlipName(item.leg.playerName)] || null;
+                        var _norm = normSlipName(item.leg.playerName);
+                        var _gm = playerGiBySlug[slug] || {};
+                        gi = _gm[_norm] || null;
+                        // Prefix fallback: ESPN may drop a second surname
+                        // e.g. stored "victor garcia raja" vs ESPN "victor garcia"
+                        if (!gi) {
+                            var _gkeys = Object.keys(_gm);
+                            for (var _gi2 = 0; _gi2 < _gkeys.length; _gi2++) {
+                                var _gk = _gkeys[_gi2];
+                                if (_norm.startsWith(_gk) || _gk.startsWith(_norm)) { gi = _gm[_gk]; break; }
+                            }
+                        }
                     }
                     if (!gi || gi.state === 'Preview') return;
-                    var stats = (statsBySlug[slug] || {})[normSlipName(item.leg.playerName)];
+                    var _sNorm = normSlipName(item.leg.playerName);
+                    var _sm = statsBySlug[slug] || {};
+                    var stats = _sm[_sNorm] || null;
+                    // Prefix fallback for stats too
+                    if (!stats) {
+                        var _skeys = Object.keys(_sm);
+                        for (var _si = 0; _si < _skeys.length; _si++) {
+                            if (_sNorm.startsWith(_skeys[_si]) || _skeys[_si].startsWith(_sNorm)) { stats = _sm[_skeys[_si]]; break; }
+                        }
+                    }
                     var field = SOCCER_FIELD[item.leg.marketType];
                     var val   = (stats && field && stats[field] !== undefined) ? stats[field] : null;
                     updateLegStatus(item.leg.parlayId, item.leg.legIndex, val,
@@ -8375,6 +8467,7 @@
             pitcher_ks:'Pitcher Ks', outs_ou:'Outs',
             hits_allowed:'Hits Allowed', er_allowed:'Earned Runs', bb_allowed:'Walks Allowed', hwer:'H+W+ER',
             pts:'Points', reb:'Rebounds', ast:'Assists', fg3m:'Threes', pra:'PRA', pa:'Pts+Ast', pr:'Pts+Reb', ra:'Reb+Ast',
+            double_double:'Dbl-Dbl', triple_double:'Trpl-Dbl',
             points:'Points', assists:'Assists', rebounds:'Rebounds', steals:'Steals',
             blocks:'Blocks', threes:'Threes', turnovers:'Turnovers', minutes:'Minutes',
             '1inn_ml':'1st Inn Winner', '1inn_runs_ou':'1st Inn Runs', '1inn_runs_exact':'1st Inn Runs',
@@ -8509,6 +8602,26 @@
                 game = pool.games.find(function(g) { return g.awayShort === player.team || g.homeShort === player.team; });
             }
             if (game) return parlayGameRsUrl(game, pool.sport);
+            // Soccer: pool.games is always empty — search rsGameIds directly via player's team names
+            if (!game && pool.sport === 'soccer_fc' && player.awayShort && player.homeShort) {
+                var _socKeys = Object.keys(rsGameIds);
+                var _socAw   = player.awayShort.toLowerCase();
+                var _socHw   = player.homeShort.toLowerCase();
+                for (var _sk = 0; _sk < _socKeys.length; _sk++) {
+                    var _skl = _socKeys[_sk].toLowerCase();
+                    if (_skl.indexOf(_socAw) !== -1 && _skl.indexOf(_socHw) !== -1)
+                        return getRealSportsUrl(rsGameIds[_socKeys[_sk]], legSport, null, _socKeys[_sk]);
+                }
+                // Nickname fallback (last word) — "AS Roma" → "roma", "ACF Fiorentina" → "fiorentina"
+                var _socAwN = _socAw.split(' ').pop(), _socHwN = _socHw.split(' ').pop();
+                if (_socAwN !== _socAw || _socHwN !== _socHw) {
+                    for (var _skn = 0; _skn < _socKeys.length; _skn++) {
+                        var _sknl = _socKeys[_skn].toLowerCase();
+                        if (_sknl.indexOf(_socAwN) !== -1 && _sknl.indexOf(_socHwN) !== -1)
+                            return getRealSportsUrl(rsGameIds[_socKeys[_skn]], legSport, null, _socKeys[_skn]);
+                    }
+                }
+            }
         }
         return null;
     }
@@ -8537,14 +8650,14 @@
         var adjPayoutRax  = s.payout_rax;
         if (hasPush) {
             var origProb = legsArr.reduce(function(acc, l) { return acc * legImpliedProb(l); }, 1);
-            if (origProb > 0) origPayoutRax = Math.min(Math.floor(s.stake_rax * 0.9 * 0.70 / origProb), 10000);
+            if (origProb > 0) origPayoutRax = Math.min(Math.floor(s.stake_rax * 0.9 * 0.70 / origProb), 20000);
             if (s.status === 'won') {
                 adjPayoutRax = s.payout_rax; // auto-settle already recalculated
             } else if (activeLegs.length < 2) {
                 adjPayoutRax = s.stake_rax; // voided → full refund
             } else {
                 var adjProb = activeLegs.reduce(function(acc, l) { return acc * legImpliedProb(l); }, 1);
-                if (adjProb > 0) adjPayoutRax = Math.min(Math.floor(s.stake_rax * 0.9 * 0.70 / adjProb), 10000);
+                if (adjProb > 0) adjPayoutRax = Math.min(Math.floor(s.stake_rax * 0.9 * 0.70 / adjProb), 20000);
             }
         }
         var mult = s.stake_rax > 0 ? ((hasPush ? adjPayoutRax : s.payout_rax) / s.stake_rax).toFixed(2) + 'x' : '';
@@ -9213,6 +9326,24 @@
                         }
                         if (_mlbCorrMsg) { showConfirm(_mlbCorrMsg, function() {}); return; }
                     }
+                    // 1st inning NRFI correlation:
+                    // Runs Under 0.5 + Exactly 0 for any team (same game) all require NRFI.
+                    // Two Exactly 0 runs legs from same game are also correlated.
+                    if (newP.eventId && (newP.market === '1inn_runs_ou' || newP.market === '1inn_runs_exact')) {
+                        var _nrfiCorr = Object.keys(parlayPicks).some(function(k) {
+                            var ex = findParlayPlayer(k);
+                            if (!ex || ex.eventId !== newP.eventId) return false;
+                            var newIsUnder  = newP.market === '1inn_runs_ou'  && parlayPicks[String(newP.id)] !== 'more';
+                            var newIsExact0 = newP.market === '1inn_runs_exact' && (newP.idir === '0' || newP.threshold === 0);
+                            var exIsUnder   = ex.market  === '1inn_runs_ou'  && parlayPicks[k] !== 'more';
+                            var exIsExact0  = ex.market  === '1inn_runs_exact' && (ex.idir  === '0' || ex.threshold  === 0);
+                            // For the new pick we check the dir argument (not yet stored in parlayPicks)
+                            var newDirIsUnder  = newP.market === '1inn_runs_ou'  && dir === 'less';
+                            var newDirIsExact0 = newP.market === '1inn_runs_exact' && (newP.idir === '0' || String(newP.idir) === '0');
+                            return (newDirIsUnder && exIsExact0) || (newDirIsExact0 && exIsUnder) || (newDirIsExact0 && exIsExact0);
+                        });
+                        if (_nrfiCorr) { showConfirm('1st inning Runs Under + Exactly 0 picks from the same game are correlated — both require NRFI.', function() {}); return; }
+                    }
                     // Soccer: block Goalscorer + Shots on Target for same player (correlated)
                     if (newP.name && !newP.isTeamMarket && !newP.fightId &&
                         (newP.market === 'goalscorer' || newP.market === 'sot')) {
@@ -9563,7 +9694,9 @@
             var _pg = (PARLAY_GAMES.find(function(g) { return g.eventId === p.eventId; }) ||
                        PARLAY_GAMES_WNBA.find(function(g) { return g.eventId === p.eventId; }) ||
                        PARLAY_GAMES_NFL.find(function(g) { return g.eventId === p.eventId; }) ||
-                       (p.awayTeam && p.homeTeam ? p : null));
+                       (p.awayTeam && p.homeTeam ? p : null) ||
+                       // Soccer: player objects have awayShort/homeShort but not awayTeam/homeTeam
+                       (p.awayShort && p.homeShort ? { awayTeam: p.awayShort, homeTeam: p.homeShort, awayShort: p.awayShort, homeShort: p.homeShort } : null));
             // 1inn picks need short codes so place.js get1innHalf() can match playerName to half.
             // All other picks store full DK team name (e.g. "Cardinals @ Cubs") so the fuzzy
             // substring match in parlayLegRsUrl finds rsGameIds keys like "St. Louis Cardinals @ Chicago Cubs".
