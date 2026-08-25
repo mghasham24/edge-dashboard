@@ -122,16 +122,40 @@ Cloudflare Pages (static frontend) + Cloudflare Functions (API) + D1 (SQLite) + 
 - Trial eligibility: `users.had_free_trial = 0` — set to 1 on first checkout, blocks second trial
 
 ## Working With Claude
-- **Ask clarifying questions** when a request is ambiguous rather than inferring and acting. User explicitly wants this.
-- **Never cite Odds API credits** for FD/DK fetch decisions — those are native calls, zero cost. Only cite Odds API for UFC.
-- **Push staging first** (`git push origin main:staging`), then explicitly push main when user says so.
+
+### Ask First — Never Guess
+- **Ask clarifying questions** when a request is ambiguous rather than inferring and acting.
+- **When diagnosing any bug**: run the relevant D1 SELECT query first. Most bugs here are data state problems (wrong column, missing row, bad join) — not code logic bugs. Query the data, read code only if the data doesn't explain it.
+- **For live/runtime data** (DevTools network requests, RS API responses, auth tokens, what the user sees on screen) — ask the user immediately. Never infer. One targeted question is faster and more accurate than 10 minutes of code reading.
+- **NEVER guess RS API endpoints, parameters, or status values.** Unverified RS API calls have triggered ban warnings. Before adding any new RS API call, ask the user to verify the exact URL from DevTools (Network tab on web.realapp.com). Confirmed valid RS offer statuses: `open`, `accepted`, `rejected`, `expired`. Invalid (caused ban warning): `completed`, `countered`.
+
+### Never Do Without Explicit Approval
+- **Never trigger API endpoints** (curl, fetch, etc.) without explicit instruction.
+- **Never run D1 writes** (UPDATE/INSERT/DELETE) on production without explicit instruction. SELECT queries are always fine.
+- **Never mention Tampermonkey scripts** — system must work fully serverless, no Mac or browser scripts required.
+- **Never cite Odds API credits** for FD/DK decisions — those are native calls, zero cost. Only cite Odds API for UFC.
+
+### Payout Bot
+- When user says **"run payout bot"** — immediately run without asking or searching:
+  ```
+  cd "/Users/mohamadghasham/RaxEdge Project/payout-bot" && node index.js
+  ```
+- Payout bot uses Safari AppleScript automation only — **never direct RS API calls for offer submission**. RS bans accounts that submit offers via API.
+
+### Memory Hygiene
+- **Update memory immediately** after deploys, D1 migrations, CF secret rotations, or operational state changes (payout pause/unpause). Don't wait until end of session.
+- **Log config changes** to `project_parlays.md` Live Ops State block: what changed, when, why.
 
 ## Deploy Conventions
-- **Always push to `origin main:staging` first** — never push directly to `origin/main` without explicit user confirmation.
-- Exception: user says "push main" → push to `origin main` directly.
-- **`workers/alert-cron`** must be deployed separately: `cd workers/alert-cron && npx wrangler deploy`. A git push alone does NOT deploy it.
-- **Never push alert-cron changes to `origin/main`** without explicit instruction — it fires real Telegram messages every minute.
-- **`workers/rs-poster`** — local files remain but the CF Worker was deleted from Cloudflare dashboard. Do not redeploy it.
+- **Every deploy = two steps, always together:**
+  1. `git push origin main`
+  2. `npx wrangler pages deploy . --project-name=edge-dashboard --branch main`
+- Never do one without the other. Never push to staging only.
+- **Staging URL**: https://staging.edge-dashboard-4wl.pages.dev — deploy with `--branch staging` to update it.
+- **Production URL**: https://raxedge.com
+- **Bump `?v=N`** in `index.html` for `app.js` and `app.css` on every deploy that changes those files. Also update the `#app-version-badge` span to match.
+- **`workers/alert-cron`** deploys separately: `cd workers/alert-cron && npx wrangler deploy`. Never push alert-cron to main without explicit instruction — it fires real Discord/Telegram messages every minute.
+- **`workers/rs-poster`** — CF Worker deleted from dashboard. Do not redeploy it.
 
 ## Auth & Plan Model
 - Sessions: `sessions` table, token in cookie (`session=`), 30-day expiry.
