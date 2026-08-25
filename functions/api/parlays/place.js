@@ -393,6 +393,26 @@ async function _place({ request, env }, onCreditConsumed) {
     if (inn1ExactZeroCounts[eid] > 1)
       return err('Cannot combine Exactly 0 runs for multiple teams in the same game — picks are correlated (both require NRFI).', 400);
   }
+
+  // 1inn_run_yn "No Score" correlation rules.
+  // Rule A: Two "No Score" legs from the same game = NRFI expressed twice (both teams can't score = Under 0.5 total).
+  // Rule B: "No Score" leg + 1inn_runs_ou Under from same game = correlated (Under 0.5 means neither team scores).
+  const inn1RunYnNoByGame = {};
+  for (const l of normalized) {
+    if (l.marketType !== '1inn_run_yn') continue;
+    const isNo = l.label && l.label.trim().toLowerCase() === 'no';
+    if (!isNo) continue;
+    const eid = l.eventName || l.eventId;
+    if (!eid) continue;
+    inn1RunYnNoByGame[eid] = (inn1RunYnNoByGame[eid] || 0) + 1;
+    if (inn1RunYnNoByGame[eid] > 1)
+      return err('Cannot combine multiple "No Score" picks from the same game — picks are correlated (both teams not scoring = NRFI).', 400);
+  }
+  for (const eid of Object.keys(inn1RunYnNoByGame)) {
+    if (inn1RunsOuUnderEids.has(eid))
+      return err('Cannot combine a "No Score" pick with 1st inning Runs Under from the same game — picks are correlated (Under 0.5 means neither team can score).', 400);
+  }
+
   for (const l of normalized) {
     if (l.marketType.startsWith('1inn_')) continue;
     const eid = l.eventName || l.eventId;
