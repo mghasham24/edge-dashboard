@@ -228,6 +228,15 @@ async function handleRequest({ request, env }) {
     );
   }
 
+  // Persist full owned-card inventory to D1 so place.js can verify ownership without
+  // needing a live RS API call (which requires a fresh EDGEBOT_SESSION_TOKEN).
+  try {
+    await env.DB.prepare(
+      "INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES('card_inventory',?,?) " +
+      "ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at"
+    ).bind(JSON.stringify([...owned]), now).run();
+  } catch (_) {}
+
   // 3b-new. Insert cards edgebot owns that aren't in the pool yet (e.g. fresh auction wins).
   // Exclude cards recently used as deposit cards (within 2 hours) — card-reconcile running just
   // after deposit-check deletes a used card could re-insert it before RS reflects the transfer,

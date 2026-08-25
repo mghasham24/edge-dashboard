@@ -13,33 +13,22 @@ function impliedProb(odds) {
 }
 
 // Only assign cards reconcile-confirmed owned within the last 15 minutes.
-// Reconcile runs every 2 min — this survives ~7 consecutive failures before blocking.
-const VERIFY_MAX_AGE = 15 * 60;
-// If the real-time ownership check can't reach RS (expired session, timeout), only trust
-// a card if reconcile confirmed it very recently (one reconcile interval = 6 min).
-const STRICT_AGE   = 6 * 60;
-const EDGEBOT_USER = 'V3yGgkkJ';
-const RS_DEVICE_UUID = '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e';
+// Reconcile runs every 2–5 min — this survives ~3–7 consecutive failures before blocking.
+const VERIFY_MAX_AGE    = 15 * 60;
+// card_inventory cache must be within 2 reconcile intervals to be trusted.
+const INVENTORY_MAX_AGE = 10 * 60;
 
-// Returns true (edgebot owns it), false (someone else owns it), null (can't verify — trust verified_at).
-async function verifyEdgebotOwns(cardId, authInfo, sessionToken) {
+// Returns true (edgebot owns it per last reconcile snapshot), false (not in snapshot),
+// null (snapshot missing or too stale — reconcile may be down).
+// Reads from D1 so it never depends on EDGEBOT_SESSION_TOKEN being fresh.
+async function verifyEdgebotOwns(cardId, env, now) {
   try {
-    const res = await fetch(`https://web.realapp.com/collectingcards/${cardId}`, {
-      headers: {
-        'Accept':             'application/json',
-        'real-auth-info':     authInfo,
-        'real-session-token': sessionToken || '',
-        'real-device-uuid':   RS_DEVICE_UUID,
-        'real-device-type':   'desktop_web',
-        'real-version':       '35',
-      },
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const uid  = data.card?.userId ?? data.userId ?? null;
-    if (uid === null) return null;
-    return uid === EDGEBOT_USER;
+    const row = await env.DB.prepare(
+      "SELECT data, fetched_at FROM odds_cache WHERE cache_key='card_inventory'"
+    ).first();
+    if (!row || (now - row.fetched_at) > INVENTORY_MAX_AGE) return null;
+    const ids = JSON.parse(row.data);
+    return Array.isArray(ids) && ids.includes(Number(cardId));
   } catch { return null; }
 }
 
@@ -53,25 +42,22 @@ async function pickCard(env, now) {
       ? ' AND card_id NOT IN (' + excluded.map(() => '?').join(',') + ')'
       : '';
     const row = await env.DB.prepare(
-      'SELECT card_id, verified_at FROM deposit_cards WHERE assigned_to_parlay_id IS NULL AND freed_at IS NULL AND verified_at > ?' +
+      'SELECT card_id FROM deposit_cards WHERE assigned_to_parlay_id IS NULL AND freed_at IS NULL AND verified_at > ?' +
       notIn + ' ORDER BY verified_at DESC LIMIT 1'
     ).bind(now - VERIFY_MAX_AGE, ...excluded).first();
     if (!row) break;
 
-    if (env.EDGEBOT_AUTH_INFO) {
-      const owned = await verifyEdgebotOwns(row.card_id, env.EDGEBOT_AUTH_INFO, env.EDGEBOT_SESSION_TOKEN || '');
-      if (owned === false) {
-        // Card confirmed not owned by edgebot — remove ghost from pool and try next
-        await env.DB.prepare('DELETE FROM deposit_cards WHERE card_id=?').bind(row.card_id).run();
-        excluded.push(row.card_id);
-        continue;
-      }
-      if (owned === null && (now - (row.verified_at || 0)) > STRICT_AGE) {
-        // Can't reach RS to verify (expired session / timeout) and reconcile stamp is older than
-        // one reconcile interval — too risky to assign; try next card rather than give out a ghost.
-        excluded.push(row.card_id);
-        continue;
-      }
+    const owned = await verifyEdgebotOwns(row.card_id, env, now);
+    if (owned === false) {
+      // Card confirmed not in edgebot's inventory — remove ghost from pool and try next
+      await env.DB.prepare('DELETE FROM deposit_cards WHERE card_id=?').bind(row.card_id).run();
+      excluded.push(row.card_id);
+      continue;
+    }
+    if (owned === null) {
+      // Inventory snapshot missing or stale (reconcile may be down) — skip rather than risk a ghost
+      excluded.push(row.card_id);
+      continue;
     }
     return row.card_id;
   }
