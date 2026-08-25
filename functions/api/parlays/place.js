@@ -15,13 +15,49 @@ function impliedProb(odds) {
 // Only assign cards reconcile-confirmed owned within the last 15 minutes.
 // Reconcile runs every 2–5 min — this survives ~3–7 consecutive failures before blocking.
 const VERIFY_MAX_AGE    = 15 * 60;
-// card_inventory cache must be within 2 reconcile intervals to be trusted.
+// card_inventory snapshot must be within 2 reconcile intervals to be trusted as a fallback.
 const INVENTORY_MAX_AGE = 10 * 60;
+const EDGEBOT_USER      = 'V3yGgkkJ';
+const RS_DEVICE_UUID    = '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e';
 
-// Returns true (edgebot owns it per last reconcile snapshot), false (not in snapshot),
-// null (snapshot missing or too stale — reconcile may be down).
-// Reads from D1 so it never depends on EDGEBOT_SESSION_TOKEN being fresh.
-async function verifyEdgebotOwns(cardId, env, now) {
+// Read the shared RS auth token from D1 — refreshed every 30s, always fresh.
+async function getSharedRsToken(env) {
+  try {
+    const row = await env.DB.prepare(
+      "SELECT data FROM odds_cache WHERE cache_key='meta:rs_auth_token'"
+    ).first();
+    if (!row?.data) return null;
+    const parsed = JSON.parse(row.data);
+    return parsed.token || null;
+  } catch { return null; }
+}
+
+// Real-time check via RS API — uses the always-fresh shared token, no session expiry risk.
+// Returns true (edgebot owns it), false (someone else owns it), null (can't determine).
+async function verifyLive(cardId, rsToken) {
+  if (!rsToken) return null;
+  try {
+    const res = await fetch(`https://web.realapp.com/collectingcards/${cardId}`, {
+      headers: {
+        'Accept':           'application/json',
+        'real-auth-info':   rsToken,
+        'real-device-uuid': RS_DEVICE_UUID,
+        'real-device-type': 'desktop_web',
+        'real-version':     '35',
+      },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const uid  = data.card?.userId ?? data.userId ?? null;
+    if (uid === null) return null;
+    return uid === EDGEBOT_USER;
+  } catch { return null; }
+}
+
+// Snapshot fallback — reads the full owned-card set written by card-reconcile every 5 min.
+// Returns true/false/null (null = snapshot missing or too stale).
+async function verifySnapshot(cardId, env, now) {
   try {
     const row = await env.DB.prepare(
       "SELECT data, fetched_at FROM odds_cache WHERE cache_key='card_inventory'"
@@ -32,10 +68,19 @@ async function verifyEdgebotOwns(cardId, env, now) {
   } catch { return null; }
 }
 
+// Combined: real-time RS check first (always-fresh token), fall back to D1 snapshot.
+// Returns true/false/null (null = neither source could determine ownership).
+async function verifyEdgebotOwns(cardId, env, now, rsToken) {
+  const live = await verifyLive(cardId, rsToken);
+  if (live !== null) return live;
+  return verifySnapshot(cardId, env, now);
+}
+
 // Pick a verified, unassigned card (up to 5 attempts).
-// If a card fails the ownership check it is removed from the pool and the next one is tried.
+// Each candidate is verified against RS in real-time before being assigned.
 // Returns card_id or null when none are available.
 async function pickCard(env, now) {
+  const rsToken  = await getSharedRsToken(env); // fetch once, reuse across attempts
   const excluded = [];
   for (let i = 0; i < 5; i++) {
     const notIn = excluded.length
@@ -47,15 +92,15 @@ async function pickCard(env, now) {
     ).bind(now - VERIFY_MAX_AGE, ...excluded).first();
     if (!row) break;
 
-    const owned = await verifyEdgebotOwns(row.card_id, env, now);
+    const owned = await verifyEdgebotOwns(row.card_id, env, now, rsToken);
     if (owned === false) {
-      // Card confirmed not in edgebot's inventory — remove ghost from pool and try next
+      // Confirmed not owned by edgebot — remove ghost from pool and try next
       await env.DB.prepare('DELETE FROM deposit_cards WHERE card_id=?').bind(row.card_id).run();
       excluded.push(row.card_id);
       continue;
     }
     if (owned === null) {
-      // Inventory snapshot missing or stale (reconcile may be down) — skip rather than risk a ghost
+      // Neither live check nor snapshot could verify — skip rather than risk a ghost
       excluded.push(row.card_id);
       continue;
     }
