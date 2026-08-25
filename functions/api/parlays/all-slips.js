@@ -29,9 +29,9 @@ export async function onRequestGet({ request, env }) {
       'SELECT id, user_id, rs_username, status, legs_count, stake_rax, payout_rax, deposit_card_id, ' +
       'rs_offer_id, received_rax, expires_at, created_at, deposited_at, settled_at ' +
       'FROM parlays ' +
-      "WHERE rs_username LIKE ? AND NOT (status='pending_deposit' AND created_at<?) " +
+      'WHERE rs_username LIKE ? ' +
       'ORDER BY created_at DESC LIMIT 200'
-    ).bind(like, pendingCutoff).all());
+    ).bind(like).all());
 
     if (!parlays.length) return ok({ slips: [], searched: true });
 
