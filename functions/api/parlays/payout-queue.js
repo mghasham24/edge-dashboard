@@ -88,7 +88,8 @@ async function handleRequest({ request, env }) {
     const { results } = await env.DB.prepare(
       'SELECT q.id, q.parlay_id, q.rs_username, q.payout_rax, q.offer_amount, ' +
       'q.status, q.target_card_id, q.rs_offer_id, q.attempts, q.notes, ' +
-      'q.created_at, q.sent_at, q.skipped_cards, ra.rs_user_id, p.status AS parlay_status ' +
+      'q.created_at, q.sent_at, q.skipped_cards, q.card1_id, q.card1_sent_at, ' +
+      'ra.rs_user_id, p.status AS parlay_status ' +
       'FROM payout_queue q ' +
       'LEFT JOIN real_auth ra ON ra.user_id = q.user_id ' +
       'LEFT JOIN parlays p ON p.id = q.parlay_id ' +
@@ -122,11 +123,15 @@ async function handleRequest({ request, env }) {
   }
 
   // ── Prepare: find a card in the winner's RS inventory ────────────────────
+  // For payouts > 10K: two cards needed (RS cap is 10K per card).
+  //   Phase 1 (card1_sent_at IS NULL): find card1, offer 10K.
+  //   Phase 2 (card1_sent_at IS NOT NULL): find card2, offer remainder.
   if (action === 'prepare') {
     if (!id) return err('id required', 400);
 
     const entry = await env.DB.prepare(
-      'SELECT q.id, q.user_id, q.offer_amount, q.skipped_cards, ra.rs_user_id ' +
+      'SELECT q.id, q.user_id, q.payout_rax, q.offer_amount, q.skipped_cards, ' +
+      'q.card1_id, q.card1_sent_at, q.target_card_id, ra.rs_user_id ' +
       'FROM payout_queue q LEFT JOIN real_auth ra ON ra.user_id = q.user_id WHERE q.id=?'
     ).bind(id).first();
     if (!entry)            return err('Not found', 404);
@@ -152,21 +157,55 @@ async function handleRequest({ request, env }) {
       for (const r of (pool || [])) skippedIds.add(r.card_id);
     } catch (_) {}
 
-    const cardId = await findUnownedCard(entry.rs_user_id, authInfo, sessionToken, skippedIds);
-    if (!cardId) return err('No eligible cards found for this winner', 404);
+    const isMultiCard = (entry.payout_rax || entry.offer_amount) > 10000;
 
-    const cardUrl = 'https://www.realapp.com/' + rsUrlEncode(20, 0, 0, cardId);
+    if (!isMultiCard || !entry.card1_sent_at) {
+      // Phase 1 (or single-card payout): find the first card
+      const cardId = await findUnownedCard(entry.rs_user_id, authInfo, sessionToken, skippedIds);
+      if (!cardId) return err('No eligible cards found for this winner', 404);
 
-    await env.DB.prepare(
-      'UPDATE payout_queue SET target_card_id=?, last_attempt_at=? WHERE id=?'
-    ).bind(cardId, now, id).run();
+      const cardUrl     = 'https://www.realapp.com/' + rsUrlEncode(20, 0, 0, cardId);
+      const offerAmount = isMultiCard ? 10000 : (entry.offer_amount || entry.payout_rax);
 
-    return ok({ cardId, cardUrl, offerAmount: entry.offer_amount });
+      await env.DB.prepare(
+        'UPDATE payout_queue SET target_card_id=?, last_attempt_at=? WHERE id=?'
+      ).bind(cardId, now, id).run();
+
+      return ok({ cardId, cardUrl, offerAmount, isMultiCard, phase: 1 });
+    }
+
+    // Phase 2: card1 already sent — find a second card for the remaining amount.
+    // Skip card1 and any previously skipped cards.
+    if (entry.card1_id) skippedIds.add(entry.card1_id);
+
+    // Reuse an already-assigned card2 (target_card_id) if present (retry case)
+    let cardId = entry.target_card_id;
+    if (!cardId) {
+      cardId = await findUnownedCard(entry.rs_user_id, authInfo, sessionToken, skippedIds);
+      if (!cardId) return err('No eligible card found for second payout', 404);
+      await env.DB.prepare(
+        'UPDATE payout_queue SET target_card_id=?, last_attempt_at=? WHERE id=?'
+      ).bind(cardId, now, id).run();
+    }
+
+    const cardUrl     = 'https://www.realapp.com/' + rsUrlEncode(20, 0, 0, cardId);
+    const offerAmount = (entry.payout_rax || entry.offer_amount) - 10000;
+
+    return ok({ cardId, cardUrl, offerAmount, isMultiCard: true, phase: 2 });
   }
 
   // ── Mark sent ──────────────────────────────────────────────────────────────
+  // ?phase=1 — card1 sent: save card1_id from target, reset target for phase 2, stay pending
+  // ?phase=2 or absent — fully done: mark status='sent'
   if (action === 'mark_sent') {
     if (!id) return err('id required', 400);
+    const phase = url.searchParams.get('phase');
+    if (phase === '1') {
+      await env.DB.prepare(
+        'UPDATE payout_queue SET card1_id=target_card_id, card1_sent_at=?, target_card_id=NULL WHERE id=?'
+      ).bind(now, id).run();
+      return ok({ marked: true, phase: 1 });
+    }
     const result = await env.DB.prepare(
       "UPDATE payout_queue SET status='sent', sent_at=? WHERE id=? AND status='pending'"
     ).bind(now, id).run();
@@ -195,6 +234,16 @@ async function handleRequest({ request, env }) {
       'UPDATE payout_queue SET target_card_id=NULL, skipped_cards=? WHERE id=?'
     ).bind(JSON.stringify([...skipped]), id).run();
     return ok({ skipped: [...skipped] });
+  }
+
+  // ── Update notes ──────────────────────────────────────────────────────────
+  if (action === 'update_notes') {
+    if (!id) return err('id required', 400);
+    const notes = url.searchParams.get('notes') || '';
+    await env.DB.prepare(
+      'UPDATE payout_queue SET notes=? WHERE id=?'
+    ).bind(notes.slice(0, 500), id).run();
+    return ok({ updated: true });
   }
 
   return err('Unknown action', 400);

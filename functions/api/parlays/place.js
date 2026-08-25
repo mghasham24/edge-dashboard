@@ -457,7 +457,7 @@ async function _place({ request, env }, onCreditConsumed) {
   // Parlays over 2.5x are docked 10 Rax to cover deposit card acquisition cost.
   const trueProb      = normalized.reduce((acc, l) => acc * l.impliedProb, 1);
   const effectiveStake = Math.floor(stake * 0.9);
-  const rawPayout = Math.min(Math.floor(effectiveStake * 0.70 / trueProb), 10000);
+  const rawPayout = Math.min(Math.floor(effectiveStake * 0.70 / trueProb), 20000);
   let payoutRax = Math.floor((rawPayout + 2) / 10) * 10;
   if (0.70 / trueProb > 2.5) payoutRax = Math.max(0, payoutRax - 10);
   if (isFreePlay) payoutRax = Math.min(payoutRax, 3000);

@@ -45,8 +45,12 @@ async function fetchQueue() {
     .sort((a, b) => (a.attempts || 0) - (b.attempts || 0))
     .slice(0, MAX_PER_RUN);
 }
-async function markAttempt(id) {
+async function markAttempt(id, notes) {
   await api(`/api/parlays/payout-queue?action=mark_attempt&id=${id}`, 'POST').catch(() => {});
+  if (notes) {
+    const ts = new Date().toISOString();
+    await api(`/api/parlays/payout-queue?action=update_notes&id=${id}&notes=${encodeURIComponent(`[${ts}] ${notes.slice(0, 400)}`)}`, 'POST').catch(() => {});
+  }
 }
 async function skipCard(id) {
   await api(`/api/parlays/payout-queue?action=skip_card&id=${id}`, 'POST').catch(() => {});
@@ -58,6 +62,10 @@ async function prepareEntry(id) {
 }
 async function markSent(id) {
   const d = await api(`/api/parlays/payout-queue?action=mark_sent&id=${id}`, 'POST');
+  return d.ok;
+}
+async function markCard1Sent(id) {
+  const d = await api(`/api/parlays/payout-queue?action=mark_sent&id=${id}&phase=1`, 'POST');
   return d.ok;
 }
 
@@ -363,31 +371,59 @@ async function processQueue() {
     const entry = queue[i];
     console.log(`\n[${ts()}] [${i + 1}/${queue.length}] #${entry.id} — @${entry.rs_username} — ${Number(entry.offer_amount).toLocaleString()} Rax`);
 
-    let cardUrl, offerAmount;
+    let p;
     try {
-      const p = await prepareEntry(entry.id);
-      cardUrl = p.cardUrl; offerAmount = p.offerAmount;
-      console.log(`  Card: ${cardUrl}`);
+      p = await prepareEntry(entry.id);
+      console.log(`  Card 1: ${p.cardUrl}  (${Number(p.offerAmount).toLocaleString()} Rax${p.isMultiCard ? ' · phase 1 of 2' : ''})`);
     } catch (e) { console.error('  ✗ No card:', e.message); continue; }
 
+    let allSent = false;
     try {
-      const ok = await processOffer(cardUrl, offerAmount);
-      if (ok) { await markSent(entry.id); console.log('  ✓ Offer sent'); sent++; }
-      else {
-        // Slider max < offer amount — this card is confirmed too low-value.
-        // Skip it so prepare finds a different card next run.
+      const ok1 = await processOffer(p.cardUrl, p.offerAmount);
+      if (!ok1) {
         await skipCard(entry.id);
-        await markAttempt(entry.id);
-        console.log('  ✗ Skipped (card value too low — added to skip list)');
+        await markAttempt(entry.id, `card1=${p.cardUrl} skipped — slider max too low for ${p.offerAmount} Rax`);
+        console.log('  ✗ Card 1 value too low — skipped');
+      } else if (p.isMultiCard) {
+        // Phase 1 done — record card1 and immediately find + send card2
+        await markCard1Sent(entry.id);
+        console.log('  ✓ Card 1 offer sent — preparing card 2…');
+        await sleep(rand(1500, 2500));
+
+        let p2;
+        try { p2 = await prepareEntry(entry.id); }
+        catch (e2) {
+          console.error('  ✗ Card 2 prepare failed:', e2.message);
+          await markAttempt(entry.id, `card2 prepare failed: ${e2.message}`);
+          continue;
+        }
+        console.log(`  Card 2: ${p2.cardUrl}  (${Number(p2.offerAmount).toLocaleString()} Rax · phase 2 of 2)`);
+
+        const ok2 = await processOffer(p2.cardUrl, p2.offerAmount);
+        if (!ok2) {
+          await skipCard(entry.id);
+          await markAttempt(entry.id, `card2=${p2.cardUrl} skipped — slider max too low for ${p2.offerAmount} Rax`);
+          console.log('  ✗ Card 2 value too low — will retry next run');
+        } else {
+          await markSent(entry.id);
+          console.log('  ✓ Both offers sent');
+          allSent = true;
+          sent++;
+        }
+      } else {
+        await markSent(entry.id);
+        console.log('  ✓ Offer sent');
+        allSent = true;
+        sent++;
       }
     } catch (e) {
       console.error('  ✗ Error:', e.message);
-      await markAttempt(entry.id);
+      await markAttempt(entry.id, `card=${p?.cardUrl || 'none'} err=${e.message}`);
       await safariCloseTab();
     }
 
     if (i < queue.length - 1) {
-      const wait = rand(10, 20);
+      const wait = rand(2, 3);
       console.log(`  Waiting ${wait}s before next offer...`);
       await sleep(wait * 1000);
     }
