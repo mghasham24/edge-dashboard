@@ -246,8 +246,16 @@ async function handleRequest({ request, env }) {
   // Fetch the current owner of each pending deposit card directly from the RS card endpoint.
   // When a user accepts edgebot's counter-offer the card transfers immediately — card.userId
   // reflects the new owner before the offer status reliably appears as "accepted" via pagination.
+  // Build a full set of all rows to ownership-check: includes parlays with no rs_offer_id
+  // (those never got a counter-offer recorded), so cards that transferred without deposit-check
+  // seeing the offer in the inbox (e.g. session-expired window) are still caught here.
+  const allOwnershipRows = [
+    ...allPending,
+    ...(recentExpiredRows.results || []),
+    ...(voidedDepositRows.results || []),
+  ];
   let ownershipActivated = 0;
-  const ownershipCheckRows = directCheckRows.filter(r => r.deposit_card_id != null && !directActivated.has(r.rs_offer_id));
+  const ownershipCheckRows = allOwnershipRows.filter(r => r.deposit_card_id != null && !directActivated.has(r.rs_offer_id));
   for (const row of ownershipCheckRows) {
     const ownerId = await fetchCardOwner(row.deposit_card_id, authInfo, sessionToken);
     if (ownerId !== null && ownerId !== EDGEBOT_USER) {
@@ -397,7 +405,6 @@ async function handleRequest({ request, env }) {
     ).bind(offerId, receivedRax, now, parlayId, cardId).run();
     if (result.meta.changes > 0) {
       await env.DB.prepare('DELETE FROM deposit_cards WHERE card_id=?').bind(cardId).run();
-      // Check if this activation pushes the user's referred-by referrer over the 2k threshold.
       // Fire-and-forget — never block the main deposit flow.
       checkReferralMilestone(parlayId).catch(() => {});
     } else {
@@ -544,6 +551,41 @@ async function handleRequest({ request, env }) {
       'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at'
     ).bind('deposit_check_debug', JSON.stringify(result), now).run();
   } catch(e) {}
+
+  // Low-card admin alert — fires once per hour when free cards drop to 10 or fewer
+  if (env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_ALERT_CHAT_ID) {
+    try {
+      const LOW_CARD_THRESHOLD = 10;
+      const ALERT_THROTTLE     = 3600; // 1 hour
+      const testAlert          = url.searchParams.has('test_alert');
+      const freeRow = await env.DB.prepare(
+        'SELECT COUNT(*) AS cnt FROM deposit_cards WHERE assigned_to_parlay_id IS NULL'
+      ).first();
+      const freeCards = freeRow?.cnt ?? 0;
+      if (testAlert || freeCards <= LOW_CARD_THRESHOLD) {
+        const lastAlert = await env.DB.prepare(
+          "SELECT fetched_at FROM odds_cache WHERE cache_key='low_card_alert_sent'"
+        ).first();
+        if (testAlert || !lastAlert || (now - lastAlert.fetched_at) >= ALERT_THROTTLE) {
+          const text = testAlert
+            ? `🧪 Test alert — deposit card monitor is working.\n\nCurrent free cards: ${freeCards}`
+            : `⚠️ Low deposit cards: ${freeCards} free card${freeCards === 1 ? '' : 's'} remaining.\n\nAdd more via D1:\nINSERT OR IGNORE INTO deposit_cards (card_id) VALUES (...);`;
+          await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ chat_id: env.TELEGRAM_ALERT_CHAT_ID, text }),
+            signal:  AbortSignal.timeout(6000),
+          });
+          if (!testAlert) {
+            await env.DB.prepare(
+              "INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES('low_card_alert_sent','1',?) ON CONFLICT(cache_key) DO UPDATE SET data='1',fetched_at=excluded.fetched_at"
+            ).bind(now).run();
+          }
+        }
+      }
+    } catch {}
+  }
+
   return ok(result);
 }
 
