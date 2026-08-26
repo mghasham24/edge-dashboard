@@ -255,7 +255,12 @@ async function handleRequest({ request, env }) {
     ...(voidedDepositRows.results || []),
   ];
   let ownershipActivated = 0;
-  const ownershipCheckRows = allOwnershipRows.filter(r => r.deposit_card_id != null && !directActivated.has(r.rs_offer_id));
+  // Cap at 15 rows — each fetchCardOwner takes up to 8s; CF wall-clock limit is 30s.
+  // Pending rows first (most likely to have a real transfer), then expired/voided.
+  const ownershipCheckRows = allOwnershipRows
+    .filter(r => r.deposit_card_id != null && !directActivated.has(r.rs_offer_id))
+    .sort((a, b) => (a.status === 'pending_deposit' ? 0 : 1) - (b.status === 'pending_deposit' ? 0 : 1))
+    .slice(0, 15);
   for (const row of ownershipCheckRows) {
     const ownerId = await fetchCardOwner(row.deposit_card_id, authInfo, sessionToken);
     if (ownerId !== null && ownerId !== EDGEBOT_USER) {
