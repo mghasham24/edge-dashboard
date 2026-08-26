@@ -68,11 +68,13 @@ function buildWinMessage(parlay, legs) {
     ? (parlay.payout_rax / parlay.stake_rax).toFixed(2) + 'x'
     : '';
   const legLines = (legs || []).map(l => `✅ ${l.player_name} — ${l.label}`).join('\n');
+  const slipUrl = parlay.share_token ? `\nhttps://raxedge.com/slip?t=${parlay.share_token}` : '';
   return (
     `🏆 Your parlay won!\n\n` +
     `${parlay.legs_count}-leg · ${Number(parlay.stake_rax).toLocaleString()} Rax → ${Number(parlay.payout_rax).toLocaleString()} Rax${mult ? ' (' + mult + ')' : ''}\n\n` +
     (legLines ? legLines + '\n\n' : '') +
-    `Your payout is on its way — check your offers!`
+    `Your payout is on its way — check your offers!` +
+    slipUrl
   );
 }
 
@@ -92,7 +94,7 @@ export async function onRequestPost({ request, env }) {
 
   // Find won parlays that haven't been notified yet and have a cached DM channel
   const { results: pending } = await env.DB.prepare(
-    'SELECT p.id, p.stake_rax, p.payout_rax, p.legs_count, ra.dm_channel_id ' +
+    'SELECT p.id, p.stake_rax, p.payout_rax, p.legs_count, p.share_token, ra.dm_channel_id ' +
     'FROM parlays p ' +
     'JOIN real_auth ra ON ra.user_id = p.user_id ' +
     "WHERE p.status = 'won' AND p.win_notified_at IS NULL AND ra.dm_channel_id IS NOT NULL " +
