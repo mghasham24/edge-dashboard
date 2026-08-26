@@ -8517,12 +8517,12 @@
         else if (s.status === 'active') lines.push('Stake: ' + Number(s.stake_rax).toLocaleString() + ' · To Win: ' + Number(s.payout_rax).toLocaleString() + ' Rax');
         else lines.push('Stake: ' + Number(s.stake_rax).toLocaleString() + ' · Payout: ' + Number(s.payout_rax).toLocaleString() + ' Rax');
         var slipUrl = s.share_token ? 'https://raxedge.com/slip?t=' + s.share_token : 'https://raxedge.com';
-        lines.push(slipUrl);
         var text = lines.join('\n');
         if (navigator.share) {
+            // Pass url separately — don't include in text to avoid duplication in share sheet
             navigator.share({ text: text, url: slipUrl }).catch(function() {});
         } else {
-            navigator.clipboard.writeText(text).then(function() {
+            navigator.clipboard.writeText(text + '\n' + slipUrl).then(function() {
                 if (btn) { btn.textContent = 'Copied!'; setTimeout(function() { btn.textContent = 'Share'; }, 2000); }
             }).catch(function() {
                 if (btn) { btn.textContent = 'Failed'; setTimeout(function() { btn.textContent = 'Share'; }, 2000); }
