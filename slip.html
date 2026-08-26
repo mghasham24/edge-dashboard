@@ -171,6 +171,20 @@
 <script>
   const RAX_LOGO_SVG = `<svg viewBox="0 0 512 512" style="width:11px;height:11px;vertical-align:-1px;display:inline-block;opacity:.7" aria-hidden="true"><g fill="currentColor"><path d="M128.1,141.1h356.8C442.8,57.4,356.1,0,256,0C192,0,133.5,23.5,88.6,62.3L128.1,141.1z"/><polygon points="355.3,193.2 154.2,193.2 254.7,394"/><path d="M413.6,193.2L253.9,512c0.7,0,1.4,0,2.1,0c141.4,0,256-114.6,256-256c0-21.7-2.7-42.7-7.8-62.8H413.6z"/><path d="M225.6,452.1L50.7,103C18.9,145.7,0,198.6,0,256c0,121.7,85,223.6,198.8,249.6L225.6,452.1z"/></g></svg>`;
 
+  const MKT_LABEL = {
+    hits:'Hits', total_bases:'Total Bases', rbis:'RBIs', runs:'Runs', hrbi:'H+R+RBI',
+    singles:'Singles', stolen_bases:'Stolen Bases', doubles:'Doubles', walks:'Walks',
+    home_runs:'Home Runs', pitcher_ks:'Strikeouts', outs_ou:'Outs Recorded',
+    hits_allowed:'Hits Allowed', er_allowed:'Earned Runs', bb_allowed:'Walks Allowed',
+    pts:'Points', reb:'Rebounds', ast:'Assists', fg3m:'3-Pointers', pra:'Pts+Reb+Ast',
+    pa:'Pts+Ast', pr:'Pts+Reb', ra:'Reb+Ast', stl:'Steals', blk:'Blocks',
+    points:'Points', assists:'Assists', rebounds:'Rebounds', steals:'Steals', blocks:'Blocks',
+    threes:'3-Pointers', goalscorer:'Goalscorer', sot:'Shots on Target', shots:'Shots',
+    '1inn_ml':'1st Inning ML', '1inn_runs_ou':'1st Inning Runs', '1inn_run_yn':'1st Inning Score',
+    team_ml:'Moneyline', team_runline:'Run Line', team_total:'Team Total',
+    ufc_ml:'Fight ML', ufc_total:'Fight Total',
+  };
+
   function escHtml(s) {
     if (!s) return '';
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -248,7 +262,7 @@
         <span class="leg-icon">${legIcon(leg.status)}</span>
         <div class="leg-body">
           <div class="leg-player${leg.status === 'won' ? ' won' : leg.status === 'lost' ? ' lost' : ''}">${escHtml(leg.player_name)}</div>
-          <div class="leg-line">${escHtml(leg.label || leg.direction || '')}</div>
+          <div class="leg-line">${escHtml(leg.label || leg.direction || '')}${leg.market_type && MKT_LABEL[leg.market_type] ? ' · <span style="color:var(--accent);font-size:10px">' + escHtml(MKT_LABEL[leg.market_type]) + '</span>' : ''}</div>
         </div>
         ${odds}
       </div>`;
