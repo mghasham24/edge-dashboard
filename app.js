@@ -8420,7 +8420,20 @@
         // Async: load headshots for any legs that didn't have a stored/live URL
         slips.forEach(function(s) {
             (s.legs || []).forEach(function(leg, li) {
-                if ((leg.market_type || '').startsWith('team_')) return;
+                var mkt = leg.market_type || '';
+                if (mkt.startsWith('team_') || mkt.startsWith('1inn_')) return;
+                // UFC dual: load each fighter separately into their slot divs
+                if (leg.sport === 'ufc') {
+                    var ufcVsA = (leg.player_name || '').match(/^(.+?)\s+vs\s+(.+?)(?:\s+[OU][\d.]+)?$/i)
+                              || (leg.event_name  || '').match(/^(.+?)\s+vs\s+(.+)$/i);
+                    if (ufcVsA) {
+                        loadSlipHeadshotAsync('slipav-' + s.id + '-' + li + '-a', ufcVsA[1].trim(), 'ufc');
+                        loadSlipHeadshotAsync('slipav-' + s.id + '-' + li + '-b', ufcVsA[2].trim(), 'ufc');
+                    } else {
+                        loadSlipHeadshotAsync('slipav-' + s.id + '-' + li, leg.player_name, 'ufc');
+                    }
+                    return;
+                }
                 var isSoccer = (leg.sport || '').startsWith('soccer_');
                 if (isSoccer) {
                     var _rsm = PARLAY_HEADSHOT_CACHE[leg.player_name];
@@ -8772,35 +8785,29 @@
                     avatarHtml = '<div class="pslip-avatar"><div class="pslip-av-inner" style="background:hsl(' + hue + ',40%,22%)"><span>' + escHtml(initials) + '</span></div></div>';
                 }
             } else if (leg.sport === 'ufc') {
-                // UFC dual fighters — same dual-logo layout as team markets
+                // UFC dual fighters — wrapper divs with IDs so loadSlipHeadshotAsync can fill them
                 var ufcVsM = (leg.player_name || '').match(/^(.+?)\s+vs\s+(.+?)(?:\s+[OU][\d.]+)?$/i)
                           || (leg.event_name  || '').match(/^(.+?)\s+vs\s+(.+)$/i);
                 if (ufcVsM) {
                     var ufcFa  = ufcVsM[1].trim(), ufcFb = ufcVsM[2].trim();
-                    var ufcHsA = SLIP_HEADSHOT_CACHE[ufcFa] || PARLAY_HEADSHOT_CACHE['ufc:' + ufcFa];
-                    var ufcHsB = SLIP_HEADSHOT_CACHE[ufcFb] || PARLAY_HEADSHOT_CACHE['ufc:' + ufcFb];
-                    ufcHsA = (ufcHsA && ufcHsA !== 'none') ? ufcHsA : null;
-                    ufcHsB = (ufcHsB && ufcHsB !== 'none') ? ufcHsB : null;
-                    var initA = (ufcFa[0] || '?').toUpperCase(), initB = (ufcFb[0] || '?').toUpperCase();
-                    var mkDualUfc = function(cls, src, fb) {
-                        return src
-                            ? '<img class="' + cls + '" src="' + escHtml(src) + '" alt="" style="object-fit:cover" onerror="this.outerHTML=\'<span class=\\\'' + cls + ' pslip-dual-init\\\'>' + escHtml(fb) + '</span>\'">'
-                            : '<span class="' + cls + ' pslip-dual-init">' + escHtml(fb) + '</span>';
-                    };
+                    var initA  = (ufcFa[0] || '?').toUpperCase(), initB = (ufcFb[0] || '?').toUpperCase();
+                    var ufcIdA = 'slipav-' + s.id + '-' + li + '-a';
+                    var ufcIdB = 'slipav-' + s.id + '-' + li + '-b';
                     avatarHtml = '<div class="pslip-avatar pslip-avatar-dual">' +
                         '<div class="pslip-av-inner pslip-av-dual">' +
-                            mkDualUfc('pslip-dual-logo-a', ufcHsA, initA) +
-                            mkDualUfc('pslip-dual-logo-b', ufcHsB, initB) +
+                            '<div id="' + ufcIdA + '" class="pslip-dual-slot-a" data-name="' + escHtml(ufcFa) + '" data-sport="ufc" data-fallback="' + escHtml(initA) + '">' + escHtml(initA) + '</div>' +
+                            '<div id="' + ufcIdB + '" class="pslip-dual-slot-b" data-name="' + escHtml(ufcFb) + '" data-sport="ufc" data-fallback="' + escHtml(initB) + '">' + escHtml(initB) + '</div>' +
                         '</div></div>';
                 } else {
-                    // Single fighter (shouldn't happen often) — fall through to headshot
+                    // Single fighter — standard headshot
                     var _ufcHsSingle = SLIP_HEADSHOT_CACHE[leg.player_name] || PARLAY_HEADSHOT_CACHE['ufc:' + leg.player_name];
                     _ufcHsSingle = (_ufcHsSingle && _ufcHsSingle !== 'none') ? _ufcHsSingle : (leg.headshot_url || null);
                     var _ufcFbHtml = '<span style="background:hsl(' + hue + ',40%,22%)">' + escHtml(initials) + '</span>';
+                    var _ufcAvId = 'slipav-' + s.id + '-' + li;
                     if (_ufcHsSingle) {
-                        avatarHtml = '<div class="pslip-avatar"><div class="pslip-av-inner"><img src="' + escHtml(_ufcHsSingle) + '" alt="" onerror="this.parentNode.innerHTML=' + "'" + escHtml(initials) + "'" + '"></div>' + dirBadge + '</div>';
+                        avatarHtml = '<div class="pslip-avatar"><div class="pslip-av-inner" id="' + _ufcAvId + '" data-name="' + escHtml(leg.player_name) + '" data-sport="ufc" data-fallback="' + escHtml(_ufcFbHtml) + '"><img src="' + escHtml(_ufcHsSingle) + '" alt="" onerror="loadSlipHeadshotAsync(this.parentNode.id,this.parentNode.dataset.name,this.parentNode.dataset.sport)"></div>' + dirBadge + '</div>';
                     } else {
-                        avatarHtml = '<div class="pslip-avatar"><div class="pslip-av-inner" style="background:hsl(' + hue + ',40%,22%)">' + _ufcFbHtml + '</div>' + dirBadge + '</div>';
+                        avatarHtml = '<div class="pslip-avatar"><div class="pslip-av-inner" id="' + _ufcAvId + '" data-name="' + escHtml(leg.player_name) + '" data-sport="ufc" data-fallback="' + escHtml(_ufcFbHtml) + '" style="background:hsl(' + hue + ',40%,22%)">' + _ufcFbHtml + '</div>' + dirBadge + '</div>';
                     }
                 }
             } else {

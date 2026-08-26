@@ -3295,6 +3295,11 @@
     .pslip-dual-logo-a,.pslip-dual-logo-b { position:absolute; width:22px !important; height:22px !important; border-radius:50%; object-fit:contain !important; object-position:center !important; background:var(--bg3); border:1.5px solid var(--bg2); padding:2px }
     .pslip-dual-logo-a { top:0; left:0 }
     .pslip-dual-logo-b { bottom:0; right:0 }
+    /* UFC dual fighter slots — wrapper divs so loadSlipHeadshotAsync can target them */
+    .pslip-dual-slot-a,.pslip-dual-slot-b { position:absolute; width:22px; height:22px; border-radius:50%; background:var(--bg3); border:1.5px solid var(--bg2); overflow:hidden; display:flex; align-items:center; justify-content:center; font-size:7px; font-weight:800; color:var(--muted) }
+    .pslip-dual-slot-a img,.pslip-dual-slot-b img { width:100%; height:100%; object-fit:cover }
+    .pslip-dual-slot-a { top:0; left:0 }
+    .pslip-dual-slot-b { bottom:0; right:0 }
     .pslip-dual-init { display:flex !important; align-items:center; justify-content:center; font-size:7px; font-weight:800; color:var(--muted) }
     /* Team prop box score */
     .pslip-team-bs-wrap { margin-top:5px }
