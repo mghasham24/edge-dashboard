@@ -5934,6 +5934,7 @@
                     if (!espnId) { PARLAY_HEADSHOT_CACHE[cacheKey] = 'none'; return; }
                     var url = 'https://a.espncdn.com/combiner/i?img=/i/headshots/mma/players/full/' + espnId + '.png&w=350&h=254';
                     PARLAY_HEADSHOT_CACHE[cacheKey] = url;
+                    _rsHsLsSet(cacheKey, url);
                     grid.querySelectorAll('[data-fighter-name="' + name + '"]').forEach(function(el) { _applyUfcHeadshot(el, url); });
                 })
                 .catch(function() { PARLAY_HEADSHOT_CACHE[cacheKey] = 'none'; });
@@ -7249,14 +7250,43 @@
             });
             return;
         }
-        // UFC: check build-panel headshot cache (keyed as 'ufc:NAME') before hitting ESPN
+        // UFC: check build-panel headshot cache (keyed as 'ufc:NAME') and localStorage before hitting ESPN
         if (legSport === 'ufc') {
             var _ufcC = PARLAY_HEADSHOT_CACHE['ufc:' + playerName];
+            if (!_ufcC) {
+                var _ufcLs = _rsHsLsGet('ufc:' + playerName);
+                if (_ufcLs) { PARLAY_HEADSHOT_CACHE['ufc:' + playerName] = _ufcLs; _ufcC = _ufcLs; }
+            }
             if (_ufcC) {
                 if (_ufcC !== 'none') { SLIP_HEADSHOT_CACHE[playerName] = _ufcC; showImg(document.getElementById(elemId), _ufcC); }
                 else { SLIP_HEADSHOT_CACHE[playerName] = 'none'; showFallback(document.getElementById(elemId)); }
                 return;
             }
+            // ESPN MMA search — try sport=mma first, then broader fallback for obscure fighters
+            var _ufcName = playerName;
+            var _ufcElemId = elemId;
+            var _ufcApply = function(url) {
+                PARLAY_HEADSHOT_CACHE['ufc:' + _ufcName] = url || 'none';
+                if (url) { _rsHsLsSet('ufc:' + _ufcName, url); SLIP_HEADSHOT_CACHE[_ufcName] = url; }
+                else { SLIP_HEADSHOT_CACHE[_ufcName] = 'none'; }
+                var _el = document.getElementById(_ufcElemId);
+                if (url) showImg(_el, url); else showFallback(_el);
+            };
+            var _ufcSearch = function(sportParam, fallbackFn) {
+                var _q = 'https://site.api.espn.com/apis/search/v2?query=' + encodeURIComponent(_ufcName) + '&limit=5&type=player' + (sportParam ? '&sport=' + sportParam : '');
+                fetch(_q, { signal: AbortSignal.timeout(5000) })
+                    .then(function(r) { return r.json(); })
+                    .then(function(d) {
+                        var group = (d.results || []).find(function(r) { return r.type === 'player'; });
+                        var hit = group && group.contents && group.contents[0];
+                        var eid = hit ? (hit.uid || '').split('~a:')[1] : '';
+                        if (!eid && fallbackFn) { fallbackFn(); return; }
+                        _ufcApply(eid ? 'https://a.espncdn.com/combiner/i?img=/i/headshots/mma/players/full/' + eid + '.png&w=350&h=254' : null);
+                    })
+                    .catch(function() { if (fallbackFn) fallbackFn(); else _ufcApply(null); });
+            };
+            _ufcSearch('mma', function() { _ufcSearch(null, null); });
+            return;
         }
         // Check live player pools first — may have loaded since the slip rendered
         var lp = PARLAY_PLAYERS.find(function(x) { return x.name === playerName; }) ||
@@ -7284,7 +7314,6 @@
                 }
                 var url = 'https://a.espncdn.com/combiner/i?img=/i/headshots/' + espnLeague + '/players/full/' + espnId + '.png&w=350&h=254';
                 SLIP_HEADSHOT_CACHE[playerName] = url;
-                if (legSport === 'ufc') PARLAY_HEADSHOT_CACHE['ufc:' + playerName] = url;
                 showImg(document.getElementById(elemId), url);
             })
             .catch(function() {
