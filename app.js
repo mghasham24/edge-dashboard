@@ -8764,7 +8764,11 @@
             } else if (leg.market_type && leg.market_type.startsWith('ufc_method_')) {
                 line = arrow + ' ' + leg.player_name;
             } else {
-                line = arrow + ' ' + leg.player_name + ' ' + dir + ' ' + leg.threshold + ' ' + mkt;
+                var pName = leg.player_name || '';
+                if (leg.market_type === 'team_total' || leg.market_type === 'team_runline') {
+                    pName = pName.replace(/\s+[OU][0-9.]+$/, '').trim();
+                }
+                line = arrow + ' ' + pName + ' ' + dir + ' ' + leg.threshold + ' ' + mkt;
             }
             lines.push(line + result);
         });
