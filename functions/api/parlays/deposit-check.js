@@ -614,5 +614,19 @@ async function handleRequest({ request, env }) {
   return ok(result);
 }
 
-export const onRequestPost = handleRequest;
-export const onRequestGet  = handleRequest;
+async function safeHandleRequest(ctx) {
+  try {
+    return await handleRequest(ctx);
+  } catch (e) {
+    const ts = Math.floor(Date.now() / 1000);
+    try {
+      await ctx.env.DB.prepare(
+        'INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at'
+      ).bind('deposit_check_crash', JSON.stringify({ ts, error: e?.message, stack: (e?.stack || '').slice(0, 800) }), ts).run();
+    } catch (_) {}
+    return new Response(JSON.stringify({ error: 'crash', message: e?.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+  }
+}
+
+export const onRequestPost = safeHandleRequest;
+export const onRequestGet  = safeHandleRequest;
