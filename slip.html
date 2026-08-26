@@ -168,6 +168,39 @@
     return 'Pending';
   }
 
+  // ESPN search headshot loader — same logic as loadSlipHeadshotAsync in app.js
+  const HS_CACHE = {};
+  function loadHeadshot(id, name, sport) {
+    if (HS_CACHE[name] === 'none') return;
+    if (HS_CACHE[name]) { applyHeadshot(id, HS_CACHE[name]); return; }
+    const legSport  = sport || 'mlb';
+    const espnSport  = legSport === 'wnba' ? 'basketball' : legSport.startsWith('soccer') ? 'soccer' : legSport === 'ufc' ? 'mma' : 'baseball';
+    const espnLeague = legSport === 'wnba' ? 'wnba'       : legSport.startsWith('soccer') ? 'soccer' : legSport === 'ufc' ? 'mma' : 'mlb';
+    fetch('https://site.api.espn.com/apis/search/v2?query=' + encodeURIComponent(name) + '&limit=3&type=player&sport=' + espnSport, { signal: AbortSignal.timeout(5000) })
+      .then(r => r.json())
+      .then(d => {
+        const group = (d.results || []).find(r => r.type === 'player');
+        const hit   = group && group.contents && group.contents[0];
+        const uid   = hit ? (hit.uid || '') : '';
+        const espnId = uid.split('~a:')[1] || '';
+        if (!espnId) { HS_CACHE[name] = 'none'; return; }
+        const url = `https://a.espncdn.com/combiner/i?img=/i/headshots/${espnLeague}/players/full/${espnId}.png&w=350&h=254`;
+        HS_CACHE[name] = url;
+        applyHeadshot(id, url);
+      })
+      .catch(() => { HS_CACHE[name] = 'none'; });
+  }
+  function applyHeadshot(id, url) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const img = document.createElement('img');
+    img.src = url;
+    img.alt = '';
+    img.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%';
+    img.onerror = () => img.remove();
+    el.appendChild(img);
+  }
+
   function render(slip) {
     const statusCls = ['won','lost','active'].includes(slip.status) ? slip.status : 'pending';
     const initial   = slip.rs_username ? slip.rs_username[0].toUpperCase() : '?';
@@ -178,14 +211,16 @@
                   : slip.created_at   ? 'Created ' + fmtDate(slip.created_at) : '';
     const fpBadge = slip.is_free_play ? '<span class="fp-badge">FREE PLAY</span>' : '';
 
-    const legsHtml = (slip.legs || []).map(leg => {
+    const legsHtml = (slip.legs || []).map((leg, i) => {
       const odds = leg.american_odds != null
         ? `<span class="leg-odds">${escHtml(fmtOdds(leg.american_odds))}</span>` : '';
-      const shotInner = leg.headshot_url
-        ? `<img src="${escHtml(leg.headshot_url)}" alt="" onerror="this.style.display='none'">`
-        : escHtml((leg.player_name || '?')[0].toUpperCase());
+      const shotId = `leg-shot-${i}`;
+      // Always render initial; overlay stored headshot or async-load it
+      const storedImg = leg.headshot_url
+        ? `<img src="${escHtml(leg.headshot_url)}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.remove()">`
+        : '';
       return `<div class="leg">
-        <div class="leg-shot">${shotInner}</div>
+        <div class="leg-shot" id="${shotId}">${escHtml((leg.player_name || '?')[0].toUpperCase())}${storedImg}</div>
         <span class="leg-icon">${legIcon(leg.status)}</span>
         <div class="leg-body">
           <div class="leg-player">${escHtml(leg.player_name)}</div>
@@ -229,6 +264,13 @@
       <button class="share-btn" id="copy-btn" onclick="copyLink()">🔗 Copy link</button>
       <div class="cta">Find +EV parlays at <a href="https://raxedge.com">raxedge.com</a></div>
     `;
+
+    // Async-load headshots for legs that didn't have a stored URL
+    (slip.legs || []).forEach((leg, i) => {
+      if (!leg.headshot_url && leg.player_name) {
+        loadHeadshot(`leg-shot-${i}`, leg.player_name, leg.sport);
+      }
+    });
   }
 
   function copyLink() {
