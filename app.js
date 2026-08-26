@@ -8771,20 +8771,48 @@
                 } else {
                     avatarHtml = '<div class="pslip-avatar"><div class="pslip-av-inner" style="background:hsl(' + hue + ',40%,22%)"><span>' + escHtml(initials) + '</span></div></div>';
                 }
+            } else if (leg.sport === 'ufc') {
+                // UFC dual fighters — same dual-logo layout as team markets
+                var ufcVsM = (leg.player_name || '').match(/^(.+?)\s+vs\s+(.+?)(?:\s+[OU][\d.]+)?$/i)
+                          || (leg.event_name  || '').match(/^(.+?)\s+vs\s+(.+)$/i);
+                if (ufcVsM) {
+                    var ufcFa  = ufcVsM[1].trim(), ufcFb = ufcVsM[2].trim();
+                    var ufcHsA = SLIP_HEADSHOT_CACHE[ufcFa] || PARLAY_HEADSHOT_CACHE['ufc:' + ufcFa];
+                    var ufcHsB = SLIP_HEADSHOT_CACHE[ufcFb] || PARLAY_HEADSHOT_CACHE['ufc:' + ufcFb];
+                    ufcHsA = (ufcHsA && ufcHsA !== 'none') ? ufcHsA : null;
+                    ufcHsB = (ufcHsB && ufcHsB !== 'none') ? ufcHsB : null;
+                    var initA = (ufcFa[0] || '?').toUpperCase(), initB = (ufcFb[0] || '?').toUpperCase();
+                    var mkDualUfc = function(cls, src, fb) {
+                        return src
+                            ? '<img class="' + cls + '" src="' + escHtml(src) + '" alt="" style="object-fit:cover" onerror="this.outerHTML=\'<span class=\\\'' + cls + ' pslip-dual-init\\\'>' + escHtml(fb) + '</span>\'">'
+                            : '<span class="' + cls + ' pslip-dual-init">' + escHtml(fb) + '</span>';
+                    };
+                    avatarHtml = '<div class="pslip-avatar pslip-avatar-dual">' +
+                        '<div class="pslip-av-inner pslip-av-dual">' +
+                            mkDualUfc('pslip-dual-logo-a', ufcHsA, initA) +
+                            mkDualUfc('pslip-dual-logo-b', ufcHsB, initB) +
+                        '</div></div>';
+                } else {
+                    // Single fighter (shouldn't happen often) — fall through to headshot
+                    var _ufcHsSingle = SLIP_HEADSHOT_CACHE[leg.player_name] || PARLAY_HEADSHOT_CACHE['ufc:' + leg.player_name];
+                    _ufcHsSingle = (_ufcHsSingle && _ufcHsSingle !== 'none') ? _ufcHsSingle : (leg.headshot_url || null);
+                    var _ufcFbHtml = '<span style="background:hsl(' + hue + ',40%,22%)">' + escHtml(initials) + '</span>';
+                    if (_ufcHsSingle) {
+                        avatarHtml = '<div class="pslip-avatar"><div class="pslip-av-inner"><img src="' + escHtml(_ufcHsSingle) + '" alt="" onerror="this.parentNode.innerHTML=' + "'" + escHtml(initials) + "'" + '"></div>' + dirBadge + '</div>';
+                    } else {
+                        avatarHtml = '<div class="pslip-avatar"><div class="pslip-av-inner" style="background:hsl(' + hue + ',40%,22%)">' + _ufcFbHtml + '</div>' + dirBadge + '</div>';
+                    }
+                }
             } else {
                 // Player prop: try DK headshot first; if it 404s, fall through to MLB Stats API async lookup
                 var livePlayer = PARLAY_PLAYERS.find(function(pp) { return pp.name === leg.player_name; }) ||
                                  PARLAY_PLAYERS_WNBA.find(function(pp) { return pp.name === leg.player_name; }) ||
                                  PARLAY_PLAYERS_SOCCER.find(function(pp) { return pp.name === leg.player_name; });
                 var _legIsSoccer = (leg.sport || '').startsWith('soccer_');
-                var _legIsUfc    = leg.sport === 'ufc';
                 var headshotSrc;
                 if (_legIsSoccer) {
                     var _rsm = PARLAY_HEADSHOT_CACHE[leg.player_name];
                     headshotSrc = (_rsm && _rsm !== 'none' && _rsm !== 'pending') ? _rsm : (_rsHsLsGet(leg.player_name) || null);
-                } else if (_legIsUfc) {
-                    var _ufcHs = SLIP_HEADSHOT_CACHE[leg.player_name] || PARLAY_HEADSHOT_CACHE['ufc:' + leg.player_name];
-                    headshotSrc = (_ufcHs && _ufcHs !== 'none') ? _ufcHs : (leg.headshot_url || null);
                 } else {
                     headshotSrc = (livePlayer && livePlayer.headshot) || leg.headshot_url || null;
                 }
