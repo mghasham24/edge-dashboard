@@ -284,10 +284,12 @@ async function handleRequest({ request, env }) {
   }
 
   let incomingOpen, incomingAccepted, outgoingAccepted, outgoingRejected, outgoingOpen;
+  // Use allSettled so that if one fetchOffers rejects (e.g. auth 401), the other four
+  // don't become unhandled rejections — CF Workers turn unhandled rejections into 1101s.
   const hardTimeout = new Promise((_, rej) => setTimeout(() => rej(new Error('RS fetch hard timeout 25s')), 25000));
   try {
-    [incomingOpen, incomingAccepted, outgoingAccepted, outgoingRejected, outgoingOpen] = await Promise.race([
-      Promise.all([
+    const settled = await Promise.race([
+      Promise.allSettled([
         fetchOffers(authInfo, sessionToken, 'incoming', 'open'),
         fetchOffers(authInfo, sessionToken, 'incoming', 'accepted'),
         fetchOffers(authInfo, sessionToken, 'outgoing', 'accepted'),
@@ -296,6 +298,11 @@ async function handleRequest({ request, env }) {
       ]),
       hardTimeout,
     ]);
+    // Surface auth errors so the catch block can log them and alert.
+    const authFail = settled.find(r => r.status === 'rejected' && r.reason?.message?.startsWith('RS auth'));
+    if (authFail) throw authFail.reason;
+    [incomingOpen, incomingAccepted, outgoingAccepted, outgoingRejected, outgoingOpen] =
+      settled.map(r => r.status === 'fulfilled' ? r.value : []);
   } catch (e) {
     const failResult = { ts: now, error: 'RS fetch error: ' + e.message, checked: 0, accepted: 0, countered: 0, pending: pending.length };
     try { await env.DB.prepare('INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at').bind('deposit_check_debug', JSON.stringify(failResult), now).run(); } catch(_) {}
