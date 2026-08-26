@@ -259,6 +259,19 @@ async function handleRequest({ request, env }) {
   for (const row of ownershipCheckRows) {
     const ownerId = await fetchCardOwner(row.deposit_card_id, authInfo, sessionToken);
     if (ownerId !== null && ownerId !== EDGEBOT_USER) {
+      // Guard: if another parlay already consumed this card (e.g. the card was sold via a
+      // non-Real-Pro auction to a different user), void this parlay instead of activating it.
+      // The card left edgebot because that user paid — not because this parlay's user did.
+      const cardConsumedBy = await env.DB.prepare(
+        "SELECT id FROM parlays WHERE deposit_card_id=? AND id != ? AND status NOT IN ('pending_deposit','expired','void','cancelled') LIMIT 1"
+      ).bind(row.deposit_card_id, row.id).first();
+      if (cardConsumedBy) {
+        await env.DB.prepare(
+          "UPDATE parlays SET status='void', admin_notes='deposit_card_consumed_by_parlay_' || ? WHERE id=? AND status='pending_deposit'"
+        ).bind(String(cardConsumedBy.id), row.id).run();
+        errors.push({ parlayId: row.id, action: 'void_card_stolen', consumedByParlay: cardConsumedBy.id });
+        continue;
+      }
       await activateParlay(row.id, row.deposit_card_id, row.rs_offer_id ?? null, row.stake_rax);
       ownershipActivated++;
       directActivated.add(row.rs_offer_id);

@@ -290,26 +290,26 @@ function lookupByLine(dict, line) {
   return null;
 }
 
-// ── Telegram send ──────────────────────────────────────
+// ── Discord send ───────────────────────────────────────
 
-async function sendTelegram(chatId, text, botToken, replyMarkup) {
+async function sendDiscord(channelId, content, components, botToken) {
   try {
-    const body = { chat_id: chatId, text, parse_mode: 'HTML' };
-    if (replyMarkup) body.reply_markup = replyMarkup;
-    const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+    const body = { content };
+    if (components) body.components = components;
+    const res = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Authorization': `Bot ${botToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     });
     const data = await res.json();
-    return data.ok ? data.result.message_id : null;
+    return data.id || null;
   } catch(e) { return null; }
 }
 
 function formatAlert(sport, game, market, side, ev, units, dollarAmt, pt, rsPct, adjFairPct, gameUrl, isLive) {
   const ptStr   = pt != null ? ' ' + (pt > 0 ? '+' : '') + pt : '';
   const lineStr = market === 'ML' || market === 'RFI' ? side : side + ptStr;
-  const header  = isLive ? '⚡ <b>Live Alert</b>' : '🔔 <b>RaxEdge Alert</b>';
+  const header  = isLive ? '⚡ **Live Alert**' : '🔔 **RaxEdge Alert**';
 
   const evStr  = (ev >= 0 ? '+' : '') + ev.toFixed(1) + '% EV';
   const rsLine = rsPct != null
@@ -334,15 +334,15 @@ function formatAlert(sport, game, market, side, ev, units, dollarAmt, pt, rsPct,
 
   const teams     = game.split(' @ ');
   const shortGame = (teams[0] || game) + ' @ ' + (teams[1] || '');
-  const linkLine  = gameUrl ? `\n<a href="${gameUrl}">View on Real Sports ↗</a>` : '';
+  const linkLine  = gameUrl ? `\n[View on Real Sports ↗](${gameUrl})` : '';
 
   return (
     `${header}\n\n` +
-    `<b>${lineStr}</b> · ${market} · ${sport.label}\n` +
+    `**${lineStr}** · ${market} · ${sport.label}\n` +
     `${rsLine}\n` +
     sensLine +
     fairLine +
-    `\n<i>${shortGame}</i>${linkLine}`
+    `\n*${shortGame}*${linkLine}`
   );
 }
 
@@ -689,9 +689,7 @@ function processNativeFC(sport, fdGames, rsGames, rsGameIds, rsGameSports, globa
 // ── Main cron logic (called by scheduler and HTTP trigger) ────────────────
 
 async function runCron(env, ctx) {
-  if (!env.TELEGRAM_BOT_TOKEN) return;
-
-    const now = Math.floor(Date.now() / 1000);
+  const now = Math.floor(Date.now() / 1000);
     const FD_STALE_THRESHOLD = 30 * 60;
     const FD_WARM_THRESHOLD  = 30;  // refresh FD if no recent site traffic (keeps live odds current)
     const RS_STALE_THRESHOLD = 4 * 60 * 60;
@@ -746,6 +744,12 @@ async function runCron(env, ctx) {
         });
       } catch(e) {}
 
+      try {
+        fetch(`${env.SITE_URL}/api/parlays/sync-cards?_cron_key=${env.CRON_SECRET}`, {
+          signal: AbortSignal.timeout(55000),
+        }).catch(() => {});
+      } catch(e) {}
+
       // RS verify-poll — poll 3× per minute (~every 20s) since CF cron minimum is 1 min
       const _pollUrl = `${env.SITE_URL}/api/parlays/rs-verify-poll?_cron_key=${env.CRON_SECRET}`;
       const _doPoll = () => fetch(_pollUrl, { method: 'POST', signal: AbortSignal.timeout(15000) }).catch(() => {});
@@ -776,10 +780,10 @@ async function runCron(env, ctx) {
     }
 
     // ── 5d. Low deposit-card alert ────────────────────────
-    if (env.ADMIN_CHAT_ID && env.TELEGRAM_BOT_TOKEN) {
+    if (env.ADMIN_DISCORD_CHANNEL_ID && env.DISCORD_BOT_TOKEN) {
       try {
         const LOW_CARD_THRESHOLD = 10;
-        const ALERT_COOLDOWN     = 60 * 60; // 1 hour between alerts
+        const ALERT_COOLDOWN     = 60 * 60;
         const cardRow = await env.DB.prepare(
           'SELECT COUNT(*) as cnt FROM deposit_cards WHERE assigned_to_parlay_id IS NULL'
         ).first();
@@ -789,10 +793,11 @@ async function runCron(env, ctx) {
             "SELECT fetched_at FROM odds_cache WHERE cache_key='low_card_alert_sent'"
           ).first();
           if (!lastAlert || (now - lastAlert.fetched_at) > ALERT_COOLDOWN) {
-            await sendTelegram(
-              env.ADMIN_CHAT_ID,
-              `⚠️ <b>Low Deposit Cards</b>\n\n${freeCards} free cards remaining in the parlay pool.\n\nBuy more 2025 MLB deposit cards from the RS marketplace.`,
-              env.TELEGRAM_BOT_TOKEN
+            await sendDiscord(
+              env.ADMIN_DISCORD_CHANNEL_ID,
+              `⚠️ **Low Deposit Cards**\n\n${freeCards} free cards remaining in the parlay pool.\n\nBuy more 2025 MLB deposit cards from the RS marketplace.`,
+              null,
+              env.DISCORD_BOT_TOKEN
             );
             await env.DB.prepare(
               "INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES('low_card_alert_sent',?,?) " +
@@ -805,10 +810,10 @@ async function runCron(env, ctx) {
 
     // 1. Load all verified, enabled users
     const users = await env.DB.prepare(
-      `SELECT ns.user_id, ns.telegram_chat_id, ns.min_ev, ns.sports, ns.one_side, ns.unit_size
+      `SELECT ns.user_id, ns.discord_dm_channel_id, ns.min_ev, ns.sports, ns.one_side, ns.unit_size
        FROM notification_settings ns
        JOIN users u ON u.id = ns.user_id
-       WHERE ns.telegram_verified=1 AND ns.enabled=1 AND (u.plan='pro' OR u.is_admin=1)`
+       WHERE ns.discord_verified=1 AND ns.enabled=1 AND (u.plan='pro' OR u.is_admin=1)`
     ).all();
 
     if (!users.results || !users.results.length) {
@@ -1268,23 +1273,29 @@ async function runCron(env, ctx) {
           const ins = await env.DB.prepare(
             `INSERT INTO alert_messages (user_id, chat_id, bet_key, sport, game, market, side, pt, ev, units, dollar_amt, sent_at)
              VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
-          ).bind(user.user_id, user.telegram_chat_id, bet.betKey, bet.sport.label, bet.game, bet.market, bet.side, bet.pt ?? null, bet.ev, bet.units, dollarAmt, now).run();
+          ).bind(user.user_id, user.discord_dm_channel_id, bet.betKey, bet.sport.label, bet.game, bet.market, bet.side, bet.pt ?? null, bet.ev, bet.units, dollarAmt, now).run();
           alertRowId = ins.meta.last_row_id;
         } catch(e) {}
 
-        const replyMarkup = alertRowId ? {
-          inline_keyboard: [[{ text: '✅ Mark Bet Taken', callback_data: 't:' + alertRowId }]]
-        } : undefined;
+        const components = alertRowId ? [{
+          type: 1,
+          components: [{
+            type: 2,
+            style: 2,
+            label: '☑️ Mark Bet Taken',
+            custom_id: 't:' + alertRowId
+          }]
+        }] : undefined;
 
-        const msgId = await sendTelegram(user.telegram_chat_id, message, env.TELEGRAM_BOT_TOKEN, replyMarkup);
+        const msgId = await sendDiscord(user.discord_dm_channel_id, message, components, env.DISCORD_BOT_TOKEN);
         if (msgId) {
           dbg.sentCount++;
           if (alertRowId) {
             try {
-              await env.DB.prepare('UPDATE alert_messages SET msg_id=? WHERE id=?').bind(msgId, alertRowId).run();
+              await env.DB.prepare('UPDATE alert_messages SET msg_id=? WHERE id=?').bind(String(msgId), alertRowId).run();
             } catch(e) {}
           }
-          // Only log after confirmed send — prevents suppressing bets on future runs when Telegram failed
+          // Only log after confirmed send — prevents suppressing bets on future runs when Discord failed
           try {
             await env.DB.prepare(
               `INSERT INTO alert_sent_log (user_id, bet_key, last_ev, sent_at) VALUES (?,?,?,?)
@@ -1311,7 +1322,7 @@ async function runCron(env, ctx) {
     } catch(e) {}
 
     try {
-      await env.DB.prepare('DELETE FROM telegram_verify_tokens WHERE expires_at < ?')
+      await env.DB.prepare('DELETE FROM discord_verify_tokens WHERE expires_at < ?')
         .bind(now).run();
     } catch(e) {}
 
@@ -1321,7 +1332,8 @@ async function runCron(env, ctx) {
     } catch(e) {}
 }
 
-// ── Export: HTTP fetch (Telegram callback + /trigger) + scheduled ─────────
+// ── Export: HTTP fetch (/trigger only) + scheduled ────────────────────────
+// Discord button clicks are handled by functions/api/discord/interactions.js
 
 export default {
   async fetch(request, env, ctx) {
@@ -1336,44 +1348,6 @@ export default {
       return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json' } });
     }
 
-    if (request.method !== 'POST') return new Response('ok');
-    const secret = request.headers.get('X-Telegram-Bot-Api-Secret-Token');
-    if (!env.TELEGRAM_WEBHOOK_SECRET || secret !== env.TELEGRAM_WEBHOOK_SECRET)
-      return new Response('Forbidden', { status: 403 });
-    const body = await request.json().catch(() => null);
-    if (!body?.callback_query) return new Response('ok');
-    const { id: queryId, data, message } = body.callback_query;
-    const chatId    = message?.chat?.id;
-    const messageId = message?.message_id;
-    let nowTaken = false;
-    if (data?.startsWith('t:')) {
-      const alertId = parseInt(data.slice(2));
-      if (alertId) {
-        try {
-          const row = await env.DB.prepare('SELECT taken FROM alert_messages WHERE id=?').bind(alertId).first();
-          nowTaken = !row?.taken;
-          await env.DB.prepare('UPDATE alert_messages SET taken=? WHERE id=?').bind(nowTaken ? 1 : 0, alertId).run();
-        } catch(e) {}
-      }
-    }
-    const base = `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}`;
-    await fetch(`${base}/answerCallbackQuery`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ callback_query_id: queryId, text: nowTaken ? '✅ Bet marked as taken' : 'Bet unmarked' }),
-    }).catch(() => {});
-    if (chatId && messageId) {
-      const buttonText = nowTaken ? '✅ Bet Taken' : 'Mark Bet Taken';
-      await fetch(`${base}/editMessageReplyMarkup`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: chatId,
-          message_id: messageId,
-          reply_markup: { inline_keyboard: [[{ text: buttonText, callback_data: data }]] },
-        }),
-      }).catch(() => {});
-    }
     return new Response('ok');
   },
 

@@ -20,6 +20,9 @@
         key: 'soccer_wc',
         label: 'WC'
     }, {
+        key: 'football_ncaaf',
+        label: 'CFB'
+    }, {
         key: 'baseball_cws',
         label: 'CWS'
     }];
@@ -38,6 +41,8 @@
         return 'basketball_nba';
     })();
     var currentFcLeague = 'ALL';
+    var currentCfbConf = 'ALL';
+    var _cfbConfsAvailable = ['ALL'];
     var rawRows = [];
     var rawRowsBySport = {}; // sport key -> parsed rows (same IDs as preds)
     var _alertSyncedIds = new Set(); // row IDs checked via alert sync (so we can uncheck on untake)
@@ -56,6 +61,7 @@
     var nhlPoller    = null;
     var dkPoller     = null;
     var fcPoller     = null;
+    var cfbPoller    = null;
     var wcPoller     = null;
     var scoresPoller = null;
     var wcSubTab     = 'games'; // 'games' | 'futures'
@@ -404,6 +410,160 @@
         'FC Bayern':'https://a.espncdn.com/i/teamlogos/soccer/500/132.png','Bayern München':'https://a.espncdn.com/i/teamlogos/soccer/500/132.png','FC Bayern München':'https://a.espncdn.com/i/teamlogos/soccer/500/132.png','Bayern Munchen':'https://a.espncdn.com/i/teamlogos/soccer/500/132.png','FC Bayern Munchen':'https://a.espncdn.com/i/teamlogos/soccer/500/132.png',
     };
 
+    // CFB team logos keyed by DK shortName (metadata.shortName from cfb-lines API)
+    var CFB_TEAM_LOGOS = {
+        // SEC
+        'ALA':'https://a.espncdn.com/i/teamlogos/ncaa/500/333.png',
+        'AUB':'https://a.espncdn.com/i/teamlogos/ncaa/500/2.png',
+        'UGA':'https://a.espncdn.com/i/teamlogos/ncaa/500/61.png',
+        'LSU':'https://a.espncdn.com/i/teamlogos/ncaa/500/99.png',
+        'FLA':'https://a.espncdn.com/i/teamlogos/ncaa/500/57.png',
+        'UF':'https://a.espncdn.com/i/teamlogos/ncaa/500/57.png',
+        'TENN':'https://a.espncdn.com/i/teamlogos/ncaa/500/2633.png',
+        'ARK':'https://a.espncdn.com/i/teamlogos/ncaa/500/8.png',
+        'MSST':'https://a.espncdn.com/i/teamlogos/ncaa/500/344.png',
+        'MIZ':'https://a.espncdn.com/i/teamlogos/ncaa/500/142.png',
+        'UK':'https://a.espncdn.com/i/teamlogos/ncaa/500/96.png',
+        'SC':'https://a.espncdn.com/i/teamlogos/ncaa/500/2579.png',
+        'SCAR':'https://a.espncdn.com/i/teamlogos/ncaa/500/2579.png',
+        'VAN':'https://a.espncdn.com/i/teamlogos/ncaa/500/238.png',
+        'MISS':'https://a.espncdn.com/i/teamlogos/ncaa/500/145.png',
+        'TAMU':'https://a.espncdn.com/i/teamlogos/ncaa/500/245.png',
+        'TEX':'https://a.espncdn.com/i/teamlogos/ncaa/500/251.png',
+        'OU':'https://a.espncdn.com/i/teamlogos/ncaa/500/201.png',
+        'OKLA':'https://a.espncdn.com/i/teamlogos/ncaa/500/201.png',
+        // Big Ten
+        'OSU':'https://a.espncdn.com/i/teamlogos/ncaa/500/194.png',
+        'MICH':'https://a.espncdn.com/i/teamlogos/ncaa/500/130.png',
+        'PSU':'https://a.espncdn.com/i/teamlogos/ncaa/500/213.png',
+        'WIS':'https://a.espncdn.com/i/teamlogos/ncaa/500/275.png',
+        'MINN':'https://a.espncdn.com/i/teamlogos/ncaa/500/135.png',
+        'NW':'https://a.espncdn.com/i/teamlogos/ncaa/500/77.png',
+        'NEB':'https://a.espncdn.com/i/teamlogos/ncaa/500/158.png',
+        'ILL':'https://a.espncdn.com/i/teamlogos/ncaa/500/356.png',
+        'PUR':'https://a.espncdn.com/i/teamlogos/ncaa/500/2509.png',
+        'IU':'https://a.espncdn.com/i/teamlogos/ncaa/500/84.png',
+        'IND':'https://a.espncdn.com/i/teamlogos/ncaa/500/84.png',
+        'IOWA':'https://a.espncdn.com/i/teamlogos/ncaa/500/2294.png',
+        'MD':'https://a.espncdn.com/i/teamlogos/ncaa/500/120.png',
+        'RUT':'https://a.espncdn.com/i/teamlogos/ncaa/500/164.png',
+        'RUTG':'https://a.espncdn.com/i/teamlogos/ncaa/500/164.png',
+        'MSU':'https://a.espncdn.com/i/teamlogos/ncaa/500/127.png',
+        'UCLA':'https://a.espncdn.com/i/teamlogos/ncaa/500/26.png',
+        'USC':'https://a.espncdn.com/i/teamlogos/ncaa/500/30.png',
+        'UW':'https://a.espncdn.com/i/teamlogos/ncaa/500/264.png',
+        'WASH':'https://a.espncdn.com/i/teamlogos/ncaa/500/264.png',
+        'ORE':'https://a.espncdn.com/i/teamlogos/ncaa/500/2483.png',
+        // ACC
+        'FSU':'https://a.espncdn.com/i/teamlogos/ncaa/500/52.png',
+        'CLEM':'https://a.espncdn.com/i/teamlogos/ncaa/500/228.png',
+        'UNC':'https://a.espncdn.com/i/teamlogos/ncaa/500/153.png',
+        'NCST':'https://a.espncdn.com/i/teamlogos/ncaa/500/152.png',
+        'NC ST':'https://a.espncdn.com/i/teamlogos/ncaa/500/152.png',
+        'UVA':'https://a.espncdn.com/i/teamlogos/ncaa/500/258.png',
+        'VT':'https://a.espncdn.com/i/teamlogos/ncaa/500/259.png',
+        'MIA':'https://a.espncdn.com/i/teamlogos/ncaa/500/2390.png',
+        'UM':'https://a.espncdn.com/i/teamlogos/ncaa/500/2390.png',
+        'GT':'https://a.espncdn.com/i/teamlogos/ncaa/500/59.png',
+        'PITT':'https://a.espncdn.com/i/teamlogos/ncaa/500/221.png',
+        'BC':'https://a.espncdn.com/i/teamlogos/ncaa/500/103.png',
+        'DUKE':'https://a.espncdn.com/i/teamlogos/ncaa/500/150.png',
+        'WAKE':'https://a.espncdn.com/i/teamlogos/ncaa/500/154.png',
+        'SYR':'https://a.espncdn.com/i/teamlogos/ncaa/500/183.png',
+        'LOU':'https://a.espncdn.com/i/teamlogos/ncaa/500/97.png',
+        'SMU':'https://a.espncdn.com/i/teamlogos/ncaa/500/2567.png',
+        'CAL':'https://a.espncdn.com/i/teamlogos/ncaa/500/25.png',
+        'STAN':'https://a.espncdn.com/i/teamlogos/ncaa/500/24.png',
+        // Big 12
+        'BAY':'https://a.espncdn.com/i/teamlogos/ncaa/500/239.png',
+        'TTU':'https://a.espncdn.com/i/teamlogos/ncaa/500/2641.png',
+        'OKST':'https://a.espncdn.com/i/teamlogos/ncaa/500/197.png',
+        'KST':'https://a.espncdn.com/i/teamlogos/ncaa/500/2306.png',
+        'KSU':'https://a.espncdn.com/i/teamlogos/ncaa/500/2306.png',
+        'ISU':'https://a.espncdn.com/i/teamlogos/ncaa/500/66.png',
+        'KU':'https://a.espncdn.com/i/teamlogos/ncaa/500/2305.png',
+        'WVU':'https://a.espncdn.com/i/teamlogos/ncaa/500/277.png',
+        'CIN':'https://a.espncdn.com/i/teamlogos/ncaa/500/2132.png',
+        'BYU':'https://a.espncdn.com/i/teamlogos/ncaa/500/252.png',
+        'UCF':'https://a.espncdn.com/i/teamlogos/ncaa/500/2116.png',
+        'HOU':'https://a.espncdn.com/i/teamlogos/ncaa/500/248.png',
+        'ARIZ':'https://a.espncdn.com/i/teamlogos/ncaa/500/12.png',
+        'ASU':'https://a.espncdn.com/i/teamlogos/ncaa/500/9.png',
+        'UTAH':'https://a.espncdn.com/i/teamlogos/ncaa/500/254.png',
+        'COL':'https://a.espncdn.com/i/teamlogos/ncaa/500/38.png',
+        // Pac-12 remnants
+        'ORST':'https://a.espncdn.com/i/teamlogos/ncaa/500/204.png',
+        'WSU':'https://a.espncdn.com/i/teamlogos/ncaa/500/265.png',
+        // Independents
+        'ND':'https://a.espncdn.com/i/teamlogos/ncaa/500/87.png',
+        // MWC
+        'BSU':'https://a.espncdn.com/i/teamlogos/ncaa/500/68.png',
+        'SDSU':'https://a.espncdn.com/i/teamlogos/ncaa/500/21.png',
+        'FRES':'https://a.espncdn.com/i/teamlogos/ncaa/500/278.png',
+        'CSU':'https://a.espncdn.com/i/teamlogos/ncaa/500/36.png',
+        'WYO':'https://a.espncdn.com/i/teamlogos/ncaa/500/2751.png',
+        'UNLV':'https://a.espncdn.com/i/teamlogos/ncaa/500/2439.png',
+        'NEV':'https://a.espncdn.com/i/teamlogos/ncaa/500/2440.png',
+        'UNR':'https://a.espncdn.com/i/teamlogos/ncaa/500/2440.png',
+        'HAW':'https://a.espncdn.com/i/teamlogos/ncaa/500/62.png',
+        'SJSU':'https://a.espncdn.com/i/teamlogos/ncaa/500/23.png',
+        'UNM':'https://a.espncdn.com/i/teamlogos/ncaa/500/167.png',
+        'USU':'https://a.espncdn.com/i/teamlogos/ncaa/500/328.png',
+        'UTST':'https://a.espncdn.com/i/teamlogos/ncaa/500/328.png',
+        'AFA':'https://a.espncdn.com/i/teamlogos/ncaa/500/2005.png',
+        // CUSA
+        'LT':'https://a.espncdn.com/i/teamlogos/ncaa/500/2348.png',
+        'NMSU':'https://a.espncdn.com/i/teamlogos/ncaa/500/2441.png',
+        'UTEP':'https://a.espncdn.com/i/teamlogos/ncaa/500/2638.png',
+        'USM':'https://a.espncdn.com/i/teamlogos/ncaa/500/2572.png',
+        'MTSU':'https://a.espncdn.com/i/teamlogos/ncaa/500/2393.png',
+        'JSU':'https://a.espncdn.com/i/teamlogos/ncaa/500/55.png',
+        'WKU':'https://a.espncdn.com/i/teamlogos/ncaa/500/98.png',
+        'FIU':'https://a.espncdn.com/i/teamlogos/ncaa/500/2229.png',
+        'UNT':'https://a.espncdn.com/i/teamlogos/ncaa/500/249.png',
+        'NT':'https://a.espncdn.com/i/teamlogos/ncaa/500/249.png',
+        'RICE':'https://a.espncdn.com/i/teamlogos/ncaa/500/242.png',
+        'UTSA':'https://a.espncdn.com/i/teamlogos/ncaa/500/2636.png',
+        'ODU':'https://a.espncdn.com/i/teamlogos/ncaa/500/2429.png',
+        // MAC
+        'OHIO':'https://a.espncdn.com/i/teamlogos/ncaa/500/195.png',
+        'TOL':'https://a.espncdn.com/i/teamlogos/ncaa/500/2649.png',
+        'BG':'https://a.espncdn.com/i/teamlogos/ncaa/500/189.png',
+        'BGSU':'https://a.espncdn.com/i/teamlogos/ncaa/500/189.png',
+        'CMU':'https://a.espncdn.com/i/teamlogos/ncaa/500/2117.png',
+        'EMU':'https://a.espncdn.com/i/teamlogos/ncaa/500/2199.png',
+        'WMU':'https://a.espncdn.com/i/teamlogos/ncaa/500/2711.png',
+        'BALL':'https://a.espncdn.com/i/teamlogos/ncaa/500/2050.png',
+        'UB':'https://a.espncdn.com/i/teamlogos/ncaa/500/2084.png',
+        'BUFF':'https://a.espncdn.com/i/teamlogos/ncaa/500/2084.png',
+        'KENT':'https://a.espncdn.com/i/teamlogos/ncaa/500/2309.png',
+        'NIU':'https://a.espncdn.com/i/teamlogos/ncaa/500/2459.png',
+        'AKR':'https://a.espncdn.com/i/teamlogos/ncaa/500/2006.png',
+        // AAC
+        'MEM':'https://a.espncdn.com/i/teamlogos/ncaa/500/235.png',
+        'TULN':'https://a.espncdn.com/i/teamlogos/ncaa/500/2670.png',
+        'TUL':'https://a.espncdn.com/i/teamlogos/ncaa/500/2670.png',
+        'TULSA':'https://a.espncdn.com/i/teamlogos/ncaa/500/202.png',
+        'ECU':'https://a.espncdn.com/i/teamlogos/ncaa/500/151.png',
+        'USF':'https://a.espncdn.com/i/teamlogos/ncaa/500/58.png',
+        'TEM':'https://a.espncdn.com/i/teamlogos/ncaa/500/218.png',
+        'ARMY':'https://a.espncdn.com/i/teamlogos/ncaa/500/349.png',
+        'NAVY':'https://a.espncdn.com/i/teamlogos/ncaa/500/2426.png',
+        // SBC
+        'APP':'https://a.espncdn.com/i/teamlogos/ncaa/500/2026.png',
+        'ULL':'https://a.espncdn.com/i/teamlogos/ncaa/500/309.png',
+        'LAF':'https://a.espncdn.com/i/teamlogos/ncaa/500/309.png',
+        'TROY':'https://a.espncdn.com/i/teamlogos/ncaa/500/2653.png',
+        'ARST':'https://a.espncdn.com/i/teamlogos/ncaa/500/2032.png',
+        'CCU':'https://a.espncdn.com/i/teamlogos/ncaa/500/324.png',
+        'GSU':'https://a.espncdn.com/i/teamlogos/ncaa/500/2247.png',
+        'GAST':'https://a.espncdn.com/i/teamlogos/ncaa/500/2247.png',
+        'SOAL':'https://a.espncdn.com/i/teamlogos/ncaa/500/6.png',
+        'SA':'https://a.espncdn.com/i/teamlogos/ncaa/500/6.png',
+        'TXST':'https://a.espncdn.com/i/teamlogos/ncaa/500/326.png',
+        'MARS':'https://a.espncdn.com/i/teamlogos/ncaa/500/276.png',
+    };
+
     // Country flag emoji for WC tab — no external CDN, renders natively on all platforms
     var WC_FLAG_EMOJI = {
         'Albania':'🇦🇱',
@@ -640,6 +800,58 @@
         'Los Angeles Sparks':'#552583','Minnesota Lynx':'#0c2340','New York Liberty':'#00471b',
         'Phoenix Mercury':'#cb6015','Seattle Storm':'#2c5234','Washington Mystics':'#e31837',
         'Golden State Valkyries':'#1d428a','Toronto Tempo':'#7b3f8c','Portland Fire':'#cc0000',
+        // CFB — keyed by DK shortName (metadata.shortName)
+        // SEC
+        'ALA':'#9E1B32','AUB':'#0C2340','UGA':'#BA0C2F','LSU':'#461D7C',
+        'FLA':'#0021A5','UF':'#0021A5','TENN':'#FF8200','ARK':'#9D2235',
+        'MSST':'#5D1725','MIZ':'#F1B82D','UK':'#0033A0','SC':'#73000A',
+        'SCAR':'#73000A','VAN':'#866D4B','MISS':'#14213D','TAMU':'#500000',
+        'TEX':'#BF5700','OU':'#841617','OKLA':'#841617',
+        // Big Ten
+        'OSU':'#BB0000','MICH':'#00274C','PSU':'#041E42','WIS':'#C5050C',
+        'MINN':'#7A0019','NW':'#4E2A84','NEB':'#E41C38','ILL':'#E84A27',
+        'PUR':'#CEB888','IU':'#990000','IND':'#990000','IOWA':'#FFCD00',
+        'MD':'#E03A3E','RUT':'#CC0033','RUTG':'#CC0033','MSU':'#18453B',
+        'UCLA':'#2D68C4','USC':'#990000','UW':'#4B2E83','WASH':'#4B2E83',
+        'ORE':'#154733',
+        // ACC
+        'FSU':'#782F40','CLEM':'#F56600','UNC':'#4B9CD3','NCST':'#CC0000',
+        'NC ST':'#CC0000','UVA':'#232D4B','VT':'#861F41','MIA':'#005030',
+        'UM':'#005030','GT':'#003057','PITT':'#003594','BC':'#8A2432',
+        'DUKE':'#003087','WAKE':'#9E7E38','SYR':'#F76900','LOU':'#AD0000',
+        'SMU':'#0033A3','CAL':'#003262','STAN':'#8C1515',
+        // Big 12
+        'BAY':'#154734','TTU':'#CC0000','OKST':'#FF6600','KST':'#512888',
+        'KSU':'#512888','ISU':'#C8102E','KU':'#0051A5','WVU':'#EAAA00',
+        'CIN':'#E00122','BYU':'#002E5D','UCF':'#000000','HOU':'#C8102E',
+        'ARIZ':'#003366','ASU':'#8C1D40','UTAH':'#CC0000','COL':'#CFB87C',
+        // Pac-12 remnants
+        'ORST':'#D3492A','WSU':'#981E32',
+        // Independents
+        'ND':'#003087',
+        // MWC
+        'BSU':'#0033A0','SDSU':'#A6192E','FRES':'#CC0000','CSU':'#1E4D2B',
+        'WYO':'#492F24','UNLV':'#CF0A2C','NEV':'#003362','UNR':'#003362',
+        'HAW':'#024731','SJSU':'#0055A2','UNM':'#BA0C2F','USU':'#00263A',
+        'UTST':'#00263A','AFA':'#003087',
+        // CUSA
+        'LT':'#002F86','NMSU':'#861F2A','UTEP':'#041E42','USM':'#333333',
+        'MTSU':'#0A428B','JSU':'#003087','WKU':'#C8102E','FIU':'#081E3F',
+        'UNT':'#00853E','NT':'#00853E','RICE':'#003087','UTSA':'#002A5C',
+        'ODU':'#003057',
+        // MAC
+        'OHIO':'#00694E','TOL':'#15397F','BG':'#FC4C02','BGSU':'#FC4C02',
+        'CMU':'#6A0032','EMU':'#006633','WMU':'#6C4023','BALL':'#BA0C2F',
+        'UB':'#005BAC','BUFF':'#005BAC','KENT':'#002664','NIU':'#C8102E',
+        'AKR':'#041E42',
+        // AAC
+        'MEM':'#004990','TULN':'#006747','TUL':'#006747','TULSA':'#002D72',
+        'ECU':'#592A8A','USF':'#006747','TEM':'#990000','ARMY':'#000000',
+        'NAVY':'#00205B',
+        // SBC
+        'APP':'#000000','ULL':'#CE1126','LAF':'#CE1126','TROY':'#8B0000',
+        'ARST':'#CC0000','CCU':'#006F71','GSU':'#0039A6','GAST':'#0039A6',
+        'SOAL':'#BA0C2F','SA':'#BA0C2F','TXST':'#501214','MARS':'#00694E',
     };
 
     // Secondary brand color — only for teams with two visually distinct colors.
@@ -819,7 +1031,7 @@
         if (emoji) {
             return '<span style="font-size:' + Math.round(s * 1.15) + 'px;line-height:1;flex-shrink:0;vertical-align:middle">' + emoji + '</span>';
         }
-        var url = cleanName && TEAM_LOGO_URLS[cleanName];
+        var url = cleanName && (TEAM_LOGO_URLS[cleanName] || CFB_TEAM_LOGOS[cleanName]);
         var hue = teamColorHue(name);
         var letter = (name || '?').charAt(0).toUpperCase();
         var fb = 'display:inline-flex;align-items:center;justify-content:center;width:' + s + 'px;height:' + s + 'px;border-radius:50%;background:hsl(' + hue + ',55%,32%);font-size:' + Math.round(s * 0.52) + 'px;font-weight:700;color:#fff;font-family:var(--sans);flex-shrink:0;vertical-align:middle';
@@ -1906,6 +2118,7 @@
             mma_mixed_martial_arts: 'UFC',
             soccer_fc: 'FC',
             soccer_wc: 'WC',
+            football_ncaaf: 'CFB',
             baseball_cws: 'CWS'
         };
         var leagueColorMap = {
@@ -1916,6 +2129,7 @@
             mma_mixed_martial_arts: '#f05252',
             soccer_fc: '#2dcc7e',
             soccer_wc: '#f5a623',
+            football_ncaaf: '#e5a823',
             baseball_cws: '#f5a623'
         };
         var leagueLbl = leagueBadgeMap[currentSport] || '';
@@ -15207,16 +15421,26 @@
                     buildFcLeagueNav();
                     document.getElementById('fc-league-nav').style.display = 'flex';
                     document.getElementById('wc-sub-nav').style.display = 'none';
+                    document.getElementById('cfb-conf-nav').style.display = 'none';
                     showWcFuturesPanel(false);
                 } else if (s.key === 'soccer_wc') {
                     document.getElementById('fc-league-nav').style.display = 'none';
+                    document.getElementById('cfb-conf-nav').style.display = 'none';
                     wcSubTab = 'games';
                     buildWcSubNav();
                     document.getElementById('wc-sub-nav').style.display = 'flex';
                     showWcFuturesPanel(false);
+                } else if (s.key === 'football_ncaaf') {
+                    document.getElementById('fc-league-nav').style.display = 'none';
+                    document.getElementById('wc-sub-nav').style.display = 'none';
+                    currentCfbConf = 'ALL';
+                    buildCfbConfNav();
+                    document.getElementById('cfb-conf-nav').style.display = 'flex';
+                    showWcFuturesPanel(false);
                 } else {
                     document.getElementById('fc-league-nav').style.display = 'none';
                     document.getElementById('wc-sub-nav').style.display = 'none';
+                    document.getElementById('cfb-conf-nav').style.display = 'none';
                     showWcFuturesPanel(false);
                 }
                 loadOdds();
@@ -15695,6 +15919,76 @@
                     if (document.hidden) return;
                     fetchFCNativeUpdate();
                 }, 30000);
+            });
+            return;
+        }
+
+        // CFB: DK native ML lines
+        if (currentSport === 'football_ncaaf') {
+            altOdds = {};
+            rawRows = [];
+            fetch('/api/dk/cfb-lines', { credentials: 'same-origin' })
+            .then(function(r) {
+                if (r.status === 401) {
+                    dot.className = 'sdot error';
+                    stxt.textContent = 'Session expired — please log in again.';
+                    resetRefreshBtn();
+                    handleUnauthenticated();
+                    return Promise.reject('unauth');
+                }
+                return r.json();
+            })
+            .then(function(data) {
+                if (!data.ok || !data.games || !Object.keys(data.games).length) {
+                    rawRows = []; rsGameIds = {};
+                    dot.className = 'sdot error';
+                    stxt.textContent = 'No CFB games available';
+                    return;
+                }
+                var rows = [];
+                var confsSet = new Set();
+                Object.entries(data.games).forEach(function([gameKey, game]) {
+                    var cm = game.cm ? new Date(game.cm) : null;
+                    var gid = game.id;
+                    var pid = gid + '-ml';
+                    var awayConf = game.awayConf || '';
+                    var homeConf = game.homeConf || '';
+                    if (awayConf) confsSet.add(awayConf);
+                    if (homeConf) confsSet.add(homeConf);
+                    if (game.awayOdds != null) rows.push({ id: pid + '-A', game: gameKey, cm: cm, mkt: 'ML', side: game.away, am: game.awayOdds, pt: null, pid: pid, ps: 'A', gid: gid, _cfbConf: awayConf || homeConf, _sport_key: 'football_ncaaf' });
+                    if (game.homeOdds != null) rows.push({ id: pid + '-B', game: gameKey, cm: cm, mkt: 'ML', side: game.home, am: game.homeOdds, pt: null, pid: pid, ps: 'B', gid: gid, _cfbConf: homeConf || awayConf, _sport_key: 'football_ncaaf' });
+                });
+                var CFB_CONF_ORDER = ['SEC', 'B10', 'ACC', 'B12', 'P12', 'MWC', 'CUSA', 'MAC', 'AAC', 'SBC'];
+                _cfbConfsAvailable = ['ALL'].concat(CFB_CONF_ORDER.filter(function(c) { return confsSet.has(c); }));
+                buildCfbConfNav();
+                rawRows = rows;
+                rawRowsBySport[currentSport] = rawRows;
+                var nowStr = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+                if (rawRows.length) {
+                    dot.className = 'sdot live';
+                    stxt.textContent = 'Updated ' + nowStr + ' · ' + Object.keys(data.games).length + ' games · DraftKings';
+                } else {
+                    dot.className = 'sdot error';
+                    stxt.textContent = 'No CFB games available';
+                }
+            })
+            .catch(function(e) {
+                if (e === 'unauth') return;
+                rawRows = []; rsGameIds = {};
+                dot.className = 'sdot error';
+                stxt.textContent = 'Error fetching CFB data';
+            })
+            .then(function() {
+                resetRefreshBtn();
+                if (rawRows.length > 0) {
+                    fetchRealMarkets(currentSport).then(function() { fetchExactEvForRows(currentSport); }).catch(function() { renderTable(); });
+                } else { renderTable(); }
+                if (cfbPoller) clearInterval(cfbPoller);
+                cfbPoller = setInterval(function() {
+                    if (currentSport !== 'football_ncaaf') { clearInterval(cfbPoller); cfbPoller = null; return; }
+                    if (document.hidden) return;
+                    loadOdds();
+                }, 120000); // refresh every 2 min
             });
             return;
         }
@@ -16258,6 +16552,10 @@
                        || gameMarkets['Match Result'] || gameMarkets['1X2']
                        || gameMarkets['Home/Draw/Away'] || gameMarkets['Game Winner'];
             }
+            // CFB: RS may label the market "Winner" or "Match Winner" instead of "Game Winner"
+            if (!mktData && (r._sport_key === 'football_ncaaf' || currentSport === 'football_ncaaf') && r.mkt === 'ML') {
+                mktData = gameMarkets['Winner'] || gameMarkets['Match Winner'] || gameMarkets['Game Winner'];
+            }
             var outcomes = mktData ? (mktData.outcomes || mktData) : null;
             if (!outcomes || !outcomes.length) return;
 
@@ -16319,6 +16617,17 @@
                 } else {
                     match = r.ps === 'A' ? outcomes[0] : outcomes[1];
                 }
+            } else if (r._sport_key === 'football_ncaaf' || currentSport === 'football_ncaaf') {
+                // CFB: team keys are short abbreviations (FSU, NMSU, NC ST) — some words are ≤2 chars
+                // so the generic >2-char word filter misses them. Normalize by stripping spaces first.
+                var cfbNorm = sideLower.replace(/\s+/g, '');
+                match = outcomes.find(function(o) {
+                    if (!o.label) return false;
+                    var ol = resolveTeamName(o.label).toLowerCase();
+                    var olNorm = ol.replace(/\s+/g, '');
+                    return olNorm === cfbNorm || olNorm.indexOf(cfbNorm) !== -1 || cfbNorm.indexOf(olNorm) !== -1
+                        || sideLower.split(' ').some(function(w) { return w.length > 1 && ol.indexOf(w) !== -1; });
+                });
             } else {
                 match = outcomes.find(function(o) {
                     if (!o.label) return false;
@@ -16451,6 +16760,35 @@
                             var fcSyncData = await fcSyncResp.json();
                             fillPredsFromSync(fcRows, fcSyncData);
                             lastSyncData[s.key] = fcSyncData;
+                        }
+                    }
+                    done++;
+                    setBar(Math.round(done / total * 100));
+                    return;
+                }
+                // CFB: use DK native ML lines
+                if (s.key === 'football_ncaaf') {
+                    var [cfbResP, cfbSyncResP] = await Promise.all([
+                        fetch('/api/dk/cfb-lines', { credentials: 'same-origin' }),
+                        fetch('/api/real/sync?sport=football_ncaaf', { credentials: 'same-origin' })
+                    ]);
+                    var cfbDataP = cfbResP.ok ? await cfbResP.json() : null;
+                    if (cfbDataP && cfbDataP.ok && cfbDataP.games) {
+                        var cfbRowsP = [];
+                        Object.entries(cfbDataP.games).forEach(function([gameKey, game]) {
+                            var cm = game.cm ? new Date(game.cm) : null;
+                            var gid = game.id;
+                            var pid = gid + '-ml';
+                            var awayConf = game.awayConf || '';
+                            var homeConf = game.homeConf || '';
+                            if (game.awayOdds != null) cfbRowsP.push({ id: pid+'-A', game: gameKey, cm: cm, mkt: 'ML', side: game.away, am: game.awayOdds, pt: null, pid: pid, ps: 'A', gid: gid, _cfbConf: awayConf || homeConf, _sport_key: 'football_ncaaf' });
+                            if (game.homeOdds != null) cfbRowsP.push({ id: pid+'-B', game: gameKey, cm: cm, mkt: 'ML', side: game.home, am: game.homeOdds, pt: null, pid: pid, ps: 'B', gid: gid, _cfbConf: homeConf || awayConf, _sport_key: 'football_ncaaf' });
+                        });
+                        rawRowsBySport[s.key] = cfbRowsP;
+                        if (cfbSyncResP.ok) {
+                            var cfbSyncDataP = await cfbSyncResP.json();
+                            fillPredsFromSync(cfbRowsP, cfbSyncDataP);
+                            lastSyncData[s.key] = cfbSyncDataP;
                         }
                     }
                     done++;
@@ -16961,6 +17299,25 @@
         });
     }
 
+    function buildCfbConfNav() {
+        var nav = document.getElementById('cfb-conf-nav');
+        if (!nav) return;
+        nav.innerHTML = '';
+        _cfbConfsAvailable.forEach(function(conf) {
+            var btn = document.createElement('button');
+            btn.className = 'fc-league-tab' + (conf === currentCfbConf ? ' active' : '');
+            btn.textContent = conf;
+            btn.onclick = function() {
+                currentCfbConf = conf;
+                nav.querySelectorAll('.fc-league-tab').forEach(function(b) {
+                    b.classList.toggle('active', b.textContent === conf);
+                });
+                renderTable();
+            };
+            nav.appendChild(btn);
+        });
+    }
+
     function renderTable() {
         if (evTabVisible || otdVisible) return;
         var _panels = ['admin-panel','portfolio-panel','alerts-panel','referral-panel','ev-panel','otd-panel'];
@@ -17026,7 +17383,7 @@
                     if (dkAltPrice != null) { dispAm = dkAltPrice; dispPt = parseFloat(yl); }
                 }
             }
-            return { id: r.id, game: r.game, cm: r.cm, mkt: r.mkt, side: r.side, am: dispAm, pt: dispPt, ps: r.ps, pid: r.pid, gid: r.gid, league: r.league, fair: fair, af: af, yl: yl, edge: edge, u: u, bet: u * unit };
+            return { id: r.id, game: r.game, cm: r.cm, mkt: r.mkt, side: r.side, am: dispAm, pt: dispPt, ps: r.ps, pid: r.pid, gid: r.gid, league: r.league, _cfbConf: r._cfbConf, fair: fair, af: af, yl: yl, edge: edge, u: u, bet: u * unit };
         });
         cacheEvRows(rows, currentSport);
         var now = new Date();
@@ -17100,6 +17457,10 @@
         // FC league sub-nav filter
         if (currentSport === 'soccer_fc' && currentFcLeague !== 'ALL') {
             filtered = filtered.filter(function(r) { return r.league === currentFcLeague; });
+        }
+        // CFB conference filter
+        if (currentSport === 'football_ncaaf' && currentCfbConf !== 'ALL') {
+            filtered = filtered.filter(function(r) { return r._cfbConf === currentCfbConf; });
         }
         var mO = { ML: 0, Spread: 1, Total: 2, RFI: 3 };
         var FC_LEAGUE_ORDER = { 'UCL': 0, 'EPL': 1, 'La Liga': 2, 'Serie A': 3, 'Bundesliga': 4, 'Ligue 1': 5, 'MLS': 6 };
@@ -17922,6 +18283,10 @@
                 if (!mktData && (sport === 'soccer_fc' || sport === 'soccer_wc') && r.mkt === 'Spread') {
                     mktData = gameMarkets['Match Result'] || gameMarkets['Asian Handicap'] || gameMarkets['Handicap'];
                 }
+                // CFB: RS may label the game winner market as "Winner" or "Match Winner"
+                if (!mktData && sport === 'football_ncaaf' && r.mkt === 'ML') {
+                    mktData = gameMarkets['Winner'] || gameMarkets['Match Winner'] || gameMarkets['Game Winner'];
+                }
                 var outcomes = mktData ? (mktData.outcomes || mktData) : null;
                 if (!outcomes || !outcomes.length) return;
 
@@ -18064,6 +18429,19 @@ if (!match && r.mkt === 'Spread' && (sport === 'soccer_fc' || sport === 'soccer_
                     });
                     // Positional fallback: RS 3-way outcomes are typically [Away, Draw, Home] or [Home, Draw, Away]
                     if (!match && outcomes.length === 3) match = outcomes[1];
+                }
+
+                // CFB pass: team keys are short abbreviations (FSU, NMSU, NC ST) — words may be ≤2 chars.
+                // Normalize by stripping spaces to match RS labels (e.g. "NC ST" → "ncst").
+                if (!match && sport === 'football_ncaaf' && r.mkt === 'ML') {
+                    var cfbSideNorm = sideLower.replace(/\s+/g, '');
+                    match = outcomes.find(function(o) {
+                        if (!o.label) return false;
+                        var ol = resolveTeamName(o.label).toLowerCase();
+                        var olNorm = ol.replace(/\s+/g, '');
+                        return olNorm === cfbSideNorm || olNorm.indexOf(cfbSideNorm) !== -1 || cfbSideNorm.indexOf(olNorm) !== -1
+                            || sideLower.split(' ').some(function(w) { return w.length > 1 && ol.indexOf(w) !== -1; });
+                    });
                 }
 
                 // Pass 1: exact word match or full label phrase in FD side

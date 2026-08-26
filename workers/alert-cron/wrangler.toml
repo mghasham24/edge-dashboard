@@ -3,10 +3,10 @@
 #   cd workers/alert-cron && npx wrangler deploy
 #
 # Required secrets (set in Cloudflare dashboard → Workers → alert-cron → Settings → Variables):
-#   TELEGRAM_BOT_TOKEN    — from @BotFather
-#   ADMIN_CHAT_ID         — your numeric Telegram chat ID (get from @userinfobot); used for low-card-pool and system alerts
-#   ODDS_API_KEY          — same key used by the Pages project
-#   CRON_SECRET           — shared secret with Pages project to bypass session auth on /api/real/sync
+#   DISCORD_BOT_TOKEN         — Bot token from Discord Developer Portal
+#   ADMIN_DISCORD_CHANNEL_ID  — Discord channel ID for admin alerts (low card pool etc.)
+#   ODDS_API_KEY              — same key used by the Pages project
+#   CRON_SECRET               — shared secret with Pages project to bypass session auth on /api/real/sync
 
 name = "raxedge-alert-cron"
 main = "index.js"

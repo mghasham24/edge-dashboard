@@ -104,9 +104,17 @@ export async function onRequestGet({ request, env }) {
   const existing = await env.DB.prepare('SELECT card_id FROM deposit_cards').all();
   const existingSet = new Set((existing.results || []).map(r => r.card_id));
 
-  // Insert new cards
+  // Cards already consumed by any live/active parlay — never re-pool these.
+  // Prevents auction-window cards (non-Real-Pro deposit: card stays in edgebot inventory
+  // during 10-min countdown) from being re-inserted and double-assigned.
+  const usedRows = await env.DB.prepare(
+    "SELECT DISTINCT deposit_card_id FROM parlays WHERE deposit_card_id IS NOT NULL AND status NOT IN ('expired','void','cancelled')"
+  ).all();
+  const usedCardIds = new Set((usedRows.results || []).map(r => r.deposit_card_id));
+
+  // Insert new cards — skip cards already tied to a parlay
   const syncNow = Math.floor(Date.now() / 1000);
-  const toInsert = [...allIds].filter(id => !existingSet.has(id));
+  const toInsert = [...allIds].filter(id => !existingSet.has(id) && !usedCardIds.has(id));
   if (toInsert.length) {
     await env.DB.batch(
       toInsert.map(id =>
