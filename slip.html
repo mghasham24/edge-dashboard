@@ -98,6 +98,25 @@
   .leg-line   { font-size: 11px; color: var(--muted); margin-top: 3px; }
   .leg-odds   { font-size: 12px; color: var(--accent); font-weight: 600; flex-shrink: 0; }
 
+  /* Dual team logo avatar for team-market legs */
+  .leg-shot.dual {
+    background: transparent;
+    border: none;
+    overflow: visible;
+  }
+  .dual-logo-a, .dual-logo-b {
+    position: absolute;
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    object-fit: contain;
+    object-position: center;
+    background: var(--bg3);
+    border: 1.5px solid var(--border);
+    padding: 3px;
+  }
+  .dual-logo-a { top: 0; left: 0; }
+  .dual-logo-b { bottom: 0; right: 0; }
+
   .card-footer {
     border-top: 1px solid var(--border);
     padding: 16px 20px;
@@ -170,6 +189,52 @@
 
 <script>
   const RAX_LOGO_SVG = `<svg viewBox="0 0 512 512" style="width:11px;height:11px;vertical-align:-1px;display:inline-block;opacity:.7" aria-hidden="true"><g fill="currentColor"><path d="M128.1,141.1h356.8C442.8,57.4,356.1,0,256,0C192,0,133.5,23.5,88.6,62.3L128.1,141.1z"/><polygon points="355.3,193.2 154.2,193.2 254.7,394"/><path d="M413.6,193.2L253.9,512c0.7,0,1.4,0,2.1,0c141.4,0,256-114.6,256-256c0-21.7-2.7-42.7-7.8-62.8H413.6z"/><path d="M225.6,452.1L50.7,103C18.9,145.7,0,198.6,0,256c0,121.7,85,223.6,198.8,249.6L225.6,452.1z"/></g></svg>`;
+
+  // ── Team logo data (mirrors app.js) ─────────────────────────────────────────
+  const TEAM_LOGO_URLS = {
+    'Atlanta Hawks':'https://a.espncdn.com/i/teamlogos/nba/500/atl.png','Boston Celtics':'https://a.espncdn.com/i/teamlogos/nba/500/bos.png','Brooklyn Nets':'https://a.espncdn.com/i/teamlogos/nba/500/bkn.png','Charlotte Hornets':'https://a.espncdn.com/i/teamlogos/nba/500/cha.png','Chicago Bulls':'https://a.espncdn.com/i/teamlogos/nba/500/chi.png','Cleveland Cavaliers':'https://a.espncdn.com/i/teamlogos/nba/500/cle.png','Dallas Mavericks':'https://a.espncdn.com/i/teamlogos/nba/500/dal.png','Denver Nuggets':'https://a.espncdn.com/i/teamlogos/nba/500/den.png','Detroit Pistons':'https://a.espncdn.com/i/teamlogos/nba/500/det.png','Golden State Warriors':'https://a.espncdn.com/i/teamlogos/nba/500/gs.png','Houston Rockets':'https://a.espncdn.com/i/teamlogos/nba/500/hou.png','Indiana Pacers':'https://a.espncdn.com/i/teamlogos/nba/500/ind.png','LA Clippers':'https://a.espncdn.com/i/teamlogos/nba/500/lac.png','Los Angeles Clippers':'https://a.espncdn.com/i/teamlogos/nba/500/lac.png','Los Angeles Lakers':'https://a.espncdn.com/i/teamlogos/nba/500/lal.png','LA Lakers':'https://a.espncdn.com/i/teamlogos/nba/500/lal.png','Memphis Grizzlies':'https://a.espncdn.com/i/teamlogos/nba/500/mem.png','Miami Heat':'https://a.espncdn.com/i/teamlogos/nba/500/mia.png','Milwaukee Bucks':'https://a.espncdn.com/i/teamlogos/nba/500/mil.png','Minnesota Timberwolves':'https://a.espncdn.com/i/teamlogos/nba/500/min.png','New Orleans Pelicans':'https://a.espncdn.com/i/teamlogos/nba/500/no.png','New York Knicks':'https://a.espncdn.com/i/teamlogos/nba/500/ny.png','Oklahoma City Thunder':'https://a.espncdn.com/i/teamlogos/nba/500/okc.png','Orlando Magic':'https://a.espncdn.com/i/teamlogos/nba/500/orl.png','Philadelphia 76ers':'https://a.espncdn.com/i/teamlogos/nba/500/phi.png','Phoenix Suns':'https://a.espncdn.com/i/teamlogos/nba/500/phx.png','Portland Trail Blazers':'https://a.espncdn.com/i/teamlogos/nba/500/por.png','Sacramento Kings':'https://a.espncdn.com/i/teamlogos/nba/500/sac.png','San Antonio Spurs':'https://a.espncdn.com/i/teamlogos/nba/500/sa.png','Toronto Raptors':'https://a.espncdn.com/i/teamlogos/nba/500/tor.png','Utah Jazz':'https://a.espncdn.com/i/teamlogos/nba/500/utah.png','Washington Wizards':'https://a.espncdn.com/i/teamlogos/nba/500/wsh.png',
+    'Atlanta Dream':'https://a.espncdn.com/i/teamlogos/wnba/500/atl.png','Chicago Sky':'https://a.espncdn.com/i/teamlogos/wnba/500/chi.png','Connecticut Sun':'https://a.espncdn.com/i/teamlogos/wnba/500/conn.png','Dallas Wings':'https://a.espncdn.com/i/teamlogos/wnba/500/dal.png','Indiana Fever':'https://a.espncdn.com/i/teamlogos/wnba/500/ind.png','Las Vegas Aces':'https://a.espncdn.com/i/teamlogos/wnba/500/lv.png','Los Angeles Sparks':'https://a.espncdn.com/i/teamlogos/wnba/500/la.png','Minnesota Lynx':'https://a.espncdn.com/i/teamlogos/wnba/500/min.png','New York Liberty':'https://a.espncdn.com/i/teamlogos/wnba/500/ny.png','Phoenix Mercury':'https://a.espncdn.com/i/teamlogos/wnba/500/phx.png','Seattle Storm':'https://a.espncdn.com/i/teamlogos/wnba/500/sea.png','Washington Mystics':'https://a.espncdn.com/i/teamlogos/wnba/500/wsh.png','Golden State Valkyries':'https://a.espncdn.com/i/teamlogos/wnba/500/gsv.png','Toronto Tempo':'https://a.espncdn.com/i/teamlogos/wnba/500/tor.png','Portland Fire':'https://a.espncdn.com/i/teamlogos/wnba/500/por.png',
+    'Anaheim Ducks':'https://a.espncdn.com/i/teamlogos/nhl/500/ana.png','ANA Ducks':'https://a.espncdn.com/i/teamlogos/nhl/500/ana.png','Boston Bruins':'https://a.espncdn.com/i/teamlogos/nhl/500/bos.png','BOS Bruins':'https://a.espncdn.com/i/teamlogos/nhl/500/bos.png','Buffalo Sabres':'https://a.espncdn.com/i/teamlogos/nhl/500/buf.png','BUF Sabres':'https://a.espncdn.com/i/teamlogos/nhl/500/buf.png','Calgary Flames':'https://a.espncdn.com/i/teamlogos/nhl/500/cgy.png','CGY Flames':'https://a.espncdn.com/i/teamlogos/nhl/500/cgy.png','Carolina Hurricanes':'https://a.espncdn.com/i/teamlogos/nhl/500/car.png','CAR Hurricanes':'https://a.espncdn.com/i/teamlogos/nhl/500/car.png','Chicago Blackhawks':'https://a.espncdn.com/i/teamlogos/nhl/500/chi.png','CHI Blackhawks':'https://a.espncdn.com/i/teamlogos/nhl/500/chi.png','Colorado Avalanche':'https://a.espncdn.com/i/teamlogos/nhl/500/col.png','COL Avalanche':'https://a.espncdn.com/i/teamlogos/nhl/500/col.png','Columbus Blue Jackets':'https://a.espncdn.com/i/teamlogos/nhl/500/cbj.png','CBJ Blue Jackets':'https://a.espncdn.com/i/teamlogos/nhl/500/cbj.png','Dallas Stars':'https://a.espncdn.com/i/teamlogos/nhl/500/dal.png','DAL Stars':'https://a.espncdn.com/i/teamlogos/nhl/500/dal.png','Detroit Red Wings':'https://a.espncdn.com/i/teamlogos/nhl/500/det.png','DET Red Wings':'https://a.espncdn.com/i/teamlogos/nhl/500/det.png','Edmonton Oilers':'https://a.espncdn.com/i/teamlogos/nhl/500/edm.png','EDM Oilers':'https://a.espncdn.com/i/teamlogos/nhl/500/edm.png','Florida Panthers':'https://a.espncdn.com/i/teamlogos/nhl/500/fla.png','FLA Panthers':'https://a.espncdn.com/i/teamlogos/nhl/500/fla.png','Los Angeles Kings':'https://a.espncdn.com/i/teamlogos/nhl/500/la.png','LA Kings':'https://a.espncdn.com/i/teamlogos/nhl/500/la.png','Minnesota Wild':'https://a.espncdn.com/i/teamlogos/nhl/500/min.png','MIN Wild':'https://a.espncdn.com/i/teamlogos/nhl/500/min.png','Montreal Canadiens':'https://a.espncdn.com/i/teamlogos/nhl/500/mtl.png','MTL Canadiens':'https://a.espncdn.com/i/teamlogos/nhl/500/mtl.png','Nashville Predators':'https://a.espncdn.com/i/teamlogos/nhl/500/nsh.png','NSH Predators':'https://a.espncdn.com/i/teamlogos/nhl/500/nsh.png','New Jersey Devils':'https://a.espncdn.com/i/teamlogos/nhl/500/nj.png','NJ Devils':'https://a.espncdn.com/i/teamlogos/nhl/500/nj.png','New York Islanders':'https://a.espncdn.com/i/teamlogos/nhl/500/nyi.png','NY Islanders':'https://a.espncdn.com/i/teamlogos/nhl/500/nyi.png','New York Rangers':'https://a.espncdn.com/i/teamlogos/nhl/500/nyr.png','NY Rangers':'https://a.espncdn.com/i/teamlogos/nhl/500/nyr.png','Ottawa Senators':'https://a.espncdn.com/i/teamlogos/nhl/500/ott.png','OTT Senators':'https://a.espncdn.com/i/teamlogos/nhl/500/ott.png','Philadelphia Flyers':'https://a.espncdn.com/i/teamlogos/nhl/500/phi.png','PHI Flyers':'https://a.espncdn.com/i/teamlogos/nhl/500/phi.png','Pittsburgh Penguins':'https://a.espncdn.com/i/teamlogos/nhl/500/pit.png','PIT Penguins':'https://a.espncdn.com/i/teamlogos/nhl/500/pit.png','San Jose Sharks':'https://a.espncdn.com/i/teamlogos/nhl/500/sj.png','SJ Sharks':'https://a.espncdn.com/i/teamlogos/nhl/500/sj.png','Seattle Kraken':'https://a.espncdn.com/i/teamlogos/nhl/500/sea.png','SEA Kraken':'https://a.espncdn.com/i/teamlogos/nhl/500/sea.png','St. Louis Blues':'https://a.espncdn.com/i/teamlogos/nhl/500/stl.png','STL Blues':'https://a.espncdn.com/i/teamlogos/nhl/500/stl.png','Tampa Bay Lightning':'https://a.espncdn.com/i/teamlogos/nhl/500/tb.png','TB Lightning':'https://a.espncdn.com/i/teamlogos/nhl/500/tb.png','Toronto Maple Leafs':'https://a.espncdn.com/i/teamlogos/nhl/500/tor.png','TOR Maple Leafs':'https://a.espncdn.com/i/teamlogos/nhl/500/tor.png','Utah Mammoth':'https://a.espncdn.com/i/teamlogos/nhl/500/utah.png','UTA Mammoth':'https://a.espncdn.com/i/teamlogos/nhl/500/utah.png','Vancouver Canucks':'https://a.espncdn.com/i/teamlogos/nhl/500/van.png','VAN Canucks':'https://a.espncdn.com/i/teamlogos/nhl/500/van.png','Vegas Golden Knights':'https://a.espncdn.com/i/teamlogos/nhl/500/vgk.png','VGK Golden Knights':'https://a.espncdn.com/i/teamlogos/nhl/500/vgk.png','Washington Capitals':'https://a.espncdn.com/i/teamlogos/nhl/500/wsh.png','WAS Capitals':'https://a.espncdn.com/i/teamlogos/nhl/500/wsh.png','Winnipeg Jets':'https://a.espncdn.com/i/teamlogos/nhl/500/wpg.png','WPG Jets':'https://a.espncdn.com/i/teamlogos/nhl/500/wpg.png',
+    'Arizona Diamondbacks':'https://a.espncdn.com/i/teamlogos/mlb/500/ari.png','Atlanta Braves':'https://a.espncdn.com/i/teamlogos/mlb/500/atl.png','Baltimore Orioles':'https://a.espncdn.com/i/teamlogos/mlb/500/bal.png','Boston Red Sox':'https://a.espncdn.com/i/teamlogos/mlb/500/bos.png','Chicago Cubs':'https://a.espncdn.com/i/teamlogos/mlb/500/chc.png','Chicago White Sox':'https://a.espncdn.com/i/teamlogos/mlb/500/cws.png','Cincinnati Reds':'https://a.espncdn.com/i/teamlogos/mlb/500/cin.png','Cleveland Guardians':'https://a.espncdn.com/i/teamlogos/mlb/500/cle.png','Colorado Rockies':'https://a.espncdn.com/i/teamlogos/mlb/500/col.png','Detroit Tigers':'https://a.espncdn.com/i/teamlogos/mlb/500/det.png','Houston Astros':'https://a.espncdn.com/i/teamlogos/mlb/500/hou.png','Kansas City Royals':'https://a.espncdn.com/i/teamlogos/mlb/500/kc.png','Los Angeles Angels':'https://a.espncdn.com/i/teamlogos/mlb/500/laa.png','Los Angeles Dodgers':'https://a.espncdn.com/i/teamlogos/mlb/500/lad.png','Miami Marlins':'https://a.espncdn.com/i/teamlogos/mlb/500/mia.png','Milwaukee Brewers':'https://a.espncdn.com/i/teamlogos/mlb/500/mil.png','Minnesota Twins':'https://a.espncdn.com/i/teamlogos/mlb/500/min.png','New York Mets':'https://a.espncdn.com/i/teamlogos/mlb/500/nym.png','New York Yankees':'https://a.espncdn.com/i/teamlogos/mlb/500/nyy.png','Oakland Athletics':'https://a.espncdn.com/i/teamlogos/mlb/500/oak.png','Athletics':'https://a.espncdn.com/i/teamlogos/mlb/500/oak.png','Philadelphia Phillies':'https://a.espncdn.com/i/teamlogos/mlb/500/phi.png','Pittsburgh Pirates':'https://a.espncdn.com/i/teamlogos/mlb/500/pit.png','San Diego Padres':'https://a.espncdn.com/i/teamlogos/mlb/500/sd.png','San Francisco Giants':'https://a.espncdn.com/i/teamlogos/mlb/500/sf.png','Seattle Mariners':'https://a.espncdn.com/i/teamlogos/mlb/500/sea.png','St. Louis Cardinals':'https://a.espncdn.com/i/teamlogos/mlb/500/stl.png','Tampa Bay Rays':'https://a.espncdn.com/i/teamlogos/mlb/500/tb.png','Texas Rangers':'https://a.espncdn.com/i/teamlogos/mlb/500/tex.png','Toronto Blue Jays':'https://a.espncdn.com/i/teamlogos/mlb/500/tor.png','Washington Nationals':'https://a.espncdn.com/i/teamlogos/mlb/500/was.png',
+    'Arizona Cardinals':'https://a.espncdn.com/i/teamlogos/nfl/500/ari.png','Atlanta Falcons':'https://a.espncdn.com/i/teamlogos/nfl/500/atl.png','Baltimore Ravens':'https://a.espncdn.com/i/teamlogos/nfl/500/bal.png','Buffalo Bills':'https://a.espncdn.com/i/teamlogos/nfl/500/buf.png','Carolina Panthers':'https://a.espncdn.com/i/teamlogos/nfl/500/car.png','Chicago Bears':'https://a.espncdn.com/i/teamlogos/nfl/500/chi.png','Cincinnati Bengals':'https://a.espncdn.com/i/teamlogos/nfl/500/cin.png','Cleveland Browns':'https://a.espncdn.com/i/teamlogos/nfl/500/cle.png','Dallas Cowboys':'https://a.espncdn.com/i/teamlogos/nfl/500/dal.png','Denver Broncos':'https://a.espncdn.com/i/teamlogos/nfl/500/den.png','Detroit Lions':'https://a.espncdn.com/i/teamlogos/nfl/500/det.png','Green Bay Packers':'https://a.espncdn.com/i/teamlogos/nfl/500/gb.png','Houston Texans':'https://a.espncdn.com/i/teamlogos/nfl/500/hou.png','Indianapolis Colts':'https://a.espncdn.com/i/teamlogos/nfl/500/ind.png','Jacksonville Jaguars':'https://a.espncdn.com/i/teamlogos/nfl/500/jax.png','Kansas City Chiefs':'https://a.espncdn.com/i/teamlogos/nfl/500/kc.png','Las Vegas Raiders':'https://a.espncdn.com/i/teamlogos/nfl/500/lv.png','Los Angeles Chargers':'https://a.espncdn.com/i/teamlogos/nfl/500/lac.png','Los Angeles Rams':'https://a.espncdn.com/i/teamlogos/nfl/500/lar.png','Miami Dolphins':'https://a.espncdn.com/i/teamlogos/nfl/500/mia.png','Minnesota Vikings':'https://a.espncdn.com/i/teamlogos/nfl/500/min.png','New England Patriots':'https://a.espncdn.com/i/teamlogos/nfl/500/ne.png','New Orleans Saints':'https://a.espncdn.com/i/teamlogos/nfl/500/no.png','New York Giants':'https://a.espncdn.com/i/teamlogos/nfl/500/nyg.png','New York Jets':'https://a.espncdn.com/i/teamlogos/nfl/500/nyj.png','Philadelphia Eagles':'https://a.espncdn.com/i/teamlogos/nfl/500/phi.png','Pittsburgh Steelers':'https://a.espncdn.com/i/teamlogos/nfl/500/pit.png','San Francisco 49ers':'https://a.espncdn.com/i/teamlogos/nfl/500/sf.png','Seattle Seahawks':'https://a.espncdn.com/i/teamlogos/nfl/500/sea.png','Tampa Bay Buccaneers':'https://a.espncdn.com/i/teamlogos/nfl/500/tb.png','Tennessee Titans':'https://a.espncdn.com/i/teamlogos/nfl/500/ten.png','Washington Commanders':'https://a.espncdn.com/i/teamlogos/nfl/500/wsh.png',
+  };
+
+  const DK_WNBA_TEAM_MAP = {
+    'LV Aces':'Las Vegas Aces','IND Fever':'Indiana Fever','LA Sparks':'Los Angeles Sparks','MIN Lynx':'Minnesota Lynx','NY Liberty':'New York Liberty','CHI Sky':'Chicago Sky','SEA Storm':'Seattle Storm','PHX Mercury':'Phoenix Mercury','ATL Dream':'Atlanta Dream','CONN Sun':'Connecticut Sun','CT Sun':'Connecticut Sun','DAL Wings':'Dallas Wings','WSH Mystics':'Washington Mystics','WAS Mystics':'Washington Mystics','DC Mystics':'Washington Mystics','GSV Valkyries':'Golden State Valkyries','GS Valkyries':'Golden State Valkyries','TOR Tempo':'Toronto Tempo','POR Fire':'Portland Fire',
+    'LV':'Las Vegas Aces','IND':'Indiana Fever','LA':'Los Angeles Sparks','MIN':'Minnesota Lynx','NY':'New York Liberty','CHI':'Chicago Sky','SEA':'Seattle Storm','PHX':'Phoenix Mercury','ATL':'Atlanta Dream','CONN':'Connecticut Sun','CT':'Connecticut Sun','DAL':'Dallas Wings','WSH':'Washington Mystics','WAS':'Washington Mystics','DC':'Washington Mystics','GSV':'Golden State Valkyries','GS':'Golden State Valkyries','TOR':'Toronto Tempo','POR':'Portland Fire',
+    'Aces':'Las Vegas Aces','Fever':'Indiana Fever','Sparks':'Los Angeles Sparks','Lynx':'Minnesota Lynx','Liberty':'New York Liberty','Sky':'Chicago Sky','Storm':'Seattle Storm','Mercury':'Phoenix Mercury','Dream':'Atlanta Dream','Sun':'Connecticut Sun','Wings':'Dallas Wings','Mystics':'Washington Mystics','Valkyries':'Golden State Valkyries','Tempo':'Toronto Tempo','Fire':'Portland Fire',
+  };
+
+  const DK_MLB_TEAM_MAP = {
+    'HOU Astros':'Houston Astros','TOR Blue Jays':'Toronto Blue Jays','NYY Yankees':'New York Yankees','BOS Red Sox':'Boston Red Sox','NYM Mets':'New York Mets','ATL Braves':'Atlanta Braves','LAD Dodgers':'Los Angeles Dodgers','SF Giants':'San Francisco Giants','CHC Cubs':'Chicago Cubs','CWS White Sox':'Chicago White Sox','MIL Brewers':'Milwaukee Brewers','STL Cardinals':'St. Louis Cardinals','PHI Phillies':'Philadelphia Phillies','WSH Nationals':'Washington Nationals','MIA Marlins':'Miami Marlins','PIT Pirates':'Pittsburgh Pirates','CIN Reds':'Cincinnati Reds','COL Rockies':'Colorado Rockies','ARI Diamondbacks':'Arizona Diamondbacks','SD Padres':'San Diego Padres','MIN Twins':'Minnesota Twins','CLE Guardians':'Cleveland Guardians','DET Tigers':'Detroit Tigers','KC Royals':'Kansas City Royals','CHW White Sox':'Chicago White Sox','TB Rays':'Tampa Bay Rays','BAL Orioles':'Baltimore Orioles','TEX Rangers':'Texas Rangers','SEA Mariners':'Seattle Mariners','OAK Athletics':'Oakland Athletics','LAA Angels':'Los Angeles Angels',
+    'NYY':'New York Yankees','BOS':'Boston Red Sox','NYM':'New York Mets','ATL':'Atlanta Braves','LAD':'Los Angeles Dodgers','SFG':'San Francisco Giants','SF':'San Francisco Giants','CHC':'Chicago Cubs','CWS':'Chicago White Sox','CHW':'Chicago White Sox','MIL':'Milwaukee Brewers','STL':'St. Louis Cardinals','PHI':'Philadelphia Phillies','WSH':'Washington Nationals','WAS':'Washington Nationals','MIA':'Miami Marlins','PIT':'Pittsburgh Pirates','CIN':'Cincinnati Reds','COL':'Colorado Rockies','ARI':'Arizona Diamondbacks','SDP':'San Diego Padres','SD':'San Diego Padres','MIN':'Minnesota Twins','CLE':'Cleveland Guardians','DET':'Detroit Tigers','KC':'Kansas City Royals','KCR':'Kansas City Royals','TBR':'Tampa Bay Rays','TB':'Tampa Bay Rays','BAL':'Baltimore Orioles','TEX':'Texas Rangers','SEA':'Seattle Mariners','OAK':'Oakland Athletics','LAA':'Los Angeles Angels','HOU':'Houston Astros','TOR':'Toronto Blue Jays',
+    'WAS Nationals':'Washington Nationals','WSN Nationals':'Washington Nationals','Athletics':'Oakland Athletics','ATH Athletics':'Oakland Athletics','LA Dodgers':'Los Angeles Dodgers','NY Yankees':'New York Yankees','NY Mets':'New York Mets','CHI Cubs':'Chicago Cubs','CHI White Sox':'Chicago White Sox','KC Royals':'Kansas City Royals',
+  };
+
+  const DK_NFL_TEAM_MAP = {
+    'ARI Cardinals':'Arizona Cardinals','ATL Falcons':'Atlanta Falcons','BAL Ravens':'Baltimore Ravens','BUF Bills':'Buffalo Bills','CAR Panthers':'Carolina Panthers','CHI Bears':'Chicago Bears','CIN Bengals':'Cincinnati Bengals','CLE Browns':'Cleveland Browns','DAL Cowboys':'Dallas Cowboys','DEN Broncos':'Denver Broncos','DET Lions':'Detroit Lions','GB Packers':'Green Bay Packers','HOU Texans':'Houston Texans','IND Colts':'Indianapolis Colts','JAX Jaguars':'Jacksonville Jaguars','KC Chiefs':'Kansas City Chiefs','LV Raiders':'Las Vegas Raiders','LAC Chargers':'Los Angeles Chargers','LA Chargers':'Los Angeles Chargers','LAR Rams':'Los Angeles Rams','LA Rams':'Los Angeles Rams','MIA Dolphins':'Miami Dolphins','MIN Vikings':'Minnesota Vikings','NE Patriots':'New England Patriots','NO Saints':'New Orleans Saints','NYG Giants':'New York Giants','NYJ Jets':'New York Jets','PHI Eagles':'Philadelphia Eagles','PIT Steelers':'Pittsburgh Steelers','SF 49ers':'San Francisco 49ers','SEA Seahawks':'Seattle Seahawks','TB Buccaneers':'Tampa Bay Buccaneers','TEN Titans':'Tennessee Titans','WAS Commanders':'Washington Commanders',
+    'ARI':'Arizona Cardinals','ATL':'Atlanta Falcons','BAL':'Baltimore Ravens','BUF':'Buffalo Bills','CAR':'Carolina Panthers','CHI':'Chicago Bears','CIN':'Cincinnati Bengals','CLE':'Cleveland Browns','DAL':'Dallas Cowboys','DEN':'Denver Broncos','DET':'Detroit Lions','GB':'Green Bay Packers','HOU':'Houston Texans','IND':'Indianapolis Colts','JAX':'Jacksonville Jaguars','KC':'Kansas City Chiefs','LV':'Las Vegas Raiders','LAC':'Los Angeles Chargers','LAR':'Los Angeles Rams','MIA':'Miami Dolphins','MIN':'Minnesota Vikings','NE':'New England Patriots','NO':'New Orleans Saints','NYG':'New York Giants','NYJ':'New York Jets','PHI':'Philadelphia Eagles','PIT':'Pittsburgh Steelers','SF':'San Francisco 49ers','SEA':'Seattle Seahawks','TB':'Tampa Bay Buccaneers','TEN':'Tennessee Titans','WAS':'Washington Commanders',
+  };
+
+  function normSlipName(n) {
+    return n.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
+      .replace(/\s+(?:jr\.?|sr\.?|ii|iii|iv)$/, '');
+  }
+
+  function slipTeamLogo(teamName, sport) {
+    if (!teamName) return null;
+    if (TEAM_LOGO_URLS[teamName]) return TEAM_LOGO_URLS[teamName];
+    let full;
+    const s = sport || '';
+    if (s === 'baseball_mlb' || s === 'mlb') {
+      full = DK_MLB_TEAM_MAP[teamName] || DK_NFL_TEAM_MAP[teamName] || DK_WNBA_TEAM_MAP[teamName] || teamName;
+    } else if (s === 'basketball_wnba' || s === 'wnba') {
+      full = DK_WNBA_TEAM_MAP[teamName] || DK_NFL_TEAM_MAP[teamName] || DK_MLB_TEAM_MAP[teamName] || teamName;
+    } else {
+      full = DK_NFL_TEAM_MAP[teamName] || DK_MLB_TEAM_MAP[teamName] || DK_WNBA_TEAM_MAP[teamName] || teamName;
+    }
+    return TEAM_LOGO_URLS[full] || null;
+  }
 
   const MKT_LABEL = {
     hits:'Hits', total_bases:'Total Bases', rbis:'RBIs', runs:'Runs', hrbi:'H+R+RBI',
@@ -251,18 +316,78 @@
     const fpBadge = slip.is_free_play ? '<span class="fp-badge">FREE PLAY</span>' : '';
 
     const legsHtml = (slip.legs || []).map((leg, i) => {
-      const odds = leg.american_odds != null
+      const mkt    = leg.market_type || '';
+      const isTeamMkt = mkt.startsWith('team_') || mkt.startsWith('1inn_');
+      const odds   = leg.american_odds != null
         ? `<span class="leg-odds">${escHtml(fmtOdds(leg.american_odds))}</span>` : '';
       const shotId = `leg-shot-${i}`;
-      const storedImg = leg.headshot_url
-        ? `<img src="${escHtml(leg.headshot_url)}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.remove()">`
-        : '';
+      const words    = (leg.player_name || '').split(' ');
+      const initials = ((words[0] ? words[0][0] : '') + (words.length > 1 ? words[words.length-1][0] || '' : '')).toUpperCase();
+
+      let shotHtml;
+      if (isTeamMkt) {
+        let evtPts = (leg.event_name || '').match(/^(.+?)\s+@\s+(.+)$/);
+        if (!evtPts && mkt === 'team_total') {
+          evtPts = (leg.player_name || '').match(/^(.+?)\s+@\s+(.+?)\s+[OU][\d.]+$/);
+        }
+        let evtAway = evtPts ? evtPts[1].trim() : null;
+        let evtHome = evtPts ? evtPts[2].trim() : null;
+        let logoA = null, logoB = null;
+
+        if (mkt === 'team_total' || mkt.startsWith('1inn_')) {
+          if (mkt.startsWith('1inn_') && evtAway && evtHome) {
+            logoA = 'https://a.espncdn.com/i/teamlogos/mlb/500/' + evtAway.toLowerCase() + '.png';
+            logoB = 'https://a.espncdn.com/i/teamlogos/mlb/500/' + evtHome.toLowerCase() + '.png';
+          } else {
+            logoA = evtAway ? slipTeamLogo(evtAway, leg.sport) : null;
+            logoB = evtHome ? slipTeamLogo(evtHome, leg.sport) : null;
+          }
+        } else if (mkt === 'team_runline') {
+          const pickedN   = (leg.player_name || '').replace(/ (ML|RL)$/i, '').trim();
+          const pickedNrm = normSlipName(pickedN);
+          const awayNrm   = normSlipName(evtAway || '');
+          const awayNick  = awayNrm.split(' ').slice(1).join(' ');
+          const isAwayPk  = awayNrm === pickedNrm || (awayNick && pickedNrm.endsWith(awayNick));
+          logoA = slipTeamLogo(isAwayPk ? evtAway : evtHome, leg.sport);
+          logoB = slipTeamLogo(isAwayPk ? evtHome : evtAway, leg.sport);
+        } else {
+          const tmln = (leg.player_name || '').replace(/ (ML|RL)$/i, '').trim();
+          logoA = slipTeamLogo(tmln, leg.sport);
+          if (!logoA && (evtAway || evtHome)) {
+            const tNrm  = normSlipName(tmln);
+            const aNrm  = normSlipName(evtAway || '');
+            const tLast = tNrm.split(' ').pop();
+            const aLast = aNrm.split(' ').pop();
+            const isAway = aNrm === tNrm || (tLast && tLast === aLast);
+            logoA = isAway
+              ? (slipTeamLogo(evtAway, leg.sport) || slipTeamLogo(evtHome, leg.sport))
+              : (slipTeamLogo(evtHome, leg.sport) || slipTeamLogo(evtAway, leg.sport));
+          }
+        }
+
+        if (logoA && logoB) {
+          shotHtml = '<div class="leg-shot dual" id="' + shotId + '">' +
+            '<img class="dual-logo-a" src="' + escHtml(logoA) + '" alt="" onerror="this.style.display=\'none\'">' +
+            '<img class="dual-logo-b" src="' + escHtml(logoB) + '" alt="" onerror="this.style.display=\'none\'">' +
+            '</div>';
+        } else if (logoA) {
+          shotHtml = `<div class="leg-shot" id="${shotId}"><img src="${escHtml(logoA)}" alt="" style="width:100%;height:100%;object-fit:contain;padding:4px" onerror="this.style.display='none'"></div>`;
+        } else {
+          shotHtml = `<div class="leg-shot" id="${shotId}">${escHtml(initials)}</div>`;
+        }
+      } else {
+        const storedImg = leg.headshot_url
+          ? `<img src="${escHtml(leg.headshot_url)}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.remove()">`
+          : '';
+        shotHtml = `<div class="leg-shot" id="${shotId}">${escHtml((leg.player_name || '?')[0].toUpperCase())}${storedImg}</div>`;
+      }
+
       return `<div class="leg">
-        <div class="leg-shot" id="${shotId}">${escHtml((leg.player_name || '?')[0].toUpperCase())}${storedImg}</div>
+        ${shotHtml}
         <span class="leg-icon">${legIcon(leg.status)}</span>
         <div class="leg-body">
           <div class="leg-player${leg.status === 'won' ? ' won' : leg.status === 'lost' ? ' lost' : ''}">${escHtml(leg.player_name)}</div>
-          <div class="leg-line">${escHtml(leg.label || leg.direction || '')}${leg.market_type && MKT_LABEL[leg.market_type] ? ' · <span style="color:var(--accent);font-size:10px">' + escHtml(MKT_LABEL[leg.market_type]) + '</span>' : ''}</div>
+          <div class="leg-line">${escHtml(leg.label || leg.direction || '')}${mkt && MKT_LABEL[mkt] ? ' · <span style="color:var(--accent);font-size:10px">' + escHtml(MKT_LABEL[mkt]) + '</span>' : ''}</div>
         </div>
         ${odds}
       </div>`;
@@ -308,9 +433,11 @@
       <div class="cta">Find +EV parlays at <a href="https://raxedge.com">raxedge.com</a></div>
     `;
 
-    // Async-load headshots for legs that didn't have a stored URL
+    // Async-load headshots for player prop legs that didn't have a stored URL
     (slip.legs || []).forEach((leg, i) => {
-      if (!leg.headshot_url && leg.player_name) {
+      const mkt = leg.market_type || '';
+      const isTeamMkt = mkt.startsWith('team_') || mkt.startsWith('1inn_');
+      if (!isTeamMkt && !leg.headshot_url && leg.player_name) {
         loadHeadshot(`leg-shot-${i}`, leg.player_name, leg.sport);
       }
     });
