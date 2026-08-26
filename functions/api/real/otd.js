@@ -18,7 +18,7 @@ function buildHeaders(env) {
     'real-device-name': '5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5.2 Safari/605.1.15',
     'real-device-type': 'desktop_web',
     'real-request-token': hashidsEncode(Date.now()),
-    'real-version': '35'
+    'real-version': '36'
   };
 }
 
@@ -171,7 +171,7 @@ export async function onRequestGet(context) {
                     'Origin': 'https://www.realapp.com', 'Referer': 'https://www.realapp.com/',
                     'real-auth-info': env.REAL_AUTH_TOKEN, 'real-session-token': env.REAL_SESSION_TOKEN,
                     'real-device-uuid': env.REAL_DEVICE_UUID || '',
-                    'real-device-type': 'desktop_web', 'real-version': '35',
+                    'real-device-type': 'desktop_web', 'real-version': '36',
                     'real-request-token': hashidsEncode(now),
                   };
                   await Promise.all(stillNumeric.slice(0, 15).map(async item => {

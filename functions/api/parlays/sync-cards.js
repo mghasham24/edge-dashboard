@@ -26,7 +26,7 @@ function buildHeaders(authInfo, sessionToken) {
     'real-device-uuid': RS_DEVICE_UUID,
     'real-device-type': 'desktop_web',
     'real-device-name': '5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5.2 Safari/605.1.15',
-    'real-version':     '35',
+    'real-version':     '36',
     'real-request-token': hashidsEncode(Date.now()),
   };
   if (sessionToken) {

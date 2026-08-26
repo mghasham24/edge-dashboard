@@ -49,7 +49,7 @@ async function verifyLive(cardId, rsToken) {
         'real-auth-info':   rsToken,
         'real-device-uuid': RS_DEVICE_UUID,
         'real-device-type': 'desktop_web',
-        'real-version':     '35',
+        'real-version':     '36',
       },
       signal: AbortSignal.timeout(5000),
     });
