@@ -1577,6 +1577,15 @@ async function handleRequest({ request, env }) {
           }
         } catch(_) {}
       }
+      // Flush already-resolved individual leg statuses even though the parlay isn't finished yet.
+      // Without this, a leg whose game ended is left pending while a co-leg's game is still live.
+      for (const o of resolvedLegs) {
+        if (o.outcome === null) continue;
+        try {
+          await env.DB.prepare("UPDATE parlay_legs SET status=?, settled_at=? WHERE id=?")
+            .bind(o.outcome, now, o.legId).run();
+        } catch(_) {}
+      }
       report.push({ parlayId: parlay.id, status: 'waiting', waiting: [...stillWaiting.map(o => o.player), ...futurePendingLegs.map(l => l.player_name)] });
       continue;
     }
