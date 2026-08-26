@@ -14219,6 +14219,7 @@
                             '<div style="margin-top:4px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">' +
                                 '<span style="font-size:12px;color:var(--muted)">Parlay #' + q.parlay_id + '</span>' +
                                 '<span style="font-size:11px;font-weight:700;letter-spacing:.04em;color:' + badgeColor + ';text-transform:uppercase">' + escHtml(badgeLabel) + '</span>' +
+                                (q.share_token ? '<a href="https://raxedge.com/slip?t=' + encodeURIComponent(q.share_token) + '" target="_blank" rel="noopener" style="font-size:11px;color:var(--accent);text-decoration:none">View Slip ↗</a>' : '') +
                             '</div>' +
                             noteHtml +
                         '</div>' +

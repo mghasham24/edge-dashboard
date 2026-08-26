@@ -89,7 +89,7 @@ async function handleRequest({ request, env }) {
       'SELECT q.id, q.parlay_id, q.rs_username, q.payout_rax, q.offer_amount, ' +
       'q.status, q.target_card_id, q.rs_offer_id, q.attempts, q.notes, ' +
       'q.created_at, q.sent_at, q.skipped_cards, q.card1_id, q.card1_sent_at, ' +
-      'ra.rs_user_id, p.status AS parlay_status ' +
+      'ra.rs_user_id, p.status AS parlay_status, p.share_token ' +
       'FROM payout_queue q ' +
       'LEFT JOIN real_auth ra ON ra.user_id = q.user_id ' +
       'LEFT JOIN parlays p ON p.id = q.parlay_id ' +
