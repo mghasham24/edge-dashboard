@@ -8942,7 +8942,7 @@
             : '';
         var settleBtn = (s.status === 'active' && currentUser && currentUser.is_admin) ? '<button class="pslip-settle-btn" onclick="parlayOpenSettle(' + s.id + ')">Settle</button>' : '';
         var adminCardBtn = (showUsername && s.deposit_card_url) ? '<a href="' + escHtml(s.deposit_card_url) + '" target="_blank" rel="noopener" class="pslip-admin-card-btn">View Card</a>' : '';
-        var shareBtn = (!showUsername && (s.status === 'active' || s.status === 'won' || s.status === 'lost')) ? '<button class="pslip-share-btn" onclick="parlayShare(' + s.id + ', this)">Share</button>' : '';
+        var shareBtn = ((s.status === 'active' || s.status === 'won' || s.status === 'lost') && s.share_token) ? '<button class="pslip-share-btn" onclick="parlayShare(' + s.id + ', this)">Share</button>' : '';
         var multBadge = mult ? '<span class="pslip-mult">' + escHtml(mult) + '</span>' : '';
         var userBadge = (showUsername && s.rs_username) ? '<span class="pslip-user-badge">@' + escHtml(s.rs_username) + '</span>' : '';
 

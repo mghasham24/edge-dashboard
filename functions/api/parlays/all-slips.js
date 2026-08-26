@@ -27,7 +27,7 @@ export async function onRequestGet({ request, env }) {
     const like = '%' + searchQuery + '%';
     ({ results: parlays } = await env.DB.prepare(
       'SELECT id, user_id, rs_username, status, legs_count, stake_rax, payout_rax, deposit_card_id, ' +
-      'rs_offer_id, received_rax, expires_at, created_at, deposited_at, settled_at ' +
+      'rs_offer_id, received_rax, expires_at, created_at, deposited_at, settled_at, share_token ' +
       'FROM parlays ' +
       'WHERE rs_username LIKE ? ' +
       'ORDER BY created_at DESC LIMIT 200'
@@ -46,7 +46,7 @@ export async function onRequestGet({ request, env }) {
     // Default: 300 most recent non-expired-pending parlays
     ({ results: parlays } = await env.DB.prepare(
       'SELECT id, user_id, rs_username, status, legs_count, stake_rax, payout_rax, deposit_card_id, ' +
-      'rs_offer_id, received_rax, expires_at, created_at, deposited_at, settled_at ' +
+      'rs_offer_id, received_rax, expires_at, created_at, deposited_at, settled_at, share_token ' +
       'FROM parlays ' +
       "WHERE NOT (status = 'pending_deposit' AND created_at < ?) " +
       'ORDER BY created_at DESC LIMIT 300'
