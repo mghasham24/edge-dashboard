@@ -117,6 +117,23 @@
   .dual-logo-a { top: 0; left: 0; }
   .dual-logo-b { bottom: 0; right: 0; }
 
+  /* Dual fighter headshots for UFC legs */
+  .dual-head-a, .dual-head-b {
+    position: absolute;
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    background: var(--bg3);
+    border: 1.5px solid var(--border);
+    overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px; font-weight: 800; color: var(--muted);
+  }
+  .dual-head-a { top: 0; left: 0; }
+  .dual-head-b { bottom: 0; right: 0; }
+  .dual-head-a img, .dual-head-b img {
+    width: 100%; height: 100%; object-fit: cover; border-radius: 50%;
+  }
+
   .card-footer {
     border-top: 1px solid var(--border);
     padding: 16px 20px;
@@ -294,6 +311,30 @@
       })
       .catch(() => { HS_CACHE[name] = 'none'; });
   }
+  function loadUfcHeadshot(elemId, fighterName) {
+    if (!fighterName) return;
+    const key = 'ufc:' + fighterName;
+    if (HS_CACHE[key] === 'none') return;
+    if (HS_CACHE[key]) { applyHeadshotToDiv(elemId, HS_CACHE[key]); return; }
+    fetch('https://site.api.espn.com/apis/search/v2?query=' + encodeURIComponent(fighterName) + '&limit=3&type=player&sport=mma', { signal: AbortSignal.timeout(5000) })
+      .then(r => r.json())
+      .then(d => {
+        const group  = (d.results || []).find(r => r.type === 'player');
+        const hit    = group && group.contents && group.contents[0];
+        const espnId = hit ? ((hit.uid || '').split('~a:')[1] || '') : '';
+        if (!espnId) { HS_CACHE[key] = 'none'; return; }
+        const url = 'https://a.espncdn.com/combiner/i?img=/i/headshots/mma/players/full/' + espnId + '.png&w=350&h=254';
+        HS_CACHE[key] = url;
+        applyHeadshotToDiv(elemId, url);
+      })
+      .catch(() => { HS_CACHE[key] = 'none'; });
+  }
+  function applyHeadshotToDiv(elemId, url) {
+    const el = document.getElementById(elemId);
+    if (!el) return;
+    el.innerHTML = '<img src="' + escHtml(url) + '" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.remove()">';
+  }
+
   function applyHeadshot(id, url) {
     const el = document.getElementById(id);
     if (!el) return;
@@ -318,6 +359,7 @@
     const legsHtml = (slip.legs || []).map((leg, i) => {
       const mkt    = leg.market_type || '';
       const isTeamMkt = mkt.startsWith('team_') || mkt.startsWith('1inn_');
+      const isUfc  = mkt.startsWith('ufc_') || leg.sport === 'ufc';
       const odds   = leg.american_odds != null
         ? `<span class="leg-odds">${escHtml(fmtOdds(leg.american_odds))}</span>` : '';
       const shotId = `leg-shot-${i}`;
@@ -374,6 +416,21 @@
           shotHtml = `<div class="leg-shot" id="${shotId}"><img src="${escHtml(logoA)}" alt="" style="width:100%;height:100%;object-fit:contain;padding:4px" onerror="this.style.display='none'"></div>`;
         } else {
           shotHtml = `<div class="leg-shot" id="${shotId}">${escHtml(initials)}</div>`;
+        }
+      } else if (isUfc) {
+        const vsMatch = (leg.player_name || '').match(/^(.+?)\s+vs\s+(.+?)(?:\s+[OU][\d.]+)?$/i)
+          || (leg.event_name || '').match(/^(.+?)\s+vs\s+(.+)$/i);
+        if (vsMatch) {
+          const fa = vsMatch[1].trim(), fb = vsMatch[2].trim();
+          shotHtml = '<div class="leg-shot dual" id="' + shotId + '">' +
+            '<div class="dual-head-a" id="' + shotId + '-a">' + escHtml((fa[0] || '?').toUpperCase()) + '</div>' +
+            '<div class="dual-head-b" id="' + shotId + '-b">' + escHtml((fb[0] || '?').toUpperCase()) + '</div>' +
+            '</div>';
+        } else {
+          const storedImg = leg.headshot_url
+            ? `<img src="${escHtml(leg.headshot_url)}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.remove()">`
+            : '';
+          shotHtml = `<div class="leg-shot" id="${shotId}">${escHtml((leg.player_name || '?')[0].toUpperCase())}${storedImg}</div>`;
         }
       } else {
         const storedImg = leg.headshot_url
@@ -433,11 +490,24 @@
       <div class="cta">Find +EV parlays at <a href="https://raxedge.com">raxedge.com</a></div>
     `;
 
-    // Async-load headshots for player prop legs that didn't have a stored URL
+    // Async-load headshots for player prop and UFC legs
     (slip.legs || []).forEach((leg, i) => {
       const mkt = leg.market_type || '';
       const isTeamMkt = mkt.startsWith('team_') || mkt.startsWith('1inn_');
-      if (!isTeamMkt && !leg.headshot_url && leg.player_name) {
+      const isUfc = mkt.startsWith('ufc_') || leg.sport === 'ufc';
+      if (isTeamMkt) return;
+      if (isUfc) {
+        const vsMatch = (leg.player_name || '').match(/^(.+?)\s+vs\s+(.+?)(?:\s+[OU][\d.]+)?$/i)
+          || (leg.event_name || '').match(/^(.+?)\s+vs\s+(.+)$/i);
+        if (vsMatch) {
+          loadUfcHeadshot(`leg-shot-${i}-a`, vsMatch[1].trim());
+          loadUfcHeadshot(`leg-shot-${i}-b`, vsMatch[2].trim());
+        } else {
+          loadHeadshot(`leg-shot-${i}`, leg.player_name, leg.sport);
+        }
+        return;
+      }
+      if (!leg.headshot_url && leg.player_name) {
         loadHeadshot(`leg-shot-${i}`, leg.player_name, leg.sport);
       }
     });
