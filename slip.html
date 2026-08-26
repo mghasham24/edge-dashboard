@@ -92,7 +92,9 @@
 
   .leg-icon { font-size: 14px; flex-shrink: 0; }
   .leg-body { flex: 1; min-width: 0; }
-  .leg-player { font-weight: 700; font-size: 14px; color: var(--green); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .leg-player { font-weight: 700; font-size: 14px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .leg-player.won  { color: var(--green); }
+  .leg-player.lost { color: var(--red); }
   .leg-line   { font-size: 11px; color: var(--muted); margin-top: 3px; }
   .leg-odds   { font-size: 12px; color: var(--accent); font-weight: 600; flex-shrink: 0; }
 
@@ -245,7 +247,7 @@
         <div class="leg-shot" id="${shotId}">${escHtml((leg.player_name || '?')[0].toUpperCase())}${storedImg}</div>
         <span class="leg-icon">${legIcon(leg.status)}</span>
         <div class="leg-body">
-          <div class="leg-player">${escHtml(leg.player_name)}</div>
+          <div class="leg-player${leg.status === 'won' ? ' won' : leg.status === 'lost' ? ' lost' : ''}">${escHtml(leg.player_name)}</div>
           <div class="leg-line">${escHtml(leg.label || leg.direction || '')}</div>
         </div>
         ${odds}
