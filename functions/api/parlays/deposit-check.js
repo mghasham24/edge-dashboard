@@ -226,6 +226,7 @@ async function handleRequest({ request, env }) {
   }
 
   const directActivated = new Set();
+  const errors = [];
   for (const row of directCheckRows) {
     const offer = await fetchOffer(row.rs_offer_id);
     if (!offer) continue;
@@ -362,7 +363,6 @@ async function handleRequest({ request, env }) {
 
   let accepted = 0;
   let countered = 0;
-  const errors = [];
 
   // Called after a parlay is activated. Checks if the referred user (parlay owner) has
   // crossed 2k cumulative stake and credits the referrer with one free play + RS DM.
