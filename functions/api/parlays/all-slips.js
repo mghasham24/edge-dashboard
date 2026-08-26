@@ -5,6 +5,12 @@ import { getSession } from '../../_lib/session.js';
 import { ok, err }    from '../../_lib/response.js';
 import { rsUrlEncode } from '../../_lib/hashids.js';
 
+function generateShareToken() {
+  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  const bytes = crypto.getRandomValues(new Uint8Array(10));
+  return Array.from(bytes, b => chars[b % chars.length]).join('');
+}
+
 export async function onRequestGet({ request, env }) {
   const session = await getSession(request, env.DB);
   if (!session) return err('Authentication required', 401);
@@ -63,6 +69,15 @@ export async function onRequestGet({ request, env }) {
       '  ORDER BY created_at DESC LIMIT 300' +
       ') ORDER BY pl.id ASC'
     ).bind(pendingCutoff).all());
+  }
+
+  // Lazy share_token generation for slips that predate migration 0009
+  const needsToken = parlays.filter(p => !p.share_token && ['active','won','lost'].includes(p.status));
+  if (needsToken.length) {
+    needsToken.forEach(p => { p.share_token = generateShareToken(); });
+    await env.DB.batch(needsToken.map(p =>
+      env.DB.prepare('UPDATE parlays SET share_token=? WHERE id=? AND share_token IS NULL').bind(p.share_token, p.id).run()
+    ));
   }
 
   const legMap = {};
