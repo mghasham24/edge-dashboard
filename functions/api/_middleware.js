@@ -13,7 +13,9 @@ const SKIP_AUTH_PREFIXES = [
   '/api/admin/rs-check-position',
   '/api/admin/rs-check-simple',
   '/api/parlays/leaderboard',
+  '/api/parlays/slip-public',
   '/api/espn/',
+  '/api/discord/',
 ];
 
 // Cron/machine calls authenticate internally via their own key param

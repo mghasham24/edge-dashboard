@@ -9,8 +9,44 @@
 //   UFC  — ESPN MMA scoreboard
 // Reliability: only settles Final/completed games; stale legs voided after STALE_DAYS.
 
-import { ok, err }    from '../../_lib/response.js';
-import { getSession } from '../../_lib/session.js';
+import { ok, err }       from '../../_lib/response.js';
+import { getSession }    from '../../_lib/session.js';
+import { hashidsEncode } from '../../_lib/hashids.js';
+
+const RS_BASE        = 'https://web.realapp.com';
+const RS_DEVICE_UUID = '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e';
+
+const ONE_LEG_MESSAGES = [
+  (n, p) => `🔥 One leg left. Lock in, this is it.`,
+  (n, p) => `💀 Last leg. You're one win away from ${p} Rax.`,
+  (n, p) => `🎯 Final leg on your ${n}-legger. ${p} Rax is on the line.`,
+  (n, p) => `🏆 You're one leg away from winning ${p} Rax. Let's go.`,
+  (n, p) => `⚡ One leg stands between you and ${p} Rax. Hold tight.`,
+  (n, p) => `😤 ${n}-leg parlay, one leg left. Don't fumble it now.`,
+  (n, p) => `🎰 Last leg of your ${n}-legger. ${p} Rax waiting for you.`,
+  (n, p) => `🤑 One leg left — hit this and collect ${p} Rax.`,
+  (n, p) => `👀 Your slip is sweating. One leg left, ${p} Rax on deck.`,
+  (n, p) => `🔔 One leg left on your parlay. ${p} Rax says it hits.`,
+];
+
+function buildRsHeaders(authInfo, sessionToken, withBody = false) {
+  const h = {
+    'Accept':             'application/json',
+    'Accept-Language':    'en-US,en;q=0.9',
+    'Origin':             'https://www.realapp.com',
+    'Referer':            'https://www.realapp.com/',
+    'User-Agent':         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5.2 Safari/605.1.15',
+    'real-auth-info':     authInfo,
+    'real-session-token': sessionToken,
+    'real-device-uuid':   RS_DEVICE_UUID,
+    'real-device-type':   'desktop_web',
+    'real-version':       '35',
+    'real-request-token': hashidsEncode(Date.now()),
+    'real-device-name':   '5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5.2 Safari/605.1.15',
+  };
+  if (withBody) h['Content-Type'] = 'application/json';
+  return h;
+}
 
 const MLB_API    = 'https://statsapi.mlb.com/api/v1';
 
@@ -1015,7 +1051,7 @@ async function handleRequest({ request, env }) {
 
   // 1. Load active parlays
   const { results: parlays } = await env.DB.prepare(
-    "SELECT id, user_id, payout_rax, stake_rax, received_rax, is_free_play, rs_username FROM parlays WHERE status='active'"
+    "SELECT id, user_id, payout_rax, stake_rax, received_rax, is_free_play, rs_username, legs_count, one_leg_dm_sent, share_token FROM parlays WHERE status='active'"
   ).all();
   if (!parlays.length) return cacheAndReturn({ settled: 0, reason: 'no_active_parlays' });
 
@@ -1333,7 +1369,12 @@ async function handleRequest({ request, env }) {
         }
       }
       if (!playerStats) {
-        const gameFinal = (slugData.games || []).length > 0;
+        // Only treat "a game is final" as evidence this player DNP'd when the event_name
+        // identifies a specific matchup. Player-prop format ("Albert Gudmundsson · sot")
+        // has no team info — another league game being final doesn't mean THIS player's game
+        // is done (e.g. LAZ vs BOL final while Roma vs FIO is still live).
+        const hasMatchup = /\s+(vs|@)\s+/i.test(leg.event_name || '');
+        const gameFinal = hasMatchup && (slugData.games || []).length > 0;
         legOutcomes[leg.id] = (gameFinal || leg.game_date < staleDate) ? 'void' : null;
         continue;
       }
@@ -1487,6 +1528,55 @@ async function handleRequest({ request, env }) {
 
     // Future legs count the same as unresolved today-legs — parlay can't finish while they exist
     if ((stillWaiting.length || futurePendingLegs.length) && !(anyLostEarly || priorLost)) {
+      // One-leg-left DM: fire once when exactly 1 leg remains on a 3+ leg parlay
+      const legsLeft = stillWaiting.length + futurePendingLegs.length;
+      if (legsLeft === 1 && !parlay.one_leg_dm_sent && (parlay.legs_count || 0) >= 3) {
+        try {
+          const authInfo     = env.EDGEBOT_AUTH_INFO;
+          const sessionToken = env.EDGEBOT_SESSION_TOKEN;
+          if (authInfo && sessionToken) {
+            const ra = await env.DB.prepare(
+              'SELECT dm_channel_id FROM real_auth WHERE user_id=?'
+            ).bind(parlay.user_id).first();
+            if (ra?.dm_channel_id) {
+              // Fetch all legs with full details for the breakdown
+              const { results: legDetails } = await env.DB.prepare(
+                'SELECT id, player_name, label, direction, threshold, american_odds, status FROM parlay_legs WHERE parlay_id=? ORDER BY id'
+              ).bind(parlay.id).all();
+
+              // This-pass outcomes not yet written to DB — overlay them
+              const thisPassMap = {};
+              for (const o of resolvedLegs) thisPassMap[o.legId] = o.outcome;
+
+              const fmtRax  = n => n ? String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : '?';
+              const fmtOdds = o => o != null ? (o > 0 ? '+' : '') + o : '';
+
+              const legLines = legDetails.map(leg => {
+                const status = thisPassMap[leg.id] || leg.status;
+                const icon   = status === 'won' ? '✅' : status === 'pending' ? '⏳' : status === 'void' ? '↩️' : '❌';
+                const odds   = leg.american_odds != null ? ` (${fmtOdds(leg.american_odds)})` : '';
+                return `${icon} ${leg.player_name} – ${leg.label || leg.direction}${odds}`;
+              }).join('\n');
+
+              const multi   = parlay.stake_rax ? (parlay.payout_rax / parlay.stake_rax).toFixed(1) + 'x' : '';
+              const payout  = fmtRax(parlay.payout_rax);
+              const footer  = `Stake: ${fmtRax(parlay.stake_rax)} Rax · ${multi} · Win: ${payout} Rax`;
+
+              const msgFn   = ONE_LEG_MESSAGES[Math.floor(Math.random() * ONE_LEG_MESSAGES.length)];
+              const slipUrl = parlay.share_token ? `\nhttps://raxedge.com/slip?t=${parlay.share_token}` : '';
+              const text    = `${msgFn(parlay.legs_count, payout)}\n\n${legLines}\n\n${footer}${slipUrl}`;
+
+              await fetch(`${RS_BASE}/messages/channels/${ra.dm_channel_id}/messages`, {
+                method:  'POST',
+                headers: buildRsHeaders(authInfo, sessionToken, true),
+                body:    JSON.stringify({ text, parentMessageId: null }),
+                signal:  AbortSignal.timeout(10000),
+              });
+            }
+            await env.DB.prepare('UPDATE parlays SET one_leg_dm_sent=1 WHERE id=?').bind(parlay.id).run();
+          }
+        } catch(_) {}
+      }
       report.push({ parlayId: parlay.id, status: 'waiting', waiting: [...stillWaiting.map(o => o.player), ...futurePendingLegs.map(l => l.player_name)] });
       continue;
     }

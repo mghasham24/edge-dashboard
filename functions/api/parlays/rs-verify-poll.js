@@ -131,6 +131,7 @@ export async function onRequestPost({ request, env }) {
           requestsSample: reqsArr.slice(0,2).map(c => ({ id: c.id||c.channelId, lastDisplay: c.lastMessageDisplay, lastSenderId: c.lastMessage?.userId, bumpedAt: c.bumpedAt, keys: Object.keys(c).slice(0,8) })),
           withParlay: sorted.filter(c => (c.lastMessageDisplay||'').toLowerCase().includes('parlay')).map(c => ({ id: c.id, lastDisplay: c.lastMessageDisplay, lastSenderId: c.lastMessage?.userId, bumpedAt: c.bumpedAt })),
           top10: sorted.slice(0,10).map(c => ({ id: c.id, lastDisplay: (c.lastMessageDisplay||'').slice(0,60), lastSenderId: c.lastMessage?.userId, bumpedAt: c.bumpedAt })),
+          userFieldSample: sorted.slice(0,3).flatMap(c => (c.users||[]).slice(0,1).map(u => Object.keys(u).slice(0,20))),
         }), now).run();
       } catch(_) {}
     } catch(e) {
@@ -173,6 +174,25 @@ export async function onRequestPost({ request, env }) {
       .filter(c => { const id = String(c.id || ''); if (!id || _seenIds.has(id)) return false; _seenIds.add(id); return true; });
 
     const sent = [];
+
+    // Bulk-sync avatarKey for every user seen across all channels.
+    // RS returns avatarKey on every channel user object — use it to keep rs_avatar_url fresh
+    // without needing any additional API calls.
+    try {
+      const avatarMap = new Map(); // rs_user_id → avatar URL
+      for (const ch of channelList) {
+        for (const u of (ch.users || [])) {
+          if (u.userId && u.avatarKey && !avatarMap.has(u.userId)) {
+            avatarMap.set(u.userId, `https://media.realapp.com/assets/user/default/large/${u.userId}_${u.avatarKey}.webp`);
+          }
+        }
+      }
+      for (const [uid, url] of avatarMap) {
+        await env.DB.prepare(
+          'UPDATE real_auth SET rs_avatar_url=? WHERE rs_user_id=? AND (rs_avatar_url IS NULL OR rs_avatar_url != ?)'
+        ).bind(url, uid, url).run().catch(() => {});
+      }
+    } catch(_) {}
 
     for (const channel of channelList) {
       const channelId  = String(channel.id || '');
@@ -228,6 +248,9 @@ export async function onRequestPost({ request, env }) {
       const rsUserId   = effectiveSenderId;
       const otherUser  = (channel.users || []).find(u => u.userId === rsUserId);
       const rsUsername = otherUser?.userName || '';
+      const rsAvatarUrl = otherUser?.avatarKey
+        ? `https://media.realapp.com/assets/user/default/large/${rsUserId}_${otherUser.avatarKey}.webp`
+        : null;
 
       try {
         const existing = await env.DB.prepare(
@@ -295,8 +318,8 @@ export async function onRequestPost({ request, env }) {
       }
       try {
         await env.DB.prepare(
-          'UPDATE real_auth SET dm_channel_id = ? WHERE rs_user_id = ?'
-        ).bind(channelId, rsUserId).run();
+          'UPDATE real_auth SET dm_channel_id = ?, rs_avatar_url = COALESCE(?, rs_avatar_url) WHERE rs_user_id = ?'
+        ).bind(channelId, rsAvatarUrl, rsUserId).run();
       } catch(e) { /* non-fatal */ }
 
       // 6. Mark message as processed

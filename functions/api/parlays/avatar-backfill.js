@@ -2,6 +2,11 @@
 // Resumable: pages through edgebot DM channels, saves cursor to D1 so the 30s CF wall
 // clock never cuts it off. Call repeatedly until response shows done:true.
 // ?reset=1  — clear saved cursor and start from the beginning.
+//
+// GET /api/parlays/avatar-backfill?_cron_key=...&targeted=1
+// Targeted: fetches /user/{rs_username} for every real_auth row with rs_avatar_url IS NULL.
+// Use this after the channel-pagination pass to catch users whose DM channels are past the
+// RS history cutoff.
 
 import { hashidsEncode } from '../../_lib/hashids.js';
 
@@ -36,7 +41,48 @@ export async function onRequestGet({ request, env }) {
   if (!authInfo || !sessionToken)
     return new Response(JSON.stringify({ error: 'EDGEBOT credentials not configured' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
 
-  const reset = url.searchParams.get('reset') === '1';
+  const reset    = url.searchParams.get('reset') === '1';
+  const targeted = url.searchParams.get('targeted') === '1';
+
+  // --- Targeted mode: fetch /user/{rs_username} for all rows missing an avatar ---
+  if (targeted) {
+    const rows = await env.DB.prepare(
+      "SELECT rs_user_id, rs_username FROM real_auth WHERE rs_avatar_url IS NULL AND rs_username IS NOT NULL"
+    ).all();
+    const users = rows.results || [];
+
+    let attempted = 0, updated = 0, errors = 0;
+    for (const u of users) {
+      attempted++;
+      try {
+        const res = await fetch(`${RS_BASE}/user/${encodeURIComponent(u.rs_username)}`, {
+          headers: buildHeaders(authInfo, sessionToken),
+          signal:  AbortSignal.timeout(8000),
+        });
+        if (!res.ok) { errors++; continue; }
+        const data = await res.json();
+        const avatarKey = data?.user?.avatarKey;
+        const userId    = data?.user?.id;
+        if (!avatarKey || !userId) { errors++; continue; }
+        const avatarUrl = `https://media.realapp.com/assets/user/default/large/${userId}_${avatarKey}.webp`;
+        const result = await env.DB.prepare(
+          'UPDATE real_auth SET rs_avatar_url=? WHERE rs_user_id=? AND (rs_avatar_url IS NULL OR rs_avatar_url != ?)'
+        ).bind(avatarUrl, u.rs_user_id, avatarUrl).run();
+        if (result.meta?.changes) updated++;
+      } catch { errors++; }
+      await new Promise(r => setTimeout(r, 150));
+    }
+
+    if (updated > 0) {
+      await env.DB.prepare("DELETE FROM odds_cache WHERE cache_key LIKE 'leaderboard:%'").run().catch(() => {});
+    }
+
+    return new Response(JSON.stringify({ targeted: true, attempted, updated, errors }), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  // --- Channel-pagination mode (default) ---
 
   // Load or clear saved cursor
   let before = '';

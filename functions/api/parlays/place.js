@@ -7,6 +7,12 @@ import { ok, err }        from '../../_lib/response.js';
 import { rsUrlEncode }    from '../../_lib/hashids.js';
 import { checkRateLimit } from '../../_lib/rateLimit.js';
 
+function generateShareToken() {
+  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  const bytes = crypto.getRandomValues(new Uint8Array(10));
+  return Array.from(bytes, b => chars[b % chars.length]).join('');
+}
+
 function impliedProb(odds) {
   if (odds > 0) return 100 / (odds + 100);
   return Math.abs(odds) / (Math.abs(odds) + 100);
@@ -528,9 +534,9 @@ async function _place({ request, env }, onCreditConsumed) {
   if (isFreePlay) {
     const fpRes = await env.DB.prepare(
       'INSERT INTO parlays (user_id, sport, legs_count, stake_rax, true_prob, payout_rax, ' +
-      'rs_username, is_free_play, status, received_rax, expires_at, deposited_at, created_at) ' +
-      "VALUES (?, ?, ?, 100, ?, ?, ?, 1, 'active', 0, 0, ?, ?)"
-    ).bind(user.id, parlayS, normalized.length, trueProb, payoutRax, user.rs_username, now, now).run();
+      'rs_username, is_free_play, status, received_rax, expires_at, deposited_at, created_at, share_token) ' +
+      "VALUES (?, ?, ?, 100, ?, ?, ?, 1, 'active', 0, 0, ?, ?, ?)"
+    ).bind(user.id, parlayS, normalized.length, trueProb, payoutRax, user.rs_username, now, now, generateShareToken()).run();
     const fpId = fpRes.meta.last_row_id;
     return placeLegsAndRespond(env.DB, fpId, null, normalized, 100, payoutRax, null, user.rs_username, now, true);
   }
@@ -542,10 +548,10 @@ async function _place({ request, env }, onCreditConsumed) {
   // Insert parlay row
   const parlayRes = await env.DB.prepare(
     'INSERT INTO parlays (user_id, sport, legs_count, stake_rax, true_prob, payout_rax, ' +
-    'deposit_card_id, rs_username, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    'deposit_card_id, rs_username, expires_at, created_at, share_token) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
   ).bind(
     user.id, parlayS, normalized.length, stake,
-    trueProb, payoutRax, cardId, user.rs_username, expiresAt, now
+    trueProb, payoutRax, cardId, user.rs_username, expiresAt, now, generateShareToken()
   ).run();
 
   const parlayId = parlayRes.meta.last_row_id;
@@ -564,10 +570,10 @@ async function _place({ request, env }, onCreditConsumed) {
 
     const retry2 = await env.DB.prepare(
       'INSERT INTO parlays (user_id, sport, legs_count, stake_rax, true_prob, payout_rax, ' +
-      'deposit_card_id, rs_username, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      'deposit_card_id, rs_username, expires_at, created_at, share_token) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     ).bind(
       user.id, parlayS, normalized.length, stake,
-      trueProb, payoutRax, retryCardId, user.rs_username, expiresAt, now
+      trueProb, payoutRax, retryCardId, user.rs_username, expiresAt, now, generateShareToken()
     ).run();
 
     const newParlayId = retry2.meta.last_row_id;

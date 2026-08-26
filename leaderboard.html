@@ -128,20 +128,110 @@
     gap: 8px;
   }
 
+  .row-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    transition: border-color .15s;
+    overflow: hidden;
+  }
+  .row-wrap:hover { border-color: rgba(79,110,247,.3); }
+  .row-wrap.top1 { border-color: rgba(245,158,11,.3); background: rgba(245,158,11,.05); }
+  .row-wrap.top2 { border-color: rgba(148,163,184,.2); }
+  .row-wrap.top3 { border-color: rgba(205,124,67,.2); }
+
   .row {
     display: flex;
     align-items: center;
     gap: 14px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 14px;
     padding: 14px 16px;
-    transition: border-color .15s;
+    cursor: pointer;
+    user-select: none;
   }
-  .row:hover { border-color: rgba(79,110,247,.3); }
-  .row.top1 { border-color: rgba(245,158,11,.3); background: rgba(245,158,11,.05); }
-  .row.top2 { border-color: rgba(148,163,184,.2); }
-  .row.top3 { border-color: rgba(205,124,67,.2); }
+
+  .chevron {
+    font-size: 16px;
+    color: var(--muted);
+    transition: transform .2s;
+    flex-shrink: 0;
+    line-height: 1;
+  }
+  .row-wrap.open .chevron { transform: rotate(90deg); }
+
+  .slips-panel {
+    display: none;
+    border-top: 1px solid var(--border);
+    padding: 12px 16px;
+    display: none;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .row-wrap.open .slips-panel { display: flex; }
+
+  .slip-item {
+    background: rgba(255,255,255,.03);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+  .slip-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .slip-profit {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--green);
+  }
+  .slip-info {
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .slip-legs-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .slip-leg {
+    font-size: 12px;
+    color: var(--text2);
+    display: flex;
+    gap: 6px;
+    align-items: baseline;
+  }
+  .slip-leg-player {
+    color: var(--green);
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 160px;
+  }
+  .slip-leg-line { flex-shrink: 0; }
+  .slip-leg-odds {
+    flex-shrink: 0;
+    font-size: 11px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .slips-more-btn {
+    width: 100%;
+    margin-top: 4px;
+    padding: 8px;
+    background: rgba(79,110,247,.08);
+    border: 1px solid rgba(79,110,247,.2);
+    border-radius: 8px;
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background .15s;
+  }
+  .slips-more-btn:hover { background: rgba(79,110,247,.15); }
 
   .rank {
     width: 28px;
@@ -156,6 +246,7 @@
   }
 
   .avatar {
+    position: relative;
     width: 38px; height: 38px;
     border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
@@ -164,10 +255,18 @@
     flex-shrink: 0;
     background: rgba(79,110,247,.18);
     color: var(--accent);
+    overflow: hidden;
   }
-  .row.top1 .avatar { background: rgba(245,158,11,.18); color: var(--gold); }
-  .row.top2 .avatar { background: rgba(148,163,184,.12); color: var(--silver); }
-  .row.top3 .avatar { background: rgba(205,124,67,.14); color: var(--bronze); }
+  .avatar img {
+    position: absolute;
+    inset: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
+  }
+  .row-wrap.top1 .avatar { background: rgba(245,158,11,.18); color: var(--gold); }
+  .row-wrap.top2 .avatar { background: rgba(148,163,184,.12); color: var(--silver); }
+  .row-wrap.top3 .avatar { background: rgba(205,124,67,.14); color: var(--bronze); }
 
   .info { flex: 1; min-width: 0; }
   .username {
@@ -273,6 +372,51 @@
     transition: opacity .15s;
   }
   .cta-btn:hover { opacity: .88; }
+
+  /* Weekly rewards banner */
+  .rewards-banner {
+    width: 100%;
+    max-width: 480px;
+    background: linear-gradient(135deg, rgba(245,158,11,.12) 0%, rgba(79,110,247,.08) 100%);
+    border: 1px solid rgba(245,158,11,.25);
+    border-radius: 14px;
+    padding: 14px 16px;
+    margin-bottom: 4px;
+  }
+  .rewards-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 10px;
+  }
+  .rewards-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .reward-item {
+    flex: 1;
+    text-align: center;
+    background: rgba(0,0,0,.2);
+    border-radius: 10px;
+    padding: 10px 6px;
+  }
+  .reward-medal { font-size: 20px; line-height: 1; }
+  .reward-amount {
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--text);
+    margin-top: 4px;
+    font-variant-numeric: tabular-nums;
+  }
+  .reward-label {
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 1px;
+  }
+  .rewards-banner.hidden { display: none; }
 </style>
 </head>
 <body>
@@ -280,7 +424,7 @@
 <div class="header">
   <div class="logo">RaxEdge Parlays</div>
   <h1>Top Earners<br><span id="header-span">This Week</span></h1>
-  <p class="subtitle">Real Sports parlay leaderboard</p>
+  <p class="subtitle">Real Sports parlay leaderboard · ranked by total winnings</p>
   <div class="toggle-wrap">
     <div class="toggle">
       <button class="toggle-btn active" id="btn-weekly" onclick="setPeriod('weekly')">7 Days</button>
@@ -290,6 +434,27 @@
   <div class="window-pill" id="window-pill">
     <span class="dot"></span>
     <span id="pill-text">Loading…</span>
+  </div>
+</div>
+
+<div class="rewards-banner" id="rewards-banner">
+  <div class="rewards-title">Weekly Prize Pool</div>
+  <div class="rewards-row">
+    <div class="reward-item">
+      <div class="reward-medal">🥇</div>
+      <div class="reward-amount">5,000</div>
+      <div class="reward-label">Rax</div>
+    </div>
+    <div class="reward-item">
+      <div class="reward-medal">🥈</div>
+      <div class="reward-amount">2,500</div>
+      <div class="reward-label">Rax</div>
+    </div>
+    <div class="reward-item">
+      <div class="reward-medal">🥉</div>
+      <div class="reward-amount">1,000</div>
+      <div class="reward-label">Rax</div>
+    </div>
   </div>
 </div>
 
@@ -333,6 +498,7 @@
 <script>
   const MEDALS = ['🥇', '🥈', '🥉'];
   var activePeriod = 'weekly';
+  var lastResults = [];
 
   function fmt(n) { return n.toLocaleString('en-US'); }
 
@@ -340,16 +506,132 @@
     return new Date(ts * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   }
 
-  function rowClass(i) {
-    if (i === 0) return 'row top1';
-    if (i === 1) return 'row top2';
-    if (i === 2) return 'row top3';
-    return 'row';
+  function wrapClass(i) {
+    if (i === 0) return 'row-wrap top1';
+    if (i === 1) return 'row-wrap top2';
+    if (i === 2) return 'row-wrap top3';
+    return 'row-wrap';
   }
 
   function rankEl(i) {
     if (i < 3) return '<div class="rank">' + MEDALS[i] + '</div>';
     return '<div class="rank"><span class="rank-num">' + (i + 1) + '</span></div>';
+  }
+
+  var MARKET_LABELS = {
+    // MLB batter
+    hits: 'Hits', home_runs: 'Home Runs', rbis: 'RBIs', hrbi: 'H+R+RBI',
+    total_bases: 'Total Bases', singles: 'Singles', doubles: 'Doubles',
+    walks: 'Walks', stolen_bases: 'Stolen Bases', runs: 'Runs',
+    // MLB pitcher
+    pitcher_ks: 'Strikeouts', outs_ou: 'Outs', hits_allowed: 'Hits Allowed',
+    er_allowed: 'ER Allowed', bb_allowed: 'BB Allowed', hwer: 'H+W+ER',
+    // 1st inning
+    '1inn_ml': '1st Inn Winner', '1inn_runs_ou': '1st Inn Runs', '1inn_runs_exact': '1st Inn Runs',
+    '1inn_hits_ou': '1st Inn Hits', '1inn_hits_exact': '1st Inn Hits',
+    '1inn_run_yn': '1st Inn Score', '1inn_walks_ou': '1st Inn Walks',
+    '1inn_pitches_ou': '1st Inn Pitches', '1inn_batters_ou': '1st Inn Batters',
+    '1inn_hr_yn': '1st Inn HR', '1inn_ks': '1st Inn Ks',
+    // Team lines
+    team_ml: 'Moneyline', team_runline: 'Run Line', team_total: 'Team Total',
+    // WNBA / NBA
+    pts: 'Points', reb: 'Rebounds', ast: 'Assists', fg3m: '3-Pointers',
+    pra: 'PRA', pa: 'Pts+Ast', pr: 'Pts+Reb', ra: 'Reb+Ast',
+    double_double: 'Double-Double', triple_double: 'Triple-Double',
+    steals: 'Steals', blocks: 'Blocks', turnovers: 'Turnovers',
+    points: 'Points', rebounds: 'Rebounds', assists: 'Assists',
+    // Soccer
+    goalscorer: 'Goalscorer', sot: 'Shots on Target', saves: 'GK Saves',
+    offsides: 'Offsides', fouls_won: 'Fouls Won',
+    // UFC
+    ufc_ml: 'Fighter ML', ufc_total: 'Fight Total',
+  };
+
+  function marketLabel(mt) {
+    if (!mt) return '';
+    return MARKET_LABELS[mt] || mt.replace(/_/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+  }
+
+  // Strip leading city abbreviation: "MIL Brewers" → "Brewers", "LA Dodgers" → "Dodgers"
+  function stripCityAbbr(s) {
+    return s.replace(/^[A-Z]{2,3}\s+/, '');
+  }
+
+  // Clean team_total player_name: "MIL Brewers @ LA Dodgers O8" → "Brewers @ Dodgers"
+  function cleanTeamName(name, mt) {
+    if (mt === 'team_total') {
+      var m = name.match(/^([A-Z]{2,3}\s+.+?)\s+@\s+([A-Z]{2,3}\s+.+?)\s+[OU][\d.]+$/i);
+      if (m) return stripCityAbbr(m[1].trim()) + ' @ ' + stripCityAbbr(m[2].trim());
+    }
+    return stripCityAbbr(name);
+  }
+
+  function fmtOdds(n) {
+    return n > 0 ? '+' + n : String(n);
+  }
+
+  function fmtLegLine(leg) {
+    var mkt = marketLabel(leg.market_type);
+    var line = '';
+    if (leg.direction && leg.threshold != null) {
+      var dir = leg.direction === 'more' ? 'Over' : 'Under';
+      line = dir + ' ' + leg.threshold;
+    } else if (leg.label) {
+      line = leg.label;
+    }
+    return mkt ? (mkt + (line ? ' · ' + line : '')) : line;
+  }
+
+  var SLIPS_PAGE_SIZE = 3;
+
+  function renderSlips(slips, expanded) {
+    if (!slips || !slips.length) return '';
+    var show = expanded ? slips.length : Math.min(SLIPS_PAGE_SIZE, slips.length);
+    var html = '<div class="slips-panel">';
+    for (var i = 0; i < show; i++) {
+      var s = slips[i];
+      html += '<div class="slip-item">';
+      html += '<div class="slip-meta">';
+      html +=   '<span class="slip-profit">+' + fmt(s.payout_rax) + ' Rax</span>';
+      html +=   '<span class="slip-info">' + s.legs_count + '-leg · ' + fmtDate(s.deposited_at) + '</span>';
+      html += '</div>';
+      html += '<div class="slip-legs-list">';
+      for (var j = 0; j < s.legs.length; j++) {
+        var leg = s.legs[j];
+        html += '<div class="slip-leg">';
+        html += '<span class="slip-leg-player">' + escHtml(cleanTeamName(leg.player_name, leg.market_type)) + '</span>';
+        html += '<span class="slip-leg-line">' + escHtml(fmtLegLine(leg)) + '</span>';
+        html += '<span class="slip-leg-odds">' + fmtOdds(leg.american_odds) + '</span>';
+        html += '</div>';
+      }
+      html += '</div></div>';
+    }
+    if (!expanded && slips.length > SLIPS_PAGE_SIZE) {
+      var rem = slips.length - SLIPS_PAGE_SIZE;
+      html += '<button class="slips-more-btn" onclick="event.stopPropagation();expandSlips(this,' + slips.length + ')">Show ' + rem + ' more win' + (rem === 1 ? '' : 's') + ' ›</button>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function toggleRow(el) {
+    el.classList.toggle('open');
+  }
+
+  function expandSlips(btn, total) {
+    var panel = btn.closest('.slips-panel');
+    var wrap  = btn.closest('.row-wrap');
+    if (!panel || !wrap) return;
+    // Find the result entry by index in the board
+    var board   = document.getElementById('board');
+    var wraps   = Array.from(board.querySelectorAll('.row-wrap'));
+    var idx     = wraps.indexOf(wrap);
+    if (idx < 0 || !lastResults || !lastResults[idx]) return;
+    panel.outerHTML = renderSlips(lastResults[idx].slips, true);
   }
 
   function fmtWeekday(ts) {
@@ -359,39 +641,51 @@
   function updateHeader(period, windowStart, windowEnd, generatedAt) {
     var span = document.getElementById('header-span');
     var pill = document.getElementById('pill-text');
+    var banner = document.getElementById('rewards-banner');
     if (period === 'alltime') {
       span.textContent = 'All Time';
       pill.textContent = 'All time · updates every 10 min';
+      if (banner) banner.classList.add('hidden');
     } else {
       span.textContent = 'This Week';
       var from = fmtWeekday(windowStart);
-      var to   = fmtWeekday((windowEnd || (windowStart + 604800)) - 1); // Sun 11:59 PM
+      var to   = fmtWeekday((windowEnd || (windowStart + 604800)) - 1);
       pill.textContent = from + ' – ' + to + ' · updates every 5 min';
+      if (banner) banner.classList.remove('hidden');
     }
     document.getElementById('btn-weekly').classList.toggle('active',  period === 'weekly');
     document.getElementById('btn-alltime').classList.toggle('active', period === 'alltime');
   }
 
   function render(results, period, windowStart, windowEnd, generatedAt) {
+    lastResults = results;
     const board = document.getElementById('board');
     if (!results.length) {
       var msg = period === 'weekly' ? 'No results yet this week.<br>Be the first to cash a parlay!' : 'No all-time results yet.';
       board.innerHTML = '<div class="state-card"><span class="emoji">📊</span>' + msg + '</div>';
     } else {
-      board.innerHTML = results.map((r, i) => `
-        <div class="${rowClass(i)}">
-          ${rankEl(i)}
-          <div class="avatar">${r.rs_username[0].toUpperCase()}</div>
-          <div class="info">
-            <div class="username">@${r.rs_username}</div>
-            <div class="record"><b>${r.wins}W</b> / ${r.losses}L</div>
-          </div>
-          <div class="profit">
-            <div class="profit-amount">+${fmt(r.net_profit)}</div>
-            <div class="profit-label">Rax profit</div>
-          </div>
-        </div>
-      `).join('');
+      board.innerHTML = results.map((r, i) => {
+        var hasSlips = r.slips && r.slips.length > 0;
+        return '<div class="' + wrapClass(i) + '" onclick="toggleRow(this)">' +
+          '<div class="row">' +
+            rankEl(i) +
+            '<div class="avatar">' + escHtml(r.rs_username[0].toUpperCase()) +
+              (r.rs_avatar_url ? '<img src="' + escHtml(r.rs_avatar_url) + '" alt="" loading="lazy" onerror="this.style.display=\'none\'">' :
+               r.rs_user_id    ? '<img src="/api/parlays/avatar?uid=' + encodeURIComponent(r.rs_user_id) + '" alt="" loading="lazy" onerror="this.style.display=\'none\'">' : '') +
+            '</div>' +
+            '<div class="info">' +
+              '<div class="username">@' + escHtml(r.rs_username) + '</div>' +
+              '<div class="record"><b>' + r.wins + 'W</b> / ' + r.losses + 'L</div>' +
+            '</div>' +
+            '<div class="profit">' +
+              '<div class="profit-amount">+' + fmt(r.total_winnings) + '</div>' +
+              '<div class="profit-label">Rax won</div>' +
+            '</div>' +
+            (hasSlips ? '<span class="chevron">›</span>' : '') +
+          '</div>' +
+          (hasSlips ? renderSlips(r.slips, false) : '') +
+        '</div>';
+      }).join('');
     }
     updateHeader(period, windowStart, windowEnd, generatedAt);
   }

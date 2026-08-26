@@ -123,6 +123,16 @@ Cloudflare Pages (static frontend) + Cloudflare Functions (API) + D1 (SQLite) + 
 
 ## Working With Claude
 
+### Map Before You Build (MANDATORY)
+Every new feature or non-trivial fix must be fully mapped out and broken down BEFORE writing a single line of code. Present the plan to the user covering:
+1. **What it does** — user-facing behaviour in plain English
+2. **Components** — every file that needs to change (API, frontend, DB migration, etc.)
+3. **Data flow** — how data moves from source to destination
+4. **Edge cases** — failure modes, missing data, race conditions
+5. **Open questions** — anything that needs user input before building
+
+Do not write code until the user explicitly approves the map. If the user says "build it" without a prior map, produce the map first and wait for approval.
+
 ### Ask First — Never Guess
 - **Ask clarifying questions** when a request is ambiguous rather than inferring and acting.
 - **When diagnosing any bug**: run the relevant D1 SELECT query first. Most bugs here are data state problems (wrong column, missing row, bad join) — not code logic bugs. Query the data, read code only if the data doesn't explain it.

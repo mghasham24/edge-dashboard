@@ -17,12 +17,17 @@ export async function onRequestGet({ request, env }) {
   if (!from || !to) return err('from and to required', 400);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) return err('Invalid date format', 400);
 
-  const fromTs = Math.floor(new Date(from + 'T00:00:00Z').getTime() / 1000);
-  const toTs   = Math.floor(new Date(to   + 'T23:59:59Z').getTime() / 1000);
+  // Use ET midnight as day boundary (EDT = UTC-4 = 14400s offset).
+  // "2026-08-24" ET day runs Aug 24 04:00 UTC → Aug 25 03:59:59 UTC.
+  const ET_OFFSET = 4 * 3600; // seconds behind UTC (EDT)
+  const fromTs = Math.floor(new Date(from + 'T00:00:00Z').getTime() / 1000) + ET_OFFSET;
+  const toTs   = Math.floor(new Date(to   + 'T00:00:00Z').getTime() / 1000) + ET_OFFSET + 86400 - 1;
 
+  // Group by deposited_at in ET so results match the leaderboard's ET week window.
+  // Fall back to created_at for slips without a confirmed deposit (pending_deposit).
   const { results: rows } = await env.DB.prepare(`
     SELECT
-      DATE(created_at, 'unixepoch') AS day,
+      DATE(COALESCE(deposited_at, created_at) - ${ET_OFFSET}, 'unixepoch') AS day,
       COUNT(*) AS total,
       SUM(CASE WHEN status = 'won'             THEN 1 ELSE 0 END) AS won,
       SUM(CASE WHEN status = 'lost'            THEN 1 ELSE 0 END) AS lost,
@@ -35,7 +40,7 @@ export async function onRequestGet({ request, env }) {
                      THEN CAST(payout_rax AS REAL) / stake_rax END), 2) AS avg_mult,
       COUNT(DISTINCT CASE WHEN status IN ('active','won','lost') THEN user_id END) AS unique_bettors
     FROM parlays
-    WHERE created_at >= ? AND created_at <= ?
+    WHERE COALESCE(deposited_at, created_at) >= ? AND COALESCE(deposited_at, created_at) <= ?
     GROUP BY day
     ORDER BY day DESC
   `).bind(fromTs, toTs).all();

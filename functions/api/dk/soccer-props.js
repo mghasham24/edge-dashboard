@@ -7,7 +7,7 @@ import { getSessionOrCron } from '../../_lib/auth.js';
 
 const DK_BASE   = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
 const CACHE_TTL = 300;
-const CACHE_KEY = 'dk_soccer_props_v3';
+const CACHE_KEY = 'dk_soccer_props_v5';
 
 // Confirmed subcat IDs from DevTools 2026-08-16 (MLS, confirmed same across EU leagues).
 const SUBCAT_MAP_OU = {
@@ -59,11 +59,12 @@ function parseOdds(american) {
 function buildEventMap(eventsArr, leagueId, leagueInfo) {
   const today = todayET();
   const map = {};
+  const nowMs = Date.now();
   for (const ev of (eventsArr || [])) {
     if (!ev.startEventDate) continue;
-    const d = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date(ev.startEventDate));
-    if (d < today) continue;
     const startMs = new Date(ev.startEventDate).getTime();
+    if (startMs <= nowMs) continue;
+    const d = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date(startMs));
     const timeStr = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' }).format(new Date(startMs));
     const parts = ev.participants || [];
     const home  = parts.find(p => p.venueRole === 'Home');
@@ -123,7 +124,8 @@ function parseMilestone(data, eventMap, subcatId, info) {
     const headshot = dkId ? `/api/dk/player-image?id=${dkId}&size=lg` : null;
 
     players.push({
-      name: player.name, team, opp, time: ev.time, startMs: ev.startMs,
+      name: player.name, team, opp, awayShort: ev.awayShort, homeShort: ev.homeShort,
+      time: ev.time, startMs: ev.startMs,
       market: info.market, stat: info.stat, espnField: info.espnField,
       league: ev.league, leagueId: ev.leagueId, espnSlug: ev.espnSlug,
       gameDate: ev.gameDate,
@@ -163,7 +165,8 @@ function parseGoalscorer(data, eventMap) {
     const opp    = isHome ? ev.awayShort : ev.homeShort;
     const dkId   = player.id || null;
     players.push({
-      name: player.name, team, opp, time: ev.time, startMs: ev.startMs,
+      name: player.name, team, opp, awayShort: ev.awayShort, homeShort: ev.homeShort,
+      time: ev.time, startMs: ev.startMs,
       market: 'goalscorer', stat: 'Goalscorer', espnField: 'totalGoals',
       league: ev.league, leagueId: ev.leagueId, espnSlug: ev.espnSlug,
       gameDate: ev.gameDate,
@@ -199,7 +202,8 @@ function parseGoalscorer(data, eventMap) {
     const opp    = isHome ? ev.awayShort : ev.homeShort;
     const dkId   = player.id || null;
     players.push({
-      name: player.name, team, opp, time: ev.time, startMs: ev.startMs,
+      name: player.name, team, opp, awayShort: ev.awayShort, homeShort: ev.homeShort,
+      time: ev.time, startMs: ev.startMs,
       market: 'goalscorer', stat: 'Goalscorer', espnField: 'totalGoals',
       league: ev.league, leagueId: ev.leagueId, espnSlug: ev.espnSlug,
       gameDate: ev.gameDate,
@@ -226,13 +230,6 @@ export async function onRequestGet(context) {
   if (!session) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401, headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
-  // Admin-only while in development
-  if (!session.is_admin) {
-    return new Response(JSON.stringify({ error: 'Admin only' }), {
-      status: 403, headers: { 'Content-Type': 'application/json' },
     });
   }
 

@@ -4,6 +4,12 @@ import { getSession }   from '../../_lib/session.js';
 import { ok, err }      from '../../_lib/response.js';
 import { rsUrlEncode }  from '../../_lib/hashids.js';
 
+function generateShareToken() {
+  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  const bytes = crypto.getRandomValues(new Uint8Array(10));
+  return Array.from(bytes, b => chars[b % chars.length]).join('');
+}
+
 export async function onRequestGet({ request, env }) {
   const session = await getSession(request, env.DB);
   if (!session) return err('Authentication required', 401);
@@ -30,7 +36,7 @@ export async function onRequestGet({ request, env }) {
 
   const { results: parlays } = await env.DB.prepare(
     'SELECT id, status, legs_count, stake_rax, payout_rax, deposit_card_id, ' +
-    'rs_offer_id, received_rax, is_free_play, expires_at, created_at, deposited_at, settled_at ' +
+    'rs_offer_id, received_rax, is_free_play, expires_at, created_at, deposited_at, settled_at, share_token ' +
     `FROM parlays WHERE ${WHERE} ${ORDER} LIMIT ? OFFSET ?`
   ).bind(session.user_id, pendingCutoff, limit, offset).all();
 
@@ -59,10 +65,19 @@ export async function onRequestGet({ request, env }) {
     return new Response(JSON.stringify({ parlayIds: parlays.map(p => p.id), legCount: legs.length, legs }), { headers: { 'Content-Type': 'application/json' } });
   }
 
+  // Lazy-generate share tokens for existing slips that don't have one
+  const tokenUpdates = parlays.filter(p => !p.share_token).map(p => {
+    const token = generateShareToken();
+    p.share_token = token;
+    return env.DB.prepare('UPDATE parlays SET share_token=? WHERE id=? AND share_token IS NULL').bind(token, p.id).run();
+  });
+  if (tokenUpdates.length) await Promise.allSettled(tokenUpdates);
+
   return ok({
     slips: parlays.map(p => ({
       ...p,
       legs: legMap[p.id] || [],
+      share_token: p.share_token || null,
       deposit_card_url: (p.status === 'pending_deposit' && p.deposit_card_id)
         ? 'https://www.realapp.com/' + rsUrlEncode(20, 0, 0, p.deposit_card_id)
         : null,

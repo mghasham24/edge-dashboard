@@ -21,13 +21,13 @@ export async function onRequest({ request, env }) {
 
   if (request.method === 'GET') {
     const row = await env.DB.prepare(
-      'SELECT telegram_chat_id, telegram_verified, enabled, min_ev, sports, one_side, unit_size FROM notification_settings WHERE user_id=?'
+      'SELECT discord_verified, enabled, min_ev, sports, one_side, unit_size FROM notification_settings WHERE user_id=?'
     ).bind(session.user_id).first();
 
     return new Response(JSON.stringify({
       ok: true,
       settings: row ? {
-        verified:   row.telegram_verified === 1,
+        verified:   row.discord_verified === 1,
         enabled:    row.enabled === 1,
         min_ev:     row.min_ev,
         sports:     row.sports,

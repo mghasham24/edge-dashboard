@@ -15,8 +15,8 @@ const CARD_SOURCES = [
   { sport: 'mlb', season: 2025 },
 ];
 
-function buildHeaders(authInfo) {
-  return {
+function buildHeaders(authInfo, sessionToken) {
+  const h = {
     'Accept':           'application/json',
     'Content-Type':     'application/json',
     'Origin':           'https://www.realapp.com',
@@ -29,47 +29,48 @@ function buildHeaders(authInfo) {
     'real-version':     '35',
     'real-request-token': hashidsEncode(Date.now()),
   };
+  if (sessionToken) {
+    h['real-session-token'] = sessionToken;
+    h['Cookie'] = `real-session-token=${sessionToken}`;
+  }
+  return h;
 }
 
-async function fetchCardPage(sport, season, offset, authInfo) {
+async function fetchCardPage(sport, season, offset, authInfo, sessionToken) {
   const url = `https://web.realapp.com/collectingcards/${sport}/season/${season}/entity/play/user/${EDGEBOT_USER}/cards` +
     `?includeRecommendations=true&rarity=all&view=rating&offset=${offset}`;
   const res = await fetch(url, {
-    headers: buildHeaders(authInfo),
+    headers: buildHeaders(authInfo, sessionToken),
     signal:  AbortSignal.timeout(12000),
   });
-  if (!res.ok) return { cards: [], total: 0 };
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    return { cards: [], total: 0, status: res.status, errorBody: body.slice(0, 200) };
+  }
   const data = await res.json();
   return {
     cards: data.cards || [],
-    total: data.cardCount || 0,
+    status: res.status,
   };
 }
 
-async function fetchAllCards(sport, season, authInfo) {
+async function fetchAllCards(sport, season, authInfo, sessionToken) {
   const ids = [];
   const PAGE_SIZE = 10;
+  const MAX_PAGES = 50; // safety cap: 500 cards max
+  const pageLog = [];
   let offset = 0;
 
-  const first = await fetchCardPage(sport, season, offset, authInfo);
-  for (const c of first.cards) if (c.id) ids.push(c.id);
-  const total = first.total;
-
-  // Fetch remaining pages
-  const remaining = total - first.cards.length;
-  if (remaining > 0) {
-    const pageCount = Math.ceil(remaining / PAGE_SIZE);
-    const pagePromises = [];
-    for (let p = 1; p <= pageCount; p++) {
-      pagePromises.push(fetchCardPage(sport, season, p * PAGE_SIZE, authInfo));
-    }
-    const pages = await Promise.all(pagePromises);
-    for (const page of pages) {
-      for (const c of page.cards) if (c.id) ids.push(c.id);
-    }
+  for (let p = 0; p < MAX_PAGES; p++) {
+    if (p > 0) await new Promise(r => setTimeout(r, 300));
+    const page = await fetchCardPage(sport, season, offset, authInfo, sessionToken);
+    pageLog.push({ offset, count: page.cards.length, status: page.status });
+    for (const c of page.cards) if (c.id) ids.push(c.id);
+    if (page.cards.length < PAGE_SIZE) break; // last page
+    offset += PAGE_SIZE;
   }
 
-  return ids;
+  return { ids, pageLog };
 }
 
 export async function onRequestGet({ request, env }) {
@@ -78,18 +79,23 @@ export async function onRequestGet({ request, env }) {
     return err('Unauthorized', 401);
   }
 
-  const authInfo = env.EDGEBOT_AUTH_INFO;
+  const authInfo     = env.EDGEBOT_AUTH_INFO;
+  const sessionToken = env.EDGEBOT_SESSION_TOKEN;
   if (!authInfo) return err('EDGEBOT_AUTH_INFO not configured', 500);
 
   // Fetch all cards across all sport/season combos in parallel
   const results = await Promise.allSettled(
-    CARD_SOURCES.map(({ sport, season }) => fetchAllCards(sport, season, authInfo))
+    CARD_SOURCES.map(({ sport, season }) => fetchAllCards(sport, season, authInfo, sessionToken))
   );
 
   // Deduplicate
   const allIds = new Set();
+  const allPageLogs = [];
   for (const r of results) {
-    if (r.status === 'fulfilled') r.value.forEach(id => allIds.add(id));
+    if (r.status === 'fulfilled') {
+      r.value.ids.forEach(id => allIds.add(id));
+      allPageLogs.push(...r.value.pageLog);
+    }
   }
 
   if (!allIds.size) return err('No cards fetched from RS — check EDGEBOT_AUTH_INFO', 502);
@@ -135,5 +141,6 @@ export async function onRequestGet({ request, env }) {
     inserted: toInsert.length,
     deleted:  toDelete.length,
     sources:  CARD_SOURCES.length,
+    pages:    allPageLogs,
   });
 }

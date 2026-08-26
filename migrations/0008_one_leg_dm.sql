@@ -1,0 +1,1 @@
+ALTER TABLE parlays ADD COLUMN one_leg_dm_sent INTEGER DEFAULT 0;
