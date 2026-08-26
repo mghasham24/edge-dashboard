@@ -75,26 +75,25 @@
   .status-badge.active  { background: rgba(79,110,247,.15); color: var(--accent); }
   .status-badge.pending { background: rgba(107,107,138,.15);color: var(--muted); }
 
-  .legs { padding: 8px 0; }
+  .legs { padding: 4px 0; }
   .leg {
-    display: flex; align-items: center; gap: 10px;
-    padding: 10px 16px;
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 16px;
   }
   .leg + .leg { border-top: 1px solid var(--border); }
 
   .leg-shot {
-    width: 36px; height: 36px; border-radius: 50%;
+    width: 52px; height: 52px; border-radius: 50%;
     background: var(--bg3); border: 1px solid var(--border);
     flex-shrink: 0; overflow: hidden;
     display: flex; align-items: center; justify-content: center;
-    font-size: 10px; color: var(--muted); font-weight: 600; position: relative;
+    font-size: 13px; color: var(--muted); font-weight: 700; position: relative;
   }
-  .leg-shot img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 
   .leg-icon { font-size: 14px; flex-shrink: 0; }
   .leg-body { flex: 1; min-width: 0; }
-  .leg-player { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .leg-line   { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .leg-player { font-weight: 700; font-size: 14px; color: var(--green); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .leg-line   { font-size: 11px; color: var(--muted); margin-top: 3px; }
   .leg-odds   { font-size: 12px; color: var(--accent); font-weight: 600; flex-shrink: 0; }
 
   .card-footer {
@@ -106,17 +105,40 @@
   .stat-val   { font-size: 16px; font-weight: 700; }
   .stat-val.green { color: var(--green); }
   .stat-val.blue  { color: var(--accent); }
-  .stat-label { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .stat-label {
+    font-size: 11px; color: var(--muted); margin-top: 3px;
+    display: flex; align-items: center; justify-content: center; gap: 3px;
+  }
 
+  .rax-logo-inline {
+    display: inline-flex; align-items: center; vertical-align: middle;
+  }
+
+  .share-area {
+    width: 100%; max-width: 420px;
+    margin: 12px auto 0;
+  }
   .share-btn {
-    display: block; width: 100%; max-width: 420px;
-    margin: 12px auto 0; padding: 12px;
+    display: block; width: 100%;
+    padding: 12px;
     background: var(--bg3); border: 1px solid var(--border); border-radius: 10px;
     color: var(--muted); font-size: 13px; font-weight: 600; cursor: pointer;
     text-align: center; transition: color .15s, border-color .15s;
   }
   .share-btn:hover { color: var(--text); border-color: var(--accent); }
   .share-btn.copied { color: var(--green); border-color: var(--green); }
+
+  .link-box {
+    display: none;
+    margin-top: 8px;
+    width: 100%;
+    padding: 10px 12px;
+    background: var(--bg3); border: 1px solid var(--border); border-radius: 10px;
+    color: var(--text); font-size: 12px; font-family: monospace;
+    outline: none; cursor: text;
+    border-color: var(--green);
+  }
+  .link-box.visible { display: block; }
 
   .cta { margin-top: 24px; text-align: center; font-size: 13px; color: var(--muted); }
   .cta a { color: var(--accent); text-decoration: none; font-weight: 600; }
@@ -145,6 +167,8 @@
 <div id="root"></div>
 
 <script>
+  const RAX_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" style="width:11px;height:11px;flex-shrink:0;opacity:.7"><rect width="512" height="512" fill="#0a0a0c" rx="90"/><polygon points="256,48 464,256 256,464 48,256" fill="none" stroke="#6b6b8a" stroke-width="40"/><polygon points="256,165 347,256 256,347 165,256" fill="#6b6b8a"/></svg>`;
+
   function escHtml(s) {
     if (!s) return '';
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -173,16 +197,15 @@
   function loadHeadshot(id, name, sport) {
     if (HS_CACHE[name] === 'none') return;
     if (HS_CACHE[name]) { applyHeadshot(id, HS_CACHE[name]); return; }
-    const legSport  = sport || 'mlb';
+    const legSport   = sport || 'mlb';
     const espnSport  = legSport === 'wnba' ? 'basketball' : legSport.startsWith('soccer') ? 'soccer' : legSport === 'ufc' ? 'mma' : 'baseball';
     const espnLeague = legSport === 'wnba' ? 'wnba'       : legSport.startsWith('soccer') ? 'soccer' : legSport === 'ufc' ? 'mma' : 'mlb';
     fetch('https://site.api.espn.com/apis/search/v2?query=' + encodeURIComponent(name) + '&limit=3&type=player&sport=' + espnSport, { signal: AbortSignal.timeout(5000) })
       .then(r => r.json())
       .then(d => {
-        const group = (d.results || []).find(r => r.type === 'player');
-        const hit   = group && group.contents && group.contents[0];
-        const uid   = hit ? (hit.uid || '') : '';
-        const espnId = uid.split('~a:')[1] || '';
+        const group  = (d.results || []).find(r => r.type === 'player');
+        const hit    = group && group.contents && group.contents[0];
+        const espnId = hit ? ((hit.uid || '').split('~a:')[1] || '') : '';
         if (!espnId) { HS_CACHE[name] = 'none'; return; }
         const url = `https://a.espncdn.com/combiner/i?img=/i/headshots/${espnLeague}/players/full/${espnId}.png&w=350&h=254`;
         HS_CACHE[name] = url;
@@ -215,7 +238,6 @@
       const odds = leg.american_odds != null
         ? `<span class="leg-odds">${escHtml(fmtOdds(leg.american_odds))}</span>` : '';
       const shotId = `leg-shot-${i}`;
-      // Always render initial; overlay stored headshot or async-load it
       const storedImg = leg.headshot_url
         ? `<img src="${escHtml(leg.headshot_url)}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.remove()">`
         : '';
@@ -235,6 +257,8 @@
       ? `<div class="stat-val green">+${fmt(slip.payout_rax)}</div>`
       : `<div class="stat-val blue">${fmt(slip.payout_rax)}</div>`;
 
+    const raxLabel = `<span class="stat-label"><span class="rax-logo-inline">${RAX_LOGO_SVG}</span></span>`;
+
     document.getElementById('root').innerHTML = `
       <div class="card">
         <div class="card-header">
@@ -249,7 +273,7 @@
         <div class="card-footer">
           <div class="stat">
             <div class="stat-val">${fmt(slip.stake_rax)}</div>
-            <div class="stat-label">Stake (Rax)</div>
+            <div class="stat-label">Stake ${RAX_LOGO_SVG}</div>
           </div>
           <div class="stat">
             <div class="stat-val">${multi}</div>
@@ -257,11 +281,14 @@
           </div>
           <div class="stat">
             ${payoutVal}
-            <div class="stat-label">Payout (Rax)</div>
+            <div class="stat-label">Payout ${RAX_LOGO_SVG}</div>
           </div>
         </div>
       </div>
-      <button class="share-btn" id="copy-btn" onclick="copyLink()">🔗 Copy link</button>
+      <div class="share-area">
+        <button class="share-btn" id="copy-btn" onclick="copyLink()">🔗 Copy link</button>
+        <input class="link-box" id="link-box" type="text" readonly onclick="this.select()" value="${escHtml(window.location.href)}">
+      </div>
       <div class="cta">Find +EV parlays at <a href="https://raxedge.com">raxedge.com</a></div>
     `;
 
@@ -274,12 +301,21 @@
   }
 
   function copyLink() {
-    navigator.clipboard.writeText(window.location.href).then(() => {
-      const btn = document.getElementById('copy-btn');
+    const url = window.location.href;
+    const btn = document.getElementById('copy-btn');
+    const box = document.getElementById('link-box');
+
+    // Show the link box
+    if (box) { box.classList.add('visible'); box.select(); }
+
+    navigator.clipboard.writeText(url).then(() => {
       if (!btn) return;
-      btn.textContent = '✅ Copied!';
+      btn.textContent = '✅ Copied to clipboard!';
       btn.classList.add('copied');
-      setTimeout(() => { btn.textContent = '🔗 Copy link'; btn.classList.remove('copied'); }, 2000);
+      setTimeout(() => { btn.textContent = '🔗 Copy link'; btn.classList.remove('copied'); }, 2500);
+    }).catch(() => {
+      // Clipboard denied (common on iOS) — box is already visible so user can copy manually
+      if (btn) btn.textContent = '🔗 Copy link';
     });
   }
 
