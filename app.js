@@ -10942,10 +10942,10 @@
     function renderCasinoDepositHTML() {
         if (casinoDepositPending) return renderCasinoDepositPendingHTML();
         return [
-            '<p style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);border-radius:8px;padding:10px 12px;color:rgba(251,191,36,.9);font-size:12px;margin:0">⚠️ Real charges a 10% marketplace fee — depositing 1,000 Rax credits <strong style="color:rgba(251,191,36,1)">900 Rax</strong> to your balance.</p>',
+            '<p id="casino-dep-note" style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);border-radius:8px;padding:10px 12px;color:rgba(251,191,36,.9);font-size:12px;margin:0">⚠️ Real charges a 10% marketplace fee — depositing <span id="casino-dep-note-send">1,000</span> Rax credits <strong id="casino-dep-note-recv" style="color:rgba(251,191,36,1)">900 Rax</strong> to your balance.</p>',
             '<div style="width:100%">',
             '<label style="font-size:12px;color:rgba(255,255,255,.4);display:block;margin-bottom:6px">Amount to send (Rax)</label>',
-            '<input type="number" id="casino-dep-amount" min="1000" max="100000" step="1000" value="1000" />',
+            '<input type="number" id="casino-dep-amount" min="1000" max="100000" step="1000" value="1000" oninput="updateCasinoDepNote()" />',
             '</div>',
             '<div class="casino-dep-chips">',
             '<button class="casino-dep-chip" onclick="setCasinoDepAmt(1000)">1K</button>',
@@ -10959,9 +10959,19 @@
         ].join('');
     }
 
+    function updateCasinoDepNote() {
+        var inp  = document.getElementById('casino-dep-amount');
+        var send = document.getElementById('casino-dep-note-send');
+        var recv = document.getElementById('casino-dep-note-recv');
+        if (!inp || !send || !recv) return;
+        var amt = parseInt(inp.value, 10) || 1000;
+        send.textContent = amt.toLocaleString();
+        recv.textContent = Math.floor(amt * 0.9).toLocaleString() + ' Rax';
+    }
+
     function setCasinoDepAmt(n) {
         var inp = document.getElementById('casino-dep-amount');
-        if (inp) inp.value = n;
+        if (inp) { inp.value = n; updateCasinoDepNote(); }
     }
 
     function renderCasinoDepositPendingHTML() {
