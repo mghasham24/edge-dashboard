@@ -66,6 +66,34 @@ async function findUnownedCard(rsUserId, authInfo, sessionToken, skipIds) {
   return null;
 }
 
+// Find the first unowned card of a specific rarity (e.g. 'epic', 'legendary') in the winner's
+// inventory. Used for single-card payouts above 10k when a higher-cap card is available.
+async function findUnownedCardOfRarity(rsUserId, authInfo, sessionToken, skipIds, targetRarity) {
+  const hdrs   = buildHeaders(authInfo, sessionToken);
+  const target = targetRarity.toLowerCase();
+  for (const [sport, season, entity] of CARD_TARGETS) {
+    try {
+      const url =
+        `https://web.realapp.com/collectingcards/${sport}/season/${season}/entity/${entity}` +
+        `/user/${rsUserId}/cards?filterCustomType=unowned&includeRecommendations=false&rarity=all&view=rating`;
+      const res = await fetch(url, { headers: hdrs, signal: AbortSignal.timeout(6000) });
+      if (!res.ok) continue;
+      const data = await res.json();
+      const cards = Array.isArray(data) ? data : (data.cards || data.items || []);
+      for (const card of cards.slice(0, 30)) {
+        const id = card.id ?? card.cardId ?? null;
+        if (!id || skipIds.has(id)) continue;
+        if (card.untouchable === true) continue;
+        if (card.prestige != null && card.prestige >= 1) continue;
+        const rarity = (card.rarityLabel || '').toLowerCase();
+        if (rarity !== target) continue;
+        return id;
+      }
+    } catch { continue; }
+  }
+  return null;
+}
+
 async function isAuthorized(request, env) {
   const url = new URL(request.url);
   if (env.CRON_SECRET && url.searchParams.get('_cron_key') === env.CRON_SECRET) return true;
@@ -157,21 +185,38 @@ async function handleRequest({ request, env }) {
       for (const r of (pool || [])) skippedIds.add(r.card_id);
     } catch (_) {}
 
-    const isMultiCard = (entry.payout_rax || entry.offer_amount) > 10000;
+    const payoutRax   = entry.payout_rax || entry.offer_amount;
+    const isMultiCard = payoutRax > 10000;
 
     if (!isMultiCard || !entry.card1_sent_at) {
-      // Phase 1 (or single-card payout): find the first card
-      const cardId = await findUnownedCard(entry.rs_user_id, authInfo, sessionToken, skippedIds);
+      // Phase 1 (or single-card payout ≤ 10k): find the first card.
+      // For payouts 10,001–15,000: try an Epic card first (cap 15k) → single offer.
+      // For payouts 15,001–20,000: try a Legendary card first (cap 20k) → single offer.
+      // Fallback in both cases: 2-card split with standard cards.
+      let cardId      = null;
+      let singleHighRarity = false;
+
+      if (isMultiCard) {
+        const targetRarity = payoutRax <= 15000 ? 'epic' : 'legendary';
+        cardId = await findUnownedCardOfRarity(entry.rs_user_id, authInfo, sessionToken, skippedIds, targetRarity);
+        if (cardId) singleHighRarity = true;
+      }
+
+      if (!cardId) {
+        cardId = await findUnownedCard(entry.rs_user_id, authInfo, sessionToken, skippedIds);
+      }
       if (!cardId) return err('No eligible cards found for this winner', 404);
 
       const cardUrl     = 'https://www.realapp.com/' + rsUrlEncode(20, 0, 0, cardId);
-      const offerAmount = isMultiCard ? 10000 : (entry.offer_amount || entry.payout_rax);
+      // High-rarity single card covers the full payout; otherwise phase 1 of 2-card split = 10k.
+      const offerAmount = singleHighRarity ? payoutRax : (isMultiCard ? 10000 : payoutRax);
+      const multiCard   = isMultiCard && !singleHighRarity;
 
       await env.DB.prepare(
         'UPDATE payout_queue SET target_card_id=?, last_attempt_at=? WHERE id=?'
       ).bind(cardId, now, id).run();
 
-      return ok({ cardId, cardUrl, offerAmount, isMultiCard, phase: 1 });
+      return ok({ cardId, cardUrl, offerAmount, isMultiCard: multiCard, phase: 1 });
     }
 
     // Phase 2: card1 already sent — find a second card for the remaining amount.
