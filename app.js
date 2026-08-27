@@ -10556,6 +10556,7 @@
     var casinoGame           = null;   // full game state from API
     var casinoDepositPending = null;   // { card_url, rax_requested, rax_credited }
     var casinoBusy           = false;
+    var casinoLastBet        = 0;      // remembered across hands
 
     var CASINO_SUITS = { H: '♥', D: '♦', C: '♣', S: '♠' };
 
@@ -10653,7 +10654,9 @@
     }
 
     function renderCasinoBetCtrlHTML() {
-        var curr = casinoBalance >= 100 ? Math.min(casinoBalance, 1000) : 100;
+        var curr = casinoLastBet && casinoLastBet <= casinoBalance
+            ? casinoLastBet
+            : (casinoBalance >= 100 ? Math.min(casinoBalance, 1000) : 100);
         return [
             '<button class="casino-deal-btn" id="casino-deal-btn" onclick="casinoDeal()">Play</button>',
             '<div class="casino-amt-row">',
@@ -10828,6 +10831,7 @@
         if (!bet || bet < 100 || bet > 10000) { alert('Bet must be between 100 and 10,000 Rax.'); return; }
         if (bet > casinoBalance)              { alert('Insufficient casino balance. Deposit first.'); return; }
         casinoBusy = true;
+        casinoLastBet = bet;
         var btn = document.getElementById('casino-deal-btn');
         if (btn) { btn.disabled = true; btn.textContent = 'Dealing…'; }
         try {
@@ -11125,7 +11129,7 @@
             if (!res.ok || !data.ok) { el.innerHTML = '<div class="casino-error">Failed to load.</div>'; return; }
             var hist = data.history || [];
             if (!hist.length) { el.innerHTML = '<div class="casino-loading" style="padding:10px 0;font-size:13px">No hands yet.</div>'; return; }
-            var rMap = { won: 'W', lost: 'L', push: 'P', blackjack: 'BJ' };
+            var rMap = { won: 'Win', lost: 'Loss', push: 'Push', blackjack: 'BJ' };
             var rows = hist.map(function(h) {
                 var net    = h.net || 0;
                 var netStr = net > 0 ? '+' + net.toLocaleString() : net.toLocaleString();
