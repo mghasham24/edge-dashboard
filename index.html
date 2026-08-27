@@ -12,7 +12,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Barlow:wght@400;500;600;700&display=swap">
-    <link rel="stylesheet" href="/app.css?v=168">
+    <link rel="stylesheet" href="/app.css?v=176">
     <script src="https://www.google.com/recaptcha/api.js?render=6Let4qMsAAAAAFhvh6wy6Ai_Ruzq2j4MIlMhqRnl"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/hashids/2.3.0/hashids.min.js"></script>
     <script>
@@ -329,6 +329,7 @@
                     <button class="header-nav-btn nav-dd-item active" id="header-dash-btn" onclick="goToDashboard();closeNavDropdown()">📊 Dashboard</button>
                     <button class="header-nav-btn nav-dd-item" id="header-otd-btn" onclick="headerNavOtd();closeNavDropdown()">🏆 OTD</button>
                     <button class="header-nav-btn nav-dd-item" id="header-parlays-btn" onclick="headerNavParlays();closeNavDropdown()" style="display:none">🎲 Parlays</button>
+                    <button class="header-nav-btn nav-dd-item" id="header-casino-btn" onclick="headerNavCasino();closeNavDropdown()" style="display:none">🎰 Casino</button>
                 </div>
             </div>
             <div id="header-right" style="display:flex;align-items:center;gap:8px">
@@ -506,7 +507,8 @@
                 <div style="display:flex;gap:6px">
                     <button class="admin-sub-btn active" id="admin-sub-users" onclick="adminShowSection('users')">Users</button>
                     <button class="admin-sub-btn" id="admin-sub-perf" onclick="adminShowSection('perf')">Performance</button>
-                    <button class="admin-sub-btn" id="admin-sub-payouts" onclick="adminShowSection('payouts')">Payouts</button>
+                    <button class="admin-sub-btn" id="admin-sub-payouts" onclick="adminShowSection('payouts')">Parlay Payouts</button>
+                    <button class="admin-sub-btn" id="admin-sub-casino" onclick="adminShowSection('casino')">Casino</button>
                 </div>
             </div>
             <div class="admin-stats">
@@ -644,6 +646,25 @@
                 </div>
                 <div id="admin-payouts-list" style="font-size:13px;color:var(--muted)">Loading…</div>
             </div><!-- /admin-payouts-section -->
+
+            <!-- Casino Withdrawals section -->
+            <div id="admin-casino-section" style="display:none">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px">
+                    <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2)">Casino Withdrawals</div>
+                    <div style="display:flex;gap:8px;align-items:center">
+                        <select id="casino-wd-filter" onchange="loadAdminCasinoWithdrawals()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;padding:6px 10px;border-radius:5px;cursor:pointer">
+                            <option value="">All</option>
+                            <option value="pending">Pending</option>
+                            <option value="processing">Processing</option>
+                            <option value="complete">Complete</option>
+                            <option value="failed">Failed</option>
+                        </select>
+                        <button onclick="loadAdminCasinoWithdrawals()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:5px;cursor:pointer">Refresh</button>
+                    </div>
+                </div>
+                <div id="admin-casino-stats" style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px"></div>
+                <div id="admin-casino-wd-list" style="font-size:13px;color:var(--muted)">Loading…</div>
+            </div><!-- /admin-casino-section -->
         </div>
 
         <!-- Referral Panel -->
@@ -916,6 +937,7 @@
 
         <div class="admin-panel" id="otd-panel"></div>
         <div class="admin-panel" id="parlays-panel"></div>
+        <div class="admin-panel" id="casino-panel"></div>
 
         <!-- Alerts panel -->
         <div class="admin-panel" id="alerts-panel">
@@ -1018,7 +1040,7 @@
     <!-- end #dashboard -->
 
     <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script>
-    <script src="/app.js?v=810"></script>
-    <div id="app-version-badge" style="position:fixed;bottom:6px;right:10px;font-size:9px;font-weight:600;color:var(--muted2);font-family:var(--mono);letter-spacing:.03em;pointer-events:none;z-index:1">v807</div>
+    <script src="/app.js?v=820"></script>
+    <div id="app-version-badge" style="position:fixed;bottom:6px;right:10px;font-size:9px;font-weight:600;color:var(--muted2);font-family:var(--mono);letter-spacing:.03em;pointer-events:none;z-index:1">v820</div>
 </body>
 </html>

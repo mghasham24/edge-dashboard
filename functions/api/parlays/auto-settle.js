@@ -206,8 +206,8 @@ function parse1innMatchup(eventName) {
   return { awayName: m[1].trim(), homeName: m[2].trim() };
 }
 
-// DK display names that differ from MLB API abbreviations (e.g. "A's" → "ATH")
-const DK_MLB_ALIASES = { "a's": 'ATH' };
+// DK/FD display names that differ from MLB Stats API abbreviations
+const DK_MLB_ALIASES = { "a's": 'ath', sfg: 'sf' };
 
 // Find MLB final game matching the parsed matchup (DK names vs MLB API names)
 function match1innGame(matchup, finalGames) {
@@ -237,6 +237,7 @@ function match1innGame(matchup, finalGames) {
 function get1innSide(playerName, game) {
   const statRe = /\s+(hits?|pitches?|batters?|scores?|runs?|ks?|hr|walks?|strikeouts?)\s*$/i;
   const teamPart = normalizeName(playerName.replace(statRe, '').trim());
+  const teamResolved = (DK_MLB_ALIASES[teamPart] || teamPart).toLowerCase();
   const aN = normalizeName(game.awayName);
   const hN = normalizeName(game.homeName);
   const aAbbr = game.awayAbbr.toLowerCase();
@@ -244,8 +245,8 @@ function get1innSide(playerName, game) {
   const aNick = aN.split(' ').slice(1).join(' ');
   const hNick = hN.split(' ').slice(1).join(' ');
 
-  if (teamPart === aAbbr || teamPart === aN || (aNick && aN.endsWith(teamPart))) return 'away';
-  if (teamPart === hAbbr || teamPart === hN || (hNick && hN.endsWith(teamPart))) return 'home';
+  if (teamResolved === aAbbr || teamPart === aN || (aNick && aN.endsWith(teamPart))) return 'away';
+  if (teamResolved === hAbbr || teamPart === hN || (hNick && hN.endsWith(teamPart))) return 'home';
   return null; // ambiguous
 }
 

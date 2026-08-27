@@ -10428,7 +10428,7 @@
         var el = document.getElementById('nav-current-label');
         if (el) el.textContent = label;
         document.querySelectorAll('.header-nav-btn').forEach(function(b) { b.classList.remove('active'); });
-        var map = { '📊 Dashboard': 'header-dash-btn', '🏆 OTD': 'header-otd-btn', '🎲 Parlays': 'header-parlays-btn' };
+        var map = { '📊 Dashboard': 'header-dash-btn', '🏆 OTD': 'header-otd-btn', '🎲 Parlays': 'header-parlays-btn', '🎰 Casino': 'header-casino-btn' };
         var id = map[label];
         if (id) { var b = document.getElementById(id); if (b) b.classList.add('active'); }
     }
@@ -10471,24 +10471,660 @@
 
     function goToDashboard() {
         setNavLabel('📊 Dashboard');
-        var parlayPanel = document.getElementById('parlays-panel');
-        var otdPanel    = document.getElementById('otd-panel');
-        if (parlayPanel && parlayPanel.classList.contains('visible')) hideParlaysTab();
-        if (otdPanel    && otdPanel.classList.contains('visible'))    hideOtdTab();
+        var parlayPanel  = document.getElementById('parlays-panel');
+        var otdPanel     = document.getElementById('otd-panel');
+        var casinoPanel  = document.getElementById('casino-panel');
+        if (parlayPanel  && parlayPanel.classList.contains('visible'))  hideParlaysTab();
+        if (otdPanel     && otdPanel.classList.contains('visible'))     hideOtdTab();
+        if (casinoPanel  && casinoPanel.classList.contains('visible'))  hideCasinoTab();
     }
 
     function headerNavOtd() {
         var parlayPanel = document.getElementById('parlays-panel');
+        var casinoPanel = document.getElementById('casino-panel');
         if (parlayPanel && parlayPanel.classList.contains('visible')) hideParlaysTab();
+        if (casinoPanel && casinoPanel.classList.contains('visible')) hideCasinoTab();
         showOtdTab();
     }
 
     function headerNavParlays() {
-        var otdPanel = document.getElementById('otd-panel');
-        if (otdPanel && otdPanel.classList.contains('visible')) hideOtdTab();
+        var otdPanel    = document.getElementById('otd-panel');
+        var casinoPanel = document.getElementById('casino-panel');
+        if (otdPanel    && otdPanel.classList.contains('visible'))    hideOtdTab();
+        if (casinoPanel && casinoPanel.classList.contains('visible')) hideCasinoTab();
         showParlaysTab();
     }
+
+    function headerNavCasino() {
+        var otdPanel    = document.getElementById('otd-panel');
+        var parlayPanel = document.getElementById('parlays-panel');
+        if (otdPanel    && otdPanel.classList.contains('visible'))    hideOtdTab();
+        if (parlayPanel && parlayPanel.classList.contains('visible')) hideParlaysTab();
+        showCasinoTab();
+    }
+
+    function showCasinoTab() {
+        stopAllPollers();
+        document.getElementById('sport-tabs').style.display   = 'none';
+        document.getElementById('feature-tabs').style.display = 'none';
+        document.querySelector('.controls').style.display     = 'none';
+        document.querySelector('.status-bar').style.display   = 'none';
+        document.querySelector('.table-wrap').style.display   = 'none';
+        document.getElementById('mobile-cards').style.display = 'none';
+        document.getElementById('collapse-btn').style.display = 'none';
+        document.getElementById('refresh-btn').style.display  = 'none';
+        var fcNav = document.getElementById('fc-league-nav');
+        var wcNav = document.getElementById('wc-sub-nav');
+        if (fcNav) fcNav.style.display = 'none';
+        if (wcNav) wcNav.style.display = 'none';
+        var sub = document.querySelector('.subheader-sticky');
+        if (sub) sub.classList.add('casino-mode');
+        var headerH = sub ? sub.offsetHeight : 56;
+        var panel = document.getElementById('casino-panel');
+        panel.style.cssText = 'display:flex;flex-direction:column;padding:0;overflow:hidden;position:fixed;top:' + headerH + 'px;left:0;right:0;bottom:0;z-index:199;background:var(--bg)';
+        panel.classList.add('visible');
+        document.body.style.overflow = 'hidden';
+        document.body.style.position = 'fixed';
+        document.body.style.width    = '100%';
+        setNavLabel('🎰 Casino');
+        renderCasinoPanel();
+    }
+
+    function hideCasinoTab() {
+        var sub = document.querySelector('.subheader-sticky');
+        if (sub) sub.classList.remove('casino-mode');
+        document.body.style.overflow = '';
+        document.body.style.position = '';
+        document.body.style.width    = '';
+        document.getElementById('sport-tabs').style.display   = '';
+        document.getElementById('feature-tabs').style.display = 'none';
+        document.querySelector('.controls').style.display     = '';
+        document.querySelector('.status-bar').style.display   = '';
+        document.querySelector('.table-wrap').style.display   = '';
+        document.getElementById('mobile-cards').style.display = '';
+        document.getElementById('collapse-btn').style.display = 'none';
+        document.getElementById('refresh-btn').style.display  = '';
+        var panel = document.getElementById('casino-panel');
+        panel.style.cssText = '';
+        panel.classList.remove('visible');
+    }
     // ── End parlays tab ────────────────────────────────────────────────────────
+
+    // ── Casino UI ─────────────────────────────────────────────────────────────
+
+    var casinoBalance        = 0;
+    var casinoGame           = null;   // full game state from API
+    var casinoDepositPending = null;   // { card_url, rax_requested, rax_credited }
+    var casinoBusy           = false;
+
+    var CASINO_SUITS = { H: '♥', D: '♦', C: '♣', S: '♠' };
+
+    function renderCasinoPanel() {
+        var panel = document.getElementById('casino-panel');
+        if (!panel) return;
+        panel.innerHTML = [
+            '<div class="casino-hdr">',
+            '  <span class="casino-hdr-title">🎰 Blackjack</span>',
+            '  <div class="casino-hdr-right">',
+            '    <button class="casino-hdr-btn dep" onclick="showCasinoModal(\'deposit\')">+ Deposit</button>',
+            '    <div class="casino-hdr-bal-wrap">',
+            '      <span class="casino-hdr-bal-label">Balance</span>',
+            '      <span class="casino-hdr-bal" id="casino-bal-display">—</span>',
+            '    </div>',
+            '    <button class="casino-hdr-btn" onclick="showCasinoModal(\'withdraw\')">Withdraw</button>',
+            '  </div>',
+            '</div>',
+            '<div class="casino-main" id="casino-main"></div>',
+            '<div class="casino-modal-overlay" id="casino-modal" style="display:none" onclick="hideCasinoModalBg(event)">',
+            '  <div class="casino-modal-dialog">',
+            '    <div class="casino-modal-dialog-hdr">',
+            '      <h3 id="casino-modal-title"></h3>',
+            '      <button class="casino-modal-close" onclick="hideCasinoModal()">✕</button>',
+            '    </div>',
+            '    <div class="casino-modal-inner" id="casino-modal-content"></div>',
+            '  </div>',
+            '</div>',
+        ].join('');
+        casinoLoadBalance();
+    }
+
+    function showCasinoModal(type) {
+        var overlay = document.getElementById('casino-modal');
+        var content = document.getElementById('casino-modal-content');
+        var title   = document.getElementById('casino-modal-title');
+        if (!overlay || !content) return;
+        if (title) title.textContent = type === 'deposit' ? 'Deposit Rax' : 'Withdraw Rax';
+        content.innerHTML = type === 'deposit' ? renderCasinoDepositHTML() : renderCasinoWithdrawHTML();
+        overlay.style.display = 'flex';
+    }
+
+    function hideCasinoModal() {
+        var overlay = document.getElementById('casino-modal');
+        if (overlay) overlay.style.display = 'none';
+    }
+
+    function hideCasinoModalBg(e) {
+        if (e.target === document.getElementById('casino-modal')) hideCasinoModal();
+    }
+
+    function updateCasinoBalance(n) {
+        casinoBalance = n;
+        var el = document.getElementById('casino-bal-display');
+        if (el) el.textContent = n.toLocaleString();
+    }
+
+    async function casinoLoadBalance() {
+        try {
+            var res  = await fetch('/api/casino/balance');
+            var data = await res.json();
+            if (!data.ok) return;
+            updateCasinoBalance(data.casino_balance);
+            casinoGame = data.active_game || null;
+            renderCasinoMain();
+        } catch(e) {}
+    }
+
+    // ── Single-screen main render ─────────────────────────────────────────────
+
+    function renderCasinoMain() {
+        var el = document.getElementById('casino-main');
+        if (!el) return;
+        var hasGame = casinoGame && (casinoGame.status === 'active' || casinoGame.status === 'complete');
+        var fieldHTML = hasGame ? renderCasinoFieldHTML(casinoGame) : renderCasinoIdleFieldHTML();
+        var ctrlHTML  = hasGame ? renderCasinoCtrlHTML(casinoGame)  : renderCasinoBetCtrlHTML();
+        el.innerHTML =
+            fieldHTML +
+            '<div class="casino-ctrl"><div class="casino-ctrl-inner">' + ctrlHTML + '</div></div>' +
+            '<div class="casino-history-section">' +
+            '<div class="casino-history-section-title">Recent Hands</div>' +
+            '<div id="casino-history-inline"><div class="casino-loading">Loading…</div></div>' +
+            '</div>';
+        loadCasinoHistoryInline();
+    }
+
+    // ── Idle state (no active game) ───────────────────────────────────────────
+
+    function renderCasinoIdleFieldHTML() {
+        return '<div class="casino-field">' +
+            '<div class="casino-zone" style="min-height:90px"></div>' +
+            '<div class="casino-center-strip">Blackjack pays 6:5&nbsp;&nbsp;·&nbsp;&nbsp;Insurance pays 2:1</div>' +
+            '<div class="casino-zone" style="min-height:90px"></div>' +
+            '</div>';
+    }
+
+    function renderCasinoBetCtrlHTML() {
+        var curr = casinoBalance >= 100 ? Math.min(casinoBalance, 1000) : 100;
+        return [
+            '<button class="casino-deal-btn" id="casino-deal-btn" onclick="casinoDeal()">Deal</button>',
+            '<div class="casino-amt-row">',
+            '<div class="casino-amt-wrap">',
+            '<input class="casino-amt-input" type="number" id="casino-bet-input" min="100" max="10000" step="100" value="' + curr + '" />',
+            '<span class="casino-amt-label">Rax</span>',
+            '</div>',
+            '<button class="casino-mult-btn" onclick="casinoBetHalf()">½</button>',
+            '<button class="casino-mult-btn" onclick="casinoBetDouble()">2×</button>',
+            '</div>',
+            '<div class="casino-quick-chips">',
+            '<button class="casino-chip" onclick="setCasinoBet(100)">100</button>',
+            '<button class="casino-chip" onclick="setCasinoBet(500)">500</button>',
+            '<button class="casino-chip" onclick="setCasinoBet(1000)">1K</button>',
+            '<button class="casino-chip" onclick="setCasinoBet(2500)">2.5K</button>',
+            '<button class="casino-chip" onclick="setCasinoBet(5000)">5K</button>',
+            '<button class="casino-chip" onclick="setCasinoBet(10000)">MAX</button>',
+            '</div>',
+        ].join('');
+    }
+
+    function casinoBetHalf() {
+        var inp = document.getElementById('casino-bet-input');
+        if (!inp) return;
+        inp.value = Math.max(100, Math.floor((parseInt(inp.value, 10) || 1000) / 2));
+    }
+
+    function casinoBetDouble() {
+        var inp = document.getElementById('casino-bet-input');
+        if (!inp) return;
+        inp.value = Math.min(10000, (parseInt(inp.value, 10) || 1000) * 2);
+    }
+
+    // ── Active / complete game field ──────────────────────────────────────────
+
+    function renderCasinoFieldHTML(state) {
+        var done    = state.status === 'complete';
+        var insPend = state.insurance_offered && !state.insurance_resolved;
+        var hands   = state.hands || [];
+        var actIdx  = state.active_hand_idx || 0;
+        var results = Array.isArray(state.result) ? state.result : [];
+        var multi   = hands.length > 1;
+        var parts   = ['<div class="casino-field">'];
+
+        // Dealer zone
+        var dCards   = state.dealer_hand || [];
+        var dVisible = dCards.filter(function(c) { return c !== null; });
+        var dTotal   = done && dVisible.length ? calcClientTotal(dVisible) : '?';
+        parts.push('<div class="casino-zone">');
+        parts.push('<div class="casino-score-pill">Dealer · ' + dTotal + '</div>');
+        parts.push('<div class="casino-card-stack">');
+        for (var i = 0; i < dCards.length; i++) parts.push(renderCardHTML(dCards[i], dCards[i] === null, '', 'd', i));
+        parts.push('</div></div>');
+
+        // Center info strip
+        parts.push('<div class="casino-center-strip">Blackjack pays 6:5&nbsp;&nbsp;·&nbsp;&nbsp;Insurance pays 2:1</div>');
+
+        // Insurance bar (shown in field)
+        if (insPend) {
+            var halfBet = Math.floor((hands[0] && hands[0].bet || 0) / 2);
+            parts.push(
+                '<div class="casino-ins-bar">' +
+                '<p>Dealer shows Ace — take insurance? (' + halfBet.toLocaleString() + ' Rax)</p>' +
+                '<div class="casino-ins-btns">' +
+                '<button class="casino-ins-yes" onclick="casinoInsurance(true)">Take Insurance</button>' +
+                '<button class="casino-ins-no"  onclick="casinoInsurance(false)">Decline</button>' +
+                '</div></div>'
+            );
+        }
+
+        // Player hands
+        for (var h = 0; h < hands.length; h++) {
+            var hand    = hands[h];
+            var hCards  = hand.cards || [];
+            var total   = calcClientTotal(hCards);
+            var hResult = results.find(function(r) { return r.hand_idx === h; });
+            var isAct   = !done && h === actIdx;
+            var pillCls = 'casino-score-pill' + (total > 21 ? ' bust' : total === 21 && hCards.length === 2 ? ' bjpil' : '');
+            var handLbl = multi ? 'Hand ' + (h + 1) + ' · ' : '';
+            var zoneCls = 'casino-zone';
+            if (done && hResult) {
+                zoneCls += hResult.result === 'blackjack' ? ' zone-bj' : hResult.result === 'won' ? ' zone-win' : hResult.result === 'push' ? ' zone-push' : ' zone-lose';
+            } else if (done && hand.status === 'bust') {
+                zoneCls += ' zone-lose';
+            } else if (isAct) {
+                zoneCls += ' zone-active';
+            }
+            parts.push('<div class="' + zoneCls + '">');
+            // Result pill (when done)
+            if (done && hResult) {
+                var rCls  = hResult.result === 'won' ? 'win' : hResult.result === 'blackjack' ? 'bj' : hResult.result === 'push' ? 'push' : 'lose';
+                var rLbl  = { won: 'Win +' + hResult.credit.toLocaleString(), lost: 'Lose', push: 'Push', blackjack: 'Blackjack! +' + hResult.credit.toLocaleString() }[hResult.result] || hResult.result;
+                parts.push('<div class="casino-result-pill ' + rCls + '">' + escHtml(rLbl) + '</div>');
+            } else if (done && hand.status === 'bust') {
+                parts.push('<div class="casino-result-pill lose">Bust</div>');
+            }
+            parts.push('<div class="' + pillCls + '">' + escHtml(handLbl) + total + '</div>');
+            parts.push('<div class="casino-card-stack">');
+            for (var ci = 0; ci < hCards.length; ci++) {
+                var xCls = isAct && !multi ? 'active-hcard' : hand.status === 'standing' ? 'standing-card' : '';
+                parts.push(renderCardHTML(hCards[ci], false, xCls, h, ci));
+            }
+            parts.push('</div></div>');
+        }
+
+        parts.push('</div>');
+        return parts.join('');
+    }
+
+    function renderCasinoCtrlHTML(state) {
+        var done    = state.status === 'complete';
+        var insPend = state.insurance_offered && !state.insurance_resolved;
+        if (done) return '<button class="casino-new-hand-btn" onclick="casinoNewHand()">New Hand</button>';
+        if (insPend) return ''; // insurance handled in field
+        var hands  = state.hands || [];
+        var actIdx = state.active_hand_idx || 0;
+        var ah     = hands[actIdx] || hands[0];
+        var canDbl = ah && ah.cards && ah.cards.length === 2 && !ah.doubled;
+        var canSpl = ah && casinoCanSplit(ah.cards) && hands.length < 4;
+        return '<div class="casino-action-grid">' +
+            '<button class="casino-action-btn hit"   onclick="casinoHit()">Hit</button>' +
+            '<button class="casino-action-btn stand" onclick="casinoStand()">Stand</button>' +
+            '<button class="casino-action-btn dbl"' + (canDbl ? '' : ' disabled') + ' onclick="casinoDouble()">Double ×2</button>' +
+            '<button class="casino-action-btn spl"' + (canSpl ? '' : ' disabled') + ' onclick="casinoSplit()">Split</button>' +
+            '</div>';
+    }
+
+    function setCasinoBet(n) {
+        var inp = document.getElementById('casino-bet-input');
+        if (inp) inp.value = n;
+    }
+
+    // ── Card / hand rendering ─────────────────────────────────────────────────
+
+    function calcClientTotal(cards) {
+        var total = 0, aces = 0;
+        for (var i = 0; i < cards.length; i++) {
+            var v = cards[i] && cards[i].v;
+            if (!v) continue;
+            if (v === 'A')                                        { total += 11; aces++; }
+            else if (v === 'T' || v === 'J' || v === 'Q' || v === 'K') total += 10;
+            else                                                    total += parseInt(v, 10);
+        }
+        while (total > 21 && aces > 0) { total -= 10; aces--; }
+        return total;
+    }
+
+    function casinoCanSplit(cards) {
+        if (!cards || cards.length !== 2) return false;
+        var v1 = cards[0].v, v2 = cards[1].v;
+        var isTen = function(v) { return v === 'T' || v === 'J' || v === 'Q' || v === 'K'; };
+        if (isTen(v1) && isTen(v2)) return true;
+        return v1 === v2;
+    }
+
+    function renderCardHTML(card, hidden, extraCls, handKey, cardIdx) {
+        var dataAttrs = (handKey !== undefined ? ' data-hand="' + handKey + '" data-ci="' + cardIdx + '"' : '');
+        if (hidden || !card) return '<div class="casino-card back"' + dataAttrs + '></div>';
+        var isRed = card.s === 'H' || card.s === 'D';
+        var label = card.v === 'T' ? '10' : card.v;
+        var suit  = CASINO_SUITS[card.s] || card.s;
+        var cls   = 'casino-card' + (isRed ? ' red' : '') + (extraCls ? ' ' + extraCls : '');
+        return '<div class="' + cls + '"' + dataAttrs + '><span class="cv-top">' + escHtml(label) + '</span><span class="cv-suit">' + suit + '</span><span class="cv-bot">' + escHtml(label) + '</span></div>';
+    }
+
+    // ── Game actions ──────────────────────────────────────────────────────────
+
+    async function casinoDeal() {
+        if (casinoBusy) return;
+        var inp = document.getElementById('casino-bet-input');
+        var bet = inp ? parseInt(inp.value, 10) : 0;
+        if (!bet || bet < 100 || bet > 10000) { alert('Bet must be between 100 and 10,000 Rax.'); return; }
+        if (bet > casinoBalance)              { alert('Insufficient casino balance. Deposit first.'); return; }
+        casinoBusy = true;
+        var btn = document.getElementById('casino-deal-btn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Dealing…'; }
+        try {
+            var res  = await fetch('/api/casino/blackjack/deal', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bet: bet }) });
+            var data = await res.json();
+            if (!res.ok || data.error) { alert(data.error || 'Error starting game.'); return; }
+            handleCasinoResponse(data);
+        } catch(e) { alert('Network error. Please try again.'); }
+        finally    { casinoBusy = false; }
+    }
+
+    async function casinoHit()   { await casinoAction('/api/casino/blackjack/hit',   {}); }
+    async function casinoStand() { await casinoAction('/api/casino/blackjack/stand', {}); }
+
+    async function casinoDouble() {
+        if (!casinoGame) return;
+        var ah   = casinoGame.hands && casinoGame.hands[casinoGame.active_hand_idx];
+        var cost = ah ? ah.bet : 0;
+        if (cost > casinoBalance) { alert('Insufficient balance to double.'); return; }
+        await casinoAction('/api/casino/blackjack/double', {});
+    }
+
+    async function casinoSplit() {
+        if (!casinoGame) return;
+        var ah   = casinoGame.hands && casinoGame.hands[casinoGame.active_hand_idx];
+        var cost = ah ? ah.bet : 0;
+        if (cost > casinoBalance) { alert('Insufficient balance to split.'); return; }
+        await casinoAction('/api/casino/blackjack/split', {});
+    }
+
+    async function casinoInsurance(take) { await casinoAction('/api/casino/blackjack/insurance', { take: take }); }
+
+    async function casinoAction(url, body) {
+        if (casinoBusy) return;
+        casinoBusy = true;
+        try {
+            var res  = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            var data = await res.json();
+            if (!res.ok || data.error) { alert(data.error || 'Error. Please try again.'); return; }
+            handleCasinoResponse(data);
+        } catch(e) { alert('Network error. Please try again.'); }
+        finally    { casinoBusy = false; }
+    }
+
+    function handleCasinoResponse(data) {
+        if (data.casino_balance !== undefined) updateCasinoBalance(data.casino_balance);
+        var prevGame = casinoGame;
+        casinoGame = {
+            game_id:            data.game_id,
+            version:            data.version,
+            status:             data.status,
+            hands:              data.hands,
+            active_hand_idx:    data.active_hand_idx,
+            dealer_hand:        data.dealer_hand,
+            insurance_offered:  data.insurance_offered,
+            insurance_resolved: data.insurance_resolved,
+            result:             data.result,
+        };
+        renderCasinoMain();
+        animateNewCards(prevGame, casinoGame);
+    }
+
+    function animateNewCards(prev, next) {
+        if (!next) return;
+        var STEP = 170; // ms between cards
+        var toAnimate = []; // { hand: 'd'|0|1|2|3, ci: N }
+
+        var prevDH = prev ? (prev.dealer_hand || []) : [];
+        var nextDH = next.dealer_hand || [];
+        var prevHC = prev ? (prev.hands || []).map(function(h) { return h.cards.length; }) : [];
+        var nextHC = (next.hands || []).map(function(h) { return h.cards.length; });
+
+        if (!prev || prevDH.length === 0) {
+            // Initial deal — standard BJ order: player[0], dealer[0], player[1], dealer[1]
+            if (nextHC[0] > 0)  toAnimate.push({ hand: 0,   ci: 0 });
+            if (nextDH.length > 0) toAnimate.push({ hand: 'd', ci: 0 });
+            if (nextHC[0] > 1)  toAnimate.push({ hand: 0,   ci: 1 });
+            if (nextDH.length > 1) toAnimate.push({ hand: 'd', ci: 1 });
+        } else {
+            // Player new cards (hit/double/split)
+            for (var h = 0; h < nextHC.length; h++) {
+                var start = prevHC[h] !== undefined ? prevHC[h] : 0;
+                for (var ci = start; ci < nextHC[h]; ci++) toAnimate.push({ hand: h, ci: ci });
+            }
+            // Dealer: reveal hole card (was null, now face) + any new cards dealt
+            for (var di = 0; di < nextDH.length; di++) {
+                var wasHidden = di >= prevDH.length || prevDH[di] === null;
+                var nowVisible = nextDH[di] !== null;
+                if (wasHidden && nowVisible) toAnimate.push({ hand: 'd', ci: di });
+            }
+        }
+
+        var mainEl = document.getElementById('casino-main');
+        if (!mainEl) return;
+        toAnimate.forEach(function(item, idx) {
+            var el = mainEl.querySelector('[data-hand="' + item.hand + '"][data-ci="' + item.ci + '"]');
+            if (!el) return;
+            el.style.animationDelay = (idx * STEP) + 'ms';
+            el.classList.remove('casino-card-anim');
+            void el.offsetWidth;
+            el.classList.add('casino-card-anim');
+        });
+    }
+
+    function casinoNewHand() {
+        casinoGame = null;
+        renderCasinoMain();
+    }
+
+    // ── Deposit modal ─────────────────────────────────────────────────────────
+
+    function renderCasinoDepositHTML() {
+        if (casinoDepositPending) return renderCasinoDepositPendingHTML();
+        return [
+            '<p style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);border-radius:8px;padding:10px 12px;color:rgba(251,191,36,.9);font-size:12px;margin:0">⚠️ Real charges a 10% marketplace fee — depositing 1,000 Rax credits <strong style="color:rgba(251,191,36,1)">900 Rax</strong> to your balance.</p>',
+            '<div style="width:100%">',
+            '<label style="font-size:12px;color:rgba(255,255,255,.4);display:block;margin-bottom:6px">Amount to send (Rax)</label>',
+            '<input type="number" id="casino-dep-amount" min="1000" max="100000" step="1000" value="1000" />',
+            '</div>',
+            '<div class="casino-dep-chips">',
+            '<button class="casino-dep-chip" onclick="setCasinoDepAmt(1000)">1K</button>',
+            '<button class="casino-dep-chip" onclick="setCasinoDepAmt(2000)">2K</button>',
+            '<button class="casino-dep-chip" onclick="setCasinoDepAmt(5000)">5K</button>',
+            '<button class="casino-dep-chip" onclick="setCasinoDepAmt(10000)">10K</button>',
+            '<button class="casino-dep-chip" onclick="setCasinoDepAmt(20000)">20K</button>',
+            '</div>',
+            '<div id="casino-dep-err" class="casino-modal-err" style="display:none"></div>',
+            '<button class="casino-submit-btn" id="casino-dep-btn" onclick="casinoSubmitDeposit()" style="width:100%">Get Card Link</button>',
+        ].join('');
+    }
+
+    function setCasinoDepAmt(n) {
+        var inp = document.getElementById('casino-dep-amount');
+        if (inp) inp.value = n;
+    }
+
+    function renderCasinoDepositPendingHTML() {
+        var dep = casinoDepositPending || {};
+        var raxReq = dep.rax_requested || 0;
+        var raxCred = dep.rax_credited || 0;
+        return [
+            '<p>You\'ll receive <strong style="color:#fff">' + raxCred.toLocaleString() + ' Rax</strong> credited after the 10% Real fee.</p>',
+            '<a href="' + escHtml(dep.card_url || '') + '" target="_blank" rel="noopener" style="display:block;text-decoration:none">',
+            '  <button class="casino-submit-btn" style="width:100%;background:#16a34a;font-size:14px;letter-spacing:.02em">',
+            '    SEND ' + raxReq.toLocaleString() + ' RAX TO THIS CARD ↗',
+            '  </button>',
+            '</a>',
+            '<div id="casino-dep-err" class="casino-modal-err" style="display:none"></div>',
+            '<button class="casino-submit-btn" id="casino-dep-check-btn" onclick="casinoCheckDeposit()" style="width:100%">Check Deposit</button>',
+            '<button class="casino-submit-btn secondary" id="casino-dep-cancel-btn" onclick="casinoCancelDeposit()" style="width:100%">Start New Deposit</button>',
+        ].join('');
+    }
+
+    function casinoDepositErr(msg) {
+        var el = document.getElementById('casino-dep-err');
+        if (el) { el.textContent = msg; el.style.display = msg ? '' : 'none'; }
+    }
+
+    async function casinoSubmitDeposit() {
+        var inp = document.getElementById('casino-dep-amount');
+        var amt = inp ? parseInt(inp.value, 10) : 0;
+        if (!amt || amt < 1000) { casinoDepositErr('Minimum deposit is 1,000 Rax.'); return; }
+        var btn = document.getElementById('casino-dep-btn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
+        casinoDepositErr('');
+        try {
+            var res  = await fetch('/api/casino/deposit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: amt }) });
+            var data = await res.json();
+            if (!res.ok || data.error) {
+                casinoDepositErr(data.error || 'Error creating deposit. Please try again.');
+                if (btn) { btn.disabled = false; btn.textContent = 'Get Card Link'; }
+                return;
+            }
+            casinoDepositPending = { card_url: data.card_url, rax_requested: data.rax_requested, rax_credited: data.rax_credited };
+            var content = document.getElementById('casino-modal-content');
+            if (content) content.innerHTML = renderCasinoDepositPendingHTML();
+        } catch(e) {
+            casinoDepositErr('Network error. Please try again.');
+            if (btn) { btn.disabled = false; btn.textContent = 'Get Card Link'; }
+        }
+    }
+
+    async function casinoCheckDeposit() {
+        var btn = document.getElementById('casino-dep-check-btn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Checking…'; }
+        casinoDepositErr('');
+        try {
+            var res  = await fetch('/api/casino/deposit-check');
+            var data = await res.json();
+            if (data.confirmed > 0) {
+                casinoDepositPending = null;
+                hideCasinoModal();
+                await casinoLoadBalance();
+            } else {
+                if (btn) { btn.disabled = false; btn.textContent = 'Check Deposit'; }
+                casinoDepositErr('Deposit not confirmed yet. Make sure you sent the offer on Real.');
+            }
+        } catch(e) {
+            if (btn) { btn.disabled = false; btn.textContent = 'Check Deposit'; }
+            casinoDepositErr('Network error. Please try again.');
+        }
+    }
+
+    async function casinoCancelDeposit() {
+        var btn = document.getElementById('casino-dep-cancel-btn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Cancelling…'; }
+        try {
+            await fetch('/api/casino/deposit-cancel', { method: 'POST' });
+        } catch(e) {}
+        casinoDepositPending = null;
+        var content = document.getElementById('casino-modal-content');
+        if (content) content.innerHTML = renderCasinoDepositHTML();
+    }
+
+    // ── Withdraw modal ────────────────────────────────────────────────────────
+
+    function renderCasinoWithdrawHTML() {
+        var def = casinoBalance >= 1000 ? Math.min(casinoBalance, 5000) : 1000;
+        return [
+            '<p>Balance: <strong style="color:#fff">' + casinoBalance.toLocaleString() + ' Rax</strong> · Processed within 24 hours via edgebot. Minimum 1,000 Rax.</p>',
+            '<div style="width:100%">',
+            '<label style="font-size:12px;color:rgba(255,255,255,.4);display:block;margin-bottom:6px">Amount (Rax)</label>',
+            '<input type="number" id="casino-wd-amount" min="1000" max="' + Math.max(casinoBalance, 1000) + '" step="100" value="' + (casinoBalance >= 1000 ? def : '') + '" />',
+            '</div>',
+            '<div id="casino-wd-err" class="casino-modal-err" style="display:none"></div>',
+            '<button class="casino-submit-btn" id="casino-wd-btn" onclick="casinoSubmitWithdraw()" style="width:100%">Request Withdrawal</button>',
+        ].join('');
+    }
+
+    function casinoWithdrawErr(msg) {
+        var el = document.getElementById('casino-wd-err');
+        if (el) { el.textContent = msg; el.style.display = msg ? '' : 'none'; }
+    }
+
+    async function casinoSubmitWithdraw() {
+        var inp = document.getElementById('casino-wd-amount');
+        var amt = inp ? parseInt(inp.value, 10) : 0;
+        if (!amt || amt < 1000)  { casinoWithdrawErr('Minimum withdrawal is 1,000 Rax.'); return; }
+        if (amt > casinoBalance) { casinoWithdrawErr('Insufficient casino balance.'); return; }
+        showConfirm('Request withdrawal of ' + amt.toLocaleString() + ' Rax?', function() {
+            casinoDoWithdraw(amt);
+        });
+    }
+
+    async function casinoDoWithdraw(amt) {
+        var btn = document.getElementById('casino-wd-btn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Submitting…'; }
+        casinoWithdrawErr('');
+        try {
+            var res  = await fetch('/api/casino/withdraw', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: amt }) });
+            var data = await res.json();
+            if (!res.ok || data.error) {
+                casinoWithdrawErr(data.error || 'Error submitting withdrawal.');
+                if (btn) { btn.disabled = false; btn.textContent = 'Request Withdrawal'; }
+                return;
+            }
+            updateCasinoBalance(data.casino_balance);
+            hideCasinoModal();
+        } catch(e) {
+            casinoWithdrawErr('Network error. Please try again.');
+            if (btn) { btn.disabled = false; btn.textContent = 'Request Withdrawal'; }
+        }
+    }
+
+    // ── Inline history (below the table) ─────────────────────────────────────
+
+    async function loadCasinoHistoryInline() {
+        var el = document.getElementById('casino-history-inline');
+        if (!el) return;
+        try {
+            var res  = await fetch('/api/casino/blackjack/history');
+            var data = await res.json();
+            if (!res.ok || !data.ok) { el.innerHTML = '<div class="casino-error">Failed to load.</div>'; return; }
+            var hist = data.history || [];
+            if (!hist.length) { el.innerHTML = '<div class="casino-loading" style="padding:10px 0;font-size:13px">No hands yet.</div>'; return; }
+            var rMap = { won: 'W', lost: 'L', push: 'P', blackjack: 'BJ' };
+            var rows = hist.map(function(h) {
+                var net    = h.net || 0;
+                var netStr = net > 0 ? '+' + net.toLocaleString() : net.toLocaleString();
+                var netCls = net > 0 ? 'chr-win' : net < 0 ? 'chr-lose' : 'chr-push';
+                var handResults = (h.hands || []).map(function(hh) { return rMap[hh.result] || '?'; });
+                var resultStr   = handResults.join('/') || '—';
+                var anyWin  = (h.hands || []).some(function(hh) { return hh.result === 'won' || hh.result === 'blackjack'; });
+                var allPush = (h.hands || []).length > 0 && (h.hands || []).every(function(hh) { return hh.result === 'push'; });
+                var rCls    = anyWin ? 'chr-win' : allPush ? 'chr-push' : 'chr-lose';
+                var d       = new Date((h.created_at || 0) * 1000);
+                var dateStr = (d.getMonth() + 1) + '/' + d.getDate() + ' ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+                return '<tr><td>' + escHtml(dateStr) + '</td><td>' + (h.total_bet||0).toLocaleString() + '</td>' +
+                    '<td class="' + rCls + '">' + escHtml(resultStr) + '</td>' +
+                    '<td class="' + netCls + '">' + escHtml(netStr) + '</td></tr>';
+            }).join('');
+            el.innerHTML = '<table class="casino-history-table"><thead><tr><th>Date</th><th>Bet</th><th>Result</th><th>Net</th></tr></thead><tbody>' + rows + '</tbody></table>';
+        } catch(e) { el.innerHTML = '<div class="casino-error">Error loading history.</div>'; }
+    }
+
+    // ── End casino UI ─────────────────────────────────────────────────────────
+
 
     function renderOtdCarousel() {
         var el = document.getElementById('otd-pass-carousel');
@@ -14274,11 +14910,13 @@
         var usersEl   = document.getElementById('admin-users-section');
         var perfEl    = document.getElementById('admin-perf-section');
         var payoutsEl = document.getElementById('admin-payouts-section');
+        var casinoEl  = document.getElementById('admin-casino-section');
         var uBtn      = document.getElementById('admin-sub-users');
         var pBtn      = document.getElementById('admin-sub-perf');
         var qBtn      = document.getElementById('admin-sub-payouts');
-        [usersEl, perfEl, payoutsEl].forEach(function(el) { if (el) el.style.display = 'none'; });
-        [uBtn, pBtn, qBtn].forEach(function(b) { if (b) b.classList.remove('active'); });
+        var cBtn      = document.getElementById('admin-sub-casino');
+        [usersEl, perfEl, payoutsEl, casinoEl].forEach(function(el) { if (el) el.style.display = 'none'; });
+        [uBtn, pBtn, qBtn, cBtn].forEach(function(b) { if (b) b.classList.remove('active'); });
         if (section === 'perf') {
             if (perfEl) perfEl.style.display = '';
             if (pBtn)   pBtn.classList.add('active');
@@ -14288,6 +14926,10 @@
             if (payoutsEl) payoutsEl.style.display = '';
             if (qBtn)      qBtn.classList.add('active');
             loadAdminPayouts();
+        } else if (section === 'casino') {
+            if (casinoEl) casinoEl.style.display = '';
+            if (cBtn)     cBtn.classList.add('active');
+            loadAdminCasinoWithdrawals();
         } else {
             if (usersEl) usersEl.style.display = '';
             if (uBtn)    uBtn.classList.add('active');
@@ -14642,6 +15284,82 @@
             btn.textContent = 'Error';
             btn.disabled = false;
         }
+    }
+
+    async function loadAdminCasinoWithdrawals() {
+        var el      = document.getElementById('admin-casino-wd-list');
+        var statsEl = document.getElementById('admin-casino-stats');
+        if (!el) return;
+        el.innerHTML = '<span style="color:var(--muted)">Loading…</span>';
+        var status = document.getElementById('casino-wd-filter') ? document.getElementById('casino-wd-filter').value : '';
+        try {
+            var url  = '/api/admin/casino-withdrawals' + (status ? '?status=' + encodeURIComponent(status) : '');
+            var res  = await fetch(url, { credentials: 'same-origin' });
+            var data = await res.json();
+            if (!data.ok) { el.innerHTML = '<span style="color:#ef4444">Error loading withdrawals</span>'; return; }
+
+            var RAX   = 'Ⓡ';
+            var wds   = data.withdrawals || [];
+            var stats = data.stats || {};
+
+            // Stats bar
+            if (statsEl) {
+                statsEl.innerHTML =
+                    '<div class="admin-stat" style="min-width:120px"><div class="admin-stat-val">' + (stats.pending_count || 0) + '</div><div class="admin-stat-lbl">Pending</div></div>' +
+                    '<div class="admin-stat" style="min-width:120px"><div class="admin-stat-val">' + Number(stats.pending_rax || 0).toLocaleString() + ' ' + RAX + '</div><div class="admin-stat-lbl">Pending Rax</div></div>' +
+                    '<div class="admin-stat" style="min-width:120px"><div class="admin-stat-val">' + Number(stats.paid_rax || 0).toLocaleString() + ' ' + RAX + '</div><div class="admin-stat-lbl">Total Paid</div></div>' +
+                    '<div class="admin-stat" style="min-width:120px"><div class="admin-stat-val">' + Number(stats.total_liability || 0).toLocaleString() + ' ' + RAX + '</div><div class="admin-stat-lbl">Casino Liability</div></div>';
+            }
+
+            if (!wds.length) { el.innerHTML = '<span style="color:var(--muted)">No withdrawals found</span>'; return; }
+
+            var statusColor = { pending: 'var(--orange,#f59e0b)', processing: '#60a5fa', complete: 'var(--green)', failed: '#ef4444' };
+            el.innerHTML = '<div class="admin-table-wrap"><table class="admin-table"><thead><tr>' +
+                '<th>ID</th><th>Email</th><th>RS Username</th><th>Amount</th><th>Casino Bal</th><th>Status</th><th>Requested</th><th>Notes</th><th>Actions</th>' +
+                '</tr></thead><tbody>' +
+                wds.map(function(w) {
+                    var sc   = statusColor[w.status] || 'var(--muted)';
+                    var dt   = w.created_at ? new Date(w.created_at * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+                    var acts = w.status === 'pending' || w.status === 'processing' ? (
+                        '<button onclick="casinoWithdrawalAction(' + w.id + ',\'processing\')" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:11px;padding:4px 8px;border-radius:4px;cursor:pointer;margin-right:4px">Processing</button>' +
+                        '<button onclick="casinoWithdrawalAction(' + w.id + ',\'complete\')"  style="background:var(--bg3);border:1px solid var(--border2);color:var(--green);font-family:var(--sans);font-size:11px;padding:4px 8px;border-radius:4px;cursor:pointer;margin-right:4px">Complete</button>' +
+                        '<button onclick="casinoWithdrawalAction(' + w.id + ',\'failed\')"    style="background:var(--bg3);border:1px solid var(--border2);color:#ef4444;font-family:var(--sans);font-size:11px;padding:4px 8px;border-radius:4px;cursor:pointer">Failed (refund)</button>'
+                    ) : '<span style="color:var(--muted2);font-size:11px">—</span>';
+                    return '<tr>' +
+                        '<td style="color:var(--muted2)">#' + w.id + '</td>' +
+                        '<td style="font-size:12px">' + escHtml(w.email || '—') + '</td>' +
+                        '<td><a href="https://www.realapp.com/@' + escHtml(w.rs_username) + '" target="_blank" style="color:var(--accent)">@' + escHtml(w.rs_username) + '</a></td>' +
+                        '<td style="font-variant-numeric:tabular-nums;font-weight:700">' + Number(w.amount).toLocaleString() + ' ' + RAX + '</td>' +
+                        '<td style="font-variant-numeric:tabular-nums;color:var(--muted)">' + Number(w.casino_balance || 0).toLocaleString() + ' ' + RAX + '</td>' +
+                        '<td><span style="color:' + sc + ';font-weight:600;font-size:12px">' + w.status + '</span></td>' +
+                        '<td style="color:var(--muted2);font-size:12px;white-space:nowrap">' + dt + '</td>' +
+                        '<td style="color:var(--muted2);font-size:12px;max-width:160px;word-break:break-word">' + escHtml(w.notes || '—') + '</td>' +
+                        '<td>' + acts + '</td>' +
+                    '</tr>';
+                }).join('') +
+                '</tbody></table></div>';
+        } catch (e) {
+            el.innerHTML = '<span style="color:#ef4444">Failed to load: ' + escHtml(e.message) + '</span>';
+        }
+    }
+
+    function casinoWithdrawalAction(id, status) {
+        var msg = status === 'failed'
+            ? 'Mark as failed and refund the Rax to their casino balance?'
+            : status === 'complete'
+            ? 'Mark withdrawal as complete? (Rax has been sent on RS)'
+            : 'Mark as processing?';
+        showConfirm(msg, function() {
+            fetch('/api/admin/casino-withdrawals', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: id, status: status }),
+            }).then(function(r) { return r.json(); }).then(function(data) {
+                if (data.ok) loadAdminCasinoWithdrawals();
+                else alert('Error: ' + (data.error || 'Unknown'));
+            }).catch(function(e) { alert('Request failed: ' + e.message); });
+        });
     }
 
     async function loadAdminUsers(q, offset, append) {
@@ -15462,6 +16180,10 @@
         // Parlays — visible to all logged-in users; non-pro sees upgrade modal on click
         var hpb = document.getElementById('header-parlays-btn');
         if (hpb) hpb.style.display = currentUser ? '' : 'none';
+
+        // Casino — admin only
+        var hcb = document.getElementById('header-casino-btn');
+        if (hcb) hcb.style.display = (currentUser && currentUser.is_admin) ? '' : 'none';
 
         // Pro → hamburger menu item
         var ddManage = document.getElementById('dd-manage-sub-item');
@@ -17324,7 +18046,7 @@
 
     function renderTable() {
         if (evTabVisible || otdVisible) return;
-        var _panels = ['admin-panel','portfolio-panel','alerts-panel','referral-panel','ev-panel','otd-panel'];
+        var _panels = ['admin-panel','portfolio-panel','alerts-panel','referral-panel','ev-panel','otd-panel','casino-panel'];
         if (_panels.some(function(id){ return document.getElementById(id)?.classList.contains('visible'); })) return;
         var tableWrap = document.querySelector('.table-wrap');
         if (tableWrap) tableWrap.style.display = '';
