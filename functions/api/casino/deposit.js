@@ -110,13 +110,30 @@ export async function onRequestPost({ request, env }) {
   if (!Number.isInteger(amount) || amount < MIN_DEPOSIT)
     return err(`Minimum deposit is ${MIN_DEPOSIT} Rax.`, 400);
 
-  // Check no existing pending deposit
-  const existing = await env.DB.prepare(
-    "SELECT id FROM casino_deposits WHERE user_id = ? AND status = 'pending' LIMIT 1"
-  ).bind(userId).first();
-  if (existing) return err('You already have a pending deposit. Complete or cancel it first.', 409);
+  const now = Math.floor(Date.now() / 1000);
 
-  const now    = Math.floor(Date.now() / 1000);
+  // Auto-expire stale pending deposits (> 30 min old)
+  await env.DB.prepare(
+    "UPDATE casino_deposits SET status='expired' WHERE user_id=? AND status='pending' AND created_at < ?"
+  ).bind(userId, now - 30 * 60).run();
+
+  // Resume an existing live pending deposit (within 30 min) instead of blocking
+  const existing = await env.DB.prepare(
+    "SELECT * FROM casino_deposits WHERE user_id=? AND status='pending' LIMIT 1"
+  ).bind(userId).first();
+  if (existing && existing.card_id) {
+    const cardUrl = 'https://www.realapp.com/' + rsUrlEncode(20, 0, 0, existing.card_id);
+    return new Response(JSON.stringify({
+      ok:            true,
+      card_url:      cardUrl,
+      card_id:       existing.card_id,
+      rax_requested: existing.rax_requested,
+      rax_credited:  Math.floor(existing.rax_requested * 0.9),
+      expires_at:    existing.created_at + 30 * 60,
+      resumed:       true,
+    }), { headers: { 'Content-Type': 'application/json' } });
+  }
+
   const cardId = await pickCard(env, now, env.DB);
   if (!cardId) return err('No deposit cards available right now. Please try again in a few minutes.', 503);
 
