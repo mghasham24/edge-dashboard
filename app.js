@@ -10862,7 +10862,14 @@
         await casinoAction('/api/casino/blackjack/split', {});
     }
 
-    async function casinoInsurance(take) { await casinoAction('/api/casino/blackjack/insurance', { take: take }); }
+    async function casinoInsurance(take) {
+        var body = { take: take };
+        if (take) {
+            var bet = casinoGame && casinoGame.hands && casinoGame.hands[0] && casinoGame.hands[0].bet || 0;
+            body.amount = Math.floor(bet / 2);
+        }
+        await casinoAction('/api/casino/blackjack/insurance', body);
+    }
 
     async function casinoAction(url, body) {
         if (casinoBusy) return;
