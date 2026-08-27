@@ -10755,6 +10755,9 @@
                 var rCls  = hResult.result === 'won' ? 'win' : hResult.result === 'blackjack' ? 'bj' : hResult.result === 'push' ? 'push' : 'lose';
                 var rLbl  = { won: 'Win +' + hResult.credit.toLocaleString(), lost: 'Lose', push: 'Push', blackjack: 'Blackjack! +' + hResult.credit.toLocaleString() }[hResult.result] || hResult.result;
                 parts.push('<div class="casino-result-pill ' + rCls + '">' + escHtml(rLbl) + '</div>');
+                if (hResult.insurance_won) {
+                    parts.push('<div class="casino-result-pill win casino-ins-win-pill">Insurance +' + hResult.insurance_won.toLocaleString() + ' Rax</div>');
+                }
             } else if (done && hand.status === 'bust') {
                 parts.push('<div class="casino-result-pill lose">Bust</div>');
             }
@@ -10940,7 +10943,7 @@
         if (!next) return { maxDelay: 0, dealerItems: [] };
         var PLAYER_STEP = 200;
         var DEALER_STEP = 900;
-        var HOLE_EXTRA  = 1000; // extra gap between hole reveal and first draw
+        var HOLE_EXTRA  = 500; // extra gap between hole reveal and first draw
         var toAnimate   = [];
         var dealerItems = []; // { ci, delay } for dealer cards only
 
@@ -11191,7 +11194,8 @@
                 var allPush = (h.hands || []).length > 0 && (h.hands || []).every(function(hh) { return hh.result === 'push'; });
                 var rCls    = anyWin ? 'chr-win' : allPush ? 'chr-push' : 'chr-lose';
                 var d       = new Date((h.created_at || 0) * 1000);
-                var dateStr = (d.getMonth() + 1) + '/' + d.getDate() + ' ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+                var tStr    = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).replace(' AM', 'a').replace(' PM', 'p');
+                var dateStr = (d.getMonth() + 1) + '/' + d.getDate() + ' ' + tStr;
                 return '<tr><td>' + escHtml(dateStr) + '</td><td>' + (h.total_bet||0).toLocaleString() + '</td>' +
                     '<td class="' + rCls + '">' + escHtml(resultStr) + '</td>' +
                     '<td class="' + netCls + '">' + escHtml(netStr) + '</td></tr>';
