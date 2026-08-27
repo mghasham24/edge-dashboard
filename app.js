@@ -10706,13 +10706,18 @@
         var dVisible = dCards.filter(function(c) { return c !== null; });
         var dTotal   = dVisible.length ? calcClientTotal(dVisible) : '?';
         parts.push('<div class="casino-zone">');
-        parts.push('<div class="casino-score-pill">Dealer · ' + dTotal + '</div>');
+        parts.push('<div class="casino-score-pill" id="casino-dealer-pill">Dealer · ' + dTotal + '</div>');
         parts.push('<div class="casino-card-stack">');
         for (var i = 0; i < dCards.length; i++) parts.push(renderCardHTML(dCards[i], dCards[i] === null, '', 'd', i));
         parts.push('</div></div>');
 
         // Center info strip
         parts.push('<div class="casino-center-strip">Blackjack pays 6:5&nbsp;&nbsp;·&nbsp;&nbsp;Insurance pays 2:1</div>');
+
+        // No Blackjack note (after insurance resolved with no dealer BJ)
+        if (state.insurance_offered && state.insurance_resolved && state.insurance_bet && state.status !== 'complete') {
+            parts.push('<div class="casino-no-bj-note">No Blackjack — Insurance lost (−' + state.insurance_bet.toLocaleString() + ' Rax)</div>');
+        }
 
         // Insurance bar (shown in field)
         if (insPend) {
@@ -10895,17 +10900,49 @@
             dealer_hand:        data.dealer_hand,
             insurance_offered:  data.insurance_offered,
             insurance_resolved: data.insurance_resolved,
+            insurance_bet:      data.insurance_bet ?? null,
             result:             data.result,
         };
         renderCasinoMain();
-        animateNewCards(prevGame, casinoGame);
+        var animResult = animateNewCards(prevGame, casinoGame);
+        if (!animResult || !animResult.dealerItems.length) return;
+
+        // Suppress zone colors + result pills until all dealer cards are revealed
+        var mainEl = document.getElementById('casino-main');
+        if (!mainEl) return;
+        mainEl.setAttribute('data-animating', '1');
+
+        // Set dealer pill to pre-action visible count
+        var prevDH      = prevGame ? (prevGame.dealer_hand || []) : [];
+        var prevVisible = prevDH.filter(function(c) { return c !== null; });
+        var pill = document.getElementById('casino-dealer-pill');
+        if (pill) pill.textContent = 'Dealer · ' + (prevVisible.length ? calcClientTotal(prevVisible) : '?');
+
+        // Incremental dealer pill update after each card animates
+        var nextDH = casinoGame.dealer_hand || [];
+        animResult.dealerItems.forEach(function(item) {
+            setTimeout(function() {
+                var p = document.getElementById('casino-dealer-pill');
+                if (!p) return;
+                var vis = nextDH.slice(0, item.ci + 1).filter(function(c) { return c !== null; });
+                p.textContent = 'Dealer · ' + (vis.length ? calcClientTotal(vis) : '?');
+            }, item.delay + 300);
+        });
+
+        // Reveal result after last dealer card finishes
+        setTimeout(function() {
+            var el = document.getElementById('casino-main');
+            if (el) el.removeAttribute('data-animating');
+        }, animResult.maxDelay + 700);
     }
 
     function animateNewCards(prev, next) {
-        if (!next) return;
-        var PLAYER_STEP = 200; // ms between player cards
-        var DEALER_STEP = 900; // ms between dealer cards (reveal/draw phase)
-        var toAnimate = []; // { hand, ci, delay }
+        if (!next) return { maxDelay: 0, dealerItems: [] };
+        var PLAYER_STEP = 200;
+        var DEALER_STEP = 900;
+        var HOLE_EXTRA  = 1000; // extra gap between hole reveal and first draw
+        var toAnimate   = [];
+        var dealerItems = []; // { ci, delay } for dealer cards only
 
         var prevDH = prev ? (prev.dealer_hand || []) : [];
         var nextDH = next.dealer_hand || [];
@@ -10929,22 +10966,27 @@
                     delay += PLAYER_STEP;
                 }
             }
-            // Dealer: hole card reveal + new draw cards — slower spacing
-            var dealerCards = [];
+            // Dealer: hole card reveal + new draw cards
+            var rawDealer = [];
             for (var di = 0; di < nextDH.length; di++) {
                 var wasHidden  = di >= prevDH.length || prevDH[di] === null;
                 var nowVisible = nextDH[di] !== null;
-                if (wasHidden && nowVisible) dealerCards.push({ hand: 'd', ci: di });
+                if (wasHidden && nowVisible) rawDealer.push({ hand: 'd', ci: di });
             }
-            for (var k = 0; k < dealerCards.length; k++) {
-                dealerCards[k].delay = delay;
-                toAnimate.push(dealerCards[k]);
+            for (var k = 0; k < rawDealer.length; k++) {
+                rawDealer[k].delay = delay;
+                toAnimate.push(rawDealer[k]);
+                dealerItems.push({ ci: rawDealer[k].ci, delay: delay });
                 delay += DEALER_STEP;
+                // Extra pause after hole reveal when draws follow
+                if (k === 0 && rawDealer[k].ci === 1 && rawDealer.length > 1) delay += HOLE_EXTRA;
             }
         }
 
+        var maxDelay = toAnimate.length ? toAnimate[toAnimate.length - 1].delay : 0;
+
         var mainEl = document.getElementById('casino-main');
-        if (!mainEl) return;
+        if (!mainEl) return { maxDelay: maxDelay, dealerItems: dealerItems };
         toAnimate.forEach(function(item) {
             var el = mainEl.querySelector('[data-hand="' + item.hand + '"][data-ci="' + item.ci + '"]');
             if (!el) return;
@@ -10953,6 +10995,8 @@
             void el.offsetWidth;
             el.classList.add('casino-card-anim');
         });
+
+        return { maxDelay: maxDelay, dealerItems: dealerItems };
     }
 
     function casinoNewHand() {

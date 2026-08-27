@@ -279,6 +279,8 @@ function resolve1stInnLeg(leg, finalGames, linescore1Map, pbpMap) {
     switch (mkt) {
       case '1inn_walks_ou': {
         // Game-level: total walks drawn by both teams in inning 1
+        const ls = linescore1Map ? linescore1Map[game.gamePk] : null;
+        if (!ls || ls.away.runs === null || ls.home.runs === null) return null;
         const total = pbp.top.walks + pbp.bottom.walks;
         const line  = parseFloat(leg.threshold);
         if (isNaN(line)) return null;
@@ -288,6 +290,9 @@ function resolve1stInnLeg(leg, finalGames, linescore1Map, pbpMap) {
       }
       case '1inn_batters_ou': {
         if (!side) return null;
+        const ls = linescore1Map ? linescore1Map[game.gamePk] : null;
+        if (side === 'away' && (!ls || ls.home.runs === null)) return null; // bottom half not done
+        if (side === 'home' && (!ls || ls.away.runs === null)) return null; // top half not done
         // away pitcher faces home batters in bottom; home pitcher faces away batters in top
         const count = side === 'away' ? pbp.bottom.batters : pbp.top.batters;
         const line  = parseFloat(leg.threshold);
@@ -298,6 +303,9 @@ function resolve1stInnLeg(leg, finalGames, linescore1Map, pbpMap) {
       }
       case '1inn_pitches_ou': {
         if (!side) return null;
+        const ls = linescore1Map ? linescore1Map[game.gamePk] : null;
+        if (side === 'away' && (!ls || ls.home.runs === null)) return null;
+        if (side === 'home' && (!ls || ls.away.runs === null)) return null;
         // away pitcher throws in bottom; home pitcher throws in top
         const pitches = side === 'away' ? pbp.bottom.pitches : pbp.top.pitches;
         const line    = parseFloat(leg.threshold);
@@ -308,6 +316,9 @@ function resolve1stInnLeg(leg, finalGames, linescore1Map, pbpMap) {
       }
       case '1inn_pitches_range': {
         if (!side) return null;
+        const ls = linescore1Map ? linescore1Map[game.gamePk] : null;
+        if (side === 'away' && (!ls || ls.home.runs === null)) return null;
+        if (side === 'home' && (!ls || ls.away.runs === null)) return null;
         const pitches = side === 'away' ? pbp.bottom.pitches : pbp.top.pitches;
         // label is e.g. "10-14 pitches" or "25+ pitches" or "0-9 pitches"
         const rangeM = label.match(/^(\d+)-(\d+)/);
@@ -327,6 +338,9 @@ function resolve1stInnLeg(leg, finalGames, linescore1Map, pbpMap) {
       }
       case '1inn_hr_yn': {
         if (!side) return null;
+        const ls = linescore1Map ? linescore1Map[game.gamePk] : null;
+        if (side === 'away' && (!ls || ls.away.runs === null)) return null; // top half not done
+        if (side === 'home' && (!ls || ls.home.runs === null)) return null; // bottom half not done
         // away bats in top; home bats in bottom
         const hrs = side === 'away' ? pbp.top.hrs : pbp.bottom.hrs;
         const hit = hrs > 0;
@@ -336,6 +350,9 @@ function resolve1stInnLeg(leg, finalGames, linescore1Map, pbpMap) {
       }
       case '1inn_ks_exact': {
         if (!side || exactVal == null) return null;
+        const ls = linescore1Map ? linescore1Map[game.gamePk] : null;
+        if (side === 'away' && (!ls || ls.home.runs === null)) return null;
+        if (side === 'home' && (!ls || ls.away.runs === null)) return null;
         // pitcher Ks: away pitcher throws in bottom (home bats), home pitcher throws in top (away bats)
         const ks = side === 'away' ? pbp.bottom.ks : pbp.top.ks;
         return ks === exactVal ? 'won' : 'lost';

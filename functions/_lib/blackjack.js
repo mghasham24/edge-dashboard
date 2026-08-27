@@ -201,6 +201,7 @@ export function clientState(game, extra = {}) {
     dealer_hand:        dealerCards,
     insurance_offered:  game.insurance_offered,
     insurance_resolved: game.insurance_resolved,
+    insurance_bet:      game.insurance_bet ?? null,
     result:             game.result ?? null,
     ...extra,
   };
