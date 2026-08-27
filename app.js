@@ -10655,7 +10655,7 @@
     function renderCasinoBetCtrlHTML() {
         var curr = casinoBalance >= 100 ? Math.min(casinoBalance, 1000) : 100;
         return [
-            '<button class="casino-deal-btn" id="casino-deal-btn" onclick="casinoDeal()">Deal</button>',
+            '<button class="casino-deal-btn" id="casino-deal-btn" onclick="casinoDeal()">Play</button>',
             '<div class="casino-amt-row">',
             '<div class="casino-amt-wrap">',
             '<input class="casino-amt-input" type="number" id="casino-bet-input" min="100" max="10000" step="100" value="' + curr + '" />',
@@ -10701,7 +10701,7 @@
         // Dealer zone
         var dCards   = state.dealer_hand || [];
         var dVisible = dCards.filter(function(c) { return c !== null; });
-        var dTotal   = done && dVisible.length ? calcClientTotal(dVisible) : '?';
+        var dTotal   = dVisible.length ? calcClientTotal(dVisible) : '?';
         parts.push('<div class="casino-zone">');
         parts.push('<div class="casino-score-pill">Dealer · ' + dTotal + '</div>');
         parts.push('<div class="casino-card-stack">');
@@ -10766,7 +10766,7 @@
     function renderCasinoCtrlHTML(state) {
         var done    = state.status === 'complete';
         var insPend = state.insurance_offered && !state.insurance_resolved;
-        if (done) return '<button class="casino-new-hand-btn" onclick="casinoNewHand()">New Hand</button>';
+        if (done) return '<button class="casino-new-hand-btn" onclick="casinoNewHand()">Play</button>';
         if (insPend) return ''; // insurance handled in field
         var hands  = state.hands || [];
         var actIdx = state.active_hand_idx || 0;
@@ -10892,8 +10892,9 @@
 
     function animateNewCards(prev, next) {
         if (!next) return;
-        var STEP = 170; // ms between cards
-        var toAnimate = []; // { hand: 'd'|0|1|2|3, ci: N }
+        var PLAYER_STEP = 200; // ms between player cards
+        var DEALER_STEP = 900; // ms between dealer cards (reveal/draw phase)
+        var toAnimate = []; // { hand, ci, delay }
 
         var prevDH = prev ? (prev.dealer_hand || []) : [];
         var nextDH = next.dealer_hand || [];
@@ -10901,31 +10902,42 @@
         var nextHC = (next.hands || []).map(function(h) { return h.cards.length; });
 
         if (!prev || prevDH.length === 0) {
-            // Initial deal — standard BJ order: player[0], dealer[0], player[1], dealer[1]
-            if (nextHC[0] > 0)  toAnimate.push({ hand: 0,   ci: 0 });
-            if (nextDH.length > 0) toAnimate.push({ hand: 'd', ci: 0 });
-            if (nextHC[0] > 1)  toAnimate.push({ hand: 0,   ci: 1 });
-            if (nextDH.length > 1) toAnimate.push({ hand: 'd', ci: 1 });
+            // Initial deal — BJ order: p0, d0, p1, d1 — uniform 200ms cadence
+            var delay = 0;
+            if (nextHC[0] > 0)     { toAnimate.push({ hand: 0,   ci: 0, delay: delay }); delay += PLAYER_STEP; }
+            if (nextDH.length > 0) { toAnimate.push({ hand: 'd', ci: 0, delay: delay }); delay += PLAYER_STEP; }
+            if (nextHC[0] > 1)     { toAnimate.push({ hand: 0,   ci: 1, delay: delay }); delay += PLAYER_STEP; }
+            if (nextDH.length > 1) { toAnimate.push({ hand: 'd', ci: 1, delay: delay }); }
         } else {
-            // Player new cards (hit/double/split)
+            var delay = 0;
+            // Player new cards first (hit/double/split)
             for (var h = 0; h < nextHC.length; h++) {
                 var start = prevHC[h] !== undefined ? prevHC[h] : 0;
-                for (var ci = start; ci < nextHC[h]; ci++) toAnimate.push({ hand: h, ci: ci });
+                for (var ci = start; ci < nextHC[h]; ci++) {
+                    toAnimate.push({ hand: h, ci: ci, delay: delay });
+                    delay += PLAYER_STEP;
+                }
             }
-            // Dealer: reveal hole card (was null, now face) + any new cards dealt
+            // Dealer: hole card reveal + new draw cards — slower spacing
+            var dealerCards = [];
             for (var di = 0; di < nextDH.length; di++) {
-                var wasHidden = di >= prevDH.length || prevDH[di] === null;
+                var wasHidden  = di >= prevDH.length || prevDH[di] === null;
                 var nowVisible = nextDH[di] !== null;
-                if (wasHidden && nowVisible) toAnimate.push({ hand: 'd', ci: di });
+                if (wasHidden && nowVisible) dealerCards.push({ hand: 'd', ci: di });
+            }
+            for (var k = 0; k < dealerCards.length; k++) {
+                dealerCards[k].delay = delay;
+                toAnimate.push(dealerCards[k]);
+                delay += DEALER_STEP;
             }
         }
 
         var mainEl = document.getElementById('casino-main');
         if (!mainEl) return;
-        toAnimate.forEach(function(item, idx) {
+        toAnimate.forEach(function(item) {
             var el = mainEl.querySelector('[data-hand="' + item.hand + '"][data-ci="' + item.ci + '"]');
             if (!el) return;
-            el.style.animationDelay = (idx * STEP) + 'ms';
+            el.style.animationDelay = item.delay + 'ms';
             el.classList.remove('casino-card-anim');
             void el.offsetWidth;
             el.classList.add('casino-card-anim');
