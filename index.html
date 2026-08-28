@@ -421,7 +421,7 @@
             <div class="ctrl-row">
                 <button id="ev-tab-btn" class="ctrl-tab-btn" onclick="toggleEvTab(this)" style="color:var(--yellow);font-weight:700;background:var(--bg3);border:1px solid var(--border2);font-family:var(--sans);font-size:12px;letter-spacing:.05em;padding:6px 14px;border-radius:5px;cursor:pointer;white-space:nowrap">⚡ Best EV</button>
                 <button id="referral-tab-btn" class="ctrl-tab-btn" onclick="toggleReferTab(this)" style="color:var(--green);font-weight:700;background:var(--bg3);border:1px solid var(--border2);font-family:var(--sans);font-size:12px;letter-spacing:.05em;padding:6px 14px;border-radius:5px;cursor:pointer;white-space:nowrap">🎁 Refer</button>
-                <button id="alerts-tab-btn" class="ctrl-tab-btn" onclick="toggleAlertsTab(this)" style="display:none;color:var(--accent);font-weight:700;background:var(--bg3);border:1px solid var(--border2);font-family:var(--sans);font-size:12px;letter-spacing:.05em;padding:6px 14px;border-radius:5px;cursor:pointer;white-space:nowrap">🔔 Notify</button>
+                <button id="alerts-tab-btn" class="ctrl-tab-btn" onclick="toggleAlertsTab(this)" style="display:none;color:var(--accent);font-weight:700;background:var(--bg3);border:1px solid var(--border2);font-family:var(--sans);font-size:12px;letter-spacing:.05em;padding:6px 14px;border-radius:5px;cursor:pointer;white-space:nowrap">🚨 <span style="color:#ff3b3b">Alerts</span></button>
                 <div class="search-wrap">
                     <span class="search-ico">&#9906;</span>
                     <input class="search-inp" id="search" placeholder="Search..." oninput="renderTable()">
@@ -1014,19 +1014,6 @@
                                 style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--mono);font-size:14px;font-weight:700;padding:8px 12px;border-radius:7px">
                         </div>
 
-                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-                            <div>
-                                <div style="font-size:13px;font-weight:700;color:var(--fg)">1 Side Only</div>
-                                <div style="font-size:11px;color:var(--muted);margin-top:2px">Only alert highest EV side per game</div>
-                            </div>
-                            <label style="position:relative;display:inline-block;cursor:pointer">
-                                <input type="checkbox" id="alerts-oneside-toggle" onchange="saveAlertSettings()" style="position:absolute;opacity:0;width:0;height:0">
-                                <div id="alerts-oneside-track" style="width:38px;height:22px;background:var(--bg4);border-radius:11px;transition:background .2s;position:relative">
-                                    <div id="alerts-oneside-thumb" style="position:absolute;top:3px;left:3px;width:16px;height:16px;background:#666;border-radius:50%;transition:transform .2s,background .2s"></div>
-                                </div>
-                            </label>
-                        </div>
-
                         <div>
                             <div style="font-size:12px;font-weight:700;color:var(--fg);margin-bottom:8px">Sports</div>
                             <div id="alerts-sports-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:6px"></div>
@@ -1040,7 +1027,7 @@
     <!-- end #dashboard -->
 
     <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script>
-    <script src="/app.js?v=832"></script>
-    <div id="app-version-badge" style="position:fixed;bottom:6px;right:10px;font-size:9px;font-weight:600;color:var(--muted2);font-family:var(--mono);letter-spacing:.03em;pointer-events:none;z-index:1">v832</div>
+    <script src="/app.js?v=833"></script>
+    <div id="app-version-badge" style="position:fixed;bottom:6px;right:10px;font-size:9px;font-weight:600;color:var(--muted2);font-family:var(--mono);letter-spacing:.03em;pointer-events:none;z-index:1">v833</div>
 </body>
 </html>
