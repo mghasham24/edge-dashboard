@@ -3508,6 +3508,16 @@
 }
 .casino-card-anim { animation: casinoCardDeal 0.28s ease-out both }
 
+/* Push-in deal: card starts at 0 width, slides in pushing siblings, then flips face-up */
+.casino-card-new { max-width:0 !important; overflow:hidden }
+@keyframes casinoCardPush {
+    0%   { max-width:0; transform:rotateY(90deg); opacity:0 }
+    38%  { max-width:64px; transform:rotateY(90deg); opacity:1 }
+    72%  { transform:rotateY(-8deg) }
+    100% { max-width:64px; transform:rotateY(0deg) }
+}
+.casino-card-deal { animation:casinoCardPush 0.4s ease both; overflow:hidden }
+
 .casino-table-divider {
     width:100%; max-width:480px; border:none; border-top:1px dashed var(--border); margin:0;
 }

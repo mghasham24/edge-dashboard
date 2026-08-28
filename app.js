@@ -10941,48 +10941,44 @@
 
     function animateNewCards(prev, next) {
         if (!next) return { maxDelay: 0, dealerItems: [] };
-        var PLAYER_STEP = 200;
-        var DEALER_STEP = 900;
-        var HOLE_EXTRA  = 500; // extra gap between hole reveal and first draw
-        var toAnimate   = [];
-        var dealerItems = []; // { ci, delay } for dealer cards only
+        var STEP        = 250; // ms between each card
+        var toAnimate   = []; // { hand, ci, delay, type:'push'|'flip' }
+        var dealerItems = [];
 
         var prevDH = prev ? (prev.dealer_hand || []) : [];
         var nextDH = next.dealer_hand || [];
         var prevHC = prev ? (prev.hands || []).map(function(h) { return h.cards.length; }) : [];
         var nextHC = (next.hands || []).map(function(h) { return h.cards.length; });
+        var delay  = 0;
 
         if (!prev || prevDH.length === 0) {
-            // Initial deal — BJ order: p0, d0, p1, d1 — uniform 200ms cadence
-            var delay = 0;
-            if (nextHC[0] > 0)     { toAnimate.push({ hand: 0,   ci: 0, delay: delay }); delay += PLAYER_STEP; }
-            if (nextDH.length > 0) { toAnimate.push({ hand: 'd', ci: 0, delay: delay }); delay += PLAYER_STEP; }
-            if (nextHC[0] > 1)     { toAnimate.push({ hand: 0,   ci: 1, delay: delay }); delay += PLAYER_STEP; }
-            if (nextDH.length > 1) { toAnimate.push({ hand: 'd', ci: 1, delay: delay }); }
+            // Initial deal — p0, d0, p1, d1 — all slide/push in
+            if (nextHC[0] > 0)     { toAnimate.push({ hand: 0,   ci: 0, delay: delay, type: 'push' }); delay += STEP; }
+            if (nextDH.length > 0) { toAnimate.push({ hand: 'd', ci: 0, delay: delay, type: 'push' }); delay += STEP; }
+            if (nextHC[0] > 1)     { toAnimate.push({ hand: 0,   ci: 1, delay: delay, type: 'push' }); delay += STEP; }
+            if (nextDH.length > 1) { toAnimate.push({ hand: 'd', ci: 1, delay: delay, type: 'push' }); }
         } else {
-            var delay = 0;
-            // Player new cards first (hit/double/split)
+            // New player cards (hit / double / split)
             for (var h = 0; h < nextHC.length; h++) {
                 var start = prevHC[h] !== undefined ? prevHC[h] : 0;
                 for (var ci = start; ci < nextHC[h]; ci++) {
-                    toAnimate.push({ hand: h, ci: ci, delay: delay });
-                    delay += PLAYER_STEP;
+                    toAnimate.push({ hand: h, ci: ci, delay: delay, type: 'push' });
+                    delay += STEP;
                 }
             }
-            // Dealer: hole card reveal + new draw cards
+            // Dealer — hole card (ci=1) flips in place; new draws (ci≥2) push in
             var rawDealer = [];
             for (var di = 0; di < nextDH.length; di++) {
                 var wasHidden  = di >= prevDH.length || prevDH[di] === null;
                 var nowVisible = nextDH[di] !== null;
-                if (wasHidden && nowVisible) rawDealer.push({ hand: 'd', ci: di });
+                if (wasHidden && nowVisible)
+                    rawDealer.push({ hand: 'd', ci: di, type: di === 1 ? 'flip' : 'push' });
             }
             for (var k = 0; k < rawDealer.length; k++) {
                 rawDealer[k].delay = delay;
                 toAnimate.push(rawDealer[k]);
                 dealerItems.push({ ci: rawDealer[k].ci, delay: delay });
-                delay += DEALER_STEP;
-                // Extra pause after hole reveal when draws follow
-                if (k === 0 && rawDealer[k].ci === 1 && rawDealer.length > 1) delay += HOLE_EXTRA;
+                delay += STEP;
             }
         }
 
@@ -10990,13 +10986,34 @@
 
         var mainEl = document.getElementById('casino-main');
         if (!mainEl) return { maxDelay: maxDelay, dealerItems: dealerItems };
+
+        // Immediately hide all PUSH cards — no pre-occupied space before animation
+        var elMap = {};
         toAnimate.forEach(function(item) {
             var el = mainEl.querySelector('[data-hand="' + item.hand + '"][data-ci="' + item.ci + '"]');
             if (!el) return;
-            el.style.animationDelay = item.delay + 'ms';
-            el.classList.remove('casino-card-anim');
-            void el.offsetWidth;
-            el.classList.add('casino-card-anim');
+            elMap[item.hand + ',' + item.ci] = el;
+            if (item.type === 'push') el.classList.add('casino-card-new');
+        });
+
+        // Force reflow so hidden state is committed before first paint
+        void mainEl.offsetWidth;
+
+        // Schedule each card reveal
+        toAnimate.forEach(function(item) {
+            var el = elMap[item.hand + ',' + item.ci];
+            if (!el) return;
+            setTimeout(function() {
+                if (item.type === 'push') {
+                    el.classList.remove('casino-card-new');
+                    el.classList.add('casino-card-deal');
+                } else {
+                    // Hole card flips in place — no push needed
+                    el.classList.remove('casino-card-anim');
+                    void el.offsetWidth;
+                    el.classList.add('casino-card-anim');
+                }
+            }, item.delay);
         });
 
         return { maxDelay: maxDelay, dealerItems: dealerItems };
