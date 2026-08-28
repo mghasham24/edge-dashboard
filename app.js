@@ -11196,11 +11196,14 @@
                 var d       = new Date((h.created_at || 0) * 1000);
                 var tStr    = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).replace(' AM', 'a').replace(' PM', 'p');
                 var dateStr = (d.getMonth() + 1) + '/' + d.getDate() + ' ' + tStr;
-                return '<tr><td>' + escHtml(dateStr) + '</td><td>' + (h.total_bet||0).toLocaleString() + '</td>' +
-                    '<td class="' + rCls + '">' + escHtml(resultStr) + '</td>' +
-                    '<td class="' + netCls + '">' + escHtml(netStr) + '</td></tr>';
+                return '<div class="chr-row">' +
+                    '<span class="chr-date">' + escHtml(dateStr) + '</span>' +
+                    '<span class="chr-bet">' + escHtml((h.total_bet||0).toLocaleString()) + '</span>' +
+                    '<span class="chr-result ' + rCls + '">' + escHtml(resultStr) + '</span>' +
+                    '<span class="chr-net ' + netCls + '">' + escHtml(netStr) + '</span>' +
+                    '</div>';
             }).join('');
-            el.innerHTML = '<table class="casino-history-table"><thead><tr><th>Date</th><th>Bet</th><th>Result</th><th>Net</th></tr></thead><tbody>' + rows + '</tbody></table>';
+            el.innerHTML = '<div class="chr-row chr-header"><span class="chr-date">Date</span><span class="chr-bet">Bet</span><span class="chr-result">Result</span><span class="chr-net">Net</span></div>' + rows;
         } catch(e) { el.innerHTML = '<div class="casino-error">Error loading history.</div>'; }
     }
 
