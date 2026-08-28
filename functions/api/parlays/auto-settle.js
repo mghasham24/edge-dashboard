@@ -291,10 +291,10 @@ function resolve1stInnLeg(leg, finalGames, linescore1Map, pbpMap) {
       case '1inn_batters_ou': {
         if (!side) return null;
         const ls = linescore1Map ? linescore1Map[game.gamePk] : null;
-        if (side === 'away' && (!ls || ls.home.runs === null)) return null; // bottom half not done
-        if (side === 'home' && (!ls || ls.away.runs === null)) return null; // top half not done
-        // away pitcher faces home batters in bottom; home pitcher faces away batters in top
-        const count = side === 'away' ? pbp.bottom.batters : pbp.top.batters;
+        // "HOU Batters" = HOU's own batters at the plate: away bats Top 1, home bats Bot 1
+        if (side === 'away' && (!ls || ls.away.runs === null)) return null; // top half not done
+        if (side === 'home' && (!ls || ls.home.runs === null)) return null; // bottom half not done
+        const count = side === 'away' ? pbp.top.batters : pbp.bottom.batters;
         const line  = parseFloat(leg.threshold);
         if (isNaN(line)) return null;
         if (isOver)  return count > line ? 'won' : 'lost';
