@@ -8757,6 +8757,9 @@
                     var pick = leg.label || (leg.threshold != null ? String(leg.threshold) : '');
                     line = arrow + ' ' + leg.player_name + ' (1IN)' + (pick ? ' · ' + pick : '');
                 }
+            } else if (leg.market_type === 'team_ml') {
+                var teamName = (leg.player_name || '').replace(/\s+ML$/i, '').trim();
+                line = arrow + ' ' + teamName + ' to Win';
             } else if (leg.market_type === 'ufc_ml') {
                 line = arrow + ' ' + leg.player_name + ' Win';
             } else if (leg.market_type === 'ufc_total') {
