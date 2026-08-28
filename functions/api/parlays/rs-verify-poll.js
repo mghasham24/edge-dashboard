@@ -41,7 +41,7 @@ function buildHeaders(authInfo, sessionToken, withBody = false) {
   return h;
 }
 
-async function solveTurnstile(capsolverKey) {
+async function solveTurnstileOnce(capsolverKey) {
   const createRes = await fetch('https://api.capsolver.com/createTask', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -71,6 +71,16 @@ async function solveTurnstile(capsolverKey) {
     if (poll.status === 'failed') throw new Error('CapSolver solve failed');
   }
   throw new Error('CapSolver timeout');
+}
+
+async function solveTurnstile(capsolverKey) {
+  try {
+    return await solveTurnstileOnce(capsolverKey);
+  } catch(e) {
+    // Retry once after 2s — handles transient CapSolver errors / zero-credit flash
+    await new Promise(r => setTimeout(r, 2000));
+    return await solveTurnstileOnce(capsolverKey);
+  }
 }
 
 function genCode() {
@@ -262,13 +272,21 @@ export async function onRequestPost({ request, env }) {
       // 2. Accept message request if this is a first-time DM
       if (requestChannelIds.has(channelId)) {
         try {
-          await fetch(`${RS_BASE}/messages/channels/${channelId}/acceptrequest`, {
+          const acceptRes = await fetch(`${RS_BASE}/messages/channels/${channelId}/acceptrequest`, {
             method:  'PUT',
             headers: buildHeaders(authInfo, sessionToken, true),
             body:    '{}',
             signal:  AbortSignal.timeout(8000),
           });
-        } catch(e) { /* non-fatal — attempt send anyway */ }
+          if (!acceptRes.ok) {
+            const body = await acceptRes.text().catch(() => '');
+            sent.push({ skipped: 'acceptrequest_failed', channelId, rsUsername, status: acceptRes.status, body: body.slice(0, 200) });
+            continue;
+          }
+        } catch(e) {
+          sent.push({ skipped: 'acceptrequest_error', channelId, rsUsername, error: e.message });
+          continue;
+        }
       }
 
       // 3. Solve Turnstile (required for message send)
@@ -415,6 +433,13 @@ export async function onRequestPost({ request, env }) {
         sent.push({ milestoneDm: true, dmChannelId, error: e.message });
       }
     }
+
+    // Store last poll result for debugging
+    try {
+      await env.DB.prepare(
+        'INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at'
+      ).bind('edgebot_poll_result', JSON.stringify({ ts: now, processed: sent.length, sent }), now).run();
+    } catch(_) {}
 
     return ok({ processed: sent.length, sent });
 
