@@ -178,12 +178,17 @@ function resolveTeamLeg(leg, finalGames) {
   const teamName = normalizeName(dkName);
   const nickname = teamName.split(' ').slice(1).join(' ');
   const dkUp     = dkName.toUpperCase();
+  const legTeam  = (leg.team || '').toUpperCase(); // stored DK shortName (most reliable for CFB)
   const game = finalGames.find(g => {
     const homeNorm = normalizeName(g.homeName);
     const awayNorm = normalizeName(g.awayName);
     if (homeNorm === teamName || awayNorm === teamName) return true;
     if (nickname && (homeNorm.endsWith(nickname) || awayNorm.endsWith(nickname))) return true;
-    // CFB: ESPN abbreviation is often a suffix of DK shortName (e.g. DK "UNC" → ESPN "NC")
+    // Direct shortName match — exact or DK suffix (e.g. "UNC" → ESPN "NC")
+    if (legTeam && (g.homeAbbr === legTeam || g.awayAbbr === legTeam)) return true;
+    if (legTeam && g.homeAbbr && legTeam.length > g.homeAbbr.length && legTeam.endsWith(g.homeAbbr)) return true;
+    if (legTeam && g.awayAbbr && legTeam.length > g.awayAbbr.length && legTeam.endsWith(g.awayAbbr)) return true;
+    // Fallback: DK player_name suffix (older legs without leg.team)
     if (g.homeAbbr && dkUp.length > g.homeAbbr.length && dkUp.endsWith(g.homeAbbr)) return true;
     if (g.awayAbbr && dkUp.length > g.awayAbbr.length && dkUp.endsWith(g.awayAbbr)) return true;
     return false;
@@ -193,6 +198,7 @@ function resolveTeamLeg(leg, finalGames) {
   const homeNorm  = normalizeName(game.homeName);
   const isHome    = homeNorm === teamName ||
                     (nickname && homeNorm.endsWith(nickname)) ||
+                    (legTeam && (game.homeAbbr === legTeam || (legTeam.length > game.homeAbbr.length && legTeam.endsWith(game.homeAbbr)))) ||
                     (game.homeAbbr && dkUp.length > game.homeAbbr.length && dkUp.endsWith(game.homeAbbr));
   const teamScore = isHome ? game.homeScore : game.awayScore;
   const oppScore  = isHome ? game.awayScore : game.homeScore;

@@ -5718,9 +5718,13 @@
                 } else if (mkt.market === 'team_total') {
                     var overId = teamPickIdCounter--;
                     var underId = teamPickIdCounter--;
+                    // CFB: use shortNames so auto-settle matchesTeam can match via exact ESPN abbreviation
+                    var _totBase = sport === 'cfb'
+                        ? (game.awayShort + ' @ ' + game.homeShort)
+                        : (game.awayTeam + ' @ ' + game.homeTeam);
                     pushTo.push({
                         id: overId, isTeamMarket: true, market: 'team_total', stat: 'Total',
-                        name: game.awayTeam + ' @ ' + game.homeTeam + ' O' + mkt.line,
+                        name: _totBase + ' O' + mkt.line,
                         team: null, opp: null,
                         homeTeam: game.homeTeam, awayTeam: game.awayTeam,
                         homeShort: game.homeShort, awayShort: game.awayShort,
@@ -5730,7 +5734,7 @@
                     });
                     pushTo.push({
                         id: underId, isTeamMarket: true, market: 'team_total', stat: 'Total',
-                        name: game.awayTeam + ' @ ' + game.homeTeam + ' U' + mkt.line,
+                        name: _totBase + ' U' + mkt.line,
                         team: null, opp: null,
                         homeTeam: game.homeTeam, awayTeam: game.awayTeam,
                         homeShort: game.homeShort, awayShort: game.awayShort,
