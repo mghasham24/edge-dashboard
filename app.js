@@ -9828,6 +9828,34 @@
                             return;
                         }
                     }
+                    // CFB: block same-game opposite-side team markets (ML, RL, O/U)
+                    if (newP.isTeamMarket && newP.eventId &&
+                        (newP.market === 'team_ml' || newP.market === 'team_runline' || newP.market === 'team_total')) {
+                        var _cfbTeamConflict = Object.keys(parlayPicks).some(function(k) {
+                            var ex = findParlayPlayer(k);
+                            return ex && ex.isTeamMarket && ex.eventId === newP.eventId &&
+                                   ex.market === newP.market && ex.id !== newP.id;
+                        });
+                        if (_cfbTeamConflict) {
+                            var _cfbMktLabel = newP.market === 'team_ml' ? 'Moneyline' : newP.market === 'team_runline' ? 'Run Line' : 'Total';
+                            showConfirm('Can\'t pick both sides of the same ' + _cfbMktLabel + ' — these are opposite outcomes.', function() {});
+                            return;
+                        }
+                    }
+                    // CFB: block Pass Yds + Pass TDs for same QB (TDs are a subset of passing volume)
+                    if (newP.name && !newP.isTeamMarket && newP.eventId &&
+                        (newP.market === 'cfb_pass_yds' || newP.market === 'cfb_pass_tds')) {
+                        var _cfbPassCorrHit = Object.keys(parlayPicks).some(function(k) {
+                            var ex = findParlayPlayer(k);
+                            if (!ex || ex.isTeamMarket || ex.name !== newP.name || ex.eventId !== newP.eventId) return false;
+                            return (newP.market === 'cfb_pass_yds' && ex.market === 'cfb_pass_tds') ||
+                                   (newP.market === 'cfb_pass_tds' && ex.market === 'cfb_pass_yds');
+                        });
+                        if (_cfbPassCorrHit) {
+                            showConfirm('Pass Yards and Pass TDs for the same QB are correlated — can\'t combine these.', function() {});
+                            return;
+                        }
+                    }
                     // Block same player/team appearing twice
                     var duplicate = Object.keys(parlayPicks).some(function(k) {
                         var existing = findParlayPlayer(k);
