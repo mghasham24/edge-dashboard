@@ -9382,40 +9382,33 @@
                         logoB = evtHome ? slipTeamLogo(evtHome, leg.sport) : null;
                     }
                 } else if (mkt === 'team_runline') {
+                    // Single logo — picked team only
                     if (leg.team) {
-                        // leg.team is shortName of picked team — use it directly (avoids full-name mismatch)
                         logoA = slipTeamLogo(leg.team, leg.sport);
-                        // Opp: try both event_name parts; pick whichever isn't the same as logoA
-                        if (evtAway && evtHome) {
-                            var _rlA = slipTeamLogo(evtAway, leg.sport);
-                            var _rlH = slipTeamLogo(evtHome, leg.sport);
-                            logoB = (_rlA && _rlA !== logoA) ? _rlA : (_rlH && _rlH !== logoA) ? _rlH : null;
-                        }
                     } else {
                         var pickedN = (leg.player_name || '').replace(/ (ML|RL|Spread)$/i, '').trim();
-                        var pickedNrm = normSlipName(pickedN);
-                        var awayNrm   = normSlipName(evtAway || '');
-                        var awayNick  = awayNrm.split(' ').slice(1).join(' ');
-                        var isAwayPk  = awayNrm === pickedNrm || (awayNick && pickedNrm.endsWith(awayNick));
-                        logoA = slipTeamLogo(isAwayPk ? evtAway : evtHome, leg.sport);
-                        logoB = slipTeamLogo(isAwayPk ? evtHome : evtAway, leg.sport);
+                        logoA = slipTeamLogo(pickedN, leg.sport);
+                        if (!logoA && (evtAway || evtHome)) {
+                            var pickedNrm = normSlipName(pickedN);
+                            var awayNrm   = normSlipName(evtAway || '');
+                            var awayNick  = awayNrm.split(' ').slice(1).join(' ');
+                            var isAwayPk  = awayNrm === pickedNrm || (awayNick && pickedNrm.endsWith(awayNick));
+                            logoA = slipTeamLogo(isAwayPk ? evtAway : evtHome, leg.sport);
+                        }
                     }
                 } else {
-                    // team_ml / team_runline single-logo — use leg.team shortName first (avoids full-name mismatch)
+                    // team_ml — single logo of picked team
                     if (leg.team) {
                         logoA = slipTeamLogo(leg.team, leg.sport);
                     }
                     if (!logoA) {
                         var tmln = (leg.player_name || '').replace(/ (ML|RL|Spread)$/i, '').trim();
                         logoA = slipTeamLogo(tmln, leg.sport);
-                        // Fallback: try matching team against event_name parts (handles "LA Chargers" → evtAway "LAC")
                         if (!logoA && (evtAway || evtHome)) {
                             var tNrm = normSlipName(tmln);
                             var aNrm = normSlipName(evtAway || '');
-                            var hNrm = normSlipName(evtHome || '');
                             var tLast = tNrm.split(' ').pop();
                             var aLast = aNrm.split(' ').pop();
-                            var hLast = hNrm.split(' ').pop();
                             var isAway = aNrm === tNrm || (tLast && tLast === aLast);
                             logoA = isAway
                                 ? (slipTeamLogo(evtAway, leg.sport) || slipTeamLogo(evtHome, leg.sport))
@@ -9427,8 +9420,8 @@
                     if (src) return '<img class="' + cls + '" src="' + escHtml(src) + '" alt="" onerror="this.outerHTML=\'<span class=\\\'' + cls + ' pslip-dual-init\\\'>' + escHtml(fb) + '</span>\'">';
                     return '<span class="' + cls + ' pslip-dual-init">' + escHtml(fb) + '</span>';
                 };
-                if (mkt === 'team_total' || mkt.startsWith('1inn_') || logoA || logoB) {
-                    // Always show dual frame for game-level markets; also for ML/RL if at least one logo found
+                if (mkt === 'team_total' || mkt.startsWith('1inn_')) {
+                    // Dual frame for game-level markets only (both team logos)
                     var _initA = (evtAway || '').replace(/\s+/g, '').slice(0, 2).toUpperCase() || initials[0] || '?';
                     var _initB = (evtHome || '').replace(/\s+/g, '').slice(0, 2).toUpperCase() || initials[initials.length - 1] || '?';
                     avatarHtml = '<div class="pslip-avatar pslip-avatar-dual">' +
@@ -9436,6 +9429,9 @@
                             mkDualSlot('pslip-dual-logo-a', logoA, _initA) +
                             mkDualSlot('pslip-dual-logo-b', logoB, _initB) +
                         '</div></div>';
+                } else if (logoA) {
+                    // Single logo for ML/RL — picked team only
+                    avatarHtml = '<div class="pslip-avatar"><div class="pslip-av-inner" style="background:hsl(' + hue + ',30%,18%) url(' + escHtml(logoA) + ') center/contain no-repeat"></div></div>';
                 } else {
                     avatarHtml = '<div class="pslip-avatar"><div class="pslip-av-inner" style="background:hsl(' + hue + ',40%,22%)"><span>' + escHtml(initials) + '</span></div></div>';
                 }
