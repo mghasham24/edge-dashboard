@@ -11397,6 +11397,7 @@
             '      <span class="casino-hdr-bal" id="casino-bal-display">—</span>',
             '    </div>',
             '    <button class="casino-hdr-btn" onclick="showCasinoModal(\'withdraw\')">Withdraw</button>',
+            '    <button class="casino-hdr-btn" onclick="showCasinoModal(\'transactions\')" style="opacity:.7">Transactions</button>',
             '  </div>',
             '</div>',
             '<div class="casino-main" id="casino-main"></div>',
@@ -11418,9 +11419,15 @@
         var content = document.getElementById('casino-modal-content');
         var title   = document.getElementById('casino-modal-title');
         if (!overlay || !content) return;
-        if (title) title.textContent = type === 'deposit' ? 'Deposit Rax' : 'Withdraw Rax';
-        content.innerHTML = type === 'deposit' ? renderCasinoDepositHTML() : renderCasinoWithdrawHTML();
-        overlay.style.display = 'flex';
+        if (title) title.textContent = type === 'deposit' ? 'Deposit Rax' : type === 'transactions' ? 'Transactions' : 'Withdraw Rax';
+        if (type === 'transactions') {
+            content.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px 0">Loading…</p>';
+            overlay.style.display = 'flex';
+            loadCasinoTransactions(content);
+        } else {
+            content.innerHTML = type === 'deposit' ? renderCasinoDepositHTML() : renderCasinoWithdrawHTML();
+            overlay.style.display = 'flex';
+        }
     }
 
     function hideCasinoModal() {
@@ -11965,6 +11972,55 @@
         casinoDepositPending = null;
         var content = document.getElementById('casino-modal-content');
         if (content) content.innerHTML = renderCasinoDepositHTML();
+    }
+
+    // ── Transactions modal ────────────────────────────────────────────────────
+
+    async function loadCasinoTransactions(container) {
+        try {
+            var res  = await fetch('/api/casino/transactions');
+            var data = await res.json();
+            if (!data.ok || !data.transactions) { container.innerHTML = '<p style="color:#ef4444;text-align:center">Error loading transactions.</p>'; return; }
+            var txs = data.transactions;
+            if (!txs.length) { container.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px 0">No transactions yet.</p>'; return; }
+
+            var statusLabel = {
+                confirmed: '<span style="color:var(--green)">Completed</span>',
+                complete:  '<span style="color:var(--green)">Completed</span>',
+                pending:   '<span style="color:#f59e0b">Pending</span>',
+                processing:'<span style="color:#60a5fa">Processing</span>',
+                expired:   '<span style="color:var(--muted)">Expired</span>',
+                failed:    '<span style="color:#ef4444">Failed</span>',
+            };
+
+            var html = '<div style="display:flex;flex-direction:column;gap:8px;max-height:420px;overflow-y:auto">';
+            txs.forEach(function(tx) {
+                var isDeposit = tx.type === 'deposit';
+                var amt = isDeposit
+                    ? (tx.status === 'confirmed' ? (tx.rax_credited || tx.amount) : tx.amount)
+                    : tx.amount;
+                var label = isDeposit ? 'Deposit' : 'Withdrawal';
+                var sign  = isDeposit ? '+' : '-';
+                var color = isDeposit ? 'var(--green)' : '#f59e0b';
+                var date  = tx.created_at ? new Date(tx.created_at * 1000).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' }) : '—';
+                var badge = statusLabel[tx.status] || '<span style="color:var(--muted)">' + (tx.status || '—') + '</span>';
+                html +=
+                    '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:var(--bg3);border-radius:7px;font-size:13px">' +
+                    '  <div>' +
+                    '    <div style="font-weight:600;color:var(--fg)">' + label + '</div>' +
+                    '    <div style="color:var(--muted);font-size:11px;margin-top:2px">' + date + '</div>' +
+                    '  </div>' +
+                    '  <div style="text-align:right">' +
+                    '    <div style="font-weight:700;color:' + color + '">' + sign + amt.toLocaleString() + ' Ⓡ</div>' +
+                    '    <div style="font-size:11px;margin-top:2px">' + badge + '</div>' +
+                    '  </div>' +
+                    '</div>';
+            });
+            html += '</div>';
+            container.innerHTML = html;
+        } catch(e) {
+            container.innerHTML = '<p style="color:#ef4444;text-align:center">Error loading transactions.</p>';
+        }
     }
 
     // ── Withdraw modal ────────────────────────────────────────────────────────
@@ -16309,6 +16365,75 @@
             }).join('');
         } catch (e) {
             el.innerHTML = '<span style="color:#ef4444">Failed to load: ' + escHtml(e.message) + '</span>';
+        }
+    }
+
+    function adminCasinoSubTab(tab) {
+        var wdPane = document.getElementById('admin-casino-pane-wd');
+        var txPane = document.getElementById('admin-casino-pane-tx');
+        var wdBtn  = document.getElementById('admin-casino-sub-wd');
+        var txBtn  = document.getElementById('admin-casino-sub-tx');
+        if (tab === 'tx') {
+            if (wdPane) wdPane.style.display = 'none';
+            if (txPane) txPane.style.display = '';
+            if (wdBtn)  wdBtn.classList.remove('active');
+            if (txBtn)  txBtn.classList.add('active');
+            loadAdminCasinoTransactions();
+        } else {
+            if (txPane) txPane.style.display = 'none';
+            if (wdPane) wdPane.style.display = '';
+            if (txBtn)  txBtn.classList.remove('active');
+            if (wdBtn)  wdBtn.classList.add('active');
+        }
+    }
+
+    async function loadAdminCasinoTransactions() {
+        var el = document.getElementById('admin-casino-tx-list');
+        if (!el) return;
+        el.innerHTML = '<span style="color:var(--muted)">Loading…</span>';
+        try {
+            var res  = await fetch('/api/casino/transactions?admin=1', { credentials: 'same-origin' });
+            var data = await res.json();
+            if (!data.ok) { el.innerHTML = '<span style="color:#ef4444">Error loading transactions</span>'; return; }
+            var txs = data.transactions || [];
+            if (!txs.length) { el.innerHTML = '<span style="color:var(--muted)">No transactions found.</span>'; return; }
+
+            var statusLabel = {
+                confirmed:  '<span style="color:var(--green)">Completed</span>',
+                complete:   '<span style="color:var(--green)">Completed</span>',
+                pending:    '<span style="color:#f59e0b">Pending</span>',
+                processing: '<span style="color:#60a5fa">Processing</span>',
+                expired:    '<span style="color:var(--muted)">Expired</span>',
+                failed:     '<span style="color:#ef4444">Failed</span>',
+            };
+
+            el.innerHTML =
+                '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
+                '<thead><tr style="color:var(--muted2);font-size:11px;text-transform:uppercase;letter-spacing:.06em">' +
+                '<th style="text-align:left;padding:6px 8px">User</th>' +
+                '<th style="text-align:left;padding:6px 8px">Type</th>' +
+                '<th style="text-align:right;padding:6px 8px">Amount</th>' +
+                '<th style="text-align:right;padding:6px 8px">Credited</th>' +
+                '<th style="text-align:left;padding:6px 8px">Status</th>' +
+                '<th style="text-align:left;padding:6px 8px">Date</th>' +
+                '</tr></thead><tbody>' +
+                txs.map(function(tx) {
+                    var date = tx.created_at ? new Date(tx.created_at * 1000).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' }) : '—';
+                    var credited = tx.type === 'deposit' && tx.rax_credited ? tx.rax_credited.toLocaleString() + ' Ⓡ' : '—';
+                    var typeColor = tx.type === 'deposit' ? 'var(--green)' : '#f59e0b';
+                    var badge = statusLabel[tx.status] || ('<span style="color:var(--muted)">' + (tx.status || '—') + '</span>');
+                    return '<tr style="border-top:1px solid var(--border)">' +
+                        '<td style="padding:8px 8px;color:var(--muted);font-size:12px">' + escHtml(tx.email || String(tx.user_id)) + '</td>' +
+                        '<td style="padding:8px 8px;font-weight:600;color:' + typeColor + '">' + (tx.type === 'deposit' ? 'Deposit' : 'Withdrawal') + '</td>' +
+                        '<td style="padding:8px 8px;text-align:right;font-weight:600">' + (tx.amount || 0).toLocaleString() + ' Ⓡ</td>' +
+                        '<td style="padding:8px 8px;text-align:right;color:var(--muted)">' + credited + '</td>' +
+                        '<td style="padding:8px 8px">' + badge + '</td>' +
+                        '<td style="padding:8px 8px;color:var(--muted);font-size:12px">' + date + '</td>' +
+                        '</tr>';
+                }).join('') +
+                '</tbody></table>';
+        } catch(e) {
+            el.innerHTML = '<span style="color:#ef4444">Error loading transactions</span>';
         }
     }
 

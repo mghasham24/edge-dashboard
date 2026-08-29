@@ -80,6 +80,7 @@ async function pickCard(env, now, db) {
     const row = await db.prepare(
       'SELECT card_id FROM deposit_cards' +
       ' WHERE assigned_to_parlay_id IS NULL AND freed_at IS NULL AND verified_at > ?' +
+      ' AND sport=\'nba\' AND season=\'2026\'' +
       ' AND card_id NOT IN (SELECT card_id FROM casino_deposits WHERE status=\'pending\' AND card_id IS NOT NULL)' +
       notIn + ' ORDER BY verified_at DESC LIMIT 1'
     ).bind(now - VERIFY_MAX_AGE, ...excluded).first();

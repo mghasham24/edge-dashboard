@@ -10,9 +10,11 @@ import { ok, err }       from '../../_lib/response.js';
 const RS_DEVICE_UUID = '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e';
 const EDGEBOT_USER   = 'V3yGgkkJ';
 
-// All sport/season combos to scan for deposit account's cards
+// All sport/season combos to scan for deposit account's cards.
+// Parlays use mlb/2025; casino uses nba/2026 — kept separate to prevent pool exhaustion.
 const CARD_SOURCES = [
   { sport: 'mlb', season: 2025 },
+  { sport: 'nba', season: 2026 },
 ];
 
 function buildHeaders(authInfo, sessionToken) {
@@ -83,71 +85,81 @@ export async function onRequestGet({ request, env }) {
   const sessionToken = env.EDGEBOT_SESSION_TOKEN;
   if (!authInfo) return err('EDGEBOT_AUTH_INFO not configured', 500);
 
-  // Fetch all cards across all sport/season combos in parallel
-  const results = await Promise.allSettled(
-    CARD_SOURCES.map(({ sport, season }) => fetchAllCards(sport, season, authInfo, sessionToken))
-  );
-
-  // Deduplicate
-  const allIds = new Set();
-  const allPageLogs = [];
-  for (const r of results) {
-    if (r.status === 'fulfilled') {
-      r.value.ids.forEach(id => allIds.add(id));
-      allPageLogs.push(...r.value.pageLog);
-    }
-  }
-
-  if (!allIds.size) return err('No cards fetched from RS — check EDGEBOT_AUTH_INFO', 502);
-
-  // Get current cards in D1
-  const existing = await env.DB.prepare('SELECT card_id FROM deposit_cards').all();
-  const existingSet = new Set((existing.results || []).map(r => r.card_id));
-
   // Cards already consumed by any live/active parlay — never re-pool these.
-  // Prevents auction-window cards (non-Real-Pro deposit: card stays in edgebot inventory
-  // during 10-min countdown) from being re-inserted and double-assigned.
   const usedRows = await env.DB.prepare(
     "SELECT DISTINCT deposit_card_id FROM parlays WHERE deposit_card_id IS NOT NULL AND status NOT IN ('expired','void','cancelled')"
   ).all();
   const usedCardIds = new Set((usedRows.results || []).map(r => r.deposit_card_id));
 
-  // Insert new cards — skip cards already tied to a parlay
-  const syncNow = Math.floor(Date.now() / 1000);
-  const toInsert = [...allIds].filter(id => !existingSet.has(id) && !usedCardIds.has(id));
-  if (toInsert.length) {
-    await env.DB.batch(
-      toInsert.map(id =>
-        env.DB.prepare('INSERT OR IGNORE INTO deposit_cards (card_id, verified_at) VALUES (?,?)').bind(id, syncNow)
-      )
-    );
-  }
-  // Stamp verified_at on all existing cards that edgebot still owns
-  const toVerify = [...allIds].filter(id => existingSet.has(id));
-  if (toVerify.length) {
-    await env.DB.batch(
-      toVerify.map(id =>
-        env.DB.prepare('UPDATE deposit_cards SET verified_at=? WHERE card_id=?').bind(syncNow, id)
-      )
-    );
+  const syncNow   = Math.floor(Date.now() / 1000);
+  const allPageLogs = [];
+  let totalInserted = 0, totalDeleted = 0, totalCards = 0;
+
+  // Fetch all card sources in parallel, then process each sport/season independently
+  // so each card is stored with its sport+season tag for pool isolation.
+  const fetched = await Promise.allSettled(
+    CARD_SOURCES.map(({ sport, season }) =>
+      fetchAllCards(sport, season, authInfo, sessionToken).then(r => ({ sport, season: String(season), ...r }))
+    )
+  );
+
+  let anyFetched = false;
+  for (const result of fetched) {
+    if (result.status !== 'fulfilled') continue;
+    const { sport, season, ids, pageLog } = result.value;
+    allPageLogs.push(...pageLog);
+    if (!ids.length) continue;
+    anyFetched = true;
+    totalCards += ids.length;
+
+    const allIds = new Set(ids);
+
+    // Existing cards for this sport/season only
+    const existing = await env.DB.prepare(
+      'SELECT card_id FROM deposit_cards WHERE sport=? AND season=?'
+    ).bind(sport, season).all();
+    const existingSet = new Set((existing.results || []).map(r => r.card_id));
+
+    const toInsert = [...allIds].filter(id => !existingSet.has(id) && !usedCardIds.has(id));
+    if (toInsert.length) {
+      await env.DB.batch(
+        toInsert.map(id =>
+          env.DB.prepare(
+            'INSERT OR IGNORE INTO deposit_cards (card_id, verified_at, sport, season) VALUES (?,?,?,?)'
+          ).bind(id, syncNow, sport, season)
+        )
+      );
+      totalInserted += toInsert.length;
+    }
+
+    const toVerify = [...allIds].filter(id => existingSet.has(id));
+    if (toVerify.length) {
+      await env.DB.batch(
+        toVerify.map(id =>
+          env.DB.prepare('UPDATE deposit_cards SET verified_at=? WHERE card_id=?').bind(syncNow, id)
+        )
+      );
+    }
+
+    const toDelete = [...existingSet].filter(id => !allIds.has(id));
+    if (toDelete.length) {
+      await env.DB.batch(
+        toDelete.map(id =>
+          env.DB.prepare(
+            'DELETE FROM deposit_cards WHERE card_id=? AND assigned_to_parlay_id IS NULL'
+          ).bind(id)
+        )
+      );
+      totalDeleted += toDelete.length;
+    }
   }
 
-  // Delete cards no longer in RS (sold/transferred) — only if not assigned to a live parlay
-  const toDelete = [...existingSet].filter(id => !allIds.has(id));
-  if (toDelete.length) {
-    await env.DB.batch(
-      toDelete.map(id =>
-        env.DB.prepare(
-          'DELETE FROM deposit_cards WHERE card_id=? AND assigned_to_parlay_id IS NULL'
-        ).bind(id)
-      )
-    );
-  }
+  if (!anyFetched) return err('No cards fetched from RS — check EDGEBOT_AUTH_INFO', 502);
 
   return ok({
-    total:    allIds.size,
-    inserted: toInsert.length,
-    deleted:  toDelete.length,
+    total:    totalCards,
+    inserted: totalInserted,
+    deleted:  totalDeleted,
     sources:  CARD_SOURCES.length,
     pages:    allPageLogs,
   });

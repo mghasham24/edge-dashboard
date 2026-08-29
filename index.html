@@ -649,21 +649,39 @@
 
             <!-- Casino Withdrawals section -->
             <div id="admin-casino-section" style="display:none">
-                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px">
-                    <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2)">Casino Withdrawals</div>
-                    <div style="display:flex;gap:8px;align-items:center">
-                        <select id="casino-wd-filter" onchange="loadAdminCasinoWithdrawals()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;padding:6px 10px;border-radius:5px;cursor:pointer">
-                            <option value="">All</option>
-                            <option value="pending">Pending</option>
-                            <option value="processing">Processing</option>
-                            <option value="complete">Complete</option>
-                            <option value="failed">Failed</option>
-                        </select>
-                        <button onclick="loadAdminCasinoWithdrawals()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:5px;cursor:pointer">Refresh</button>
-                    </div>
+                <!-- Sub-tabs -->
+                <div style="display:flex;gap:8px;margin-bottom:16px">
+                    <button id="admin-casino-sub-wd" class="admin-sub-btn active" onclick="adminCasinoSubTab('wd')">Withdrawals</button>
+                    <button id="admin-casino-sub-tx" class="admin-sub-btn" onclick="adminCasinoSubTab('tx')">Transactions</button>
                 </div>
-                <div id="admin-casino-stats" style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px"></div>
-                <div id="admin-casino-wd-list" style="font-size:13px;color:var(--muted)">Loading…</div>
+
+                <!-- Withdrawals pane -->
+                <div id="admin-casino-pane-wd">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px">
+                        <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2)">Casino Withdrawals</div>
+                        <div style="display:flex;gap:8px;align-items:center">
+                            <select id="casino-wd-filter" onchange="loadAdminCasinoWithdrawals()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;padding:6px 10px;border-radius:5px;cursor:pointer">
+                                <option value="">All</option>
+                                <option value="pending">Pending</option>
+                                <option value="processing">Processing</option>
+                                <option value="complete">Complete</option>
+                                <option value="failed">Failed</option>
+                            </select>
+                            <button onclick="loadAdminCasinoWithdrawals()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:5px;cursor:pointer">Refresh</button>
+                        </div>
+                    </div>
+                    <div id="admin-casino-stats" style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px"></div>
+                    <div id="admin-casino-wd-list" style="font-size:13px;color:var(--muted)">Loading…</div>
+                </div>
+
+                <!-- Transactions pane -->
+                <div id="admin-casino-pane-tx" style="display:none">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px">
+                        <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2)">All Casino Transactions</div>
+                        <button onclick="loadAdminCasinoTransactions()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:5px;cursor:pointer">Refresh</button>
+                    </div>
+                    <div id="admin-casino-tx-list" style="font-size:13px;color:var(--muted)">Loading…</div>
+                </div>
             </div><!-- /admin-casino-section -->
         </div>
 
@@ -1027,7 +1045,7 @@
     <!-- end #dashboard -->
 
     <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script>
-    <script src="/app.js?v=872"></script>
+    <script src="/app.js?v=873"></script>
     <div id="app-version-badge" style="position:fixed;bottom:6px;right:10px;font-size:9px;font-weight:600;color:var(--muted2);font-family:var(--mono);letter-spacing:.03em;pointer-events:none;z-index:1">v871</div>
 </body>
 </html>
