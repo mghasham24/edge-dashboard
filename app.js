@@ -5518,17 +5518,24 @@
         'TEN':'Tennessee Titans','WAS':'Washington Commanders',
     };
 
-    function dkTeamLogo(dkName) {
+    function dkTeamLogo(dkName, sport) {
         if (!dkName) return null;
+        // Use explicit sport arg, fall back to active tab sport
+        var sp = sport || parlayActiveSport || '';
         if (TEAM_LOGO_URLS[dkName]) return TEAM_LOGO_URLS[dkName];
-        if (CFB_TEAM_LOGOS[dkName]) return CFB_TEAM_LOGOS[dkName];
         var full;
-        if (parlayActiveSport === 'wnba') {
+        if (sp === 'wnba' || sp === 'basketball_wnba') {
             full = DK_WNBA_TEAM_MAP[dkName] || DK_NFL_TEAM_MAP[dkName] || DK_MLB_TEAM_MAP[dkName] || dkName;
+        } else if (sp === 'mlb' || sp === 'baseball_mlb') {
+            // MLB-first: "COL"→Colorado Rockies, "ATL"→Atlanta Braves, not CFB/NFL teams
+            full = DK_MLB_TEAM_MAP[dkName] || DK_NFL_TEAM_MAP[dkName] || DK_WNBA_TEAM_MAP[dkName] || dkName;
+        } else if (sp === 'nfl') {
+            full = DK_NFL_TEAM_MAP[dkName] || DK_MLB_TEAM_MAP[dkName] || DK_WNBA_TEAM_MAP[dkName] || dkName;
         } else {
             full = DK_NFL_TEAM_MAP[dkName] || DK_MLB_TEAM_MAP[dkName] || DK_WNBA_TEAM_MAP[dkName] || dkName;
         }
-        return TEAM_LOGO_URLS[full] || CFB_TEAM_LOGOS[full] || null;
+        // CFB is last-resort — prevents COL/ATL/PHI/DET etc. from hitting CFB map when sport is known
+        return TEAM_LOGO_URLS[full] || (sp === 'cfb' ? CFB_TEAM_LOGOS[dkName] : null) || CFB_TEAM_LOGOS[full] || null;
     }
 
     // Sport-aware logo lookup — strictly uses only the primary sport map when sport is known,
@@ -5549,10 +5556,16 @@
         return TEAM_LOGO_URLS[full] || null;
     }
 
-    function dkTeamColor(dkName) {
-        var full = parlayActiveSport === 'wnba'
-            ? (DK_WNBA_TEAM_MAP[dkName] || DK_NFL_TEAM_MAP[dkName] || DK_MLB_TEAM_MAP[dkName] || dkName)
-            : (DK_NFL_TEAM_MAP[dkName] || DK_MLB_TEAM_MAP[dkName] || DK_WNBA_TEAM_MAP[dkName] || dkName);
+    function dkTeamColor(dkName, sport) {
+        var sp = sport || parlayActiveSport || '';
+        var full;
+        if (sp === 'wnba' || sp === 'basketball_wnba') {
+            full = DK_WNBA_TEAM_MAP[dkName] || DK_NFL_TEAM_MAP[dkName] || DK_MLB_TEAM_MAP[dkName] || dkName;
+        } else if (sp === 'mlb' || sp === 'baseball_mlb') {
+            full = DK_MLB_TEAM_MAP[dkName] || DK_NFL_TEAM_MAP[dkName] || DK_WNBA_TEAM_MAP[dkName] || dkName;
+        } else {
+            full = DK_NFL_TEAM_MAP[dkName] || DK_MLB_TEAM_MAP[dkName] || DK_WNBA_TEAM_MAP[dkName] || dkName;
+        }
         return TEAM_COLORS[full] || parlayTeamColor(dkName);
     }
 
