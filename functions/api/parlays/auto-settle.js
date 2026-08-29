@@ -1426,9 +1426,9 @@ async function handleRequest({ request, env }) {
         const result   = ufcResults[fullNorm] || ufcResults[lastName];
         if (!result || !result.method) { legOutcomes[leg.id] = leg.game_date < staleDate ? 'void' : null; continue; }
         const outcome = (result.won && result.method === method) ? 'won' : 'lost';
-        // ESPN comp-status data can be wrong in the first ~90min after a fight ends.
+        // ESPN comp-status data can be wrong in the first ~30min after a fight ends.
         // Only commit 'lost' once we're past that window — 'won' settles immediately.
-        if (outcome === 'lost' && leg.game_start_ms && now * 1000 < leg.game_start_ms + 90 * 60 * 1000) {
+        if (outcome === 'lost' && leg.game_start_ms && now * 1000 < leg.game_start_ms + 30 * 60 * 1000) {
           legOutcomes[leg.id] = null; continue;
         }
         legOutcomes[leg.id] = outcome;
