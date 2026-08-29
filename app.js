@@ -11382,8 +11382,8 @@
         var panel = document.getElementById('casino-panel');
         if (!panel) return;
         // Gate: RS account required. Show verify screen if not verified.
-        // rs_verified comes from real_auth.parlay_verified via me.js; parlayRsVerified covers in-session verify.
-        if (!currentUser || (!currentUser.is_admin && !currentUser.rs_verified && !parlayRsVerified)) {
+        // Casino is admin-only while deposit card issues are resolved.
+        if (!currentUser || !currentUser.is_admin) {
             casinoRenderVerifyGate();
             return;
         }
@@ -17244,9 +17244,9 @@
         var hpb = document.getElementById('header-parlays-btn');
         if (hpb) hpb.style.display = currentUser ? '' : 'none';
 
-        // Casino — visible to all logged-in users; verify gate shown inside if no RS account
+        // Casino — admin only while deposit issues are resolved
         var hcb = document.getElementById('header-casino-btn');
-        if (hcb) hcb.style.display = currentUser ? '' : 'none';
+        if (hcb) hcb.style.display = (currentUser && currentUser.is_admin) ? '' : 'none';
 
         // Pro → hamburger menu item
         var ddManage = document.getElementById('dd-manage-sub-item');
