@@ -5753,6 +5753,8 @@
                     var _totBase = sport === 'cfb'
                         ? (game.awayShort + ' @ ' + game.homeShort)
                         : (game.awayTeam + ' @ ' + game.homeTeam);
+                    var _awayLogoTot = dkTeamLogo(game.awayShort) || dkTeamLogo(game.awayTeam);
+                    var _homeLogoTot = dkTeamLogo(game.homeShort) || dkTeamLogo(game.homeTeam);
                     pushTo.push({
                         id: overId, isTeamMarket: true, market: 'team_total', stat: 'Total',
                         name: _totBase + ' O' + mkt.line,
@@ -5761,7 +5763,9 @@
                         homeShort: game.homeShort, awayShort: game.awayShort,
                         moreOdds: mkt.overOdds, oppOdds: mkt.underOdds,
                         line: mkt.line, eventId: game.eventId, time: game.time, startMs: game.startMs,
-                        initials: 'O', color: '#16a34a', logo: null, marketId: mkt.marketId, selId: mkt.overSelId,
+                        initials: 'O', color: '#16a34a', logo: null,
+                        awayLogo: _awayLogoTot, homeLogo: _homeLogoTot,
+                        marketId: mkt.marketId, selId: mkt.overSelId,
                     });
                     pushTo.push({
                         id: underId, isTeamMarket: true, market: 'team_total', stat: 'Total',
@@ -5771,7 +5775,9 @@
                         homeShort: game.homeShort, awayShort: game.awayShort,
                         moreOdds: mkt.underOdds, oppOdds: mkt.overOdds,
                         line: mkt.line, eventId: game.eventId, time: game.time, startMs: game.startMs,
-                        initials: 'U', color: '#ef4444', logo: null, marketId: mkt.marketId, selId: mkt.underSelId,
+                        initials: 'U', color: '#ef4444', logo: null,
+                        awayLogo: _awayLogoTot, homeLogo: _homeLogoTot,
+                        marketId: mkt.marketId, selId: mkt.underSelId,
                     });
                     mkt._overPickId = overId; mkt._underPickId = underId;
                 }
@@ -6285,6 +6291,20 @@
         var s = size + 'px';
         var imgStyle = 'width:' + s + ';height:' + s + ';border-radius:50%;object-fit:contain;flex-shrink:0;background:var(--bg3)';
         var fallback = '<div style="width:' + s + ';height:' + s + ';border-radius:50%;background:linear-gradient(135deg,' + (p.color || '#333') + ',' + (p.color || '#333') + 'aa);display:flex;align-items:center;justify-content:center;font-size:' + fsize + 'px;font-weight:800;color:#fff;flex-shrink:0">' + escHtml(p.initials || '?') + '</div>';
+        if (p.isTeamMarket && p.market === 'team_total') {
+            var _logoA = p.awayLogo || dkTeamLogo(p.awayShort) || dkTeamLogo(p.awayTeam);
+            var _logoB = p.homeLogo || dkTeamLogo(p.homeShort) || dkTeamLogo(p.homeTeam);
+            var _initA = (p.awayShort || '').replace(/\s+/g,'').slice(0,2).toUpperCase() || '?';
+            var _initB = (p.homeShort || '').replace(/\s+/g,'').slice(0,2).toUpperCase() || '?';
+            var _mkSlot = function(cls, src, init) {
+                if (src) return '<img class="' + cls + '" src="' + escHtml(src) + '" onerror="this.outerHTML=\'<span class=\\\'' + cls + ' pslip-dual-init\\\'>' + escHtml(init) + '</span>\'">';
+                return '<span class="' + cls + ' pslip-dual-init">' + escHtml(init) + '</span>';
+            };
+            return '<div style="width:' + s + ';height:' + s + ';position:relative;flex-shrink:0">' +
+                _mkSlot('pslip-dual-logo-a', _logoA, _initA) +
+                _mkSlot('pslip-dual-logo-b', _logoB, _initB) +
+                '</div>';
+        }
         if (p.isTeamMarket) {
             if (p.isFighter) return '';
             var logo = p.logo || dkTeamLogo(p.team) || dkTeamLogo(p.awayTeam) || dkTeamLogo(p.homeTeam);
@@ -9731,11 +9751,24 @@
                 var p = findParlayPlayer(id);
                 if (!p) return '';
                 var bg = 'linear-gradient(135deg,' + p.color + ',' + p.color + 'aa)';
-                var imgSrc = p.headshot || (p.isTeamMarket ? p.logo : null);
-                var inner = imgSrc
-                    ? '<img src="' + escHtml(imgSrc) + '" style="position:absolute;inset:0;width:100%;height:100%;object-fit:' + (p.isTeamMarket ? 'contain' : 'cover') + ';object-position:center;border-radius:50%;padding:' + (p.isTeamMarket ? '3px' : '0') + '" onerror="this.style.display=\'none\'">' +
-                      '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff;background:' + bg + ';border-radius:50%;z-index:-1">' + escHtml(p.initials) + '</div>'
-                    : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff;background:' + bg + ';border-radius:50%">' + escHtml(p.initials) + '</div>';
+                var inner;
+                if (p.isTeamMarket && p.market === 'team_total') {
+                    var _pA = p.awayLogo || dkTeamLogo(p.awayShort) || dkTeamLogo(p.awayTeam);
+                    var _pB = p.homeLogo || dkTeamLogo(p.homeShort) || dkTeamLogo(p.homeTeam);
+                    var _iA = (p.awayShort || '').replace(/\s+/g,'').slice(0,2).toUpperCase() || '?';
+                    var _iB = (p.homeShort || '').replace(/\s+/g,'').slice(0,2).toUpperCase() || '?';
+                    var _ps = function(cls, src, init) {
+                        if (src) return '<img class="' + cls + '" src="' + escHtml(src) + '" onerror="this.outerHTML=\'<span class=\\\'' + cls + ' pslip-dual-init\\\'>' + escHtml(init) + '</span>\'">';
+                        return '<span class="' + cls + ' pslip-dual-init">' + escHtml(init) + '</span>';
+                    };
+                    inner = _ps('pslip-dual-logo-a', _pA, _iA) + _ps('pslip-dual-logo-b', _pB, _iB);
+                } else {
+                    var imgSrc = p.headshot || (p.isTeamMarket ? p.logo : null);
+                    inner = imgSrc
+                        ? '<img src="' + escHtml(imgSrc) + '" style="position:absolute;inset:0;width:100%;height:100%;object-fit:' + (p.isTeamMarket ? 'contain' : 'cover') + ';object-position:center;border-radius:50%;padding:' + (p.isTeamMarket ? '3px' : '0') + '" onerror="this.style.display=\'none\'">' +
+                          '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff;background:' + bg + ';border-radius:50%;z-index:-1">' + escHtml(p.initials) + '</div>'
+                        : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff;background:' + bg + ';border-radius:50%">' + escHtml(p.initials) + '</div>';
+                }
                 return '<div class="pmp-head" style="position:relative">' + inner + '</div>';
             }).join('') +
             (ids.length > 3 ? '<div class="pmp-head pmp-extra">+' + (ids.length - 3) + '</div>' : '');
