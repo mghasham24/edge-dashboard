@@ -3286,8 +3286,8 @@
             var data = await res.json();
             if (!data.ok || !data.code) throw new Error(data.error || 'Failed');
 
-            // Open Discord bot install page in a new tab
-            window.open('https://discord.gg/ejGsd8YFp', '_blank');
+            // Open DM with the bot directly (ensures correct DM channel ID is stored on /connect)
+            window.open('https://discord.com/users/1541566305923113000', '_blank');
 
             // Show step 2 — the code to DM
             var codeEl = document.getElementById('alerts-discord-code');
@@ -8780,6 +8780,7 @@
         else if (s.status === 'active') lines.push('Stake: ' + Number(s.stake_rax).toLocaleString() + ' · To Win: ' + Number(s.payout_rax).toLocaleString() + ' Rax');
         else lines.push('Stake: ' + Number(s.stake_rax).toLocaleString() + ' · Payout: ' + Number(s.payout_rax).toLocaleString() + ' Rax');
         var slipUrl = s.share_token ? 'https://raxedge.com/slip?t=' + s.share_token : 'https://raxedge.com';
+        if (s.rs_tracker_url) lines.push('📊 Track live: ' + s.rs_tracker_url);
         var text = lines.join('\n');
         if (navigator.share) {
             // Pass url separately — don't include in text to avoid duplication in share sheet
