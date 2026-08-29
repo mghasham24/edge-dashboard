@@ -6437,7 +6437,7 @@
         // Read market pick IDs from PARLAY_PLAYERS team picks (populated by buildGamePicks).
         // This is more reliable than reading mkt._awayPickId from game.markets (which can
         // lose its mutations if the game object is replaced between buildGamePicks and render).
-        var playerPool = sport === 'wnba' ? PARLAY_PLAYERS_WNBA : sport === 'nfl' ? PARLAY_PLAYERS_NFL : PARLAY_PLAYERS;
+        var playerPool = sport === 'wnba' ? PARLAY_PLAYERS_WNBA : sport === 'nfl' ? PARLAY_PLAYERS_NFL : sport === 'cfb' ? PARLAY_PLAYERS_CFB : PARLAY_PLAYERS;
         // Index team picks by eventId + market type
         var pickIdx = {};
         playerPool.forEach(function(p) {
@@ -6944,6 +6944,47 @@
                     return '<button class="fc-parlay-lg-btn" onclick="scrollToFcLeague(\'' + escHtml(_slug) + '\')">' + _lgl + escHtml(lg) + '</button>';
                 }).join('');
             }
+        } else if (players.length && players[0].type === 'milestone' && players[0].market && players[0].market.indexOf('cfb_') === 0) {
+            // CFB milestone props: one grouped card per player+market showing all thresholds as pills
+            var _lgNavHide0 = document.getElementById('fc-parlay-league-nav');
+            if (_lgNavHide0) _lgNavHide0.style.display = 'none';
+            grid.style.cssText = 'display:flex;flex-direction:column;overflow-y:auto;gap:10px;padding:12px;box-sizing:border-box;flex:1;min-height:0';
+            // Group by name::market preserving order of first appearance
+            var _msGroups = [], _msGroupMap = {};
+            players.forEach(function(p) {
+                var k = p.name + '::' + p.market;
+                if (!_msGroupMap[k]) {
+                    _msGroupMap[k] = { key: k, name: p.name, market: p.market, stat: p.stat, team: p.team, opp: p.opp, time: p.time, startMs: p.startMs, commenceMs: p.commenceMs, initials: p.initials, color: p.color, headshot: p.headshot, id: p.id, entries: [] };
+                    _msGroups.push(_msGroupMap[k]);
+                }
+                _msGroupMap[k].entries.push(p);
+            });
+            grid.innerHTML = _msGroups.map(function(g) {
+                var avatarStyle = 'background:linear-gradient(135deg,' + g.color + ',' + g.color + 'aa)';
+                var hsHtml = g.headshot
+                    ? '<img class="parlay-card-headshot pmc-hs" data-name="' + escHtml(g.name) + '" data-sport="cfb" src="' + escHtml(g.headshot) + '" alt="" onerror="parlayHeadshotFail(this)">' +
+                      '<div class="parlay-card-avatar pmc-av" style="' + avatarStyle + ';display:none">' + escHtml(g.initials) + '</div>'
+                    : '<div class="parlay-card-avatar pmc-av" id="bcard-av-' + g.id + '" style="' + avatarStyle + '">' + escHtml(g.initials) + '</div>';
+                var timeStr = parlayFmtTime(g.commenceMs || g.startMs || 0, g.time);
+                var pills = g.entries.sort(function(a, b) { return a.threshold - b.threshold; }).map(function(e) {
+                    var isActive = !!parlayPicks[String(e.id)];
+                    return '<button class="pmc-pill' + (isActive ? ' active' : '') + '" onclick="parlayMilestonePick(' + e.id + ',\'' + escHtml(g.key).replace(/'/g, '\\\'') + '\')">' +
+                        '<span class="pmc-pill-thresh">' + escHtml(e.milestoneLabel) + '</span>' +
+                        '<span class="pmc-pill-odds">' + parlayFmtOdds(e.moreOdds) + '</span>' +
+                    '</button>';
+                }).join('');
+                return '<div class="pmc">' +
+                    '<div class="pmc-header">' +
+                        hsHtml +
+                        '<div class="pmc-info">' +
+                            '<span class="pmc-name">' + escHtml(g.name) + '</span>' +
+                            '<span class="pmc-meta">' + escHtml(g.team) + (g.opp ? ' vs ' + escHtml(g.opp) : '') + (timeStr ? ' · ' + escHtml(timeStr) : '') + '</span>' +
+                        '</div>' +
+                        '<span class="pmc-stat">' + escHtml(g.stat) + '</span>' +
+                    '</div>' +
+                    '<div class="pmc-pills">' + pills + '</div>' +
+                '</div>';
+            }).join('');
         } else {
             var _lgNavHide = document.getElementById('fc-parlay-league-nav');
             if (_lgNavHide) _lgNavHide.style.display = 'none';
@@ -6953,8 +6994,8 @@
         // Async: load headshots for cards rendered with initials avatar (no DK headshot).
         // Soccer uses RS player search (D1-cached, staggered 300ms). Others use ESPN.
         var _hsSport    = parlayActiveSport;
-        var _espnLeague = _hsSport === 'wnba' ? 'wnba' : 'mlb';
-        var _espnQSport = _hsSport === 'wnba' ? 'basketball' : 'baseball';
+        var _espnLeague = _hsSport === 'wnba' ? 'wnba' : _hsSport === 'nfl' ? 'nfl' : _hsSport === 'cfb' ? 'college-football' : 'mlb';
+        var _espnQSport = _hsSport === 'wnba' ? 'basketball' : _hsSport === 'nfl' ? 'football' : _hsSport === 'cfb' ? 'college-football' : 'baseball';
         var _seenEspn   = {};
         var _hsIdx      = 0;
         players.forEach(function(p) {
@@ -9990,6 +10031,23 @@
         parlayUpdateCardDOM(key);
         parlayRenderSlip();
         parlayRenderPill();
+    }
+
+    // Milestone pick: deselect any other threshold for the same player+market, then toggle this one
+    function parlayMilestonePick(id, groupKey) {
+        var parts = typeof groupKey === 'string' ? groupKey.split('::') : [];
+        var gName = parts[0] || '', gMkt = parts[1] || '';
+        var pools = [PARLAY_PLAYERS, PARLAY_PLAYERS_WNBA, PARLAY_PLAYERS_NFL, PARLAY_PLAYERS_CFB, PARLAY_PLAYERS_SOCCER, PARLAY_PLAYERS_UFC];
+        if (gName && gMkt) {
+            pools.forEach(function(pool) {
+                (pool || []).forEach(function(p) {
+                    if (p.name === gName && p.market === gMkt && String(p.id) !== String(id) && parlayPicks[String(p.id)]) {
+                        delete parlayPicks[String(p.id)];
+                    }
+                });
+            });
+        }
+        parlayTogglePick(id, 'more');
     }
 
     function parlaysClear() {

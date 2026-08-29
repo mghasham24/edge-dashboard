@@ -3099,6 +3099,23 @@
     .fc-parlay-section-hdr { display:flex; align-items:center; gap:8px; padding:0 0 8px; border-bottom:1px solid var(--border2); margin-bottom:10px }
     .fc-parlay-section-hdr span { font-size:13px; font-weight:700; color:var(--muted); letter-spacing:.04em; text-transform:uppercase }
     .fc-parlay-section-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; align-content:start }
+    /* Milestone grouped card (CFB player props) */
+    .pmc { background:var(--bg2); border:1.5px solid var(--border2); border-radius:12px; padding:12px; display:flex; flex-direction:column; gap:10px }
+    .pmc-header { display:flex; align-items:center; gap:10px }
+    .pmc-header .parlay-card-avatar { width:40px; height:40px; font-size:14px; flex-shrink:0 }
+    .pmc-header .parlay-card-headshot { width:40px; height:40px; border-radius:50%; object-fit:cover; flex-shrink:0 }
+    .pmc-info { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px }
+    .pmc-name { font-size:14px; font-weight:700; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+    .pmc-meta { font-size:11px; color:var(--muted) }
+    .pmc-stat { font-size:10px; font-weight:800; color:var(--muted2); text-transform:uppercase; letter-spacing:.06em; white-space:nowrap; flex-shrink:0 }
+    .pmc-pills { display:flex; gap:6px; overflow-x:auto; padding-bottom:2px; scrollbar-width:none }
+    .pmc-pills::-webkit-scrollbar { display:none }
+    .pmc-pill { flex-shrink:0; display:flex; flex-direction:column; align-items:center; gap:2px; padding:7px 13px; border-radius:8px; border:1.5px solid var(--border); background:var(--bg3); cursor:pointer; transition:border-color .15s, background .15s }
+    .pmc-pill:hover { border-color:var(--muted) }
+    .pmc-pill.active { border-color:var(--green); background:rgba(45,204,126,.1) }
+    .pmc-pill-thresh { font-size:13px; font-weight:800; color:var(--text) }
+    .pmc-pill-odds { font-size:11px; font-weight:600; color:var(--muted) }
+    .pmc-pill.active .pmc-pill-thresh, .pmc-pill.active .pmc-pill-odds { color:var(--green) }
     .parlay-card { background:var(--bg2); border:1.5px solid var(--border2); border-radius:12px; display:flex; flex-direction:column; transition:border-color .15s }
     .parlay-card:hover { border-color:var(--muted) }
     .parlay-card.sel-more { border-color:var(--green); box-shadow:0 0 0 1px var(--green) inset }
