@@ -8487,9 +8487,28 @@
                     return null;
                 }
 
+                // Find game by player's team DK abbreviation — handles old slips where
+                // event_name was stored as "Player Name · market_type" instead of "AWAY @ HOME".
+                function cfbFindGameByTeam(teamDk) {
+                    if (!teamDk) return null;
+                    var dk = teamDk.toLowerCase();
+                    var keys = Object.keys(cfbEventInfoMap);
+                    for (var _k = 0; _k < keys.length; _k++) {
+                        var eI = cfbEventInfoMap[keys[_k]];
+                        if (!eI.awayAbbr || !eI.homeAbbr) continue;
+                        if (cfbMatch(eI.awayAbbr, eI.awayName, dk) || cfbMatch(eI.homeAbbr, eI.homeName, dk)) return eI;
+                    }
+                    return null;
+                }
+
+                function cfbResolveGame(eventName, team) {
+                    if (eventName && eventName.indexOf('@') !== -1) return cfbFindGameInfo(eventName);
+                    return cfbFindGameByTeam(team) || null;
+                }
+
                 if (!liveOrFinalCfb.length) {
                     propNeeded.forEach(function(n) {
-                        var gi2 = cfbFindGameInfo(n.eventName) || (cfbEarliest ? { state: 'Preview', startET: cfbEarliest } : null);
+                        var gi2 = cfbResolveGame(n.eventName, n.team) || (cfbEarliest ? { state: 'Preview', startET: cfbEarliest } : null);
                         updateLegStatus(n.parlayId, n.legIndex, null, n.threshold, n.direction, n.marketType, gi2, false);
                     });
                     return;
@@ -8558,7 +8577,7 @@
                             val2 = (pStats && pStats[n.marketType] !== undefined) ? pStats[n.marketType] : null;
                             gi3 = evtId2 ? cfbEventInfoMap[evtId2] : null;
                         }
-                        if (!gi3) gi3 = cfbFindGameInfo(n.eventName) || (cfbEarliest ? { state: 'Preview', startET: cfbEarliest } : null);
+                        if (!gi3) gi3 = cfbResolveGame(n.eventName, n.team) || (cfbEarliest ? { state: 'Preview', startET: cfbEarliest } : null);
                         updateLegStatus(n.parlayId, n.legIndex, val2, n.threshold, n.direction, n.marketType, gi3, false);
                     });
                 }).catch(function() {});
@@ -8847,7 +8866,7 @@
                 // For MLB/WNBA/NFL, use the stored game_date as-is. If the date is in the future, the schedule API
                 // returns Preview games → the polling correctly shows "Preview" and waits for the game to start.
                 var gd = gdRaw;
-                var legObj = { parlayId: s.id, legIndex: li, playerName: leg.player_name, marketType: mkt, threshold: parseFloat(leg.threshold) || 0, direction: leg.direction, isTeam: mkt.startsWith('team_'), sport: leg.sport || '', eventName: leg.event_name || '' };
+                var legObj = { parlayId: s.id, legIndex: li, playerName: leg.player_name, marketType: mkt, threshold: parseFloat(leg.threshold) || 0, direction: leg.direction, isTeam: mkt.startsWith('team_'), sport: leg.sport || '', eventName: leg.event_name || '', team: leg.team || '' };
                 if (WNBA_MKT_SET[mkt] || leg.sport === 'wnba') {
                     if (!wnbaNeededByDate[gd]) wnbaNeededByDate[gd] = [];
                     wnbaNeededByDate[gd].push(legObj);
