@@ -164,7 +164,7 @@ async function handleRequest({ request, env }) {
   }
 
   // 2. Fetch edgebot's actual RS card inventory
-  let owned, sportStats;
+  let owned, ownedMeta, sportStats;
   try {
     ({ owned, ownedMeta, sportStats } = await fetchEdgebotOwnedCardIds(authInfo, sessionToken));
   } catch (e) {
