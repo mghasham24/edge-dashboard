@@ -11316,6 +11316,14 @@
                                     '<input type="number" id="casino-verify-code" placeholder="6-digit code" maxlength="6" style="flex:1;padding:10px 12px;border-radius:8px;border:1.5px solid var(--border2);background:var(--bg2);color:var(--text);font-size:15px;font-weight:700;letter-spacing:.08em;font-family:var(--mono,monospace);-moz-appearance:textfield;" oninput="this.value=this.value.replace(/[^0-9]/g,\'\').slice(0,6)">' +
                                     '<button onclick="casinoSubmitVerifyCode()" style="padding:10px 18px;border-radius:8px;background:var(--accent);color:#fff;font-size:13px;font-weight:700;border:none;cursor:pointer;white-space:nowrap;font-family:var(--sans)">Verify</button>' +
                                 '</div>' +
+                                '<div style="margin-top:10px;">' +
+                                    '<div style="font-size:12px;color:var(--text2);margin-bottom:5px;">Referred by (optional)</div>' +
+                                    '<div style="display:flex;align-items:center;border-radius:8px;border:1.5px solid var(--border2);background:var(--bg2);overflow:hidden;">' +
+                                        '<span style="padding:9px 10px 9px 12px;color:var(--text2);font-size:14px;font-family:var(--sans);user-select:none;">@</span>' +
+                                        '<input type="text" id="casino-verify-referral" placeholder="Enter Real Sports username of who referred you" style="flex:1;border:none;outline:none;background:transparent;padding:9px 12px 9px 0;color:var(--text);font-size:14px;font-family:var(--sans);">' +
+                                    '</div>' +
+                                    '<div style="font-size:11px;color:var(--muted);margin-top:4px;">Don\'t include the @ symbol</div>' +
+                                '</div>' +
                                 '<div id="casino-verify-error" style="font-size:12px;color:#e55;margin-top:6px;display:none;"></div>' +
                             '</div>' +
                         '</div>' +
@@ -11338,10 +11346,14 @@
         casinoVerifyLoading = true;
         var btn = input.nextElementSibling;
         if (btn) btn.textContent = 'Verifying…';
+        var referralInput = document.getElementById('casino-verify-referral');
+        var referredBy = referralInput ? referralInput.value.trim() : '';
+        var body = { code: code };
+        if (referredBy) body.referredBy = referredBy;
         fetch('/api/parlays/rs-verify', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ code: code }),
+            body: JSON.stringify(body),
         })
             .then(function(r) { return r.json(); })
             .then(function(d) {
