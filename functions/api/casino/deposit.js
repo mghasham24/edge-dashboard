@@ -10,61 +10,88 @@ import { err }         from '../../_lib/response.js';
 import { rsUrlEncode } from '../../_lib/hashids.js';
 
 const MIN_DEPOSIT    = 1000;
+const VERIFY_MAX_AGE = 15 * 60; // card must have been confirmed by sync-cards within 15 min
+const INVENTORY_MAX_AGE = 10 * 60;
 const RS_DEVICE_UUID = '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e';
 const EDGEBOT_USER   = 'V3yGgkkJ';
 
-// Live-only check using edgebot's own auth token.
-// Returns true (edgebot owns), false (someone else owns — remove from pool), null (fetch failed — skip).
-// No snapshot fallback: we must confirm live ownership before showing a card to a user.
-async function verifyEdgebotOwnsLive(cardId, authInfo) {
-  if (!authInfo) return null;
+// Identical to parlays/place.js — shared RS token (always fresh from TM bridge).
+async function getSharedRsToken(env) {
+  try {
+    const row = await env.DB.prepare(
+      "SELECT data FROM odds_cache WHERE cache_key='meta:rs_auth_token'"
+    ).first();
+    if (!row?.data) return null;
+    const parsed = JSON.parse(row.data);
+    return parsed.token || null;
+  } catch { return null; }
+}
+
+// Identical to parlays/place.js verifyLive.
+async function verifyLive(cardId, rsToken) {
+  if (!rsToken) return null;
   try {
     const res = await fetch(`https://web.realapp.com/collectingcards/${cardId}`, {
       headers: {
         'Accept':           'application/json',
-        'real-auth-info':   authInfo,
+        'real-auth-info':   rsToken,
         'real-device-uuid': RS_DEVICE_UUID,
         'real-device-type': 'desktop_web',
         'real-version':     '36',
       },
-      signal: AbortSignal.timeout(6000),
+      signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) return null;
     const data = await res.json();
     const uid  = data.card?.userId ?? data.userId ?? null;
-    return uid === null ? null : uid === EDGEBOT_USER;
+    if (uid === null) return null;
+    return uid === EDGEBOT_USER;
   } catch { return null; }
 }
 
+// Identical to parlays/place.js verifySnapshot.
+async function verifySnapshot(cardId, env, now) {
+  try {
+    const row = await env.DB.prepare(
+      "SELECT data, fetched_at FROM odds_cache WHERE cache_key='card_inventory'"
+    ).first();
+    if (!row || (now - row.fetched_at) > INVENTORY_MAX_AGE) return null;
+    const ids = JSON.parse(row.data);
+    return Array.isArray(ids) && ids.includes(Number(cardId));
+  } catch { return null; }
+}
+
+async function verifyEdgebotOwns(cardId, env, now, rsToken) {
+  const live = await verifyLive(cardId, rsToken);
+  if (live !== null) return live;
+  return verifySnapshot(cardId, env, now);
+}
+
+// Identical logic to parlays/place.js pickCard — shared token, snapshot fallback, VERIFY_MAX_AGE filter.
+// Also excludes cards held by pending parlays (assigned_to_parlay_id IS NULL).
 async function pickCard(env, now, db) {
-  // Exclude cards already claimed by a pending casino deposit
-  const pendingCards = await db.prepare(
-    "SELECT card_id FROM casino_deposits WHERE status='pending' AND card_id IS NOT NULL"
-  ).all();
-  const claimedIds = (pendingCards.results || []).map(r => r.card_id);
+  const rsToken  = await getSharedRsToken(env);
+  const excluded = [];
 
-  const authInfo = env.EDGEBOT_AUTH_INFO;
-  const excluded = [...claimedIds];
-
-  for (let i = 0; i < 15; i++) {
+  for (let i = 0; i < 5; i++) {
     const notIn = excluded.length
       ? ' AND card_id NOT IN (' + excluded.map(() => '?').join(',') + ')'
       : '';
     const row = await db.prepare(
-      'SELECT card_id FROM deposit_cards WHERE assigned_to_parlay_id IS NULL AND freed_at IS NULL' +
+      'SELECT card_id FROM deposit_cards' +
+      ' WHERE assigned_to_parlay_id IS NULL AND freed_at IS NULL AND verified_at > ?' +
+      ' AND card_id NOT IN (SELECT card_id FROM casino_deposits WHERE status=\'pending\' AND card_id IS NOT NULL)' +
       notIn + ' ORDER BY verified_at DESC LIMIT 1'
-    ).bind(...excluded).first();
+    ).bind(now - VERIFY_MAX_AGE, ...excluded).first();
     if (!row) break;
 
-    const owned = await verifyEdgebotOwnsLive(row.card_id, authInfo);
+    const owned = await verifyEdgebotOwns(row.card_id, env, now, rsToken);
     if (owned === false) {
-      // Edgebot no longer owns this card — remove from pool
       await db.prepare('DELETE FROM deposit_cards WHERE card_id=?').bind(row.card_id).run();
       excluded.push(row.card_id);
       continue;
     }
     if (owned === null) {
-      // Live check failed (network/token) — skip this card for now, don't remove
       excluded.push(row.card_id);
       continue;
     }
