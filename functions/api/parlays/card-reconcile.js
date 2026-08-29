@@ -18,6 +18,7 @@ const RS_DEVICE_UUID = '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e';
 // Season format: sync-cards.js uses plain years (2025, 2024) — NOT '2025-26' style.
 const CARD_SPORTS = [
   { sport: 'mlb', season: '2025' },
+  { sport: 'nba', season: '2026' },
 ];
 
 function buildHeaders(authInfo, sessionToken) {
@@ -89,13 +90,17 @@ async function fetchEdgebotOwnedCardIds(authInfo, sessionToken) {
   );
 
   const owned      = new Set();
+  const ownedMeta  = new Map(); // cardId -> { sport, season }
   const sportStats = [];
   for (const { sport, season, ids, httpStatus } of results) {
-    for (const id of ids) owned.add(id);
+    for (const id of ids) {
+      owned.add(id);
+      if (!ownedMeta.has(id)) ownedMeta.set(id, { sport, season });
+    }
     sportStats.push({ sport, season, found: ids.length, httpStatus });
   }
 
-  return { owned, sportStats };
+  return { owned, ownedMeta, sportStats };
 }
 
 async function handleRequest({ request, env }) {
@@ -161,7 +166,7 @@ async function handleRequest({ request, env }) {
   // 2. Fetch edgebot's actual RS card inventory
   let owned, sportStats;
   try {
-    ({ owned, sportStats } = await fetchEdgebotOwnedCardIds(authInfo, sessionToken));
+    ({ owned, ownedMeta, sportStats } = await fetchEdgebotOwnedCardIds(authInfo, sessionToken));
   } catch (e) {
     try {
       await env.DB.prepare(
@@ -249,9 +254,12 @@ async function handleRequest({ request, env }) {
   const newCardIds = [...owned].filter(id => !poolCardIds.has(id) && !recentlyUsed.has(id));
   if (newCardIds.length) {
     await batchChunked(
-      newCardIds.map(id =>
-        env.DB.prepare('INSERT OR IGNORE INTO deposit_cards (card_id, verified_at) VALUES (?,?)').bind(id, now)
-      )
+      newCardIds.map(id => {
+        const meta = ownedMeta.get(id) || { sport: 'mlb', season: '2025' };
+        return env.DB.prepare(
+          'INSERT OR IGNORE INTO deposit_cards (card_id, verified_at, sport, season) VALUES (?,?,?,?)'
+        ).bind(id, now, meta.sport, meta.season);
+      })
     );
   }
 
