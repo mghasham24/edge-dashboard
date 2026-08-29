@@ -1505,7 +1505,18 @@ async function handleRequest({ request, env }) {
     }
 
     if (sport === 'cfb') {
-      // CFB player prop milestone settle: statVal >= threshold → won
+      // CFB combo rush yards: player_name stored as "Player1|Player2" — sum both rush yards
+      if (mkt === 'cfb_combo_rush_yds') {
+        const comboParts = (leg.player_name || '').split('|').map(n => normForLookup(n.trim())).filter(Boolean);
+        if (comboParts.length !== 2) { legOutcomes[leg.id] = null; continue; }
+        const statsMap = cfbStatsMap[leg.game_date] || {};
+        const s1 = statsMap[comboParts[0]]; const s2 = statsMap[comboParts[1]];
+        if (!s1 || !s2) { legOutcomes[leg.id] = leg.game_date < staleDate ? 'void' : null; continue; }
+        const comboVal = (s1.cfb_rush_yds ?? 0) + (s2.cfb_rush_yds ?? 0);
+        legOutcomes[leg.id] = comboVal >= leg.threshold ? 'won' : 'lost';
+        continue;
+      }
+      // CFB individual player prop milestone settle: statVal >= threshold → won
       const cfbPlayerStats = (cfbStatsMap[leg.game_date] || {})[normForLookup(leg.player_name)];
       if (!cfbPlayerStats) {
         legOutcomes[leg.id] = leg.game_date < staleDate ? 'void' : null;

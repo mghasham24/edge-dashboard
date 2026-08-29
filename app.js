@@ -10241,7 +10241,9 @@
                 : ((_pg && _pg.awayTeam && _pg.homeTeam) ? (_pg.awayTeam + ' @ ' + _pg.homeTeam)
                   : (p.awayShort && p.homeShort) ? (p.awayShort + ' @ ' + p.homeShort) : '');
             return {
-                playerName:   p.name,
+                playerName:   (p.market === 'cfb_combo_rush_yds' && p.comboPlayers && p.comboPlayers.length === 2)
+                                ? p.comboPlayers.join('|')
+                                : p.name,
                 direction:    dir,
                 marketType:   p.market,
                 threshold:    p.line,
