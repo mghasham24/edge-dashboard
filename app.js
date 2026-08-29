@@ -8424,6 +8424,132 @@
                     }
                     updateLegStatus(n.parlayId, n.legIndex, null, n.threshold, n.direction, n.marketType, gi, true);
                 });
+
+                // Player prop legs — fetch per-game summary to get individual box scores
+                var propNeeded = needed.filter(function(n) { return !n.isTeam; });
+                if (!propNeeded.length) return;
+
+                // Build event info map and find preview start times
+                var cfbEventInfoMap = {};
+                var cfbPreviewMs = [];
+                events.forEach(function(ev) {
+                    var sName2 = (ev.status && ev.status.type && ev.status.type.name) || '';
+                    var isFinal2 = sName2 === 'STATUS_FINAL' || sName2 === 'STATUS_FINAL_OVERTIME';
+                    var isLive2  = sName2 === 'STATUS_IN_PROGRESS' || sName2 === 'STATUS_HALFTIME' || sName2 === 'STATUS_END_PERIOD';
+                    var state2   = isFinal2 ? 'Final' : (isLive2 ? 'Live' : 'Preview');
+                    var period2  = (ev.status && ev.status.period) || 0;
+                    var clock2   = (ev.status && ev.status.displayClock) || '';
+                    var qtr2     = isLive2 ? (sName2 === 'STATUS_HALFTIME' ? 'Half' : ('Q' + period2 + (clock2 ? ' ' + clock2 : ''))) : (isFinal2 ? 'Final' : '');
+                    var startMs2 = ev.date ? new Date(ev.date).getTime() : 0;
+                    var startET2 = startMs2 ? new Date(startMs2).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' }) : '';
+                    var comps2   = (ev.competitions && ev.competitions[0] && ev.competitions[0].competitors) || [];
+                    var homeC2   = comps2.find(function(c) { return c.homeAway === 'home'; }) || {};
+                    var awayC2   = comps2.find(function(c) { return c.homeAway === 'away'; }) || {};
+                    cfbEventInfoMap[String(ev.id)] = {
+                        state: state2, inningLabel: qtr2, startET: startET2,
+                        homeAbbr: ((homeC2.team && homeC2.team.abbreviation) || '').toUpperCase(),
+                        awayAbbr: ((awayC2.team && awayC2.team.abbreviation) || '').toUpperCase(),
+                        homeName: (homeC2.team && (homeC2.team.displayName || homeC2.team.name)) || '',
+                        awayName: (awayC2.team && (awayC2.team.displayName || awayC2.team.name)) || '',
+                    };
+                    if (state2 === 'Preview' && startMs2) cfbPreviewMs.push(startMs2);
+                });
+
+                var cfbEarliest = cfbPreviewMs.length ? new Date(Math.min.apply(null, cfbPreviewMs)).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' }) : null;
+
+                var liveOrFinalCfb = events.filter(function(ev) {
+                    var sn2 = (ev.status && ev.status.type && ev.status.type.name) || '';
+                    return sn2 === 'STATUS_IN_PROGRESS' || sn2 === 'STATUS_HALFTIME' || sn2 === 'STATUS_END_PERIOD' || sn2 === 'STATUS_FINAL' || sn2 === 'STATUS_FINAL_OVERTIME';
+                });
+
+                function cfbFindGameInfo(eventName) {
+                    var enLc = (eventName || '').toLowerCase();
+                    if (!enLc) return null;
+                    var keys = Object.keys(cfbEventInfoMap);
+                    for (var _k = 0; _k < keys.length; _k++) {
+                        var eI = cfbEventInfoMap[keys[_k]];
+                        var aw = eI.awayAbbr ? eI.awayAbbr.toLowerCase() : '';
+                        var hw = eI.homeAbbr ? eI.homeAbbr.toLowerCase() : '';
+                        if (aw && hw && enLc.indexOf(aw) !== -1 && enLc.indexOf(hw) !== -1) return eI;
+                    }
+                    return null;
+                }
+
+                if (!liveOrFinalCfb.length) {
+                    propNeeded.forEach(function(n) {
+                        var gi2 = cfbFindGameInfo(n.eventName) || (cfbEarliest ? { state: 'Preview', startET: cfbEarliest } : null);
+                        updateLegStatus(n.parlayId, n.legIndex, null, n.threshold, n.direction, n.marketType, gi2, false);
+                    });
+                    return;
+                }
+
+                Promise.all(liveOrFinalCfb.map(function(ev) {
+                    return fetch('https://site.api.espn.com/apis/site/v2/sports/football/college-football/summary?event=' + ev.id, { signal: AbortSignal.timeout(8000), cache: 'no-cache' })
+                        .then(function(r) { return r.json(); })
+                        .then(function(d) { return { eventId: String(ev.id), d: d }; })
+                        .catch(function() { return null; });
+                })).then(function(summaries) {
+                    var cfbPlayerStats = {};  // normName → { cfb_pass_yds, cfb_pass_tds, cfb_rush_yds, cfb_recv_yds }
+                    var cfbPlayerEvt   = {};  // normName → eventId string
+
+                    summaries.forEach(function(res) {
+                        if (!res || !res.d) return;
+                        var bxPlayers = (res.d.boxscore && res.d.boxscore.players) || [];
+                        bxPlayers.forEach(function(teamBlock) {
+                            (teamBlock.statistics || []).forEach(function(sb) {
+                                var names   = sb.names || sb.labels || [];
+                                var ydsIdx  = names.indexOf('YDS');
+                                var tdIdx   = names.indexOf('TD');
+                                if (ydsIdx < 0) return;
+                                var hasCar  = names.indexOf('CAR') >= 0;
+                                var hasRec  = names.indexOf('REC') >= 0;
+                                var hasPas  = names.indexOf('C/ATT') >= 0 || names.indexOf('ATT') >= 0;
+
+                                (sb.athletes || []).forEach(function(a) {
+                                    var pname = normSlipName((a.athlete && a.athlete.displayName) || '');
+                                    if (!pname) return;
+                                    var s2 = a.stats || [];
+                                    function getStat2(idx) {
+                                        if (idx < 0 || idx >= s2.length) return 0;
+                                        var v2 = s2[idx];
+                                        if (!v2 || v2 === '--' || v2 === '-') return 0;
+                                        return parseInt(String(v2).replace(/,/g, '').split('/')[0], 10) || 0;
+                                    }
+                                    if (!cfbPlayerStats[pname]) cfbPlayerStats[pname] = { cfb_pass_yds: 0, cfb_pass_tds: 0, cfb_rush_yds: 0, cfb_recv_yds: 0 };
+                                    if (hasPas) {
+                                        cfbPlayerStats[pname].cfb_pass_yds = getStat2(ydsIdx);
+                                        cfbPlayerStats[pname].cfb_pass_tds = getStat2(tdIdx);
+                                    } else if (hasCar) {
+                                        cfbPlayerStats[pname].cfb_rush_yds = getStat2(ydsIdx);
+                                    } else if (hasRec) {
+                                        cfbPlayerStats[pname].cfb_recv_yds = getStat2(ydsIdx);
+                                    }
+                                    cfbPlayerEvt[pname] = res.eventId;
+                                });
+                            });
+                        });
+                    });
+
+                    propNeeded.forEach(function(n) {
+                        var val2 = null, gi3 = null;
+                        if (n.marketType === 'cfb_combo_rush_yds') {
+                            var comboParts = n.playerName.split('|').map(function(p) { return normSlipName(p.trim()); });
+                            val2 = comboParts.reduce(function(sum, p) {
+                                return sum + ((cfbPlayerStats[p] && cfbPlayerStats[p].cfb_rush_yds) || 0);
+                            }, 0);
+                            var comboEvt = comboParts.reduce(function(found, p) { return found || cfbPlayerEvt[p] || null; }, null);
+                            gi3 = comboEvt ? cfbEventInfoMap[comboEvt] : null;
+                        } else {
+                            var norm2 = normSlipName(n.playerName);
+                            var evtId2 = cfbPlayerEvt[norm2];
+                            var pStats = cfbPlayerStats[norm2];
+                            val2 = (pStats && pStats[n.marketType] !== undefined) ? pStats[n.marketType] : null;
+                            gi3 = evtId2 ? cfbEventInfoMap[evtId2] : null;
+                        }
+                        if (!gi3) gi3 = cfbFindGameInfo(n.eventName) || (cfbEarliest ? { state: 'Preview', startET: cfbEarliest } : null);
+                        updateLegStatus(n.parlayId, n.legIndex, val2, n.threshold, n.direction, n.marketType, gi3, false);
+                    });
+                }).catch(function() {});
             });
         }).catch(function() {});
     }
@@ -9574,7 +9700,7 @@
                 }
             }
             // Progress bar for player props — rendered at 0% immediately, updated by fetchLiveSlipStats
-            var UNIT_INLINE = { hits:'H', total_bases:'TB', rbis:'RBI', runs:'R', hrbi:'H+R+BI', pitcher_ks:'K', outs_ou:'Outs', pts:'PTS', reb:'REB', ast:'AST', fg3m:'3PM', pra:'PRA', pa:'P+A', pr:'P+R', ra:'R+A' };
+            var UNIT_INLINE = { hits:'H', total_bases:'TB', rbis:'RBI', runs:'R', hrbi:'H+R+BI', pitcher_ks:'K', outs_ou:'Outs', pts:'PTS', reb:'REB', ast:'AST', fg3m:'3PM', pra:'PRA', pa:'P+A', pr:'P+R', ra:'R+A', cfb_pass_yds:'Yds', cfb_pass_tds:'TDs', cfb_rush_yds:'Yds', cfb_recv_yds:'Yds', cfb_combo_rush_yds:'Yds' };
             var unitInline  = UNIT_INLINE[mkt] || '';
             var initPct = dir === 'more' ? '0' : '100'; // over starts empty; under starts full
             var initBar = '<div class="pslip-prog-track"><div class="pslip-prog-fill prog-more" style="width:' + initPct + '%"></div></div><span class="pslip-prog-stat">0' + (unitInline ? ' ' + unitInline : '') + '</span>';
