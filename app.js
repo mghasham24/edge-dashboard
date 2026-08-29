@@ -5207,11 +5207,12 @@
         { key: 'fouls_won',  label: 'Fouls Won' },
     ];
     var CFB_CATS = [
-        { key: 'teams',        label: 'Teams' },
-        { key: 'cfb_pass_yds', label: 'Pass Yds' },
-        { key: 'cfb_pass_tds', label: 'Pass TDs' },
-        { key: 'cfb_rush_yds', label: 'Rush Yds' },
-        { key: 'cfb_recv_yds', label: 'Recv Yds' },
+        { key: 'teams',              label: 'Teams' },
+        { key: 'cfb_pass_yds',       label: 'Pass Yds' },
+        { key: 'cfb_pass_tds',       label: 'Pass TDs' },
+        { key: 'cfb_rush_yds',       label: 'Rush Yds' },
+        { key: 'cfb_recv_yds',       label: 'Recv Yds' },
+        { key: 'cfb_combo_rush_yds', label: 'Combo Rush' },
     ];
     var WNBA_MKT_SET   = { pts:1, reb:1, ast:1, fg3m:1, pra:1, pa:1, pr:1, ra:1, double_double:1, triple_double:1 };
     var SOCCER_MKT_SET = { sot:1, assists:1, saves:1, offsides:1, fouls_won:1, goalscorer:1 };
@@ -9853,6 +9854,24 @@
                         });
                         if (_cfbPassCorrHit) {
                             showConfirm('Pass Yards and Pass TDs for the same QB are correlated — can\'t combine these.', function() {});
+                            return;
+                        }
+                    }
+                    // CFB: block combo rush yards overlapping with individual rush yards for same player
+                    if (newP.eventId && (newP.market === 'cfb_combo_rush_yds' || newP.market === 'cfb_rush_yds')) {
+                        var _comboRushCorrHit = Object.keys(parlayPicks).some(function(k) {
+                            var ex = findParlayPlayer(k);
+                            if (!ex || ex.eventId !== newP.eventId) return false;
+                            if (newP.market === 'cfb_combo_rush_yds' && ex.market === 'cfb_rush_yds' && newP.comboPlayers)
+                                return newP.comboPlayers.indexOf(ex.name) !== -1;
+                            if (newP.market === 'cfb_rush_yds' && ex.market === 'cfb_combo_rush_yds' && ex.comboPlayers)
+                                return ex.comboPlayers.indexOf(newP.name) !== -1;
+                            if (newP.market === 'cfb_combo_rush_yds' && ex.market === 'cfb_combo_rush_yds')
+                                return true;
+                            return false;
+                        });
+                        if (_comboRushCorrHit) {
+                            showConfirm('Can\'t combine a Combined Rush Yards pick with an individual Rush Yards pick for the same player — these are correlated.', function() {});
                             return;
                         }
                     }

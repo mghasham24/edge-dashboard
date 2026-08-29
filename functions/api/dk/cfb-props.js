@@ -1,7 +1,7 @@
 // functions/api/dk/cfb-props.js
 // GET /api/dk/cfb-props
 // Returns today's CFB player props from DK for the parlay builder.
-// League 87637 (NCAAF). Subcats: 16568 (Pass TDs), 16569 (Pass Yds), 16570 (Recv Yds), 16571 (Rush Yds).
+// League 87637 (NCAAF). Subcats: 16568 (Pass TDs), 16569 (Pass Yds), 16570 (Recv Yds), 16571 (Rush Yds), 18497 (Combo Rush Yds).
 // All CFB player props are milestone markets (150+, 175+, etc.) — direction always 'more'.
 
 import { getSessionOrCron } from '../../_lib/auth.js';
@@ -11,6 +11,7 @@ const DK_LEAGUE    = '87637'; // NCAAF
 const LINES_SUBCAT = '4518';  // used only for events list
 const CACHE_TTL    = 900;     // 15 minutes
 const CACHE_KEY    = 'dk_cfb_props_v1';
+const COMBO_RUSH_SUBCAT = '18497'; // Combined Rushing Yards Milestones
 
 const PROP_SUBCAT_MAP = {
   '16568': { market: 'cfb_pass_tds', stat: 'Pass TDs' },
@@ -130,22 +131,24 @@ export async function onRequestGet(context) {
     const awayShort = awayPart?.metadata?.shortName || awayPart?.name || '';
     const eventId   = String(e.id);
 
-    // Fetch all 4 prop subcats in parallel with 5s timeout each
+    // Fetch all 4 individual prop subcats + 1 combo subcat in parallel with 5s timeout each
     const subcatEntries = Object.entries(PROP_SUBCAT_MAP);
+    const allFetchIds   = [...subcatEntries.map(([id]) => id), COMBO_RUSH_SUBCAT];
     const subcatResults = await Promise.allSettled(
-      subcatEntries.map(([subcatId]) =>
+      allFetchIds.map(subcatId =>
         fetch(propsUrl(eventId, subcatId), { headers: DK_HEADERS, signal: AbortSignal.timeout(5000) })
           .then(r => r.ok ? r.json() : null)
           .catch(() => null)
       )
     );
 
+    // Individual prop subcats (indices 0..3)
     for (let i = 0; i < subcatEntries.length; i++) {
       const [subcatId, subcatMeta] = subcatEntries[i];
       const data = subcatResults[i].status === 'fulfilled' ? subcatResults[i].value : null;
       if (!data) continue;
 
-      // Build selection lookup: selectionId → selection
+      // Build selection lookup: marketId → selections[]
       const selsByMarket = new Map();
       for (const s of (data.selections || [])) {
         const arr = selsByMarket.get(String(s.marketId)) || [];
@@ -192,6 +195,73 @@ export async function onRequestGet(context) {
             homeShort:      homeShort,
             headshot:       null,
           });
+        }
+      }
+    }
+
+    // Combo rush yards subcat (last index) — keep only the highest-threshold market per game (the starters)
+    const comboData = subcatResults[subcatEntries.length].status === 'fulfilled' ? subcatResults[subcatEntries.length].value : null;
+    if (comboData) {
+      const comboSelsByMarket = new Map();
+      for (const s of (comboData.selections || [])) {
+        const arr = comboSelsByMarket.get(String(s.marketId)) || [];
+        arr.push(s);
+        comboSelsByMarket.set(String(s.marketId), arr);
+      }
+
+      // Find market with highest max milestoneValue (= two players with most combined rush volume)
+      let bestMkt = null, bestMaxVal = -1;
+      for (const mkt of (comboData.markets || [])) {
+        const sels = comboSelsByMarket.get(String(mkt.id)) || [];
+        const maxVal = sels.reduce((m, s) => Math.max(m, s.milestoneValue ?? 0), 0);
+        if (maxVal > bestMaxVal) { bestMaxVal = maxVal; bestMkt = mkt; }
+      }
+
+      if (bestMkt) {
+        // Parse "Player1 (TEAM1) & Player2 (TEAM2) - Combined Rushing Yards"
+        const cm = (bestMkt.name || '').match(/^(.+?)\s*\([^)]+\)\s*&\s*(.+?)\s*\([^)]+\)\s*-/);
+        if (cm) {
+          const player1 = cm[1].trim(); // e.g. "Waymond Jordan"
+          const player2 = cm[2].trim(); // e.g. "King Miller"
+          const last1 = player1.split(' ').pop();
+          const last2 = player2.split(' ').pop();
+          const displayName  = last1 + ' & ' + last2;
+          const initials     = ((last1[0] || '') + (last2[0] || '')).toUpperCase();
+          const comboPlayers = [player1, player2];
+
+          const bestSels = comboSelsByMarket.get(String(bestMkt.id)) || [];
+          for (const sel of bestSels) {
+            const threshold = sel.milestoneValue ?? null;
+            if (threshold == null) continue;
+            const odds = parseOdds(sel.displayOdds?.american);
+            if (odds == null) continue;
+
+            allPlayers.push({
+              name:           displayName,
+              market:         'cfb_combo_rush_yds',
+              stat:           'Combined Rush Yds',
+              type:           'milestone',
+              direction:      'more',
+              threshold:      threshold,
+              milestoneLabel: threshold + '+',
+              americanOdds:   odds,
+              selectionId:    String(sel.id),
+              marketId:       String(bestMkt.id),
+              subcatId:       COMBO_RUSH_SUBCAT,
+              eventId:        eventId,
+              team:           awayShort,
+              opp:            homeShort,
+              isHome:         false,
+              startMs:        startMs,
+              time:           timeStr,
+              gameDate:       gameDate,
+              awayShort:      awayShort,
+              homeShort:      homeShort,
+              headshot:       null,
+              initials:       initials,
+              comboPlayers:   comboPlayers,
+            });
+          }
         }
       }
     }
