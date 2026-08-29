@@ -11424,6 +11424,7 @@
     }
 
     function hideCasinoModal() {
+        casinoStopDepositPoll();
         var overlay = document.getElementById('casino-modal');
         if (overlay) overlay.style.display = 'none';
     }
@@ -11896,8 +11897,7 @@
             '    SEND ' + raxReq.toLocaleString() + ' RAX TO THIS CARD ↗',
             '  </button>',
             '</a>',
-            '<div id="casino-dep-err" class="casino-modal-err" style="display:none"></div>',
-            '<button class="casino-submit-btn" id="casino-dep-check-btn" onclick="casinoCheckDeposit()" style="width:100%">Check Deposit</button>',
+            '<p id="casino-dep-status" style="text-align:center;color:rgba(255,255,255,.5);font-size:13px;margin:4px 0">Waiting for your offer… Auto-confirms within ~1 min.</p>',
             '<button class="casino-submit-btn secondary" id="casino-dep-cancel-btn" onclick="casinoCancelDeposit()" style="width:100%">Start New Deposit</button>',
         ].join('');
     }
@@ -11925,34 +11925,38 @@
             casinoDepositPending = { card_url: data.card_url, rax_requested: data.rax_requested, rax_credited: data.rax_credited };
             var content = document.getElementById('casino-modal-content');
             if (content) content.innerHTML = renderCasinoDepositPendingHTML();
+            casinoStartDepositPoll();
         } catch(e) {
             casinoDepositErr('Network error. Please try again.');
             if (btn) { btn.disabled = false; btn.textContent = 'Get Card Link'; }
         }
     }
 
-    async function casinoCheckDeposit() {
-        var btn = document.getElementById('casino-dep-check-btn');
-        if (btn) { btn.disabled = true; btn.textContent = 'Checking…'; }
-        casinoDepositErr('');
-        try {
-            var res  = await fetch('/api/casino/deposit-check');
-            var data = await res.json();
-            if (data.confirmed > 0) {
-                casinoDepositPending = null;
-                hideCasinoModal();
-                await casinoLoadBalance();
-            } else {
-                if (btn) { btn.disabled = false; btn.textContent = 'Check Deposit'; }
-                casinoDepositErr('Deposit not confirmed yet. Make sure you sent the offer on Real.');
-            }
-        } catch(e) {
-            if (btn) { btn.disabled = false; btn.textContent = 'Check Deposit'; }
-            casinoDepositErr('Network error. Please try again.');
-        }
+    var casinoDepositPollTimer = null;
+
+    function casinoStartDepositPoll() {
+        casinoStopDepositPoll();
+        casinoDepositPollTimer = setInterval(async function() {
+            if (!casinoDepositPending) { casinoStopDepositPoll(); return; }
+            try {
+                var res  = await fetch('/api/casino/deposit-check');
+                var data = await res.json();
+                if (data.confirmed > 0) {
+                    casinoStopDepositPoll();
+                    casinoDepositPending = null;
+                    hideCasinoModal();
+                    await casinoLoadBalance();
+                }
+            } catch(e) {}
+        }, 30000);
+    }
+
+    function casinoStopDepositPoll() {
+        if (casinoDepositPollTimer) { clearInterval(casinoDepositPollTimer); casinoDepositPollTimer = null; }
     }
 
     async function casinoCancelDeposit() {
+        casinoStopDepositPoll();
         var btn = document.getElementById('casino-dep-cancel-btn');
         if (btn) { btn.disabled = true; btn.textContent = 'Cancelling…'; }
         try {

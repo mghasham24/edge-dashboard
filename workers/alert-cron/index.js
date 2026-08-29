@@ -731,6 +731,11 @@ async function runCron(env, ctx) {
         });
       } catch(e) {}
       try {
+        await fetch(`${env.SITE_URL}/api/casino/deposit-check?_cron_key=${env.CRON_SECRET}`, {
+          signal: AbortSignal.timeout(25000),
+        });
+      } catch(e) {}
+      try {
         await fetch(`${env.SITE_URL}/api/parlays/win-notify?_cron_key=${env.CRON_SECRET}`, {
           method: 'POST',
           signal: AbortSignal.timeout(30000),
