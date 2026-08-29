@@ -5366,6 +5366,7 @@
     function slipTeamLogo(teamName, sport) {
         if (!teamName) return null;
         if (TEAM_LOGO_URLS[teamName]) return TEAM_LOGO_URLS[teamName];
+        if (sport === 'cfb') return CFB_TEAM_LOGOS[teamName] || null;
         var full;
         if (sport === 'baseball_mlb' || sport === 'mlb') {
             full = DK_MLB_TEAM_MAP[teamName] || DK_NFL_TEAM_MAP[teamName] || DK_WNBA_TEAM_MAP[teamName] || teamName;
@@ -7077,7 +7078,7 @@
             '<button class="parlay-sport-btn' + (parlayActiveSport === 'mlb'    ? ' active' : '') + '" onclick="setParlayActiveSport(\'mlb\')">MLB</button>' +
             '<button class="parlay-sport-btn' + (parlayActiveSport === 'wnba'   ? ' active' : '') + '" onclick="setParlayActiveSport(\'wnba\')">WNBA</button>' +
             '<button class="parlay-sport-btn' + (parlayActiveSport === 'nfl'    ? ' active' : '') + '" onclick="setParlayActiveSport(\'nfl\')">NFL</button>' +
-            (isAdmin ? '<button class="parlay-sport-btn' + (parlayActiveSport === 'cfb' ? ' active' : '') + '" onclick="setParlayActiveSport(\'cfb\')">CFB</button>' : '') +
+            '<button class="parlay-sport-btn' + (parlayActiveSport === 'cfb' ? ' active' : '') + '" onclick="setParlayActiveSport(\'cfb\')">CFB</button>' +
             '<button class="parlay-sport-btn' + (parlayActiveSport === 'ufc'    ? ' active' : '') + '" onclick="setParlayActiveSport(\'ufc\')">UFC</button>' +
             '<button class="parlay-sport-btn' + (parlayActiveSport === 'soccer' ? ' active' : '') + '" onclick="setParlayActiveSport(\'soccer\')">FC</button>' +
         '</div>';
