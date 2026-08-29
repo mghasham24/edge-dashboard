@@ -10710,7 +10710,7 @@
                 '<button class="parlay-view-tab' + (parlayView === 'build' ? ' active' : '') + '" onclick="parlaySetView(\'build\')">Build</button>' +
                 '<button class="parlay-view-tab' + (parlayView === 'slips' ? ' active' : '') + '" onclick="parlaySetView(\'slips\')">My Slips</button>' +
                 (isAdmin ? '<button class="parlay-view-tab' + (parlayView === 'all-slips' ? ' active' : '') + '" onclick="parlaySetView(\'all-slips\')">All Slips</button>' : '') +
-                (isAdmin ? '<a class="parlay-view-tab" href="/leaderboard" target="_blank" rel="noopener" style="text-decoration:none;display:flex;align-items:center;justify-content:center;gap:4px">Leaderboard <span style="font-size:11px;opacity:.7">↗</span></a>' : '') +
+                '<a class="parlay-view-tab" href="/leaderboard" target="_blank" rel="noopener" style="text-decoration:none;display:flex;align-items:center;justify-content:center;gap:4px">Leaderboard <span style="font-size:11px;opacity:.7">↗</span></a>' +
             '</div>';
         if (parlayView === 'slips') {
             parlaySlipsPage = 0;
