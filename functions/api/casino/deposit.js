@@ -46,7 +46,7 @@ async function pickCard(env, now, db) {
   const authInfo = env.EDGEBOT_AUTH_INFO;
   const excluded = [...claimedIds];
 
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 15; i++) {
     const notIn = excluded.length
       ? ' AND card_id NOT IN (' + excluded.map(() => '?').join(',') + ')'
       : '';
