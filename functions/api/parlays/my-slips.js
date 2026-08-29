@@ -50,7 +50,7 @@ export async function onRequestGet({ request, env }) {
   const placeholders = ids.map(() => '?').join(',');
   const { results: legs } = await env.DB.prepare(
     'SELECT pl.id, pl.parlay_id, pl.player_name, pl.label, pl.threshold, pl.direction, ' +
-    'pl.american_odds, pl.status, pl.result_value, pl.market_type, pl.headshot_url, pl.game_date, pl.event_name, pl.sport, pl.game_start_ms, pl.rs_game_id, pl.event_id ' +
+    'pl.american_odds, pl.status, pl.result_value, pl.market_type, pl.headshot_url, pl.game_date, pl.event_name, pl.sport, pl.game_start_ms, pl.rs_game_id, pl.event_id, pl.team ' +
     `FROM parlay_legs pl WHERE pl.parlay_id IN (${placeholders}) ORDER BY pl.id ASC`
   ).bind(...ids).all();
 
