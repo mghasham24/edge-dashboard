@@ -3,14 +3,14 @@
 // Also callable by user: GET /api/casino/deposit-check (session auth — checks own pending deposit)
 // Checks edgebot's RS incoming offers for accepted casino deposit transactions.
 // On match: accepts open offers, credits casino_balance * 0.9, confirms deposit.
-// Expires pending deposits older than 30 min.
+// Expires pending deposits older than 3 min.
 
 import { getSession }    from '../../_lib/session.js';
 import { ok, err }       from '../../_lib/response.js';
 import { hashidsEncode } from '../../_lib/hashids.js';
 
 const RS_DEVICE_UUID = '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e';
-const DEPOSIT_TTL    = 30 * 60; // 30 minutes
+const DEPOSIT_TTL    = 3 * 60; // 3 minutes
 
 function buildHeaders(authInfo, sessionToken) {
   return {
@@ -120,18 +120,27 @@ async function handleRequest({ request, env, userId }) {
     const dep = cardMap[Number(cardId)] ?? cardMap[cardId];
     if (!dep) continue;
 
+    // Guard: ensure this RS offer ID was never credited to any deposit before.
+    // Accepted offers persist in RS history, so the same offer can match a new
+    // deposit on the same card if the card is recycled. This prevents that.
+    const alreadyUsed = await env.DB.prepare(
+      "SELECT id FROM casino_deposits WHERE rs_offer_id=? AND status='confirmed' LIMIT 1"
+    ).bind(String(offer.id)).first();
+    if (alreadyUsed) continue;
+
     const amount = Math.max(
       offer.counterAmount ?? 0,
       offer.amount        ?? 0,
       offer.offerAmount   ?? 0,
-      dep.rax_requested,
     );
+    // Require a real non-zero offer amount — never fall back to dep.rax_requested
+    if (!amount || amount <= 0) continue;
     const raxCredited = Math.floor(amount * 0.9);
 
     // Idempotency: only credit if still pending
     const updated = await env.DB.prepare(
       "UPDATE casino_deposits SET status='confirmed', rax_credited=?, rs_offer_id=? WHERE id=? AND status='pending'"
-    ).bind(raxCredited, offer.id, dep.id).run();
+    ).bind(raxCredited, String(offer.id), dep.id).run();
 
     if (updated.meta.changes > 0) {
       await env.DB.batch([
@@ -152,8 +161,14 @@ async function handleRequest({ request, env, userId }) {
     const dep = cardMap[Number(cardId)] ?? cardMap[cardId];
     if (!dep) continue;
 
+    // Guard: same offer-ID reuse protection as Phase 1
+    const alreadyUsed = await env.DB.prepare(
+      "SELECT id FROM casino_deposits WHERE rs_offer_id=? AND status='confirmed' LIMIT 1"
+    ).bind(String(offer.id)).first();
+    if (alreadyUsed) continue;
+
     const amount = offer.counterAmount ?? offer.amount ?? offer.offerAmount;
-    if (!amount) continue;
+    if (!amount || amount <= 0) continue;
 
     if (amount >= dep.rax_requested) {
       const result = await acceptOffer(offer.id, authInfo, sessionTok);
@@ -161,7 +176,7 @@ async function handleRequest({ request, env, userId }) {
       const raxCredited = Math.floor(amount * 0.9);
       const updated = await env.DB.prepare(
         "UPDATE casino_deposits SET status='confirmed', rax_credited=?, rs_offer_id=? WHERE id=? AND status='pending'"
-      ).bind(raxCredited, offer.id, dep.id).run();
+      ).bind(raxCredited, String(offer.id), dep.id).run();
       if (updated.meta.changes > 0) {
         await env.DB.batch([
           env.DB.prepare('UPDATE users SET casino_balance = casino_balance + ? WHERE id = ?')
@@ -179,7 +194,7 @@ async function handleRequest({ request, env, userId }) {
     }
   }
 
-  // Expire stale pending deposits (> 30 min old)
+  // Expire stale pending deposits (> 3 min old)
   const toExpire = pending
     .filter(dep => (now - dep.created_at) > DEPOSIT_TTL)
     .map(dep => dep.id);

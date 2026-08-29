@@ -126,7 +126,7 @@ export async function onRequestPost({ request, env }) {
   // Auto-expire stale pending deposits (> 30 min old)
   await env.DB.prepare(
     "UPDATE casino_deposits SET status='expired' WHERE user_id=? AND status='pending' AND created_at < ?"
-  ).bind(userId, now - 30 * 60).run();
+  ).bind(userId, now - 3 * 60).run();
 
   // Resume an existing live pending deposit (within 30 min) instead of blocking
   const existing = await env.DB.prepare(
@@ -140,7 +140,7 @@ export async function onRequestPost({ request, env }) {
       card_id:       existing.card_id,
       rax_requested: existing.rax_requested,
       rax_credited:  Math.floor(existing.rax_requested * 0.9),
-      expires_at:    existing.created_at + 30 * 60,
+      expires_at:    existing.created_at + 3 * 60,
       resumed:       true,
     }), { headers: { 'Content-Type': 'application/json' } });
   }
@@ -160,6 +160,6 @@ export async function onRequestPost({ request, env }) {
     card_id:       cardId,
     rax_requested: amount,
     rax_credited:  Math.floor(amount * 0.9),
-    expires_at:    now + 30 * 60,
+    expires_at:    now + 3 * 60,
   }), { headers: { 'Content-Type': 'application/json' } });
 }
