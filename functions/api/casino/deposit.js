@@ -110,6 +110,10 @@ export async function onRequestPost({ request, env }) {
   if (!Number.isInteger(amount) || amount < MIN_DEPOSIT)
     return err(`Minimum deposit is ${MIN_DEPOSIT} Rax.`, 400);
 
+  // Require RS account before depositing — can't withdraw without it
+  const userCheck = await env.DB.prepare('SELECT rs_username FROM users WHERE id = ?').bind(userId).first();
+  if (!userCheck?.rs_username) return err('Link your RealSports account before depositing. Verify in Parlays or Casino.', 400);
+
   const now = Math.floor(Date.now() / 1000);
 
   // Auto-expire stale pending deposits (> 30 min old)

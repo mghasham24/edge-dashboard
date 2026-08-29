@@ -10887,6 +10887,8 @@
                 if (d.ok && d.verified) {
                     parlayRsVerified = true;
                     parlayRsUsername = d.rsUsername || null;
+                    // Also update currentUser so casino gate opens without a page reload
+                    if (currentUser) currentUser.rs_username = d.rsUsername || null;
                     renderParlayPanel();
                     loadParlayPlayers();
                 } else {
@@ -11279,10 +11281,99 @@
     var casinoLastBet        = 0;      // remembered across hands
 
     var CASINO_SUITS = { H: '♥', D: '♦', C: '♣', S: '♠' };
+    var casinoVerifyLoading = false;
+
+    function casinoRenderVerifyGate() {
+        var panel = document.getElementById('casino-panel');
+        if (!panel) return;
+        panel.innerHTML =
+            '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 24px;min-height:420px;text-align:center;">' +
+                '<div style="font-size:40px;margin-bottom:16px;">🔐</div>' +
+                '<div style="font-size:18px;font-weight:800;color:var(--text);margin-bottom:8px;">Connect Your Real Sports Account</div>' +
+                '<div style="font-size:13px;color:var(--muted);max-width:320px;line-height:1.6;margin-bottom:28px;">Verify ownership of your RS account to deposit, play, and withdraw. Takes 30 seconds.</div>' +
+                '<div style="width:100%;max-width:360px;text-align:left;">' +
+                    '<div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px;">3 Steps</div>' +
+                    '<div style="display:flex;flex-direction:column;gap:12px;margin-bottom:24px;">' +
+                        '<div style="display:flex;align-items:flex-start;gap:12px;">' +
+                            '<div style="width:24px;height:24px;border-radius:50%;background:var(--accent);color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;">1</div>' +
+                            '<div>' +
+                                '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;">Open Real Sports &amp; go to @edgebot\'s messages</div>' +
+                                '<a href="https://www.realapp.com" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:8px;background:var(--accent);color:#fff;font-size:12px;font-weight:700;text-decoration:none;">Open Real Sports →</a>' +
+                            '</div>' +
+                        '</div>' +
+                        '<div style="display:flex;align-items:flex-start;gap:12px;">' +
+                            '<div style="width:24px;height:24px;border-radius:50%;background:var(--accent);color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;">2</div>' +
+                            '<div>' +
+                                '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px;">Send the message:</div>' +
+                                '<div style="display:inline-block;font-size:15px;font-weight:800;color:var(--accent);background:var(--accent)18;border-radius:6px;padding:4px 10px;letter-spacing:.04em;">Parlay</div>' +
+                            '</div>' +
+                        '</div>' +
+                        '<div style="display:flex;align-items:flex-start;gap:12px;">' +
+                            '<div style="width:24px;height:24px;border-radius:50%;background:var(--accent);color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;">3</div>' +
+                            '<div style="width:100%;">' +
+                                '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:6px;">Enter the code @edgebot sends back</div>' +
+                                '<div style="display:flex;gap:8px;">' +
+                                    '<input type="number" id="casino-verify-code" placeholder="6-digit code" maxlength="6" style="flex:1;padding:10px 12px;border-radius:8px;border:1.5px solid var(--border2);background:var(--bg2);color:var(--text);font-size:15px;font-weight:700;letter-spacing:.08em;font-family:var(--mono,monospace);-moz-appearance:textfield;" oninput="this.value=this.value.replace(/[^0-9]/g,\'\').slice(0,6)">' +
+                                    '<button onclick="casinoSubmitVerifyCode()" style="padding:10px 18px;border-radius:8px;background:var(--accent);color:#fff;font-size:13px;font-weight:700;border:none;cursor:pointer;white-space:nowrap;font-family:var(--sans)">Verify</button>' +
+                                '</div>' +
+                                '<div id="casino-verify-error" style="font-size:12px;color:#e55;margin-top:6px;display:none;"></div>' +
+                            '</div>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>' +
+            '</div>';
+    }
+
+    function casinoSubmitVerifyCode() {
+        if (casinoVerifyLoading) return;
+        var input = document.getElementById('casino-verify-code');
+        var errEl = document.getElementById('casino-verify-error');
+        if (!input) return;
+        var code = (input.value || '').trim();
+        if (!/^\d{6}$/.test(code)) {
+            if (errEl) { errEl.textContent = 'Enter the 6-digit code from @edgebot'; errEl.style.display = 'block'; }
+            return;
+        }
+        if (errEl) errEl.style.display = 'none';
+        casinoVerifyLoading = true;
+        var btn = input.nextElementSibling;
+        if (btn) btn.textContent = 'Verifying…';
+        fetch('/api/parlays/rs-verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code: code }),
+        })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                casinoVerifyLoading = false;
+                if (d.ok && d.verified) {
+                    parlayRsVerified = true;
+                    parlayRsUsername = d.rsUsername || null;
+                    if (currentUser) currentUser.rs_username = d.rsUsername || null;
+                    // Reload casino now that RS is linked
+                    renderCasinoPanel();
+                    casinoLoadBalance();
+                } else {
+                    if (errEl) { errEl.textContent = d.error || 'Invalid or expired code'; errEl.style.display = 'block'; }
+                    if (btn) btn.textContent = 'Verify';
+                }
+            })
+            .catch(function() {
+                casinoVerifyLoading = false;
+                if (errEl) { errEl.textContent = 'Network error — try again'; errEl.style.display = 'block'; }
+                var btn2 = document.querySelector('#casino-verify-code + button');
+                if (btn2) btn2.textContent = 'Verify';
+            });
+    }
 
     function renderCasinoPanel() {
         var panel = document.getElementById('casino-panel');
         if (!panel) return;
+        // Gate: RS account required. Show verify screen if not linked.
+        if (!currentUser || !(currentUser.rs_username || parlayRsVerified)) {
+            casinoRenderVerifyGate();
+            return;
+        }
         panel.innerHTML = [
             '<div class="casino-hdr">',
             '  <span class="casino-hdr-title">🎰 Blackjack</span>',
@@ -17004,9 +17095,9 @@
         var hpb = document.getElementById('header-parlays-btn');
         if (hpb) hpb.style.display = currentUser ? '' : 'none';
 
-        // Casino — admin or casino_access flag
+        // Casino — visible to all logged-in users; verify gate shown inside if no RS account
         var hcb = document.getElementById('header-casino-btn');
-        if (hcb) hcb.style.display = (currentUser && (currentUser.is_admin || currentUser.casino_access)) ? '' : 'none';
+        if (hcb) hcb.style.display = currentUser ? '' : 'none';
 
         // Pro → hamburger menu item
         var ddManage = document.getElementById('dd-manage-sub-item');
@@ -17032,7 +17123,7 @@
         }
 
         // Auto-open Casino if user arrived via /casino
-        if (window.location.pathname === '/casino' && currentUser && (currentUser.is_admin || currentUser.casino_access)) {
+        if (window.location.pathname === '/casino' && currentUser) {
             history.replaceState(null, '', '/');
             headerNavCasino();
         }

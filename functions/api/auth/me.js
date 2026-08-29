@@ -6,7 +6,7 @@ export async function onRequestGet({ request, env }) {
 
   const now = Math.floor(Date.now() / 1000);
   const row = await env.DB.prepare(
-    'SELECT u.email, u.plan, u.is_admin, u.referral_code, u.had_free_trial, u.pro_expires_at, u.stripe_sub_id, u.billing_interval FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires_at>?'
+    'SELECT u.email, u.plan, u.is_admin, u.casino_access, u.referral_code, u.had_free_trial, u.pro_expires_at, u.stripe_sub_id, u.billing_interval, u.rs_username FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires_at>?'
   ).bind(m[1], now).first();
 
   if (!row) return fail();
@@ -15,11 +15,13 @@ export async function onRequestGet({ request, env }) {
     email: row.email,
     plan: row.plan,
     is_admin: row.is_admin || 0,
+    casino_access: row.casino_access || 0,
     referral_code: row.referral_code || '',
     had_free_trial: row.had_free_trial || 0,
     pro_expires_at: row.pro_expires_at || null,
     stripe_sub_id: row.stripe_sub_id || null,
     billing_interval: row.billing_interval || 'monthly',
+    rs_username: row.rs_username || null,
   }), {
     headers: { 'Content-Type': 'application/json' }
   });
