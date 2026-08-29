@@ -562,6 +562,36 @@
         'SA':'https://a.espncdn.com/i/teamlogos/ncaa/500/6.png',
         'TXST':'https://a.espncdn.com/i/teamlogos/ncaa/500/326.png',
         'MARS':'https://a.espncdn.com/i/teamlogos/ncaa/500/276.png',
+        // WAC / Big Sky / FCS
+        'SAC ST':'https://a.espncdn.com/i/teamlogos/ncaa/500/2561.png',
+        'SACST':'https://a.espncdn.com/i/teamlogos/ncaa/500/2561.png',
+        'EWU':'https://a.espncdn.com/i/teamlogos/ncaa/500/2197.png',
+        'NAU':'https://a.espncdn.com/i/teamlogos/ncaa/500/2464.png',
+        'MONT':'https://a.espncdn.com/i/teamlogos/ncaa/500/136.png',
+        'IDHO':'https://a.espncdn.com/i/teamlogos/ncaa/500/70.png',
+        'WEB':'https://a.espncdn.com/i/teamlogos/ncaa/500/2780.png',
+        'UCD':'https://a.espncdn.com/i/teamlogos/ncaa/500/2110.png',
+        'SUU':'https://a.espncdn.com/i/teamlogos/ncaa/500/2561.png',
+        'NDSU':'https://a.espncdn.com/i/teamlogos/ncaa/500/2449.png',
+        'SDAK':'https://a.espncdn.com/i/teamlogos/ncaa/500/2571.png',
+        'SDSU':'https://a.espncdn.com/i/teamlogos/ncaa/500/21.png',
+        'SDST':'https://a.espncdn.com/i/teamlogos/ncaa/500/2571.png',
+        'MCNS':'https://a.espncdn.com/i/teamlogos/ncaa/500/2394.png',
+        'SAM':'https://a.espncdn.com/i/teamlogos/ncaa/500/2534.png',
+        'SHU':'https://a.espncdn.com/i/teamlogos/ncaa/500/236.png',
+        'GWEB':'https://a.espncdn.com/i/teamlogos/ncaa/500/2780.png',
+        'PRST':'https://a.espncdn.com/i/teamlogos/ncaa/500/2506.png',
+        'PRBU':'https://a.espncdn.com/i/teamlogos/ncaa/500/2506.png',
+        'CENT':'https://a.espncdn.com/i/teamlogos/ncaa/500/2115.png',
+        'CAL P':'https://a.espncdn.com/i/teamlogos/ncaa/500/2499.png',
+        'CALP':'https://a.espncdn.com/i/teamlogos/ncaa/500/2499.png',
+        'UC DAV':'https://a.espncdn.com/i/teamlogos/ncaa/500/2110.png',
+        'UCDAV':'https://a.espncdn.com/i/teamlogos/ncaa/500/2110.png',
+        'SFA':'https://a.espncdn.com/i/teamlogos/ncaa/500/2581.png',
+        'NWST':'https://a.espncdn.com/i/teamlogos/ncaa/500/76.png',
+        'ALCO':'https://a.espncdn.com/i/teamlogos/ncaa/500/2010.png',
+        'GRAM':'https://a.espncdn.com/i/teamlogos/ncaa/500/2261.png',
+        'PRAIR':'https://a.espncdn.com/i/teamlogos/ncaa/500/2506.png',
     };
 
     // Country flag emoji for WC tab — no external CDN, renders natively on all platforms
@@ -9214,17 +9244,19 @@
                             : (slipTeamLogo(evtHome, leg.sport) || slipTeamLogo(evtAway, leg.sport));
                     }
                 }
-                if (logoA && logoB) {
-                    var mkDualImg = function(cls, src, fb) {
-                        return '<img class="' + cls + '" src="' + escHtml(src) + '" alt="" onerror="this.outerHTML=\'<span class=\\\'' + cls + ' pslip-dual-init\\\'>' + escHtml(fb) + '</span>\'">';
-                    };
+                var mkDualSlot = function(cls, src, fb) {
+                    if (src) return '<img class="' + cls + '" src="' + escHtml(src) + '" alt="" onerror="this.outerHTML=\'<span class=\\\'' + cls + ' pslip-dual-init\\\'>' + escHtml(fb) + '</span>\'">';
+                    return '<span class="' + cls + ' pslip-dual-init">' + escHtml(fb) + '</span>';
+                };
+                if (mkt === 'team_total' || mkt.startsWith('1inn_') || logoA || logoB) {
+                    // Always show dual frame for game-level markets; also for ML/RL if at least one logo found
+                    var _initA = (evtAway || '').replace(/\s+/g, '').slice(0, 2).toUpperCase() || initials[0] || '?';
+                    var _initB = (evtHome || '').replace(/\s+/g, '').slice(0, 2).toUpperCase() || initials[initials.length - 1] || '?';
                     avatarHtml = '<div class="pslip-avatar pslip-avatar-dual">' +
                         '<div class="pslip-av-inner pslip-av-dual">' +
-                            mkDualImg('pslip-dual-logo-a', logoA, initials[0] || '?') +
-                            mkDualImg('pslip-dual-logo-b', logoB, initials[initials.length - 1] || '?') +
+                            mkDualSlot('pslip-dual-logo-a', logoA, _initA) +
+                            mkDualSlot('pslip-dual-logo-b', logoB, _initB) +
                         '</div></div>';
-                } else if (logoA) {
-                    avatarHtml = '<div class="pslip-avatar"><div class="pslip-av-inner"><img src="' + escHtml(logoA) + '" alt="" style="padding:4px" onerror="this.parentNode.innerHTML=\'<span>' + escHtml(initials) + '</span>\'"></div></div>';
                 } else {
                     avatarHtml = '<div class="pslip-avatar"><div class="pslip-av-inner" style="background:hsl(' + hue + ',40%,22%)"><span>' + escHtml(initials) + '</span></div></div>';
                 }
