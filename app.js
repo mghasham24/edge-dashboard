@@ -5350,13 +5350,14 @@
     function dkTeamLogo(dkName) {
         if (!dkName) return null;
         if (TEAM_LOGO_URLS[dkName]) return TEAM_LOGO_URLS[dkName];
+        if (CFB_TEAM_LOGOS[dkName]) return CFB_TEAM_LOGOS[dkName];
         var full;
         if (parlayActiveSport === 'wnba') {
             full = DK_WNBA_TEAM_MAP[dkName] || DK_NFL_TEAM_MAP[dkName] || DK_MLB_TEAM_MAP[dkName] || dkName;
         } else {
             full = DK_NFL_TEAM_MAP[dkName] || DK_MLB_TEAM_MAP[dkName] || DK_WNBA_TEAM_MAP[dkName] || dkName;
         }
-        return TEAM_LOGO_URLS[full] || null;
+        return TEAM_LOGO_URLS[full] || CFB_TEAM_LOGOS[full] || null;
     }
 
     // Sport-aware logo lookup — strictly uses only the primary sport map when sport is known,

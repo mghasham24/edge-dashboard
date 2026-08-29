@@ -3107,7 +3107,7 @@
     .pmc-info { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px }
     .pmc-name { font-size:14px; font-weight:700; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
     .pmc-meta { font-size:11px; color:var(--muted) }
-    .pmc-stat { font-size:10px; font-weight:800; color:var(--muted2); text-transform:uppercase; letter-spacing:.06em; white-space:nowrap; flex-shrink:0 }
+    .pmc-stat { font-size:11px; font-weight:800; color:var(--text); text-transform:uppercase; letter-spacing:.06em; white-space:nowrap; flex-shrink:0; opacity:.75 }
     .pmc-pills { display:flex; gap:6px; overflow-x:auto; padding-bottom:2px; scrollbar-width:none }
     .pmc-pills::-webkit-scrollbar { display:none }
     .pmc-pill { flex-shrink:0; display:flex; flex-direction:column; align-items:center; gap:2px; padding:7px 13px; border-radius:8px; border:1.5px solid var(--border); background:var(--bg3); cursor:pointer; transition:border-color .15s, background .15s }
