@@ -8464,22 +8464,25 @@
 
                 function cfbFindGameInfo(eventName) {
                     if (!eventName) return null;
-                    // event_name format: "AWAYDK @ HOMEDK" (DK shortNames, e.g. "CONN @ USC")
                     var atIdx = eventName.indexOf('@');
                     if (atIdx < 0) return null;
                     var awDk = eventName.slice(0, atIdx).trim().toLowerCase();
                     var hwDk = eventName.slice(atIdx + 1).trim().toLowerCase();
                     if (!awDk || !hwDk) return null;
+                    // Match a DK shortName against an ESPN abbreviation + full team name.
+                    // Handles: exact "USC"="USC", substring "CONN"⊂"UCONN", and
+                    // first-token-in-fullname "OKLA" in "Oklahoma Sooners", "OHIO ST" → "ohio" in "Ohio State".
+                    function cfbMatch(espnAbbr, espnName, dkShort) {
+                        var ea = espnAbbr.toLowerCase(), en = (espnName || '').toLowerCase();
+                        if (ea === dkShort || ea.indexOf(dkShort) !== -1 || dkShort.indexOf(ea) !== -1) return true;
+                        var firstTok = dkShort.split(/\s+/)[0];
+                        return firstTok.length >= 3 && en.indexOf(firstTok) !== -1;
+                    }
                     var keys = Object.keys(cfbEventInfoMap);
                     for (var _k = 0; _k < keys.length; _k++) {
                         var eI = cfbEventInfoMap[keys[_k]];
-                        var aw = eI.awayAbbr ? eI.awayAbbr.toLowerCase() : '';
-                        var hw = eI.homeAbbr ? eI.homeAbbr.toLowerCase() : '';
-                        if (!aw || !hw) continue;
-                        // Bidirectional substring: DK "CONN" matches ESPN "UCONN", DK "SJSU" matches ESPN "SJSU"
-                        var awM = aw === awDk || aw.indexOf(awDk) !== -1 || awDk.indexOf(aw) !== -1;
-                        var hwM = hw === hwDk || hw.indexOf(hwDk) !== -1 || hwDk.indexOf(hw) !== -1;
-                        if (awM && hwM) return eI;
+                        if (!eI.awayAbbr || !eI.homeAbbr) continue;
+                        if (cfbMatch(eI.awayAbbr, eI.awayName, awDk) && cfbMatch(eI.homeAbbr, eI.homeName, hwDk)) return eI;
                     }
                     return null;
                 }
