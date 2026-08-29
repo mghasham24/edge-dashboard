@@ -21,12 +21,13 @@ export async function onRequestPost({ request, env }) {
   if (!Number.isInteger(amount) || amount < MIN_WITHDRAWAL)
     return err(`Minimum withdrawal is ${MIN_WITHDRAWAL} Rax.`, 400);
 
-  // Verify user has a linked RS username (needed for payout)
-  const user = await env.DB.prepare(
-    'SELECT casino_balance, rs_username FROM users WHERE id = ?'
-  ).bind(userId).first();
+  // Verify user has a verified RS account (needed for payout)
+  const [user, authRow] = await Promise.all([
+    env.DB.prepare('SELECT casino_balance FROM users WHERE id = ?').bind(userId).first(),
+    env.DB.prepare('SELECT rs_username FROM real_auth WHERE user_id = ? AND parlay_verified = 1').bind(userId).first(),
+  ]);
   if (!user) return err('User not found.', 404);
-  if (!user.rs_username) return err('Link your RealSports account before withdrawing.', 400);
+  if (!authRow?.rs_username) return err('Link your RealSports account before withdrawing.', 400);
   if (user.casino_balance < amount) return err('Insufficient casino balance.', 402);
 
   // Check daily withdrawal cap
@@ -49,7 +50,7 @@ export async function onRequestPost({ request, env }) {
 
   const result = await env.DB.prepare(
     'INSERT INTO casino_withdrawals (user_id, amount, rs_username, status, created_at) VALUES (?,?,?,?,?)'
-  ).bind(userId, amount, user.rs_username, 'pending', now).run();
+  ).bind(userId, amount, authRow.rs_username, 'pending', now).run();
 
   const balance = await env.DB.prepare('SELECT casino_balance FROM users WHERE id = ?')
     .bind(userId).first();
@@ -58,7 +59,7 @@ export async function onRequestPost({ request, env }) {
     ok:             true,
     withdrawal_id:  result.meta.last_row_id,
     amount,
-    rs_username:    user.rs_username,
+    rs_username:    authRow.rs_username,
     status:         'pending',
     casino_balance: balance?.casino_balance ?? 0,
     message:        'Withdrawal requested. You will receive Rax on RealSports within 24 hours.',

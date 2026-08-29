@@ -6,7 +6,7 @@ export async function onRequestGet({ request, env }) {
 
   const now = Math.floor(Date.now() / 1000);
   const row = await env.DB.prepare(
-    'SELECT u.email, u.plan, u.is_admin, u.casino_access, u.referral_code, u.had_free_trial, u.pro_expires_at, u.stripe_sub_id, u.billing_interval, u.rs_username FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires_at>?'
+    'SELECT u.email, u.plan, u.is_admin, u.casino_access, u.referral_code, u.had_free_trial, u.pro_expires_at, u.stripe_sub_id, u.billing_interval, ra.rs_username, ra.parlay_verified FROM sessions s JOIN users u ON u.id=s.user_id LEFT JOIN real_auth ra ON ra.user_id=u.id WHERE s.token=? AND s.expires_at>?'
   ).bind(m[1], now).first();
 
   if (!row) return fail();
@@ -22,6 +22,7 @@ export async function onRequestGet({ request, env }) {
     stripe_sub_id: row.stripe_sub_id || null,
     billing_interval: row.billing_interval || 'monthly',
     rs_username: row.rs_username || null,
+    rs_verified: row.parlay_verified === 1 ? 1 : 0,
   }), {
     headers: { 'Content-Type': 'application/json' }
   });

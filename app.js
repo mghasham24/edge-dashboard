@@ -10888,7 +10888,7 @@
                     parlayRsVerified = true;
                     parlayRsUsername = d.rsUsername || null;
                     // Also update currentUser so casino gate opens without a page reload
-                    if (currentUser) currentUser.rs_username = d.rsUsername || null;
+                    if (currentUser) { currentUser.rs_verified = 1; currentUser.rs_username = d.rsUsername || null; }
                     renderParlayPanel();
                     loadParlayPlayers();
                 } else {
@@ -11349,7 +11349,7 @@
                 if (d.ok && d.verified) {
                     parlayRsVerified = true;
                     parlayRsUsername = d.rsUsername || null;
-                    if (currentUser) currentUser.rs_username = d.rsUsername || null;
+                    if (currentUser) { currentUser.rs_verified = 1; currentUser.rs_username = d.rsUsername || null; }
                     // Reload casino now that RS is linked
                     renderCasinoPanel();
                     casinoLoadBalance();
@@ -11369,8 +11369,9 @@
     function renderCasinoPanel() {
         var panel = document.getElementById('casino-panel');
         if (!panel) return;
-        // Gate: RS account required. Show verify screen if not linked.
-        if (!currentUser || !(currentUser.rs_username || parlayRsVerified)) {
+        // Gate: RS account required. Show verify screen if not verified.
+        // rs_verified comes from real_auth.parlay_verified via me.js; parlayRsVerified covers in-session verify.
+        if (!currentUser || (!currentUser.is_admin && !currentUser.rs_verified && !parlayRsVerified)) {
             casinoRenderVerifyGate();
             return;
         }
