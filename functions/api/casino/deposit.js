@@ -9,8 +9,9 @@ import { getSession }  from '../../_lib/session.js';
 import { err }         from '../../_lib/response.js';
 import { rsUrlEncode } from '../../_lib/hashids.js';
 
-const MIN_DEPOSIT    = 1000;
-const VERIFY_MAX_AGE = 15 * 60; // card must have been confirmed by sync-cards within 15 min
+const MIN_DEPOSIT     = 1000;
+const MIN_DEPOSIT_TTL = 3 * 60; // matches deposit-check DEPOSIT_TTL
+const VERIFY_MAX_AGE  = 15 * 60;
 const INVENTORY_MAX_AGE = 10 * 60;
 const RS_DEVICE_UUID = '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e';
 const EDGEBOT_USER   = 'V3yGgkkJ';
@@ -67,8 +68,9 @@ async function verifyEdgebotOwns(cardId, env, now, rsToken) {
   return verifySnapshot(cardId, env, now);
 }
 
-// Identical logic to parlays/place.js pickCard — shared token, snapshot fallback, VERIFY_MAX_AGE filter.
-// Also excludes cards held by pending parlays (assigned_to_parlay_id IS NULL).
+// Mirrors parlays/place.js pickCard exactly — atomic claim via claimed_for_casino_at.
+// claimed_for_casino_at is set atomically on deposit_cards; if another concurrent request
+// claims the same card first (changes === 0), we skip to the next card.
 async function pickCard(env, now, db) {
   const rsToken  = await getSharedRsToken(env);
   const excluded = [];
@@ -81,9 +83,9 @@ async function pickCard(env, now, db) {
       'SELECT card_id FROM deposit_cards' +
       ' WHERE assigned_to_parlay_id IS NULL AND freed_at IS NULL AND verified_at > ?' +
       ' AND sport=\'nba\' AND season=\'2026\'' +
-      ' AND card_id NOT IN (SELECT card_id FROM casino_deposits WHERE status=\'pending\' AND card_id IS NOT NULL)' +
+      ' AND (claimed_for_casino_at IS NULL OR claimed_for_casino_at < ?)' +
       notIn + ' ORDER BY verified_at DESC LIMIT 1'
-    ).bind(now - VERIFY_MAX_AGE, ...excluded).first();
+    ).bind(now - VERIFY_MAX_AGE, now - MIN_DEPOSIT_TTL, ...excluded).first();
     if (!row) break;
 
     const owned = await verifyEdgebotOwns(row.card_id, env, now, rsToken);
@@ -93,6 +95,18 @@ async function pickCard(env, now, db) {
       continue;
     }
     if (owned === null) {
+      excluded.push(row.card_id);
+      continue;
+    }
+
+    // Atomic claim — mirrors parlays assigned_to_parlay_id UPDATE pattern.
+    // If another concurrent request already claimed this card, changes === 0 → skip.
+    const claim = await db.prepare(
+      'UPDATE deposit_cards SET claimed_for_casino_at=?' +
+      ' WHERE card_id=? AND (claimed_for_casino_at IS NULL OR claimed_for_casino_at < ?)'
+    ).bind(now, row.card_id, now - MIN_DEPOSIT_TTL).run();
+
+    if (claim.meta.changes === 0) {
       excluded.push(row.card_id);
       continue;
     }
@@ -124,10 +138,16 @@ export async function onRequestPost({ request, env }) {
 
   const now = Math.floor(Date.now() / 1000);
 
-  // Auto-expire stale pending deposits (> 30 min old)
+  // Release claimed_for_casino_at on cards whose deposit TTL has passed —
+  // makes them available again without waiting for reconcile.
+  await env.DB.prepare(
+    'UPDATE deposit_cards SET claimed_for_casino_at=NULL WHERE claimed_for_casino_at < ?'
+  ).bind(now - MIN_DEPOSIT_TTL).run();
+
+  // Auto-expire stale pending deposits (> 3 min old)
   await env.DB.prepare(
     "UPDATE casino_deposits SET status='expired' WHERE user_id=? AND status='pending' AND created_at < ?"
-  ).bind(userId, now - 3 * 60).run();
+  ).bind(userId, now - MIN_DEPOSIT_TTL).run();
 
   // Resume an existing live pending deposit (within 30 min) instead of blocking
   const existing = await env.DB.prepare(

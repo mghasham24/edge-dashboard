@@ -143,6 +143,13 @@ async function handleRequest({ request, env }) {
       "  SELECT id FROM parlays WHERE status IN ('won','lost','void','voided','expired')" +
       ")"
     ).run();
+
+    // 0c. Release stale casino card claims — any card claimed > 3 min ago with no confirmed deposit.
+    await env.DB.prepare(
+      "UPDATE deposit_cards SET claimed_for_casino_at=NULL" +
+      " WHERE claimed_for_casino_at IS NOT NULL AND claimed_for_casino_at < unixepoch() - 180" +
+      " AND card_id NOT IN (SELECT card_id FROM casino_deposits WHERE status='pending' AND card_id IS NOT NULL)"
+    ).run();
   } catch (_) { /* non-fatal — continue to stamp verified_at */ }
 
   // 1. Load all pool cards (assigned AND unassigned — a sold card could be assigned to an
@@ -228,7 +235,12 @@ async function handleRequest({ request, env }) {
   if (ownedPoolIds.length) {
     await batchChunked(
       ownedPoolIds.map(id =>
-        env.DB.prepare('UPDATE deposit_cards SET verified_at=?, freed_at=NULL WHERE card_id=?').bind(now, id)
+        // Also clear stale casino claims — a card confirmed still-owned is safe to re-offer.
+        env.DB.prepare(
+          'UPDATE deposit_cards SET verified_at=?, freed_at=NULL,' +
+          ' claimed_for_casino_at=CASE WHEN claimed_for_casino_at < ? THEN NULL ELSE claimed_for_casino_at END' +
+          ' WHERE card_id=?'
+        ).bind(now, now - 180, id)
       )
     );
   }
