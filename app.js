@@ -8463,14 +8463,23 @@
                 });
 
                 function cfbFindGameInfo(eventName) {
-                    var enLc = (eventName || '').toLowerCase();
-                    if (!enLc) return null;
+                    if (!eventName) return null;
+                    // event_name format: "AWAYDK @ HOMEDK" (DK shortNames, e.g. "CONN @ USC")
+                    var atIdx = eventName.indexOf('@');
+                    if (atIdx < 0) return null;
+                    var awDk = eventName.slice(0, atIdx).trim().toLowerCase();
+                    var hwDk = eventName.slice(atIdx + 1).trim().toLowerCase();
+                    if (!awDk || !hwDk) return null;
                     var keys = Object.keys(cfbEventInfoMap);
                     for (var _k = 0; _k < keys.length; _k++) {
                         var eI = cfbEventInfoMap[keys[_k]];
                         var aw = eI.awayAbbr ? eI.awayAbbr.toLowerCase() : '';
                         var hw = eI.homeAbbr ? eI.homeAbbr.toLowerCase() : '';
-                        if (aw && hw && enLc.indexOf(aw) !== -1 && enLc.indexOf(hw) !== -1) return eI;
+                        if (!aw || !hw) continue;
+                        // Bidirectional substring: DK "CONN" matches ESPN "UCONN", DK "SJSU" matches ESPN "SJSU"
+                        var awM = aw === awDk || aw.indexOf(awDk) !== -1 || awDk.indexOf(aw) !== -1;
+                        var hwM = hw === hwDk || hw.indexOf(hwDk) !== -1 || hwDk.indexOf(hw) !== -1;
+                        if (awM && hwM) return eI;
                     }
                     return null;
                 }
