@@ -3313,16 +3313,21 @@
     /* Team prop box score */
     .pslip-team-bs-wrap { margin-top:5px }
     .pslip-team-bs { display:flex; align-items:center; gap:8px; margin-top:5px; padding:5px 8px; background:var(--bg3); border-radius:7px }
-    .pslip-team-bs.pregame { justify-content:space-between }
-    .pslip-bs-rows { display:flex; flex-direction:column; gap:2px }
+    .pslip-team-bs.pregame { justify-content:space-between; flex-direction:column; gap:3px; align-items:flex-start }
+    .pslip-bs-rows { display:flex; flex-direction:column; gap:3px }
     .pslip-bs-row { display:flex; align-items:center; gap:5px }
     .pslip-bs-row.winning .pslip-bs-score { color:var(--green) }
+    .pslip-bs-logo { width:20px; height:20px; object-fit:contain; flex-shrink:0 }
+    .pslip-bs-abbr-only { font-size:10px; font-weight:800; color:var(--muted); width:20px; flex-shrink:0; letter-spacing:.03em }
     .pslip-bs-abbr { font-size:10px; font-weight:800; color:var(--muted); width:26px; flex-shrink:0; letter-spacing:.03em }
     .pslip-bs-score { font-size:14px; font-weight:800; color:var(--text); font-variant-numeric:tabular-nums; min-width:18px }
     .pslip-bs-info { flex:1; display:flex; flex-direction:column; gap:3px; align-items:flex-end }
     .pslip-bs-state { font-size:10px; font-weight:700; color:var(--muted2); white-space:nowrap }
     .pslip-bs-state.live { color:#ef4444 }
     .pslip-bs-versus { font-size:11px; font-weight:700; color:var(--muted) }
+    .pslip-bs-preview-teams { display:flex; align-items:center; gap:6px }
+    .pslip-bs-preview-team { display:flex; align-items:center; gap:4px }
+    .pslip-bs-at { font-size:10px; color:var(--muted2); font-weight:600 }
     .pslip-bs-outcome { font-size:11px; font-weight:800; white-space:nowrap; padding:1px 6px; border-radius:4px }
     .pslip-bs-outcome.won { background:rgba(45,204,126,.12); color:var(--green) }
     .pslip-bs-outcome.lost { background:rgba(239,68,68,.1); color:#ef4444 }

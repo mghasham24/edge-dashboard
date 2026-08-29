@@ -5206,9 +5206,16 @@
         { key: 'offsides',   label: 'Offsides' },
         { key: 'fouls_won',  label: 'Fouls Won' },
     ];
+    var CFB_CATS = [
+        { key: 'teams',        label: 'Teams' },
+        { key: 'cfb_pass_yds', label: 'Pass Yds' },
+        { key: 'cfb_pass_tds', label: 'Pass TDs' },
+        { key: 'cfb_rush_yds', label: 'Rush Yds' },
+        { key: 'cfb_recv_yds', label: 'Recv Yds' },
+    ];
     var WNBA_MKT_SET   = { pts:1, reb:1, ast:1, fg3m:1, pra:1, pa:1, pr:1, ra:1, double_double:1, triple_double:1 };
     var SOCCER_MKT_SET = { sot:1, assists:1, saves:1, offsides:1, fouls_won:1, goalscorer:1 };
-    var parlayActiveSport = 'mlb'; // 'mlb' | 'wnba' | 'nfl' | 'ufc' | 'soccer'
+    var parlayActiveSport = 'mlb'; // 'mlb' | 'wnba' | 'nfl' | 'ufc' | 'soccer' | 'cfb'
     var PARLAY_HEADSHOT_CACHE = {}; // playerName → RS/ESPN URL, 'none', or 'pending'
     var PARLAY_RS_HS_FLIGHT = {}; // playerName → [cb, ...] while RS search is in-flight
     // Static overrides for players whose RS/ESPN search name differs from DK/RS bet name
@@ -5220,17 +5227,20 @@
     var PARLAY_PLAYERS        = [];  // filled by loadParlayPlayers()
     var PARLAY_PLAYERS_WNBA   = [];  // filled by loadParlayPlayers() when sport=wnba
     var PARLAY_PLAYERS_NFL    = [];  // team picks only for NFL
+    var PARLAY_PLAYERS_CFB    = [];  // CFB player props + team picks
     var PARLAY_PLAYERS_UFC    = [];  // fighter ML/total picks for UFC
     var PARLAY_PLAYERS_SOCCER = [];  // soccer player props (admin-only)
     var PARLAY_GAMES        = [];  // filled by loadParlayLines() for MLB
     var PARLAY_GAMES_WNBA   = [];  // filled by loadParlayLines() for WNBA
     var PARLAY_GAMES_NFL    = [];  // filled by loadParlayLines() for NFL
+    var PARLAY_GAMES_CFB    = [];  // filled by loadParlayLines() for CFB
     var PARLAY_GAMES_UFC    = [];  // filled by loadParlayUfc() / loadOdds UFC branch
     var PARLAY_1INN_GAMES   = [];  // filled by loadParlay1stInning() for MLB 1st inning
     var PARLAY_1INN_PLAYERS = [];  // pick objects built from PARLAY_1INN_GAMES
     var parlayGamesLoading      = false;
     var parlayGamesWnbaLoading  = false;
     var parlayGamesNflLoading   = false;
+    var parlayGamesCfbLoading   = false;
     var parlayGamesUfcLoading   = false;
     var parlay1innLoading       = false;
     var teamPickIdCounter   = -1; // negative IDs for team market picks
@@ -5495,7 +5505,7 @@
         var sport = parlayActiveSport;
         // NFL is team-only — no player props, go straight to lines
         if (sport === 'nfl') { parlayRenderGrid(); return; }
-        var cache = sport === 'soccer' ? PARLAY_PLAYERS_SOCCER : sport === 'wnba' ? PARLAY_PLAYERS_WNBA : PARLAY_PLAYERS;
+        var cache = sport === 'soccer' ? PARLAY_PLAYERS_SOCCER : sport === 'wnba' ? PARLAY_PLAYERS_WNBA : sport === 'cfb' ? PARLAY_PLAYERS_CFB : PARLAY_PLAYERS;
         var _preloadSport = sport;
 
         // Soccer has no RS IDs — skip RS ID lookup entirely
@@ -5532,7 +5542,7 @@
         parlayPlayersLoading = true;
         var grid = document.getElementById('parlay-player-grid');
         if (grid) grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">Loading props…</div>';
-        var url = sport === 'soccer' ? '/api/dk/soccer-props' : sport === 'wnba' ? '/api/dk/wnba-props' : '/api/dk/mlb-props';
+        var url = sport === 'soccer' ? '/api/dk/soccer-props' : sport === 'wnba' ? '/api/dk/wnba-props' : sport === 'cfb' ? '/api/dk/cfb-props' : '/api/dk/mlb-props';
 
         Promise.all([
             fetch(url).then(function(r) { return r.json(); }),
@@ -5550,7 +5560,7 @@
                     if (grid) grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">No props available today</div>';
                     return;
                 }
-                var players = buildParlayPlayersFromDk(d.players, sport === 'soccer' ? 200000 : sport === 'wnba' ? 100000 : 1);
+                var players = buildParlayPlayersFromDk(d.players, sport === 'soccer' ? 200000 : sport === 'wnba' ? 100000 : sport === 'cfb' ? 300000 : 1);
                 if (sport === 'soccer') {
                     PARLAY_PLAYERS_SOCCER = players;
                     // Warm the headshot cache for all soccer players immediately after data loads.
@@ -5568,6 +5578,10 @@
                     });
                 }
                 else if (sport === 'wnba') PARLAY_PLAYERS_WNBA = players;
+                else if (sport === 'cfb') {
+                    var _cfbTeamPicks = PARLAY_PLAYERS_CFB.filter(function(p) { return p.isTeamMarket; });
+                    PARLAY_PLAYERS_CFB = _cfbTeamPicks.concat(players);
+                }
                 else {
                     var _teamPicks = PARLAY_PLAYERS.filter(function(p) { return p.isTeamMarket; });
                     PARLAY_PLAYERS = _teamPicks.concat(players);
@@ -5600,20 +5614,22 @@
 
     function loadParlayLines() {
         var sport      = parlayActiveSport;
-        var isLoading  = sport === 'wnba' ? parlayGamesWnbaLoading : sport === 'nfl' ? parlayGamesNflLoading : parlayGamesLoading;
-        var gamesCache = sport === 'wnba' ? PARLAY_GAMES_WNBA : sport === 'nfl' ? PARLAY_GAMES_NFL : PARLAY_GAMES;
+        var isLoading  = sport === 'wnba' ? parlayGamesWnbaLoading : sport === 'nfl' ? parlayGamesNflLoading : sport === 'cfb' ? parlayGamesCfbLoading : parlayGamesLoading;
+        var gamesCache = sport === 'wnba' ? PARLAY_GAMES_WNBA : sport === 'nfl' ? PARLAY_GAMES_NFL : sport === 'cfb' ? PARLAY_GAMES_CFB : PARLAY_GAMES;
         if (isLoading || gamesCache.length > 0) return;
         if (sport === 'wnba')      parlayGamesWnbaLoading = true;
         else if (sport === 'nfl')  parlayGamesNflLoading  = true;
+        else if (sport === 'cfb')  parlayGamesCfbLoading  = true;
         else                       parlayGamesLoading = true;
         var grid = document.getElementById('parlay-player-grid');
         if (grid) grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">Loading game lines…</div>';
-        var url = sport === 'wnba' ? '/api/dk/wnba-lines' : sport === 'nfl' ? '/api/dk/nfl-lines' : '/api/dk/mlb-lines';
+        var url = sport === 'wnba' ? '/api/dk/wnba-lines' : sport === 'nfl' ? '/api/dk/nfl-lines' : sport === 'cfb' ? '/api/dk/cfb-lines' : '/api/dk/mlb-lines';
         fetch(url)
             .then(function(r) { return r.json(); })
             .then(function(d) {
                 if (sport === 'wnba')      parlayGamesWnbaLoading = false;
                 else if (sport === 'nfl')  parlayGamesNflLoading  = false;
+                else if (sport === 'cfb')  parlayGamesCfbLoading  = false;
                 else                       parlayGamesLoading = false;
                 if (!d.ok || !d.games || !d.games.length) {
                     if (grid) grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">No game lines available today</div>';
@@ -5621,6 +5637,7 @@
                 }
                 if (sport === 'wnba')      PARLAY_GAMES_WNBA = d.games;
                 else if (sport === 'nfl')  PARLAY_GAMES_NFL  = d.games;
+                else if (sport === 'cfb')  PARLAY_GAMES_CFB  = d.games;
                 else                       PARLAY_GAMES = d.games;
                 buildGamePicks(d.games, sport);
                 parlayRenderGrid();
@@ -5628,6 +5645,7 @@
             .catch(function() {
                 if (sport === 'wnba')      parlayGamesWnbaLoading = false;
                 else if (sport === 'nfl')  parlayGamesNflLoading  = false;
+                else if (sport === 'cfb')  parlayGamesCfbLoading  = false;
                 else                       parlayGamesLoading = false;
                 if (grid) grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">Failed to load game lines — try again</div>';
             });
@@ -5639,10 +5657,12 @@
             PARLAY_PLAYERS_WNBA = PARLAY_PLAYERS_WNBA.filter(function(p) { return !p.isTeamMarket; });
         } else if (sport === 'nfl') {
             PARLAY_PLAYERS_NFL = [];
+        } else if (sport === 'cfb') {
+            PARLAY_PLAYERS_CFB = PARLAY_PLAYERS_CFB.filter(function(p) { return !p.isTeamMarket; });
         } else {
             PARLAY_PLAYERS = PARLAY_PLAYERS.filter(function(p) { return !p.isTeamMarket; });
         }
-        var pushTo = sport === 'wnba' ? PARLAY_PLAYERS_WNBA : sport === 'nfl' ? PARLAY_PLAYERS_NFL : PARLAY_PLAYERS;
+        var pushTo = sport === 'wnba' ? PARLAY_PLAYERS_WNBA : sport === 'nfl' ? PARLAY_PLAYERS_NFL : sport === 'cfb' ? PARLAY_PLAYERS_CFB : PARLAY_PLAYERS;
         games.forEach(function(game) {
             game.markets.forEach(function(mkt) {
                 if (mkt.market === 'team_ml') {
@@ -5819,6 +5839,7 @@
         return PARLAY_PLAYERS.find(function(x) { return x.id === n; }) ||
                PARLAY_PLAYERS_WNBA.find(function(x) { return x.id === n; }) ||
                PARLAY_PLAYERS_NFL.find(function(x) { return x.id === n; }) ||
+               PARLAY_PLAYERS_CFB.find(function(x) { return x.id === n; }) ||
                PARLAY_PLAYERS_UFC.find(function(x) { return x.id === n; }) ||
                PARLAY_PLAYERS_SOCCER.find(function(x) { return x.id === n; }) ||
                PARLAY_1INN_PLAYERS.find(function(x) { return x.id === n; }) ||
@@ -6760,8 +6781,8 @@
 
         // Teams tab
         if (parlayCategory === 'teams') {
-            var _gamesCache   = parlayActiveSport === 'wnba' ? PARLAY_GAMES_WNBA : parlayActiveSport === 'nfl' ? PARLAY_GAMES_NFL : PARLAY_GAMES;
-            var _gamesLoading = parlayActiveSport === 'wnba' ? parlayGamesWnbaLoading : parlayActiveSport === 'nfl' ? parlayGamesNflLoading : parlayGamesLoading;
+            var _gamesCache   = parlayActiveSport === 'wnba' ? PARLAY_GAMES_WNBA : parlayActiveSport === 'nfl' ? PARLAY_GAMES_NFL : parlayActiveSport === 'cfb' ? PARLAY_GAMES_CFB : PARLAY_GAMES;
+            var _gamesLoading = parlayActiveSport === 'wnba' ? parlayGamesWnbaLoading : parlayActiveSport === 'nfl' ? parlayGamesNflLoading : parlayActiveSport === 'cfb' ? parlayGamesCfbLoading : parlayGamesLoading;
             if (!_gamesCache.length && !_gamesLoading) { loadParlayLines(); return; }
             if (_gamesLoading) {
                 grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">Loading game lines…</div>';
@@ -6773,7 +6794,7 @@
 
         // Reset all teams-tab inline overrides — restores CSS display:grid etc.
         grid.style.cssText = '';
-        var playerPool = parlayActiveSport === 'soccer' ? PARLAY_PLAYERS_SOCCER : parlayActiveSport === 'wnba' ? PARLAY_PLAYERS_WNBA : parlayActiveSport === 'nfl' ? PARLAY_PLAYERS_NFL : PARLAY_PLAYERS;
+        var playerPool = parlayActiveSport === 'soccer' ? PARLAY_PLAYERS_SOCCER : parlayActiveSport === 'wnba' ? PARLAY_PLAYERS_WNBA : parlayActiveSport === 'nfl' ? PARLAY_PLAYERS_NFL : parlayActiveSport === 'cfb' ? PARLAY_PLAYERS_CFB : PARLAY_PLAYERS;
         if (!playerPool.filter(function(p){return !p.isTeamMarket;}).length && !parlayPlayersLoading) { loadParlayPlayers(); return; }
         if (parlayPlayersLoading) {
             grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">Loading props…</div>';
@@ -7009,12 +7030,13 @@
             '<button class="parlay-sport-btn' + (parlayActiveSport === 'mlb'    ? ' active' : '') + '" onclick="setParlayActiveSport(\'mlb\')">MLB</button>' +
             '<button class="parlay-sport-btn' + (parlayActiveSport === 'wnba'   ? ' active' : '') + '" onclick="setParlayActiveSport(\'wnba\')">WNBA</button>' +
             '<button class="parlay-sport-btn' + (parlayActiveSport === 'nfl'    ? ' active' : '') + '" onclick="setParlayActiveSport(\'nfl\')">NFL</button>' +
+            (isAdmin ? '<button class="parlay-sport-btn' + (parlayActiveSport === 'cfb' ? ' active' : '') + '" onclick="setParlayActiveSport(\'cfb\')">CFB</button>' : '') +
             '<button class="parlay-sport-btn' + (parlayActiveSport === 'ufc'    ? ' active' : '') + '" onclick="setParlayActiveSport(\'ufc\')">UFC</button>' +
             '<button class="parlay-sport-btn' + (parlayActiveSport === 'soccer' ? ' active' : '') + '" onclick="setParlayActiveSport(\'soccer\')">FC</button>' +
         '</div>';
 
         if (parlayActiveSport !== 'mlb') {
-            var cats = parlayActiveSport === 'wnba' ? WNBA_CATS : parlayActiveSport === 'nfl' ? NFL_CATS : parlayActiveSport === 'ufc' ? UFC_CATS : parlayActiveSport === 'soccer' ? SOCCER_CATS : UFC_CATS;
+            var cats = parlayActiveSport === 'wnba' ? WNBA_CATS : parlayActiveSport === 'nfl' ? NFL_CATS : parlayActiveSport === 'cfb' ? CFB_CATS : parlayActiveSport === 'ufc' ? UFC_CATS : parlayActiveSport === 'soccer' ? SOCCER_CATS : UFC_CATS;
             cats = cats.filter(function(c) { return !c.adminOnly || isAdmin; });
             var searchTab = parlaySearchQuery
                 ? '<button class="parlay-cat-btn' + (parlayCategory === 'search' ? ' active' : '') + '" data-cat="search" onclick="parlaySetCategory(\'search\')">Player</button>'
@@ -7078,7 +7100,7 @@
             parlayCategory     = 'hits';
             parlayPrevCategory = 'hits';
         } else {
-            var cats = sport === 'wnba' ? WNBA_CATS : sport === 'nfl' ? NFL_CATS : sport === 'ufc' ? UFC_CATS : sport === 'soccer' ? SOCCER_CATS : PARLAY_CATS;
+            var cats = sport === 'wnba' ? WNBA_CATS : sport === 'nfl' ? NFL_CATS : sport === 'cfb' ? CFB_CATS : sport === 'ufc' ? UFC_CATS : sport === 'soccer' ? SOCCER_CATS : PARLAY_CATS;
             var isAdmin = currentUser && currentUser.is_admin;
             cats = cats.filter(function(c) { return !c.adminOnly || isAdmin; });
             parlayCategory     = cats[0].key;
@@ -7410,8 +7432,8 @@
 
     function loadSlipHeadshotAsync(elemId, playerName, sport, team) {
         var legSport  = sport || (document.getElementById(elemId) ? document.getElementById(elemId).dataset.sport : '') || 'mlb';
-        var espnSport  = legSport === 'wnba' ? 'basketball' : legSport === 'ufc' ? 'mma' : 'baseball';
-        var espnLeague = legSport === 'wnba' ? 'wnba'       : legSport === 'ufc' ? 'mma' : 'mlb';
+        var espnSport  = legSport === 'wnba' ? 'basketball' : legSport === 'ufc' ? 'mma' : legSport === 'nfl' ? 'football' : legSport === 'cfb' ? 'college-football' : 'baseball';
+        var espnLeague = legSport === 'wnba' ? 'wnba'       : legSport === 'ufc' ? 'mma' : legSport === 'nfl' ? 'nfl'      : legSport === 'cfb' ? 'college-football' : 'mlb';
         function showFallback(el) {
             if (!el) return;
             var fb = el.dataset.fallback;
@@ -7506,6 +7528,7 @@
         var lp = PARLAY_PLAYERS.find(function(x) { return x.name === playerName; }) ||
                  PARLAY_PLAYERS_WNBA.find(function(x) { return x.name === playerName; }) ||
                  PARLAY_PLAYERS_NFL.find(function(x) { return x.name === playerName; }) ||
+                 PARLAY_PLAYERS_CFB.find(function(x) { return x.name === playerName; }) ||
                  PARLAY_PLAYERS_UFC.find(function(x) { return x.name === playerName; }) ||
                  PARLAY_PLAYERS_SOCCER.find(function(x) { return x.name === playerName; });
         if (lp && lp.headshot) {
@@ -7674,11 +7697,21 @@
         if (isTeam && barEl && gameInfo) {
             var hS = gameInfo.homeScore, aS = gameInfo.awayScore;
             var hA = gameInfo.homeAbbr || '', aA = gameInfo.awayAbbr || '';
+            var hL = gameInfo.homeLogo || '', aL = gameInfo.awayLogo || '';
             var isFinalT = state === 'Final', isLiveT = state === 'Live';
+
+            function bsLogoHtml(logo, abbr) {
+                if (logo) return '<img src="' + escHtml(logo) + '" class="pslip-bs-logo" onerror="this.style.display=\'none\'">';
+                return '<span class="pslip-bs-abbr-only">' + escHtml(abbr) + '</span>';
+            }
 
             if (state === 'Preview') {
                 barEl.innerHTML = '<div class="pslip-team-bs pregame">' +
-                    '<span class="pslip-bs-versus">' + escHtml((aA || '?') + ' @ ' + (hA || '?')) + '</span>' +
+                    '<div class="pslip-bs-preview-teams">' +
+                        '<div class="pslip-bs-preview-team">' + bsLogoHtml(aL, aA) + '<span class="pslip-bs-abbr">' + escHtml(aA || '?') + '</span></div>' +
+                        '<span class="pslip-bs-at">@</span>' +
+                        '<div class="pslip-bs-preview-team">' + bsLogoHtml(hL, hA) + '<span class="pslip-bs-abbr">' + escHtml(hA || '?') + '</span></div>' +
+                    '</div>' +
                     '<span class="pslip-bs-state">' + escHtml(gameInfo.startET || '') + '</span>' +
                 '</div>';
             } else if ((isLiveT || isFinalT) && hS != null && aS != null) {
@@ -7707,8 +7740,8 @@
                 var bsAWin = isFinalT && aS > hS, bsHWin = isFinalT && hS > aS;
                 barEl.innerHTML = '<div class="pslip-team-bs">' +
                     '<div class="pslip-bs-rows">' +
-                        '<div class="pslip-bs-row' + (bsAWin ? ' winning' : '') + '"><span class="pslip-bs-abbr">' + escHtml(aA) + '</span><span class="pslip-bs-score">' + aS + '</span></div>' +
-                        '<div class="pslip-bs-row' + (bsHWin ? ' winning' : '') + '"><span class="pslip-bs-abbr">' + escHtml(hA) + '</span><span class="pslip-bs-score">' + hS + '</span></div>' +
+                        '<div class="pslip-bs-row' + (bsAWin ? ' winning' : '') + '">' + bsLogoHtml(aL, aA) + '<span class="pslip-bs-abbr">' + escHtml(aA) + '</span><span class="pslip-bs-score">' + aS + '</span></div>' +
+                        '<div class="pslip-bs-row' + (bsHWin ? ' winning' : '') + '">' + bsLogoHtml(hL, hA) + '<span class="pslip-bs-abbr">' + escHtml(hA) + '</span><span class="pslip-bs-score">' + hS + '</span></div>' +
                     '</div>' +
                     '<div class="pslip-bs-info">' +
                         (bsStateLabel ? '<span class="pslip-bs-state' + (isLiveT ? ' live' : '') + '">' + escHtml(bsStateLabel) + '</span>' : '') +
@@ -7788,6 +7821,8 @@
                         awayName: awayComp && awayComp.team ? (awayComp.team.displayName || awayComp.team.name || '') : '',
                         homeScore: homeComp ? parseInt(homeComp.score, 10) : null,
                         awayScore: awayComp ? parseInt(awayComp.score, 10) : null,
+                        homeLogo: homeComp && homeComp.team ? (homeComp.team.logo || '') : '',
+                        awayLogo: awayComp && awayComp.team ? (awayComp.team.logo || '') : '',
                     };
                     eventInfoMap[ev.id] = gameInfo;
                     if (state !== 'Preview') wnbaGameList.push(gameInfo);
@@ -7975,6 +8010,8 @@
                         awayName: (awayComp.team && (awayComp.team.displayName || awayComp.team.name)) || '',
                         homeScore: homeComp.score != null ? parseInt(homeComp.score, 10) : null,
                         awayScore: awayComp.score != null ? parseInt(awayComp.score, 10) : null,
+                        homeLogo: (homeComp.team && homeComp.team.logo) || '',
+                        awayLogo: (awayComp.team && awayComp.team.logo) || '',
                     });
                 });
 
@@ -8013,6 +8050,98 @@
                     var gi = Object.assign({}, baseGame);
                     if (n.marketType !== 'team_total' && gi.homeScore != null) {
                         var isHome = matchFn(gi.homeName);
+                        gi.pickedTeamScore = isHome ? gi.homeScore : gi.awayScore;
+                        gi.oppScore        = isHome ? gi.awayScore : gi.homeScore;
+                    }
+                    updateLegStatus(n.parlayId, n.legIndex, null, n.threshold, n.direction, n.marketType, gi, true);
+                });
+            });
+        }).catch(function() {});
+    }
+
+    function fetchCfbLiveStats(cfbNeededByDate) {
+        var dates = Object.keys(cfbNeededByDate);
+        if (!dates.length) return;
+        Promise.all(dates.map(function(date) {
+            var fmt = date.replace(/-/g, '');
+            return fetch('https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates=' + fmt, { signal: AbortSignal.timeout(8000), cache: 'no-cache' })
+                .then(function(r) { return r.json(); })
+                .then(function(data) { return { date: date, events: data.events || [] }; })
+                .catch(function() { return { date: date, events: [] }; });
+        })).then(function(dateResults) {
+            dateResults.forEach(function(dr) {
+                var date   = dr.date;
+                var events = dr.events;
+                var needed = cfbNeededByDate[date] || [];
+                if (!needed.length) return;
+
+                var gameList = [];
+                events.forEach(function(ev) {
+                    var status  = ev.status || {};
+                    var sType   = status.type || {};
+                    var sName   = sType.name || '';
+                    var isFinal = sName === 'STATUS_FINAL' || sName === 'STATUS_FINAL_OVERTIME';
+                    var isLive  = sName === 'STATUS_IN_PROGRESS' || sName === 'STATUS_HALFTIME' || sName === 'STATUS_END_PERIOD';
+                    var state   = isFinal ? 'Final' : (isLive ? 'Live' : 'Preview');
+                    var period  = status.period || 0;
+                    var clock   = status.displayClock || '';
+                    var qtrLabel = isLive ? (sName === 'STATUS_HALFTIME' ? 'Half' : ('Q' + period + (clock ? ' ' + clock : ''))) :
+                                   isFinal ? 'Final' : '';
+                    var comps    = (ev.competitions && ev.competitions[0] && ev.competitions[0].competitors) || [];
+                    var homeComp = comps.find(function(c) { return c.homeAway === 'home'; }) || {};
+                    var awayComp = comps.find(function(c) { return c.homeAway === 'away'; }) || {};
+                    var startET  = ev.date ? new Date(ev.date).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' }) : '';
+                    gameList.push({
+                        state: state, inningLabel: qtrLabel, startET: startET,
+                        homeAbbr: (homeComp.team && homeComp.team.abbreviation || '').toUpperCase(),
+                        awayAbbr: (awayComp.team && awayComp.team.abbreviation || '').toUpperCase(),
+                        homeName: (homeComp.team && (homeComp.team.displayName || homeComp.team.name)) || '',
+                        awayName: (awayComp.team && (awayComp.team.displayName || awayComp.team.name)) || '',
+                        homeScore: homeComp.score != null ? parseInt(homeComp.score, 10) : null,
+                        awayScore: awayComp.score != null ? parseInt(awayComp.score, 10) : null,
+                        homeLogo: (homeComp.team && homeComp.team.logo) || '',
+                        awayLogo: (awayComp.team && awayComp.team.logo) || '',
+                    });
+                });
+
+                needed.filter(function(n) { return n.isTeam; }).forEach(function(n) {
+                    var raw     = n.playerName.replace(/ (ML|RL)$/i, '').trim();
+                    var rawUp   = raw.toUpperCase();
+                    var rawNorm = normSlipName(raw);
+                    var rawNick = rawNorm.split(' ').slice(1).join(' ');
+
+                    var baseGame = null;
+                    if (n.marketType === 'team_total') {
+                        var m = n.playerName.match(/^(.+?)\s+@\s+(.+?)\s+[OU][\d.]+$/i);
+                        if (m) {
+                            var awayN = normSlipName(m[1].trim()), homeN = normSlipName(m[2].trim());
+                            var awayNk = awayN.split(' ').slice(1).join(' '), homeNk = homeN.split(' ').slice(1).join(' ');
+                            baseGame = gameList.find(function(g) {
+                                var hn = normSlipName(g.homeName), an = normSlipName(g.awayName);
+                                var ha = g.homeAbbr.toUpperCase(),  aa = g.awayAbbr.toUpperCase();
+                                return (an === awayN || (awayNk && an.endsWith(awayNk)) || (rawUp.length > aa.length && rawUp.endsWith(aa))) &&
+                                       (hn === homeN || (homeNk && hn.endsWith(homeNk)) || (rawUp.length > ha.length && rawUp.endsWith(ha)));
+                            }) || null;
+                        }
+                    } else {
+                        baseGame = gameList.find(function(g) {
+                            var hn = normSlipName(g.homeName), an = normSlipName(g.awayName);
+                            var ha = g.homeAbbr.toUpperCase(), aa = g.awayAbbr.toUpperCase();
+                            if (rawNorm === hn || rawNorm === an) return true;
+                            if (rawNick && (hn.endsWith(rawNick) || an.endsWith(rawNick))) return true;
+                            // DK shortName suffix match: "UNC" vs ESPN "NC"
+                            if (rawUp.length > ha.length && rawUp.endsWith(ha)) return true;
+                            if (rawUp.length > aa.length && rawUp.endsWith(aa)) return true;
+                            return false;
+                        }) || null;
+                    }
+                    if (!baseGame) return;
+
+                    var gi = Object.assign({}, baseGame);
+                    if (n.marketType !== 'team_total' && gi.homeScore != null) {
+                        var isHome = normSlipName(gi.homeName) === rawNorm ||
+                                     (rawNick && normSlipName(gi.homeName).endsWith(rawNick)) ||
+                                     (rawUp.length > gi.homeAbbr.length && rawUp.endsWith(gi.homeAbbr));
                         gi.pickedTeamScore = isHome ? gi.homeScore : gi.awayScore;
                         gi.oppScore        = isHome ? gi.awayScore : gi.homeScore;
                     }
@@ -8288,6 +8417,7 @@
         var neededByDate       = {};  // MLB
         var wnbaNeededByDate   = {};  // WNBA
         var nflNeededByDate    = {};  // NFL
+        var cfbNeededByDate    = {};  // CFB
         var soccerNeededByDate = {};  // soccer FC (keyed by date; each entry has legObj.sport = 'soccer_slug')
         var liveToday = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
         PARLAY_SLIPS.forEach(function(s) {
@@ -8309,6 +8439,9 @@
                 } else if (leg.sport === 'nfl') {
                     if (!nflNeededByDate[gd]) nflNeededByDate[gd] = [];
                     nflNeededByDate[gd].push(legObj);
+                } else if (leg.sport === 'cfb' || (leg.market_type || mkt).startsWith('cfb_')) {
+                    if (!cfbNeededByDate[gd]) cfbNeededByDate[gd] = [];
+                    cfbNeededByDate[gd].push(legObj);
                 } else if (isSoccer) {
                     if (!soccerNeededByDate[gd]) soccerNeededByDate[gd] = [];
                     soccerNeededByDate[gd].push(legObj);
@@ -8321,6 +8454,7 @@
 
         fetchWnbaLiveStats(wnbaNeededByDate);
         fetchNflLiveStats(nflNeededByDate);
+        fetchCfbLiveStats(cfbNeededByDate);
         fetchSoccerLiveStats(soccerNeededByDate);
 
         var dates = Object.keys(neededByDate);
@@ -8366,14 +8500,18 @@
                     var startET = new Date(g.gameDate).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' });
                     var hName = (g.teams && g.teams.home && g.teams.home.team && g.teams.home.team.name) || '';
                     var aName = (g.teams && g.teams.away && g.teams.away.team && g.teams.away.team.name) || '';
+                    var _hAbbr = ((g.teams && g.teams.home && g.teams.home.team && g.teams.home.team.abbreviation) || MLB_NAME_ABBR[hName] || '').toUpperCase();
+                    var _aAbbr = ((g.teams && g.teams.away && g.teams.away.team && g.teams.away.team.abbreviation) || MLB_NAME_ABBR[aName] || '').toUpperCase();
                     gameInfoMap[g.gamePk] = {
                         state: state, startET: startET, inningLabel: inningLabel,
-                        homeAbbr: ((g.teams && g.teams.home && g.teams.home.team && g.teams.home.team.abbreviation) || MLB_NAME_ABBR[hName] || '').toUpperCase(),
-                        awayAbbr: ((g.teams && g.teams.away && g.teams.away.team && g.teams.away.team.abbreviation) || MLB_NAME_ABBR[aName] || '').toUpperCase(),
+                        homeAbbr: _hAbbr,
+                        awayAbbr: _aAbbr,
                         homeName: hName,
                         awayName: aName,
                         homeScore: g.teams && g.teams.home && g.teams.home.score,
                         awayScore: g.teams && g.teams.away && g.teams.away.score,
+                        homeLogo: _hAbbr ? 'https://a.espncdn.com/i/teamlogos/mlb/500/' + _hAbbr.toLowerCase() + '.png' : '',
+                        awayLogo: _aAbbr ? 'https://a.espncdn.com/i/teamlogos/mlb/500/' + _aAbbr.toLowerCase() + '.png' : '',
                     };
                     if (state === 'Preview') previewTimes.push(new Date(g.gameDate).getTime());
                 });
@@ -8686,6 +8824,7 @@
                 }
                 var livePlayer = PARLAY_PLAYERS.find(function(pp) { return pp.name === leg.player_name; }) ||
                                  PARLAY_PLAYERS_WNBA.find(function(pp) { return pp.name === leg.player_name; }) ||
+                                 PARLAY_PLAYERS_CFB.find(function(pp) { return pp.name === leg.player_name; }) ||
                                  PARLAY_PLAYERS_SOCCER.find(function(pp) { return pp.name === leg.player_name; });
                 if (leg.headshot_url || (livePlayer && livePlayer.headshot)) return;
                 loadSlipHeadshotAsync('slipav-' + s.id + '-' + li, leg.player_name, leg.sport || 'mlb', leg.team);
@@ -9062,9 +9201,10 @@
                     }
                 }
             } else {
-                // Player prop: try DK headshot first; if it 404s, fall through to MLB Stats API async lookup
+                // Player prop: try DK headshot first; if it 404s, fall through to ESPN async lookup
                 var livePlayer = PARLAY_PLAYERS.find(function(pp) { return pp.name === leg.player_name; }) ||
                                  PARLAY_PLAYERS_WNBA.find(function(pp) { return pp.name === leg.player_name; }) ||
+                                 PARLAY_PLAYERS_CFB.find(function(pp) { return pp.name === leg.player_name; }) ||
                                  PARLAY_PLAYERS_SOCCER.find(function(pp) { return pp.name === leg.player_name; });
                 var _legIsSoccer = (leg.sport || '').startsWith('soccer_');
                 var headshotSrc;
@@ -9982,6 +10122,7 @@
             var _pg = (PARLAY_GAMES.find(function(g) { return g.eventId === p.eventId; }) ||
                        PARLAY_GAMES_WNBA.find(function(g) { return g.eventId === p.eventId; }) ||
                        PARLAY_GAMES_NFL.find(function(g) { return g.eventId === p.eventId; }) ||
+                       PARLAY_GAMES_CFB.find(function(g) { return g.eventId === p.eventId; }) ||
                        (p.awayTeam && p.homeTeam ? p : null) ||
                        // Soccer: player objects have awayShort/homeShort but not awayTeam/homeTeam
                        (p.awayShort && p.homeShort ? { awayTeam: p.awayShort, homeTeam: p.homeShort, awayShort: p.awayShort, homeShort: p.homeShort } : null));
@@ -10006,6 +10147,7 @@
                     if (PARLAY_PLAYERS_UFC.some(function(x) { return x.id === pid; }))    return 'ufc';
                     if (PARLAY_PLAYERS_WNBA.some(function(x) { return x.id === pid; }))   return 'wnba';
                     if (PARLAY_PLAYERS_NFL.some(function(x) { return x.id === pid; }))    return 'nfl';
+                    if (PARLAY_PLAYERS_CFB.some(function(x) { return x.id === pid; }))    return 'cfb';
                     if (PARLAY_PLAYERS_SOCCER.some(function(x) { return x.id === pid; })) return 'soccer_' + (p.espnSlug || '');
                     return 'mlb';
                 })(),

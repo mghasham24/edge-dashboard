@@ -4,8 +4,143 @@
 // Returns deposit card URL and 30-min expiry window.
 import { getSession }     from '../../_lib/session.js';
 import { ok, err }        from '../../_lib/response.js';
-import { rsUrlEncode }    from '../../_lib/hashids.js';
+import { rsUrlEncode, hashidsEncode } from '../../_lib/hashids.js';
 import { checkRateLimit } from '../../_lib/rateLimit.js';
+
+// ── RS Stat Tracker ───────────────────────────────────────────────────────────
+// Fires once at placement for MLB player prop legs. Silent on failure.
+const TRACKER_STAT_TYPE = { hits:9, total_bases:21, rbis:3, pitcher_ks:70, outs_ou:106, hrbi:33 };
+const TRACKER_SITEKEY   = '0x4AAAAAADHHMQ4l_2uyXqiu';
+const MLB_API           = 'https://statsapi.mlb.com/api/v1';
+const RS_TRACKER_BASE   = 'https://web.realapp.com';
+const RS_TRACKER_UUID   = '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e';
+
+function trackerHeaders(authInfo, sessionToken, withBody = false) {
+  const h = {
+    'Accept': 'application/json', 'Origin': 'https://www.realapp.com',
+    'Referer': 'https://www.realapp.com/',
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5.2 Safari/605.1.15',
+    'real-auth-info': authInfo, 'real-session-token': sessionToken || '',
+    'real-device-uuid': RS_TRACKER_UUID, 'real-device-type': 'desktop_web',
+    'real-version': '36', 'real-request-token': hashidsEncode(Date.now()),
+    'real-device-name': '5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5.2 Safari/605.1.15',
+  };
+  if (withBody) h['Content-Type'] = 'application/json';
+  return h;
+}
+
+async function solveTrackerTurnstile(capsolverKey) {
+  const created = await fetch('https://api.capsolver.com/createTask', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ clientKey: capsolverKey, task: { type: 'AntiTurnstileTaskProxyLess', websiteURL: 'https://www.realapp.com/', websiteKey: TRACKER_SITEKEY } }),
+    signal: AbortSignal.timeout(10000),
+  }).then(r => r.json());
+  if (created.errorId !== 0 || !created.taskId) throw new Error('CapSolver create failed');
+  for (let i = 0; i < 15; i++) {
+    await new Promise(r => setTimeout(r, 1000));
+    const poll = await fetch('https://api.capsolver.com/getTaskResult', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientKey: capsolverKey, taskId: created.taskId }),
+      signal: AbortSignal.timeout(8000),
+    }).then(r => r.json());
+    if (poll.status === 'ready') return poll.solution.token;
+    if (poll.status === 'failed') throw new Error('CapSolver solve failed');
+  }
+  throw new Error('CapSolver timeout');
+}
+
+async function createTrackerGroup(env, parlayId, legs) {
+  try {
+    const authInfo   = env.EDGEBOT_AUTH_INFO;
+    const capKey     = env.CAPSOLVER_API_KEY;
+    const sessionTok = env.EDGEBOT_SESSION_TOKEN || '';
+    if (!authInfo || !capKey) return;
+
+    // Only MLB player prop legs with a mappable stat type
+    const mappable = legs.filter(l => TRACKER_STAT_TYPE[l.marketType] != null);
+    if (!mappable.length) return;
+
+    // Look up MLB player IDs in parallel
+    const playerById = {};
+    await Promise.all([...new Set(mappable.map(l => l.playerName))].map(async name => {
+      try {
+        const r = await fetch(`${MLB_API}/people/search?names=${encodeURIComponent(name)}&sportId=1&hydrate=currentTeam`, { signal: AbortSignal.timeout(8000) });
+        if (!r.ok) return;
+        const people = (await r.json()).people || [];
+        const match = people.find(p => p.active) || people[0];
+        if (match?.id) playerById[name] = { id: match.id, name: match.fullName, teamId: match.currentTeam?.id };
+      } catch(_) {}
+    }));
+
+    // Group legs by game_date, look up gamePks per date
+    const dateTeams = {};
+    for (const leg of mappable) {
+      const p = playerById[leg.playerName];
+      if (!p?.teamId) continue;
+      const gd = leg.gameDate;
+      if (!dateTeams[gd]) dateTeams[gd] = new Set();
+      dateTeams[gd].add(p.teamId);
+    }
+    const gamePkByDateTeam = {};
+    await Promise.all(Object.entries(dateTeams).map(async ([date, teamIds]) => {
+      try {
+        const r = await fetch(`${MLB_API}/schedule?date=${date}&sportId=1`, { signal: AbortSignal.timeout(8000) });
+        if (!r.ok) return;
+        const games = (await r.json()).dates?.[0]?.games || [];
+        for (const teamId of teamIds) {
+          const g = games.find(g => g.teams?.home?.team?.id === teamId || g.teams?.away?.team?.id === teamId);
+          if (g) gamePkByDateTeam[`${date}:${teamId}`] = g.gamePk;
+        }
+      } catch(_) {}
+    }));
+
+    // Build stat entries
+    const stats = [];
+    const seen  = new Set();
+    for (const leg of mappable) {
+      const p = playerById[leg.playerName];
+      if (!p?.teamId) continue;
+      const gamePk = gamePkByDateTeam[`${leg.gameDate}:${p.teamId}`];
+      if (!gamePk) continue;
+      const statType = TRACKER_STAT_TYPE[leg.marketType];
+      const value    = parseFloat(leg.threshold);
+      const type     = leg.direction === 'less' ? 'under' : 'over';
+      const key      = `${p.id}_player_${statType}_${value}_${gamePk}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      stats.push({
+        entityType: 'player', entityId: p.id, label: p.name,
+        entity: { id: p.id, sport: 'mlb', name: p.name, key: `${p.id}_mlb`, gameId: gamePk },
+        statType, value, type, gameId: gamePk, key,
+        team: null, isMoneyline: false, isTeamSelection: false,
+      });
+    }
+    if (!stats.length) return;
+
+    // Use the game date of the first leg (RS tracker is per-day)
+    const gameDate = mappable[0].gameDate;
+    const turnstileToken = await solveTrackerTurnstile(capKey);
+
+    const postRes = await fetch(`${RS_TRACKER_BASE}/stattrackergroups/mlb`, {
+      method: 'POST',
+      headers: { ...trackerHeaders(authInfo, sessionTok, true), 'real-turnstile-token': turnstileToken },
+      body: JSON.stringify({ stats, notificationType: 'individual', day: gameDate }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!postRes.ok) return;
+
+    const data    = await postRes.json().catch(() => ({}));
+    const groupId = data.statTrackerGroup?.id;
+    if (!groupId) return;
+
+    const trackerUrl = 'https://www.realapp.com/' + rsUrlEncode(19, 0, 0, groupId);
+    const now = Math.floor(Date.now() / 1000);
+    await env.DB.prepare(
+      'INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES (?,?,?) ' +
+      'ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at'
+    ).bind(`meta:tracker_parlay_${parlayId}`, JSON.stringify({ url: trackerUrl }), now).run();
+  } catch(_) { /* background — silent */ }
+}
 
 function generateShareToken() {
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -146,7 +281,7 @@ export async function onRequestPost(ctx) {
   }
 }
 
-async function _place({ request, env }, onCreditConsumed) {
+async function _place({ request, env, waitUntil }, onCreditConsumed) {
   const session = await getSession(request, env.DB);
   if (!session) return err('Authentication required', 401);
 
@@ -221,7 +356,7 @@ async function _place({ request, env }, onCreditConsumed) {
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
     const gameDate = leg.gameDate || today;
 
-    const VALID_SPORTS = ['mlb', 'wnba', 'nfl', 'ufc'];
+    const VALID_SPORTS = ['mlb', 'wnba', 'nfl', 'ufc', 'cfb'];
     // For team-market legs, derive sport from the team nickname so a leg placed
     // while on the wrong tab (e.g. WNBA tab + NFL team) is stored correctly.
     const TEAM_MARKETS = new Set(['team_ml', 'team_runline', 'team_total']);
@@ -236,9 +371,13 @@ async function _place({ request, env }, onCreditConsumed) {
       'valkyries','fire','tempo', // 2026 expansion teams: GS Valkyries, Portland Fire, Toronto Tempo
     ]);
     // soccer_* slugs (e.g. soccer_eng.1) pass through as-is — not in VALID_SPORTS list.
+    // cfb_* market types (e.g. cfb_pass_yds) pass through directly.
     let legSport = (leg.sport && leg.sport.startsWith('soccer_')) ? leg.sport
       : VALID_SPORTS.includes(leg.sport) ? leg.sport : 'mlb';
-    if (TEAM_MARKETS.has(leg.marketType)) {
+    // CFB: trust sport field directly — can't enumerate 130+ team nicknames, and cfb_ market prefix confirms props.
+    if (leg.sport === 'cfb' || (leg.marketType && leg.marketType.startsWith('cfb_'))) {
+      legSport = 'cfb';
+    } else if (TEAM_MARKETS.has(leg.marketType)) {
       // Always derive sport from team nickname for team-market legs.
       // Cardinals (MLB) and Giants (MLB) share nicknames with NFL teams — use sent sport as tiebreaker.
       const words = (leg.playerName || '').toLowerCase().split(/[\s@]+/);
@@ -539,6 +678,7 @@ async function _place({ request, env }, onCreditConsumed) {
       "VALUES (?, ?, ?, 100, ?, ?, ?, 1, 'active', 0, 0, ?, ?, ?)"
     ).bind(user.id, parlayS, normalized.length, trueProb, payoutRax, user.rs_username, now, now, generateShareToken()).run();
     const fpId = fpRes.meta.last_row_id;
+    if (waitUntil) waitUntil(createTrackerGroup(env, fpId, normalized));
     return placeLegsAndRespond(env.DB, fpId, null, normalized, 100, payoutRax, null, user.rs_username, now, true);
   }
 
@@ -588,9 +728,11 @@ async function _place({ request, env }, onCreditConsumed) {
       return err('No deposit cards available — try again shortly', 503);
     }
 
+    if (waitUntil) waitUntil(createTrackerGroup(env, newParlayId, normalized));
     return placeLegsAndRespond(env.DB, newParlayId, retryCardId, normalized, stake, payoutRax, expiresAt, user.rs_username, now, false);
   }
 
+  if (waitUntil) waitUntil(createTrackerGroup(env, parlayId, normalized));
   return placeLegsAndRespond(env.DB, parlayId, cardId, normalized, stake, payoutRax, expiresAt, user.rs_username, now, false);
 }
 

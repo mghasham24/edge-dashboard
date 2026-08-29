@@ -70,6 +70,7 @@ function mlbAbbrFromName(name) {
 const ESPN_WNBA  = 'https://site.api.espn.com/apis/site/v2/sports/basketball/wnba';
 const ESPN_NFL   = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl';
 const ESPN_MMA   = 'https://site.api.espn.com/apis/site/v2/sports/mma/ufc';
+const ESPN_CFB   = 'https://site.api.espn.com/apis/site/v2/sports/football/college-football';
 const VPS_HOST   = 'http://vps.raxedge.com:3003';
 const STALE_DAYS = 2;
 
@@ -158,6 +159,8 @@ function resolveTeamLeg(leg, finalGames) {
       const nickname = rawNorm.split(' ').slice(1).join(' ');
       if (nickname && gameNorm.endsWith(nickname)) return true;
       if (gameAbbr === raw.toUpperCase()) return true;
+      // CFB: ESPN abbreviation is often a suffix of DK shortName (e.g. DK "UNC" → ESPN "NC")
+      if (gameAbbr && raw.length > gameAbbr.length && raw.toUpperCase().endsWith(gameAbbr)) return true;
       return false;
     }
 
@@ -174,16 +177,23 @@ function resolveTeamLeg(leg, finalGames) {
   const dkName   = leg.player_name.replace(/ (ML|RL)$/i, '').trim();
   const teamName = normalizeName(dkName);
   const nickname = teamName.split(' ').slice(1).join(' ');
+  const dkUp     = dkName.toUpperCase();
   const game = finalGames.find(g => {
     const homeNorm = normalizeName(g.homeName);
     const awayNorm = normalizeName(g.awayName);
-    return homeNorm === teamName || awayNorm === teamName ||
-           (nickname && (homeNorm.endsWith(nickname) || awayNorm.endsWith(nickname)));
+    if (homeNorm === teamName || awayNorm === teamName) return true;
+    if (nickname && (homeNorm.endsWith(nickname) || awayNorm.endsWith(nickname))) return true;
+    // CFB: ESPN abbreviation is often a suffix of DK shortName (e.g. DK "UNC" → ESPN "NC")
+    if (g.homeAbbr && dkUp.length > g.homeAbbr.length && dkUp.endsWith(g.homeAbbr)) return true;
+    if (g.awayAbbr && dkUp.length > g.awayAbbr.length && dkUp.endsWith(g.awayAbbr)) return true;
+    return false;
   });
   if (!game) return null;
 
   const homeNorm  = normalizeName(game.homeName);
-  const isHome    = homeNorm === teamName || (nickname && homeNorm.endsWith(nickname));
+  const isHome    = homeNorm === teamName ||
+                    (nickname && homeNorm.endsWith(nickname)) ||
+                    (game.homeAbbr && dkUp.length > game.homeAbbr.length && dkUp.endsWith(game.homeAbbr));
   const teamScore = isHome ? game.homeScore : game.awayScore;
   const oppScore  = isHome ? game.awayScore : game.homeScore;
 
@@ -762,6 +772,109 @@ async function getWnbaPlayerStats(date, proxyKey) {
   } catch(e) { return {}; }
 }
 
+// ── CFB helpers ───────────────────────────────────────────────────────────────
+
+async function getCfbFinalGames(date) {
+  return getEspnFinalGames(ESPN_CFB, date); // ESPN CFB works from CF directly — no VPS proxy needed
+}
+
+// CFB ESPN summary stat group label sets
+const CFB_STAT_GROUPS = {
+  cfb_pass_yds: { group: 'passing',   ydsLabel: 'YDS', tdLabel: null  },
+  cfb_pass_tds: { group: 'passing',   ydsLabel: null,  tdLabel: 'TD'  },
+  cfb_rush_yds: { group: 'rushing',   ydsLabel: 'YDS', tdLabel: null  },
+  cfb_recv_yds: { group: 'receiving', ydsLabel: 'YDS', tdLabel: null  },
+};
+
+async function getCfbPlayerStats(date, legs) {
+  const yyyymmdd = date.replace(/-/g, '');
+  try {
+    const sbRes = await fetch(`${ESPN_CFB}/scoreboard?dates=${yyyymmdd}`, {
+      headers: ESPN_HEADERS, signal: AbortSignal.timeout(10000),
+    });
+    if (!sbRes.ok) return {};
+    const sbData = await sbRes.json();
+
+    // Only settle from completed/final games
+    const finalEvents = (sbData.events || []).filter(e => {
+      const st = e.competitions?.[0]?.status?.type;
+      return st?.completed || (st?.name || '').toUpperCase().includes('FINAL');
+    });
+    if (!finalEvents.length) return {};
+
+    // Determine which events we need (match legs by team names)
+    // Leg event_name format: "AWY @ HME" (DK shortNames, e.g. "UNC @ TCU")
+    const neededEventIds = new Set();
+    for (const leg of legs) {
+      const evName = leg.event_name || '';
+      const m = evName.match(/^(.+?)\s+@\s+(.+)$/);
+      if (!m) continue;
+      const dkAway = m[1].trim().toUpperCase();
+      const dkHome = m[2].trim().toUpperCase();
+      for (const ev of finalEvents) {
+        const comps = ev.competitions?.[0]?.competitors || [];
+        const home  = comps.find(c => c.homeAway === 'home');
+        const away  = comps.find(c => c.homeAway === 'away');
+        const homeAbbr = (home?.team?.abbreviation || '').toUpperCase();
+        const awayAbbr = (away?.team?.abbreviation || '').toUpperCase();
+        // DK shortName often ends with ESPN abbreviation (e.g. "UNC" ends with "NC")
+        const homeMatch = dkHome === homeAbbr || (dkHome.length > homeAbbr.length && dkHome.endsWith(homeAbbr));
+        const awayMatch = dkAway === awayAbbr || (dkAway.length > awayAbbr.length && dkAway.endsWith(awayAbbr));
+        if (homeMatch && awayMatch) { neededEventIds.add(String(ev.id)); break; }
+      }
+    }
+    if (!neededEventIds.size) return {};
+
+    const summaries = await Promise.allSettled([...neededEventIds].map(async id => {
+      try {
+        const r = await fetch(`${ESPN_CFB}/summary?event=${id}`, {
+          headers: ESPN_HEADERS, signal: AbortSignal.timeout(10000),
+        });
+        return r.ok ? r.json() : null;
+      } catch(e) { return null; }
+    }));
+
+    const stats = {};
+    for (const res of summaries) {
+      const d = res.status === 'fulfilled' ? res.value : null;
+      if (!d) continue;
+      for (const teamBlock of (d.boxscore?.players || [])) {
+        for (const sb of (teamBlock.statistics || [])) {
+          const labels = sb.names || sb.labels || [];
+          const statType = (sb.type || sb.abbreviation || '').toLowerCase();
+          // Determine passing/rushing/receiving group
+          let group = null;
+          if (statType === 'passing' || labels.includes('QBR')) group = 'passing';
+          else if (statType === 'rushing') group = 'rushing';
+          else if (statType === 'receiving') group = 'receiving';
+          if (!group) continue;
+
+          const ydsIdx = labels.indexOf('YDS');
+          const tdIdx  = labels.indexOf('TD');
+
+          for (const a of (sb.athletes || [])) {
+            const name = normalizeName(a.athlete?.fullName || a.athlete?.displayName || '');
+            if (!name) continue;
+            const s = a.stats || [];
+            if (!s.length) continue; // DNP
+            const getInt = idx => idx >= 0 ? (parseInt(String(s[idx] || '0').split('/')[0], 10) || 0) : 0;
+            if (!stats[name]) stats[name] = {};
+            if (group === 'passing') {
+              stats[name].cfb_pass_yds = (stats[name].cfb_pass_yds ?? 0) + getInt(ydsIdx);
+              stats[name].cfb_pass_tds = (stats[name].cfb_pass_tds ?? 0) + getInt(tdIdx);
+            } else if (group === 'rushing') {
+              stats[name].cfb_rush_yds = (stats[name].cfb_rush_yds ?? 0) + getInt(ydsIdx);
+            } else if (group === 'receiving') {
+              stats[name].cfb_recv_yds = (stats[name].cfb_recv_yds ?? 0) + getInt(ydsIdx);
+            }
+          }
+        }
+      }
+    }
+    return stats;
+  } catch(e) { return {}; }
+}
+
 // ── UFC helper ────────────────────────────────────────────────────────────────
 
 async function getUfcResults(date, proxyKey = '') {
@@ -1123,11 +1236,14 @@ async function handleRequest({ request, env }) {
     if (s.startsWith('soccer_'))                                 return 'soccer';
     // Rescue: legs placed before the place.js soccer fix were stored as sport='mlb'.
     if (SOCCER_PROP_TYPES.has(mkt))                              return 'soccer';
+    if (s === 'cfb')                                             return 'cfb';
+    if (mkt && mkt.startsWith('cfb_'))                           return 'cfb';
     if (mkt.startsWith('1inn_'))                                 return 'mlb';
     if ((mkt in MLB_STAT_FIELD) && !WNBA_PROP_TYPES.has(mkt))   return 'mlb';
     if (mkt === 'team_ml' || mkt === 'team_runline' || mkt === 'team_total') {
       // Stored sport field is authoritative — use it first to avoid cross-sport nickname collisions
       // (e.g. "Cardinals" exists in both MLB and NFL; "Giants" in both MLB and NFL)
+      if (s === 'cfb')                                    return 'cfb';
       if (s === 'nfl'  || s === 'american_football_nfl')  return 'nfl';
       if (s === 'wnba' || s === 'basketball_wnba')         return 'wnba';
       if (s === 'mlb'  || s === 'baseball_mlb')            return 'mlb';
@@ -1160,6 +1276,8 @@ async function handleRequest({ request, env }) {
   const wnbaGamesMap    = {};
   const wnbaStatsMap    = {};
   const nflGamesMap     = {};
+  const cfbGamesMap     = {};
+  const cfbStatsMap     = {};
   const ufcMap          = {};
   // soccer: date → espnSlug → { games: [...], stats: { playerName → statObj } }
   const soccerMap       = {};
@@ -1167,6 +1285,7 @@ async function handleRequest({ request, env }) {
   const hasMlbOnDate    = date => eligibleLegs.some(l => l.game_date === date && legSportOf(l) === 'mlb');
   const hasWnbaOnDate   = date => eligibleLegs.some(l => l.game_date === date && legSportOf(l) === 'wnba');
   const hasNflOnDate    = date => eligibleLegs.some(l => l.game_date === date && legSportOf(l) === 'nfl');
+  const hasCfbOnDate    = date => eligibleLegs.some(l => l.game_date === date && legSportOf(l) === 'cfb');
   const hasUfcOnDate    = date => eligibleLegs.some(l => l.game_date === date && legSportOf(l) === 'ufc');
   const has1innOnDate   = date => eligibleLegs.some(l => l.game_date === date && l.market_type.startsWith('1inn_'));
   const has1innPbpOnDate= date => eligibleLegs.some(l => l.game_date === date && INN1_PBP_MKTS.has(l.market_type));
@@ -1196,17 +1315,19 @@ async function handleRequest({ request, env }) {
     soccerMap[date] = {};
     const soccerSlugs = soccerSlugsForDate(date);
 
-    const [mlbGames, wnbaGames, nflGames, ufcResults] = await Promise.all([
+    const [mlbGames, wnbaGames, nflGames, cfbGames, ufcResults] = await Promise.all([
       (hasMlbOnDate(date) || hasNflTeamMktFallback(date))
                             ? withTimeout(getMlbFinalGames(date), 9000, [])             : Promise.resolve([]),
       hasWnbaOnDate(date) ? withTimeout(getWnbaFinalGames(date, proxyKey), 9000, [])  : Promise.resolve([]),
       hasNflOnDate(date)  ? withTimeout(getEspnFinalGames(ESPN_NFL, date, env.DB, proxyKey), 9000, [])  : Promise.resolve([]),
+      hasCfbOnDate(date)  ? withTimeout(getCfbFinalGames(date), 9000, [])             : Promise.resolve([]),
       hasUfcOnDate(date)  ? withTimeout(getUfcResults(date, proxyKey), 9000, {})      : Promise.resolve({}),
     ]);
 
     mlbGamesMap[date]  = mlbGames;
     wnbaGamesMap[date] = wnbaGames;
     nflGamesMap[date]  = nflGames;
+    cfbGamesMap[date]  = cfbGames;
     ufcMap[date]       = ufcResults;
 
     // MLB boxscores and WNBA stats are fetched in parallel to avoid sequential timeout
@@ -1255,6 +1376,15 @@ async function handleRequest({ request, env }) {
       hasWnbaOnDate(date) ? withTimeout(getWnbaPlayerStats(date, proxyKey), 12000, {}) : Promise.resolve({}),
     ]);
 
+    // CFB player stats (fetched separately — ESPN CFB summary, directly from CF)
+    if (hasCfbOnDate(date)) {
+      const cfbLegsForDate = eligibleLegs.filter(l => l.game_date === date && legSportOf(l) === 'cfb');
+      const cfbStats = await withTimeout(getCfbPlayerStats(date, cfbLegsForDate), 15000, {});
+      cfbStatsMap[date] = cfbStats;
+    } else {
+      cfbStatsMap[date] = {};
+    }
+
     if (mlbBlock) {
       mlbStatsMap[date]      = mlbBlock.allStats;
       mlbLinescore1Map[date] = mlbBlock.linescore1;
@@ -1291,6 +1421,8 @@ async function handleRequest({ request, env }) {
         has1inn: has1innOnDate(date),
         wnbaGames: wnbaGamesMap[date].map(g => `${g.awayName} ${g.awayScore} @ ${g.homeName} ${g.homeScore}`),
         nflGames:  nflGamesMap[date].map(g => `${g.awayName} ${g.awayScore} @ ${g.homeName} ${g.homeScore}`),
+        cfbGames:  (cfbGamesMap[date] || []).map(g => `${g.awayAbbr} ${g.awayScore} @ ${g.homeAbbr} ${g.homeScore}`),
+        cfbPlayers: Object.keys(cfbStatsMap[date] || {}),
         ufcFights: Object.entries(ufcMap[date] || {}).map(([n, r]) => `${n}: ${JSON.stringify(r)}`),
         legs: eligibleLegs.filter(l => l.game_date === date).map(l => {
           const sport = legSportOf(l);
@@ -1303,9 +1435,15 @@ async function handleRequest({ request, env }) {
             return { player: l.player_name, label: l.label, event_name: l.event_name, sport: 'mlb', type: mkt, outcome: outcome ?? 'not_resolved_yet' };
           }
           if (isTeam) {
-            const games = sport === 'wnba' ? wnbaGamesMap[date] : sport === 'nfl' ? nflGamesMap[date] : mlbGamesMap[date];
+            const games = sport === 'wnba' ? wnbaGamesMap[date] : sport === 'nfl' ? nflGamesMap[date] : sport === 'cfb' ? (cfbGamesMap[date] || []) : mlbGamesMap[date];
             const outcome = games.length ? resolveTeamLeg(l, games) : null;
             return { player: l.player_name, sport, type: 'team_market', outcome: outcome ?? 'not_final_yet' };
+          }
+          if (sport === 'cfb') {
+            const cfbStats = (cfbStatsMap[date] || {})[normForLookup(l.player_name)];
+            const statVal  = cfbStats ? cfbStats[mkt] ?? null : null;
+            const outcome  = statVal == null ? null : (statVal >= l.threshold ? 'won' : 'lost');
+            return { player: l.player_name, sport: 'cfb', market_type: mkt, threshold: l.threshold, statVal, found: !!cfbStats, outcome };
           }
           if (sport === 'ufc') {
             const lastName = normalizeName(l.player_name).split(' ').pop();
@@ -1353,6 +1491,7 @@ async function handleRequest({ request, env }) {
     if (isTeam) {
       const games = sport === 'wnba' ? wnbaGamesMap[leg.game_date] || []
                   : sport === 'nfl'  ? nflGamesMap[leg.game_date]  || []
+                  : sport === 'cfb'  ? cfbGamesMap[leg.game_date]  || []
                   :                    mlbGamesMap[leg.game_date]   || [];
       let outcome = games.length ? resolveTeamLeg(leg, games) : null;
       // If stored as NFL but game not found, try MLB as fallback.
@@ -1362,6 +1501,19 @@ async function handleRequest({ request, env }) {
         if (mlbFallback.length) outcome = resolveTeamLeg(leg, mlbFallback);
       }
       legOutcomes[leg.id] = (outcome === null && leg.game_date < staleDate) ? 'void' : outcome;
+      continue;
+    }
+
+    if (sport === 'cfb') {
+      // CFB player prop milestone settle: statVal >= threshold → won
+      const cfbPlayerStats = (cfbStatsMap[leg.game_date] || {})[normForLookup(leg.player_name)];
+      if (!cfbPlayerStats) {
+        legOutcomes[leg.id] = leg.game_date < staleDate ? 'void' : null;
+        continue;
+      }
+      const cfbStatVal = cfbPlayerStats[mkt] ?? null;
+      if (cfbStatVal == null) { legOutcomes[leg.id] = null; continue; }
+      legOutcomes[leg.id] = cfbStatVal >= leg.threshold ? 'won' : 'lost';
       continue;
     }
 
