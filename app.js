@@ -5727,7 +5727,7 @@
                     var homeRlId = teamPickIdCounter--;
                     pushTo.push({
                         id: awayRlId, isTeamMarket: true, market: 'team_runline', stat: mkt.stat || (sport === 'mlb' ? 'Run Line' : 'Spread'),
-                        name: game.awayTeam + ' RL', team: game.awayShort, opp: game.homeShort,
+                        name: game.awayTeam + (sport === 'mlb' ? ' RL' : ' Spread'), team: game.awayShort, opp: game.homeShort,
                         homeTeam: game.homeTeam, awayTeam: game.awayTeam,
                         homeShort: game.homeShort, awayShort: game.awayShort,
                         moreOdds: mkt.awayOdds, oppOdds: mkt.homeOdds,
@@ -5737,7 +5737,7 @@
                     });
                     pushTo.push({
                         id: homeRlId, isTeamMarket: true, market: 'team_runline', stat: mkt.stat || (sport === 'mlb' ? 'Run Line' : 'Spread'),
-                        name: game.homeTeam + ' RL', team: game.homeShort, opp: game.awayShort,
+                        name: game.homeTeam + (sport === 'mlb' ? ' RL' : ' Spread'), team: game.homeShort, opp: game.awayShort,
                         homeTeam: game.homeTeam, awayTeam: game.awayTeam,
                         homeShort: game.homeShort, awayShort: game.awayShort,
                         moreOdds: mkt.homeOdds, oppOdds: mkt.awayOdds,
@@ -9242,7 +9242,7 @@
                         logoB = evtHome ? slipTeamLogo(evtHome, leg.sport) : null;
                     }
                 } else if (mkt === 'team_runline') {
-                    if (leg.sport === 'cfb' && leg.team) {
+                    if (leg.team) {
                         // leg.team is shortName of picked team — use it directly (avoids full-name mismatch)
                         logoA = slipTeamLogo(leg.team, leg.sport);
                         // Opp: try both event_name parts; pick whichever isn't the same as logoA
@@ -9252,7 +9252,7 @@
                             logoB = (_rlA && _rlA !== logoA) ? _rlA : (_rlH && _rlH !== logoA) ? _rlH : null;
                         }
                     } else {
-                        var pickedN = (leg.player_name || '').replace(/ (ML|RL)$/i, '').trim();
+                        var pickedN = (leg.player_name || '').replace(/ (ML|RL|Spread)$/i, '').trim();
                         var pickedNrm = normSlipName(pickedN);
                         var awayNrm   = normSlipName(evtAway || '');
                         var awayNick  = awayNrm.split(' ').slice(1).join(' ');
@@ -9261,12 +9261,12 @@
                         logoB = slipTeamLogo(isAwayPk ? evtHome : evtAway, leg.sport);
                     }
                 } else {
-                    // team_ml — use leg.team shortName for CFB to avoid full DK name vs abbreviation mismatch
-                    if (leg.sport === 'cfb' && leg.team) {
+                    // team_ml / team_runline single-logo — use leg.team shortName first (avoids full-name mismatch)
+                    if (leg.team) {
                         logoA = slipTeamLogo(leg.team, leg.sport);
                     }
                     if (!logoA) {
-                        var tmln = (leg.player_name || '').replace(/ (ML|RL)$/i, '').trim();
+                        var tmln = (leg.player_name || '').replace(/ (ML|RL|Spread)$/i, '').trim();
                         logoA = slipTeamLogo(tmln, leg.sport);
                         // Fallback: try matching team against event_name parts (handles "LA Chargers" → evtAway "LAC")
                         if (!logoA && (evtAway || evtHome)) {
@@ -9477,7 +9477,7 @@
             legsHtml += '<div class="pslip-leg' + legResultCls + '">' +
                 avatarHtml +
                 '<div class="pslip-leg-body">' +
-                    '<div class="pslip-leg-top"><span class="pslip-leg-name">' + escHtml(leg.player_name) + '</span>' + propInfoHtml + legRsBtn + timeHtml + legIcon + '</div>' +
+                    '<div class="pslip-leg-top"><span class="pslip-leg-name">' + escHtml(mkt === 'team_runline' && leg.sport !== 'mlb' && (leg.player_name || '').endsWith(' RL') ? leg.player_name.slice(0, -3) + ' Spread' : (leg.player_name || '')) + '</span>' + propInfoHtml + legRsBtn + timeHtml + legIcon + '</div>' +
                     '<div class="pslip-leg-sub"><span class="pslip-market">' + statLine + '</span> · <span class="pslip-odds">' + escHtml(odds) + '</span></div>' +
                     progHtml +
                 '</div>' +

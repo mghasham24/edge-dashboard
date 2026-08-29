@@ -50,7 +50,7 @@ export async function onRequestGet({ request, env }) {
   const placeholders = ids.map(() => '?').join(',');
   const { results: legs } = await env.DB.prepare(
     'SELECT pl.id, pl.parlay_id, pl.player_name, pl.label, pl.threshold, pl.direction, ' +
-    'pl.american_odds, pl.status, pl.result_value, pl.market_type, pl.headshot_url, pl.game_date, pl.event_name, pl.sport, pl.game_start_ms, pl.rs_game_id, pl.event_id ' +
+    'pl.american_odds, pl.status, pl.result_value, pl.market_type, pl.headshot_url, pl.game_date, pl.event_name, pl.sport, pl.game_start_ms, pl.rs_game_id, pl.event_id, pl.team ' +
     `FROM parlay_legs pl WHERE pl.parlay_id IN (${placeholders}) ORDER BY pl.id ASC`
   ).bind(...ids).all();
 
@@ -73,11 +73,24 @@ export async function onRequestGet({ request, env }) {
   });
   if (tokenUpdates.length) await Promise.allSettled(tokenUpdates);
 
+  // Fetch RS tracker URLs for all slips in one query
+  const trackerKeys = ids.map(id => `meta:tracker_parlay_${id}`);
+  const trackerPlaceholders = trackerKeys.map(() => '?').join(',');
+  const { results: trackerRows } = await env.DB.prepare(
+    `SELECT cache_key, data FROM odds_cache WHERE cache_key IN (${trackerPlaceholders})`
+  ).bind(...trackerKeys).all();
+  const trackerByParlayId = {};
+  for (const row of trackerRows) {
+    const id = parseInt(row.cache_key.replace('meta:tracker_parlay_', ''), 10);
+    try { trackerByParlayId[id] = JSON.parse(row.data).url || null; } catch(_) {}
+  }
+
   return ok({
     slips: parlays.map(p => ({
       ...p,
       legs: legMap[p.id] || [],
       share_token: p.share_token || null,
+      rs_tracker_url: trackerByParlayId[p.id] || null,
       deposit_card_url: (p.status === 'pending_deposit' && p.deposit_card_id)
         ? 'https://www.realapp.com/' + rsUrlEncode(20, 0, 0, p.deposit_card_id)
         : null,
