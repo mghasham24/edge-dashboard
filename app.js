@@ -5709,7 +5709,7 @@
                         moreOdds: mkt.awayOdds, oppOdds: mkt.homeOdds,
                         line: null, eventId: game.eventId, time: game.time, startMs: game.startMs,
                         initials: game.awayShort, color: dkTeamColor(game.awayTeam),
-                        logo: dkTeamLogo(game.awayTeam), marketId: mkt.marketId, selId: mkt.awaySelId,
+                        logo: dkTeamLogo(game.awayShort) || dkTeamLogo(game.awayTeam), marketId: mkt.marketId, selId: mkt.awaySelId,
                     });
                     pushTo.push({
                         id: homeId, isTeamMarket: true, market: 'team_ml', stat: 'Moneyline',
@@ -5719,31 +5719,31 @@
                         moreOdds: mkt.homeOdds, oppOdds: mkt.awayOdds,
                         line: null, eventId: game.eventId, time: game.time, startMs: game.startMs,
                         initials: game.homeShort, color: dkTeamColor(game.homeTeam),
-                        logo: dkTeamLogo(game.homeTeam), marketId: mkt.marketId, selId: mkt.homeSelId,
+                        logo: dkTeamLogo(game.homeShort) || dkTeamLogo(game.homeTeam), marketId: mkt.marketId, selId: mkt.homeSelId,
                     });
                     mkt._awayPickId = awayId; mkt._homePickId = homeId;
                 } else if (mkt.market === 'team_runline') {
                     var awayRlId = teamPickIdCounter--;
                     var homeRlId = teamPickIdCounter--;
                     pushTo.push({
-                        id: awayRlId, isTeamMarket: true, market: 'team_runline', stat: mkt.stat || 'Run Line',
+                        id: awayRlId, isTeamMarket: true, market: 'team_runline', stat: mkt.stat || (sport === 'mlb' ? 'Run Line' : 'Spread'),
                         name: game.awayTeam + ' RL', team: game.awayShort, opp: game.homeShort,
                         homeTeam: game.homeTeam, awayTeam: game.awayTeam,
                         homeShort: game.homeShort, awayShort: game.awayShort,
                         moreOdds: mkt.awayOdds, oppOdds: mkt.homeOdds,
                         line: mkt.awayLine, eventId: game.eventId, time: game.time, startMs: game.startMs,
                         initials: game.awayShort, color: dkTeamColor(game.awayTeam),
-                        logo: dkTeamLogo(game.awayTeam), marketId: mkt.marketId, selId: mkt.awaySelId,
+                        logo: dkTeamLogo(game.awayShort) || dkTeamLogo(game.awayTeam), marketId: mkt.marketId, selId: mkt.awaySelId,
                     });
                     pushTo.push({
-                        id: homeRlId, isTeamMarket: true, market: 'team_runline', stat: mkt.stat || 'Run Line',
+                        id: homeRlId, isTeamMarket: true, market: 'team_runline', stat: mkt.stat || (sport === 'mlb' ? 'Run Line' : 'Spread'),
                         name: game.homeTeam + ' RL', team: game.homeShort, opp: game.awayShort,
                         homeTeam: game.homeTeam, awayTeam: game.awayTeam,
                         homeShort: game.homeShort, awayShort: game.awayShort,
                         moreOdds: mkt.homeOdds, oppOdds: mkt.awayOdds,
                         line: mkt.homeLine, eventId: game.eventId, time: game.time, startMs: game.startMs,
                         initials: game.homeShort, color: dkTeamColor(game.homeTeam),
-                        logo: dkTeamLogo(game.homeTeam), marketId: mkt.marketId, selId: mkt.homeSelId,
+                        logo: dkTeamLogo(game.homeShort) || dkTeamLogo(game.homeTeam), marketId: mkt.marketId, selId: mkt.homeSelId,
                     });
                     mkt._awayPickId = awayRlId; mkt._homePickId = homeRlId;
                 } else if (mkt.market === 'team_total') {
@@ -6559,7 +6559,7 @@
                 var homeRlSel = parlayPicks[String(rlHome.id)] ? ' active' : '';
                 var awayLn = rlAway.line != null ? (rlAway.line > 0 ? '+' + rlAway.line : '' + rlAway.line) : '';
                 var homeLn = rlHome.line != null ? (rlHome.line > 0 ? '+' + rlHome.line : '' + rlHome.line) : '';
-                html += '<div class="pgc-row"><span class="pgc-label">' + (sport === 'wnba' ? 'Spread' : 'Run Line') + '</span>';
+                html += '<div class="pgc-row"><span class="pgc-label">' + (sport !== 'mlb' ? 'Spread' : 'Run Line') + '</span>';
                 html += '<button class="pgc-btn' + awayRlSel + '" onclick="parlayTogglePick(' + rlAway.id + ',\'more\')">' + (awayLogo ? '<img class="pgc-btn-logo" src="' + escHtml(awayLogo) + '" onerror="this.style.display=\'none\'">' : '') + '<span>' + escHtml(game.awayShort) + ' ' + awayLn + ' (' + parlayFmtOdds(rlAway.moreOdds) + ')</span></button>';
                 html += '<button class="pgc-btn' + homeRlSel + '" onclick="parlayTogglePick(' + rlHome.id + ',\'more\')">' + (homeLogo ? '<img class="pgc-btn-logo" src="' + escHtml(homeLogo) + '" onerror="this.style.display=\'none\'">' : '') + '<span>' + escHtml(game.homeShort) + ' ' + homeLn + ' (' + parlayFmtOdds(rlHome.moreOdds) + ')</span></button>';
                 html += '</div>';
@@ -6568,7 +6568,7 @@
                 var homeRlSel2 = parlayPicks[String(rlMkt._homePickId)] ? ' active' : '';
                 var aln = rlMkt.awayLine > 0 ? '+' + rlMkt.awayLine : '' + rlMkt.awayLine;
                 var hln = rlMkt.homeLine > 0 ? '+' + rlMkt.homeLine : '' + rlMkt.homeLine;
-                html += '<div class="pgc-row"><span class="pgc-label">' + (sport === 'wnba' ? 'Spread' : 'Run Line') + '</span>';
+                html += '<div class="pgc-row"><span class="pgc-label">' + (sport !== 'mlb' ? 'Spread' : 'Run Line') + '</span>';
                 html += '<button class="pgc-btn' + awayRlSel2 + '" onclick="parlayTogglePick(' + rlMkt._awayPickId + ',\'more\')">' + escHtml(game.awayShort) + ' ' + aln + ' (' + parlayFmtOdds(rlMkt.awayOdds) + ')</button>';
                 html += '<button class="pgc-btn' + homeRlSel2 + '" onclick="parlayTogglePick(' + rlMkt._homePickId + ',\'more\')">' + escHtml(game.homeShort) + ' ' + hln + ' (' + parlayFmtOdds(rlMkt.homeOdds) + ')</button>';
                 html += '</div>';
@@ -8985,6 +8985,7 @@
             var arrow  = leg.direction === 'more' ? '↑' : '↓';
             var dir    = leg.direction === 'more' ? 'Over' : 'Under';
             var mkt    = MKT_LABEL[leg.market_type] || leg.market_type || '';
+            if (leg.market_type === 'team_runline' && leg.sport !== 'mlb') mkt = 'Spread';
             var result = leg.status === 'won' ? ' ✓' : leg.status === 'lost' ? ' ✗' : '';
             var line;
             if (leg.market_type && leg.market_type.startsWith('1inn_')) {
@@ -9241,11 +9242,15 @@
                         logoB = evtHome ? slipTeamLogo(evtHome, leg.sport) : null;
                     }
                 } else if (mkt === 'team_runline') {
-                    if (leg.sport === 'cfb' && leg.team && evtAway && evtHome) {
-                        // CFB: leg.team is stored shortName (e.g. "SAC ST") — use directly to avoid full-name mismatch
-                        var _cfbRlIsAway = leg.team.toUpperCase() === evtAway.toUpperCase();
-                        logoA = slipTeamLogo(_cfbRlIsAway ? evtAway : evtHome, leg.sport);
-                        logoB = slipTeamLogo(_cfbRlIsAway ? evtHome : evtAway, leg.sport);
+                    if (leg.sport === 'cfb' && leg.team) {
+                        // leg.team is shortName of picked team — use it directly (avoids full-name mismatch)
+                        logoA = slipTeamLogo(leg.team, leg.sport);
+                        // Opp: try both event_name parts; pick whichever isn't the same as logoA
+                        if (evtAway && evtHome) {
+                            var _rlA = slipTeamLogo(evtAway, leg.sport);
+                            var _rlH = slipTeamLogo(evtHome, leg.sport);
+                            logoB = (_rlA && _rlA !== logoA) ? _rlA : (_rlH && _rlH !== logoA) ? _rlH : null;
+                        }
                     } else {
                         var pickedN = (leg.player_name || '').replace(/ (ML|RL)$/i, '').trim();
                         var pickedNrm = normSlipName(pickedN);
@@ -9930,7 +9935,7 @@
                                    ex.market === newP.market && ex.id !== newP.id;
                         });
                         if (_cfbTeamConflict) {
-                            var _cfbMktLabel = newP.market === 'team_ml' ? 'Moneyline' : newP.market === 'team_runline' ? 'Run Line' : 'Total';
+                            var _cfbMktLabel = newP.market === 'team_ml' ? 'Moneyline' : newP.market === 'team_runline' ? (parlayActiveSport === 'mlb' ? 'Run Line' : 'Spread') : 'Total';
                             showConfirm('Can\'t pick both sides of the same ' + _cfbMktLabel + ' — these are opposite outcomes.', function() {});
                             return;
                         }
@@ -10324,11 +10329,15 @@
                        (p.awayTeam && p.homeTeam ? p : null) ||
                        // Soccer: player objects have awayShort/homeShort but not awayTeam/homeTeam
                        (p.awayShort && p.homeShort ? { awayTeam: p.awayShort, homeTeam: p.homeShort, awayShort: p.awayShort, homeShort: p.homeShort } : null));
-            // 1inn picks need short codes so place.js get1innHalf() can match playerName to half.
+            // 1inn and CFB picks use shortNames so logo/label lookups work in My Slips.
             // All other picks store full DK team name (e.g. "Cardinals @ Cubs") so the fuzzy
             // substring match in parlayLegRsUrl finds rsGameIds keys like "St. Louis Cardinals @ Chicago Cubs".
             var _is1inn = p.market && p.market.startsWith('1inn_');
-            var _gameKey = _is1inn
+            var _isCfbSport = (function() {
+                var _pid = p.id;
+                return PARLAY_PLAYERS_CFB.some(function(x) { return x.id === _pid; });
+            })();
+            var _gameKey = (_is1inn || _isCfbSport)
                 ? ((p.awayShort && p.homeShort) ? (p.awayShort + ' @ ' + p.homeShort) : '')
                 : ((_pg && _pg.awayTeam && _pg.homeTeam) ? (_pg.awayTeam + ' @ ' + _pg.homeTeam)
                   : (p.awayShort && p.homeShort) ? (p.awayShort + ' @ ' + p.homeShort) : '');
