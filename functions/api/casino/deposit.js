@@ -10,7 +10,6 @@ import { err }         from '../../_lib/response.js';
 import { rsUrlEncode } from '../../_lib/hashids.js';
 
 const MIN_DEPOSIT    = 1000;
-const VERIFY_MAX_AGE = 15 * 60; // card must have been verified within 15 min (by sync-cards cron)
 const RS_DEVICE_UUID = '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e';
 const EDGEBOT_USER   = 'V3yGgkkJ';
 
@@ -52,9 +51,9 @@ async function pickCard(env, now, db) {
       ? ' AND card_id NOT IN (' + excluded.map(() => '?').join(',') + ')'
       : '';
     const row = await db.prepare(
-      'SELECT card_id FROM deposit_cards WHERE assigned_to_parlay_id IS NULL AND freed_at IS NULL AND verified_at > ?' +
+      'SELECT card_id FROM deposit_cards WHERE assigned_to_parlay_id IS NULL AND freed_at IS NULL' +
       notIn + ' ORDER BY verified_at DESC LIMIT 1'
-    ).bind(now - VERIFY_MAX_AGE, ...excluded).first();
+    ).bind(...excluded).first();
     if (!row) break;
 
     const owned = await verifyEdgebotOwnsLive(row.card_id, authInfo);
