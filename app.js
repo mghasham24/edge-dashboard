@@ -7803,7 +7803,6 @@
     }
 
     function startLiveSlipTracking() {
-        return; // paused
         stopLiveSlipTracking();
         var liveToday2 = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
         var hasLive = PARLAY_SLIPS.some(function(s) {
