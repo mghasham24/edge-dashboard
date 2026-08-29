@@ -8922,6 +8922,8 @@
             '1inn_ks':'1st Inn Ks', '1inn_ks_exact':'1st Inn Ks',
             team_ml:'Moneyline', team_runline:'Run Line', team_total:'Total',
             ufc_ml:'Fighter ML', ufc_total:'Fight Total',
+            cfb_pass_yds:'Pass Yards', cfb_pass_tds:'Pass TDs', cfb_rush_yds:'Rush Yards',
+            cfb_recv_yds:'Recv Yards', cfb_combo_rush_yds:'Combined Rush Yards',
         };
         var mult = s.stake_rax > 0 ? (s.payout_rax / s.stake_rax).toFixed(2) + 'x' : '';
         var emoji = s.status === 'won' ? '🏆' : s.status === 'lost' ? '❌' : '🎯';
@@ -9145,6 +9147,9 @@
             team_ml:'Moneyline', team_runline:'Run Line', team_total:'Total',
             // UFC
             ufc_ml:'Fighter ML', ufc_total:'Fight Total',
+            // CFB
+            cfb_pass_yds:'Pass Yards', cfb_pass_tds:'Pass TDs', cfb_rush_yds:'Rush Yards',
+            cfb_recv_yds:'Recv Yards', cfb_combo_rush_yds:'Combined Rush Yards',
         };
         for (var li = 0; li < legsArr.length; li++) {
             var leg = legsArr[li];
@@ -15441,6 +15446,8 @@
                 points:'Pts', assists:'Ast', rebounds:'Reb', steals:'Stl', blocks:'Blk', threes:'3s',
                 '1inn_ml':'1st Inn ML', '1inn_runs_ou':'1st Inn Runs', '1inn_run_yn':'1st Inn Score',
                 team_ml:'ML', team_runline:'RL', team_total:'Total', ufc_ml:'ML', ufc_total:'Fight Total',
+                cfb_pass_yds:'Pass Yds', cfb_pass_tds:'Pass TDs', cfb_rush_yds:'Rush Yds',
+                cfb_recv_yds:'Recv Yds', cfb_combo_rush_yds:'Combo Rush Yds',
             };
             var FINAL_LEG = new Set(['won','lost','void','push']);
             el.innerHTML = queue.map(function(q) {
