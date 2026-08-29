@@ -5241,7 +5241,7 @@
         { key: 'cfb_pass_yds',       label: 'Pass Yds' },
         { key: 'cfb_pass_tds',       label: 'Pass TDs' },
         { key: 'cfb_rush_yds',       label: 'Rush Yds' },
-        { key: 'cfb_recv_yds',       label: 'Recv Yds' },
+        { key: 'cfb_recv_yds',       label: 'Rec Yds' },
         { key: 'cfb_combo_rush_yds', label: 'Combo Rush' },
     ];
     var WNBA_MKT_SET   = { pts:1, reb:1, ast:1, fg3m:1, pra:1, pa:1, pr:1, ra:1, double_double:1, triple_double:1 };
@@ -6311,7 +6311,8 @@
             if (logo) return '<img src="' + escHtml(logo) + '" style="' + imgStyle + ';padding:2px" onerror="this.outerHTML=' + "'" + escHtml(fallback) + "'" + '">';
             return fallback;
         }
-        var src = p.headshot || null;
+        var _cached = PARLAY_HEADSHOT_CACHE[p.name];
+        var src = p.headshot || (_cached && _cached !== 'none' && _cached !== 'pending' ? _cached : null);
         if (src) return '<img src="' + escHtml(src) + '" style="' + imgStyle + '" onerror="this.outerHTML=' + "'" + escHtml(fallback) + "'" + '">';
         return fallback;
     }
@@ -8974,7 +8975,7 @@
             team_ml:'Moneyline', team_runline:'Run Line', team_total:'Total',
             ufc_ml:'Fighter ML', ufc_total:'Fight Total',
             cfb_pass_yds:'Pass Yards', cfb_pass_tds:'Pass TDs', cfb_rush_yds:'Rush Yards',
-            cfb_recv_yds:'Recv Yards', cfb_combo_rush_yds:'Combined Rush Yards',
+            cfb_recv_yds:'Rec Yards', cfb_combo_rush_yds:'Combined Rush Yards',
         };
         var mult = s.stake_rax > 0 ? (s.payout_rax / s.stake_rax).toFixed(2) + 'x' : '';
         var emoji = s.status === 'won' ? '🏆' : s.status === 'lost' ? '❌' : '🎯';
@@ -9200,7 +9201,7 @@
             ufc_ml:'Fighter ML', ufc_total:'Fight Total',
             // CFB
             cfb_pass_yds:'Pass Yards', cfb_pass_tds:'Pass TDs', cfb_rush_yds:'Rush Yards',
-            cfb_recv_yds:'Recv Yards', cfb_combo_rush_yds:'Combined Rush Yards',
+            cfb_recv_yds:'Rec Yards', cfb_combo_rush_yds:'Combined Rush Yards',
         };
         for (var li = 0; li < legsArr.length; li++) {
             var leg = legsArr[li];
@@ -9240,28 +9241,41 @@
                         logoB = evtHome ? slipTeamLogo(evtHome, leg.sport) : null;
                     }
                 } else if (mkt === 'team_runline') {
-                    var pickedN = (leg.player_name || '').replace(/ (ML|RL)$/i, '').trim();
-                    var pickedNrm = normSlipName(pickedN);
-                    var awayNrm   = normSlipName(evtAway || '');
-                    var awayNick  = awayNrm.split(' ').slice(1).join(' ');
-                    var isAwayPk  = awayNrm === pickedNrm || (awayNick && pickedNrm.endsWith(awayNick));
-                    logoA = slipTeamLogo(isAwayPk ? evtAway : evtHome, leg.sport);
-                    logoB = slipTeamLogo(isAwayPk ? evtHome : evtAway, leg.sport);
+                    if (leg.sport === 'cfb' && leg.team && evtAway && evtHome) {
+                        // CFB: leg.team is stored shortName (e.g. "SAC ST") — use directly to avoid full-name mismatch
+                        var _cfbRlIsAway = leg.team.toUpperCase() === evtAway.toUpperCase();
+                        logoA = slipTeamLogo(_cfbRlIsAway ? evtAway : evtHome, leg.sport);
+                        logoB = slipTeamLogo(_cfbRlIsAway ? evtHome : evtAway, leg.sport);
+                    } else {
+                        var pickedN = (leg.player_name || '').replace(/ (ML|RL)$/i, '').trim();
+                        var pickedNrm = normSlipName(pickedN);
+                        var awayNrm   = normSlipName(evtAway || '');
+                        var awayNick  = awayNrm.split(' ').slice(1).join(' ');
+                        var isAwayPk  = awayNrm === pickedNrm || (awayNick && pickedNrm.endsWith(awayNick));
+                        logoA = slipTeamLogo(isAwayPk ? evtAway : evtHome, leg.sport);
+                        logoB = slipTeamLogo(isAwayPk ? evtHome : evtAway, leg.sport);
+                    }
                 } else {
-                    var tmln = (leg.player_name || '').replace(/ (ML|RL)$/i, '').trim();
-                    logoA = slipTeamLogo(tmln, leg.sport);
-                    // Fallback: try matching team against event_name parts (handles "LA Chargers" → evtAway "LAC")
-                    if (!logoA && (evtAway || evtHome)) {
-                        var tNrm = normSlipName(tmln);
-                        var aNrm = normSlipName(evtAway || '');
-                        var hNrm = normSlipName(evtHome || '');
-                        var tLast = tNrm.split(' ').pop();
-                        var aLast = aNrm.split(' ').pop();
-                        var hLast = hNrm.split(' ').pop();
-                        var isAway = aNrm === tNrm || (tLast && tLast === aLast);
-                        logoA = isAway
-                            ? (slipTeamLogo(evtAway, leg.sport) || slipTeamLogo(evtHome, leg.sport))
-                            : (slipTeamLogo(evtHome, leg.sport) || slipTeamLogo(evtAway, leg.sport));
+                    // team_ml — use leg.team shortName for CFB to avoid full DK name vs abbreviation mismatch
+                    if (leg.sport === 'cfb' && leg.team) {
+                        logoA = slipTeamLogo(leg.team, leg.sport);
+                    }
+                    if (!logoA) {
+                        var tmln = (leg.player_name || '').replace(/ (ML|RL)$/i, '').trim();
+                        logoA = slipTeamLogo(tmln, leg.sport);
+                        // Fallback: try matching team against event_name parts (handles "LA Chargers" → evtAway "LAC")
+                        if (!logoA && (evtAway || evtHome)) {
+                            var tNrm = normSlipName(tmln);
+                            var aNrm = normSlipName(evtAway || '');
+                            var hNrm = normSlipName(evtHome || '');
+                            var tLast = tNrm.split(' ').pop();
+                            var aLast = aNrm.split(' ').pop();
+                            var hLast = hNrm.split(' ').pop();
+                            var isAway = aNrm === tNrm || (tLast && tLast === aLast);
+                            logoA = isAway
+                                ? (slipTeamLogo(evtAway, leg.sport) || slipTeamLogo(evtHome, leg.sport))
+                                : (slipTeamLogo(evtHome, leg.sport) || slipTeamLogo(evtAway, leg.sport));
+                        }
                     }
                 }
                 var mkDualSlot = function(cls, src, fb) {
@@ -9763,7 +9777,9 @@
                     };
                     inner = _ps('pslip-dual-logo-a', _pA, _iA) + _ps('pslip-dual-logo-b', _pB, _iB);
                 } else {
-                    var imgSrc = p.headshot || (p.isTeamMarket ? p.logo : null);
+                    var _pCached = !p.isTeamMarket ? PARLAY_HEADSHOT_CACHE[p.name] : null;
+                    var _pCachedUrl = (_pCached && _pCached !== 'none' && _pCached !== 'pending') ? _pCached : null;
+                    var imgSrc = p.headshot || _pCachedUrl || (p.isTeamMarket ? p.logo : null);
                     inner = imgSrc
                         ? '<img src="' + escHtml(imgSrc) + '" style="position:absolute;inset:0;width:100%;height:100%;object-fit:' + (p.isTeamMarket ? 'contain' : 'cover') + ';object-position:center;border-radius:50%;padding:' + (p.isTeamMarket ? '3px' : '0') + '" onerror="this.style.display=\'none\'">' +
                           '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff;background:' + bg + ';border-radius:50%;z-index:-1">' + escHtml(p.initials) + '</div>'
@@ -15513,7 +15529,7 @@
                 '1inn_ml':'1st Inn ML', '1inn_runs_ou':'1st Inn Runs', '1inn_run_yn':'1st Inn Score',
                 team_ml:'ML', team_runline:'RL', team_total:'Total', ufc_ml:'ML', ufc_total:'Fight Total',
                 cfb_pass_yds:'Pass Yds', cfb_pass_tds:'Pass TDs', cfb_rush_yds:'Rush Yds',
-                cfb_recv_yds:'Recv Yds', cfb_combo_rush_yds:'Combo Rush Yds',
+                cfb_recv_yds:'Rec Yds', cfb_combo_rush_yds:'Combo Rush Yds',
             };
             var FINAL_LEG = new Set(['won','lost','void','push']);
             el.innerHTML = queue.map(function(q) {

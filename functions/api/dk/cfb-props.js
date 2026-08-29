@@ -16,7 +16,7 @@ const COMBO_RUSH_SUBCAT = '18497'; // Combined Rushing Yards Milestones
 const PROP_SUBCAT_MAP = {
   '16568': { market: 'cfb_pass_tds', stat: 'Pass TDs' },
   '16569': { market: 'cfb_pass_yds', stat: 'Pass Yds' },
-  '16570': { market: 'cfb_recv_yds', stat: 'Recv Yds' },
+  '16570': { market: 'cfb_recv_yds', stat: 'Rec Yds' },
   '16571': { market: 'cfb_rush_yds', stat: 'Rush Yds' },
 };
 
