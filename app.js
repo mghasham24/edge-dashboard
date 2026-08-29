@@ -7500,6 +7500,37 @@
         cardsEl.innerHTML = filtered.length
             ? filtered.map(function(s) { return parlaySlipCard(s, true); }).join('')
             : '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">No slips match.</div>';
+        // Async headshot loading for player prop legs (same logic as parlayRenderSlips)
+        filtered.forEach(function(s) {
+            (s.legs || []).forEach(function(leg, li) {
+                var mkt = leg.market_type || '';
+                if (mkt.startsWith('team_') || mkt.startsWith('1inn_')) return;
+                if (leg.sport === 'ufc') {
+                    var ufcVsA = (leg.player_name || '').match(/^(.+?)\s+vs\s+(.+?)(?:\s+[OU][\d.]+)?$/i)
+                              || (leg.event_name  || '').match(/^(.+?)\s+vs\s+(.+)$/i);
+                    if (ufcVsA) {
+                        loadSlipHeadshotAsync('slipav-' + s.id + '-' + li + '-a', ufcVsA[1].trim(), 'ufc');
+                        loadSlipHeadshotAsync('slipav-' + s.id + '-' + li + '-b', ufcVsA[2].trim(), 'ufc');
+                    } else {
+                        loadSlipHeadshotAsync('slipav-' + s.id + '-' + li, leg.player_name, 'ufc');
+                    }
+                    return;
+                }
+                var isSoccer = (leg.sport || '').startsWith('soccer_');
+                if (isSoccer) {
+                    var _rsm = PARLAY_HEADSHOT_CACHE[leg.player_name];
+                    var alreadyHave = (_rsm && _rsm !== 'none' && _rsm !== 'pending') || !!_rsHsLsGet(leg.player_name);
+                    if (!alreadyHave) loadSlipHeadshotAsync('slipav-' + s.id + '-' + li, leg.player_name, leg.sport);
+                    return;
+                }
+                var livePlayer = PARLAY_PLAYERS.find(function(pp) { return pp.name === leg.player_name; }) ||
+                                 PARLAY_PLAYERS_WNBA.find(function(pp) { return pp.name === leg.player_name; }) ||
+                                 PARLAY_PLAYERS_CFB.find(function(pp) { return pp.name === leg.player_name; }) ||
+                                 PARLAY_PLAYERS_SOCCER.find(function(pp) { return pp.name === leg.player_name; });
+                if (leg.headshot_url || (livePlayer && livePlayer.headshot)) return;
+                loadSlipHeadshotAsync('slipav-' + s.id + '-' + li, leg.player_name, leg.sport || 'mlb', leg.team);
+            });
+        });
         // Wire live stat tracking for the admin view — renderAllSlipsCards bypasses parlayRenderSlips
         PARLAY_SLIPS = ALL_SLIPS_DATA;
         startLiveSlipTracking();
@@ -7773,6 +7804,13 @@
         if (lp && lp.headshot) {
             SLIP_HEADSHOT_CACHE[playerName] = lp.headshot;
             showImg(document.getElementById(elemId), lp.headshot);
+            return;
+        }
+        // Also check PARLAY_HEADSHOT_CACHE — populated by builder panel ESPN searches
+        var _phc = PARLAY_HEADSHOT_CACHE[playerName];
+        if (_phc && _phc !== 'none' && _phc !== 'pending') {
+            SLIP_HEADSHOT_CACHE[playerName] = _phc;
+            showImg(document.getElementById(elemId), _phc);
             return;
         }
         // ESPN search fallback — called from browser, not CF
