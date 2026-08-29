@@ -11908,6 +11908,11 @@
     }
 
     async function casinoSubmitDeposit() {
+        if (!currentUser || (!currentUser.is_admin && !currentUser.rs_verified && !parlayRsVerified)) {
+            hideCasinoModal();
+            casinoRenderVerifyGate();
+            return;
+        }
         var inp = document.getElementById('casino-dep-amount');
         var amt = inp ? parseInt(inp.value, 10) : 0;
         if (!amt || amt < 1000) { casinoDepositErr('Minimum deposit is 1,000 Rax.'); return; }
@@ -16218,74 +16223,210 @@
         var statsEl = document.getElementById('admin-casino-stats');
         if (!el) return;
         el.innerHTML = '<span style="color:var(--muted)">Loading…</span>';
-        var status = document.getElementById('casino-wd-filter') ? document.getElementById('casino-wd-filter').value : '';
+        var statusFilter = document.getElementById('casino-wd-filter') ? document.getElementById('casino-wd-filter').value : '';
         try {
-            var url  = '/api/admin/casino-withdrawals' + (status ? '?status=' + encodeURIComponent(status) : '');
+            var url  = '/api/casino/payout-queue?action=list' + (statusFilter ? '&status=' + encodeURIComponent(statusFilter) : '');
             var res  = await fetch(url, { credentials: 'same-origin' });
             var data = await res.json();
             if (!data.ok) { el.innerHTML = '<span style="color:#ef4444">Error loading withdrawals</span>'; return; }
 
             var RAX   = 'Ⓡ';
-            var wds   = data.withdrawals || [];
+            var queue = data.queue || [];
             var stats = data.stats || {};
 
             // Stats bar
             if (statsEl) {
+                var edgePct  = stats.house_edge_pct != null ? (stats.house_edge_pct > 0 ? '+' : '') + stats.house_edge_pct + '%' : '—';
+                var edgeColor = (stats.house_edge_pct || 0) >= 0 ? 'var(--green)' : '#ef4444';
                 statsEl.innerHTML =
-                    '<div class="admin-stat" style="min-width:120px"><div class="admin-stat-val">' + (stats.pending_count || 0) + '</div><div class="admin-stat-lbl">Pending</div></div>' +
-                    '<div class="admin-stat" style="min-width:120px"><div class="admin-stat-val">' + Number(stats.pending_rax || 0).toLocaleString() + ' ' + RAX + '</div><div class="admin-stat-lbl">Pending Rax</div></div>' +
-                    '<div class="admin-stat" style="min-width:120px"><div class="admin-stat-val">' + Number(stats.paid_rax || 0).toLocaleString() + ' ' + RAX + '</div><div class="admin-stat-lbl">Total Paid</div></div>' +
-                    '<div class="admin-stat" style="min-width:120px"><div class="admin-stat-val">' + Number(stats.total_liability || 0).toLocaleString() + ' ' + RAX + '</div><div class="admin-stat-lbl">Casino Liability</div></div>';
+                    '<div class="admin-stat" style="min-width:110px"><div class="admin-stat-val">' + Number(stats.total_hands || 0).toLocaleString() + '</div><div class="admin-stat-lbl">Hands Played</div></div>' +
+                    '<div class="admin-stat" style="min-width:110px"><div class="admin-stat-val">' + Number(stats.total_wagered || 0).toLocaleString() + ' ' + RAX + '</div><div class="admin-stat-lbl">Total Wagered</div></div>' +
+                    '<div class="admin-stat" style="min-width:110px"><div class="admin-stat-val" style="color:' + edgeColor + '">' + Number(stats.house_profit || 0).toLocaleString() + ' ' + RAX + '</div><div class="admin-stat-lbl">House Profit</div></div>' +
+                    '<div class="admin-stat" style="min-width:90px"><div class="admin-stat-val" style="color:' + edgeColor + '">' + edgePct + '</div><div class="admin-stat-lbl">House Edge</div></div>' +
+                    '<div class="admin-stat" style="min-width:110px"><div class="admin-stat-val">' + (stats.pending_count || 0) + '</div><div class="admin-stat-lbl">Pending WDs</div></div>' +
+                    '<div class="admin-stat" style="min-width:110px"><div class="admin-stat-val">' + Number(stats.paid_rax || 0).toLocaleString() + ' ' + RAX + '</div><div class="admin-stat-lbl">Total Paid Out</div></div>' +
+                    '<div class="admin-stat" style="min-width:110px"><div class="admin-stat-val">' + Number(stats.total_liability || 0).toLocaleString() + ' ' + RAX + '</div><div class="admin-stat-lbl">Casino Liability</div></div>';
             }
 
-            if (!wds.length) { el.innerHTML = '<span style="color:var(--muted)">No withdrawals found</span>'; return; }
+            if (!queue.length) { el.innerHTML = '<span style="color:var(--muted)">No withdrawals found</span>'; return; }
 
             var statusColor = { pending: 'var(--orange,#f59e0b)', processing: '#60a5fa', complete: 'var(--green)', failed: '#ef4444' };
-            el.innerHTML = '<div class="admin-table-wrap"><table class="admin-table"><thead><tr>' +
-                '<th>ID</th><th>Email</th><th>RS Username</th><th>Amount</th><th>Casino Bal</th><th>Status</th><th>Requested</th><th>Notes</th><th>Actions</th>' +
-                '</tr></thead><tbody>' +
-                wds.map(function(w) {
-                    var sc   = statusColor[w.status] || 'var(--muted)';
-                    var dt   = w.created_at ? new Date(w.created_at * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
-                    var acts = w.status === 'pending' || w.status === 'processing' ? (
-                        '<button onclick="casinoWithdrawalAction(' + w.id + ',\'processing\')" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:11px;padding:4px 8px;border-radius:4px;cursor:pointer;margin-right:4px">Processing</button>' +
-                        '<button onclick="casinoWithdrawalAction(' + w.id + ',\'complete\')"  style="background:var(--bg3);border:1px solid var(--border2);color:var(--green);font-family:var(--sans);font-size:11px;padding:4px 8px;border-radius:4px;cursor:pointer;margin-right:4px">Complete</button>' +
-                        '<button onclick="casinoWithdrawalAction(' + w.id + ',\'failed\')"    style="background:var(--bg3);border:1px solid var(--border2);color:#ef4444;font-family:var(--sans);font-size:11px;padding:4px 8px;border-radius:4px;cursor:pointer">Failed (refund)</button>'
-                    ) : '<span style="color:var(--muted2);font-size:11px">—</span>';
-                    return '<tr>' +
-                        '<td style="color:var(--muted2)">#' + w.id + '</td>' +
-                        '<td style="font-size:12px">' + escHtml(w.email || '—') + '</td>' +
-                        '<td><a href="https://www.realapp.com/@' + escHtml(w.rs_username) + '" target="_blank" style="color:var(--accent)">@' + escHtml(w.rs_username) + '</a></td>' +
-                        '<td style="font-variant-numeric:tabular-nums;font-weight:700">' + Number(w.amount).toLocaleString() + ' ' + RAX + '</td>' +
-                        '<td style="font-variant-numeric:tabular-nums;color:var(--muted)">' + Number(w.casino_balance || 0).toLocaleString() + ' ' + RAX + '</td>' +
-                        '<td><span style="color:' + sc + ';font-weight:600;font-size:12px">' + w.status + '</span></td>' +
-                        '<td style="color:var(--muted2);font-size:12px;white-space:nowrap">' + dt + '</td>' +
-                        '<td style="color:var(--muted2);font-size:12px;max-width:160px;word-break:break-word">' + escHtml(w.notes || '—') + '</td>' +
-                        '<td>' + acts + '</td>' +
-                    '</tr>';
-                }).join('') +
-                '</tbody></table></div>';
+
+            el.innerHTML = queue.map(function(w) {
+                var wStatus  = w.status || 'pending';
+                var isPend   = wStatus === 'pending' || wStatus === 'processing';
+                var hasCard  = !!w.card_url;
+
+                var badgeLabel = wStatus === 'complete' ? 'PAID'
+                    : wStatus === 'failed' ? 'FAILED'
+                    : wStatus === 'processing' ? 'PROCESSING'
+                    : 'PENDING';
+                var badgeColor = statusColor[wStatus] || 'var(--muted)';
+
+                var actionsHtml = '';
+                if (isPend && hasCard) {
+                    actionsHtml =
+                        '<a href="' + escHtml(w.card_url) + '" target="_blank" rel="noopener" class="pq-open-btn" id="cq-open-' + w.id + '">Open in RS</a>' +
+                        '<button class="pq-sent-btn" onclick="markCasinoSent(' + w.id + ',this)">Mark Sent</button>' +
+                        '<button class="pq-skip-btn" onclick="skipCasinoCard(' + w.id + ',this)">Try Another Card</button>' +
+                        '<button onclick="casinoWithdrawalFail(' + w.id + ',this)" style="background:none;border:1px solid #ef4444;border-radius:5px;padding:4px 10px;font-size:11px;color:#ef4444;cursor:pointer">Refund</button>';
+                } else if (isPend) {
+                    actionsHtml =
+                        '<button class="pq-complete-btn" onclick="completeCasinoPayout(' + w.id + ',this)">Find Card</button>' +
+                        '<button onclick="casinoWithdrawalFail(' + w.id + ',this)" style="background:none;border:1px solid #ef4444;border-radius:5px;padding:4px 10px;font-size:11px;color:#ef4444;cursor:pointer">Refund</button>';
+                }
+
+                var cardHtml = hasCard
+                    ? '<a href="' + escHtml(w.card_url) + '" target="_blank" rel="noopener" style="color:var(--accent);font-size:11px">Card #' + escHtml(String(w.target_card_id)) + ' ↗</a>'
+                    : '<span style="color:var(--muted2);font-size:11px">—</span>';
+                var noteHtml = w.notes ? '<div style="font-size:10px;color:var(--muted2);margin-top:3px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escHtml(w.notes) + '">' + escHtml(w.notes.slice(0, 80)) + '</div>' : '';
+
+                var copyBtn = '<button onclick="copyCasinoCmd(this)" data-wid="' + w.id + '" data-amount="' + (w.amount || 0) + '" data-cardurl="' + escHtml(w.card_url || '') + '" style="background:none;border:1px solid var(--border);border-radius:5px;padding:3px 8px;font-size:10px;color:var(--muted);cursor:pointer">Copy cmd</button>';
+
+                var dt = w.created_at ? new Date(w.created_at * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+
+                return '<div class="pq-row" id="cq-row-' + w.id + '" style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:10px">' +
+                    '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">' +
+                        '<div style="flex:1;min-width:0">' +
+                            '<div style="display:flex;align-items:center;gap:8px">' +
+                                '<span style="font-size:13px;font-weight:600;color:var(--fg)">@' + escHtml(w.rs_username || '?') + '</span>' +
+                                copyBtn +
+                            '</div>' +
+                            '<div style="margin-top:4px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">' +
+                                '<span style="font-size:12px;color:var(--muted)">Withdrawal #' + w.id + '</span>' +
+                                '<span style="font-size:11px;font-weight:700;letter-spacing:.04em;color:' + badgeColor + ';text-transform:uppercase">' + escHtml(badgeLabel) + '</span>' +
+                                (dt ? '<span style="font-size:11px;color:var(--muted2)">' + escHtml(dt) + '</span>' : '') +
+                            '</div>' +
+                            noteHtml +
+                        '</div>' +
+                        '<div style="text-align:right;flex-shrink:0">' +
+                            '<div style="font-size:18px;font-weight:700;color:var(--fg)">' + Number(w.amount || 0).toLocaleString() + ' ' + RAX + '</div>' +
+                            '<div style="font-size:11px;color:var(--muted2)">Offer <strong style="color:var(--fg)">' + Number(w.amount || 0).toLocaleString() + '</strong> ' + RAX + ' in RS</div>' +
+                            '<div style="margin-top:6px">' + cardHtml + '</div>' +
+                        '</div>' +
+                    '</div>' +
+                    (actionsHtml ? '<div class="pq-actions" id="cq-actions-' + w.id + '" style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">' + actionsHtml + '</div>' : '') +
+                '</div>';
+            }).join('');
         } catch (e) {
             el.innerHTML = '<span style="color:#ef4444">Failed to load: ' + escHtml(e.message) + '</span>';
         }
     }
 
-    function casinoWithdrawalAction(id, status) {
-        var msg = status === 'failed'
-            ? 'Mark as failed and refund the Rax to their casino balance?'
-            : status === 'complete'
-            ? 'Mark withdrawal as complete? (Rax has been sent on RS)'
-            : 'Mark as processing?';
-        showConfirm(msg, function() {
+    async function completeCasinoPayout(wdId, btn) {
+        btn.disabled = true;
+        btn.textContent = 'Finding card…';
+        try {
+            var res  = await fetch('/api/casino/payout-queue?action=prepare&id=' + wdId, { method: 'POST', credentials: 'same-origin' });
+            var data = await res.json();
+            if (!data.ok || !data.cardUrl) {
+                btn.textContent = data.error || 'No card found';
+                btn.disabled = false;
+                return;
+            }
+            window.open(data.cardUrl, '_blank');
+            var actEl = document.getElementById('cq-actions-' + wdId);
+            if (actEl) {
+                actEl.innerHTML =
+                    '<a href="' + escHtml(data.cardUrl) + '" target="_blank" rel="noopener" class="pq-open-btn">Open in RS ↗</a>' +
+                    '<button class="pq-sent-btn" onclick="markCasinoSent(' + wdId + ',this)">Mark Sent</button>' +
+                    '<button class="pq-skip-btn" onclick="skipCasinoCard(' + wdId + ',this)">Try Another Card</button>' +
+                    '<button onclick="casinoWithdrawalFail(' + wdId + ',this)" style="background:none;border:1px solid #ef4444;border-radius:5px;padding:4px 10px;font-size:11px;color:#ef4444;cursor:pointer">Refund</button>';
+            }
+        } catch (e) {
+            btn.textContent = 'Error: ' + e.message;
+            btn.disabled = false;
+        }
+    }
+
+    async function copyCasinoCmd(btn) {
+        var wdId        = btn.dataset.wid;
+        var offerAmount = btn.dataset.amount;
+        var cardUrl     = btn.dataset.cardurl;
+        var orig = btn.textContent;
+        if (cardUrl) {
+            try {
+                await copyText('node index.js --test ' + cardUrl + ' ' + offerAmount);
+                btn.textContent = 'Copied!';
+                setTimeout(function() { btn.textContent = orig; }, 1200);
+            } catch (e) {
+                btn.textContent = 'Failed';
+                setTimeout(function() { btn.textContent = orig; }, 1500);
+            }
+            return;
+        }
+        btn.textContent = 'Finding…';
+        btn.disabled = true;
+        try {
+            var res  = await fetch('/api/casino/payout-queue?action=prepare&id=' + wdId, { method: 'POST', credentials: 'same-origin' });
+            var data = await res.json();
+            if (!data.ok || !data.cardUrl) {
+                btn.textContent = data.error || 'No card';
+                setTimeout(function() { btn.textContent = orig; btn.disabled = false; }, 2000);
+                return;
+            }
+            await copyText('node index.js --test ' + data.cardUrl + ' ' + offerAmount);
+            btn.dataset.cardurl = data.cardUrl;
+            btn.textContent = 'Copied!';
+            var actEl = document.getElementById('cq-actions-' + wdId);
+            if (actEl) {
+                actEl.innerHTML =
+                    '<a href="' + escHtml(data.cardUrl) + '" target="_blank" rel="noopener" class="pq-open-btn">Open in RS ↗</a>' +
+                    '<button class="pq-sent-btn" onclick="markCasinoSent(' + wdId + ',this)">Mark Sent</button>' +
+                    '<button class="pq-skip-btn" onclick="skipCasinoCard(' + wdId + ',this)">Try Another Card</button>' +
+                    '<button onclick="casinoWithdrawalFail(' + wdId + ',this)" style="background:none;border:1px solid #ef4444;border-radius:5px;padding:4px 10px;font-size:11px;color:#ef4444;cursor:pointer">Refund</button>';
+            }
+            setTimeout(function() { btn.textContent = orig; btn.disabled = false; }, 1500);
+        } catch (e) {
+            btn.textContent = 'Error';
+            setTimeout(function() { btn.textContent = orig; btn.disabled = false; }, 1500);
+        }
+    }
+
+    async function skipCasinoCard(wdId, btn) {
+        btn.disabled = true;
+        btn.textContent = 'Skipping…';
+        try {
+            var res  = await fetch('/api/casino/payout-queue?action=skip_card&id=' + wdId, { method: 'POST', credentials: 'same-origin' });
+            var data = await res.json();
+            if (data.ok) {
+                var actEl = document.getElementById('cq-actions-' + wdId);
+                if (actEl) actEl.innerHTML =
+                    '<button class="pq-complete-btn" onclick="completeCasinoPayout(' + wdId + ',this)">Find Card</button>' +
+                    '<button onclick="casinoWithdrawalFail(' + wdId + ',this)" style="background:none;border:1px solid #ef4444;border-radius:5px;padding:4px 10px;font-size:11px;color:#ef4444;cursor:pointer">Refund</button>';
+            }
+        } catch (e) {
+            btn.disabled = false;
+            btn.textContent = 'Error';
+        }
+    }
+
+    async function markCasinoSent(wdId, btn) {
+        btn.disabled = true;
+        btn.textContent = 'Saving…';
+        try {
+            var res  = await fetch('/api/casino/payout-queue?action=mark_sent&id=' + wdId, { method: 'POST', credentials: 'same-origin' });
+            var data = await res.json();
+            if (data.ok) loadAdminCasinoWithdrawals();
+            else { btn.textContent = 'Error'; btn.disabled = false; }
+        } catch (e) {
+            btn.textContent = 'Error';
+            btn.disabled = false;
+        }
+    }
+
+    function casinoWithdrawalFail(id, btn) {
+        if (btn) btn.disabled = true;
+        showConfirm('Mark as failed and refund the Rax to their casino balance?', function() {
             fetch('/api/admin/casino-withdrawals', {
                 method: 'POST',
                 credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: id, status: status }),
+                body: JSON.stringify({ id: id, status: 'failed' }),
             }).then(function(r) { return r.json(); }).then(function(data) {
                 if (data.ok) loadAdminCasinoWithdrawals();
-                else alert('Error: ' + (data.error || 'Unknown'));
-            }).catch(function(e) { alert('Request failed: ' + e.message); });
+                else { if (btn) btn.disabled = false; alert('Error: ' + (data.error || 'Unknown')); }
+            }).catch(function(e) { if (btn) btn.disabled = false; alert('Request failed: ' + e.message); });
         });
     }
 

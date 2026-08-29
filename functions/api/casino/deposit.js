@@ -9,58 +9,32 @@ import { getSession }  from '../../_lib/session.js';
 import { err }         from '../../_lib/response.js';
 import { rsUrlEncode } from '../../_lib/hashids.js';
 
-const MIN_DEPOSIT     = 1000;
-const VERIFY_MAX_AGE  = 15 * 60; // card must have been verified within 15 min
-const INVENTORY_MAX_AGE = 10 * 60; // D1 snapshot stale after 10 min
-const RS_DEVICE_UUID  = '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e';
-const EDGEBOT_USER    = 'V3yGgkkJ';
+const MIN_DEPOSIT    = 1000;
+const VERIFY_MAX_AGE = 15 * 60; // card must have been verified within 15 min (by sync-cards cron)
+const RS_DEVICE_UUID = '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e';
+const EDGEBOT_USER   = 'V3yGgkkJ';
 
-async function getSharedRsToken(env) {
-  try {
-    const row = await env.DB.prepare(
-      "SELECT data FROM odds_cache WHERE cache_key='meta:rs_auth_token'"
-    ).first();
-    if (!row?.data) return null;
-    const parsed = JSON.parse(row.data);
-    return parsed.token || null;
-  } catch { return null; }
-}
-
-async function verifyLive(cardId, rsToken) {
-  if (!rsToken) return null;
+// Live-only check using edgebot's own auth token.
+// Returns true (edgebot owns), false (someone else owns — remove from pool), null (fetch failed — skip).
+// No snapshot fallback: we must confirm live ownership before showing a card to a user.
+async function verifyEdgebotOwnsLive(cardId, authInfo) {
+  if (!authInfo) return null;
   try {
     const res = await fetch(`https://web.realapp.com/collectingcards/${cardId}`, {
       headers: {
         'Accept':           'application/json',
-        'real-auth-info':   rsToken,
+        'real-auth-info':   authInfo,
         'real-device-uuid': RS_DEVICE_UUID,
         'real-device-type': 'desktop_web',
         'real-version':     '36',
       },
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(6000),
     });
     if (!res.ok) return null;
     const data = await res.json();
     const uid  = data.card?.userId ?? data.userId ?? null;
     return uid === null ? null : uid === EDGEBOT_USER;
   } catch { return null; }
-}
-
-async function verifySnapshot(cardId, env, now) {
-  try {
-    const row = await env.DB.prepare(
-      "SELECT data, fetched_at FROM odds_cache WHERE cache_key='card_inventory'"
-    ).first();
-    if (!row || (now - row.fetched_at) > INVENTORY_MAX_AGE) return null;
-    const ids = JSON.parse(row.data);
-    return Array.isArray(ids) && ids.includes(Number(cardId));
-  } catch { return null; }
-}
-
-async function verifyEdgebotOwns(cardId, env, now, rsToken) {
-  const live = await verifyLive(cardId, rsToken);
-  if (live !== null) return live;
-  return verifySnapshot(cardId, env, now);
 }
 
 async function pickCard(env, now, db) {
@@ -70,7 +44,7 @@ async function pickCard(env, now, db) {
   ).all();
   const claimedIds = (pendingCards.results || []).map(r => r.card_id);
 
-  const rsToken  = await getSharedRsToken(env);
+  const authInfo = env.EDGEBOT_AUTH_INFO;
   const excluded = [...claimedIds];
 
   for (let i = 0; i < 5; i++) {
@@ -83,13 +57,15 @@ async function pickCard(env, now, db) {
     ).bind(now - VERIFY_MAX_AGE, ...excluded).first();
     if (!row) break;
 
-    const owned = await verifyEdgebotOwns(row.card_id, env, now, rsToken);
+    const owned = await verifyEdgebotOwnsLive(row.card_id, authInfo);
     if (owned === false) {
+      // Edgebot no longer owns this card — remove from pool
       await db.prepare('DELETE FROM deposit_cards WHERE card_id=?').bind(row.card_id).run();
       excluded.push(row.card_id);
       continue;
     }
     if (owned === null) {
+      // Live check failed (network/token) — skip this card for now, don't remove
       excluded.push(row.card_id);
       continue;
     }
