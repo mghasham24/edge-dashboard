@@ -11908,11 +11908,6 @@
     }
 
     async function casinoSubmitDeposit() {
-        if (!currentUser || (!currentUser.is_admin && !currentUser.rs_verified && !parlayRsVerified)) {
-            hideCasinoModal();
-            casinoRenderVerifyGate();
-            return;
-        }
         var inp = document.getElementById('casino-dep-amount');
         var amt = inp ? parseInt(inp.value, 10) : 0;
         if (!amt || amt < 1000) { casinoDepositErr('Minimum deposit is 1,000 Rax.'); return; }
