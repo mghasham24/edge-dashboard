@@ -1701,7 +1701,9 @@ async function handleRequest({ request, env }) {
       // "any final game exists on this date" for player-prop event_name format.
       const matchup = parse1innMatchup(leg.event_name);
       const gameFinal = matchup
-        ? !!match1innGame(matchup, mlbGamesMap[leg.game_date] || [])
+        // Pass game_start_ms so pickClosestGame targets the correct doubleheader game —
+        // prevents declaring "game final" based on game 1 when the leg is for game 2.
+        ? !!match1innGame(matchup, mlbGamesMap[leg.game_date] || [], leg.game_start_ms)
         // For player props (no matchup), only declare game final once 4 hours have elapsed
         // since that specific game's start time. This prevents voiding west-coast players
         // while their game is still live — even after midnight UTC when other games on the
