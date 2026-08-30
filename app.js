@@ -8431,7 +8431,8 @@
                             var ha = g.homeAbbr.toUpperCase(), aa = g.awayAbbr.toUpperCase();
                             if (rawNorm === hn || rawNorm === an) return true;
                             if (rawNick && (hn.endsWith(rawNick) || an.endsWith(rawNick))) return true;
-                            // DK shortName suffix match: "UNC" vs ESPN "NC"
+                            // DK shortName match: exact abbr ("UNLV" == "UNLV") or suffix ("UNC" ends "NC")
+                            if (rawUp === ha || rawUp === aa) return true;
                             if (rawUp.length > ha.length && rawUp.endsWith(ha)) return true;
                             if (rawUp.length > aa.length && rawUp.endsWith(aa)) return true;
                             return false;
