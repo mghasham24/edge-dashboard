@@ -139,6 +139,20 @@ function normalizeName(name) {
     .replace(/\s+(?:jr\.?|sr\.?|ii|iii|iv)$/, ''); // strip generational suffixes (e.g. "Michael Harris II" → "michael harris")
 }
 
+// ── Doubleheader game picker ──────────────────────────────────────────────────
+// When multiple games match the same matchup (doubleheader), pick the one whose
+// scheduled start (gameStartMs) is closest to the leg's stored game_start_ms.
+// Falls back to the first candidate for legs without a stored start time (old slips).
+function pickClosestGame(candidates, legStartMs) {
+  if (!candidates.length) return null;
+  if (candidates.length === 1 || !legStartMs) return candidates[0];
+  return candidates.reduce((best, g) => {
+    if (!g.gameStartMs) return best;
+    if (!best.gameStartMs) return g;
+    return Math.abs(g.gameStartMs - legStartMs) < Math.abs(best.gameStartMs - legStartMs) ? g : best;
+  });
+}
+
 // ── Team market resolver ──────────────────────────────────────────────────────
 
 function resolveTeamLeg(leg, finalGames) {
@@ -164,9 +178,12 @@ function resolveTeamLeg(leg, finalGames) {
       return false;
     }
 
-    const game = finalGames.find(g =>
-      matchesTeam(awayRaw, g.awayName, g.awayAbbr) &&
-      matchesTeam(homeRaw, g.homeName, g.homeAbbr)
+    const game = pickClosestGame(
+      finalGames.filter(g =>
+        matchesTeam(awayRaw, g.awayName, g.awayAbbr) &&
+        matchesTeam(homeRaw, g.homeName, g.homeAbbr)
+      ),
+      leg.game_start_ms
     );
     if (!game) return null;
     const total = game.homeScore + game.awayScore;
@@ -179,7 +196,7 @@ function resolveTeamLeg(leg, finalGames) {
   const nickname = teamName.split(' ').slice(1).join(' ');
   const dkUp     = dkName.toUpperCase();
   const legTeam  = (leg.team || '').toUpperCase(); // stored DK shortName (most reliable for CFB)
-  const game = finalGames.find(g => {
+  const game = pickClosestGame(finalGames.filter(g => {
     const homeNorm = normalizeName(g.homeName);
     const awayNorm = normalizeName(g.awayName);
     if (homeNorm === teamName || awayNorm === teamName) return true;
@@ -192,7 +209,7 @@ function resolveTeamLeg(leg, finalGames) {
     if (g.homeAbbr && dkUp.length > g.homeAbbr.length && dkUp.endsWith(g.homeAbbr)) return true;
     if (g.awayAbbr && dkUp.length > g.awayAbbr.length && dkUp.endsWith(g.awayAbbr)) return true;
     return false;
-  });
+  }), leg.game_start_ms);
   if (!game) return null;
 
   const homeNorm  = normalizeName(game.homeName);
@@ -226,14 +243,15 @@ function parse1innMatchup(eventName) {
 const DK_MLB_ALIASES = { "a's": 'ath', sfg: 'sf' };
 
 // Find MLB final game matching the parsed matchup (DK names vs MLB API names)
-function match1innGame(matchup, finalGames) {
+// gameStartMs: leg.game_start_ms — used to pick the right game in a doubleheader
+function match1innGame(matchup, finalGames, gameStartMs) {
   if (!matchup) return null;
   const aN = normalizeName(matchup.awayName);
   const hN = normalizeName(matchup.homeName);
   // Resolve DK team name aliases to standard MLB abbreviations
   const aResolved = (DK_MLB_ALIASES[aN] || aN).toLowerCase();
   const hResolved = (DK_MLB_ALIASES[hN] || hN).toLowerCase();
-  return finalGames.find(g => {
+  return pickClosestGame(finalGames.filter(g => {
     const ga = normalizeName(g.awayName);
     const gh = normalizeName(g.homeName);
     if (ga === aN && gh === hN) return true;
@@ -246,7 +264,7 @@ function match1innGame(matchup, finalGames) {
     const gHome = g.homeAbbr.toLowerCase();
     if (gAway === aResolved && gHome === hResolved) return true;
     return false;
-  });
+  }), gameStartMs);
 }
 
 // Determine if the team in playerName is the away or home side
@@ -272,7 +290,7 @@ function resolve1stInnLeg(leg, finalGames, linescore1Map, pbpMap) {
   const mkt = leg.market_type;
 
   const matchup = parse1innMatchup(leg.event_name);
-  const game    = match1innGame(matchup, finalGames);
+  const game    = match1innGame(matchup, finalGames, leg.game_start_ms);
   if (!game) return null; // game not final yet or not found
 
   const label = (leg.label || '').trim();
@@ -476,8 +494,9 @@ async function getMlbFinalGames(date) {
       awayName:  g.teams?.away?.team?.name  || '',
       homeAbbr:  (g.teams?.home?.team?.abbreviation || mlbAbbrFromName(g.teams?.home?.team?.name)).toUpperCase(),
       awayAbbr:  (g.teams?.away?.team?.abbreviation || mlbAbbrFromName(g.teams?.away?.team?.name)).toUpperCase(),
-      homeScore: g.teams?.home?.score ?? g.linescore?.teams?.home?.runs ?? null,
-      awayScore: g.teams?.away?.score ?? g.linescore?.teams?.away?.runs ?? null,
+      homeScore:   g.teams?.home?.score ?? g.linescore?.teams?.home?.runs ?? null,
+      awayScore:   g.teams?.away?.score ?? g.linescore?.teams?.away?.runs ?? null,
+      gameStartMs: g.gameDate ? new Date(g.gameDate).getTime() : null,
     }))
     .filter(g => g.homeScore != null && g.awayScore != null);
 }
@@ -515,8 +534,9 @@ async function getMlbLive1innDoneGames(date) {
       awayName:  g.teams?.away?.team?.name  || '',
       homeAbbr:  (g.teams?.home?.team?.abbreviation || mlbAbbrFromName(g.teams?.home?.team?.name)).toUpperCase(),
       awayAbbr:  (g.teams?.away?.team?.abbreviation || mlbAbbrFromName(g.teams?.away?.team?.name)).toUpperCase(),
-      homeScore: g.teams?.home?.score ?? null,
-      awayScore: g.teams?.away?.score ?? null,
+      homeScore:   g.teams?.home?.score ?? null,
+      awayScore:   g.teams?.away?.score ?? null,
+      gameStartMs: g.gameDate ? new Date(g.gameDate).getTime() : null,
     }));
 }
 
