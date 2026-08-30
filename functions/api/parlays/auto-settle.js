@@ -1449,34 +1449,23 @@ async function handleRequest({ request, env }) {
   await Promise.all(uniqueDates.map(async date => {
     soccerMap[date] = {};
     const soccerSlugs = soccerSlugsForDate(date);
+    const cfbLegsForDate = eligibleLegs.filter(l => l.game_date === date && legSportOf(l) === 'cfb');
 
-    const [mlbGames, wnbaGames, nflGames, cfbGames, ufcResults] = await Promise.all([
-      (hasMlbOnDate(date) || hasNflTeamMktFallback(date))
-                            ? withTimeout(getMlbFinalGames(date), 9000, [])             : Promise.resolve([]),
-      hasWnbaOnDate(date) ? withTimeout(getWnbaFinalGames(date, proxyKey), 9000, [])  : Promise.resolve([]),
-      hasNflOnDate(date)  ? withTimeout(getEspnFinalGames(ESPN_NFL, date, env.DB, proxyKey), 9000, [])  : Promise.resolve([]),
-      hasCfbOnDate(date)  ? withTimeout(getCfbFinalGames(date, proxyKey), 9000, [])   : Promise.resolve([]),
-      hasUfcOnDate(date)  ? withTimeout(getUfcResults(date, proxyKey), 9000, {})      : Promise.resolve({}),
-    ]);
-
-    mlbGamesMap[date]  = mlbGames;
-    wnbaGamesMap[date] = wnbaGames;
-    nflGamesMap[date]  = nflGames;
-    cfbGamesMap[date]  = cfbGames;
-    ufcMap[date]       = ufcResults;
-
-    // MLB boxscores and WNBA stats are fetched in parallel to avoid sequential timeout
-    const [mlbBlock, wnbaStats, cfbStatsResult] = await Promise.all([
-      // ── MLB block ──────────────────────────────────────────────────────────
-      (async () => {
-        if (!hasMlbOnDate(date)) return null;
+    // All fetches start simultaneously — game lists, boxscores/stats, and soccer
+    // in one parallel block. MLB is self-contained (fetches its game list then boxscores
+    // internally). WNBA/CFB stats don't need the game list so they also start at T=0.
+    // Soccer slugs are each self-contained (games→stats) and run in parallel with everything.
+    const [mlbResult, wnbaGames, nflGames, cfbGames, ufcResults, wnbaStats, cfbStatsResult,
+           ...soccerResults] = await Promise.all([
+      // ── Self-contained MLB block ─────────────────────────────────────────
+      (hasMlbOnDate(date) || hasNflTeamMktFallback(date)) ? (async () => {
         const fetch1inn    = has1innOnDate(date);
         const fetch1innPbp = has1innPbpOnDate(date);
-        const allStats      = {};
-        const statsByGamePk = {}; // gamePk → playerStats for doubleheader disambiguation
+        const mlbGames = await withTimeout(getMlbFinalGames(date), 9000, []);
+        const allStats = {};
+        const statsByGamePk = {};
         const linescore1 = {};
-        const pbp1       = {};
-
+        const pbp1 = {};
         if (mlbGames.length) {
           await Promise.all(mlbGames.map(async g => {
             const [bs, ls, pbp] = await Promise.all([
@@ -1484,16 +1473,11 @@ async function handleRequest({ request, env }) {
               fetch1inn    ? withTimeout(getMlbLinescore(g.gamePk), 8000)   : Promise.resolve(null),
               fetch1innPbp ? withTimeout(getMlbPlayByPlay(g.gamePk), 8000) : Promise.resolve(null),
             ]);
-            if (bs) {
-              const gameStats = extractMlbPlayerStats(bs);
-              statsByGamePk[g.gamePk] = gameStats;
-              Object.assign(allStats, gameStats);
-            }
+            if (bs) { const s = extractMlbPlayerStats(bs); statsByGamePk[g.gamePk] = s; Object.assign(allStats, s); }
             if (ls)  linescore1[g.gamePk] = ls;
             if (pbp) pbp1[g.gamePk]       = pbp;
           }));
         }
-
         let mlb1innGames = mlbGames;
         if (fetch1inn) {
           const live = await getMlbLive1innDoneGames(date).catch(() => []);
@@ -1510,42 +1494,45 @@ async function handleRequest({ request, env }) {
           }
           mlb1innGames = [...mlbGames, ...newLive];
         }
-        return { allStats, statsByGamePk, linescore1, pbp1, mlb1innGames };
-      })(),
-      // ── WNBA stats block ───────────────────────────────────────────────────
+        return { mlbGames, allStats, statsByGamePk, linescore1, pbp1, mlb1innGames };
+      })() : Promise.resolve(null),
+      // ── Individual sport game lists (all start immediately) ─────────────
+      hasWnbaOnDate(date) ? withTimeout(getWnbaFinalGames(date, proxyKey), 9000, [])  : Promise.resolve([]),
+      hasNflOnDate(date)  ? withTimeout(getEspnFinalGames(ESPN_NFL, date, env.DB, proxyKey), 9000, [])  : Promise.resolve([]),
+      hasCfbOnDate(date)  ? withTimeout(getCfbFinalGames(date, proxyKey), 9000, [])   : Promise.resolve([]),
+      hasUfcOnDate(date)  ? withTimeout(getUfcResults(date, proxyKey), 9000, {})      : Promise.resolve({}),
+      // ── Player stats — independent of game lists, start immediately ─────
       hasWnbaOnDate(date) ? withTimeout(getWnbaPlayerStats(date, proxyKey), 12000, {}) : Promise.resolve({}),
-      // ── CFB player stats — parallel with MLB/WNBA to avoid sequential timeout ──
-      hasCfbOnDate(date) ? withTimeout(
-        getCfbPlayerStats(date, eligibleLegs.filter(l => l.game_date === date && legSportOf(l) === 'cfb'), proxyKey),
-        15000, {}
-      ) : Promise.resolve({}),
+      cfbLegsForDate.length ? withTimeout(getCfbPlayerStats(date, cfbLegsForDate, proxyKey), 15000, {}) : Promise.resolve({}),
+      // ── Soccer slugs — each self-contained, all parallel ───────────────
+      ...soccerSlugs.map(espnSlug => (async () => {
+        try {
+          const games = await withTimeout(getSoccerFinalGames(espnSlug, date, proxyKey), 10000, []);
+          const stats = games.length
+            ? await withTimeout(getSoccerPlayerStats(espnSlug, games.map(g => g.eventId), proxyKey), 12000, {})
+            : {};
+          return { espnSlug, games, stats };
+        } catch(_) {
+          return { espnSlug, games: [], stats: {} };
+        }
+      })()),
     ]);
 
-    cfbStatsMap[date] = cfbStatsResult || {};
-
-    if (mlbBlock) {
-      mlbStatsMap[date]       = mlbBlock.allStats;
-      mlbStatsByGameMap[date] = mlbBlock.statsByGamePk;
-      mlbLinescore1Map[date] = mlbBlock.linescore1;
-      mlbPbpMap[date]        = mlbBlock.pbp1;
-      mlb1innGamesMap[date]  = mlbBlock.mlb1innGames;
-    } else {
-      mlbStatsMap[date]      = {};
-      mlbLinescore1Map[date] = {};
-      mlbPbpMap[date]        = {};
-      mlb1innGamesMap[date]  = [];
-    }
-    wnbaStatsMap[date] = wnbaStats || {};
-
-    // ── Soccer block ─────────────────────────────────────────────────────────
-    if (soccerSlugs.length) {
-      await Promise.allSettled(soccerSlugs.map(async espnSlug => {
-        const games = await withTimeout(getSoccerFinalGames(espnSlug, date, proxyKey), 10000, []);
-        const stats = games.length
-          ? await withTimeout(getSoccerPlayerStats(espnSlug, games.map(g => g.eventId), proxyKey), 12000, {})
-          : {};
-        soccerMap[date][espnSlug] = { games, stats };
-      }));
+    // Unpack all results into the maps
+    mlbGamesMap[date]       = mlbResult?.mlbGames      || [];
+    mlbStatsMap[date]       = mlbResult?.allStats       || {};
+    mlbStatsByGameMap[date] = mlbResult?.statsByGamePk  || {};
+    mlbLinescore1Map[date]  = mlbResult?.linescore1     || {};
+    mlbPbpMap[date]         = mlbResult?.pbp1           || {};
+    mlb1innGamesMap[date]   = mlbResult?.mlb1innGames   || [];
+    wnbaGamesMap[date]      = wnbaGames;
+    nflGamesMap[date]       = nflGames;
+    cfbGamesMap[date]       = cfbGames;
+    ufcMap[date]            = ufcResults;
+    wnbaStatsMap[date]      = wnbaStats      || {};
+    cfbStatsMap[date]       = cfbStatsResult || {};
+    for (const r of soccerResults) {
+      if (r?.espnSlug) soccerMap[date][r.espnSlug] = { games: r.games, stats: r.stats };
     }
   }));
 
@@ -1646,13 +1633,18 @@ async function handleRequest({ request, env }) {
     }
 
     if (sport === 'cfb') {
-      // CFB combo rush yards: player_name stored as "Player1|Player2" — sum both rush yards
+      // CFB combo rush yards: player_name stored as "Player1 & Player2" or "Player1|Player2"
       if (mkt === 'cfb_combo_rush_yds') {
-        const comboParts = (leg.player_name || '').split('|').map(n => normForLookup(n.trim())).filter(Boolean);
+        const comboParts = (leg.player_name || '').split(/[|&]/).map(n => normForLookup(n.trim())).filter(Boolean);
         if (comboParts.length !== 2) { legOutcomes[leg.id] = null; continue; }
         const statsMap = cfbStatsMap[leg.game_date] || {};
         const s1 = statsMap[comboParts[0]]; const s2 = statsMap[comboParts[1]];
-        if (!s1 || !s2) { legOutcomes[leg.id] = leg.game_date < staleDate ? 'void' : null; continue; }
+        if (!s1 || !s2) {
+          const legTeamUp = (leg.team || '').toUpperCase();
+          const gameFinal = legTeamUp && (cfbGamesMap[leg.game_date] || []).some(g => g.homeAbbr === legTeamUp || g.awayAbbr === legTeamUp);
+          legOutcomes[leg.id] = (gameFinal || leg.game_date < staleDate) ? 'void' : null;
+          continue;
+        }
         const comboVal = (s1.cfb_rush_yds ?? 0) + (s2.cfb_rush_yds ?? 0);
         legOutcomes[leg.id] = comboVal >= leg.threshold ? 'won' : 'lost';
         continue;
@@ -1660,7 +1652,9 @@ async function handleRequest({ request, env }) {
       // CFB individual player prop milestone settle: statVal >= threshold → won
       const cfbPlayerStats = (cfbStatsMap[leg.game_date] || {})[normForLookup(leg.player_name)];
       if (!cfbPlayerStats) {
-        legOutcomes[leg.id] = leg.game_date < staleDate ? 'void' : null;
+        const legTeamUp = (leg.team || '').toUpperCase();
+        const gameFinal = legTeamUp && (cfbGamesMap[leg.game_date] || []).some(g => g.homeAbbr === legTeamUp || g.awayAbbr === legTeamUp);
+        legOutcomes[leg.id] = (gameFinal || leg.game_date < staleDate) ? 'void' : null;
         continue;
       }
       const cfbStatVal = cfbPlayerStats[mkt] ?? null;
@@ -2053,15 +2047,27 @@ async function handleRequest({ request, env }) {
   // with empty stats (DNP), all legs now resolve to 'void' — refund the stake.
   const dnpRefunds = [];
   try {
-    const recentLost = await env.DB.prepare(
+    const { results: recentLost } = await env.DB.prepare(
       "SELECT id, user_id, stake_rax, received_rax, rs_username FROM parlays WHERE status='lost' AND settled_at > ?"
     ).bind(now - 3 * 86400).all();
 
-    for (const p of (recentLost.results || [])) {
-      const legRes = await env.DB.prepare(
-        "SELECT id, sport, event_id, market_type, player_name, threshold, direction, status, game_date FROM parlay_legs WHERE parlay_id=?"
-      ).bind(p.id).all();
-      const pLegs = legRes.results || [];
+    // Batch-load all legs for recently-lost parlays to avoid N+1 D1 queries
+    const legsByLostParlay = {};
+    if (recentLost.length) {
+      try {
+        const lostPh = recentLost.map(() => '?').join(',');
+        const { results: allLostLegs } = await env.DB.prepare(
+          `SELECT id, sport, event_id, market_type, player_name, threshold, direction, status, game_date, parlay_id FROM parlay_legs WHERE parlay_id IN (${lostPh})`
+        ).bind(...recentLost.map(p => p.id)).all();
+        for (const l of allLostLegs) {
+          if (!legsByLostParlay[l.parlay_id]) legsByLostParlay[l.parlay_id] = [];
+          legsByLostParlay[l.parlay_id].push(l);
+        }
+      } catch(_) {}
+    }
+
+    for (const p of recentLost) {
+      const pLegs = legsByLostParlay[p.id] || [];
 
       // Only consider all-WNBA parlays
       if (!pLegs.length) continue;
