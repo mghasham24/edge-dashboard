@@ -177,9 +177,12 @@ function resolveTeamLeg(leg, finalGames) {
       if (gameNorm === rawNorm) return true;
       const nickname = rawNorm.split(' ').slice(1).join(' ');
       if (nickname && gameNorm.endsWith(nickname)) return true;
-      if (gameAbbr === raw.toUpperCase()) return true;
+      const rawUp    = raw.toUpperCase();
+      const rawNoSp  = rawUp.replace(/\s+/g, ''); // e.g. "NC ST" → "NCST"
+      if (gameAbbr === rawUp || gameAbbr === rawNoSp) return true;
       // CFB: ESPN abbreviation is often a suffix of DK shortName (e.g. DK "UNC" → ESPN "NC")
-      if (gameAbbr && raw.length > gameAbbr.length && raw.toUpperCase().endsWith(gameAbbr)) return true;
+      if (gameAbbr && rawUp.length > gameAbbr.length && rawUp.endsWith(gameAbbr)) return true;
+      if (gameAbbr && rawNoSp.length > gameAbbr.length && rawNoSp.endsWith(gameAbbr)) return true;
       return false;
     }
 
@@ -196,11 +199,12 @@ function resolveTeamLeg(leg, finalGames) {
     return (isOver ? total > line : total < line) ? 'won' : 'lost';
   }
 
-  const dkName   = leg.player_name.replace(/ (ML|RL)$/i, '').trim();
-  const teamName = normalizeName(dkName);
-  const nickname = teamName.split(' ').slice(1).join(' ');
-  const dkUp     = dkName.toUpperCase();
-  const legTeam  = (leg.team || '').toUpperCase(); // stored DK shortName (most reliable for CFB)
+  const dkName       = leg.player_name.replace(/ (ML|RL)$/i, '').trim();
+  const teamName     = normalizeName(dkName);
+  const nickname     = teamName.split(' ').slice(1).join(' ');
+  const dkUp         = dkName.toUpperCase();
+  const legTeam      = (leg.team || '').toUpperCase(); // stored DK shortName (most reliable for CFB)
+  const legTeamNoSp  = legTeam.replace(/\s+/g, '');   // e.g. "NC ST" → "NCST" for ESPN abbr match
   const game = pickClosestGame(finalGames.filter(g => {
     const homeNorm = normalizeName(g.homeName);
     const awayNorm = normalizeName(g.awayName);
@@ -208,8 +212,12 @@ function resolveTeamLeg(leg, finalGames) {
     if (nickname && (homeNorm.endsWith(nickname) || awayNorm.endsWith(nickname))) return true;
     // Direct shortName match — exact or DK suffix (e.g. "UNC" → ESPN "NC")
     if (legTeam && (g.homeAbbr === legTeam || g.awayAbbr === legTeam)) return true;
+    // Space-stripped match: DK "NC ST" → "NCST" matches ESPN "NCST"
+    if (legTeamNoSp && (g.homeAbbr === legTeamNoSp || g.awayAbbr === legTeamNoSp)) return true;
     if (legTeam && g.homeAbbr && legTeam.length > g.homeAbbr.length && legTeam.endsWith(g.homeAbbr)) return true;
     if (legTeam && g.awayAbbr && legTeam.length > g.awayAbbr.length && legTeam.endsWith(g.awayAbbr)) return true;
+    if (legTeamNoSp && g.homeAbbr && legTeamNoSp.length > g.homeAbbr.length && legTeamNoSp.endsWith(g.homeAbbr)) return true;
+    if (legTeamNoSp && g.awayAbbr && legTeamNoSp.length > g.awayAbbr.length && legTeamNoSp.endsWith(g.awayAbbr)) return true;
     // Fallback: DK player_name suffix (older legs without leg.team)
     if (g.homeAbbr && dkUp.length > g.homeAbbr.length && dkUp.endsWith(g.homeAbbr)) return true;
     if (g.awayAbbr && dkUp.length > g.awayAbbr.length && dkUp.endsWith(g.awayAbbr)) return true;
@@ -220,7 +228,9 @@ function resolveTeamLeg(leg, finalGames) {
   const homeNorm  = normalizeName(game.homeName);
   const isHome    = homeNorm === teamName ||
                     (nickname && homeNorm.endsWith(nickname)) ||
-                    (legTeam && (game.homeAbbr === legTeam || (legTeam.length > game.homeAbbr.length && legTeam.endsWith(game.homeAbbr)))) ||
+                    (legTeam && (game.homeAbbr === legTeam || game.homeAbbr === legTeamNoSp ||
+                      (legTeam.length > game.homeAbbr.length && legTeam.endsWith(game.homeAbbr)) ||
+                      (legTeamNoSp.length > game.homeAbbr.length && legTeamNoSp.endsWith(game.homeAbbr)))) ||
                     (game.homeAbbr && dkUp.length > game.homeAbbr.length && dkUp.endsWith(game.homeAbbr));
   const teamScore = isHome ? game.homeScore : game.awayScore;
   const oppScore  = isHome ? game.awayScore : game.homeScore;
@@ -1438,7 +1448,7 @@ async function handleRequest({ request, env }) {
     ufcMap[date]       = ufcResults;
 
     // MLB boxscores and WNBA stats are fetched in parallel to avoid sequential timeout
-    const [mlbBlock, wnbaStats] = await Promise.all([
+    const [mlbBlock, wnbaStats, cfbStatsResult] = await Promise.all([
       // ── MLB block ──────────────────────────────────────────────────────────
       (async () => {
         if (!hasMlbOnDate(date)) return null;
@@ -1486,16 +1496,14 @@ async function handleRequest({ request, env }) {
       })(),
       // ── WNBA stats block ───────────────────────────────────────────────────
       hasWnbaOnDate(date) ? withTimeout(getWnbaPlayerStats(date, proxyKey), 12000, {}) : Promise.resolve({}),
+      // ── CFB player stats — parallel with MLB/WNBA to avoid sequential timeout ──
+      hasCfbOnDate(date) ? withTimeout(
+        getCfbPlayerStats(date, eligibleLegs.filter(l => l.game_date === date && legSportOf(l) === 'cfb'), proxyKey),
+        15000, {}
+      ) : Promise.resolve({}),
     ]);
 
-    // CFB player stats (fetched via VPS proxy — ESPN blocks CF IPs for CFB)
-    if (hasCfbOnDate(date)) {
-      const cfbLegsForDate = eligibleLegs.filter(l => l.game_date === date && legSportOf(l) === 'cfb');
-      const cfbStats = await withTimeout(getCfbPlayerStats(date, cfbLegsForDate, proxyKey), 15000, {});
-      cfbStatsMap[date] = cfbStats;
-    } else {
-      cfbStatsMap[date] = {};
-    }
+    cfbStatsMap[date] = cfbStatsResult || {};
 
     if (mlbBlock) {
       mlbStatsMap[date]       = mlbBlock.allStats;
