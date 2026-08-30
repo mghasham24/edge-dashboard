@@ -958,11 +958,15 @@ async function getCfbPlayerStats(date, legs, proxyKey = '') {
         for (const sb of (teamBlock.statistics || [])) {
           const labels = sb.names || sb.labels || [];
           const statType = (sb.type || sb.abbreviation || '').toLowerCase();
-          // Determine passing/rushing/receiving group
+          // Use label-based detection (mirrors frontend app.js) — ESPN CFB may omit or vary sb.type.
+          // CAR = carries (rushing), REC = receptions (receiving), C/ATT or ATT = passing attempts.
+          const hasCar = labels.includes('CAR');
+          const hasRec = labels.includes('REC');
+          const hasPas = labels.includes('C/ATT') || labels.includes('ATT');
           let group = null;
-          if (statType === 'passing' || labels.includes('QBR')) group = 'passing';
-          else if (statType === 'rushing') group = 'rushing';
-          else if (statType === 'receiving') group = 'receiving';
+          if (statType === 'passing' || labels.includes('QBR') || hasPas) group = 'passing';
+          else if (statType === 'rushing' || hasCar) group = 'rushing';
+          else if (statType === 'receiving' || hasRec) group = 'receiving';
           if (!group) continue;
 
           const ydsIdx = labels.indexOf('YDS');
