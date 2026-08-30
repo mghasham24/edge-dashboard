@@ -8597,11 +8597,27 @@
                     propNeeded.forEach(function(n) {
                         var val2 = null, gi3 = null;
                         if (n.marketType === 'cfb_combo_rush_yds') {
-                            var comboParts = n.playerName.split('|').map(function(p) { return normSlipName(p.trim()); });
+                            var comboParts = n.playerName.split(/[|&]/).map(function(p) { return normSlipName(p.trim()); });
+                            // Last-name suffix fallback: "barfield" matches "cam barfield" in cfbPlayerStats
+                            function cfbLookupFE(partial) {
+                                if (cfbPlayerStats[partial]) return cfbPlayerStats[partial];
+                                var lastName = partial.split(' ').pop();
+                                var found = null;
+                                Object.keys(cfbPlayerStats).forEach(function(k) {
+                                    if (!found && k.split(' ').pop() === lastName) found = cfbPlayerStats[k];
+                                });
+                                return found;
+                            }
                             val2 = comboParts.reduce(function(sum, p) {
-                                return sum + ((cfbPlayerStats[p] && cfbPlayerStats[p].cfb_rush_yds) || 0);
+                                var ps = cfbLookupFE(p);
+                                return sum + ((ps && ps.cfb_rush_yds) || 0);
                             }, 0);
-                            var comboEvt = comboParts.reduce(function(found, p) { return found || cfbPlayerEvt[p] || null; }, null);
+                            var comboEvt = comboParts.reduce(function(found, p) {
+                                if (found) return found;
+                                var lastName2 = p.split(' ').pop();
+                                var key = Object.keys(cfbPlayerEvt).find(function(k) { return k === p || k.split(' ').pop() === lastName2; });
+                                return key ? cfbPlayerEvt[key] : null;
+                            }, null);
                             gi3 = comboEvt ? cfbEventInfoMap[comboEvt] : null;
                         } else {
                             var norm2 = normSlipName(n.playerName);
