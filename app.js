@@ -7867,7 +7867,19 @@
         liveSlipInterval = setInterval(fetchLiveSlipStats, 60 * 1000);
     }
 
-    function findTeamGame(playerName, marketType, games) {
+    function findTeamGame(playerName, marketType, games, gameStartMs) {
+        // When multiple games match (doubleheader), pick the one whose start is closest to gameStartMs.
+        function pickClosest(candidates) {
+            if (!candidates.length) return null;
+            if (!gameStartMs || candidates.length === 1) return candidates[0];
+            return candidates.reduce(function(best, g) {
+                var gMs = g.gameDate ? new Date(g.gameDate).getTime() : 0;
+                var bMs = best.gameDate ? new Date(best.gameDate).getTime() : 0;
+                if (!gMs) return best;
+                if (!bMs) return g;
+                return Math.abs(gMs - gameStartMs) < Math.abs(bMs - gameStartMs) ? g : best;
+            });
+        }
         if (marketType === 'team_total') {
             // Capture full team segments: "MIL Brewers @ SD Padres U8" → ["MIL Brewers", "SD Padres"]
             var m = playerName.match(/^(.+?)\s+@\s+(.+?)\s+[OU][\d.]+/i);
@@ -7877,7 +7889,7 @@
             var homeAbbr  = homeParts[0].toUpperCase();  // "SD"
             var awayNick  = normSlipName(awayParts.slice(1).join(' ')); // "brewers"
             var homeNick  = normSlipName(homeParts.slice(1).join(' ')); // "padres"
-            return games.find(function(g) {
+            return pickClosest(games.filter(function(g) {
                 var ga  = ((g.teams && g.teams.away && g.teams.away.team && g.teams.away.team.abbreviation) || '').toUpperCase();
                 var gh  = ((g.teams && g.teams.home && g.teams.home.team && g.teams.home.team.abbreviation) || '').toUpperCase();
                 var gan = normSlipName((g.teams && g.teams.away && g.teams.away.team && g.teams.away.team.name) || '');
@@ -7885,7 +7897,7 @@
                 var abbrMatch = ga === awayAbbr && gh === homeAbbr;
                 var nickMatch = (awayNick && homeNick) && gan.endsWith(awayNick) && ghn.endsWith(homeNick);
                 return abbrMatch || nickMatch;
-            }) || null;
+            }));
         }
         var teamName = normSlipName(playerName.replace(/ (ML|RL)$/i, '').trim());
         // DK names like "CIN Reds" differ from MLB API full names "Cincinnati Reds".
@@ -7893,7 +7905,7 @@
         // or 3-letter abbreviation prefix ("cin" / "tb" / "tor").
         var nickname  = teamName.split(' ').slice(1).join(' '); // "cin reds" → "reds"
         var abbrFirst = teamName.split(' ')[0];                 // "cin reds" → "cin"
-        return games.find(function(g) {
+        return pickClosest(games.filter(function(g) {
             var hn = normSlipName((g.teams && g.teams.home && g.teams.home.team && g.teams.home.team.name) || '');
             var an = normSlipName((g.teams && g.teams.away && g.teams.away.team && g.teams.away.team.name) || '');
             var ha = ((g.teams && g.teams.home && g.teams.home.team && g.teams.home.team.abbreviation) || '').toLowerCase();
@@ -7901,7 +7913,7 @@
             return hn === teamName || an === teamName ||
                    (nickname && (hn.endsWith(nickname) || an.endsWith(nickname))) ||
                    ha === abbrFirst || aa === abbrFirst;
-        }) || null;
+        }));
     }
 
     function updateLegStatus(parlayId, legIndex, currentVal, threshold, direction, marketType, gameInfo, isTeam) {
@@ -8879,7 +8891,7 @@
                 // For MLB/WNBA/NFL, use the stored game_date as-is. If the date is in the future, the schedule API
                 // returns Preview games → the polling correctly shows "Preview" and waits for the game to start.
                 var gd = gdRaw;
-                var legObj = { parlayId: s.id, legIndex: li, playerName: leg.player_name, marketType: mkt, threshold: parseFloat(leg.threshold) || 0, direction: leg.direction, isTeam: mkt.startsWith('team_'), sport: leg.sport || '', eventName: leg.event_name || '', team: leg.team || '' };
+                var legObj = { parlayId: s.id, legIndex: li, playerName: leg.player_name, marketType: mkt, threshold: parseFloat(leg.threshold) || 0, direction: leg.direction, isTeam: mkt.startsWith('team_'), sport: leg.sport || '', eventName: leg.event_name || '', team: leg.team || '', gameStartMs: leg.game_start_ms || 0 };
                 if (WNBA_MKT_SET[mkt] || leg.sport === 'wnba') {
                     if (!wnbaNeededByDate[gd]) wnbaNeededByDate[gd] = [];
                     wnbaNeededByDate[gd].push(legObj);
@@ -8965,7 +8977,7 @@
 
                 // Team market legs: update score chip (no boxscore needed)
                 needed.filter(function(n) { return n.isTeam; }).forEach(function(n) {
-                    var game = findTeamGame(n.playerName, n.marketType, games);
+                    var game = findTeamGame(n.playerName, n.marketType, games, n.gameStartMs);
                     var gi = game ? gameInfoMap[game.gamePk] : null;
                     // For ML/RL legs, identify the picked team so updateLegStatus can show Winning/Losing
                     if (gi && (n.marketType === 'team_ml' || n.marketType === 'team_runline') && gi.homeScore != null) {
