@@ -11284,6 +11284,7 @@
     var casinoVerifyLoading = false;
 
     function casinoRenderVerifyGate() {
+        casinoVerifyLoading = false;
         var panel = document.getElementById('casino-panel');
         if (!panel) return;
         panel.innerHTML =
@@ -11313,8 +11314,8 @@
                             '<div style="width:100%;">' +
                                 '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:6px;">Enter the code @edgebot sends back</div>' +
                                 '<div style="display:flex;gap:8px;">' +
-                                    '<input type="number" id="casino-verify-code" placeholder="6-digit code" maxlength="6" style="flex:1;padding:10px 12px;border-radius:8px;border:1.5px solid var(--border2);background:var(--bg2);color:var(--text);font-size:15px;font-weight:700;letter-spacing:.08em;font-family:var(--mono,monospace);-moz-appearance:textfield;" oninput="this.value=this.value.replace(/[^0-9]/g,\'\').slice(0,6)">' +
-                                    '<button onclick="casinoSubmitVerifyCode()" style="padding:10px 18px;border-radius:8px;background:var(--accent);color:#fff;font-size:13px;font-weight:700;border:none;cursor:pointer;white-space:nowrap;font-family:var(--sans)">Verify</button>' +
+                                    '<input type="text" inputmode="numeric" id="casino-verify-code" placeholder="6-digit code" maxlength="6" autocomplete="one-time-code" style="flex:1;padding:10px 12px;border-radius:8px;border:1.5px solid var(--border2);background:var(--bg2);color:var(--text);font-size:15px;font-weight:700;letter-spacing:.08em;font-family:var(--mono,monospace);" oninput="this.value=this.value.replace(/[^0-9]/g,\'\').slice(0,6)">' +
+                                    '<button type="button" onclick="casinoSubmitVerifyCode()" style="padding:10px 18px;border-radius:8px;background:var(--accent);color:#fff;font-size:13px;font-weight:700;border:none;cursor:pointer;white-space:nowrap;font-family:var(--sans)">Verify</button>' +
                                 '</div>' +
                                 '<div style="margin-top:10px;">' +
                                     '<div style="font-size:12px;color:var(--text2);margin-bottom:5px;">Referred by (optional)</div>' +
@@ -11361,7 +11362,7 @@
                 if (d.ok && d.verified) {
                     parlayRsVerified = true;
                     parlayRsUsername = d.rsUsername || null;
-                    if (currentUser) { currentUser.rs_verified = 1; currentUser.rs_username = d.rsUsername || null; }
+                    if (currentUser) { currentUser.parlay_verified = 1; currentUser.rs_verified = 1; currentUser.rs_username = d.rsUsername || null; }
                     // Reload casino now that RS is linked
                     renderCasinoPanel();
                     casinoLoadBalance();
@@ -11382,8 +11383,7 @@
         var panel = document.getElementById('casino-panel');
         if (!panel) return;
         // Gate: RS account required. Show verify screen if not verified.
-        // Casino is admin-only while deposit card issues are resolved.
-        if (!currentUser || !currentUser.is_admin) {
+        if (!currentUser || (!currentUser.is_admin && !currentUser.parlay_verified)) {
             casinoRenderVerifyGate();
             return;
         }
@@ -11434,6 +11434,12 @@
         casinoStopDepositPoll();
         var overlay = document.getElementById('casino-modal');
         if (overlay) overlay.style.display = 'none';
+        // Reload balance whenever modal closes while a deposit was in-flight —
+        // covers the case where the user closes manually after cron already confirmed.
+        if (casinoDepositPending) {
+            casinoDepositPending = null;
+            casinoLoadBalance();
+        }
     }
 
     function hideCasinoModalBg(e) {
@@ -11946,16 +11952,17 @@
         casinoDepositPollTimer = setInterval(async function() {
             if (!casinoDepositPending) { casinoStopDepositPoll(); return; }
             try {
-                var res  = await fetch('/api/casino/deposit-check');
+                // Lightweight DB-only check — no RS API calls. RS work is cron-only.
+                var res  = await fetch('/api/casino/deposit-status');
                 var data = await res.json();
-                if (data.confirmed > 0) {
+                if (data.confirmed || !data.pending) {
                     casinoStopDepositPoll();
                     casinoDepositPending = null;
                     hideCasinoModal();
                     await casinoLoadBalance();
                 }
             } catch(e) {}
-        }, 30000);
+        }, 10000);
     }
 
     function casinoStopDepositPoll() {
@@ -17373,9 +17380,9 @@
         var hpb = document.getElementById('header-parlays-btn');
         if (hpb) hpb.style.display = currentUser ? '' : 'none';
 
-        // Casino — admin only while deposit issues are resolved
+        // Casino — visible to all logged-in users
         var hcb = document.getElementById('header-casino-btn');
-        if (hcb) hcb.style.display = (currentUser && currentUser.is_admin) ? '' : 'none';
+        if (hcb) hcb.style.display = currentUser ? '' : 'none';
 
         // Pro → hamburger menu item
         var ddManage = document.getElementById('dd-manage-sub-item');
