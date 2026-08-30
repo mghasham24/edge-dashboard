@@ -128,10 +128,21 @@ async function fetchCardOwner(cardId, authInfo, sessionToken) {
   } catch { return null; }
 }
 
-async function handleRequest({ request, env, userId }) {
+async function handleRequest({ request, env, userId, cronOk }) {
+  const url2       = new URL(request.url);
+  const debug      = url2.searchParams.has('debug');
   const now        = Math.floor(Date.now() / 1000);
   const authInfo   = env.EDGEBOT_AUTH_INFO;
   const sessionTok = env.EDGEBOT_SESSION_TOKEN || '';
+
+  if (debug && !cronOk) {
+    const session = await getSession(request, env.DB);
+    const user = session
+      ? await env.DB.prepare('SELECT is_admin FROM users WHERE id=?').bind(session.user_id).first()
+      : null;
+    if (!user?.is_admin) return err('Unauthorized', 401);
+  }
+
   if (!authInfo) return err('EDGEBOT_AUTH_INFO not configured', 500);
 
   // Load all pending deposits — scoped to one user if called by user, all if called by cron
@@ -150,7 +161,7 @@ async function handleRequest({ request, env, userId }) {
   const recentExpired = expiredRows.results || [];
 
   if (!pending.length && !recentExpired.length) {
-    return ok({ confirmed: false, checked: 0, credited: 0 });
+    return ok({ confirmed: false, checked: 0, credited: 0, pending: 0 });
   }
 
   // Build card → deposit lookup maps
@@ -163,10 +174,55 @@ async function handleRequest({ request, env, userId }) {
   let confirmed = 0;
   let credited  = 0;
 
+  // ── Debug mode: full 10-view scan, mirrors parlays/deposit-check.js debug block ──
+  if (debug) {
+    const allKnownCards = new Set([
+      ...Object.keys(cardMap), ...Object.keys(expiredMap),
+    ].map(Number));
+    const scans = await Promise.all([
+      ['incoming','open'],['incoming','accepted'],['incoming','rejected'],['incoming','expired'],['incoming','completed'],
+      ['outgoing','open'],['outgoing','accepted'],['outgoing','rejected'],['outgoing','expired'],['outgoing','completed'],
+    ].map(async ([view, status]) => {
+      try {
+        const list = await fetchOffers(authInfo, sessionTok, view, status);
+        const isOutAccepted = view === 'outgoing' && status === 'accepted';
+        const relevant = list.filter(o => { const c = getCardId(o); return allKnownCards.has(Number(c)); });
+        const rawSample = list.slice(0, isOutAccepted ? 5 : 2).map(o => {
+          const cardId = getCardId(o);
+          const slim = { id: o.id, amount: o.amount, counterAmount: o.counterAmount, status: o.status,
+            cardId: o.cardId, linkedCardIds: o.linkedCardIds, card_id: o.card_id,
+            resolvedCardId: cardId, isKnown: allKnownCards.has(Number(cardId)) };
+          if (isOutAccepted) Object.keys(o).forEach(k => { if (typeof o[k] !== 'object') slim[k] = o[k]; });
+          return slim;
+        });
+        return { view, status, count: list.length,
+          relevant: relevant.map(o => ({ id: o.id, cardId: getCardId(o), amount: o.amount, counterAmount: o.counterAmount, status: o.status })),
+          rawSample };
+      } catch (e) { return { view, status, error: e.message }; }
+    }));
+    return new Response(JSON.stringify({
+      pending: pending.map(d => ({ id: d.id, user_id: d.user_id, rax_requested: d.rax_requested, card_id: d.card_id, status: d.status, created_at: d.created_at, rs_offer_id: d.rs_offer_id })),
+      recentExpired: recentExpired.map(d => ({ id: d.id, user_id: d.user_id, rax_requested: d.rax_requested, card_id: d.card_id, created_at: d.created_at })),
+      cardMap, expiredMap, scans,
+    }, null, 2), { headers: { 'Content-Type': 'application/json' } });
+  }
+
   // ── activateDeposit ──────────────────────────────────────────────────────────
   // Credits the user and marks deposit confirmed. Mirrors parlays activateParlay.
   async function activateDeposit(dep, cardId, offerId, amount) {
     if (!amount || amount <= 0) return;
+
+    // FINAL GUARD: verify card left edgebot before crediting.
+    // If edgebot still owns it, the offer wasn't truly accepted — do not credit.
+    // null = network timeout — allow through to avoid blocking real deposits.
+    const finalCardId = cardId || dep.card_id;
+    if (finalCardId) {
+      const ownerNow = await fetchCardOwner(finalCardId, authInfo, sessionTok);
+      if (ownerNow === EDGEBOT_USER) {
+        errors.push({ depositId: dep.id, cardId: finalCardId, note: 'final_guard: edgebot still owns card — not crediting' });
+        return;
+      }
+    }
 
     // Guard: same offer ID must never credit two deposits
     if (offerId) {
@@ -193,11 +249,43 @@ async function handleRequest({ request, env, userId }) {
     }
   }
 
+  // ── Phase 0: Direct offer-by-ID lookup — mirrors parlays deposit-check Phase 0 ──
+  // When edgebot counters, rs_offer_id is stored. Fetch that offer directly next run —
+  // O(1) per deposit, immune to pagination ordering, catches counter-offer acceptance fast.
+  async function fetchOffer(offerId) {
+    try {
+      const res = await fetch(
+        `https://web.realapp.com/cardmarketplaceoffers/${offerId}`,
+        { headers: buildHeaders(authInfo, sessionTok), signal: (() => { const c = new AbortController(); setTimeout(() => c.abort(), 8000); return c.signal; })() }
+      );
+      if (!res.ok) return null;
+      return await res.json();
+    } catch { return null; }
+  }
+
+  const directCheckRows = [...pending, ...recentExpired].filter(d => d.rs_offer_id != null);
+  const directActivated = new Set();
+  for (const dep of directCheckRows) {
+    const offer = await fetchOffer(dep.rs_offer_id);
+    if (!offer) continue;
+    const status = (offer.status || offer.offerStatus || '').toLowerCase();
+    if (status !== 'accepted') continue;
+    const cardId = getCardId(offer) ?? dep.card_id;
+    const amount = Math.max(
+      offer.counterAmount ?? 0,
+      offer.amount        ?? 0,
+      offer.offerAmount   ?? 0,
+      dep.rax_requested,
+    );
+    await activateDeposit(dep, cardId, dep.rs_offer_id, amount);
+    directActivated.add(dep.rs_offer_id);
+  }
+
   // ── Phase 0b: Card ownership check ──────────────────────────────────────────
   // Most reliable signal — card transfers to user the moment they accept any offer.
-  // Cap at 15 cards to stay within CF 30s wall-clock.
+  // Cap at 15 cards to stay within CF 30s wall-clock. Skip deposits already activated in Phase 0.
   const ownershipRows = [...pending, ...recentExpired]
-    .filter(dep => dep.card_id != null)
+    .filter(dep => dep.card_id != null && !directActivated.has(dep.rs_offer_id))
     .slice(0, 15);
 
   for (const dep of ownershipRows) {
@@ -324,24 +412,39 @@ async function handleRequest({ request, env, userId }) {
     ).bind(...toExpire.map(d => d.id)).run();
   }
 
-  return ok({
-    confirmed,
-    credited,
+  const result = {
+    ts: now, confirmed, credited,
     checked: allSettled.length + (incomingOpen || []).length,
     expired: toExpire.length,
+    pending: pending.length,
     errors,
-  });
+  };
+
+  // Write cron result to odds_cache for admin inspection
+  try {
+    await env.DB.prepare(
+      'INSERT INTO odds_cache (cache_key,data,fetched_at) VALUES(?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data,fetched_at=excluded.fetched_at'
+    ).bind('casino_deposit_check_debug', JSON.stringify(result), now).run();
+  } catch (_) {}
+
+  return ok(result);
 }
 
 export async function onRequestGet({ request, env }) {
   const url     = new URL(request.url);
   const cronKey = url.searchParams.get('_cron_key');
+  const cronOk  = !!(cronKey && env.CRON_SECRET && cronKey === env.CRON_SECRET);
 
-  if (cronKey && env.CRON_SECRET && cronKey === env.CRON_SECRET) {
-    return handleRequest({ request, env, userId: null });
+  if (cronOk) {
+    return handleRequest({ request, env, userId: null, cronOk: true });
+  }
+
+  // debug param handled inside handleRequest (admin-only auth check)
+  if (url.searchParams.has('debug')) {
+    return handleRequest({ request, env, userId: null, cronOk: false });
   }
 
   const session = await getSession(request, env.DB);
   if (!session) return err('Unauthorized', 401);
-  return handleRequest({ request, env, userId: session.user_id });
+  return handleRequest({ request, env, userId: session.user_id, cronOk: false });
 }

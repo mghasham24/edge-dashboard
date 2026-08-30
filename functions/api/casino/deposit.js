@@ -16,29 +16,19 @@ const INVENTORY_MAX_AGE = 10 * 60;
 const RS_DEVICE_UUID = '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e';
 const EDGEBOT_USER   = 'V3yGgkkJ';
 
-// Identical to parlays/place.js — shared RS token (always fresh from TM bridge).
-async function getSharedRsToken(env) {
-  try {
-    const row = await env.DB.prepare(
-      "SELECT data FROM odds_cache WHERE cache_key='meta:rs_auth_token'"
-    ).first();
-    if (!row?.data) return null;
-    const parsed = JSON.parse(row.data);
-    return parsed.token || null;
-  } catch { return null; }
-}
-
-// Identical to parlays/place.js verifyLive.
-async function verifyLive(cardId, rsToken) {
-  if (!rsToken) return null;
+// Use edgebot's own credentials for card ownership verification.
+// The shared user token (meta:rs_auth_token) goes stale; edgebot creds are rotated regularly.
+async function verifyLive(cardId, authInfo, sessionToken) {
+  if (!authInfo) return null;
   try {
     const res = await fetch(`https://web.realapp.com/collectingcards/${cardId}`, {
       headers: {
-        'Accept':           'application/json',
-        'real-auth-info':   rsToken,
-        'real-device-uuid': RS_DEVICE_UUID,
-        'real-device-type': 'desktop_web',
-        'real-version':     '36',
+        'Accept':             'application/json',
+        'real-auth-info':     authInfo,
+        'real-session-token': sessionToken || '',
+        'real-device-uuid':   RS_DEVICE_UUID,
+        'real-device-type':   'desktop_web',
+        'real-version':       '36',
       },
       signal: AbortSignal.timeout(5000),
     });
@@ -50,7 +40,9 @@ async function verifyLive(cardId, rsToken) {
   } catch { return null; }
 }
 
-// Identical to parlays/place.js verifySnapshot.
+// Positive-only check: returns true if card is in snapshot, null otherwise.
+// Returns null (not false) when card is absent — snapshot may be incomplete if RS
+// rate-limited one sport during reconcile. Deletion is handled by verified_at staleness.
 async function verifySnapshot(cardId, env, now) {
   try {
     const row = await env.DB.prepare(
@@ -58,13 +50,22 @@ async function verifySnapshot(cardId, env, now) {
     ).first();
     if (!row || (now - row.fetched_at) > INVENTORY_MAX_AGE) return null;
     const ids = JSON.parse(row.data);
-    return Array.isArray(ids) && ids.includes(Number(cardId));
+    if (!Array.isArray(ids)) return null;
+    return ids.includes(Number(cardId)) ? true : null;
   } catch { return null; }
 }
 
-async function verifyEdgebotOwns(cardId, env, now, rsToken) {
-  const live = await verifyLive(cardId, rsToken);
+async function verifyEdgebotOwns(cardId, env, now) {
+  const live = await verifyLive(cardId, env.EDGEBOT_AUTH_INFO, env.EDGEBOT_SESSION_TOKEN || '');
+  // If live check succeeds (true/false), trust it over snapshot.
   if (live !== null) return live;
+  // Live returned null — RS unreachable or session expired.
+  // Fall back to snapshot only if it is very fresh (< 2 min) to avoid serving stale cards.
+  const row = await env.DB.prepare(
+    "SELECT fetched_at FROM odds_cache WHERE cache_key='card_inventory'"
+  ).first();
+  const snapshotAge = row ? (now - row.fetched_at) : 9999;
+  if (snapshotAge > 120) return null; // snapshot too stale — skip rather than risk a wrong card
   return verifySnapshot(cardId, env, now);
 }
 
@@ -72,7 +73,6 @@ async function verifyEdgebotOwns(cardId, env, now, rsToken) {
 // claimed_for_casino_at is set atomically on deposit_cards; if another concurrent request
 // claims the same card first (changes === 0), we skip to the next card.
 async function pickCard(env, now, db) {
-  const rsToken  = await getSharedRsToken(env);
   const excluded = [];
 
   for (let i = 0; i < 5; i++) {
@@ -88,7 +88,7 @@ async function pickCard(env, now, db) {
     ).bind(now - VERIFY_MAX_AGE, now - MIN_DEPOSIT_TTL, ...excluded).first();
     if (!row) break;
 
-    const owned = await verifyEdgebotOwns(row.card_id, env, now, rsToken);
+    const owned = await verifyEdgebotOwns(row.card_id, env, now);
     if (owned === false) {
       await db.prepare('DELETE FROM deposit_cards WHERE card_id=?').bind(row.card_id).run();
       excluded.push(row.card_id);
