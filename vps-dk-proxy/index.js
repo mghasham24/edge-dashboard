@@ -24,6 +24,7 @@ function parseAmerican(str) {
 }
 const ESPN_WNBA   = 'https://site.api.espn.com/apis/site/v2/sports/basketball/wnba';
 const ESPN_NFL    = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl';
+const ESPN_CFB    = 'https://site.api.espn.com/apis/site/v2/sports/football/college-football';
 const ESPN_SOCCER = 'https://site.api.espn.com/apis/site/v2/sports/soccer';
 
 if (!SECRET) { console.error('DK_PROXY_KEY env var required'); process.exit(1); }
@@ -108,6 +109,45 @@ const server = http.createServer(async (req, res) => {
     const espnUrl = `${ESPN_NFL}/scoreboard?dates=${dates}${seasontype ? `&seasontype=${seasontype}` : ''}`;
     try {
       const espnRes = await fetch(espnUrl, { headers: ESPN_HEADERS, signal: AbortSignal.timeout(10000) });
+      const body = await espnRes.text();
+      res.writeHead(espnRes.status, { 'Content-Type': 'application/json' });
+      res.end(body);
+    } catch(e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: e.message }));
+    }
+    return;
+  }
+
+  // ── ESPN CFB scoreboard ───────────────────────────────────────────────────
+  // GET /espn-cfb/scoreboard?dates=YYYYMMDD[&seasontype=N]&key=SECRET
+  if (url.pathname === '/espn-cfb/scoreboard') {
+    const dates      = url.searchParams.get('dates');
+    const seasontype = url.searchParams.get('seasontype');
+    if (!dates) { res.writeHead(400); res.end('Missing dates param'); return; }
+    const espnUrl = `${ESPN_CFB}/scoreboard?dates=${dates}${seasontype ? `&seasontype=${seasontype}` : ''}`;
+    try {
+      const espnRes = await fetch(espnUrl, { headers: ESPN_HEADERS, signal: AbortSignal.timeout(10000) });
+      const body = await espnRes.text();
+      res.writeHead(espnRes.status, { 'Content-Type': 'application/json' });
+      res.end(body);
+    } catch(e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: e.message }));
+    }
+    return;
+  }
+
+  // ── ESPN CFB game summary ─────────────────────────────────────────────────
+  // GET /espn-cfb/summary?event=ID&key=SECRET
+  if (url.pathname === '/espn-cfb/summary') {
+    const event = url.searchParams.get('event');
+    if (!event) { res.writeHead(400); res.end('Missing event param'); return; }
+    try {
+      const espnRes = await fetch(
+        `${ESPN_CFB}/summary?event=${event}`,
+        { headers: ESPN_HEADERS, signal: AbortSignal.timeout(10000) }
+      );
       const body = await espnRes.text();
       res.writeHead(espnRes.status, { 'Content-Type': 'application/json' });
       res.end(body);

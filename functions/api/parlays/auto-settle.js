@@ -805,8 +805,52 @@ async function getWnbaPlayerStats(date, proxyKey) {
 
 // ── CFB helpers ───────────────────────────────────────────────────────────────
 
-async function getCfbFinalGames(date) {
-  return getEspnFinalGames(ESPN_CFB, date); // ESPN CFB works from CF directly — no VPS proxy needed
+async function getCfbFinalGames(date, proxyKey = '') {
+  const yyyymmdd = date.replace(/-/g, '');
+  // Route through VPS proxy (ESPN blocks CF IPs for CFB as it does for NFL)
+  if (proxyKey) {
+    const base = `${VPS_HOST}/espn-cfb/scoreboard?dates=${yyyymmdd}&key=${encodeURIComponent(proxyKey)}`;
+    const urls = [base, base + '&seasontype=1']; // fetch regular + any Week 0 bucket
+    try {
+      const responses = await Promise.all(urls.map(url =>
+        fetch(url, { signal: AbortSignal.timeout(10000) })
+          .then(async r => ({ ok: r.ok, data: r.ok ? await r.json() : null }))
+          .catch(() => ({ ok: false, data: null }))
+      ));
+      function parseEvents(data) {
+        return (data?.events || [])
+          .filter(e => {
+            const st = e.competitions?.[0]?.status?.type;
+            return st?.completed || (st?.name || '').toUpperCase().includes('FINAL');
+          })
+          .map(e => {
+            const comps = e.competitions?.[0]?.competitors || [];
+            const home  = comps.find(c => c.homeAway === 'home');
+            const away  = comps.find(c => c.homeAway === 'away');
+            return {
+              eventId:   e.id,
+              homeName:  home?.team?.displayName || home?.team?.name || '',
+              awayName:  away?.team?.displayName || away?.team?.name || '',
+              homeAbbr:  (home?.team?.abbreviation || '').toUpperCase(),
+              awayAbbr:  (away?.team?.abbreviation || '').toUpperCase(),
+              homeScore: parseInt(home?.score, 10),
+              awayScore: parseInt(away?.score, 10),
+            };
+          })
+          .filter(g => !isNaN(g.homeScore) && !isNaN(g.awayScore));
+      }
+      const seen = new Set();
+      const allGames = [];
+      for (const r of responses) {
+        if (!r.ok || !r.data) continue;
+        for (const g of parseEvents(r.data)) {
+          if (!seen.has(g.eventId)) { seen.add(g.eventId); allGames.push(g); }
+        }
+      }
+      return allGames;
+    } catch(e) { return []; }
+  }
+  return getEspnFinalGames(ESPN_CFB, date);
 }
 
 // CFB ESPN summary stat group label sets
@@ -817,11 +861,14 @@ const CFB_STAT_GROUPS = {
   cfb_recv_yds: { group: 'receiving', ydsLabel: 'YDS', tdLabel: null  },
 };
 
-async function getCfbPlayerStats(date, legs) {
+async function getCfbPlayerStats(date, legs, proxyKey = '') {
   const yyyymmdd = date.replace(/-/g, '');
   try {
-    const sbRes = await fetch(`${ESPN_CFB}/scoreboard?dates=${yyyymmdd}`, {
-      headers: ESPN_HEADERS, signal: AbortSignal.timeout(10000),
+    const sbUrl = proxyKey
+      ? `${VPS_HOST}/espn-cfb/scoreboard?dates=${yyyymmdd}&key=${encodeURIComponent(proxyKey)}`
+      : `${ESPN_CFB}/scoreboard?dates=${yyyymmdd}`;
+    const sbRes = await fetch(sbUrl, {
+      headers: proxyKey ? {} : ESPN_HEADERS, signal: AbortSignal.timeout(10000),
     });
     if (!sbRes.ok) return {};
     const sbData = await sbRes.json();
@@ -858,8 +905,11 @@ async function getCfbPlayerStats(date, legs) {
 
     const summaries = await Promise.allSettled([...neededEventIds].map(async id => {
       try {
-        const r = await fetch(`${ESPN_CFB}/summary?event=${id}`, {
-          headers: ESPN_HEADERS, signal: AbortSignal.timeout(10000),
+        const sumUrl = proxyKey
+          ? `${VPS_HOST}/espn-cfb/summary?event=${id}&key=${encodeURIComponent(proxyKey)}`
+          : `${ESPN_CFB}/summary?event=${id}`;
+        const r = await fetch(sumUrl, {
+          headers: proxyKey ? {} : ESPN_HEADERS, signal: AbortSignal.timeout(10000),
         });
         return r.ok ? r.json() : null;
       } catch(e) { return null; }
@@ -1352,7 +1402,7 @@ async function handleRequest({ request, env }) {
                             ? withTimeout(getMlbFinalGames(date), 9000, [])             : Promise.resolve([]),
       hasWnbaOnDate(date) ? withTimeout(getWnbaFinalGames(date, proxyKey), 9000, [])  : Promise.resolve([]),
       hasNflOnDate(date)  ? withTimeout(getEspnFinalGames(ESPN_NFL, date, env.DB, proxyKey), 9000, [])  : Promise.resolve([]),
-      hasCfbOnDate(date)  ? withTimeout(getCfbFinalGames(date), 9000, [])             : Promise.resolve([]),
+      hasCfbOnDate(date)  ? withTimeout(getCfbFinalGames(date, proxyKey), 9000, [])   : Promise.resolve([]),
       hasUfcOnDate(date)  ? withTimeout(getUfcResults(date, proxyKey), 9000, {})      : Promise.resolve({}),
     ]);
 
@@ -1413,10 +1463,10 @@ async function handleRequest({ request, env }) {
       hasWnbaOnDate(date) ? withTimeout(getWnbaPlayerStats(date, proxyKey), 12000, {}) : Promise.resolve({}),
     ]);
 
-    // CFB player stats (fetched separately — ESPN CFB summary, directly from CF)
+    // CFB player stats (fetched via VPS proxy — ESPN blocks CF IPs for CFB)
     if (hasCfbOnDate(date)) {
       const cfbLegsForDate = eligibleLegs.filter(l => l.game_date === date && legSportOf(l) === 'cfb');
-      const cfbStats = await withTimeout(getCfbPlayerStats(date, cfbLegsForDate), 15000, {});
+      const cfbStats = await withTimeout(getCfbPlayerStats(date, cfbLegsForDate, proxyKey), 15000, {});
       cfbStatsMap[date] = cfbStats;
     } else {
       cfbStatsMap[date] = {};
