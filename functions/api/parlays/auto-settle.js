@@ -142,15 +142,20 @@ function normalizeName(name) {
 // ── Doubleheader game picker ──────────────────────────────────────────────────
 // When multiple games match the same matchup (doubleheader), pick the one whose
 // scheduled start (gameStartMs) is closest to the leg's stored game_start_ms.
-// Falls back to the first candidate for legs without a stored start time (old slips).
+// Returns null if the closest Final game is > 4 hours away — prevents game 1 from
+// settling game 2 legs before game 2 is done.
+// Falls back to candidates[0] for legs without a stored start time (old slips).
+const GAME_MATCH_TOLERANCE_MS = 4 * 60 * 60 * 1000;
 function pickClosestGame(candidates, legStartMs) {
   if (!candidates.length) return null;
-  if (candidates.length === 1 || !legStartMs) return candidates[0];
-  return candidates.reduce((best, g) => {
-    if (!g.gameStartMs) return best;
-    if (!best.gameStartMs) return g;
-    return Math.abs(g.gameStartMs - legStartMs) < Math.abs(best.gameStartMs - legStartMs) ? g : best;
-  });
+  if (!legStartMs) return candidates[0];
+  const withTimes = candidates.filter(g => g.gameStartMs);
+  if (!withTimes.length) return candidates[0];
+  const best = withTimes.reduce((b, g) =>
+    Math.abs(g.gameStartMs - legStartMs) < Math.abs(b.gameStartMs - legStartMs) ? g : b
+  );
+  if (Math.abs(best.gameStartMs - legStartMs) > GAME_MATCH_TOLERANCE_MS) return null;
+  return best;
 }
 
 // ── Team market resolver ──────────────────────────────────────────────────────
