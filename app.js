@@ -8366,10 +8366,18 @@
         if (!dates.length) return;
         Promise.all(dates.map(function(date) {
             var fmt = date.replace(/-/g, '');
-            return fetch('https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates=' + fmt, { signal: AbortSignal.timeout(8000), cache: 'no-cache' })
-                .then(function(r) { return r.json(); })
-                .then(function(data) { return { date: date, events: data.events || [] }; })
-                .catch(function() { return { date: date, events: [] }; });
+            var base = 'https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates=' + fmt;
+            return Promise.all([
+                fetch(base, { signal: AbortSignal.timeout(8000), cache: 'no-cache' }).then(function(r) { return r.json(); }).catch(function() { return {}; }),
+                fetch(base + '&seasontype=1', { signal: AbortSignal.timeout(8000), cache: 'no-cache' }).then(function(r) { return r.json(); }).catch(function() { return {}; }),
+            ]).then(function(results) {
+                var seen = {};
+                var merged = [];
+                (results[0].events || []).concat(results[1].events || []).forEach(function(ev) {
+                    if (!seen[ev.id]) { seen[ev.id] = true; merged.push(ev); }
+                });
+                return { date: date, events: merged };
+            });
         })).then(function(dateResults) {
             dateResults.forEach(function(dr) {
                 var date   = dr.date;
