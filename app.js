@@ -12011,11 +12011,15 @@
                 var color = isDeposit ? 'var(--green)' : '#f59e0b';
                 var date  = tx.created_at ? new Date(tx.created_at * 1000).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' }) : '—';
                 var badge = statusLabel[tx.status] || '<span style="color:var(--muted)">' + (tx.status || '—') + '</span>';
+                var cardLink = (isDeposit && tx.card_url)
+                    ? '<a href="' + escHtml(tx.card_url) + '" target="_blank" rel="noopener" style="display:inline-block;font-size:10px;color:var(--accent);text-decoration:none;margin-top:3px">Card #' + escHtml(String(tx.card_id)) + ' ↗</a>'
+                    : '';
                 html +=
                     '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:var(--bg3);border-radius:7px;font-size:13px">' +
                     '  <div>' +
                     '    <div style="font-weight:600;color:var(--fg)">' + label + '</div>' +
                     '    <div style="color:var(--muted);font-size:11px;margin-top:2px">' + date + '</div>' +
+                    (cardLink ? '    <div>' + cardLink + '</div>' : '') +
                     '  </div>' +
                     '  <div style="text-align:right">' +
                     '    <div style="font-weight:700;color:' + color + '">' + sign + amt.toLocaleString() + ' Ⓡ</div>' +

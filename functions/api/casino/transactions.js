@@ -2,8 +2,9 @@
 // GET /api/casino/transactions        — current user's last 50 transactions
 // GET /api/casino/transactions?admin=1 — admin: all users, last 200 each type
 
-import { getSession } from '../../_lib/session.js';
-import { ok, err }    from '../../_lib/response.js';
+import { getSession }  from '../../_lib/session.js';
+import { ok, err }     from '../../_lib/response.js';
+import { rsUrlEncode } from '../../_lib/hashids.js';
 
 export async function onRequestGet({ request, env }) {
   const session = await getSession(request, env.DB);
@@ -44,16 +45,21 @@ export async function onRequestGet({ request, env }) {
   const userId = session.user_id;
   const [deps, wds] = await Promise.all([
     env.DB.prepare(
-      `SELECT id, 'deposit' AS type, rax_requested AS amount, rax_credited, status, created_at
+      `SELECT id, 'deposit' AS type, rax_requested AS amount, rax_credited, card_id, status, created_at
        FROM casino_deposits WHERE user_id=? ORDER BY created_at DESC LIMIT 50`
     ).bind(userId).all(),
     env.DB.prepare(
-      `SELECT id, 'withdrawal' AS type, amount, NULL AS rax_credited, status, created_at
+      `SELECT id, 'withdrawal' AS type, amount, NULL AS rax_credited, NULL AS card_id, status, created_at
        FROM casino_withdrawals WHERE user_id=? ORDER BY created_at DESC LIMIT 50`
     ).bind(userId).all(),
   ]);
 
-  const rows = [...(deps.results || []), ...(wds.results || [])]
+  const depRows = (deps.results || []).map(d => ({
+    ...d,
+    card_url: d.card_id ? 'https://www.realapp.com/' + rsUrlEncode(20, 0, 0, d.card_id) : null,
+  }));
+
+  const rows = [...depRows, ...(wds.results || [])]
     .sort((a, b) => b.created_at - a.created_at)
     .slice(0, 50);
 
