@@ -23,6 +23,7 @@ export async function onRequestGet({ request, env }) {
     billing_interval: row.billing_interval || 'monthly',
     rs_username: row.rs_username || null,
     rs_verified: row.parlay_verified === 1 ? 1 : 0,
+    parlay_verified: row.parlay_verified === 1 ? 1 : 0,
   }), {
     headers: { 'Content-Type': 'application/json' }
   });
