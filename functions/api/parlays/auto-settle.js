@@ -1272,7 +1272,7 @@ async function handleRequest({ request, env }) {
   const { results: allLegs } = await env.DB.prepare(
     "SELECT pl.id, pl.parlay_id, pl.player_name, pl.market_id, pl.threshold, " +
     "pl.direction, pl.game_date, pl.game_start_ms, pl.market_type, pl.status, pl.sport, " +
-    "pl.label, pl.event_name, pl.implied_prob, p.status AS parlay_status " +
+    "pl.label, pl.event_name, pl.implied_prob, pl.team, p.status AS parlay_status " +
     "FROM parlay_legs pl " +
     "JOIN parlays p ON p.id = pl.parlay_id " +
     "WHERE pl.status = 'pending' AND p.status IN ('active','won','lost','voided','void','expired','cancelled')"
