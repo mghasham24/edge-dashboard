@@ -864,17 +864,25 @@ const CFB_STAT_GROUPS = {
 async function getCfbPlayerStats(date, legs, proxyKey = '') {
   const yyyymmdd = date.replace(/-/g, '');
   try {
-    const sbUrl = proxyKey
-      ? `${VPS_HOST}/espn-cfb/scoreboard?dates=${yyyymmdd}&key=${encodeURIComponent(proxyKey)}`
-      : `${ESPN_CFB}/scoreboard?dates=${yyyymmdd}`;
-    const sbRes = await fetch(sbUrl, {
-      headers: proxyKey ? {} : ESPN_HEADERS, signal: AbortSignal.timeout(10000),
-    });
-    if (!sbRes.ok) return {};
-    const sbData = await sbRes.json();
+    // Fetch default + seasontype=1 in parallel (same as getCfbFinalGames)
+    // so Week 0 games that only appear under seasontype=1 are also covered.
+    const mkUrl = st => proxyKey
+      ? `${VPS_HOST}/espn-cfb/scoreboard?dates=${yyyymmdd}${st ? `&seasontype=${st}` : ''}&key=${encodeURIComponent(proxyKey)}`
+      : `${ESPN_CFB}/scoreboard?dates=${yyyymmdd}${st ? `&seasontype=${st}` : ''}`;
+    const [sbRes0, sbRes1] = await Promise.all([
+      fetch(mkUrl(''), { headers: proxyKey ? {} : ESPN_HEADERS, signal: AbortSignal.timeout(10000) }).catch(() => null),
+      fetch(mkUrl('1'), { headers: proxyKey ? {} : ESPN_HEADERS, signal: AbortSignal.timeout(10000) }).catch(() => null),
+    ]);
+    const eventsRaw = [
+      ...(sbRes0?.ok ? (await sbRes0.json()).events || [] : []),
+      ...(sbRes1?.ok ? (await sbRes1.json()).events || [] : []),
+    ];
+    // Deduplicate by event id
+    const seenEvIds = new Set();
+    const allEvents = eventsRaw.filter(e => { if (seenEvIds.has(e.id)) return false; seenEvIds.add(e.id); return true; });
 
     // Only settle from completed/final games
-    const finalEvents = (sbData.events || []).filter(e => {
+    const finalEvents = allEvents.filter(e => {
       const st = e.competitions?.[0]?.status?.type;
       return st?.completed || (st?.name || '').toUpperCase().includes('FINAL');
     });
