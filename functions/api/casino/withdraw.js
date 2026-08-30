@@ -7,7 +7,6 @@ import { getSession } from '../../_lib/session.js';
 import { err }        from '../../_lib/response.js';
 
 const MIN_WITHDRAWAL = 1000;
-const DAILY_CAP      = 100000; // max total Rax paid out per day across all users
 
 export async function onRequestPost({ request, env }) {
   const session = await getSession(request, env.DB);
@@ -29,15 +28,6 @@ export async function onRequestPost({ request, env }) {
   if (!user) return err('User not found.', 404);
   if (!authRow?.rs_username) return err('Link your RealSports account before withdrawing.', 400);
   if (user.casino_balance < amount) return err('Insufficient casino balance.', 402);
-
-  // Check daily withdrawal cap
-  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD UTC
-  const dailyRow = await env.DB.prepare(
-    "SELECT SUM(amount) AS total FROM casino_withdrawals WHERE status != 'failed' AND date(created_at,'unixepoch') = ?"
-  ).bind(today).first();
-  const dailyTotal = dailyRow?.total ?? 0;
-  if (dailyTotal + amount > DAILY_CAP)
-    return err('Daily withdrawal limit reached. Try again tomorrow.', 429);
 
   const now = Math.floor(Date.now() / 1000);
 
