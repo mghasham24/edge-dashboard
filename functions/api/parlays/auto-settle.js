@@ -881,24 +881,41 @@ async function getCfbPlayerStats(date, legs, proxyKey = '') {
     if (!finalEvents.length) return {};
 
     // Determine which events we need (match legs by team names)
-    // Leg event_name format: "AWY @ HME" (DK shortNames, e.g. "UNC @ TCU")
+    // Leg event_name format: "AWY @ HME" for team legs, "Player · market" for props.
+    // Props fall back to leg.team (DK shortName) to identify the game.
     const neededEventIds = new Set();
     for (const leg of legs) {
       const evName = leg.event_name || '';
       const m = evName.match(/^(.+?)\s+@\s+(.+)$/);
-      if (!m) continue;
-      const dkAway = m[1].trim().toUpperCase();
-      const dkHome = m[2].trim().toUpperCase();
-      for (const ev of finalEvents) {
-        const comps = ev.competitions?.[0]?.competitors || [];
-        const home  = comps.find(c => c.homeAway === 'home');
-        const away  = comps.find(c => c.homeAway === 'away');
-        const homeAbbr = (home?.team?.abbreviation || '').toUpperCase();
-        const awayAbbr = (away?.team?.abbreviation || '').toUpperCase();
-        // DK shortName often ends with ESPN abbreviation (e.g. "UNC" ends with "NC")
-        const homeMatch = dkHome === homeAbbr || (dkHome.length > homeAbbr.length && dkHome.endsWith(homeAbbr));
-        const awayMatch = dkAway === awayAbbr || (dkAway.length > awayAbbr.length && dkAway.endsWith(awayAbbr));
-        if (homeMatch && awayMatch) { neededEventIds.add(String(ev.id)); break; }
+      if (m) {
+        // Team leg or old-style matchup — match both sides
+        const dkAway = m[1].trim().toUpperCase();
+        const dkHome = m[2].trim().toUpperCase();
+        for (const ev of finalEvents) {
+          const comps = ev.competitions?.[0]?.competitors || [];
+          const home  = comps.find(c => c.homeAway === 'home');
+          const away  = comps.find(c => c.homeAway === 'away');
+          const homeAbbr = (home?.team?.abbreviation || '').toUpperCase();
+          const awayAbbr = (away?.team?.abbreviation || '').toUpperCase();
+          // DK shortName often ends with ESPN abbreviation (e.g. "UNC" ends with "NC")
+          const homeMatch = dkHome === homeAbbr || (dkHome.length > homeAbbr.length && dkHome.endsWith(homeAbbr));
+          const awayMatch = dkAway === awayAbbr || (dkAway.length > awayAbbr.length && dkAway.endsWith(awayAbbr));
+          if (homeMatch && awayMatch) { neededEventIds.add(String(ev.id)); break; }
+        }
+      } else {
+        // Player prop leg — use leg.team (DK shortName) to find the game
+        const legTeam = (leg.team || '').toUpperCase();
+        if (!legTeam) continue;
+        for (const ev of finalEvents) {
+          const comps = ev.competitions?.[0]?.competitors || [];
+          const home  = comps.find(c => c.homeAway === 'home');
+          const away  = comps.find(c => c.homeAway === 'away');
+          const homeAbbr = (home?.team?.abbreviation || '').toUpperCase();
+          const awayAbbr = (away?.team?.abbreviation || '').toUpperCase();
+          const homeMatch = legTeam === homeAbbr || (legTeam.length > homeAbbr.length && legTeam.endsWith(homeAbbr));
+          const awayMatch = legTeam === awayAbbr || (legTeam.length > awayAbbr.length && legTeam.endsWith(awayAbbr));
+          if (homeMatch || awayMatch) { neededEventIds.add(String(ev.id)); break; }
+        }
       }
     }
     if (!neededEventIds.size) return {};
