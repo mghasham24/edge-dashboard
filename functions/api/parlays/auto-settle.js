@@ -1633,12 +1633,23 @@ async function handleRequest({ request, env }) {
     }
 
     if (sport === 'cfb') {
+      // Look up a CFB player by full name, then by last-name suffix.
+      // Combo legs store only last names ("Barfield & Ford") but cfbStatsMap keys are full names.
+      const cfbLookup = (statsMap, partialKey) => {
+        if (statsMap[partialKey]) return statsMap[partialKey];
+        const lastName = partialKey.split(' ').pop();
+        for (const [k, v] of Object.entries(statsMap)) {
+          if (k.split(' ').pop() === lastName) return v;
+        }
+        return null;
+      };
       // CFB combo rush yards: player_name stored as "Player1 & Player2" or "Player1|Player2"
       if (mkt === 'cfb_combo_rush_yds') {
         const comboParts = (leg.player_name || '').split(/[|&]/).map(n => normForLookup(n.trim())).filter(Boolean);
         if (comboParts.length !== 2) { legOutcomes[leg.id] = null; continue; }
         const statsMap = cfbStatsMap[leg.game_date] || {};
-        const s1 = statsMap[comboParts[0]]; const s2 = statsMap[comboParts[1]];
+        const s1 = cfbLookup(statsMap, comboParts[0]);
+        const s2 = cfbLookup(statsMap, comboParts[1]);
         if (!s1 || !s2) {
           const legTeamUp = (leg.team || '').toUpperCase();
           const gameFinal = legTeamUp && (cfbGamesMap[leg.game_date] || []).some(g => g.homeAbbr === legTeamUp || g.awayAbbr === legTeamUp);
@@ -1650,7 +1661,7 @@ async function handleRequest({ request, env }) {
         continue;
       }
       // CFB individual player prop milestone settle: statVal >= threshold → won
-      const cfbPlayerStats = (cfbStatsMap[leg.game_date] || {})[normForLookup(leg.player_name)];
+      const cfbPlayerStats = cfbLookup(cfbStatsMap[leg.game_date] || {}, normForLookup(leg.player_name));
       if (!cfbPlayerStats) {
         const legTeamUp = (leg.team || '').toUpperCase();
         const gameFinal = legTeamUp && (cfbGamesMap[leg.game_date] || []).some(g => g.homeAbbr === legTeamUp || g.awayAbbr === legTeamUp);
