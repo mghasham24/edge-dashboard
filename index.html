@@ -653,6 +653,7 @@
                 <div style="display:flex;gap:8px;margin-bottom:16px">
                     <button id="admin-casino-sub-wd" class="admin-sub-btn active" onclick="adminCasinoSubTab('wd')">Withdrawals</button>
                     <button id="admin-casino-sub-tx" class="admin-sub-btn" onclick="adminCasinoSubTab('tx')">Transactions</button>
+                    <button id="admin-casino-sub-users" class="admin-sub-btn" onclick="adminCasinoSubTab('users')">RS Users</button>
                 </div>
 
                 <!-- Withdrawals pane -->
@@ -681,6 +682,15 @@
                         <button onclick="loadAdminCasinoTransactions()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:5px;cursor:pointer">Refresh</button>
                     </div>
                     <div id="admin-casino-tx-list" style="font-size:13px;color:var(--muted)">Loading…</div>
+                </div>
+
+                <!-- RS Users pane -->
+                <div id="admin-casino-pane-users" style="display:none">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px">
+                        <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2)">RS Users · Casino</div>
+                        <button onclick="loadAdminCasinoUsers()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:5px;cursor:pointer">Refresh</button>
+                    </div>
+                    <div id="admin-casino-users-list" style="font-size:13px;color:var(--muted)">Loading…</div>
                 </div>
             </div><!-- /admin-casino-section -->
         </div>
@@ -1045,7 +1055,7 @@
     <!-- end #dashboard -->
 
     <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script>
-    <script src="/app.js?v=880"></script>
-    <div id="app-version-badge" style="position:fixed;bottom:6px;right:10px;font-size:9px;font-weight:600;color:var(--muted2);font-family:var(--mono);letter-spacing:.03em;pointer-events:none;z-index:1">v880</div>
+    <script src="/app.js?v=881"></script>
+    <div id="app-version-badge" style="position:fixed;bottom:6px;right:10px;font-size:9px;font-weight:600;color:var(--muted2);font-family:var(--mono);letter-spacing:.03em;pointer-events:none;z-index:1">v881</div>
 </body>
 </html>

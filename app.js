@@ -16376,21 +16376,124 @@
     }
 
     function adminCasinoSubTab(tab) {
-        var wdPane = document.getElementById('admin-casino-pane-wd');
-        var txPane = document.getElementById('admin-casino-pane-tx');
-        var wdBtn  = document.getElementById('admin-casino-sub-wd');
-        var txBtn  = document.getElementById('admin-casino-sub-tx');
+        var wdPane    = document.getElementById('admin-casino-pane-wd');
+        var txPane    = document.getElementById('admin-casino-pane-tx');
+        var usersPane = document.getElementById('admin-casino-pane-users');
+        var wdBtn     = document.getElementById('admin-casino-sub-wd');
+        var txBtn     = document.getElementById('admin-casino-sub-tx');
+        var usersBtn  = document.getElementById('admin-casino-sub-users');
+        [wdPane, txPane, usersPane].forEach(function(p) { if (p) p.style.display = 'none'; });
+        [wdBtn, txBtn, usersBtn].forEach(function(b) { if (b) b.classList.remove('active'); });
         if (tab === 'tx') {
-            if (wdPane) wdPane.style.display = 'none';
             if (txPane) txPane.style.display = '';
-            if (wdBtn)  wdBtn.classList.remove('active');
             if (txBtn)  txBtn.classList.add('active');
             loadAdminCasinoTransactions();
+        } else if (tab === 'users') {
+            if (usersPane) usersPane.style.display = '';
+            if (usersBtn)  usersBtn.classList.add('active');
+            loadAdminCasinoUsers();
         } else {
-            if (txPane) txPane.style.display = 'none';
             if (wdPane) wdPane.style.display = '';
-            if (txBtn)  txBtn.classList.remove('active');
             if (wdBtn)  wdBtn.classList.add('active');
+        }
+    }
+
+    async function loadAdminCasinoUsers() {
+        var el = document.getElementById('admin-casino-users-list');
+        if (!el) return;
+        el.innerHTML = '<span style="color:var(--muted)">Loading…</span>';
+        try {
+            var res  = await fetch('/api/admin/casino-users', { credentials: 'same-origin' });
+            var data = await res.json();
+            if (!data.ok) { el.innerHTML = '<span style="color:#ef4444">Error: ' + escHtml(data.error || 'Failed') + '</span>'; return; }
+            var users = data.users || [];
+            if (!users.length) { el.innerHTML = '<span style="color:var(--muted)">No RS-verified users yet.</span>'; return; }
+
+            var RAX = 'Ⓡ';
+            var fmtDt = function(ts) {
+                if (!ts) return '—';
+                return new Date(ts * 1000).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
+            };
+            var statusBadge = function(s) {
+                var map = { confirmed: ['Confirmed','var(--green)'], pending: ['Pending','#f59e0b'], expired: ['Expired','var(--muted)'], cancelled: ['Cancelled','var(--muted)'], complete: ['Complete','var(--green)'], failed: ['Failed','#ef4444'], processing: ['Processing','#60a5fa'] };
+                var m = map[s] || [s,'var(--muted)'];
+                return '<span style="font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:' + m[1] + '">' + escHtml(m[0]) + '</span>';
+            };
+
+            el.innerHTML = users.map(function(u) {
+                var totalDep = u.deposits.filter(function(d) { return d.status === 'confirmed'; })
+                    .reduce(function(s, d) { return s + (d.rax_credited || 0); }, 0);
+                var totalWd  = u.withdrawals.filter(function(w) { return w.status === 'complete'; })
+                    .reduce(function(s, w) { return s + (w.amount || 0); }, 0);
+                var depCount = u.deposits.length;
+                var uid      = 'cu-' + u.id;
+
+                var txRows = [];
+                u.deposits.forEach(function(d) {
+                    txRows.push({
+                        ts:     d.created_at,
+                        type:   'Deposit',
+                        amount: d.rax_credited || d.rax_requested,
+                        label:  d.rax_credited ? ('+' + Number(d.rax_credited).toLocaleString() + ' ' + RAX + ' <span style="color:var(--muted2);font-size:10px">(sent ' + Number(d.rax_requested).toLocaleString() + ')</span>') : (Number(d.rax_requested).toLocaleString() + ' ' + RAX),
+                        cardId: d.card_id,
+                        status: d.status,
+                        color:  'var(--green)',
+                    });
+                });
+                u.withdrawals.forEach(function(w) {
+                    txRows.push({
+                        ts:     w.created_at,
+                        type:   'Withdrawal',
+                        amount: w.amount,
+                        label:  '-' + Number(w.amount).toLocaleString() + ' ' + RAX,
+                        cardId: w.target_card_id,
+                        status: w.status,
+                        color:  '#ef4444',
+                    });
+                });
+                txRows.sort(function(a, b) { return (b.ts || 0) - (a.ts || 0); });
+
+                var txHtml = txRows.length ? txRows.map(function(tx) {
+                    return '<tr style="border-top:1px solid var(--border)">' +
+                        '<td style="padding:7px 10px;color:var(--muted2);font-size:11px;white-space:nowrap">' + escHtml(fmtDt(tx.ts)) + '</td>' +
+                        '<td style="padding:7px 10px;font-size:12px;font-weight:600;color:var(--fg)">' + escHtml(tx.type) + '</td>' +
+                        '<td style="padding:7px 10px;font-size:12px;font-weight:700;color:' + tx.color + '">' + tx.label + '</td>' +
+                        '<td style="padding:7px 10px;font-size:11px;color:var(--muted2);font-family:var(--mono)">' + (tx.cardId ? escHtml(String(tx.cardId)) : '—') + '</td>' +
+                        '<td style="padding:7px 10px">' + statusBadge(tx.status) + '</td>' +
+                    '</tr>';
+                }).join('') : '<tr><td colspan="5" style="padding:12px 10px;color:var(--muted2);font-size:12px">No transactions</td></tr>';
+
+                var detailHtml =
+                    '<div id="' + uid + '-detail" style="display:none;margin-top:10px;border-radius:6px;overflow:hidden;border:1px solid var(--border)">' +
+                        '<table style="width:100%;border-collapse:collapse;font-size:12px">' +
+                            '<thead><tr style="background:var(--bg3)">' +
+                                '<th style="padding:7px 10px;text-align:left;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted2)">Date</th>' +
+                                '<th style="padding:7px 10px;text-align:left;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted2)">Type</th>' +
+                                '<th style="padding:7px 10px;text-align:left;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted2)">Amount</th>' +
+                                '<th style="padding:7px 10px;text-align:left;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted2)">Card ID</th>' +
+                                '<th style="padding:7px 10px;text-align:left;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted2)">Status</th>' +
+                            '</tr></thead>' +
+                            '<tbody>' + txHtml + '</tbody>' +
+                        '</table>' +
+                    '</div>';
+
+                return '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px 16px;margin-bottom:8px">' +
+                    '<div style="display:flex;align-items:center;gap:12px;cursor:pointer" onclick="(function(el){el.style.display=el.style.display===\'\'?\'none\':\'\'})(document.getElementById(\'' + uid + '-detail\'))">' +
+                        '<div style="flex:1;min-width:0">' +
+                            '<div style="font-size:13px;font-weight:700;color:var(--fg)">@' + escHtml(u.rs_username || '?') + '</div>' +
+                            '<div style="font-size:11px;color:var(--muted2);margin-top:2px">' + escHtml(u.email) + '</div>' +
+                        '</div>' +
+                        '<div style="text-align:right;flex-shrink:0">' +
+                            '<div style="font-size:15px;font-weight:800;color:var(--fg)">' + Number(u.casino_balance).toLocaleString() + ' ' + RAX + '</div>' +
+                            '<div style="font-size:11px;color:var(--muted2);margin-top:2px">' + depCount + (depCount === 1 ? ' deposit' : ' deposits') + ' · ' + Number(totalDep).toLocaleString() + ' ' + RAX + ' in</div>' +
+                        '</div>' +
+                        '<div style="color:var(--muted2);font-size:14px;flex-shrink:0">▾</div>' +
+                    '</div>' +
+                    detailHtml +
+                '</div>';
+            }).join('');
+        } catch (e) {
+            el.innerHTML = '<span style="color:#ef4444">Failed: ' + escHtml(e.message) + '</span>';
         }
     }
 
