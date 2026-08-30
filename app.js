@@ -9136,7 +9136,7 @@
                 if (leg.result_value != null) return; // already stored
                 var gd = leg.game_date;
                 if (!gd) return;
-                var legObj = { parlayId: s.id, legIndex: li, playerName: leg.player_name, marketType: mkt, threshold: parseFloat(leg.threshold) || 0, direction: leg.direction || 'more' };
+                var legObj = { parlayId: s.id, legIndex: li, playerName: leg.player_name, marketType: mkt, threshold: parseFloat(leg.threshold) || 0, direction: leg.direction || 'more', gameStartMs: leg.game_start_ms || 0 };
                 if (WNBA_MKT_SET[mkt]) {
                     if (!wnbaNeededByDate[gd]) wnbaNeededByDate[gd] = [];
                     wnbaNeededByDate[gd].push(legObj);
@@ -9204,21 +9204,29 @@
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     var games = (data.dates && data.dates[0] && data.dates[0].games) || [];
-                    var pks   = games.map(function(g) { return g.gamePk; });
+                    var gameDateByPk = {};
+                    games.forEach(function(g) { gameDateByPk[g.gamePk] = g.gameDate || null; });
+                    var pks = games.map(function(g) { return g.gamePk; });
                     return Promise.all(pks.map(function(pk) {
                         return fetch('https://statsapi.mlb.com/api/v1/game/' + pk + '/boxscore', { signal: AbortSignal.timeout(8000), cache: 'no-cache' })
                             .then(function(r) { return r.json(); })
+                            .then(function(bs) { return { pk: pk, bs: bs }; })
                             .catch(function() { return null; });
-                    })).then(function(boxscores) { return { date: date, boxscores: boxscores }; });
+                    })).then(function(results) { return { date: date, results: results, gameDateByPk: gameDateByPk }; });
                 })
-                .catch(function() { return { date: date, boxscores: [] }; });
-        })).then(function(results) {
-            results.forEach(function(dr) {
-                var playerStats = {};
-                (dr.boxscores || []).forEach(function(bs) {
-                    if (!bs) return;
+                .catch(function() { return { date: date, results: [], gameDateByPk: {} }; });
+        })).then(function(allDates) {
+            allDates.forEach(function(dr) {
+                var playerStats     = {};           // merged fallback
+                var playerStatsByPk = {};           // gamePk → { normName → stats }
+                var gameMsByPk      = {};           // gamePk → start ms
+                (dr.results || []).forEach(function(res) {
+                    if (!res || !res.bs) return;
+                    var pkStats = {};
+                    var gdStr   = dr.gameDateByPk[res.pk];
+                    gameMsByPk[res.pk] = gdStr ? new Date(gdStr).getTime() : null;
                     ['away', 'home'].forEach(function(side) {
-                        var players = (bs.teams && bs.teams[side] && bs.teams[side].players) || {};
+                        var players = (res.bs.teams && res.bs.teams[side] && res.bs.teams[side].players) || {};
                         Object.values(players).forEach(function(p) {
                             var name = normSlipName((p.person && p.person.fullName) || '');
                             if (!name) return;
@@ -9234,18 +9242,35 @@
                             var ph2 = parseInt(pit.hits || 0);
                             var er2 = parseInt(pit.earnedRuns || 0);
                             var pbb2 = parseInt(pit.baseOnBalls || 0);
-                            playerStats[name] = {
+                            var statsObj = {
                                 hits: h, totalBases: tb2, rbi: rbi, runs: r, hrbi: h + r + rbi,
                                 singles: h - d2 - tri2 - hr2, doubles: d2, stolenBases: sb2, batterWalks: bb2,
                                 strikeOuts: parseInt(pit.strikeOuts || 0), outs: ipOuts2,
                                 pitcherHits: ph2, earnedRuns: er2, pitcherWalks: pbb2, hwer: ph2 + pbb2 + er2,
                             };
+                            pkStats[name]      = statsObj;
+                            playerStats[name]  = statsObj;  // merged fallback
                         });
                     });
+                    playerStatsByPk[res.pk] = pkStats;
                 });
                 (neededByDate[dr.date] || []).forEach(function(n) {
-                    var stats = playerStats[normSlipName(n.playerName)];
-                    var field = MLB_FIELD[n.marketType];
+                    // Doubleheader: pick the game closest to when the leg was placed
+                    var closestPk = null;
+                    if (n.gameStartMs) {
+                        var _bestDiff = Infinity, _bestPk = null;
+                        Object.keys(gameMsByPk).forEach(function(pk) {
+                            var gMs = gameMsByPk[pk];
+                            if (!gMs) return;
+                            var diff = Math.abs(gMs - n.gameStartMs);
+                            if (diff < _bestDiff) { _bestDiff = diff; _bestPk = pk; }
+                        });
+                        if (_bestPk && _bestDiff <= 4 * 3600 * 1000) closestPk = _bestPk;
+                    }
+                    var statsMap = (closestPk && playerStatsByPk[closestPk]) ? playerStatsByPk[closestPk] : playerStats;
+                    var norm     = normSlipName(n.playerName);
+                    var stats    = statsMap[norm];
+                    var field    = MLB_FIELD[n.marketType];
                     if (stats && field && stats[field] !== undefined) {
                         var sv = stats[field];
                         settledLegStats[n.parlayId + '-' + n.legIndex] = sv;
