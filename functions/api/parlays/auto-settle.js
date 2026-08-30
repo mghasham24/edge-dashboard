@@ -1301,7 +1301,8 @@ async function handleRequest({ request, env }) {
 
   const mlbGamesMap     = {};
   const mlb1innGamesMap = {}; // final games + live games past inning 1, for 1inn settle
-  const mlbStatsMap     = {};
+  const mlbStatsMap        = {};
+  const mlbStatsByGameMap  = {}; // date → { gamePk → playerStats } for doubleheader disambiguation
   const mlbLinescore1Map= {}; // date → { gamePk → { away:{runs,hits}, home:{runs,hits} } }
   const mlbPbpMap       = {}; // date → { gamePk → { top:{walks,ks,hrs,batters,pitches}, bottom:{...} } }
   const wnbaGamesMap    = {};
@@ -1368,7 +1369,8 @@ async function handleRequest({ request, env }) {
         if (!hasMlbOnDate(date)) return null;
         const fetch1inn    = has1innOnDate(date);
         const fetch1innPbp = has1innPbpOnDate(date);
-        const allStats   = {};
+        const allStats      = {};
+        const statsByGamePk = {}; // gamePk → playerStats for doubleheader disambiguation
         const linescore1 = {};
         const pbp1       = {};
 
@@ -1379,7 +1381,11 @@ async function handleRequest({ request, env }) {
               fetch1inn    ? withTimeout(getMlbLinescore(g.gamePk), 8000)   : Promise.resolve(null),
               fetch1innPbp ? withTimeout(getMlbPlayByPlay(g.gamePk), 8000) : Promise.resolve(null),
             ]);
-            if (bs)  Object.assign(allStats, extractMlbPlayerStats(bs));
+            if (bs) {
+              const gameStats = extractMlbPlayerStats(bs);
+              statsByGamePk[g.gamePk] = gameStats;
+              Object.assign(allStats, gameStats);
+            }
             if (ls)  linescore1[g.gamePk] = ls;
             if (pbp) pbp1[g.gamePk]       = pbp;
           }));
@@ -1401,7 +1407,7 @@ async function handleRequest({ request, env }) {
           }
           mlb1innGames = [...mlbGames, ...newLive];
         }
-        return { allStats, linescore1, pbp1, mlb1innGames };
+        return { allStats, statsByGamePk, linescore1, pbp1, mlb1innGames };
       })(),
       // ── WNBA stats block ───────────────────────────────────────────────────
       hasWnbaOnDate(date) ? withTimeout(getWnbaPlayerStats(date, proxyKey), 12000, {}) : Promise.resolve({}),
@@ -1417,7 +1423,8 @@ async function handleRequest({ request, env }) {
     }
 
     if (mlbBlock) {
-      mlbStatsMap[date]      = mlbBlock.allStats;
+      mlbStatsMap[date]       = mlbBlock.allStats;
+      mlbStatsByGameMap[date] = mlbBlock.statsByGamePk;
       mlbLinescore1Map[date] = mlbBlock.linescore1;
       mlbPbpMap[date]        = mlbBlock.pbp1;
       mlb1innGamesMap[date]  = mlbBlock.mlb1innGames;
@@ -1490,7 +1497,9 @@ async function handleRequest({ request, env }) {
             return { player: l.player_name, sport: 'wnba', market_type: mkt, field, statVal, outcome };
           }
           const norm    = normForLookup(l.player_name);
-          const stats   = (mlbStatsMap[date] || {})[norm] || null;
+          const _byGame = mlbStatsByGameMap[date] || {};
+          const _bestG  = pickClosestGame(mlbGamesMap[date] || [], l.game_start_ms);
+          const stats   = (_bestG && _byGame[_bestG.gamePk] ? _byGame[_bestG.gamePk] : (mlbStatsMap[date] || {}))[norm] || null;
           const field   = MLB_STAT_FIELD[mkt] || mkt;
           const rawVal  = stats?.[field];
           const statVal = rawVal != null ? parseFloat(rawVal) : null;
@@ -1681,8 +1690,11 @@ async function handleRequest({ request, env }) {
       continue;
     }
 
-    // MLB player prop
-    const playerStats = (mlbStatsMap[leg.game_date] || {})[normForLookup(leg.player_name)];
+    // MLB player prop — use per-game stats when game_start_ms identifies a specific game
+    const _mlbByGame  = mlbStatsByGameMap[leg.game_date] || {};
+    const _mlbBestG   = pickClosestGame(mlbGamesMap[leg.game_date] || [], leg.game_start_ms);
+    const _mlbStatSrc = (_mlbBestG && _mlbByGame[_mlbBestG.gamePk]) ? _mlbByGame[_mlbBestG.gamePk] : (mlbStatsMap[leg.game_date] || {});
+    const playerStats = _mlbStatSrc[normForLookup(leg.player_name)];
     if (!playerStats) {
       // Player absent from boxscore — scratched/DNP. Determine if game is final.
       // Try matchup parse first (works for team-format event_name); fall back to
