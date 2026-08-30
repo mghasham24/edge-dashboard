@@ -8496,6 +8496,14 @@
                     return sn2 === 'STATUS_IN_PROGRESS' || sn2 === 'STATUS_HALFTIME' || sn2 === 'STATUS_END_PERIOD' || sn2 === 'STATUS_FINAL' || sn2 === 'STATUS_FINAL_OVERTIME';
                 });
 
+                // Shared by cfbFindGameInfo and cfbFindGameByTeam — must be in outer scope.
+                function cfbMatch(espnAbbr, espnName, dkShort) {
+                    var ea = espnAbbr.toLowerCase(), en = (espnName || '').toLowerCase();
+                    if (ea === dkShort || ea.indexOf(dkShort) !== -1 || dkShort.indexOf(ea) !== -1) return true;
+                    var firstTok = dkShort.split(/\s+/)[0];
+                    return firstTok.length >= 3 && en.indexOf(firstTok) !== -1;
+                }
+
                 function cfbFindGameInfo(eventName) {
                     if (!eventName) return null;
                     var atIdx = eventName.indexOf('@');
@@ -8503,15 +8511,6 @@
                     var awDk = eventName.slice(0, atIdx).trim().toLowerCase();
                     var hwDk = eventName.slice(atIdx + 1).trim().toLowerCase();
                     if (!awDk || !hwDk) return null;
-                    // Match a DK shortName against an ESPN abbreviation + full team name.
-                    // Handles: exact "USC"="USC", substring "CONN"⊂"UCONN", and
-                    // first-token-in-fullname "OKLA" in "Oklahoma Sooners", "OHIO ST" → "ohio" in "Ohio State".
-                    function cfbMatch(espnAbbr, espnName, dkShort) {
-                        var ea = espnAbbr.toLowerCase(), en = (espnName || '').toLowerCase();
-                        if (ea === dkShort || ea.indexOf(dkShort) !== -1 || dkShort.indexOf(ea) !== -1) return true;
-                        var firstTok = dkShort.split(/\s+/)[0];
-                        return firstTok.length >= 3 && en.indexOf(firstTok) !== -1;
-                    }
                     var keys = Object.keys(cfbEventInfoMap);
                     for (var _k = 0; _k < keys.length; _k++) {
                         var eI = cfbEventInfoMap[keys[_k]];
