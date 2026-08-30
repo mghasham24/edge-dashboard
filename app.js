@@ -9020,11 +9020,15 @@
                         .then(function(bs) { return { pk: pk, bs: bs }; })
                         .catch(function() { return null; });
                 })).then(function(results) {
-                    var playerStats  = {};
-                    var playerGamePk = {};
-                    var playerSide   = {};
+                    var playerStats     = {};           // merged across all games (fallback)
+                    var playerGamePk    = {};
+                    var playerSide      = {};
+                    var playerStatsByPk = {};           // gamePk → { normName → stats }
+                    var playerSideByPk  = {};           // gamePk → { normName → side }
                     results.forEach(function(res) {
                         if (!res || !res.bs) return;
+                        var pkStats = {};
+                        var pkSide  = {};
                         ['away', 'home'].forEach(function(side) {
                             var players = (res.bs.teams && res.bs.teams[side] && res.bs.teams[side].players) || {};
                             Object.values(players).forEach(function(p) {
@@ -9043,27 +9047,50 @@
                                 var ph = parseInt(pit.hits || 0);
                                 var er = parseInt(pit.earnedRuns || 0);
                                 var pbb = parseInt(pit.baseOnBalls || pit.walks || 0);
-                                playerStats[name] = {
+                                var statsObj = {
                                     hits: h, totalBases: tb, rbi: rbi, runs: r, hrbi: h + r + rbi,
                                     singles: h - d - tri - hr, doubles: d, stolenBases: sb, batterWalks: bb,
                                     strikeOuts: parseInt(pit.strikeOuts || 0), outs: ipOuts,
                                     pitcherHits: ph, earnedRuns: er, pitcherWalks: pbb, hwer: ph + pbb + er,
                                 };
+                                pkStats[name]      = statsObj;
+                                pkSide[name]       = side;
+                                playerStats[name]  = statsObj;   // merged fallback
                                 playerGamePk[name] = res.pk;
-                                playerSide[name] = side;
+                                playerSide[name]   = side;
                             });
                         });
+                        playerStatsByPk[res.pk] = pkStats;
+                        playerSideByPk[res.pk]  = pkSide;
                     });
                     var earliestPreview = previewTimes.length ? new Date(Math.min.apply(null, previewTimes)).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' }) : null;
                     propNeeded.forEach(function(n) {
-                        var norm     = normSlipName(n.playerName);
-                        var stats    = playerStats[norm];
-                        var field    = MLB_FIELD[n.marketType];
-                        var val      = (stats && field && stats[field] !== undefined) ? stats[field] : null;
-                        var gamePk   = playerGamePk[norm];
-                        var gameInfo = gamePk ? gameInfoMap[gamePk] : null;
-                        // Player not found in any boxscore — try matching game via event_name (e.g. "TEX @ LA")
-                        // Handles pitchers not yet entered, or name mismatches.
+                        var norm = normSlipName(n.playerName);
+
+                        // Doubleheader fix: pick the game closest to when the leg was placed
+                        var closestPk = null;
+                        if (n.gameStartMs) {
+                            var _bestDiff = Infinity, _bestGame = null;
+                            games.forEach(function(g) {
+                                var gMs = g.gameDate ? new Date(g.gameDate).getTime() : 0;
+                                if (!gMs) return;
+                                var diff = Math.abs(gMs - n.gameStartMs);
+                                if (diff < _bestDiff) { _bestDiff = diff; _bestGame = g; }
+                            });
+                            if (_bestGame && _bestDiff <= 4 * 3600 * 1000) closestPk = _bestGame.gamePk;
+                        }
+
+                        // Use per-game stats when we can pin the game, else fall back to merged
+                        var statsMap = (closestPk && playerStatsByPk[closestPk]) ? playerStatsByPk[closestPk] : playerStats;
+                        var sideMap  = (closestPk && playerSideByPk[closestPk])  ? playerSideByPk[closestPk]  : playerSide;
+
+                        var stats = statsMap[norm];
+                        var field = MLB_FIELD[n.marketType];
+                        var val   = (stats && field && stats[field] !== undefined) ? stats[field] : null;
+
+                        // Prefer the pinned game's info; fall back to wherever the player's name appeared
+                        var resolvedPk = closestPk || playerGamePk[norm];
+                        var gameInfo   = resolvedPk ? gameInfoMap[resolvedPk] : null;
                         if (!gameInfo && n.eventName) {
                             var _evM = n.eventName.match(/^(.+?)\s+@\s+(.+)$/);
                             if (_evM) {
@@ -9079,8 +9106,9 @@
                             }
                         }
                         if (!gameInfo) gameInfo = earliestPreview ? { state: 'Preview', startET: earliestPreview } : null;
-                        if (gameInfo && gamePk && playerSide[norm]) {
-                            var tAbbr = playerSide[norm] === 'away' ? gameInfo.awayAbbr : gameInfo.homeAbbr;
+                        var resolvedSide = sideMap[norm];
+                        if (gameInfo && resolvedSide) {
+                            var tAbbr = resolvedSide === 'away' ? gameInfo.awayAbbr : gameInfo.homeAbbr;
                             gameInfo = Object.assign({}, gameInfo, { playerTeamAbbr: tAbbr });
                         }
                         updateLegStatus(n.parlayId, n.legIndex, val, n.threshold, n.direction, n.marketType, gameInfo, false);
