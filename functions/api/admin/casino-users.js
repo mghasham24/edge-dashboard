@@ -26,24 +26,22 @@ export async function onRequestGet({ request, env }) {
   const users = usersRows.results || [];
   if (!users.length) return ok({ users: [] });
 
-  const userIds = users.map(u => u.id);
-  const ph      = userIds.map(() => '?').join(',');
-
-  // All confirmed/pending deposits for these users
-  const depsRows = await env.DB.prepare(
-    `SELECT id, user_id, rax_requested, rax_credited, card_id, status, created_at
-     FROM casino_deposits
-     WHERE user_id IN (${ph}) AND status IN ('confirmed','pending')
-     ORDER BY created_at DESC`
-  ).bind(...userIds).all();
-
-  // All withdrawals for these users
-  const wdsRows = await env.DB.prepare(
-    `SELECT id, user_id, amount, rs_username, target_card_id, status, created_at
-     FROM casino_withdrawals
-     WHERE user_id IN (${ph})
-     ORDER BY created_at DESC`
-  ).bind(...userIds).all();
+  // JOIN against real_auth to avoid IN(...) with hundreds of params
+  const [depsRows, wdsRows] = await Promise.all([
+    env.DB.prepare(
+      `SELECT cd.id, cd.user_id, cd.rax_requested, cd.rax_credited, cd.card_id, cd.status, cd.created_at
+       FROM casino_deposits cd
+       JOIN real_auth ra ON ra.user_id = cd.user_id AND ra.parlay_verified = 1
+       WHERE cd.status IN ('confirmed','pending')
+       ORDER BY cd.created_at DESC`
+    ).all(),
+    env.DB.prepare(
+      `SELECT cw.id, cw.user_id, cw.amount, cw.rs_username, cw.target_card_id, cw.status, cw.created_at
+       FROM casino_withdrawals cw
+       JOIN real_auth ra ON ra.user_id = cw.user_id AND ra.parlay_verified = 1
+       ORDER BY cw.created_at DESC`
+    ).all(),
+  ]);
 
   const deps = depsRows.results || [];
   const wds  = wdsRows.results  || [];
