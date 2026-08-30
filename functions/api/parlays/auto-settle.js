@@ -1302,6 +1302,20 @@ async function handleRequest({ request, env }) {
   ).all();
   if (!parlays.length) return cacheAndReturn({ settled: 0, reason: 'no_active_parlays' });
 
+  // Preload all prior-settled legs for active parlays in one batch query (avoids N+1 in the loop).
+  const activeParlayIds = parlays.map(p => p.id);
+  const priorSettledByParlay = {};
+  try {
+    const ph = activeParlayIds.map(() => '?').join(',');
+    const { results: allPrior } = await env.DB.prepare(
+      `SELECT id, parlay_id, implied_prob, status FROM parlay_legs WHERE parlay_id IN (${ph}) AND status IN ('lost','void','won')`
+    ).bind(...activeParlayIds).all();
+    for (const leg of allPrior) {
+      if (!priorSettledByParlay[leg.parlay_id]) priorSettledByParlay[leg.parlay_id] = [];
+      priorSettledByParlay[leg.parlay_id].push(leg);
+    }
+  } catch(e) {}
+
   // 2. Load pending legs — active parlays for settlement, plus already-settled parlays so
   // per-leg outcomes get filled in even after the parlay is decided.
   const { results: allLegs } = await env.DB.prepare(
@@ -1826,20 +1840,11 @@ async function handleRequest({ request, env }) {
     const resolvedLegs = outcomes.filter(o => o.outcome !== null);
     const anyLostEarly = resolvedLegs.some(o => o.outcome === 'lost');
 
-    // Load all already-settled legs for this parlay (lost/void/won from prior passes).
-    // This is critical for multi-pass settlement: a void in pass N and a win in pass M
-    // would otherwise make anyVoid=false in pass M, paying the original N-leg payout unchanged.
-    let priorLost = false;
-    let priorVoidLegs = [];
-    let priorWonLegs  = [];
-    try {
-      const priorSettled = await env.DB.prepare(
-        "SELECT id, implied_prob, status FROM parlay_legs WHERE parlay_id=? AND status IN ('lost','void','won')"
-      ).bind(parlay.id).all();
-      priorLost     = priorSettled.results.some(l => l.status === 'lost');
-      priorVoidLegs = priorSettled.results.filter(l => l.status === 'void');
-      priorWonLegs  = priorSettled.results.filter(l => l.status === 'won');
-    } catch(e) {}
+    // Prior-settled legs loaded in batch before the loop — look up by parlay_id.
+    const priorSettledLegs = priorSettledByParlay[parlay.id] || [];
+    const priorLost     = priorSettledLegs.some(l => l.status === 'lost');
+    const priorVoidLegs = priorSettledLegs.filter(l => l.status === 'void');
+    const priorWonLegs  = priorSettledLegs.filter(l => l.status === 'won');
 
     // Future legs count the same as unresolved today-legs — parlay can't finish while they exist
     if ((stillWaiting.length || futurePendingLegs.length) && !(anyLostEarly || priorLost)) {
