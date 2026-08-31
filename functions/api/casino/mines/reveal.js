@@ -26,8 +26,8 @@ export async function onRequestPost({ request, env }) {
   if (!session) return err('Unauthorized', 401);
   const userId = session.user_id;
 
-  const user = await env.DB.prepare('SELECT is_admin FROM users WHERE id = ?').bind(userId).first();
-  if (!user?.is_admin) return err('Forbidden', 403);
+  const user = await env.DB.prepare('SELECT is_admin, mines_access FROM users WHERE id = ?').bind(userId).first();
+  if (!user?.is_admin && !user?.mines_access) return err('Forbidden', 403);
 
   let body;
   try { body = await request.json(); } catch { return err('Invalid JSON', 400); }

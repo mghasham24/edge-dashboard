@@ -21,8 +21,8 @@ export async function onRequestGet({ request, env }) {
   if (!session) return err('Unauthorized', 401);
   const userId = session.user_id;
 
-  const user = await env.DB.prepare('SELECT is_admin FROM users WHERE id = ?').bind(userId).first();
-  if (!user?.is_admin) return err('Forbidden', 403);
+  const user = await env.DB.prepare('SELECT is_admin, mines_access FROM users WHERE id = ?').bind(userId).first();
+  if (!user?.is_admin && !user?.mines_access) return err('Forbidden', 403);
 
   const game = await env.DB.prepare(
     "SELECT * FROM casino_mines_games WHERE user_id = ? AND status = 'active' ORDER BY id DESC LIMIT 1"
