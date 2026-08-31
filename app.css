@@ -3948,6 +3948,7 @@
     background:#343a4d; border-color:rgba(100,130,255,.3);
     transform:scale(1.04);
 }
+.mines-tile.idle { cursor:default; pointer-events:none; }
 .mines-tile.gem {
     background:linear-gradient(145deg,#1e40af,#1d4ed8); border-color:#60a5fa;
     box-shadow:0 0 14px rgba(96,165,250,.4); cursor:default;

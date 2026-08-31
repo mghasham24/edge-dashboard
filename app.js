@@ -12311,7 +12311,8 @@
             var isHit     = isMine && casinoMinesHitTile === i;
             var isPending = casinoMinesPending === i && !isGem && !isMine;
             var isNewGem  = isGem && casinoMinesNewGem === i;
-            var tileCls   = 'mines-tile' + (isGem ? ' gem' + (isNewGem ? ' new' : '') : isMine ? ' mine' + (isHit ? ' hit' : '') : isPending ? ' pending' : '');
+            var tileState = isGem ? ' gem' + (isNewGem ? ' new' : '') : isMine ? ' mine' + (isHit ? ' hit' : '') : isPending ? ' pending' : (!active && !done ? ' idle' : '');
+            var tileCls   = 'mines-tile' + tileState;
             var onclick;
             if (active && !revSet.has(i)) {
                 onclick = ' onclick="minesReveal(' + i + ')"';
@@ -12443,50 +12444,6 @@
             renderMinesMain(document.getElementById('casino-main'));
         })
         .catch(function() { casinoMinesBusy = false; alert('Network error'); });
-    };
-
-    window.minesStartAndReveal = function(idx) {
-        if (casinoMinesBusy) return;
-        var betInp   = document.getElementById('mines-bet-input');
-        var minesInp = document.getElementById('mines-count-select');
-        var bet   = parseInt((betInp && betInp.value) || '0', 10);
-        var mines = parseInt((minesInp && minesInp.value) || '3', 10);
-        if (isNaN(bet) || bet < 100 || bet > 10000) { alert('Bet must be 100–10,000 Rax.'); return; }
-        if (bet > casinoBalance) { alert('Insufficient casino balance.'); return; }
-        casinoMinesLastBet   = bet;
-        casinoMinesLastMines = mines;
-        casinoMinesBusy    = true;
-        casinoMinesPending = idx;
-        renderMinesMain(document.getElementById('casino-main'));
-        fetch('/api/casino/mines/start', {
-            method: 'POST', credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ bet: bet, mines_count: mines }),
-        })
-        .then(function(r) { return r.json(); })
-        .then(function(d) {
-            casinoMinesBusy = false;
-            if (!d.ok) {
-                casinoMinesPending = null;
-                renderMinesMain(document.getElementById('casino-main'));
-                alert(d.error || 'Error starting game');
-                return;
-            }
-            casinoMinesGame = {
-                game_id: d.game_id, bet_rax: d.bet_rax, mines_count: d.mines_count,
-                revealed: d.revealed, gems_revealed: d.gems_revealed,
-                multiplier: d.multiplier, status: d.status,
-            };
-            updateCasinoBalance(d.casino_balance);
-            // Now reveal the tile the user tapped
-            window.minesReveal(idx);
-        })
-        .catch(function() {
-            casinoMinesBusy = false;
-            casinoMinesPending = null;
-            renderMinesMain(document.getElementById('casino-main'));
-            alert('Network error');
-        });
     };
 
     window.minesReveal = function(idx) {
