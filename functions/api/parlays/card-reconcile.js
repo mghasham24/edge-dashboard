@@ -40,8 +40,8 @@ function buildHeaders(authInfo, sessionToken) {
 
 // RS collectingcards URL takes the RS user ID in the path, same as sync-cards.js.
 const EDGEBOT_USER = 'V3yGgkkJ';
-const PAGE_SIZE    = 10;
-const MAX_PAGES    = 30; // 30 × 10 = 300 cards max — fetched in parallel so all fire at once
+const PAGE_SIZE = 10;
+const MAX_PAGES = 15; // 15 × 10 = 150 cards max
 
 async function fetchCardPage(sport, season, offset, hdrs) {
   try {
@@ -57,22 +57,18 @@ async function fetchCardPage(sport, season, offset, hdrs) {
   } catch (e) { return { ids: [], httpStatus: 0, error: e.message }; }
 }
 
-// Fetch all cards for one sport/season in parallel to avoid CF's 30s wall clock.
-// Sequential paging at 1-2s per page would timeout with large card pools (179+ cards = 18 pages).
-// RS returns an empty array for out-of-range offsets so parallel over-fetch is safe.
+// Sequential paging with early-exit when an empty page is returned.
+// Parallel was causing RS 429s (30 simultaneous requests per sport).
+// Current card counts (MLB ~41, NBA ~24) fit in 3-5 pages — sequential is fast enough.
 async function fetchAllForSport(sport, season, hdrs) {
-  const settled = await Promise.allSettled(
-    Array.from({ length: MAX_PAGES }, (_, i) =>
-      fetchCardPage(sport, season, i * PAGE_SIZE, hdrs)
-    )
-  );
   const allIds = [];
   let httpStatus = 0;
-  for (let i = 0; i < settled.length; i++) {
-    if (settled[i].status !== 'fulfilled') continue;
-    const { ids, httpStatus: hs } = settled[i].value;
-    if (i === 0) httpStatus = hs;
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const { ids, httpStatus: hs } = await fetchCardPage(sport, season, page * PAGE_SIZE, hdrs);
+    if (page === 0) httpStatus = hs;
+    if (hs && hs !== 200) return { ids: allIds, httpStatus: hs }; // auth error or rate limit — stop
     allIds.push(...ids);
+    if (ids.length < PAGE_SIZE) break; // last page — no more cards
   }
   return { ids: allIds, httpStatus };
 }

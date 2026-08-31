@@ -7,6 +7,7 @@ import { getSession } from '../../_lib/session.js';
 import { err }        from '../../_lib/response.js';
 
 const MIN_WITHDRAWAL = 1000;
+const MAX_WITHDRAWAL = 30000;
 
 export async function onRequestPost({ request, env }) {
   const session = await getSession(request, env.DB);
@@ -19,6 +20,8 @@ export async function onRequestPost({ request, env }) {
   const amount = body.amount;
   if (!Number.isInteger(amount) || amount < MIN_WITHDRAWAL)
     return err(`Minimum withdrawal is ${MIN_WITHDRAWAL} Rax.`, 400);
+  if (amount > MAX_WITHDRAWAL)
+    return err(`Maximum withdrawal is ${MAX_WITHDRAWAL.toLocaleString()} Rax per request. For larger amounts, submit multiple withdrawals.`, 400);
 
   // Verify user has a verified RS account (needed for payout)
   const [user, authRow] = await Promise.all([

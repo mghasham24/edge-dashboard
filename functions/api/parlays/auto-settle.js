@@ -1003,6 +1003,11 @@ async function getCfbPlayerStats(date, legs, proxyKey = '') {
   } catch(e) { return {}; }
 }
 
+// DK name → ESPN name for UFC fighters with reversed/different name order
+const UFC_NAME_ALIASES = {
+  'long xiao': 'xiao long',
+};
+
 // ── UFC helper ────────────────────────────────────────────────────────────────
 
 async function getUfcResults(date, proxyKey = '') {
@@ -1715,8 +1720,10 @@ async function handleRequest({ request, env }) {
             n && (n.toLowerCase().includes(teamNorm) || teamNorm.includes(n.toLowerCase()))
           )
         );
-        const gameFinal = (hasMatchup || teamInFinal) && (slugData.games || []).length > 0;
-        legOutcomes[leg.id] = (gameFinal || leg.game_date < staleDate) ? 'void' : null;
+        const leagueHadGames = (slugData.games || []).length > 0;
+        // Also void when the league had final games and game_date is before today (null-team legs)
+        const gameFinal = (hasMatchup || teamInFinal || (leagueHadGames && leg.game_date < todayUtc)) && leagueHadGames;
+        legOutcomes[leg.id] = (gameFinal || leg.game_date <= staleDate) ? 'void' : null;
         continue;
       }
       if (mkt === 'goalscorer') {
@@ -1735,7 +1742,8 @@ async function handleRequest({ request, env }) {
     if (sport === 'ufc') {
       const ufcResults = ufcMap[leg.game_date] || {};
       if (mkt === 'ufc_ml') {
-        const fullNorm = normalizeName(leg.player_name);
+        const rawNorm  = normalizeName(leg.player_name);
+        const fullNorm = UFC_NAME_ALIASES[rawNorm] || rawNorm;
         const lastName = fullNorm.split(' ').pop();
         // Full name first (handles two Johnsons etc.), last name as fallback
         const result = ufcResults[fullNorm] || ufcResults[lastName];

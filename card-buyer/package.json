@@ -1,0 +1,11 @@
+{
+  "name": "card-buyer",
+  "version": "1.0.0",
+  "description": "Buys 10 Rax RS marketplace cards via Safari AppleScript automation",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "parlay": "node index.js --parlay",
+    "test": "node index.js --test"
+  }
+}

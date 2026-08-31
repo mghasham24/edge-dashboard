@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// payout-bot/index.js — AppleScript edition
+// casino-payout-bot/index.js — AppleScript edition
 // Drives real Safari (where edgebot is already logged in) via osascript.
 // No Playwright, no CDP fingerprint, Turnstile passes naturally.
 //
@@ -10,7 +10,7 @@
 //
 // Usage:
 //   node index.js --test <cardUrl> <amount>   ← dry run (skips final submit)
-//   node index.js                              ← process payout queue
+//   node index.js                              ← process casino withdrawal queue
 
 require('dotenv').config();
 const { exec }  = require('child_process');
@@ -38,7 +38,7 @@ async function api(p, method = 'GET') {
 const MAX_ATTEMPTS = 10;
 
 async function fetchQueue() {
-  const d = await api('/api/parlays/payout-queue?action=list');
+  const d = await api('/api/casino/payout-queue?action=list');
   if (!d.ok) throw new Error('Queue fetch failed: ' + JSON.stringify(d));
   return (d.queue || [])
     .filter(e => e.status === 'pending' && (e.attempts || 0) < MAX_ATTEMPTS)
@@ -46,26 +46,26 @@ async function fetchQueue() {
     .slice(0, MAX_PER_RUN);
 }
 async function markAttempt(id, notes) {
-  await api(`/api/parlays/payout-queue?action=mark_attempt&id=${id}`, 'POST').catch(() => {});
+  await api(`/api/casino/payout-queue?action=mark_attempt&id=${id}`, 'POST').catch(() => {});
   if (notes) {
     const ts = new Date().toISOString();
-    await api(`/api/parlays/payout-queue?action=update_notes&id=${id}&notes=${encodeURIComponent(`[${ts}] ${notes.slice(0, 400)}`)}`, 'POST').catch(() => {});
+    await api(`/api/casino/payout-queue?action=update_notes&id=${id}&notes=${encodeURIComponent(`[${ts}] ${notes.slice(0, 400)}`)}`, 'POST').catch(() => {});
   }
 }
 async function skipCard(id) {
-  await api(`/api/parlays/payout-queue?action=skip_card&id=${id}`, 'POST').catch(() => {});
+  await api(`/api/casino/payout-queue?action=skip_card&id=${id}`, 'POST').catch(() => {});
 }
 async function prepareEntry(id) {
-  const d = await api(`/api/parlays/payout-queue?action=prepare&id=${id}`, 'POST');
+  const d = await api(`/api/casino/payout-queue?action=prepare&id=${id}`, 'POST');
   if (!d.ok) throw new Error(d.error || 'prepare failed');
   return d;
 }
 async function markSent(id) {
-  const d = await api(`/api/parlays/payout-queue?action=mark_sent&id=${id}`, 'POST');
+  const d = await api(`/api/casino/payout-queue?action=mark_sent&id=${id}`, 'POST');
   return d.ok;
 }
 async function markCard1Sent(id) {
-  const d = await api(`/api/parlays/payout-queue?action=mark_sent&id=${id}&phase=1`, 'POST');
+  const d = await api(`/api/casino/payout-queue?action=mark_sent&id=${id}&phase=1`, 'POST');
   return d.ok;
 }
 
@@ -379,15 +379,15 @@ async function processQueue() {
   try { queue = await fetchQueue(); }
   catch (e) { console.error(`[${ts()}] Queue error:`, e.message); return 0; }
 
-  if (!queue.length) { console.log(`[${ts()}] No pending payouts.`); return 0; }
+  if (!queue.length) { console.log(`[${ts()}] No pending casino withdrawals.`); return 0; }
 
-  console.log(`[${ts()}] ${queue.length} pending payout(s):\n`);
-  queue.forEach(e => console.log(`  #${e.id}  @${e.rs_username}  ${Number(e.offer_amount).toLocaleString()} Rax`));
+  console.log(`[${ts()}] ${queue.length} pending withdrawal(s):\n`);
+  queue.forEach(e => console.log(`  #${e.id}  @${e.rs_username}  ${Number(e.amount).toLocaleString()} Rax`));
 
   let sent = 0;
   for (let i = 0; i < queue.length; i++) {
     const entry = queue[i];
-    console.log(`\n[${ts()}] [${i + 1}/${queue.length}] #${entry.id} — @${entry.rs_username} — ${Number(entry.offer_amount).toLocaleString()} Rax`);
+    console.log(`\n[${ts()}] [${i + 1}/${queue.length}] #${entry.id} — @${entry.rs_username} — ${Number(entry.amount).toLocaleString()} Rax`);
 
     // Inner retry loop: cycle through cards if listed on marketplace (up to 8 tries)
     let p;
@@ -398,7 +398,7 @@ async function processQueue() {
     while (cardTries < MAX_CARD_TRIES) {
       try {
         p = await prepareEntry(entry.id);
-        console.log(`  Card 1: ${p.cardUrl}  (${Number(p.offerAmount).toLocaleString()} Rax${p.isMultiCard ? ' · phase 1 of 2' : ''})`);
+        console.log(`  Card: ${p.cardUrl}  (${Number(p.offerAmount).toLocaleString()} Rax${p.isMultiCard ? ' · phase 1 of 2' : ''})`);
       } catch (e) { console.error('  ✗ No card:', e.message); noCard = true; break; }
 
       try { ok1 = await processOffer(p.cardUrl, p.offerAmount); }
@@ -430,20 +430,57 @@ async function processQueue() {
       continue;
     }
     if (ok1 instanceof Error) {
-      // re-enter the error handler below
-      console.error('  ✗ Error:', ok1.message);
-      await markAttempt(entry.id, `card=${p?.cardUrl || 'none'} err=${ok1.message}`);
-      await safariCloseTab();
-      if (i < queue.length - 1) { const wait = rand(2, 3); console.log(`  Waiting ${wait}s before next offer...`); await sleep(wait * 1000); }
-      continue;
+      // "already have an open offer" = edgebot has a pending offer on this card already.
+      // Skip it and retry with a different card from the user's inventory.
+      if (ok1.message && ok1.message.toLowerCase().includes('already have an open offer')) {
+        await skipCard(entry.id);
+        cardTries++;
+        console.log(`  ↻ Card already has open offer — trying next card (${cardTries}/${MAX_CARD_TRIES})...`);
+        await sleep(rand(800, 1200));
+        // Re-enter the card retry loop
+        let retryOk = false;
+        while (cardTries < MAX_CARD_TRIES) {
+          try { p = await prepareEntry(entry.id); }
+          catch (e2) { console.error('  ✗ No card:', e2.message); noCard = true; break; }
+          console.log(`  Card: ${p.cardUrl}  (${Number(p.offerAmount).toLocaleString()} Rax${p.isMultiCard ? ' · phase 1 of 2' : ''})`);
+          try { ok1 = await processOffer(p.cardUrl, p.offerAmount); retryOk = true; break; }
+          catch (e2) {
+            if (e2.message && e2.message.toLowerCase().includes('already have an open offer')) {
+              await skipCard(entry.id); cardTries++;
+              console.log(`  ↻ Still has open offer — trying next card (${cardTries}/${MAX_CARD_TRIES})...`);
+              await sleep(rand(800, 1200)); continue;
+            }
+            ok1 = e2; retryOk = true; break;
+          }
+        }
+        if (noCard) continue;
+        if (!retryOk) {
+          console.error('  ✗ All candidate cards have open offers — will retry next run.');
+          await markAttempt(entry.id, 'all candidate cards already have open offers');
+          continue;
+        }
+        if (ok1 instanceof Error) {
+          console.error('  ✗ Error:', ok1.message);
+          await markAttempt(entry.id, `card=${p?.cardUrl || 'none'} err=${ok1.message}`);
+          await safariCloseTab();
+          if (i < queue.length - 1) { const wait = rand(2, 3); console.log(`  Waiting ${wait}s before next offer...`); await sleep(wait * 1000); }
+          continue;
+        }
+      } else {
+        console.error('  ✗ Error:', ok1.message);
+        await markAttempt(entry.id, `card=${p?.cardUrl || 'none'} err=${ok1.message}`);
+        await safariCloseTab();
+        if (i < queue.length - 1) { const wait = rand(2, 3); console.log(`  Waiting ${wait}s before next offer...`); await sleep(wait * 1000); }
+        continue;
+      }
     }
 
     let allSent = false;
     try {
       if (!ok1) {
         await skipCard(entry.id);
-        await markAttempt(entry.id, `card1=${p.cardUrl} skipped — slider max too low for ${p.offerAmount} Rax`);
-        console.log('  ✗ Card 1 value too low — skipped');
+        await markAttempt(entry.id, `card=${p.cardUrl} skipped — slider max too low for ${p.offerAmount} Rax`);
+        console.log('  ✗ Card value too low — skipped');
       } else if (p.isMultiCard) {
         // Phase 1 done — record card1 and immediately find + send card2
         await markCard1Sent(entry.id);
@@ -472,7 +509,7 @@ async function processQueue() {
         }
       } else {
         await markSent(entry.id);
-        console.log('  ✓ Offer sent');
+        console.log('  ✓ Withdrawal sent');
         allSent = true;
         sent++;
       }
@@ -489,14 +526,14 @@ async function processQueue() {
     }
   }
 
-  console.log(`\n[${ts()}] ✓ Done — ${sent}/${queue.length} offers sent.`);
+  console.log(`\n[${ts()}] ✓ Done — ${sent}/${queue.length} withdrawals sent.`);
   return sent;
 }
 
 // ── One-shot main: single pass through the queue ─────────────────────────────
 async function main() {
   const sent = await processQueue();
-  console.log(`\n✓ Done — ${sent} offer(s) sent this run.`);
+  console.log(`\n✓ Done — ${sent} withdrawal(s) sent this run.`);
 }
 
 // ── Daemon mode: run forever, check every 5 minutes ───────────────────────────
@@ -518,7 +555,7 @@ async function runDaemon() {
   process.on('SIGINT', cleanup);
   process.on('SIGTERM', cleanup);
 
-  console.log(`\n Payout bot daemon started (PID ${process.pid})`);
+  console.log(`\n Casino payout bot daemon started (PID ${process.pid})`);
   console.log(` Checking every ${CHECK_EVERY / 60000} minutes. Ctrl+C to stop.\n`);
 
   while (true) {

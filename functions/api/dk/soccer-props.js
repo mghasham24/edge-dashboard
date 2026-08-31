@@ -6,7 +6,7 @@
 import { getSessionOrCron } from '../../_lib/auth.js';
 
 const DK_BASE   = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
-const CACHE_TTL = 300;
+const CACHE_TTL = 900; // 15 minutes — soccer props don't change fast
 const CACHE_KEY = 'dk_soccer_props_v5';
 
 // Confirmed subcat IDs from DevTools 2026-08-16 (MLS, confirmed same across EU leagues).
@@ -31,11 +31,15 @@ const DK_SOCCER_LEAGUES = {
 };
 
 const DK_HEADERS = {
-  'Accept':         '*/*',
-  'User-Agent':     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5.2 Safari/605.1.15',
-  'Origin':         'https://sportsbook.draftkings.com',
-  'Referer':        'https://sportsbook.draftkings.com/',
-  'x-client-name': 'web',
+  'Accept':             'application/json',
+  'Accept-Language':    'en-US,en;q=0.9',
+  'User-Agent':         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5.2 Safari/605.1.15',
+  'Origin':             'https://sportsbook.draftkings.com',
+  'Referer':            'https://sportsbook.draftkings.com/leagues/soccer/88808',
+  'sec-fetch-site':     'same-site',
+  'sec-fetch-mode':     'cors',
+  'sec-fetch-dest':     'empty',
+  'x-client-name':      'web',
 };
 
 function leagueSubcatUrl(leagueId, subcatId) {
@@ -258,16 +262,49 @@ export async function onRequestGet(context) {
     }, null, 2), { headers: { 'Content-Type': 'application/json' } });
   }
 
-  // Cache check
+  // Stale-while-revalidate cache:
+  // - Fresh (< TTL): serve immediately, no DK fetch.
+  // - Stale (>= TTL): serve stale immediately, kick off background refresh.
+  // - Missing or nocache: fetch now, block on result.
+  let stalePayload = null;
   if (!nocache) {
     try {
       const cached = await env.DB.prepare('SELECT data, fetched_at FROM odds_cache WHERE cache_key=?').bind(CACHE_KEY).first();
-      if (cached && (now - cached.fetched_at) < CACHE_TTL) {
-        return new Response(cached.data, { headers: { 'Content-Type': 'application/json' } });
+      if (cached) {
+        if ((now - cached.fetched_at) < CACHE_TTL) {
+          // Fresh — serve immediately
+          return new Response(cached.data, { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'private, max-age=600' } });
+        }
+        // Stale — save for fallback, refresh in background below
+        stalePayload = cached.data;
       }
     } catch(e) {}
   }
 
+  const JSON_HEADERS = { 'Content-Type': 'application/json', 'Cache-Control': 'private, max-age=600' };
+
+  // If we have stale data, serve it immediately and refresh in the background
+  if (stalePayload) {
+    context.waitUntil(refreshCache(env, now));
+    return new Response(stalePayload, { headers: JSON_HEADERS });
+  }
+
+  // No cache at all — block on a fresh fetch
+  const allPlayers = await fetchAllPlayers();
+  if (!allPlayers.length) {
+    return new Response(JSON.stringify({ ok: true, players: [], count: 0, ts: now }), { headers: JSON_HEADERS });
+  }
+
+  const payload = JSON.stringify({ ok: true, players: allPlayers, count: allPlayers.length, ts: now });
+  context.waitUntil(
+    env.DB.prepare(
+      'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at'
+    ).bind(CACHE_KEY, payload, now).run().catch(() => {})
+  );
+  return new Response(payload, { headers: JSON_HEADERS });
+}
+
+async function fetchAllPlayers() {
   const leagueEntries = Object.entries(DK_SOCCER_LEAGUES);
   const ouEntries     = Object.entries(SUBCAT_MAP_OU);
 
@@ -300,13 +337,16 @@ export async function onRequestGet(context) {
     }
   }
 
-  const payload = JSON.stringify({ ok: true, players: allPlayers, count: allPlayers.length, ts: now });
+  return allPlayers;
+}
 
-  context.waitUntil(
-    env.DB.prepare(
+async function refreshCache(env, now) {
+  try {
+    const players = await fetchAllPlayers();
+    if (!players.length) return; // don't overwrite good cache with empty
+    const payload = JSON.stringify({ ok: true, players, count: players.length, ts: now });
+    await env.DB.prepare(
       'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at'
-    ).bind(CACHE_KEY, payload, now).run().catch(() => {})
-  );
-
-  return new Response(payload, { headers: { 'Content-Type': 'application/json' } });
+    ).bind(CACHE_KEY, payload, now).run();
+  } catch(e) {}
 }

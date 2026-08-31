@@ -115,6 +115,27 @@ export async function settleGame(game, db, userId) {
     await db.prepare('UPDATE users SET casino_balance = casino_balance + ? WHERE id = ?')
       .bind(totalCredit, userId).run();
   }
+
+  // Log completed game to casino_hands for analytics — never blocks or breaks game
+  try {
+    const betTotal    = game.hands.reduce((s, h) => s + (h.bet || 0), 0);
+    const handsDetail = results.map((r, i) => ({
+      result:       r.result,
+      bet:          game.hands[i]?.bet   || 0,
+      credit:       r.credit,
+      player_total: r.player_total,
+      dealer_total: r.dealer_total,
+      cards:        game.hands[i]?.cards || [],
+    }));
+    await db.prepare(
+      'INSERT INTO casino_hands (user_id, game_id, bet_total, payout_total, profit, hands_json, dealer_cards, dealer_total, created_at) VALUES (?,?,?,?,?,?,?,?,?)'
+    ).bind(
+      userId, game.id, betTotal, totalCredit, betTotal - totalCredit,
+      JSON.stringify(handsDetail), JSON.stringify(game.dealer_hand), dealerTotal,
+      Math.floor(Date.now() / 1000)
+    ).run();
+  } catch (_) {}
+
   return { results, dealerTotal, totalCredit };
 }
 

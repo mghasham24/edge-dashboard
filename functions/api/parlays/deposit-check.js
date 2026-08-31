@@ -268,9 +268,11 @@ async function handleRequest({ request, env }) {
       // Guard: if another parlay already consumed this card (e.g. the card was sold via a
       // non-Real-Pro auction to a different user), void this parlay instead of activating it.
       // The card left edgebot because that user paid — not because this parlay's user did.
+      // Only look at parlays created in the last 48h — cards reused from old settled parlays
+      // should not trigger a false void (the card was recycled into the pool legitimately).
       const cardConsumedBy = await env.DB.prepare(
-        "SELECT id FROM parlays WHERE deposit_card_id=? AND id != ? AND status NOT IN ('pending_deposit','expired','void','cancelled') LIMIT 1"
-      ).bind(row.deposit_card_id, row.id).first();
+        "SELECT id FROM parlays WHERE deposit_card_id=? AND id != ? AND status NOT IN ('pending_deposit','expired','void','voided','cancelled') AND created_at > ? LIMIT 1"
+      ).bind(row.deposit_card_id, row.id, now - 48 * 3600).first();
       if (cardConsumedBy) {
         await env.DB.prepare(
           "UPDATE parlays SET status='void', admin_notes='deposit_card_consumed_by_parlay_' || ? WHERE id=? AND status='pending_deposit'"

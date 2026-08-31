@@ -1,0 +1,12 @@
+{
+  "name": "casino-payout-bot",
+  "version": "1.0.0",
+  "description": "Casino payout bot — drives real Safari via AppleScript, no browser automation fingerprint",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5"
+  }
+}

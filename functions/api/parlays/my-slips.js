@@ -20,25 +20,26 @@ export async function onRequestGet({ request, env }) {
   const offset = page * limit;
 
   const now = Math.floor(Date.now() / 1000);
-  const pendingCutoff = now - 7200;
 
+  // Hide pending_deposit slips only once expires_at has passed (not on a fixed 2h created_at window).
+  // This ensures users can still see their slip if they sent a deposit and deposit-check is slow.
   const WHERE =
     "user_id = ? AND status NOT IN ('expired','void','voided') " +
-    "AND NOT (status='pending_deposit' AND created_at < ?)";
+    "AND NOT (status='pending_deposit' AND expires_at < ?)";
   const ORDER =
     "ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'pending_deposit' THEN 1 ELSE 2 END, created_at DESC";
 
   // Total count for pagination
   const { results: [countRow] } = await env.DB.prepare(
     `SELECT COUNT(*) AS cnt FROM parlays WHERE ${WHERE}`
-  ).bind(session.user_id, pendingCutoff).all();
+  ).bind(session.user_id, now).all();
   const total = countRow?.cnt ?? 0;
 
   const { results: parlays } = await env.DB.prepare(
     'SELECT id, status, legs_count, stake_rax, payout_rax, deposit_card_id, ' +
     'rs_offer_id, received_rax, is_free_play, expires_at, created_at, deposited_at, settled_at, share_token ' +
     `FROM parlays WHERE ${WHERE} ${ORDER} LIMIT ? OFFSET ?`
-  ).bind(session.user_id, pendingCutoff, limit, offset).all();
+  ).bind(session.user_id, now, limit, offset).all();
 
   const userRow = await env.DB.prepare(
     'SELECT free_play_credits FROM users WHERE id=?'

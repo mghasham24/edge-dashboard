@@ -20,24 +20,31 @@ export async function onRequestGet({ request, env }) {
 
     const [deps, wds] = await Promise.all([
       env.DB.prepare(
-        `SELECT cd.id, cd.user_id, u.email, 'deposit' AS type,
-                cd.rax_requested AS amount, cd.rax_credited, cd.status, cd.created_at
+        `SELECT cd.id, cd.user_id, u.email,
+                (SELECT ra.rs_username FROM real_auth ra WHERE ra.user_id = cd.user_id LIMIT 1) AS rs_username,
+                'deposit' AS type,
+                cd.rax_requested AS amount, cd.rax_credited, cd.card_id, cd.status, cd.created_at
          FROM casino_deposits cd
          JOIN users u ON u.id = cd.user_id
-         ORDER BY cd.created_at DESC LIMIT 200`
+         ORDER BY cd.created_at DESC LIMIT 2000`
       ).all(),
       env.DB.prepare(
-        `SELECT cw.id, cw.user_id, u.email, 'withdrawal' AS type,
-                cw.amount, NULL AS rax_credited, cw.status, cw.created_at
+        `SELECT cw.id, cw.user_id, u.email, cw.rs_username, 'withdrawal' AS type,
+                cw.amount, NULL AS rax_credited, NULL AS card_id, cw.status, cw.created_at
          FROM casino_withdrawals cw
          JOIN users u ON u.id = cw.user_id
-         ORDER BY cw.created_at DESC LIMIT 200`
+         ORDER BY cw.created_at DESC LIMIT 2000`
       ).all(),
     ]);
 
-    const rows = [...(deps.results || []), ...(wds.results || [])]
+    const depRows = (deps.results || []).map(d => ({
+      ...d,
+      card_url: d.card_id ? 'https://www.realapp.com/' + rsUrlEncode(20, 0, 0, d.card_id) : null,
+    }));
+
+    const rows = [...depRows, ...(wds.results || [])]
       .sort((a, b) => b.created_at - a.created_at)
-      .slice(0, 300);
+      .slice(0, 4000);
 
     return ok({ transactions: rows });
   }

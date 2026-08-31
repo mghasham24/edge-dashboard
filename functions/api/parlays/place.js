@@ -302,7 +302,11 @@ async function _place({ request, env, waitUntil }, onCreditConsumed) {
     const group = legGroup(l.marketType);
     if (!group || group === 'batter') continue; // batter same-game correlation allowed
     const gameKey = l.eventName || l.eventId;
-    const scopeKey = group === 'bball_player' ? (l.playerName || gameKey) : gameKey;
+    // Pitchers: scope by player+game so opposing pitchers (different players, same game) are allowed.
+    // Batters: same-game is fine. Basketball: same player only.
+    const scopeKey = (group === 'bball_player' || group === 'pitcher')
+      ? ((l.playerName || '') + ':' + gameKey)
+      : gameKey;
     const key = group + ':' + scopeKey;
     groupGameCounts[key] = (groupGameCounts[key] || 0) + 1;
     if (groupGameCounts[key] > 1) {

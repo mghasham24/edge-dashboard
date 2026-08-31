@@ -198,16 +198,18 @@
     font-size: 12px;
     color: var(--text2);
     display: flex;
-    gap: 6px;
-    align-items: baseline;
+    flex-direction: column;
+    gap: 1px;
   }
   .slip-leg-player {
     color: var(--green);
     font-weight: 600;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 160px;
+  }
+  .slip-leg-detail {
+    display: flex;
+    gap: 6px;
+    align-items: baseline;
+    color: var(--text2);
   }
   .slip-leg-line { flex-shrink: 0; }
   .slip-leg-odds {
@@ -600,8 +602,7 @@
         var leg = s.legs[j];
         html += '<div class="slip-leg">';
         html += '<span class="slip-leg-player">' + escHtml(cleanTeamName(leg.player_name, leg.market_type)) + '</span>';
-        html += '<span class="slip-leg-line">' + escHtml(fmtLegLine(leg)) + '</span>';
-        html += '<span class="slip-leg-odds">' + fmtOdds(leg.american_odds) + '</span>';
+        html += '<div class="slip-leg-detail"><span class="slip-leg-line">' + escHtml(fmtLegLine(leg)) + '</span><span class="slip-leg-odds">' + fmtOdds(leg.american_odds) + '</span></div>';
         html += '</div>';
       }
       html += '</div></div>';
