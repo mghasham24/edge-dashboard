@@ -11678,7 +11678,7 @@
 
         // No Blackjack note (after insurance resolved with no dealer BJ)
         if (state.insurance_offered && state.insurance_resolved && state.insurance_bet && state.status !== 'complete') {
-            parts.push('<div class="casino-no-bj-note">No Blackjack — Insurance lost (−' + state.insurance_bet.toLocaleString() + ' Rax)</div>');
+            parts.push('<div class="casino-no-bj-note">No Blackjack — Insurance lost (−' + RAX_ICON + state.insurance_bet.toLocaleString() + ')</div>');
         }
 
         // Insurance bar (shown in field)
@@ -11686,7 +11686,7 @@
             var halfBet = Math.floor((hands[0] && hands[0].bet || 0) / 2);
             parts.push(
                 '<div class="casino-ins-bar">' +
-                '<p>Dealer shows Ace — take insurance? (' + halfBet.toLocaleString() + ' Rax)</p>' +
+                '<p>Dealer shows Ace — take insurance? (' + RAX_ICON + halfBet.toLocaleString() + ')</p>' +
                 '<div class="casino-ins-btns">' +
                 '<button class="casino-ins-yes" onclick="casinoInsurance(true)">Take Insurance</button>' +
                 '<button class="casino-ins-no"  onclick="casinoInsurance(false)">Decline</button>' +
@@ -11715,7 +11715,7 @@
             // Result pill (when done)
             if (done && hResult) {
                 var rCls  = hResult.result === 'won' ? 'win' : hResult.result === 'blackjack' ? 'bj' : hResult.result === 'push' ? 'push' : 'lose';
-                var rLbl  = { won: 'Win +' + hResult.credit.toLocaleString(), lost: 'Lose', push: 'Push', blackjack: 'Blackjack! +' + hResult.credit.toLocaleString() }[hResult.result] || hResult.result;
+                var rLbl  = { won: 'Win ' + RAX_ICON + '+' + hResult.credit.toLocaleString(), lost: 'Lose', push: 'Push', blackjack: 'Blackjack! ' + RAX_ICON + '+' + hResult.credit.toLocaleString() }[hResult.result] || hResult.result;
                 parts.push('<div class="casino-result-pill ' + rCls + '">' + escHtml(rLbl) + '</div>');
                 if (hResult.insurance_won) {
                     parts.push('<div class="casino-result-pill win casino-ins-win-pill">Insurance +' + hResult.insurance_won.toLocaleString() + ' Rax</div>');
@@ -12254,9 +12254,9 @@
                 var dateStr = (d.getMonth() + 1) + '/' + d.getDate() + ' ' + tStr;
                 return '<div class="chr-row">' +
                     '<span class="chr-date">' + escHtml(dateStr) + '</span>' +
-                    '<span class="chr-bet">' + escHtml((h.total_bet||0).toLocaleString()) + '</span>' +
+                    '<span class="chr-bet">' + RAX_ICON + escHtml((h.total_bet||0).toLocaleString()) + '</span>' +
                     '<span class="chr-result ' + rCls + '">' + escHtml(resultStr) + '</span>' +
-                    '<span class="chr-net ' + netCls + '">' + escHtml(netStr) + '</span>' +
+                    '<span class="chr-net ' + netCls + '">' + RAX_ICON + escHtml(netStr) + '</span>' +
                     '</div>';
             }).join('');
             el.innerHTML = '<div class="chr-row chr-header"><span class="chr-date">Date</span><span class="chr-bet">Bet</span><span class="chr-result">Result</span><span class="chr-net">Net</span></div>' + rows;
@@ -12316,7 +12316,7 @@
             : '<div class="mines-bet-row">' +
                 '<div class="casino-amt-wrap" style="flex-shrink:0">' +
                   '<input class="casino-amt-input" type="number" id="mines-bet-input" min="100" max="10000" step="100" value="' + betVal + '" />' +
-                  '<span class="casino-amt-label">Rax</span>' +
+                  '<span class="casino-amt-label">' + RAX_ICON + '</span>' +
                 '</div>' +
                 '<button class="casino-mult-btn" onclick="minesBetHalf()">½</button>' +
                 '<button class="casino-mult-btn" onclick="minesBetDouble()">2×</button>' +
