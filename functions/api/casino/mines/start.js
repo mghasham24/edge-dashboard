@@ -1,8 +1,8 @@
 // POST /api/casino/mines/start
 // Start a new mines game. Deducts bet, places mines server-side.
 
-import { getSession } from '../../../../_lib/session.js';
-import { err }        from '../../../../_lib/response.js';
+import { getSession } from '../../../_lib/session.js';
+import { err }        from '../../../_lib/response.js';
 
 const MIN_BET     = 100;
 const MAX_BET     = 10000;

@@ -1,8 +1,8 @@
 // GET /api/casino/mines/state
 // Returns the current active mines game state (for page resume).
 
-import { getSession } from '../../../../_lib/session.js';
-import { err }        from '../../../../_lib/response.js';
+import { getSession } from '../../../_lib/session.js';
+import { err }        from '../../../_lib/response.js';
 
 const HOUSE_EDGE = 0.04;
 const TILES      = 25;

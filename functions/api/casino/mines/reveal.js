@@ -1,8 +1,8 @@
 // POST /api/casino/mines/reveal
 // Reveal a tile. Body: { game_id, tile_index } or { game_id, random: true }
 
-import { getSession } from '../../../../_lib/session.js';
-import { err }        from '../../../../_lib/response.js';
+import { getSession } from '../../../_lib/session.js';
+import { err }        from '../../../_lib/response.js';
 
 const HOUSE_EDGE = 0.04;
 const TILES      = 25;

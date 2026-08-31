@@ -1,8 +1,8 @@
 // POST /api/casino/mines/cashout
 // Cash out current winnings. Body: { game_id }
 
-import { getSession } from '../../../../_lib/session.js';
-import { err }        from '../../../../_lib/response.js';
+import { getSession } from '../../../_lib/session.js';
+import { err }        from '../../../_lib/response.js';
 
 async function getBalance(userId, db) {
   const row = await db.prepare('SELECT casino_balance FROM users WHERE id = ?').bind(userId).first();
