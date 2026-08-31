@@ -11373,6 +11373,11 @@
     var casinoDepositPending = null;   // { card_url, rax_requested, rax_credited }
     var casinoBusy           = false;
     var casinoLastBet        = 0;      // remembered across hands
+    var casinoGameType       = 'blackjack'; // 'blackjack' | 'mines'
+    var casinoMinesGame      = null;   // active mines game state
+    var casinoMinesBusy      = false;
+    var casinoMinesLastBet   = 0;
+    var casinoMinesLastMines = 3;
 
     var CASINO_SUITS = { H: '♥', D: '♦', C: '♣', S: '♠' };
     var casinoVerifyLoading = false;
@@ -11481,9 +11486,15 @@
             casinoRenderVerifyGate();
             return;
         }
+        var minesTab = (currentUser && currentUser.is_admin)
+            ? '<button class="casino-game-tab' + (casinoGameType === 'mines' ? ' active' : '') + '" onclick="casinoSetGameType(\'mines\')">💣 Mines</button>'
+            : '';
         panel.innerHTML = [
             '<div class="casino-hdr">',
-            '  <span class="casino-hdr-title">🎰 Blackjack</span>',
+            '  <div class="casino-game-tabs">',
+            '    <button class="casino-game-tab' + (casinoGameType === 'blackjack' ? ' active' : '') + '" onclick="casinoSetGameType(\'blackjack\')">🃏 Blackjack</button>',
+            '    ' + minesTab,
+            '  </div>',
             '  <div class="casino-hdr-right">',
             '    <button class="casino-hdr-btn dep" onclick="showCasinoModal(\'deposit\')">+ Deposit</button>',
             '    <div class="casino-hdr-bal-wrap">',
@@ -11553,6 +11564,13 @@
             if (!data.ok) return;
             updateCasinoBalance(data.casino_balance);
             casinoGame = data.active_game || null;
+            if (casinoGameType === 'mines' && currentUser && currentUser.is_admin) {
+                try {
+                    var mr = await fetch('/api/casino/mines/state', { credentials: 'include' });
+                    var md = await mr.json();
+                    casinoMinesGame = (md.ok && md.game) ? md.game : null;
+                } catch(e) { casinoMinesGame = null; }
+            }
             renderCasinoMain();
         } catch(e) {}
     }
@@ -11562,6 +11580,10 @@
     function renderCasinoMain() {
         var el = document.getElementById('casino-main');
         if (!el) return;
+        if (casinoGameType === 'mines') {
+            renderMinesMain(el);
+            return;
+        }
         var hasGame = casinoGame && (casinoGame.status === 'active' || casinoGame.status === 'complete');
         var fieldHTML = hasGame ? renderCasinoFieldHTML(casinoGame) : renderCasinoIdleFieldHTML();
         var ctrlHTML  = hasGame ? renderCasinoCtrlHTML(casinoGame)  : renderCasinoBetCtrlHTML();
@@ -11574,6 +11596,14 @@
             '</div>';
         loadCasinoHistoryInline();
     }
+
+    window.casinoSetGameType = function(type) {
+        if (casinoGameType === type) return;
+        casinoGameType = type;
+        // Re-render panel header to update active tab
+        renderCasinoPanel();
+        casinoLoadBalance();
+    };
 
     // ── Idle state (no active game) ───────────────────────────────────────────
 
@@ -12232,6 +12262,231 @@
             el.innerHTML = '<div class="chr-row chr-header"><span class="chr-date">Date</span><span class="chr-bet">Bet</span><span class="chr-result">Result</span><span class="chr-net">Net</span></div>' + rows;
         } catch(e) { el.innerHTML = '<div class="casino-error">Error loading history.</div>'; }
     }
+
+    // ── Mines UI ──────────────────────────────────────────────────────────────
+
+    function minesCalcMult(minesCount, gemsRevealed) {
+        if (gemsRevealed === 0) return 1;
+        var mult = 1;
+        for (var k = 0; k < gemsRevealed; k++) {
+            mult *= (25 - k) / (25 - minesCount - k);
+        }
+        return mult * 0.96;
+    }
+
+    function renderMinesMain(el) {
+        var g    = casinoMinesGame;
+        var active = g && g.status === 'active';
+        var done   = g && (g.status === 'won' || g.status === 'lost');
+
+        // Left panel
+        var betVal = casinoMinesLastBet && casinoMinesLastBet <= casinoBalance
+            ? casinoMinesLastBet
+            : (casinoBalance >= 100 ? Math.min(casinoBalance, 1000) : 100);
+
+        var minesOptions = '';
+        for (var m = 1; m <= 24; m++) {
+            var sel = m === casinoMinesLastMines ? ' selected' : '';
+            minesOptions += '<option value="' + m + '"' + sel + '>' + m + '</option>';
+        }
+        var gemsCount = active ? (25 - (g.mines_count || casinoMinesLastMines)) : (25 - casinoMinesLastMines);
+        var currMult  = active ? (g.multiplier || 1) : 1;
+        var netGain   = active && g.gems_revealed > 0 ? Math.floor((g.bet_rax || betVal) * g.multiplier) - (g.bet_rax || betVal) : 0;
+        var netGainDisp = (active && g.gems_revealed > 0) ? ((currMult).toFixed(2) + '×    ' + netGain.toLocaleString() + ' Rax') : (minesCalcMult(casinoMinesLastMines,1).toFixed(2) + '× next gem');
+
+        var canCashout = active && g.gems_revealed > 0;
+
+        var leftHTML = [
+            '<div class="mines-panel">',
+            '<div class="casino-amt-row">',
+            '<div class="casino-amt-wrap">',
+            '<input class="casino-amt-input" type="number" id="mines-bet-input" min="100" max="10000" step="100" value="' + (active ? g.bet_rax : betVal) + '"' + (active ? ' disabled' : '') + ' />',
+            '<span class="casino-amt-label">Rax</span>',
+            '</div>',
+            '<button class="casino-mult-btn" onclick="minesBetHalf()"' + (active ? ' disabled' : '') + '>½</button>',
+            '<button class="casino-mult-btn" onclick="minesBetDouble()"' + (active ? ' disabled' : '') + '>2×</button>',
+            '</div>',
+            (!active ? '<div class="casino-quick-chips">' +
+                '<button class="casino-chip" onclick="setMinesBet(100)">100</button>' +
+                '<button class="casino-chip" onclick="setMinesBet(500)">500</button>' +
+                '<button class="casino-chip" onclick="setMinesBet(1000)">1K</button>' +
+                '<button class="casino-chip" onclick="setMinesBet(2500)">2.5K</button>' +
+                '<button class="casino-chip" onclick="setMinesBet(5000)">5K</button>' +
+                '<button class="casino-chip" onclick="setMinesBet(10000)">MAX</button>' +
+            '</div>' : ''),
+            '<div class="mines-field-label">Mines</div>',
+            '<select class="mines-select" id="mines-count-select"' + (active ? ' disabled' : '') + '>',
+            minesOptions,
+            '</select>',
+            '<div class="mines-field-label">Gems</div>',
+            '<div class="mines-gems-display">' + gemsCount + '</div>',
+            (!active
+                ? '<button class="casino-deal-btn" onclick="minesStart()">Play</button>'
+                : canCashout
+                    ? '<button class="casino-deal-btn mines-cashout-btn" onclick="minesCashout()">Cash Out</button>'
+                    : '<button class="casino-deal-btn" disabled>Pick a tile…</button>'
+            ),
+            (active ? '<button class="mines-random-btn" onclick="minesRandomPick()">Random Pick</button>' : ''),
+            '<div class="mines-field-label" style="margin-top:12px">Total Net Gain (' + (active && g.gems_revealed > 0 ? currMult.toFixed(2) : minesCalcMult(casinoMinesLastMines,1).toFixed(2)) + '×)</div>',
+            '<div class="mines-net-gain">' + (active && g.gems_revealed > 0 ? netGain.toLocaleString() + ' Rax' : '0.00') + '</div>',
+            '</div>',
+        ].join('');
+
+        // Grid
+        var mineSet  = new Set((g && g.mine_positions) || []);
+        var revSet   = new Set((g && g.revealed) || []);
+        var gridHTML = '<div class="mines-grid">';
+        for (var i = 0; i < 25; i++) {
+            var isMine = done && mineSet.has(i);
+            var isGem  = revSet.has(i);
+            var tileCls = 'mines-tile';
+            if (isGem)  tileCls += ' gem';
+            if (isMine) tileCls += ' mine';
+            var clickable = active && !revSet.has(i) && !isMine;
+            var onclick = clickable ? ' onclick="minesReveal(' + i + ')"' : '';
+            var inner = isGem ? '💎' : isMine ? '💣' : '';
+            gridHTML += '<div class="' + tileCls + '"' + onclick + '>' + inner + '</div>';
+        }
+        gridHTML += '</div>';
+
+        el.innerHTML =
+            '<div class="mines-layout">' +
+                leftHTML +
+                gridHTML +
+            '</div>';
+    }
+
+    window.minesBetHalf = function() {
+        var inp = document.getElementById('mines-bet-input');
+        if (!inp) return;
+        inp.value = Math.max(100, Math.floor((parseInt(inp.value, 10) || 1000) / 2));
+    };
+    window.minesBetDouble = function() {
+        var inp = document.getElementById('mines-bet-input');
+        if (!inp) return;
+        inp.value = Math.min(10000, (parseInt(inp.value, 10) || 1000) * 2);
+    };
+    window.setMinesBet = function(v) {
+        var inp = document.getElementById('mines-bet-input');
+        if (inp) inp.value = v;
+    };
+
+    window.minesStart = function() {
+        if (casinoMinesBusy) return;
+        var betInp    = document.getElementById('mines-bet-input');
+        var minesInp  = document.getElementById('mines-count-select');
+        var bet    = parseInt((betInp && betInp.value) || '0', 10);
+        var mines  = parseInt((minesInp && minesInp.value) || '3', 10);
+        if (isNaN(bet) || bet < 100 || bet > 10000) { alert('Bet must be 100–10,000 Rax.'); return; }
+        if (bet > casinoBalance) { alert('Insufficient casino balance.'); return; }
+        casinoMinesLastBet   = bet;
+        casinoMinesLastMines = mines;
+        casinoMinesBusy = true;
+        fetch('/api/casino/mines/start', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ bet: bet, mines_count: mines }),
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            casinoMinesBusy = false;
+            if (!d.ok) { alert(d.error || 'Error starting game'); return; }
+            casinoMinesGame = {
+                game_id: d.game_id, bet_rax: d.bet_rax, mines_count: d.mines_count,
+                revealed: d.revealed, gems_revealed: d.gems_revealed,
+                multiplier: d.multiplier, status: d.status,
+            };
+            updateCasinoBalance(d.casino_balance);
+            renderMinesMain(document.getElementById('casino-main'));
+        })
+        .catch(function() { casinoMinesBusy = false; alert('Network error'); });
+    };
+
+    window.minesReveal = function(idx) {
+        if (casinoMinesBusy || !casinoMinesGame) return;
+        casinoMinesBusy = true;
+        fetch('/api/casino/mines/reveal', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ game_id: casinoMinesGame.game_id, tile_index: idx }),
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            casinoMinesBusy = false;
+            if (!d.ok) { alert(d.error || 'Error'); return; }
+            if (d.hit_mine) {
+                casinoMinesGame.revealed      = (casinoMinesGame.revealed || []).concat([idx]);
+                casinoMinesGame.mine_positions = d.mine_positions;
+                casinoMinesGame.status         = 'lost';
+            } else {
+                casinoMinesGame.revealed       = (casinoMinesGame.revealed || []).concat([idx]);
+                casinoMinesGame.gems_revealed  = d.gems_revealed;
+                casinoMinesGame.multiplier     = d.multiplier;
+                casinoMinesGame.status         = d.status;
+                if (d.status === 'won') {
+                    casinoMinesGame.mine_positions = d.mine_positions;
+                }
+            }
+            updateCasinoBalance(d.casino_balance);
+            renderMinesMain(document.getElementById('casino-main'));
+            if (d.status !== 'active') {
+                setTimeout(function() { casinoMinesGame = null; renderMinesMain(document.getElementById('casino-main')); }, 2800);
+            }
+        })
+        .catch(function() { casinoMinesBusy = false; });
+    };
+
+    window.minesRandomPick = function() {
+        if (casinoMinesBusy || !casinoMinesGame) return;
+        casinoMinesBusy = true;
+        fetch('/api/casino/mines/reveal', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ game_id: casinoMinesGame.game_id, random: true }),
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            casinoMinesBusy = false;
+            if (!d.ok) { alert(d.error || 'Error'); return; }
+            if (d.hit_mine) {
+                casinoMinesGame.mine_positions = d.mine_positions;
+                casinoMinesGame.status         = 'lost';
+            } else {
+                if (d.tile_index != null) casinoMinesGame.revealed = (casinoMinesGame.revealed || []).concat([d.tile_index]);
+                casinoMinesGame.gems_revealed = d.gems_revealed;
+                casinoMinesGame.multiplier    = d.multiplier;
+                casinoMinesGame.status        = d.status;
+                if (d.status === 'won') casinoMinesGame.mine_positions = d.mine_positions;
+            }
+            updateCasinoBalance(d.casino_balance);
+            renderMinesMain(document.getElementById('casino-main'));
+            if (d.status !== 'active') {
+                setTimeout(function() { casinoMinesGame = null; renderMinesMain(document.getElementById('casino-main')); }, 2800);
+            }
+        })
+        .catch(function() { casinoMinesBusy = false; });
+    };
+
+    window.minesCashout = function() {
+        if (casinoMinesBusy || !casinoMinesGame) return;
+        casinoMinesBusy = true;
+        fetch('/api/casino/mines/cashout', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ game_id: casinoMinesGame.game_id }),
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            casinoMinesBusy = false;
+            if (!d.ok) { alert(d.error || 'Error'); return; }
+            casinoMinesGame.mine_positions = d.mine_positions;
+            casinoMinesGame.status         = 'won';
+            updateCasinoBalance(d.casino_balance);
+            renderMinesMain(document.getElementById('casino-main'));
+            setTimeout(function() { casinoMinesGame = null; renderMinesMain(document.getElementById('casino-main')); }, 2800);
+        })
+        .catch(function() { casinoMinesBusy = false; });
+    };
 
     // ── End casino UI ─────────────────────────────────────────────────────────
 
