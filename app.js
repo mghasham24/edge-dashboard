@@ -11999,7 +11999,7 @@
             '  </button>',
             '</a>',
             '<p id="casino-dep-status" style="text-align:center;color:rgba(255,255,255,.5);font-size:13px;margin:4px 0">Waiting for your offer… Auto-confirms within ~1 min.</p>',
-            '<button class="casino-submit-btn secondary" id="casino-dep-cancel-btn" onclick="casinoCancelDeposit()" style="width:100%">Start New Deposit</button>',
+            '<button class="casino-submit-btn secondary" id="casino-dep-cancel-btn" onclick="casinoCancelDeposit()" style="width:100%">Cancel</button>',
         ].join('');
     }
 
@@ -12058,11 +12058,30 @@
     }
 
     async function casinoCancelDeposit() {
+        showConfirm(
+            '<strong>Are you sure?</strong><br><span style="font-size:13px;color:var(--muted)">Cancelling will not credit any Rax you already sent. Only cancel if you have not sent payment yet.</span>',
+            _doCasinoCancelDeposit
+        );
+    }
+
+    async function _doCasinoCancelDeposit() {
         casinoStopDepositPoll();
         var btn = document.getElementById('casino-dep-cancel-btn');
         if (btn) { btn.disabled = true; btn.textContent = 'Cancelling…'; }
         try {
-            await fetch('/api/casino/deposit-cancel', { method: 'POST' });
+            var res  = await fetch('/api/casino/deposit-cancel', { method: 'POST' });
+            var data = await res.json();
+            if (data.credited) {
+                // Payment was detected — show confirmation instead of deposit form
+                casinoDepositPending = null;
+                var content = document.getElementById('casino-modal-content');
+                if (content) content.innerHTML =
+                    '<p style="text-align:center;color:var(--green);font-size:15px;font-weight:600">Payment detected ✓</p>' +
+                    '<p style="text-align:center;color:var(--muted);font-size:13px">' + data.credited.toLocaleString() + ' Rax credited to your balance.</p>' +
+                    '<button class="casino-submit-btn" onclick="hideCasinoModal()" style="width:100%;margin-top:12px">Done</button>';
+                casinoLoadBalance();
+                return;
+            }
         } catch(e) {}
         casinoDepositPending = null;
         var content = document.getElementById('casino-modal-content');
@@ -16589,6 +16608,68 @@
         }
     }
 
+    var _casinoTxAll = [];
+
+    function renderCasinoTxTable(txs) {
+        var el = document.getElementById('admin-casino-tx-list');
+        if (!el) return;
+        if (!txs.length) { el.innerHTML = '<span style="color:var(--muted)">No transactions match.</span>'; return; }
+        var statusLabel = {
+            confirmed:  '<span style="color:var(--green)">Completed</span>',
+            complete:   '<span style="color:var(--green)">Completed</span>',
+            pending:    '<span style="color:#f59e0b">Pending</span>',
+            processing: '<span style="color:#60a5fa">Processing</span>',
+            expired:    '<span style="color:var(--muted)">Expired</span>',
+            cancelled:  '<span style="color:var(--muted)">Cancelled</span>',
+            failed:     '<span style="color:#ef4444">Failed</span>',
+        };
+        el.innerHTML =
+            '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
+            '<thead><tr style="color:var(--muted2);font-size:11px;text-transform:uppercase;letter-spacing:.06em">' +
+            '<th style="text-align:left;padding:6px 8px">User</th>' +
+            '<th style="text-align:left;padding:6px 8px">RS Username</th>' +
+            '<th style="text-align:left;padding:6px 8px">Type</th>' +
+            '<th style="text-align:right;padding:6px 8px">Amount</th>' +
+            '<th style="text-align:right;padding:6px 8px">Credited</th>' +
+            '<th style="text-align:left;padding:6px 8px">Status</th>' +
+            '<th style="text-align:left;padding:6px 8px">Card</th>' +
+            '<th style="text-align:left;padding:6px 8px">Date</th>' +
+            '</tr></thead><tbody>' +
+            txs.map(function(tx) {
+                var date = tx.created_at ? new Date(tx.created_at * 1000).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' }) : '—';
+                var credited = tx.type === 'deposit' && tx.rax_credited ? tx.rax_credited.toLocaleString() + ' Ⓡ' : '—';
+                var typeColor = tx.type === 'deposit' ? 'var(--green)' : '#f59e0b';
+                var badge = statusLabel[tx.status] || ('<span style="color:var(--muted)">' + escHtml(tx.status || '—') + '</span>');
+                var cardCell = (tx.type === 'deposit' && tx.card_url)
+                    ? '<a href="' + escHtml(tx.card_url) + '" target="_blank" rel="noopener" style="color:#60a5fa;font-size:11px">View ↗</a>'
+                    : '—';
+                return '<tr style="border-top:1px solid var(--border)">' +
+                    '<td style="padding:8px 8px;color:var(--muted);font-size:12px">' + escHtml(tx.email || String(tx.user_id)) + '</td>' +
+                    '<td style="padding:8px 8px;font-size:12px">' + (tx.rs_username ? '@' + escHtml(tx.rs_username) : '—') + '</td>' +
+                    '<td style="padding:8px 8px;font-weight:600;color:' + typeColor + '">' + (tx.type === 'deposit' ? 'Deposit' : 'Withdrawal') + '</td>' +
+                    '<td style="padding:8px 8px;text-align:right;font-weight:600">' + (tx.amount || 0).toLocaleString() + ' Ⓡ</td>' +
+                    '<td style="padding:8px 8px;text-align:right;color:var(--muted)">' + credited + '</td>' +
+                    '<td style="padding:8px 8px">' + badge + '</td>' +
+                    '<td style="padding:8px 8px">' + cardCell + '</td>' +
+                    '<td style="padding:8px 8px;color:var(--muted);font-size:12px">' + date + '</td>' +
+                    '</tr>';
+            }).join('') +
+            '</tbody></table>';
+    }
+
+    function filterCasinoTx() {
+        var q      = (document.getElementById('casino-tx-search')  ? document.getElementById('casino-tx-search').value.trim().toLowerCase()  : '');
+        var type   = (document.getElementById('casino-tx-type')    ? document.getElementById('casino-tx-type').value    : '');
+        var status = (document.getElementById('casino-tx-status')  ? document.getElementById('casino-tx-status').value  : '');
+        var filtered = _casinoTxAll.filter(function(tx) {
+            if (q      && !(tx.rs_username || '').toLowerCase().includes(q)) return false;
+            if (type   && tx.type !== type) return false;
+            if (status && tx.status !== status) return false;
+            return true;
+        });
+        renderCasinoTxTable(filtered);
+    }
+
     async function loadAdminCasinoTransactions() {
         var el = document.getElementById('admin-casino-tx-list');
         if (!el) return;
@@ -16597,43 +16678,8 @@
             var res  = await fetch('/api/casino/transactions?admin=1', { credentials: 'same-origin' });
             var data = await res.json();
             if (!data.ok) { el.innerHTML = '<span style="color:#ef4444">Error loading transactions</span>'; return; }
-            var txs = data.transactions || [];
-            if (!txs.length) { el.innerHTML = '<span style="color:var(--muted)">No transactions found.</span>'; return; }
-
-            var statusLabel = {
-                confirmed:  '<span style="color:var(--green)">Completed</span>',
-                complete:   '<span style="color:var(--green)">Completed</span>',
-                pending:    '<span style="color:#f59e0b">Pending</span>',
-                processing: '<span style="color:#60a5fa">Processing</span>',
-                expired:    '<span style="color:var(--muted)">Expired</span>',
-                failed:     '<span style="color:#ef4444">Failed</span>',
-            };
-
-            el.innerHTML =
-                '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
-                '<thead><tr style="color:var(--muted2);font-size:11px;text-transform:uppercase;letter-spacing:.06em">' +
-                '<th style="text-align:left;padding:6px 8px">User</th>' +
-                '<th style="text-align:left;padding:6px 8px">Type</th>' +
-                '<th style="text-align:right;padding:6px 8px">Amount</th>' +
-                '<th style="text-align:right;padding:6px 8px">Credited</th>' +
-                '<th style="text-align:left;padding:6px 8px">Status</th>' +
-                '<th style="text-align:left;padding:6px 8px">Date</th>' +
-                '</tr></thead><tbody>' +
-                txs.map(function(tx) {
-                    var date = tx.created_at ? new Date(tx.created_at * 1000).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' }) : '—';
-                    var credited = tx.type === 'deposit' && tx.rax_credited ? tx.rax_credited.toLocaleString() + ' Ⓡ' : '—';
-                    var typeColor = tx.type === 'deposit' ? 'var(--green)' : '#f59e0b';
-                    var badge = statusLabel[tx.status] || ('<span style="color:var(--muted)">' + (tx.status || '—') + '</span>');
-                    return '<tr style="border-top:1px solid var(--border)">' +
-                        '<td style="padding:8px 8px;color:var(--muted);font-size:12px">' + escHtml(tx.email || String(tx.user_id)) + '</td>' +
-                        '<td style="padding:8px 8px;font-weight:600;color:' + typeColor + '">' + (tx.type === 'deposit' ? 'Deposit' : 'Withdrawal') + '</td>' +
-                        '<td style="padding:8px 8px;text-align:right;font-weight:600">' + (tx.amount || 0).toLocaleString() + ' Ⓡ</td>' +
-                        '<td style="padding:8px 8px;text-align:right;color:var(--muted)">' + credited + '</td>' +
-                        '<td style="padding:8px 8px">' + badge + '</td>' +
-                        '<td style="padding:8px 8px;color:var(--muted);font-size:12px">' + date + '</td>' +
-                        '</tr>';
-                }).join('') +
-                '</tbody></table>';
+            _casinoTxAll = data.transactions || [];
+            filterCasinoTx();
         } catch(e) {
             el.innerHTML = '<span style="color:#ef4444">Error loading transactions</span>';
         }

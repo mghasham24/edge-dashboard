@@ -677,9 +677,25 @@
 
                 <!-- Transactions pane -->
                 <div id="admin-casino-pane-tx" style="display:none">
-                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:10px">
                         <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2)">All Casino Transactions</div>
-                        <button onclick="loadAdminCasinoTransactions()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:5px;cursor:pointer">Refresh</button>
+                        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                            <input id="casino-tx-search" type="text" placeholder="Search RS username…" oninput="filterCasinoTx()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;padding:6px 10px;border-radius:5px;width:170px;outline:none">
+                            <select id="casino-tx-type" onchange="filterCasinoTx()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;padding:6px 10px;border-radius:5px;cursor:pointer">
+                                <option value="">All Types</option>
+                                <option value="deposit">Deposit</option>
+                                <option value="withdrawal">Withdrawal</option>
+                            </select>
+                            <select id="casino-tx-status" onchange="filterCasinoTx()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;padding:6px 10px;border-radius:5px;cursor:pointer">
+                                <option value="">All Statuses</option>
+                                <option value="confirmed">Completed</option>
+                                <option value="pending">Pending</option>
+                                <option value="expired">Expired</option>
+                                <option value="cancelled">Cancelled</option>
+                                <option value="failed">Failed</option>
+                            </select>
+                            <button onclick="loadAdminCasinoTransactions()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:5px;cursor:pointer">Refresh</button>
+                        </div>
                     </div>
                     <div id="admin-casino-tx-list" style="font-size:13px;color:var(--muted)">Loading…</div>
                 </div>
@@ -1055,7 +1071,7 @@
     <!-- end #dashboard -->
 
     <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script>
-    <script src="/app.js?v=890"></script>
-    <div id="app-version-badge" style="position:fixed;bottom:6px;right:10px;font-size:9px;font-weight:600;color:var(--muted2);font-family:var(--mono);letter-spacing:.03em;pointer-events:none;z-index:1">v890</div>
+    <script src="/app.js?v=894"></script>
+    <div id="app-version-badge" style="position:fixed;bottom:6px;right:10px;font-size:9px;font-weight:600;color:var(--muted2);font-family:var(--mono);letter-spacing:.03em;pointer-events:none;z-index:1">v893</div>
 </body>
 </html>
