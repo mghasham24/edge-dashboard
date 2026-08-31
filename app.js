@@ -11491,7 +11491,7 @@
             casinoRenderVerifyGate();
             return;
         }
-        var minesTab = (currentUser && currentUser.is_admin)
+        var minesTab = (currentUser && (currentUser.is_admin || currentUser.mines_access))
             ? '<button class="casino-game-tab' + (casinoGameType === 'mines' ? ' active' : '') + '" onclick="casinoSetGameType(\'mines\')">💣 Mines</button>'
             : '';
         panel.innerHTML = [
@@ -11569,7 +11569,7 @@
             if (!data.ok) return;
             updateCasinoBalance(data.casino_balance);
             casinoGame = data.active_game || null;
-            if (casinoGameType === 'mines' && currentUser && currentUser.is_admin) {
+            if (casinoGameType === 'mines' && currentUser && (currentUser.is_admin || currentUser.mines_access)) {
                 try {
                     var mr = await fetch('/api/casino/mines/state', { credentials: 'include' });
                     var md = await mr.json();
