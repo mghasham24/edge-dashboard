@@ -3955,33 +3955,55 @@
 
 /* Bottom controls bar */
 .mines-bottom {
-    display:flex; gap:20px; align-items:flex-start;
-    width:532px; /* 5×100 + 4×8 = 532px — matches grid */
-    padding:14px 0 4px;
+    display:flex; flex-direction:column; gap:10px;
+    width:532px; padding:14px 0 4px;
     border-top:1px solid rgba(255,255,255,.08);
 }
-.mines-ctrl-group { display:flex; flex-direction:column; gap:4px; flex:1; min-width:0 }
-.mines-btn-group  { gap:8px; flex:1.4 }
+
+/* Row 1 — bet amount */
+.mines-bet-row {
+    display:flex; align-items:center; gap:8px;
+}
+.mines-bet-row .casino-amt-wrap { width:140px }
+.mines-bet-row .casino-amt-input { width:100% }
+.mines-chips-row { display:flex; gap:5px; flex:1 }
+.mines-chip {
+    flex:1; padding:7px 0; border-radius:7px; border:1px solid rgba(255,255,255,.14);
+    background:rgba(255,255,255,.07); color:rgba(255,255,255,.8);
+    font-size:12px; font-weight:700; cursor:pointer; transition:background .15s;
+}
+.mines-chip:hover { background:rgba(255,255,255,.15); color:#fff }
+
+/* Row 2 — game stats + action */
+.mines-game-row {
+    display:flex; align-items:center; gap:12px;
+}
+.mines-stat { display:flex; flex-direction:column; gap:4px }
+.mines-stat-btns { flex:1; display:flex; flex-direction:column; gap:6px; margin-left:auto }
 .mines-field-label { font-size:10px; font-weight:700; color:rgba(255,255,255,.4); text-transform:uppercase; letter-spacing:.07em }
 .mines-select {
-    width:100%; padding:8px 10px; border-radius:8px;
+    padding:9px 10px; border-radius:8px; min-width:70px;
     background:#1a2332; color:#fff; border:1px solid rgba(255,255,255,.15);
-    font-size:14px; font-weight:600; cursor:pointer; appearance:auto;
+    font-size:15px; font-weight:700; cursor:pointer; appearance:auto;
 }
 .mines-gems-display { font-size:22px; font-weight:700; color:#60a5fa }
 .mines-net-gain     { font-size:20px; font-weight:800; color:#4ade80; letter-spacing:-.01em }
 
 .mines-action-btn {
-    width:100%; padding:13px; border-radius:10px; border:none;
+    width:100%; padding:12px 20px; border-radius:10px; border:none;
     font-size:15px; font-weight:700; cursor:pointer; transition:background .15s, opacity .15s;
-    background:#1d4ed8; color:#fff;
+    background:#1d4ed8; color:#fff; white-space:nowrap;
 }
 .mines-action-btn:hover:not(:disabled) { background:#2563eb }
 .mines-action-btn:disabled { opacity:.45; cursor:default }
-.mines-play-btn    { background:#1d4ed8 }
-.mines-cashout-btn { background:#16a34a !important }
-.mines-cashout-btn:hover { background:#15803d !important }
-.mines-rand-btn    { background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.18) }
-.mines-rand-btn:hover { background:rgba(255,255,255,.17) }
+.mines-cashout-btn { background:#16a34a }
+.mines-cashout-btn:hover:not(:disabled) { background:#15803d }
+.mines-rand-btn {
+    width:100%; padding:9px 20px; border-radius:10px;
+    border:1px solid rgba(255,255,255,.18); background:rgba(255,255,255,.08);
+    color:rgba(255,255,255,.8); font-size:13px; font-weight:600;
+    cursor:pointer; transition:background .15s; white-space:nowrap;
+}
+.mines-rand-btn:hover { background:rgba(255,255,255,.15); color:#fff }
 
 /* ── End Casino Panel ───────────────────────────────────────────────── */

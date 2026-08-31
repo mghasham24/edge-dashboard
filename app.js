@@ -12310,56 +12310,52 @@
         }
         gridHTML += '</div>';
 
-        // Bottom controls
-        var bottomHTML =
-            '<div class="mines-bottom">' +
-              // Bet + chips
-              '<div class="mines-ctrl-group">' +
-                '<div class="mines-field-label">Bet Amount</div>' +
-                '<div class="casino-amt-row">' +
-                  '<div class="casino-amt-wrap">' +
-                    '<input class="casino-amt-input" type="number" id="mines-bet-input" min="100" max="10000" step="100" value="' + (active ? g.bet_rax : betVal) + '"' + (active ? ' disabled' : '') + ' />' +
-                    '<span class="casino-amt-label">Rax</span>' +
-                  '</div>' +
-                  '<button class="casino-mult-btn" onclick="minesBetHalf()"' + (active ? ' disabled' : '') + '>½</button>' +
-                  '<button class="casino-mult-btn" onclick="minesBetDouble()"' + (active ? ' disabled' : '') + '>2×</button>' +
+        // Bottom controls — two rows
+        var betRow = active
+            ? '' // hide bet row during active game
+            : '<div class="mines-bet-row">' +
+                '<div class="casino-amt-wrap" style="flex-shrink:0">' +
+                  '<input class="casino-amt-input" type="number" id="mines-bet-input" min="100" max="10000" step="100" value="' + betVal + '" />' +
+                  '<span class="casino-amt-label">Rax</span>' +
                 '</div>' +
-                (!active
-                  ? '<div class="casino-quick-chips" style="margin-top:6px">' +
-                      '<button class="casino-chip" onclick="setMinesBet(100)">100</button>' +
-                      '<button class="casino-chip" onclick="setMinesBet(500)">500</button>' +
-                      '<button class="casino-chip" onclick="setMinesBet(1000)">1K</button>' +
-                      '<button class="casino-chip" onclick="setMinesBet(2500)">2.5K</button>' +
-                      '<button class="casino-chip" onclick="setMinesBet(5000)">5K</button>' +
-                      '<button class="casino-chip" onclick="setMinesBet(10000)">MAX</button>' +
-                    '</div>'
-                  : '') +
-              '</div>' +
-              // Mines + Gems
-              '<div class="mines-ctrl-group">' +
+                '<button class="casino-mult-btn" onclick="minesBetHalf()">½</button>' +
+                '<button class="casino-mult-btn" onclick="minesBetDouble()">2×</button>' +
+                '<div class="mines-chips-row">' +
+                  '<button class="mines-chip" onclick="setMinesBet(100)">100</button>' +
+                  '<button class="mines-chip" onclick="setMinesBet(500)">500</button>' +
+                  '<button class="mines-chip" onclick="setMinesBet(1000)">1K</button>' +
+                  '<button class="mines-chip" onclick="setMinesBet(2500)">2.5K</button>' +
+                  '<button class="mines-chip" onclick="setMinesBet(5000)">5K</button>' +
+                  '<button class="mines-chip" onclick="setMinesBet(10000)">MAX</button>' +
+                '</div>' +
+              '</div>';
+
+        var gameRow =
+            '<div class="mines-game-row">' +
+              '<div class="mines-stat">' +
                 '<div class="mines-field-label">Mines</div>' +
                 '<select class="mines-select" id="mines-count-select"' + (active ? ' disabled' : '') + '>' + minesOptions + '</select>' +
-                '<div class="mines-field-label" style="margin-top:10px">Gems</div>' +
+              '</div>' +
+              '<div class="mines-stat">' +
+                '<div class="mines-field-label">Gems</div>' +
                 '<div class="mines-gems-display">' + gemsCount + '</div>' +
               '</div>' +
-              // Net gain
-              '<div class="mines-ctrl-group">' +
+              '<div class="mines-stat">' +
                 '<div class="mines-field-label">Net Gain (' + (canCashout ? currMult.toFixed(2) : nextMultDisp) + ')</div>' +
                 '<div class="mines-net-gain">' + (canCashout ? netGain.toLocaleString() + ' Rax' : '—') + '</div>' +
               '</div>' +
-              // Action buttons
-              '<div class="mines-ctrl-group mines-btn-group">' +
+              '<div class="mines-stat mines-stat-btns">' +
                 (!active
-                  ? '<button class="mines-action-btn mines-play-btn" onclick="minesStart()">Play</button>'
+                  ? '<button class="mines-action-btn" onclick="minesStart()">Play</button>'
                   : canCashout
                     ? '<button class="mines-action-btn mines-cashout-btn" onclick="minesCashout()">Cash Out</button>'
                     : '<button class="mines-action-btn" disabled>Pick a tile…</button>'
                 ) +
-                (active
-                  ? '<button class="mines-action-btn mines-rand-btn" onclick="minesRandomPick()">Random Pick</button>'
-                  : '') +
+                (active ? '<button class="mines-rand-btn" onclick="minesRandomPick()">Random Pick</button>' : '') +
               '</div>' +
             '</div>';
+
+        var bottomHTML = '<div class="mines-bottom">' + betRow + gameRow + '</div>';
 
         el.innerHTML =
             '<div class="mines-layout">' +
