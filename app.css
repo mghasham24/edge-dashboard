@@ -4006,30 +4006,29 @@
 
 /* Bottom controls bar */
 .mines-bottom {
-    display:flex; flex-direction:column; gap:10px;
+    display:flex; flex-direction:column; gap:8px;
     width:min(calc(100vh - 270px), 100%);
-    padding:14px 0 4px;
+    padding:12px 0 4px;
     border-top:1px solid rgba(255,255,255,.08);
 }
+.mines-row { display:flex; align-items:center; gap:8px; width:100% }
 
-/* Row 1 — bet amount */
-.mines-bet-row {
-    display:flex; align-items:center; gap:8px;
-}
-.mines-bet-row .casino-amt-wrap { width:140px }
-.mines-bet-row .casino-amt-input { width:100% }
-.mines-chips-row { display:flex; gap:5px; flex:1 }
+/* Row 1 — bet input + ½ 2× */
+.mines-row-bet .casino-amt-wrap { flex:1; min-width:0 }
+.mines-row-bet .casino-amt-input { width:100% }
+
+/* Row 2 — chips */
+.mines-row-chips { flex-wrap:nowrap }
 .mines-chip {
     flex:1; padding:7px 0; border-radius:7px; border:1px solid rgba(255,255,255,.14);
     background:rgba(255,255,255,.07); color:rgba(255,255,255,.8);
     font-size:12px; font-weight:700; cursor:pointer; transition:background .15s;
+    min-width:0;
 }
 .mines-chip:hover { background:rgba(255,255,255,.15); color:#fff }
 
-/* Row 2 — game stats + action */
-.mines-game-row {
-    display:flex; align-items:center; gap:12px;
-}
+/* Row 3 — mines + play */
+.mines-row-play { align-items:flex-end }
 .mines-stat { display:flex; flex-direction:column; gap:4px }
 .mines-stat-btns { flex:1; display:flex; flex-direction:column; gap:6px; margin-left:auto }
 .mines-field-label { font-size:10px; font-weight:700; color:rgba(255,255,255,.4); text-transform:uppercase; letter-spacing:.07em }
@@ -4038,8 +4037,14 @@
     background:#1a2332; color:#fff; border:1px solid rgba(255,255,255,.15);
     font-size:15px; font-weight:700; cursor:pointer; appearance:auto;
 }
-.mines-gems-display { font-size:22px; font-weight:700; color:#60a5fa }
-.mines-net-gain     { font-size:20px; font-weight:800; color:#4ade80; letter-spacing:-.01em }
+.mines-net-gain { font-size:18px; font-weight:800; color:#4ade80; letter-spacing:-.01em }
+
+/* Mobile — smaller grid so controls fit on screen */
+@media (max-width: 600px) {
+    .mines-grid-outer { width:min(72vw, calc(100vh - 380px)) }
+    .mines-bottom     { width:min(72vw, calc(100vh - 380px)) }
+    .mines-chip { font-size:11px; padding:6px 0 }
+}
 
 .mines-action-btn {
     width:100%; padding:12px 20px; border-radius:10px; border:none;
