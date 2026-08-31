@@ -30,7 +30,7 @@ export async function onRequestPost({ request, env }) {
 
   if (game.gems_revealed === 0) return err('Reveal at least one gem before cashing out.', 400);
 
-  const payout = Math.floor(game.bet_rax * game.multiplier);
+  const payout = Math.min(Math.floor(game.bet_rax * game.multiplier), 100000);
 
   await env.DB.prepare(
     "UPDATE casino_mines_games SET status = 'won' WHERE id = ?"

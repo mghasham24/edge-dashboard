@@ -49,7 +49,7 @@ export async function onRequestPost({ request, env }) {
 
   if (!Number.isInteger(bet) || bet < MIN_BET || bet > MAX_BET)
     return err(`Bet must be ${MIN_BET}–${MAX_BET} Rax.`, 400);
-  if (!Number.isInteger(mines) || mines < 1 || mines > 24)
+  if (!Number.isInteger(mines) || mines < 1 || mines > 15)
     return err('Mines must be 1–24.', 400);
 
   const now = Math.floor(Date.now() / 1000);

@@ -95,7 +95,7 @@ export async function onRequestPost({ request, env }) {
 
   // Auto-cashout if all safe tiles revealed (can't lose from here)
   if (safeRemaining === 0) {
-    const payout = Math.floor(game.bet_rax * newMult);
+    const payout = Math.min(Math.floor(game.bet_rax * newMult), 100000);
     await env.DB.prepare(
       "UPDATE casino_mines_games SET status = 'won' WHERE id = ?"
     ).bind(gameId).run();

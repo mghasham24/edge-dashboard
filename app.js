@@ -12286,7 +12286,7 @@
             : (casinoBalance >= 100 ? Math.min(casinoBalance, 1000) : 100);
 
         var minesOptions = '';
-        for (var m = 1; m <= 24; m++) {
+        for (var m = 1; m <= 15; m++) {
             var sel = m === casinoMinesLastMines ? ' selected' : '';
             minesOptions += '<option value="' + m + '"' + sel + '>' + m + '</option>';
         }
