@@ -14,7 +14,7 @@ import { hashidsEncode } from '../../_lib/hashids.js';
 
 const RS_DEVICE_UUID = '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e';
 const EDGEBOT_USER   = 'V3yGgkkJ';
-const DEPOSIT_TTL    = 10 * 60; // 10 minutes — matches deposit.js
+const DEPOSIT_TTL    = 15 * 60; // 15 minutes — matches deposit.js
 
 function buildHeaders(authInfo, sessionToken) {
   return {

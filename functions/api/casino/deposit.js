@@ -10,7 +10,7 @@ import { err }         from '../../_lib/response.js';
 import { rsUrlEncode } from '../../_lib/hashids.js';
 
 const MIN_DEPOSIT     = 1000;
-const MIN_DEPOSIT_TTL = 10 * 60; // matches deposit-check DEPOSIT_TTL
+const MIN_DEPOSIT_TTL = 15 * 60; // matches deposit-check DEPOSIT_TTL
 const VERIFY_MAX_AGE  = 15 * 60;
 const INVENTORY_MAX_AGE = 10 * 60;
 const RS_DEVICE_UUID = '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e';
@@ -168,7 +168,7 @@ export async function onRequestPost({ request, env }) {
         card_id:       existing.card_id,
         rax_requested: existing.rax_requested,
         rax_credited:  Math.floor(existing.rax_requested * 0.9),
-        expires_at:    existing.created_at + 10 * 60,
+        expires_at:    existing.created_at + MIN_DEPOSIT_TTL,
         resumed:       true,
       }), { headers: { 'Content-Type': 'application/json' } });
     }
@@ -193,6 +193,6 @@ export async function onRequestPost({ request, env }) {
     card_id:       cardId,
     rax_requested: amount,
     rax_credited:  Math.floor(amount * 0.9),
-    expires_at:    now + 10 * 60,
+    expires_at:    now + MIN_DEPOSIT_TTL,
   }), { headers: { 'Content-Type': 'application/json' } });
 }
