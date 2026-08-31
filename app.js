@@ -11380,6 +11380,7 @@
     var casinoMinesLastMines = 3;
     var casinoMinesResult    = null;  // { multiplier, payout_rax } shown in cashout popup
     var casinoMinesHitTile   = null;  // index of the mine tile the user pressed
+    var casinoMinesPending   = null;  // tile index currently in-flight (for instant visual feedback)
 
     var CASINO_SUITS = { H: '♥', D: '♦', C: '♣', S: '♠' };
     var casinoVerifyLoading = false;
@@ -12305,8 +12306,9 @@
         for (var i = 0; i < 25; i++) {
             var isMine  = done && mineSet.has(i);
             var isGem   = revSet.has(i);
-            var isHit   = isMine && casinoMinesHitTile === i;
-            var tileCls = 'mines-tile' + (isGem ? ' gem' : isMine ? ' mine' + (isHit ? ' hit' : '') : '');
+            var isHit     = isMine && casinoMinesHitTile === i;
+            var isPending = !active && casinoMinesPending === i;
+            var tileCls   = 'mines-tile' + (isGem ? ' gem' : isMine ? ' mine' + (isHit ? ' hit' : '') : isPending ? ' pending' : '');
             var onclick;
             if (active && !revSet.has(i)) {
                 onclick = ' onclick="minesReveal(' + i + ')"';
@@ -12465,7 +12467,9 @@
 
     window.minesReveal = function(idx) {
         if (casinoMinesBusy || !casinoMinesGame) return;
-        casinoMinesBusy = true;
+        casinoMinesBusy  = true;
+        casinoMinesPending = idx;
+        renderMinesMain(document.getElementById('casino-main'));
         fetch('/api/casino/mines/reveal', {
             method: 'POST', credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
@@ -12475,11 +12479,11 @@
         .then(function(d) {
             casinoMinesBusy = false;
             if (!d.ok) { alert(d.error || 'Error'); return; }
+            casinoMinesPending = null;
             if (d.hit_mine) {
-                casinoMinesGame.revealed      = (casinoMinesGame.revealed || []).concat([idx]);
                 casinoMinesGame.mine_positions = d.mine_positions;
                 casinoMinesGame.status         = 'lost';
-                casinoMinesResult = null;
+                casinoMinesResult  = null;
                 casinoMinesHitTile = idx;
             } else {
                 casinoMinesGame.revealed       = (casinoMinesGame.revealed || []).concat([idx]);
@@ -12494,10 +12498,10 @@
             updateCasinoBalance(d.casino_balance);
             renderMinesMain(document.getElementById('casino-main'));
             if (d.status !== 'active') {
-                setTimeout(function() { casinoMinesGame = null; casinoMinesResult = null; casinoMinesHitTile = null; renderMinesMain(document.getElementById('casino-main')); }, 2800);
+                setTimeout(function() { casinoMinesGame = null; casinoMinesResult = null; casinoMinesHitTile = null; casinoMinesPending = null; renderMinesMain(document.getElementById('casino-main')); }, 2800);
             }
         })
-        .catch(function() { casinoMinesBusy = false; });
+        .catch(function() { casinoMinesBusy = false; casinoMinesPending = null; renderMinesMain(document.getElementById('casino-main')); });
     };
 
     window.minesRandomPick = function() {
@@ -12530,7 +12534,7 @@
             updateCasinoBalance(d.casino_balance);
             renderMinesMain(document.getElementById('casino-main'));
             if (d.status !== 'active') {
-                setTimeout(function() { casinoMinesGame = null; casinoMinesResult = null; casinoMinesHitTile = null; renderMinesMain(document.getElementById('casino-main')); }, 2800);
+                setTimeout(function() { casinoMinesGame = null; casinoMinesResult = null; casinoMinesHitTile = null; casinoMinesPending = null; renderMinesMain(document.getElementById('casino-main')); }, 2800);
             }
         })
         .catch(function() { casinoMinesBusy = false; });
@@ -12553,7 +12557,7 @@
             casinoMinesResult = { multiplier: d.multiplier, payout_rax: d.payout_rax };
             updateCasinoBalance(d.casino_balance);
             renderMinesMain(document.getElementById('casino-main'));
-            setTimeout(function() { casinoMinesGame = null; casinoMinesResult = null; casinoMinesHitTile = null; renderMinesMain(document.getElementById('casino-main')); }, 2800);
+            setTimeout(function() { casinoMinesGame = null; casinoMinesResult = null; casinoMinesHitTile = null; casinoMinesPending = null; renderMinesMain(document.getElementById('casino-main')); }, 2800);
         })
         .catch(function() { casinoMinesBusy = false; });
     };

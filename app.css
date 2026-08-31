@@ -3939,7 +3939,12 @@
     transition:transform .1s, background .15s, border-color .15s, box-shadow .15s;
     user-select:none;
 }
-.mines-tile:not(.gem):not(.mine):hover {
+.mines-tile.pending {
+    background:#3a4060; border-color:rgba(130,160,255,.4);
+    transform:scale(0.93); opacity:.7; pointer-events:none;
+    transition:transform .08s, opacity .08s;
+}
+.mines-tile:not(.gem):not(.mine):not(.pending):hover {
     background:#343a4d; border-color:rgba(100,130,255,.3);
     transform:scale(1.04);
 }
