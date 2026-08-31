@@ -3923,16 +3923,18 @@
 .casino-game-tab:hover { background:rgba(255,255,255,.1); color:#fff }
 .casino-game-tab.active { background:#1d4ed8; border-color:#2563eb; color:#fff }
 
-.mines-layout { display:flex; flex-direction:column; align-items:stretch; gap:16px; padding:20px }
+.mines-layout { display:flex; flex-direction:column; align-items:center; gap:12px; padding:16px }
 
-/* Grid */
-.mines-grid-wrap { width:100% }
+/* Grid — width tracks viewport height so the 5×5 + controls row always fits without scrolling */
 .mines-grid {
-    display:grid; grid-template-columns:repeat(5,1fr); gap:8px; width:100%;
+    display:grid;
+    grid-template-columns:repeat(5,1fr);
+    gap:8px;
+    width:min(calc(100vh - 270px), 100%);
 }
 .mines-tile {
     aspect-ratio:1/1; width:100%; border-radius:12px; display:flex; align-items:center; justify-content:center;
-    font-size:clamp(22px,3vw,40px); cursor:pointer;
+    font-size:clamp(18px,2.5vw,38px); cursor:pointer;
     background:#374151; border:1px solid rgba(255,255,255,.08);
     transition:transform .1s, background .15s, border-color .15s, box-shadow .15s;
     user-select:none;
@@ -3957,7 +3959,8 @@
 /* Bottom controls bar */
 .mines-bottom {
     display:flex; flex-direction:column; gap:10px;
-    width:100%; padding:14px 0 4px;
+    width:min(calc(100vh - 270px), 100%);
+    padding:14px 0 4px;
     border-top:1px solid rgba(255,255,255,.08);
 }
 
