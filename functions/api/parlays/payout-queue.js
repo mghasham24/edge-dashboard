@@ -121,7 +121,7 @@ async function handleRequest({ request, env }) {
       'FROM payout_queue q ' +
       'LEFT JOIN real_auth ra ON ra.user_id = q.user_id ' +
       'LEFT JOIN parlays p ON p.id = q.parlay_id ' +
-      'WHERE p.status IN (\'won\',\'voided\') OR q.status = \'sent\' ' +
+      'WHERE p.status IN (\'won\',\'voided\') OR q.status = \'sent\' OR q.parlay_id IS NULL ' +
       'ORDER BY q.created_at DESC LIMIT 100'
     ).all();
 
@@ -159,7 +159,7 @@ async function handleRequest({ request, env }) {
 
     const entry = await env.DB.prepare(
       'SELECT q.id, q.user_id, q.payout_rax, q.offer_amount, q.skipped_cards, ' +
-      'q.card1_id, q.card1_sent_at, q.target_card_id, ra.rs_user_id ' +
+      'q.card1_id, q.card1_sent_at, q.card1_amount, q.target_card_id, ra.rs_user_id ' +
       'FROM payout_queue q LEFT JOIN real_auth ra ON ra.user_id = q.user_id WHERE q.id=?'
     ).bind(id).first();
     if (!entry)            return err('Not found', 404);
@@ -171,12 +171,17 @@ async function handleRequest({ request, env }) {
 
     const skippedIds = new Set(entry.skipped_cards ? JSON.parse(entry.skipped_cards) : []);
 
-    // Exclude cards already targeted for other entries of the same user
+    // Exclude cards already targeted for other entries of the same user,
+    // AND card1_id from phase-1 offers sent within the last 48h (offer still open on RS)
     try {
+      const cutoff = now - 48 * 3600;
       const { results: others } = await env.DB.prepare(
-        'SELECT target_card_id FROM payout_queue WHERE user_id=? AND id!=? AND target_card_id IS NOT NULL'
+        'SELECT target_card_id, card1_id FROM payout_queue WHERE user_id=? AND id!=?'
       ).bind(entry.user_id, id).all();
-      for (const r of (others || [])) skippedIds.add(r.target_card_id);
+      for (const r of (others || [])) {
+        if (r.target_card_id) skippedIds.add(r.target_card_id);
+        if (r.card1_id)       skippedIds.add(r.card1_id);
+      }
     } catch (_) {}
 
     // Exclude cards in the deposit pool
@@ -189,17 +194,32 @@ async function handleRequest({ request, env }) {
     const isMultiCard = payoutRax > 10000;
 
     if (!isMultiCard || !entry.card1_sent_at) {
-      // Phase 1 (or single-card payout ≤ 10k): find the first card.
-      // For payouts 10,001–15,000: try an Epic card first (cap 15k) → single offer.
-      // For payouts 15,001–20,000: try a Legendary card first (cap 20k) → single offer.
-      // Fallback in both cases: 2-card split with standard cards.
-      let cardId      = null;
+      // Phase 1 (or single-card ≤ 10k): find the first card.
+      // ≤ 15k: try Epic first (15k cap) → single offer.
+      // 15k–20k: try Legendary first (20k cap) → single offer.
+      // >20k: always multi-card — try Legendary for 20k card1, fallback Epic for 15k card1.
+      // Standard card fallback: 10k card1.
+      let cardId = null;
       let singleHighRarity = false;
+      let card1Offer = 0;
 
       if (isMultiCard) {
-        const targetRarity = payoutRax <= 15000 ? 'epic' : 'legendary';
-        cardId = await findUnownedCardOfRarity(entry.rs_user_id, authInfo, sessionToken, skippedIds, targetRarity);
-        if (cardId) singleHighRarity = true;
+        if (payoutRax <= 15000) {
+          cardId = await findUnownedCardOfRarity(entry.rs_user_id, authInfo, sessionToken, skippedIds, 'epic');
+          if (cardId) singleHighRarity = true;
+        } else if (payoutRax <= 20000) {
+          cardId = await findUnownedCardOfRarity(entry.rs_user_id, authInfo, sessionToken, skippedIds, 'legendary');
+          if (cardId) singleHighRarity = true;
+        } else {
+          // >20k: split required — try legendary (20k) then epic (15k) for card1
+          cardId = await findUnownedCardOfRarity(entry.rs_user_id, authInfo, sessionToken, skippedIds, 'legendary');
+          if (cardId) {
+            card1Offer = 20000;
+          } else {
+            cardId = await findUnownedCardOfRarity(entry.rs_user_id, authInfo, sessionToken, skippedIds, 'epic');
+            if (cardId) card1Offer = 15000;
+          }
+        }
       }
 
       if (!cardId) {
@@ -207,36 +227,41 @@ async function handleRequest({ request, env }) {
       }
       if (!cardId) return err('No eligible cards found for this winner', 404);
 
-      const cardUrl     = 'https://www.realapp.com/' + rsUrlEncode(20, 0, 0, cardId);
-      // High-rarity single card covers the full payout; otherwise phase 1 of 2-card split = 10k.
-      const offerAmount = singleHighRarity ? payoutRax : (isMultiCard ? 10000 : payoutRax);
-      const multiCard   = isMultiCard && !singleHighRarity;
+      const cardUrl   = 'https://www.realapp.com/' + rsUrlEncode(20, 0, 0, cardId);
+      const multiCard = isMultiCard && !singleHighRarity;
+      const offerAmount = singleHighRarity ? payoutRax : (multiCard ? (card1Offer || 10000) : payoutRax);
 
       await env.DB.prepare(
-        'UPDATE payout_queue SET target_card_id=?, last_attempt_at=? WHERE id=?'
-      ).bind(cardId, now, id).run();
+        'UPDATE payout_queue SET target_card_id=?, card1_amount=?, last_attempt_at=? WHERE id=?'
+      ).bind(cardId, multiCard ? offerAmount : null, now, id).run();
 
       return ok({ cardId, cardUrl, offerAmount, isMultiCard: multiCard, phase: 1 });
     }
 
     // Phase 2: card1 already sent — find a second card for the remaining amount.
-    // Skip card1 and any previously skipped cards.
+    // card1_amount tells us what was already sent; remainder drives card type selection.
     if (entry.card1_id) skippedIds.add(entry.card1_id);
+
+    const remainder = payoutRax - (entry.card1_amount || 10000);
 
     // Reuse an already-assigned card2 (target_card_id) if present (retry case)
     let cardId = entry.target_card_id;
     if (!cardId) {
-      cardId = await findUnownedCard(entry.rs_user_id, authInfo, sessionToken, skippedIds);
+      if (remainder > 15000) {
+        cardId = await findUnownedCardOfRarity(entry.rs_user_id, authInfo, sessionToken, skippedIds, 'legendary');
+        if (!cardId) cardId = await findUnownedCardOfRarity(entry.rs_user_id, authInfo, sessionToken, skippedIds, 'epic');
+      } else if (remainder > 10000) {
+        cardId = await findUnownedCardOfRarity(entry.rs_user_id, authInfo, sessionToken, skippedIds, 'epic');
+      }
+      if (!cardId) cardId = await findUnownedCard(entry.rs_user_id, authInfo, sessionToken, skippedIds);
       if (!cardId) return err('No eligible card found for second payout', 404);
       await env.DB.prepare(
         'UPDATE payout_queue SET target_card_id=?, last_attempt_at=? WHERE id=?'
       ).bind(cardId, now, id).run();
     }
 
-    const cardUrl     = 'https://www.realapp.com/' + rsUrlEncode(20, 0, 0, cardId);
-    const offerAmount = (entry.payout_rax || entry.offer_amount) - 10000;
-
-    return ok({ cardId, cardUrl, offerAmount, isMultiCard: true, phase: 2 });
+    const cardUrl = 'https://www.realapp.com/' + rsUrlEncode(20, 0, 0, cardId);
+    return ok({ cardId, cardUrl, offerAmount: remainder, isMultiCard: true, phase: 2 });
   }
 
   // ── Mark sent ──────────────────────────────────────────────────────────────
