@@ -1650,13 +1650,19 @@
         }, type === 'error' ? 6000 : 4000);
     }
 
-    function showConfirm(msg, onYes) {
+    function showConfirm(msg, onYes, title) {
         var overlay = document.createElement('div');
         overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px';
         var box = document.createElement('div');
         box.style.cssText = 'background:#18181f;border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:24px;max-width:360px;width:100%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,.6)';
+        if (title) {
+            var hdr = document.createElement('p');
+            hdr.style.cssText = 'color:#f0eff5;font-size:18px;font-weight:700;margin-bottom:8px';
+            hdr.textContent = title;
+            box.appendChild(hdr);
+        }
         var txt = document.createElement('p');
-        txt.style.cssText = 'color:#f0eff5;font-size:14px;line-height:1.5;margin-bottom:20px';
+        txt.style.cssText = 'color:#a0a0b0;font-size:13px;line-height:1.5;margin-bottom:20px';
         txt.textContent = msg;
         var btns = document.createElement('div');
         btns.style.cssText = 'display:flex;gap:10px;justify-content:center';
@@ -12059,8 +12065,9 @@
 
     async function casinoCancelDeposit() {
         showConfirm(
-            'Are you sure? Cancelling will not credit any Rax you already sent. Only cancel if you have not sent payment yet.',
-            _doCasinoCancelDeposit
+            'Cancelling will not credit any Rax you already sent. Only cancel if you have not sent payment yet.',
+            _doCasinoCancelDeposit,
+            'Are you sure?'
         );
     }
 
