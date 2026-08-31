@@ -6,7 +6,7 @@ import { err }        from '../../../_lib/response.js';
 
 const MIN_BET     = 100;
 const MAX_BET     = 10000;
-const HOUSE_EDGE  = 0.04;
+const HOUSE_EDGE  = 0.05;
 const TILES       = 25;
 const ABANDON_AGE = 30 * 60; // 30 minutes
 

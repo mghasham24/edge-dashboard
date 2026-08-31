@@ -4,7 +4,7 @@
 import { getSession } from '../../../_lib/session.js';
 import { err }        from '../../../_lib/response.js';
 
-const HOUSE_EDGE = 0.04;
+const HOUSE_EDGE = 0.05;
 const TILES      = 25;
 
 function calcMultiplier(minesCount, gemsRevealed) {

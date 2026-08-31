@@ -12271,7 +12271,7 @@
         for (var k = 0; k < gemsRevealed; k++) {
             mult *= (25 - k) / (25 - minesCount - k);
         }
-        return mult * 0.96;
+        return mult * 0.95;
     }
 
     function renderMinesMain(el) {
