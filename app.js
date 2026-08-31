@@ -12059,7 +12059,7 @@
 
     async function casinoCancelDeposit() {
         showConfirm(
-            '<strong>Are you sure?</strong><br><span style="font-size:13px;color:var(--muted)">Cancelling will not credit any Rax you already sent. Only cancel if you have not sent payment yet.</span>',
+            'Are you sure? Cancelling will not credit any Rax you already sent. Only cancel if you have not sent payment yet.',
             _doCasinoCancelDeposit
         );
     }
