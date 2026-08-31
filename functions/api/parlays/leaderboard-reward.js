@@ -70,21 +70,19 @@ export async function onRequestPost({ request, env }) {
     });
   }
 
-  // Query last week's top 3
+  // Query last week's top 3 by total Rax won
   const { results: winners } = await env.DB.prepare(`
     SELECT p.user_id, ra.rs_username,
-      SUM(CASE WHEN p.status='won' THEN p.payout_rax - p.stake_rax ELSE -p.stake_rax END) AS net_profit
+      SUM(p.payout_rax) AS total_won
     FROM parlays p
     JOIN real_auth ra ON ra.user_id = p.user_id
-    WHERE p.status IN ('won','lost')
+    WHERE p.status = 'won'
       AND (p.is_free_play IS NULL OR p.is_free_play = 0)
-      AND p.deposited_at >= ? AND p.deposited_at < ?
-      AND p.deposited_at IS NOT NULL
+      AND p.settled_at >= ? AND p.settled_at < ?
       AND ra.rs_username IS NOT NULL
       AND ra.parlay_verified = 1
     GROUP BY p.user_id
-    HAVING net_profit > 0
-    ORDER BY net_profit DESC
+    ORDER BY total_won DESC
     LIMIT 3
   `).bind(windowStart, windowEnd).all();
 
