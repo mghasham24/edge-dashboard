@@ -3923,8 +3923,9 @@
 .casino-game-tab:hover { background:rgba(255,255,255,.1); color:#fff }
 .casino-game-tab.active { background:#1d4ed8; border-color:#2563eb; color:#fff }
 
-.mines-layout { display:flex; gap:20px; align-items:flex-start; padding:16px; min-height:420px }
+.mines-layout { display:flex; gap:20px; align-items:flex-start; padding:16px }
 .mines-panel { width:200px; flex-shrink:0; display:flex; flex-direction:column; gap:10px }
+.mines-right { display:flex; flex-direction:column; gap:10px; flex-shrink:0 }
 .mines-field-label { font-size:11px; font-weight:600; color:rgba(255,255,255,.45); text-transform:uppercase; letter-spacing:.06em; margin-top:4px }
 .mines-select {
     width:100%; padding:9px 12px; border-radius:8px;
@@ -3932,8 +3933,10 @@
     font-size:14px; font-weight:600; cursor:pointer; appearance:auto;
 }
 .mines-gems-display { font-size:22px; font-weight:700; color:#60a5fa; text-align:center }
+.mines-actions { display:flex; gap:8px; width:100% }
+.mines-play-btn { flex:1; margin:0 }
 .mines-random-btn {
-    width:100%; padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,.2);
+    flex:1; padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,.2);
     background:rgba(255,255,255,.07); color:rgba(255,255,255,.8);
     font-size:13px; font-weight:600; cursor:pointer; transition:background .15s;
 }
@@ -3943,12 +3946,11 @@
 .mines-net-gain { font-size:20px; font-weight:800; color:#4ade80; letter-spacing:-.01em }
 
 .mines-grid {
-    flex:1; display:grid; grid-template-columns:repeat(5,1fr); gap:8px;
-    align-content:start;
+    display:grid; grid-template-columns:repeat(5,52px); grid-template-rows:repeat(5,52px); gap:6px;
 }
 .mines-tile {
-    aspect-ratio:1/1; border-radius:10px; display:flex; align-items:center; justify-content:center;
-    font-size:26px; cursor:pointer;
+    width:52px; height:52px; border-radius:8px; display:flex; align-items:center; justify-content:center;
+    font-size:22px; cursor:pointer;
     background:linear-gradient(145deg,#1e3a5f,#152e4d);
     border:1px solid rgba(255,255,255,.1);
     transition:transform .1s, background .15s, border-color .15s, box-shadow .15s;
