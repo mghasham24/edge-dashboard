@@ -199,17 +199,23 @@ function resolveTeamLeg(leg, finalGames) {
     return (isOver ? total > line : total < line) ? 'won' : 'lost';
   }
 
+  // DK shortName → ESPN abbreviation overrides for known mismatches
+  const CFB_ABBR_MAP = { 'NC ST': 'NCSU', 'SAC ST': 'SAC' };
+
   const dkName       = leg.player_name.replace(/ (ML|RL)$/i, '').trim();
   const teamName     = normalizeName(dkName);
   const nickname     = teamName.split(' ').slice(1).join(' ');
   const dkUp         = dkName.toUpperCase();
   const legTeam      = (leg.team || '').toUpperCase(); // stored DK shortName (most reliable for CFB)
   const legTeamNoSp  = legTeam.replace(/\s+/g, '');   // e.g. "NC ST" → "NCST" for ESPN abbr match
+  const legTeamEspn  = CFB_ABBR_MAP[legTeam] || null;  // ESPN abbr override
   const game = pickClosestGame(finalGames.filter(g => {
     const homeNorm = normalizeName(g.homeName);
     const awayNorm = normalizeName(g.awayName);
     if (homeNorm === teamName || awayNorm === teamName) return true;
     if (nickname && (homeNorm.endsWith(nickname) || awayNorm.endsWith(nickname))) return true;
+    // Known DK→ESPN abbreviation override (e.g. DK "NC ST" → ESPN "NCSU")
+    if (legTeamEspn && (g.homeAbbr === legTeamEspn || g.awayAbbr === legTeamEspn)) return true;
     // Direct shortName match — exact or DK suffix (e.g. "UNC" → ESPN "NC")
     if (legTeam && (g.homeAbbr === legTeam || g.awayAbbr === legTeam)) return true;
     // Space-stripped match: DK "NC ST" → "NCST" matches ESPN "NCST"
@@ -605,6 +611,8 @@ function extractMlbPlayerStats(boxscore) {
       if (!name) continue;
       const batting  = p.stats?.batting  || {};
       const pitching = p.stats?.pitching || {};
+      // Skip players listed on the roster who didn't appear (empty stats = DNP)
+      if (!Object.keys(batting).length && !Object.keys(pitching).length) continue;
       const merged   = { ...batting, ...pitching };
       const h  = parseInt(batting.hits       || 0);
       merged.hits = h; // always batting hits — pitching spread overwrites otherwise (position players who pitch)
@@ -1696,12 +1704,18 @@ async function handleRequest({ request, env }) {
         }
       }
       if (!playerStats) {
-        // Only treat "a game is final" as evidence this player DNP'd when the event_name
-        // identifies a specific matchup. Player-prop format ("Albert Gudmundsson · sot")
-        // has no team info — another league game being final doesn't mean THIS player's game
-        // is done (e.g. LAZ vs BOL final while Roma vs FIO is still live).
+        // Determine if this player's specific game is final.
+        // Matchup format ("S04 vs FCA"): check event_name directly.
+        // Player-prop format ("Kevin Muller · saves"): fall back to leg.team substring match
+        // against the final games list — "Schalke" matches "FC Schalke 04", etc.
         const hasMatchup = /\s+(vs|@)\s+/i.test(leg.event_name || '');
-        const gameFinal = hasMatchup && (slugData.games || []).length > 0;
+        const teamNorm = (leg.team || '').toLowerCase().trim();
+        const teamInFinal = !hasMatchup && teamNorm.length > 3 && (slugData.games || []).some(g =>
+          [g.homeName, g.awayName, g.homeAbbr, g.awayAbbr].some(n =>
+            n && (n.toLowerCase().includes(teamNorm) || teamNorm.includes(n.toLowerCase()))
+          )
+        );
+        const gameFinal = (hasMatchup || teamInFinal) && (slugData.games || []).length > 0;
         legOutcomes[leg.id] = (gameFinal || leg.game_date < staleDate) ? 'void' : null;
         continue;
       }
@@ -1799,9 +1813,40 @@ async function handleRequest({ request, env }) {
     // MLB player prop — use per-game stats when game_start_ms identifies a specific game
     const _mlbByGame  = mlbStatsByGameMap[leg.game_date] || {};
     const _mlbBestG   = pickClosestGame(mlbGamesMap[leg.game_date] || [], leg.game_start_ms);
-    const _mlbStatSrc = (_mlbBestG && _mlbByGame[_mlbBestG.gamePk]) ? _mlbByGame[_mlbBestG.gamePk] : (mlbStatsMap[leg.game_date] || {});
-    const playerStats = _mlbStatSrc[normForLookup(leg.player_name)];
+    const _mlbPerGame = (_mlbBestG && _mlbByGame[_mlbBestG.gamePk]) ? _mlbByGame[_mlbBestG.gamePk] : null;
+    const _mlbCombined = mlbStatsMap[leg.game_date] || {};
+    const _mlbStatSrc = _mlbPerGame || _mlbCombined;
+    // Look up player in per-game stats first; fall back to combined all-games stats.
+    // Combined fallback handles legs whose event_name points to the wrong game.
+    const _mlbLookupKey = normForLookup(leg.player_name);
+    let playerStats = _mlbStatSrc[_mlbLookupKey];
+    if (!playerStats && _mlbPerGame) {
+      playerStats = _mlbCombined[_mlbLookupKey];
+    }
+    // Last-name fallback: MLB API may return "Framber Andres Valdez" while DK stores "Framber Valdez".
+    // Match by last name + first-initial to avoid collisions.
     if (!playerStats) {
+      const _mlbFirstInitial = _mlbLookupKey.charAt(0);
+      const _mlbLastName = _mlbLookupKey.split(' ').pop();
+      if (_mlbLastName && _mlbLastName.length > 2) {
+        const _searchMap = _mlbPerGame ? { ..._mlbPerGame, ..._mlbCombined } : _mlbCombined;
+        for (const [k, v] of Object.entries(_searchMap)) {
+          const kLast = k.split(' ').pop();
+          if (kLast === _mlbLastName && k.charAt(0) === _mlbFirstInitial) {
+            playerStats = v; break;
+          }
+        }
+      }
+    }
+    if (!playerStats) {
+      // If the game is Final (in mlbGamesMap) but its per-game boxscore is missing
+      // (timeout or malformed), the combined stats also won't have the player.
+      // Stay pending and retry rather than falsely voiding.
+      const _perGameStats = _mlbBestG ? _mlbByGame[_mlbBestG.gamePk] : undefined;
+      if (_mlbBestG && (_perGameStats === undefined || Object.keys(_perGameStats).length === 0)) {
+        legOutcomes[leg.id] = null;
+        continue;
+      }
       // Player absent from boxscore — scratched/DNP. Determine if game is final.
       // Try matchup parse first (works for team-format event_name); fall back to
       // "any final game exists on this date" for player-prop event_name format.
