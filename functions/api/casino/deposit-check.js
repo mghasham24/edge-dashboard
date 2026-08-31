@@ -14,7 +14,7 @@ import { hashidsEncode } from '../../_lib/hashids.js';
 
 const RS_DEVICE_UUID = '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e';
 const EDGEBOT_USER   = 'V3yGgkkJ';
-const DEPOSIT_TTL    = 3 * 60; // 3 minutes — matches deposit.js
+const DEPOSIT_TTL    = 10 * 60; // 10 minutes — matches deposit.js
 
 function buildHeaders(authInfo, sessionToken) {
   return {
@@ -115,6 +115,33 @@ async function counterOffer(offerId, counterAmount, authInfo, sessionToken) {
   return { ok: true };
 }
 
+// Check card auction history for a specific buyer (rs_username) buying from edgebot.
+// Returns the amount paid if it's within 10% of raxRequested, or 0 if not found / amount mismatch.
+// History may contain multiple trades (card recycled); amount validation ensures we match
+// the current deposit, not a previous one for the same card.
+async function checkAuctionHistory(cardId, rsUsername, raxRequested, authInfo, sessionToken) {
+  try {
+    const res = await fetch(
+      `https://web.realapp.com/cardauctionhistory/${cardId}`,
+      { headers: buildHeaders(authInfo, sessionToken), signal: AbortSignal.timeout(6000) }
+    );
+    if (!res.ok) return 0;
+    const data = await res.json();
+    const history = Array.isArray(data?.auctionHistory) ? data.auctionHistory : [];
+    for (const entry of history) {
+      const buyer  = entry.user?.userName?.toLowerCase();
+      const seller = entry.from?.user?.id;
+      if (buyer === rsUsername.toLowerCase() && seller === EDGEBOT_USER) {
+        const raw = String(entry.amountDisplay || '').replace(/,/g, '');
+        const amount = parseInt(raw, 10);
+        // Validate amount is within 10% of rax_requested — guards against stale recycled-card trades
+        if (amount > 0 && amount >= raxRequested * 0.9 && amount <= raxRequested * 1.1) return amount;
+      }
+    }
+  } catch (_) {}
+  return 0;
+}
+
 // Fetch the current owner of a single card. Returns RS userId string or null.
 async function fetchCardOwner(cardId, authInfo, sessionToken) {
   try {
@@ -207,6 +234,73 @@ async function handleRequest({ request, env, userId, cronOk }) {
     }, null, 2), { headers: { 'Content-Type': 'application/json' } });
   }
 
+  // ── Audit mode: verify auction history for every confirmed deposit ────────────
+  // GET ?audit_users=email1,email2&_cron_key=... (admin/cron only)
+  // Returns per-deposit verdict: paid / no_history / error
+  if (url2.searchParams.has('audit_users') && cronOk) {
+    const emails = url2.searchParams.get('audit_users').split(',').map(e => e.trim()).filter(Boolean);
+    if (!emails.length) return err('audit_users param required', 400);
+
+    const ph = emails.map(() => '?').join(',');
+    const confirmedRows = await env.DB.prepare(
+      `SELECT cd.id, cd.user_id, cd.card_id, cd.rax_requested, cd.rax_credited, cd.created_at,
+              u.email, ra.rs_username
+       FROM casino_deposits cd
+       JOIN users u ON u.id = cd.user_id
+       LEFT JOIN real_auth ra ON ra.user_id = cd.user_id AND ra.parlay_verified = 1
+       WHERE cd.status = 'confirmed' AND u.email IN (${ph})
+       ORDER BY cd.created_at DESC`
+    ).bind(...emails).all();
+
+    const rows = confirmedRows.results || [];
+
+    // Detect duplicate card_ids across deposits
+    const cardUsage = {};
+    for (const r of rows) {
+      if (!cardUsage[r.card_id]) cardUsage[r.card_id] = [];
+      cardUsage[r.card_id].push(r.id);
+    }
+
+    const results = [];
+    for (const row of rows) {
+      if (!row.rs_username || !row.card_id) {
+        results.push({ ...row, verdict: 'skip', reason: !row.rs_username ? 'no_rs_username' : 'no_card_id' });
+        continue;
+      }
+      const paidAmount = await checkAuctionHistory(row.card_id, row.rs_username, row.rax_requested, authInfo, sessionTok);
+      const dupeOf = (cardUsage[row.card_id] || []).filter(id => id !== row.id);
+      results.push({
+        dep_id: row.id,
+        email: row.email,
+        rs_username: row.rs_username,
+        card_id: row.card_id,
+        rax_requested: row.rax_requested,
+        rax_credited: row.rax_credited,
+        created: new Date(row.created_at * 1000).toISOString(),
+        verdict: paidAmount > 0 ? 'paid' : 'no_history',
+        paid_amount: paidAmount || null,
+        dupe_card_in_deps: dupeOf.length ? dupeOf : undefined,
+      });
+      await new Promise(r => setTimeout(r, 200));
+    }
+
+    const paid       = results.filter(r => r.verdict === 'paid');
+    const noHistory  = results.filter(r => r.verdict === 'no_history');
+    const skipped    = results.filter(r => r.verdict === 'skip');
+    const dupes      = Object.entries(cardUsage).filter(([, ids]) => ids.length > 1);
+    const overCredited = noHistory.reduce((s, r) => s + (r.rax_credited || 0), 0);
+
+    return new Response(JSON.stringify({
+      total: rows.length,
+      paid: paid.length,
+      no_history: noHistory.length,
+      skipped: skipped.length,
+      over_credited_rax: overCredited,
+      dupe_cards: dupes.map(([cardId, ids]) => ({ card_id: Number(cardId), dep_ids: ids })),
+      results,
+    }, null, 2), { headers: { 'Content-Type': 'application/json' } });
+  }
+
   // ── activateDeposit ──────────────────────────────────────────────────────────
   // Credits the user and marks deposit confirmed. Mirrors parlays activateParlay.
   async function activateDeposit(dep, cardId, offerId, amount) {
@@ -224,6 +318,20 @@ async function handleRequest({ request, env, userId, cronOk }) {
       }
     }
 
+    // Guard: same card must never credit two deposits.
+    // A card represents one RS payment — if any other deposit row for this card is
+    // already confirmed, this deposit is a duplicate (race condition or recycled card
+    // picked up by multiple pending rows). Blocks all multi-phase double-credit paths.
+    if (finalCardId) {
+      const cardAlreadyConfirmed = await env.DB.prepare(
+        "SELECT id FROM casino_deposits WHERE card_id=? AND id != ? AND status='confirmed' LIMIT 1"
+      ).bind(finalCardId, dep.id).first();
+      if (cardAlreadyConfirmed) {
+        errors.push({ depositId: dep.id, cardId: finalCardId, note: 'card_already_confirmed_by_' + cardAlreadyConfirmed.id });
+        return;
+      }
+    }
+
     // Guard: same offer ID must never credit two deposits
     if (offerId) {
       const alreadyUsed = await env.DB.prepare(
@@ -234,7 +342,7 @@ async function handleRequest({ request, env, userId, cronOk }) {
 
     const raxCredited = Math.floor(amount * 0.9);
     const updated = await env.DB.prepare(
-      "UPDATE casino_deposits SET status='confirmed', rax_credited=?, rs_offer_id=? WHERE id=? AND status IN ('pending','expired')"
+      "UPDATE casino_deposits SET status='confirmed', rax_credited=?, rs_offer_id=? WHERE id=? AND status IN ('pending','expired','cancelled')"
     ).bind(raxCredited, offerId ? String(offerId) : null, dep.id).run();
 
     if (updated.meta.changes > 0) {
@@ -263,36 +371,74 @@ async function handleRequest({ request, env, userId, cronOk }) {
     } catch { return null; }
   }
 
-  const directCheckRows = [...pending, ...recentExpired].filter(d => d.rs_offer_id != null);
-  const directActivated = new Set();
-  for (const dep of directCheckRows) {
-    const offer = await fetchOffer(dep.rs_offer_id);
-    if (!offer) continue;
-    const status = (offer.status || offer.offerStatus || '').toLowerCase();
-    if (status !== 'accepted') continue;
-    const cardId = getCardId(offer) ?? dep.card_id;
-    const amount = Math.max(
-      offer.counterAmount ?? 0,
-      offer.amount        ?? 0,
-      offer.offerAmount   ?? 0,
-      dep.rax_requested,
-    );
-    await activateDeposit(dep, cardId, dep.rs_offer_id, amount);
-    directActivated.add(dep.rs_offer_id);
+  // ── Phase 0b: Card ownership + auction history check ─────────────────────────
+  // Ownership check detects the card transfer instantly. Auction history then verifies
+  // that THIS user actually bought the card from edgebot for the requested amount.
+  // This is the ONLY path that credits a deposit — no offer-state-based crediting.
+  // Cap at 10 cards to stay within CF 30s wall-clock (each dep = 2 RS API calls).
+  const ownershipRows = [...pending, ...recentExpired]
+    .filter(dep => dep.card_id != null)
+    .slice(0, 10);
+
+  // Load RS usernames for all ownership rows in one batch
+  const activatedCardIds = new Set();
+  if (ownershipRows.length && !userId) {
+    const ownerUserIds = [...new Set(ownershipRows.map(d => d.user_id))];
+    const ownerPh = ownerUserIds.map(() => '?').join(',');
+    const ownerAuthRows = await env.DB.prepare(
+      `SELECT user_id, rs_username FROM real_auth WHERE user_id IN (${ownerPh}) AND parlay_verified=1`
+    ).bind(...ownerUserIds).all();
+    const ownerUsernameMap = {};
+    for (const r of (ownerAuthRows.results || [])) ownerUsernameMap[r.user_id] = r.rs_username;
+
+    for (const dep of ownershipRows) {
+      if (activatedCardIds.has(dep.card_id)) continue;
+      const ownerId = await fetchCardOwner(dep.card_id, authInfo, sessionTok);
+      if (ownerId === null || ownerId === EDGEBOT_USER) continue; // card still with edgebot
+
+      // Card left edgebot — verify the depositing user was the buyer via auction history
+      const rsUsername = ownerUsernameMap[dep.user_id];
+      if (!rsUsername) continue; // no RS username on record — skip, offer polling will catch it
+
+      const paidAmount = await checkAuctionHistory(dep.card_id, rsUsername, dep.rax_requested, authInfo, sessionTok);
+      if (paidAmount > 0) {
+        await activateDeposit(dep, dep.card_id, null, paidAmount);
+        activatedCardIds.add(dep.card_id);
+      }
+      // paidAmount === 0: auction history doesn't confirm this user bought the card yet.
+      // Could be a timing lag (history updates within a few seconds of transfer) or a
+      // genuinely wrong deposit (card sold to someone else). Leave pending — offer
+      // polling in Phase 1/2 or the next cron run's auction check will resolve it.
+    }
   }
 
-  // ── Phase 0b: Card ownership check ──────────────────────────────────────────
-  // Most reliable signal — card transfers to user the moment they accept any offer.
-  // Cap at 15 cards to stay within CF 30s wall-clock. Skip deposits already activated in Phase 0.
-  const ownershipRows = [...pending, ...recentExpired]
-    .filter(dep => dep.card_id != null && !directActivated.has(dep.rs_offer_id))
-    .slice(0, 15);
+  // ── Phase 0c: Auction history fallback ───────────────────────────────────────
+  // Catches deposits where Phase 0b was skipped (per-user calls) or where the card
+  // owner check timed out but auction history has since updated. Runs cron-wide only.
+  if (!userId) {
+    const historyRows = [...pending, ...recentExpired]
+      .filter(dep => dep.card_id && (now - dep.created_at) > 90)
+      .slice(0, 10);
 
-  for (const dep of ownershipRows) {
-    const ownerId = await fetchCardOwner(dep.card_id, authInfo, sessionTok);
-    if (ownerId !== null && ownerId !== EDGEBOT_USER) {
-      // Card left edgebot — use rax_requested as the amount (offer amount may not be known yet)
-      await activateDeposit(dep, dep.card_id, null, dep.rax_requested);
+    if (historyRows.length) {
+      const userIds = [...new Set(historyRows.map(d => d.user_id))];
+      const ph = userIds.map(() => '?').join(',');
+      const authRows = await env.DB.prepare(
+        `SELECT user_id, rs_username FROM real_auth WHERE user_id IN (${ph}) AND parlay_verified=1`
+      ).bind(...userIds).all();
+      const usernameMap = {};
+      for (const r of (authRows.results || [])) usernameMap[r.user_id] = r.rs_username;
+
+      for (const dep of historyRows) {
+        if (activatedCardIds.has(dep.card_id)) continue;
+        const rsUsername = usernameMap[dep.user_id];
+        if (!rsUsername) continue;
+        const paidAmount = await checkAuctionHistory(dep.card_id, rsUsername, dep.rax_requested, authInfo, sessionTok);
+        if (paidAmount > 0) {
+          await activateDeposit(dep, dep.card_id, null, paidAmount);
+          activatedCardIds.add(dep.card_id);
+        }
+      }
     }
   }
 
@@ -339,20 +485,9 @@ async function handleRequest({ request, env, userId, cronOk }) {
     return true;
   });
 
-  for (const offer of allSettled) {
-    const cardId = getCardId(offer);
-    if (!cardId) continue;
-    const dep = cardMap[Number(cardId)] ?? cardMap[cardId] ?? expiredMap[Number(cardId)] ?? expiredMap[cardId];
-    if (!dep) continue;
-
-    const amount = Math.max(
-      offer.counterAmount ?? 0,
-      offer.amount        ?? 0,
-      offer.offerAmount   ?? 0,
-      dep.rax_requested,
-    );
-    await activateDeposit(dep, cardId, offer.id, amount);
-  }
+  // Phase 1 removed: incomingAccepted / outgoingAccepted no longer credit directly.
+  // Phase 0b (auction history) is the sole credit path — it catches these on the
+  // same or next cron run once the card has transferred and history is populated.
 
   // ── Phase 2: Open offers — counter if under, accept if ≥ rax_requested ──────
   for (const offer of (incomingOpen || [])) {
@@ -376,9 +511,13 @@ async function handleRequest({ request, env, userId, cronOk }) {
         errors.push({ offerId: offer.id, action: 'counter', error: `RS ${result.status}: ${result.body}` });
       }
     } else {
+      // Offer meets the deposit amount — accept it. Phase 0b will credit on the
+      // next cron run once auction history confirms this user paid edgebot.
       const result = await acceptOffer(offer.id, authInfo, sessionTok);
       if (!result.ok) { errors.push({ offerId: offer.id, action: 'accept', error: `RS ${result.status}: ${result.body}` }); continue; }
-      await activateDeposit(dep, cardId, offer.id, amount);
+      await env.DB.prepare(
+        "UPDATE casino_deposits SET rs_offer_id=? WHERE id=? AND rs_offer_id IS NULL"
+      ).bind(String(offer.id), dep.id).run();
     }
   }
 
@@ -414,7 +553,7 @@ async function handleRequest({ request, env, userId, cronOk }) {
 
   const result = {
     ts: now, confirmed, credited,
-    checked: allSettled.length + (incomingOpen || []).length,
+    checked: (incomingOpen || []).length,
     expired: toExpire.length,
     pending: pending.length,
     errors,

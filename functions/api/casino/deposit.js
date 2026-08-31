@@ -10,7 +10,7 @@ import { err }         from '../../_lib/response.js';
 import { rsUrlEncode } from '../../_lib/hashids.js';
 
 const MIN_DEPOSIT     = 1000;
-const MIN_DEPOSIT_TTL = 3 * 60; // matches deposit-check DEPOSIT_TTL
+const MIN_DEPOSIT_TTL = 10 * 60; // matches deposit-check DEPOSIT_TTL
 const VERIFY_MAX_AGE  = 15 * 60;
 const INVENTORY_MAX_AGE = 10 * 60;
 const RS_DEVICE_UUID = '310a20be-9ef8-4ee0-802f-5b1cffb5dd5e';
@@ -65,13 +65,12 @@ async function verifyEdgebotOwns(cardId, env, now) {
     "SELECT fetched_at FROM odds_cache WHERE cache_key='card_inventory'"
   ).first();
   const snapshotAge = row ? (now - row.fetched_at) : 9999;
-  if (snapshotAge > 120) return null; // snapshot too stale — skip rather than risk a wrong card
+  if (snapshotAge > INVENTORY_MAX_AGE) return null; // snapshot too stale — skip rather than risk a wrong card
   return verifySnapshot(cardId, env, now);
 }
 
-// Mirrors parlays/place.js pickCard exactly — atomic claim via claimed_for_casino_at.
-// claimed_for_casino_at is set atomically on deposit_cards; if another concurrent request
-// claims the same card first (changes === 0), we skip to the next card.
+// Claim first, verify after — eliminates the multi-second race window that allowed
+// two concurrent requests to both SELECT the same card before either claimed it.
 async function pickCard(env, now, db) {
   const excluded = [];
 
@@ -79,28 +78,19 @@ async function pickCard(env, now, db) {
     const notIn = excluded.length
       ? ' AND card_id NOT IN (' + excluded.map(() => '?').join(',') + ')'
       : '';
+
     const row = await db.prepare(
       'SELECT card_id FROM deposit_cards' +
       ' WHERE assigned_to_parlay_id IS NULL AND freed_at IS NULL AND verified_at > ?' +
-      ' AND sport=\'nba\' AND season=\'2026\'' +
+      " AND sport='nba' AND season='2026'" +
       ' AND (claimed_for_casino_at IS NULL OR claimed_for_casino_at < ?)' +
+      " AND card_id NOT IN (SELECT card_id FROM casino_deposits WHERE status='confirmed' AND card_id IS NOT NULL AND created_at > " + (now - 30 * 24 * 3600) + ")" +
       notIn + ' ORDER BY verified_at DESC LIMIT 1'
     ).bind(now - VERIFY_MAX_AGE, now - MIN_DEPOSIT_TTL, ...excluded).first();
     if (!row) break;
 
-    const owned = await verifyEdgebotOwns(row.card_id, env, now);
-    if (owned === false) {
-      await db.prepare('DELETE FROM deposit_cards WHERE card_id=?').bind(row.card_id).run();
-      excluded.push(row.card_id);
-      continue;
-    }
-    if (owned === null) {
-      excluded.push(row.card_id);
-      continue;
-    }
-
-    // Atomic claim — mirrors parlays assigned_to_parlay_id UPDATE pattern.
-    // If another concurrent request already claimed this card, changes === 0 → skip.
+    // Claim immediately — no async work before this UPDATE.
+    // If another concurrent request already claimed it, changes === 0 → skip.
     const claim = await db.prepare(
       'UPDATE deposit_cards SET claimed_for_casino_at=?' +
       ' WHERE card_id=? AND (claimed_for_casino_at IS NULL OR claimed_for_casino_at < ?)'
@@ -110,6 +100,21 @@ async function pickCard(env, now, db) {
       excluded.push(row.card_id);
       continue;
     }
+
+    // Verify ownership after claiming (async RS call happens while we hold the claim).
+    const owned = await verifyEdgebotOwns(row.card_id, env, now);
+    if (owned === false) {
+      await db.prepare('DELETE FROM deposit_cards WHERE card_id=?').bind(row.card_id).run();
+      excluded.push(row.card_id);
+      continue;
+    }
+    if (owned === null) {
+      // Can't verify — release claim so it stays available for retry.
+      await db.prepare('UPDATE deposit_cards SET claimed_for_casino_at=NULL WHERE card_id=?').bind(row.card_id).run();
+      excluded.push(row.card_id);
+      continue;
+    }
+
     return row.card_id;
   }
   return null;
@@ -149,25 +154,32 @@ export async function onRequestPost({ request, env }) {
     "UPDATE casino_deposits SET status='expired' WHERE user_id=? AND status='pending' AND created_at < ?"
   ).bind(userId, now - MIN_DEPOSIT_TTL).run();
 
-  // Resume an existing live pending deposit (within 30 min) instead of blocking
+  // Resume an existing live pending deposit only if the amount matches.
+  // If the user changed the amount, expire the old one and create a fresh deposit.
   const existing = await env.DB.prepare(
     "SELECT * FROM casino_deposits WHERE user_id=? AND status='pending' LIMIT 1"
   ).bind(userId).first();
   if (existing && existing.card_id) {
-    const cardUrl = 'https://www.realapp.com/' + rsUrlEncode(20, 0, 0, existing.card_id);
-    return new Response(JSON.stringify({
-      ok:            true,
-      card_url:      cardUrl,
-      card_id:       existing.card_id,
-      rax_requested: existing.rax_requested,
-      rax_credited:  Math.floor(existing.rax_requested * 0.9),
-      expires_at:    existing.created_at + 3 * 60,
-      resumed:       true,
-    }), { headers: { 'Content-Type': 'application/json' } });
+    if (existing.rax_requested === amount) {
+      const cardUrl = 'https://www.realapp.com/' + rsUrlEncode(20, 0, 0, existing.card_id);
+      return new Response(JSON.stringify({
+        ok:            true,
+        card_url:      cardUrl,
+        card_id:       existing.card_id,
+        rax_requested: existing.rax_requested,
+        rax_credited:  Math.floor(existing.rax_requested * 0.9),
+        expires_at:    existing.created_at + 10 * 60,
+        resumed:       true,
+      }), { headers: { 'Content-Type': 'application/json' } });
+    }
+    // Amount changed — expire the old deposit so a fresh one can be created below.
+    await env.DB.prepare(
+      "UPDATE casino_deposits SET status='expired' WHERE id=? AND status='pending'"
+    ).bind(existing.id).run();
   }
 
   const cardId = await pickCard(env, now, env.DB);
-  if (!cardId) return err('No deposit cards available right now. Please try again in a few minutes.', 503);
+  if (!cardId) return err('No deposit cards available right now. DM @moe_ on Real to deposit.', 503);
 
   await env.DB.prepare(
     'INSERT INTO casino_deposits (user_id, rax_requested, card_id, status, created_at) VALUES (?,?,?,?,?)'
@@ -181,6 +193,6 @@ export async function onRequestPost({ request, env }) {
     card_id:       cardId,
     rax_requested: amount,
     rax_credited:  Math.floor(amount * 0.9),
-    expires_at:    now + 3 * 60,
+    expires_at:    now + 10 * 60,
   }), { headers: { 'Content-Type': 'application/json' } });
 }
