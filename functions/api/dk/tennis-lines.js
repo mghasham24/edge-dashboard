@@ -9,7 +9,7 @@ import { getSessionOrCron } from '../../_lib/auth.js';
 const DK_BASE      = 'https://sportsbook-nash.draftkings.com/sites/US-SB/api/sportscontent';
 const LINES_SUBCAT = '6364';  // Tennis Match Winner
 const CACHE_TTL    = 900;     // 15 minutes
-const DEFAULT_LEAGUES = ['72778']; // US Open Men's 2026
+const DEFAULT_LEAGUES = ['72778', '72779']; // US Open Men's + Women's 2026
 
 const DK_HEADERS = {
   'Accept':         '*/*',
@@ -81,6 +81,7 @@ async function fetchLeagueMatches(leagueId, today) {
   const evRes = await fetch(eventsUrl(leagueId), { headers: DK_HEADERS, signal: AbortSignal.timeout(12000) });
   if (!evRes.ok) return [];
   const evData = await evRes.json();
+  const leagueName = evData.leagues?.[0]?.name || 'Tennis';
 
   const todayEvents = (evData.events || []).filter(e => {
     const d = e.startEventDate
@@ -109,7 +110,7 @@ async function fetchLeagueMatches(leagueId, today) {
       if (!res.ok) return null;
       const data = await res.json();
       const match = parseMatch(data, e.id, player1, player2, timeStr, startMs);
-      if (match) { match.p1ExtId = p1ExtId; match.p2ExtId = p2ExtId; }
+      if (match) { match.p1ExtId = p1ExtId; match.p2ExtId = p2ExtId; match.leagueName = leagueName; }
       return match;
     } catch { return null; }
   }));

@@ -6438,7 +6438,7 @@
             grid.style.cssText = 'display:flex;flex-direction:column;overflow-y:auto;gap:8px;padding:12px;box-sizing:border-box;flex:1;min-height:0';
             grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">Loading matches…</div>';
         }
-        var leagues = '72778'; // US Open Men's — extend via ?leagues= as needed
+        var leagues = '72778,72779'; // US Open Men's + Women's
         fetch('/api/dk/tennis-lines?leagues=' + leagues, { credentials: 'include' })
             .then(function(r) { return r.json(); })
             .then(function(d) {
@@ -6489,7 +6489,7 @@
                 : '<div style="' + avBase + '">' + escHtml(p2Init) + '</div>';
             return '<div class="pgc-card">' +
                 '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px 10px">' +
-                  '<span style="font-size:11px;color:var(--muted);font-weight:500">Tennis · ' + escHtml(timeStr) + '</span>' +
+                  '<span style="font-size:11px;color:var(--muted);font-weight:500">' + escHtml(match.leagueName || 'Tennis') + ' · ' + escHtml(timeStr) + '</span>' +
                 '</div>' +
                 '<div style="display:flex;align-items:center;gap:10px;padding:0 14px 14px">' +
                   '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:8px">' +
