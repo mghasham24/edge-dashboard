@@ -6411,6 +6411,7 @@
                 time: match.time, startMs: match.startMs,
                 initials: p1Init, color: '#0ea5e9', isFighter: true,
                 selId: match.p1SelId, marketId: match.marketId,
+                atpCode: match.p1ExtId || null,
             });
             PARLAY_PLAYERS_TENNIS.push({
                 id: p2Id, isTeamMarket: true, market: 'tennis_ml', stat: 'Match Winner',
@@ -6421,6 +6422,7 @@
                 time: match.time, startMs: match.startMs,
                 initials: p2Init, color: '#0ea5e9', isFighter: true,
                 selId: match.p2SelId, marketId: match.marketId,
+                atpCode: match.p2ExtId || null,
             });
             match._p1PickId = p1Id;
             match._p2PickId = p2Id;
@@ -6479,19 +6481,25 @@
             var p2Last = (match.player2 || '').split(' ').pop();
             var avBase = 'width:56px;height:56px;border-radius:50%;overflow:hidden;background:var(--bg3);flex-shrink:0;position:relative;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:var(--muted)';
             var timeStr = parlayFmtTime ? parlayFmtTime(match.startMs, match.time) : match.time;
+            var p1Av = p1.atpCode
+                ? '<div style="' + avBase + '"><img src="https://www.atptour.com/-/media/alias/player-headshot/' + escHtml(p1.atpCode) + '" alt="" style="width:100%;height:100%;object-fit:cover" onerror="this.parentNode.innerHTML=\'' + escHtml(p1Init) + '\'" loading="lazy"></div>'
+                : '<div style="' + avBase + '">' + escHtml(p1Init) + '</div>';
+            var p2Av = p2.atpCode
+                ? '<div style="' + avBase + '"><img src="https://www.atptour.com/-/media/alias/player-headshot/' + escHtml(p2.atpCode) + '" alt="" style="width:100%;height:100%;object-fit:cover" onerror="this.parentNode.innerHTML=\'' + escHtml(p2Init) + '\'" loading="lazy"></div>'
+                : '<div style="' + avBase + '">' + escHtml(p2Init) + '</div>';
             return '<div class="pgc-card">' +
                 '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px 10px">' +
                   '<span style="font-size:11px;color:var(--muted);font-weight:500">Tennis · ' + escHtml(timeStr) + '</span>' +
                 '</div>' +
                 '<div style="display:flex;align-items:center;gap:10px;padding:0 14px 14px">' +
                   '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:8px">' +
-                    '<div style="' + avBase + '">' + escHtml(p1Init) + '</div>' +
+                    p1Av +
                     '<span style="font-size:12px;font-weight:600;text-align:center">' + escHtml(p1Last) + '</span>' +
                     '<button class="pgc-btn' + p1Sel + '" onclick="parlayTogglePick(' + p1.id + ',\'more\')" style="width:100%;font-size:12px">' + escHtml(match.player1.split(' ')[0]) + ' ' + parlayFmtOdds(match.p1Odds) + '</button>' +
                   '</div>' +
                   '<span style="font-size:11px;color:var(--muted);font-weight:700;flex-shrink:0">VS</span>' +
                   '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:8px">' +
-                    '<div style="' + avBase + '">' + escHtml(p2Init) + '</div>' +
+                    p2Av +
                     '<span style="font-size:12px;font-weight:600;text-align:center">' + escHtml(p2Last) + '</span>' +
                     '<button class="pgc-btn' + p2Sel + '" onclick="parlayTogglePick(' + p2.id + ',\'more\')" style="width:100%;font-size:12px">' + escHtml(match.player2.split(' ')[0]) + ' ' + parlayFmtOdds(match.p2Odds) + '</button>' +
                   '</div>' +
@@ -7415,7 +7423,7 @@
             '<button class="parlay-sport-btn' + (parlayActiveSport === 'cfb' ? ' active' : '') + '" onclick="setParlayActiveSport(\'cfb\')">CFB</button>' +
             '<button class="parlay-sport-btn' + (parlayActiveSport === 'ufc'    ? ' active' : '') + '" onclick="setParlayActiveSport(\'ufc\')">UFC</button>' +
             '<button class="parlay-sport-btn' + (parlayActiveSport === 'soccer'  ? ' active' : '') + '" onclick="setParlayActiveSport(\'soccer\')">FC</button>' +
-            '<button class="parlay-sport-btn' + (parlayActiveSport === 'tennis'  ? ' active' : '') + '" onclick="setParlayActiveSport(\'tennis\')">Tennis</button>' +
+            (isAdmin ? '<button class="parlay-sport-btn' + (parlayActiveSport === 'tennis' ? ' active' : '') + '" onclick="setParlayActiveSport(\'tennis\')">Tennis</button>' : '') +
         '</div>';
 
         if (parlayActiveSport !== 'mlb') {

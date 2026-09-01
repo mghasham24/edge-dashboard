@@ -95,17 +95,22 @@ async function fetchLeagueMatches(leagueId, today) {
       ? new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' }).format(new Date(startMs))
       : '';
     const parts   = e.participants || [];
-    const p1Part  = parts.find(p => p.venueRole === 'Home') || parts[0];
-    const p2Part  = parts.find(p => p.venueRole === 'Away') || parts[1];
-    const player1 = p1Part?.name || '';
-    const player2 = p2Part?.name || '';
+    const p1Part   = parts.find(p => p.venueRole === 'Home') || parts[0];
+    const p2Part   = parts.find(p => p.venueRole === 'Away') || parts[1];
+    const player1  = p1Part?.name || '';
+    const player2  = p2Part?.name || '';
+    // Capture any external player ID from DK metadata (may contain ATP Tour player code)
+    const p1ExtId  = p1Part?.metadata?.externalId || p1Part?.metadata?.playerId || p1Part?.providerId || null;
+    const p2ExtId  = p2Part?.metadata?.externalId || p2Part?.metadata?.playerId || p2Part?.providerId || null;
     if (!player1 || !player2) return null;
 
     try {
       const res = await fetch(linesUrl(String(e.id)), { headers: DK_HEADERS, signal: AbortSignal.timeout(8000) });
       if (!res.ok) return null;
       const data = await res.json();
-      return parseMatch(data, e.id, player1, player2, timeStr, startMs);
+      const match = parseMatch(data, e.id, player1, player2, timeStr, startMs);
+      if (match) { match.p1ExtId = p1ExtId; match.p2ExtId = p2ExtId; }
+      return match;
     } catch { return null; }
   }));
 }
@@ -147,6 +152,23 @@ export async function onRequestGet(context) {
     return new Response(JSON.stringify({ leagueId: leagueIds[0], events: evData.events?.slice(0, 3) || [] }, null, 2), {
       headers: { 'Content-Type': 'application/json' },
     });
+  }
+
+  // debug=2: expose full raw participant data from DK for the first event (to find ATP player code field)
+  if (debug === '2') {
+    const evRes = await fetch(eventsUrl(leagueIds[0]), { headers: DK_HEADERS, signal: AbortSignal.timeout(12000) });
+    const evData = await evRes.json();
+    const firstEvent = evData.events?.[0];
+    if (!firstEvent) return new Response(JSON.stringify({ error: 'no events' }), { headers: { 'Content-Type': 'application/json' } });
+    const linesRes = await fetch(linesUrl(String(firstEvent.id)), { headers: DK_HEADERS, signal: AbortSignal.timeout(8000) });
+    const linesData = await linesRes.json();
+    return new Response(JSON.stringify({
+      eventId: firstEvent.id,
+      name: firstEvent.name,
+      participants: firstEvent.participants,  // full participant objects — look for ATP code here
+      firstMarket: linesData.markets?.[0],
+      firstSelections: linesData.selections?.slice(0, 4),
+    }, null, 2), { headers: { 'Content-Type': 'application/json' } });
   }
 
   const allResults = await Promise.all(leagueIds.map(id => fetchLeagueMatches(id, today).catch(() => [])));
