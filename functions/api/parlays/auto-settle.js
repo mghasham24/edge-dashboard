@@ -1160,11 +1160,16 @@ async function getTennisResults(date) {
       );
       if (!res.ok) return;
       const data = await res.json();
+      // ESPN tennis: individual matches are in event.groupings[].competitions[], not event.competitions[]
       for (const event of (data.events || [])) {
-        if (!event.status?.type?.completed) continue;
-        for (const comp of (event.competitions?.[0]?.competitors || [])) {
-          const name = normalizeName(comp.athlete?.displayName || '');
-          if (name) results[name] = { won: !!comp.winner };
+        for (const grouping of (event.groupings || [])) {
+          for (const match of (grouping.competitions || [])) {
+            if (!match.status?.type?.completed) continue;
+            for (const c of (match.competitors || [])) {
+              const name = normalizeName(c.athlete?.displayName || '');
+              if (name) results[name] = { won: !!c.winner };
+            }
+          }
         }
       }
     } catch(_) {}

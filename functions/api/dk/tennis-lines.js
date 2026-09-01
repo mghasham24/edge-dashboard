@@ -131,7 +131,8 @@ async function fetchLeagueMatches(leagueId, today) {
 }
 
 // Fetch player headshots from ESPN tennis scoreboards (ATP + WTA).
-// Returns a normalized-name → headshot URL map.
+// ESPN tennis: matches are in event.groupings[].competitions[], not event.competitions[].
+// Headshot URL built from competitor.id: https://a.espncdn.com/i/headshots/tennis/players/full/{id}.png
 async function fetchESPNHeadshots(today) {
   const espnDate = today.replace(/-/g, '');
   const hs = {};
@@ -144,12 +145,15 @@ async function fetchESPNHeadshots(today) {
       if (!res.ok) return;
       const data = await res.json();
       for (const ev of (data.events || [])) {
-        for (const comp of (ev.competitions?.[0]?.competitors || [])) {
-          const athlete = comp.athlete;
-          if (!athlete) continue;
-          const key = normName(athlete.displayName || '');
-          const url = athlete.headshot?.href || null;
-          if (key && url) hs[key] = url;
+        for (const grouping of (ev.groupings || [])) {
+          for (const match of (grouping.competitions || [])) {
+            for (const c of (match.competitors || [])) {
+              if (!c.id || !c.athlete?.displayName) continue;
+              const key = normName(c.athlete.displayName);
+              const url = `https://a.espncdn.com/i/headshots/tennis/players/full/${c.id}.png`;
+              if (key && !hs[key]) hs[key] = url;
+            }
+          }
         }
       }
     } catch(_) {}
