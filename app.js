@@ -6479,14 +6479,20 @@
             var p2Init = (match.player2 || '').split(' ').map(function(w) { return w[0] || ''; }).join('').toUpperCase().slice(0, 2);
             var p1Last = (match.player1 || '').split(' ').pop();
             var p2Last = (match.player2 || '').split(' ').pop();
-            var avBase = 'width:56px;height:56px;border-radius:50%;overflow:hidden;background:var(--bg3);flex-shrink:0;position:relative;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:var(--muted)';
+            var avBase = 'width:56px;height:56px;border-radius:50%;overflow:hidden;background:var(--bg3);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--muted)';
             var timeStr = parlayFmtTime ? parlayFmtTime(match.startMs, match.time) : match.time;
+            function tennisFlag(cc) {
+                if (!cc || cc === 'ZZ' || cc.length !== 2) return null;
+                return String.fromCodePoint(127397 + cc.toUpperCase().charCodeAt(0)) + String.fromCodePoint(127397 + cc.toUpperCase().charCodeAt(1));
+            }
+            var p1Flag = match.p1Country ? tennisFlag(match.p1Country) : null;
+            var p2Flag = match.p2Country ? tennisFlag(match.p2Country) : null;
             var p1Av = p1.atpCode
-                ? '<div style="' + avBase + '"><img src="https://www.atptour.com/-/media/alias/player-headshot/' + escHtml(p1.atpCode) + '" alt="" style="width:100%;height:100%;object-fit:cover" onerror="this.parentNode.innerHTML=\'' + escHtml(p1Init) + '\'" loading="lazy"></div>'
-                : '<div style="' + avBase + '">' + escHtml(p1Init) + '</div>';
+                ? '<div style="' + avBase + ';overflow:hidden"><img src="https://www.atptour.com/-/media/alias/player-headshot/' + escHtml(p1.atpCode) + '" alt="" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display=\'none\'" loading="lazy"></div>'
+                : '<div style="' + avBase + ';font-size:' + (p1Flag ? '28px' : '16px') + '">' + (p1Flag ? p1Flag : escHtml(p1Init)) + '</div>';
             var p2Av = p2.atpCode
-                ? '<div style="' + avBase + '"><img src="https://www.atptour.com/-/media/alias/player-headshot/' + escHtml(p2.atpCode) + '" alt="" style="width:100%;height:100%;object-fit:cover" onerror="this.parentNode.innerHTML=\'' + escHtml(p2Init) + '\'" loading="lazy"></div>'
-                : '<div style="' + avBase + '">' + escHtml(p2Init) + '</div>';
+                ? '<div style="' + avBase + ';overflow:hidden"><img src="https://www.atptour.com/-/media/alias/player-headshot/' + escHtml(p2.atpCode) + '" alt="" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display=\'none\'" loading="lazy"></div>'
+                : '<div style="' + avBase + ';font-size:' + (p2Flag ? '28px' : '16px') + '">' + (p2Flag ? p2Flag : escHtml(p2Init)) + '</div>';
             return '<div class="pgc-card">' +
                 '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px 10px">' +
                   '<span style="font-size:11px;color:var(--muted);font-weight:500">' + escHtml(match.leagueName || 'Tennis') + ' · ' + escHtml(timeStr) + '</span>' +
@@ -6494,14 +6500,14 @@
                 '<div style="display:flex;align-items:center;gap:10px;padding:0 14px 14px">' +
                   '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:8px">' +
                     p1Av +
-                    '<span style="font-size:12px;font-weight:600;text-align:center">' + escHtml(p1Last) + '</span>' +
-                    '<button class="pgc-btn' + p1Sel + '" onclick="parlayTogglePick(' + p1.id + ',\'more\')" style="width:100%;font-size:12px">' + escHtml(match.player1.split(' ')[0]) + ' ' + parlayFmtOdds(match.p1Odds) + '</button>' +
+                    '<span style="font-size:12px;font-weight:600;text-align:center;line-height:1.2">' + escHtml(match.player1) + '</span>' +
+                    '<button class="pgc-btn' + p1Sel + '" onclick="parlayTogglePick(' + p1.id + ',\'more\')" style="width:100%;font-size:12px">' + escHtml(p1Last) + ' ' + parlayFmtOdds(match.p1Odds) + '</button>' +
                   '</div>' +
                   '<span style="font-size:11px;color:var(--muted);font-weight:700;flex-shrink:0">VS</span>' +
                   '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:8px">' +
                     p2Av +
-                    '<span style="font-size:12px;font-weight:600;text-align:center">' + escHtml(p2Last) + '</span>' +
-                    '<button class="pgc-btn' + p2Sel + '" onclick="parlayTogglePick(' + p2.id + ',\'more\')" style="width:100%;font-size:12px">' + escHtml(match.player2.split(' ')[0]) + ' ' + parlayFmtOdds(match.p2Odds) + '</button>' +
+                    '<span style="font-size:12px;font-weight:600;text-align:center;line-height:1.2">' + escHtml(match.player2) + '</span>' +
+                    '<button class="pgc-btn' + p2Sel + '" onclick="parlayTogglePick(' + p2.id + ',\'more\')" style="width:100%;font-size:12px">' + escHtml(p2Last) + ' ' + parlayFmtOdds(match.p2Odds) + '</button>' +
                   '</div>' +
                 '</div>' +
             '</div>';

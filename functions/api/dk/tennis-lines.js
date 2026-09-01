@@ -103,6 +103,8 @@ async function fetchLeagueMatches(leagueId, today) {
     // Capture any external player ID from DK metadata (may contain ATP Tour player code)
     const p1ExtId  = p1Part?.metadata?.externalId || p1Part?.metadata?.playerId || p1Part?.providerId || null;
     const p2ExtId  = p2Part?.metadata?.externalId || p2Part?.metadata?.playerId || p2Part?.providerId || null;
+    const p1Country = p1Part?.countryCode || null;
+    const p2Country = p2Part?.countryCode || null;
     if (!player1 || !player2) return null;
 
     try {
@@ -110,7 +112,7 @@ async function fetchLeagueMatches(leagueId, today) {
       if (!res.ok) return null;
       const data = await res.json();
       const match = parseMatch(data, e.id, player1, player2, timeStr, startMs);
-      if (match) { match.p1ExtId = p1ExtId; match.p2ExtId = p2ExtId; match.leagueName = leagueName; }
+      if (match) { match.p1ExtId = p1ExtId; match.p2ExtId = p2ExtId; match.p1Country = p1Country; match.p2Country = p2Country; match.leagueName = leagueName; }
       return match;
     } catch { return null; }
   }));
