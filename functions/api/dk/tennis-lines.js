@@ -1,7 +1,7 @@
 // functions/api/dk/tennis-lines.js
 // GET /api/dk/tennis-lines?leagues=72778,72779
 // Returns today's tennis match winner (ML) odds from DK for the parlay builder.
-// Pass ?leagues= as comma-separated DK league IDs. Default: 72778 (US Open Men's).
+// Pass ?leagues= as comma-separated DK league IDs. Default: 72778+72779 (US Open M+W).
 // Subcat 6364 = Tennis Match Winner.
 
 import { getSessionOrCron } from '../../_lib/auth.js';
@@ -19,6 +19,11 @@ const DK_HEADERS = {
   'x-client-name': 'web',
 };
 
+const ESPN_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
+  'Accept':     'application/json',
+};
+
 function todayET() {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
 }
@@ -29,6 +34,10 @@ function parseOdds(american) {
   if (!s || s === '-' || s === '+') return null;
   const n = parseInt(s, 10);
   return isFinite(n) ? n : null;
+}
+
+function normName(n) {
+  return (n || '').toLowerCase().replace(/[^a-z ]/g, '').replace(/\s+/g, ' ').trim();
 }
 
 function eventsUrl(leagueId) {
@@ -95,12 +104,11 @@ async function fetchLeagueMatches(leagueId, today) {
     const timeStr = startMs
       ? new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' }).format(new Date(startMs))
       : '';
-    const parts   = e.participants || [];
+    const parts    = e.participants || [];
     const p1Part   = parts.find(p => p.venueRole === 'Home') || parts[0];
     const p2Part   = parts.find(p => p.venueRole === 'Away') || parts[1];
     const player1  = p1Part?.name || '';
     const player2  = p2Part?.name || '';
-    // Capture any external player ID from DK metadata (may contain ATP Tour player code)
     const p1ExtId  = p1Part?.metadata?.externalId || p1Part?.metadata?.playerId || p1Part?.providerId || null;
     const p2ExtId  = p2Part?.metadata?.externalId || p2Part?.metadata?.playerId || p2Part?.providerId || null;
     const p1Country = p1Part?.countryCode || null;
@@ -112,10 +120,61 @@ async function fetchLeagueMatches(leagueId, today) {
       if (!res.ok) return null;
       const data = await res.json();
       const match = parseMatch(data, e.id, player1, player2, timeStr, startMs);
-      if (match) { match.p1ExtId = p1ExtId; match.p2ExtId = p2ExtId; match.p1Country = p1Country; match.p2Country = p2Country; match.leagueName = leagueName; }
+      if (match) {
+        match.p1ExtId   = p1ExtId;   match.p2ExtId   = p2ExtId;
+        match.p1Country = p1Country; match.p2Country = p2Country;
+        match.leagueName = leagueName;
+      }
       return match;
     } catch { return null; }
   }));
+}
+
+// Fetch player headshots from ESPN tennis scoreboards (ATP + WTA).
+// Returns a normalized-name → headshot URL map.
+async function fetchESPNHeadshots(today) {
+  const espnDate = today.replace(/-/g, '');
+  const hs = {};
+  await Promise.all(['atp', 'wta'].map(async tour => {
+    try {
+      const res = await fetch(
+        `https://site.api.espn.com/apis/site/v2/sports/tennis/${tour}/scoreboard?dates=${espnDate}`,
+        { headers: ESPN_HEADERS, signal: AbortSignal.timeout(8000) }
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+      for (const ev of (data.events || [])) {
+        for (const comp of (ev.competitions?.[0]?.competitors || [])) {
+          const athlete = comp.athlete;
+          if (!athlete) continue;
+          const key = normName(athlete.displayName || '');
+          const url = athlete.headshot?.href || null;
+          if (key && url) hs[key] = url;
+        }
+      }
+    } catch(_) {}
+  }));
+  return hs;
+}
+
+// Attach p1Headshot / p2Headshot to each match using espnHs map.
+// Tries exact normalized name first, then last-name-only fallback.
+function attachHeadshots(matches, espnHs) {
+  const entries = Object.entries(espnHs);
+  for (const m of matches) {
+    const k1 = normName(m.player1);
+    const k2 = normName(m.player2);
+    const lastNameLookup = k => {
+      const ln = k.split(' ').pop();
+      if (!ln || ln.length <= 3) return null;
+      for (const [ek, ev] of entries) {
+        if (ek === k || ek.endsWith(' ' + ln)) return ev;
+      }
+      return null;
+    };
+    m.p1Headshot = espnHs[k1] || lastNameLookup(k1) || null;
+    m.p2Headshot = espnHs[k2] || lastNameLookup(k2) || null;
+  }
 }
 
 export async function onRequestGet(context) {
@@ -132,7 +191,7 @@ export async function onRequestGet(context) {
   const nocache   = url.searchParams.has('nocache');
   const leaguesParam = url.searchParams.get('leagues');
   const leagueIds = leaguesParam ? leaguesParam.split(',').map(s => s.trim()).filter(Boolean) : DEFAULT_LEAGUES;
-  const cacheKey  = `dk_tennis_lines_v1_${leagueIds.slice().sort().join('_')}`;
+  const cacheKey  = `dk_tennis_lines_v2_${leagueIds.slice().sort().join('_')}`;
 
   const now   = Math.floor(Date.now() / 1000);
   const today = todayET();
@@ -157,7 +216,6 @@ export async function onRequestGet(context) {
     });
   }
 
-  // debug=2: expose full raw participant data from DK for the first event (to find ATP player code field)
   if (debug === '2') {
     const evRes = await fetch(eventsUrl(leagueIds[0]), { headers: DK_HEADERS, signal: AbortSignal.timeout(12000) });
     const evData = await evRes.json();
@@ -168,15 +226,26 @@ export async function onRequestGet(context) {
     return new Response(JSON.stringify({
       eventId: firstEvent.id,
       name: firstEvent.name,
-      participants: firstEvent.participants,  // full participant objects — look for ATP code here
+      participants: firstEvent.participants,
       firstMarket: linesData.markets?.[0],
       firstSelections: linesData.selections?.slice(0, 4),
     }, null, 2), { headers: { 'Content-Type': 'application/json' } });
   }
 
-  const allResults = await Promise.all(leagueIds.map(id => fetchLeagueMatches(id, today).catch(() => [])));
-  const matches    = allResults.flat().filter(Boolean).sort((a, b) => a.startMs - b.startMs);
-  const payload    = JSON.stringify({ ok: true, matches, count: matches.length, ts: now });
+  if (debug === '3') {
+    const espnHs = await fetchESPNHeadshots(today).catch(() => ({}));
+    return new Response(JSON.stringify({ count: Object.keys(espnHs).length, headshots: espnHs }, null, 2), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  const [allResults, espnHs] = await Promise.all([
+    Promise.all(leagueIds.map(id => fetchLeagueMatches(id, today).catch(() => []))),
+    fetchESPNHeadshots(today).catch(() => ({})),
+  ]);
+  const matches = allResults.flat().filter(Boolean).sort((a, b) => a.startMs - b.startMs);
+  attachHeadshots(matches, espnHs);
+  const payload = JSON.stringify({ ok: true, matches, count: matches.length, ts: now });
 
   if (matches.length > 0) {
     context.waitUntil(
@@ -191,9 +260,13 @@ export async function onRequestGet(context) {
 
 async function refreshTennisCache(env, now, today, leagueIds, cacheKey) {
   try {
-    const allResults = await Promise.all(leagueIds.map(id => fetchLeagueMatches(id, today).catch(() => [])));
-    const matches    = allResults.flat().filter(Boolean).sort((a, b) => a.startMs - b.startMs);
+    const [allResults, espnHs] = await Promise.all([
+      Promise.all(leagueIds.map(id => fetchLeagueMatches(id, today).catch(() => []))),
+      fetchESPNHeadshots(today).catch(() => ({})),
+    ]);
+    const matches = allResults.flat().filter(Boolean).sort((a, b) => a.startMs - b.startMs);
     if (!matches.length) return;
+    attachHeadshots(matches, espnHs);
     const payload = JSON.stringify({ ok: true, matches, count: matches.length, ts: now });
     await env.DB.prepare(
       'INSERT INTO odds_cache (cache_key, data, fetched_at) VALUES (?,?,?) ON CONFLICT(cache_key) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at'

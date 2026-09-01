@@ -6479,7 +6479,7 @@
             var p2Init = (match.player2 || '').split(' ').map(function(w) { return w[0] || ''; }).join('').toUpperCase().slice(0, 2);
             var p1Last = (match.player1 || '').split(' ').pop();
             var p2Last = (match.player2 || '').split(' ').pop();
-            var avBase = 'width:56px;height:56px;border-radius:50%;overflow:hidden;background:var(--bg3);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--muted)';
+            var avBase = 'width:56px;height:56px;border-radius:50%;overflow:hidden;background:var(--bg3);flex-shrink:0;position:relative;display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--muted)';
             var timeStr = parlayFmtTime ? parlayFmtTime(match.startMs, match.time) : match.time;
             function tennisFlag(cc) {
                 if (!cc || cc === 'ZZ' || cc.length !== 2) return null;
@@ -6487,12 +6487,16 @@
             }
             var p1Flag = match.p1Country ? tennisFlag(match.p1Country) : null;
             var p2Flag = match.p2Country ? tennisFlag(match.p2Country) : null;
-            var p1Av = p1.atpCode
-                ? '<div style="' + avBase + ';overflow:hidden"><img src="https://www.atptour.com/-/media/alias/player-headshot/' + escHtml(p1.atpCode) + '" alt="" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display=\'none\'" loading="lazy"></div>'
-                : '<div style="' + avBase + ';font-size:' + (p1Flag ? '28px' : '16px') + '">' + (p1Flag ? p1Flag : escHtml(p1Init)) + '</div>';
-            var p2Av = p2.atpCode
-                ? '<div style="' + avBase + ';overflow:hidden"><img src="https://www.atptour.com/-/media/alias/player-headshot/' + escHtml(p2.atpCode) + '" alt="" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display=\'none\'" loading="lazy"></div>'
-                : '<div style="' + avBase + ';font-size:' + (p2Flag ? '28px' : '16px') + '">' + (p2Flag ? p2Flag : escHtml(p2Init)) + '</div>';
+            var p1Fallback = p1Flag ? ('<div style="' + avBase + ';font-size:28px">' + p1Flag + '</div>') : ('<div style="' + avBase + ';font-size:16px">' + escHtml(p1Init) + '</div>');
+            var p2Fallback = p2Flag ? ('<div style="' + avBase + ';font-size:28px">' + p2Flag + '</div>') : ('<div style="' + avBase + ';font-size:16px">' + escHtml(p2Init) + '</div>');
+            var p1ImgSrc = match.p1Headshot || null;
+            var p2ImgSrc = match.p2Headshot || null;
+            var p1Av = p1ImgSrc
+                ? '<div style="' + avBase + ';overflow:hidden;padding:0">' + p1Fallback + '<img src="' + escHtml(p1ImgSrc) + '" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:top center" onerror="this.remove()" loading="lazy"></div>'
+                : p1Fallback;
+            var p2Av = p2ImgSrc
+                ? '<div style="' + avBase + ';overflow:hidden;padding:0">' + p2Fallback + '<img src="' + escHtml(p2ImgSrc) + '" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:top center" onerror="this.remove()" loading="lazy"></div>'
+                : p2Fallback;
             return '<div class="pgc-card">' +
                 '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px 10px">' +
                   '<span style="font-size:11px;color:var(--muted);font-weight:500">' + escHtml(match.leagueName || 'Tennis') + ' · ' + escHtml(timeStr) + '</span>' +
