@@ -11659,9 +11659,7 @@
             return;
         }
         var minesTab    = '<button class="casino-game-tab' + (casinoGameType === 'mines'    ? ' active' : '') + '" onclick="casinoSetGameType(\'mines\')">💣 Mines</button>';
-        var coinflipTab = (currentUser && currentUser.coinflip_access)
-            ? '<button class="casino-game-tab' + (casinoGameType === 'coinflip' ? ' active' : '') + '" onclick="casinoSetGameType(\'coinflip\')">🪙 Coin Flip</button>'
-            : '';
+        var coinflipTab = '<button class="casino-game-tab' + (casinoGameType === 'coinflip' ? ' active' : '') + '" onclick="casinoSetGameType(\'coinflip\')">🪙 Coin Flip</button>';
         panel.innerHTML = [
             '<div class="casino-hdr">',
             '  <div class="casino-game-tabs">',
@@ -11751,7 +11749,7 @@
                     }
                 } catch(e) { casinoMinesGame = null; }
             }
-            if (casinoGameType === 'coinflip' && currentUser && currentUser.coinflip_access) {
+            if (casinoGameType === 'coinflip') {
                 try {
                     var cfr = await fetch('/api/casino/coinflip/state', { credentials: 'include' });
                     var cfd = await cfr.json();
