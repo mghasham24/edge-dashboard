@@ -5407,18 +5407,21 @@
     var PARLAY_PLAYERS_CFB    = [];  // CFB player props + team picks
     var PARLAY_PLAYERS_UFC    = [];  // fighter ML/total picks for UFC
     var PARLAY_PLAYERS_SOCCER = [];  // soccer player props (admin-only)
+    var PARLAY_PLAYERS_TENNIS = [];  // tennis ML picks
     var PARLAY_GAMES        = [];  // filled by loadParlayLines() for MLB
     var PARLAY_GAMES_WNBA   = [];  // filled by loadParlayLines() for WNBA
     var PARLAY_GAMES_NFL    = [];  // filled by loadParlayLines() for NFL
     var PARLAY_GAMES_CFB    = [];  // filled by loadParlayLines() for CFB
     var PARLAY_GAMES_UFC    = [];  // filled by loadParlayUfc() / loadOdds UFC branch
+    var PARLAY_GAMES_TENNIS = [];  // filled by loadParlayTennis()
     var PARLAY_1INN_GAMES   = [];  // filled by loadParlay1stInning() for MLB 1st inning
     var PARLAY_1INN_PLAYERS = [];  // pick objects built from PARLAY_1INN_GAMES
-    var parlayGamesLoading      = false;
-    var parlayGamesWnbaLoading  = false;
-    var parlayGamesNflLoading   = false;
-    var parlayGamesCfbLoading   = false;
-    var parlayGamesUfcLoading   = false;
+    var parlayGamesLoading        = false;
+    var parlayGamesWnbaLoading    = false;
+    var parlayGamesNflLoading     = false;
+    var parlayGamesCfbLoading     = false;
+    var parlayGamesUfcLoading     = false;
+    var parlayGamesTennisLoading  = false;
     var parlay1innLoading       = false;
     var teamPickIdCounter   = -1; // negative IDs for team market picks
 
@@ -6044,6 +6047,7 @@
                PARLAY_PLAYERS_CFB.find(function(x) { return x.id === n; }) ||
                PARLAY_PLAYERS_UFC.find(function(x) { return x.id === n; }) ||
                PARLAY_PLAYERS_SOCCER.find(function(x) { return x.id === n; }) ||
+               PARLAY_PLAYERS_TENNIS.find(function(x) { return x.id === n; }) ||
                PARLAY_1INN_PLAYERS.find(function(x) { return x.id === n; }) ||
                null;
     }
@@ -6387,6 +6391,114 @@
         img.addEventListener('error', function() { img.remove(); if (span) span.style.display = 'flex'; });
         if (span) span.style.display = 'none';
         avEl.insertBefore(img, span || null);
+    }
+
+    var TENNIS_CATS = [{ key: 'matches', label: 'Matches' }];
+
+    function buildTennisPicks() {
+        PARLAY_PLAYERS_TENNIS = [];
+        PARLAY_GAMES_TENNIS.forEach(function(match) {
+            var p1Id = teamPickIdCounter--;
+            var p2Id = teamPickIdCounter--;
+            var p1Init = (match.player1 || '').split(' ').map(function(w) { return w[0] || ''; }).join('').toUpperCase().slice(0, 2);
+            var p2Init = (match.player2 || '').split(' ').map(function(w) { return w[0] || ''; }).join('').toUpperCase().slice(0, 2);
+            PARLAY_PLAYERS_TENNIS.push({
+                id: p1Id, isTeamMarket: true, market: 'tennis_ml', stat: 'Match Winner',
+                name: match.player1, team: match.player1, opp: match.player2,
+                awayTeam: match.player1, homeTeam: match.player2,
+                moreOdds: match.p1Odds, oppOdds: match.p2Odds,
+                line: null, eventId: match.eventId, matchId: match.eventId,
+                time: match.time, startMs: match.startMs,
+                initials: p1Init, color: '#0ea5e9', isFighter: true,
+                selId: match.p1SelId, marketId: match.marketId,
+            });
+            PARLAY_PLAYERS_TENNIS.push({
+                id: p2Id, isTeamMarket: true, market: 'tennis_ml', stat: 'Match Winner',
+                name: match.player2, team: match.player2, opp: match.player1,
+                awayTeam: match.player1, homeTeam: match.player2,
+                moreOdds: match.p2Odds, oppOdds: match.p1Odds,
+                line: null, eventId: match.eventId, matchId: match.eventId,
+                time: match.time, startMs: match.startMs,
+                initials: p2Init, color: '#0ea5e9', isFighter: true,
+                selId: match.p2SelId, marketId: match.marketId,
+            });
+            match._p1PickId = p1Id;
+            match._p2PickId = p2Id;
+        });
+    }
+
+    function loadParlayTennis() {
+        if (parlayGamesTennisLoading) return;
+        if (PARLAY_GAMES_TENNIS.length > 0) { parlayRenderTennisCards(); return; }
+        parlayGamesTennisLoading = true;
+        var grid = document.getElementById('parlay-player-grid');
+        if (grid) {
+            grid.style.cssText = 'display:flex;flex-direction:column;overflow-y:auto;gap:8px;padding:12px;box-sizing:border-box;flex:1;min-height:0';
+            grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">Loading matches…</div>';
+        }
+        var leagues = '72778'; // US Open Men's — extend via ?leagues= as needed
+        fetch('/api/dk/tennis-lines?leagues=' + leagues, { credentials: 'include' })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                parlayGamesTennisLoading = false;
+                if (!d.ok || !d.matches || !d.matches.length) {
+                    if (grid) grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">No tennis matches available today</div>';
+                    return;
+                }
+                PARLAY_GAMES_TENNIS = d.matches;
+                buildTennisPicks();
+                if (parlayActiveSport === 'tennis') parlayRenderTennisCards();
+            })
+            .catch(function() {
+                parlayGamesTennisLoading = false;
+                if (grid) grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">Failed to load matches — try again</div>';
+            });
+    }
+
+    function parlayRenderTennisCards() {
+        var grid = document.getElementById('parlay-player-grid');
+        if (!grid) return;
+        grid.style.cssText = 'display:flex;flex-direction:column;overflow-y:auto;gap:8px;padding:12px;box-sizing:border-box;flex:1;min-height:0';
+        if (!PARLAY_GAMES_TENNIS.length) {
+            grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">No tennis matches available</div>';
+            return;
+        }
+        var nowMs = Date.now();
+        var pickMap = {};
+        PARLAY_PLAYERS_TENNIS.forEach(function(p) { pickMap[p.eventId + '|' + p.name] = p; });
+        var html = PARLAY_GAMES_TENNIS.map(function(match) {
+            if (match.startMs && match.startMs < nowMs) return '';
+            var p1 = pickMap[match.eventId + '|' + match.player1];
+            var p2 = pickMap[match.eventId + '|' + match.player2];
+            if (!p1 || !p2) return '';
+            var p1Sel = parlayPicks[String(p1.id)] ? ' active' : '';
+            var p2Sel = parlayPicks[String(p2.id)] ? ' active' : '';
+            var p1Init = (match.player1 || '').split(' ').map(function(w) { return w[0] || ''; }).join('').toUpperCase().slice(0, 2);
+            var p2Init = (match.player2 || '').split(' ').map(function(w) { return w[0] || ''; }).join('').toUpperCase().slice(0, 2);
+            var p1Last = (match.player1 || '').split(' ').pop();
+            var p2Last = (match.player2 || '').split(' ').pop();
+            var avBase = 'width:56px;height:56px;border-radius:50%;overflow:hidden;background:var(--bg3);flex-shrink:0;position:relative;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:var(--muted)';
+            var timeStr = parlayFmtTime ? parlayFmtTime(match.startMs, match.time) : match.time;
+            return '<div class="pgc-card">' +
+                '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px 10px">' +
+                  '<span style="font-size:11px;color:var(--muted);font-weight:500">Tennis · ' + escHtml(timeStr) + '</span>' +
+                '</div>' +
+                '<div style="display:flex;align-items:center;gap:10px;padding:0 14px 14px">' +
+                  '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:8px">' +
+                    '<div style="' + avBase + '">' + escHtml(p1Init) + '</div>' +
+                    '<span style="font-size:12px;font-weight:600;text-align:center">' + escHtml(p1Last) + '</span>' +
+                    '<button class="pgc-btn' + p1Sel + '" onclick="parlayTogglePick(' + p1.id + ',\'more\')" style="width:100%;font-size:12px">' + escHtml(match.player1.split(' ')[0]) + ' ' + parlayFmtOdds(match.p1Odds) + '</button>' +
+                  '</div>' +
+                  '<span style="font-size:11px;color:var(--muted);font-weight:700;flex-shrink:0">VS</span>' +
+                  '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:8px">' +
+                    '<div style="' + avBase + '">' + escHtml(p2Init) + '</div>' +
+                    '<span style="font-size:12px;font-weight:600;text-align:center">' + escHtml(p2Last) + '</span>' +
+                    '<button class="pgc-btn' + p2Sel + '" onclick="parlayTogglePick(' + p2.id + ',\'more\')" style="width:100%;font-size:12px">' + escHtml(match.player2.split(' ')[0]) + ' ' + parlayFmtOdds(match.p2Odds) + '</button>' +
+                  '</div>' +
+                '</div>' +
+            '</div>';
+        }).join('');
+        grid.innerHTML = html || '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">No matches available</div>';
     }
 
     function parlayFmtTime(startMs, timeStr) {
@@ -6984,6 +7096,18 @@
             return;
         }
 
+        // Tennis tab — match cards with player ML picks
+        if (parlayActiveSport === 'tennis') {
+            if (!PARLAY_PLAYERS_TENNIS.length && !parlayGamesTennisLoading) { loadParlayTennis(); return; }
+            if (parlayGamesTennisLoading) {
+                grid.style.cssText = 'display:flex;flex-direction:column;overflow-y:auto;gap:8px;padding:12px;box-sizing:border-box;flex:1;min-height:0';
+                grid.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">Loading matches…</div>';
+                return;
+            }
+            parlayRenderTennisCards();
+            return;
+        }
+
         // 1st Inning tab (MLB only)
         if (parlayCategory === '1st_inning' && parlayActiveSport === 'mlb') {
             if (!PARLAY_1INN_GAMES.length && !parlay1innLoading) { loadParlay1stInning(); return; }
@@ -7290,11 +7414,12 @@
             '<button class="parlay-sport-btn' + (parlayActiveSport === 'nfl'    ? ' active' : '') + '" onclick="setParlayActiveSport(\'nfl\')">NFL</button>' +
             '<button class="parlay-sport-btn' + (parlayActiveSport === 'cfb' ? ' active' : '') + '" onclick="setParlayActiveSport(\'cfb\')">CFB</button>' +
             '<button class="parlay-sport-btn' + (parlayActiveSport === 'ufc'    ? ' active' : '') + '" onclick="setParlayActiveSport(\'ufc\')">UFC</button>' +
-            '<button class="parlay-sport-btn' + (parlayActiveSport === 'soccer' ? ' active' : '') + '" onclick="setParlayActiveSport(\'soccer\')">FC</button>' +
+            '<button class="parlay-sport-btn' + (parlayActiveSport === 'soccer'  ? ' active' : '') + '" onclick="setParlayActiveSport(\'soccer\')">FC</button>' +
+            '<button class="parlay-sport-btn' + (parlayActiveSport === 'tennis'  ? ' active' : '') + '" onclick="setParlayActiveSport(\'tennis\')">Tennis</button>' +
         '</div>';
 
         if (parlayActiveSport !== 'mlb') {
-            var cats = parlayActiveSport === 'wnba' ? WNBA_CATS : parlayActiveSport === 'nfl' ? NFL_CATS : parlayActiveSport === 'cfb' ? CFB_CATS : parlayActiveSport === 'ufc' ? UFC_CATS : parlayActiveSport === 'soccer' ? SOCCER_CATS : UFC_CATS;
+            var cats = parlayActiveSport === 'wnba' ? WNBA_CATS : parlayActiveSport === 'nfl' ? NFL_CATS : parlayActiveSport === 'cfb' ? CFB_CATS : parlayActiveSport === 'ufc' ? UFC_CATS : parlayActiveSport === 'soccer' ? SOCCER_CATS : parlayActiveSport === 'tennis' ? TENNIS_CATS : UFC_CATS;
             cats = cats.filter(function(c) { return !c.adminOnly || isAdmin; });
             var searchTab = parlaySearchQuery
                 ? '<button class="parlay-cat-btn' + (parlayCategory === 'search' ? ' active' : '') + '" data-cat="search" onclick="parlaySetCategory(\'search\')">Player</button>'
@@ -7358,7 +7483,7 @@
             parlayCategory     = 'hits';
             parlayPrevCategory = 'hits';
         } else {
-            var cats = sport === 'wnba' ? WNBA_CATS : sport === 'nfl' ? NFL_CATS : sport === 'cfb' ? CFB_CATS : sport === 'ufc' ? UFC_CATS : sport === 'soccer' ? SOCCER_CATS : PARLAY_CATS;
+            var cats = sport === 'wnba' ? WNBA_CATS : sport === 'nfl' ? NFL_CATS : sport === 'cfb' ? CFB_CATS : sport === 'ufc' ? UFC_CATS : sport === 'soccer' ? SOCCER_CATS : sport === 'tennis' ? TENNIS_CATS : PARLAY_CATS;
             var isAdmin = currentUser && currentUser.is_admin;
             cats = cats.filter(function(c) { return !c.adminOnly || isAdmin; });
             parlayCategory     = cats[0].key;
@@ -7367,6 +7492,7 @@
         var nav = document.getElementById('parlay-cat-nav');
         if (nav) nav.innerHTML = parlayBuildNavHtml();
         if (sport === 'ufc') loadParlayUfc();
+        else if (sport === 'tennis') loadParlayTennis();
         else loadParlayPlayers();
     }
 
@@ -8720,9 +8846,16 @@
             // If event_name is "Player Name · market_type" (no "vs"), return empty so any game matches.
             function teamsFromEvent(eventName) {
                 var upper = (eventName || '').toUpperCase();
-                if (upper.indexOf(' VS') < 0) return { t1: '', t2: '' };
-                var parts = upper.split(/\s+VS\.?\s+/);
-                return { t1: (parts[0] || '').trim(), t2: (parts[1] || '').trim() };
+                if (upper.indexOf(' VS') >= 0) {
+                    var parts = upper.split(/\s+VS\.?\s+/);
+                    return { t1: (parts[0] || '').trim(), t2: (parts[1] || '').trim() };
+                }
+                if (upper.indexOf(' @ ') >= 0) {
+                    var parts = upper.split(' @ ');
+                    // "AWAY @ HOME" — keep both so abbrMatch can find either team
+                    return { t1: (parts[0] || '').trim(), t2: (parts[1] || '').trim() };
+                }
+                return { t1: '', t2: '' };
             }
             function abbrMatch(gi, t1, t2) {
                 if (!t1 && !t2) return false;
@@ -9118,8 +9251,12 @@
                         var field = MLB_FIELD[n.marketType];
                         var val   = (stats && field && stats[field] !== undefined) ? stats[field] : null;
 
-                        // Prefer the pinned game's info; fall back to wherever the player's name appeared
-                        var resolvedPk = closestPk || playerGamePk[norm];
+                        // Prefer the pinned game's info — but only if the player was actually found there.
+                        // DK's gameStartMs can point to the wrong event (e.g. Vientos listed under SD@CIN).
+                        // If player wasn't in closestPk's boxscore, use playerGamePk (game where they appeared).
+                        var resolvedPk = (closestPk && playerStatsByPk[closestPk] && playerStatsByPk[closestPk][norm])
+                            ? closestPk
+                            : (playerGamePk[norm] || closestPk);
                         var gameInfo   = resolvedPk ? gameInfoMap[resolvedPk] : null;
                         if (!gameInfo && n.eventName) {
                             var _evM = n.eventName.match(/^(.+?)\s+@\s+(.+)$/);
@@ -10409,6 +10546,17 @@
                             return;
                         }
                     }
+                    // Tennis: block picking both players from the same match
+                    if (newP.matchId && newP.market === 'tennis_ml') {
+                        var _tennisConflict = Object.keys(parlayPicks).some(function(k) {
+                            var ex = findParlayPlayer(k);
+                            return ex && ex.matchId === newP.matchId && ex.market === 'tennis_ml' && ex.id !== newP.id;
+                        });
+                        if (_tennisConflict) {
+                            showConfirm('Can\'t pick both players from the same match — these are opposite outcomes.', function() {});
+                            return;
+                        }
+                    }
                     // Block same player/team appearing twice
                     var duplicate = Object.keys(parlayPicks).some(function(k) {
                         var existing = findParlayPlayer(k);
@@ -10619,7 +10767,7 @@
     function parlayMilestonePick(id, groupKey) {
         var parts = typeof groupKey === 'string' ? groupKey.split('::') : [];
         var gName = parts[0] || '', gMkt = parts[1] || '';
-        var pools = [PARLAY_PLAYERS, PARLAY_PLAYERS_WNBA, PARLAY_PLAYERS_NFL, PARLAY_PLAYERS_CFB, PARLAY_PLAYERS_SOCCER, PARLAY_PLAYERS_UFC];
+        var pools = [PARLAY_PLAYERS, PARLAY_PLAYERS_WNBA, PARLAY_PLAYERS_NFL, PARLAY_PLAYERS_CFB, PARLAY_PLAYERS_SOCCER, PARLAY_PLAYERS_UFC, PARLAY_PLAYERS_TENNIS];
         if (gName && gMkt) {
             pools.forEach(function(pool) {
                 (pool || []).forEach(function(p) {
@@ -10795,6 +10943,7 @@
                     if (PARLAY_PLAYERS_NFL.some(function(x) { return x.id === pid; }))    return 'nfl';
                     if (PARLAY_PLAYERS_CFB.some(function(x) { return x.id === pid; }))    return 'cfb';
                     if (PARLAY_PLAYERS_SOCCER.some(function(x) { return x.id === pid; })) return 'soccer_' + (p.espnSlug || '');
+                    if (PARLAY_PLAYERS_TENNIS.some(function(x) { return x.id === pid; })) return 'tennis';
                     return 'mlb';
                 })(),
                 gameDate:     (function(ms){ return ms ? new Date(ms).toLocaleDateString('en-CA', { timeZone: 'America/New_York' }) : new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' }); })(p.commenceMs || p.startMs || 0),
@@ -11344,6 +11493,7 @@
         document.body.style.width    = '100%';
         setNavLabel('🎰 Casino');
         renderCasinoPanel();
+        showCasinoDisclaimer();
     }
 
     function hideCasinoTab() {
@@ -11373,7 +11523,7 @@
     var casinoDepositPending = null;   // { card_url, rax_requested, rax_credited }
     var casinoBusy           = false;
     var casinoLastBet        = 0;      // remembered across hands
-    var casinoGameType       = 'blackjack'; // 'blackjack' | 'mines'
+    var casinoGameType       = 'blackjack'; // 'blackjack' | 'mines' | 'coinflip'
     var casinoMinesGame      = null;   // active mines game state
     var casinoMinesBusy      = false;
     var casinoMinesLastBet   = 0;
@@ -11383,6 +11533,15 @@
     var casinoMinesPending   = null;  // tile index currently in-flight (for instant visual feedback)
     var casinoMinesNewGem    = null;  // index of the most recently revealed gem (animation target)
     var casinoMinesResetTimer = null; // stale-game clear timer — always cancel before starting a new game
+
+    var casinoFlipGame    = null;   // active coinflip game state
+    var casinoFlipBusy    = false;
+    var casinoFlipLastBet = 0;
+    var casinoFlipSide    = 'heads';
+
+    var casinoMinesLastSeeds = null; // { server_seed_hash, client_seed, server_seed } — persists after game ends
+    var casinoFlipLastSeeds  = null; // same for coinflip
+    var casinoBJLastSeeds    = null; // same for blackjack
 
     var CASINO_SUITS = { H: '♥', D: '♦', C: '♣', S: '♠' };
     var casinoVerifyLoading = false;
@@ -11491,14 +11650,16 @@
             casinoRenderVerifyGate();
             return;
         }
-        var minesTab = (currentUser && (currentUser.is_admin || currentUser.mines_access))
-            ? '<button class="casino-game-tab' + (casinoGameType === 'mines' ? ' active' : '') + '" onclick="casinoSetGameType(\'mines\')">💣 Mines</button>'
+        var minesTab    = '<button class="casino-game-tab' + (casinoGameType === 'mines'    ? ' active' : '') + '" onclick="casinoSetGameType(\'mines\')">💣 Mines</button>';
+        var coinflipTab = (currentUser && currentUser.coinflip_access)
+            ? '<button class="casino-game-tab' + (casinoGameType === 'coinflip' ? ' active' : '') + '" onclick="casinoSetGameType(\'coinflip\')">🪙 Coin Flip</button>'
             : '';
         panel.innerHTML = [
             '<div class="casino-hdr">',
             '  <div class="casino-game-tabs">',
             '    <button class="casino-game-tab' + (casinoGameType === 'blackjack' ? ' active' : '') + '" onclick="casinoSetGameType(\'blackjack\')">🃏 Blackjack</button>',
             '    ' + minesTab,
+            '    ' + coinflipTab,
             '  </div>',
             '  <div class="casino-hdr-right">',
             '    <button class="casino-hdr-btn dep" onclick="showCasinoModal(\'deposit\')">+ Deposit</button>',
@@ -11508,6 +11669,9 @@
             '    </div>',
             '    <button class="casino-hdr-btn" onclick="showCasinoModal(\'withdraw\')">Withdraw</button>',
             '    <button class="casino-hdr-btn" onclick="showCasinoModal(\'transactions\')" style="opacity:.7">Transactions</button>',
+            (casinoGameType === 'blackjack' ? '    <button class="casino-hdr-btn" onclick="window.showBlackjackHistory()" title="Game History" style="opacity:.7">📖 History</button>' : ''),
+            (casinoGameType === 'mines'    ? '    <button class="casino-hdr-btn" onclick="window.showMinesHistory()"     title="Game History" style="opacity:.7">📖 History</button>' : ''),
+            (casinoGameType === 'coinflip' ? '    <button class="casino-hdr-btn" onclick="window.showCoinflipHistory()"  title="Game History" style="opacity:.7">📖 History</button>' : ''),
             '  </div>',
             '</div>',
             '<div class="casino-main" id="casino-main"></div>',
@@ -11569,12 +11733,25 @@
             if (!data.ok) return;
             updateCasinoBalance(data.casino_balance);
             casinoGame = data.active_game || null;
-            if (casinoGameType === 'mines' && currentUser && (currentUser.is_admin || currentUser.mines_access)) {
+            if (casinoGameType === 'mines' && currentUser) {
                 try {
                     var mr = await fetch('/api/casino/mines/state', { credentials: 'include' });
                     var md = await mr.json();
                     casinoMinesGame = (md.ok && md.game) ? md.game : null;
+                    if (casinoMinesGame && casinoMinesGame.server_seed_hash) {
+                        casinoMinesLastSeeds = { server_seed_hash: casinoMinesGame.server_seed_hash, client_seed: casinoMinesGame.client_seed, server_seed: null };
+                    }
                 } catch(e) { casinoMinesGame = null; }
+            }
+            if (casinoGameType === 'coinflip' && currentUser && currentUser.coinflip_access) {
+                try {
+                    var cfr = await fetch('/api/casino/coinflip/state', { credentials: 'include' });
+                    var cfd = await cfr.json();
+                    casinoFlipGame = (cfd.ok && cfd.game) ? cfd.game : null;
+                    if (casinoFlipGame && casinoFlipGame.server_seed_hash) {
+                        casinoFlipLastSeeds = { server_seed_hash: casinoFlipGame.server_seed_hash, client_seed: casinoFlipGame.client_seed, server_seed: null };
+                    }
+                } catch(e) { casinoFlipGame = null; }
             }
             renderCasinoMain();
         } catch(e) {}
@@ -11589,17 +11766,16 @@
             renderMinesMain(el);
             return;
         }
+        if (casinoGameType === 'coinflip') {
+            renderCoinflipMain(el);
+            return;
+        }
         var hasGame = casinoGame && (casinoGame.status === 'active' || casinoGame.status === 'complete');
         var fieldHTML = hasGame ? renderCasinoFieldHTML(casinoGame) : renderCasinoIdleFieldHTML();
         var ctrlHTML  = hasGame ? renderCasinoCtrlHTML(casinoGame)  : renderCasinoBetCtrlHTML();
         el.innerHTML =
             fieldHTML +
-            '<div class="casino-ctrl"><div class="casino-ctrl-inner">' + ctrlHTML + '</div></div>' +
-            '<div class="casino-history-section">' +
-            '<div class="casino-history-section-title">Recent Hands</div>' +
-            '<div id="casino-history-inline"><div class="casino-loading">Loading…</div></div>' +
-            '</div>';
-        loadCasinoHistoryInline();
+            '<div class="casino-ctrl"><div class="casino-ctrl-inner">' + ctrlHTML + '</div></div>';
     }
 
     window.casinoSetGameType = function(type) {
@@ -11672,8 +11848,9 @@
         var dCards   = state.dealer_hand || [];
         var dVisible = dCards.filter(function(c) { return c !== null; });
         var dTotal   = dVisible.length ? calcClientTotal(dVisible) : '?';
+        var dTotalDisp = dVisible.length ? calcClientTotalDisplay(dVisible) : '?';
         parts.push('<div class="casino-zone">');
-        parts.push('<div class="casino-score-pill" id="casino-dealer-pill">Dealer · ' + dTotal + '</div>');
+        parts.push('<div class="casino-score-pill" id="casino-dealer-pill">Dealer · ' + dTotalDisp + '</div>');
         parts.push('<div class="casino-card-stack">');
         for (var i = 0; i < dCards.length; i++) parts.push(renderCardHTML(dCards[i], dCards[i] === null, '', 'd', i));
         parts.push('</div></div>');
@@ -11703,7 +11880,8 @@
         for (var h = 0; h < hands.length; h++) {
             var hand    = hands[h];
             var hCards  = hand.cards || [];
-            var total   = calcClientTotal(hCards);
+            var total      = calcClientTotal(hCards);
+            var totalDisp  = calcClientTotalDisplay(hCards);
             var hResult = results.find(function(r) { return r.hand_idx === h; });
             var isAct   = !done && h === actIdx;
             var pillCls = 'casino-score-pill' + (total > 21 ? ' bust' : total === 21 && hCards.length === 2 ? ' bjpil' : '');
@@ -11720,15 +11898,15 @@
             // Result pill (when done)
             if (done && hResult) {
                 var rCls  = hResult.result === 'won' ? 'win' : hResult.result === 'blackjack' ? 'bj' : hResult.result === 'push' ? 'push' : 'lose';
-                var rLbl  = { won: 'Win ' + RAX_ICON + '+' + hResult.credit.toLocaleString(), lost: 'Lose', push: 'Push', blackjack: 'Blackjack! ' + RAX_ICON + '+' + hResult.credit.toLocaleString() }[hResult.result] || hResult.result;
-                parts.push('<div class="casino-result-pill ' + rCls + '">' + escHtml(rLbl) + '</div>');
+                var rLbl  = { won: 'Win +' + hResult.credit.toLocaleString() + ' ' + RAX_ICON, lost: 'Lose', push: 'Push', blackjack: 'Blackjack! +' + hResult.credit.toLocaleString() + ' ' + RAX_ICON }[hResult.result] || escHtml(hResult.result);
+                parts.push('<div class="casino-result-pill ' + rCls + '">' + rLbl + '</div>');
                 if (hResult.insurance_won) {
                     parts.push('<div class="casino-result-pill win casino-ins-win-pill">Insurance +' + hResult.insurance_won.toLocaleString() + ' Rax</div>');
                 }
             } else if (done && hand.status === 'bust') {
                 parts.push('<div class="casino-result-pill lose">Bust</div>');
             }
-            parts.push('<div class="' + pillCls + '">' + escHtml(handLbl) + total + '</div>');
+            parts.push('<div class="' + pillCls + '">' + escHtml(handLbl) + totalDisp + '</div>');
             parts.push('<div class="casino-card-stack">');
             for (var ci = 0; ci < hCards.length; ci++) {
                 var xCls = isAct && !multi ? 'active-hcard' : hand.status === 'standing' ? 'standing-card' : '';
@@ -11777,6 +11955,19 @@
         }
         while (total > 21 && aces > 0) { total -= 10; aces--; }
         return total;
+    }
+
+    function calcClientTotalDisplay(cards) {
+        var hard = 0, hasAce = false;
+        for (var i = 0; i < cards.length; i++) {
+            var v = cards[i] && cards[i].v;
+            if (!v) continue;
+            if (v === 'A') { hard += 1; hasAce = true; }
+            else if (v === 'T' || v === 'J' || v === 'Q' || v === 'K') hard += 10;
+            else hard += parseInt(v, 10);
+        }
+        var soft = (hasAce && (hard + 10) <= 21) ? hard + 10 : null;
+        return soft !== null ? hard + '/' + soft : String(hard);
     }
 
     function casinoCanSplit(cards) {
@@ -11860,6 +12051,13 @@
 
     function handleCasinoResponse(data) {
         if (data.casino_balance !== undefined) updateCasinoBalance(data.casino_balance);
+        // Capture provably fair seeds
+        if (data.server_seed_hash || data.server_seed) {
+            if (!casinoBJLastSeeds) casinoBJLastSeeds = {};
+            if (data.server_seed_hash) casinoBJLastSeeds.server_seed_hash = data.server_seed_hash;
+            if (data.client_seed)      casinoBJLastSeeds.client_seed      = data.client_seed;
+            if (data.server_seed)      casinoBJLastSeeds.server_seed      = data.server_seed;
+        }
         var prevGame = casinoGame;
         casinoGame = {
             game_id:            data.game_id,
@@ -11886,7 +12084,7 @@
         var prevDH      = prevGame ? (prevGame.dealer_hand || []) : [];
         var prevVisible = prevDH.filter(function(c) { return c !== null; });
         var pill = document.getElementById('casino-dealer-pill');
-        if (pill) pill.textContent = 'Dealer · ' + (prevVisible.length ? calcClientTotal(prevVisible) : '?');
+        if (pill) pill.textContent = 'Dealer · ' + (prevVisible.length ? calcClientTotalDisplay(prevVisible) : '?');
 
         // Incremental dealer pill update after each card animates
         var nextDH = casinoGame.dealer_hand || [];
@@ -11895,7 +12093,7 @@
                 var p = document.getElementById('casino-dealer-pill');
                 if (!p) return;
                 var vis = nextDH.slice(0, item.ci + 1).filter(function(c) { return c !== null; });
-                p.textContent = 'Dealer · ' + (vis.length ? calcClientTotal(vis) : '?');
+                p.textContent = 'Dealer · ' + (vis.length ? calcClientTotalDisplay(vis) : '?');
             }, item.delay + 300);
         });
 
@@ -12188,7 +12386,11 @@
     function renderCasinoWithdrawHTML() {
         var def = casinoBalance >= 1000 ? Math.min(casinoBalance, 5000) : 1000;
         return [
-            '<p>Balance: <strong style="color:#fff">' + casinoBalance.toLocaleString() + ' Rax</strong> · Processed within 24 hours via edgebot. Minimum 1,000 Rax.</p>',
+            '<p style="margin:0 0 10px">Balance: <strong style="color:#fff">' + casinoBalance.toLocaleString() + ' Rax</strong></p>',
+            '<div style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);border-radius:8px;padding:10px 13px;margin-bottom:14px;display:flex;align-items:flex-start;gap:8px">' +
+                '<span style="font-size:15px;flex-shrink:0">⏳</span>' +
+                '<span style="font-size:12px;color:rgba(251,191,36,.9);line-height:1.5">Withdrawals may take <strong>up to 24 hours</strong>. Minimum withdrawal is 1,000 Rax.</span>' +
+            '</div>',
             '<div style="width:100%">',
             '<label style="font-size:12px;color:rgba(255,255,255,.4);display:block;margin-bottom:6px">Amount (Rax)</label>',
             '<input type="number" id="casino-wd-amount" min="1000" max="' + Math.max(casinoBalance, 1000) + '" step="100" value="' + (casinoBalance >= 1000 ? def : '') + '" />',
@@ -12233,40 +12435,515 @@
         }
     }
 
-    // ── Inline history (below the table) ─────────────────────────────────────
+    // ── Blackjack History Modal ───────────────────────────────────────────────
 
-    async function loadCasinoHistoryInline() {
-        var el = document.getElementById('casino-history-inline');
-        if (!el) return;
-        try {
-            var res  = await fetch('/api/casino/blackjack/history');
-            var data = await res.json();
-            if (!res.ok || !data.ok) { el.innerHTML = '<div class="casino-error">Failed to load.</div>'; return; }
-            var hist = data.history || [];
-            if (!hist.length) { el.innerHTML = '<div class="casino-loading" style="padding:10px 0;font-size:13px">No hands yet.</div>'; return; }
-            var rMap = { won: 'Win', lost: 'Loss', push: 'Push', blackjack: 'BJ' };
-            var rows = hist.map(function(h) {
-                var net    = h.net || 0;
-                var netStr = net > 0 ? '+' + net.toLocaleString() : net.toLocaleString();
-                var netCls = net > 0 ? 'chr-win' : net < 0 ? 'chr-lose' : 'chr-push';
-                var handResults = (h.hands || []).map(function(hh) { return rMap[hh.result] || '?'; });
-                var resultStr   = handResults.join('/') || '—';
-                var anyWin  = (h.hands || []).some(function(hh) { return hh.result === 'won' || hh.result === 'blackjack'; });
-                var allPush = (h.hands || []).length > 0 && (h.hands || []).every(function(hh) { return hh.result === 'push'; });
-                var rCls    = anyWin ? 'chr-win' : allPush ? 'chr-push' : 'chr-lose';
-                var d       = new Date((h.created_at || 0) * 1000);
-                var tStr    = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).replace(' AM', 'a').replace(' PM', 'p');
-                var dateStr = (d.getMonth() + 1) + '/' + d.getDate() + ' ' + tStr;
-                return '<div class="chr-row">' +
-                    '<span class="chr-date">' + escHtml(dateStr) + '</span>' +
-                    '<span class="chr-bet">' + RAX_ICON + escHtml((h.total_bet||0).toLocaleString()) + '</span>' +
-                    '<span class="chr-result ' + rCls + '">' + escHtml(resultStr) + '</span>' +
-                    '<span class="chr-net ' + netCls + '">' + RAX_ICON + escHtml(netStr) + '</span>' +
+    window.showBlackjackHistory = function() {
+        var existing = document.querySelector('.mines-history-overlay');
+        if (existing) existing.remove();
+
+        var overlay = document.createElement('div');
+        overlay.className = 'mines-history-overlay';
+        var modal = document.createElement('div');
+        modal.className = 'mines-history-modal';
+        modal.innerHTML =
+            '<div class="mines-history-hdr">' +
+                '<span>📖 Game History</span>' +
+                '<button class="mines-history-close">✕</button>' +
+            '</div>' +
+            '<div class="mines-history-body"><span style="color:var(--muted)">Loading…</span></div>';
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+
+        modal.querySelector('.mines-history-close').onclick = function() { overlay.remove(); };
+        overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+
+        var body = modal.querySelector('.mines-history-body');
+
+        fetch('/api/casino/blackjack/history', { credentials: 'include' })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var hist = data.history || [];
+                if (!hist.length) { body.innerHTML = '<span style="color:var(--muted);display:block;padding:20px;text-align:center">No completed hands yet.</span>'; return; }
+
+                var totalGames  = hist.length;
+                var wins        = hist.filter(function(h) { return h.net > 0; });
+                var losses      = hist.filter(function(h) { return h.net < 0; });
+                var pushes      = hist.filter(function(h) { return h.net === 0; });
+                var blackjacks  = hist.filter(function(h) { return (h.hands || []).some(function(hh) { return hh.result === 'blackjack'; }); });
+                var winRate     = Math.round(wins.length / totalGames * 100);
+                var totalStaked = hist.reduce(function(s, h) { return s + (h.total_bet || 0); }, 0);
+                var netPnl      = hist.reduce(function(s, h) { return s + (h.net || 0); }, 0);
+                var bestWin     = wins.length ? Math.max.apply(null, wins.map(function(h) { return h.net; })) : 0;
+                var worstLoss   = losses.length ? Math.max.apply(null, losses.map(function(h) { return -h.net; })) : 0;
+                var avgBet      = Math.round(totalStaked / totalGames);
+
+                var pnlColor = netPnl >= 0 ? 'var(--green)' : '#ef4444';
+                var pnlStr   = (netPnl >= 0 ? '+' : '') + netPnl.toLocaleString();
+                var R = RAX_ICON;
+
+                var stat = function(val, lbl) {
+                    return '<div class="mh-stat"><div class="mh-stat-val">' + val + '</div><div class="mh-stat-lbl">' + lbl + '</div></div>';
+                };
+
+                var statsBar =
+                    '<div class="mh-stats">' +
+                        stat(totalGames, 'Hands') +
+                        stat(wins.length + 'W / ' + losses.length + 'L / ' + pushes.length + 'P', 'Record') +
+                        stat(winRate + '%', 'Win Rate') +
+                        stat('<span style="color:' + pnlColor + '">' + pnlStr + ' ' + R + '</span>', 'Net P&L') +
+                        stat(totalStaked.toLocaleString() + ' ' + R, 'Total Staked') +
+                        stat(blackjacks.length, 'Blackjacks') +
+                        stat('<span style="color:var(--green)">+' + bestWin.toLocaleString() + ' ' + R + '</span>', 'Best Win') +
+                        stat('<span style="color:#ef4444">−' + worstLoss.toLocaleString() + ' ' + R + '</span>', 'Biggest Loss') +
+                        stat(avgBet.toLocaleString() + ' ' + R, 'Avg Bet') +
                     '</div>';
-            }).join('');
-            el.innerHTML = '<div class="chr-row chr-header"><span class="chr-date">Date</span><span class="chr-bet">Bet</span><span class="chr-result">Result</span><span class="chr-net">Net</span></div>' + rows;
-        } catch(e) { el.innerHTML = '<div class="casino-error">Error loading history.</div>'; }
+
+                var rMap = { won: 'Win', lost: 'Loss', push: 'Push', blackjack: 'BJ' };
+                var rows = hist.map(function(h) {
+                    var net    = h.net || 0;
+                    var netCol = net > 0 ? '#4ade80' : net < 0 ? '#f87171' : '#fb923c';
+                    var netStr = (net > 0 ? '+' : '') + net.toLocaleString();
+                    var handResults = (h.hands || []).map(function(hh) { return rMap[hh.result] || '?'; });
+                    var resultStr   = handResults.join('/') || '—';
+                    var anyBJ   = (h.hands || []).some(function(hh) { return hh.result === 'blackjack'; });
+                    var anyWin  = (h.hands || []).some(function(hh) { return hh.result === 'won'; });
+                    var allPush = (h.hands || []).length > 0 && (h.hands || []).every(function(hh) { return hh.result === 'push'; });
+                    var resCol  = anyBJ ? '#93c5fd' : anyWin ? '#4ade80' : allPush ? '#fb923c' : '#f87171';
+                    var dt      = new Date((h.created_at || 0) * 1000);
+                    var hr = dt.getHours(), mn = dt.getMinutes();
+                    var ampm = hr >= 12 ? 'PM' : 'AM';
+                    var h12  = hr % 12 || 12;
+                    var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                    var dtStr  = months[dt.getMonth()] + ' ' + dt.getDate() + ', ' + h12 + ':' + (mn < 10 ? '0' : '') + mn + ' ' + ampm;
+                    var c = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:5px 4px;font-size:11px;';
+                    var pfBtn = h.server_seed_hash
+                        ? '<div style="display:flex;align-items:center;justify-content:center;padding:3px 0">' +
+                          '<button class="pf-hist-btn" onclick="pfFromHistory(this)" data-type="blackjack"' +
+                          ' data-hash="' + escHtml(h.server_seed_hash || '') + '"' +
+                          ' data-client="' + escHtml(h.client_seed || '') + '"' +
+                          ' data-server="' + escHtml(h.server_seed || '') + '"' +
+                          ' data-bjhands="' + escHtml(JSON.stringify(h.hands || [])) + '"' +
+                          ' data-bjdealer="' + escHtml(JSON.stringify(h.dealer_hand || [])) + '"' +
+                          '>🔒 Provably Fair</button></div>'
+                        : '<div></div>';
+                    return '<div class="mh-row" style="grid-template-columns:1.6fr 1fr 1fr 0.5fr 1fr auto">' +
+                        '<div style="' + c + 'color:#888">'                                              + escHtml(dtStr)                     + '</div>' +
+                        '<div style="' + c + 'text-align:right">'                                        + Number(h.total_bet||0).toLocaleString() + '</div>' +
+                        '<div style="' + c + 'text-align:center;font-weight:700;color:' + resCol + '">' + escHtml(resultStr)                 + '</div>' +
+                        '<div style="' + c + 'text-align:center">'                                       + (h.dealer_total != null ? h.dealer_total : '—') + '</div>' +
+                        '<div style="' + c + 'text-align:right;font-weight:700;color:' + netCol + '">'  + netStr                             + '</div>' +
+                        pfBtn +
+                    '</div>';
+                }).join('');
+
+                var hc   = 'overflow:hidden;white-space:nowrap;padding:4px 4px;font-size:9px;text-transform:uppercase;letter-spacing:.05em;font-weight:600;color:#666;';
+                var grid = 'display:grid;grid-template-columns:1.6fr 1fr 1fr 0.5fr 1fr auto;';
+                body.innerHTML = statsBar +
+                    '<div style="border-top:1px solid var(--border)">' +
+                        '<div style="' + grid + 'border-bottom:1px solid var(--border);background:rgba(255,255,255,.02)">' +
+                            '<div style="' + hc + 'text-align:left">Date</div>' +
+                            '<div style="' + hc + 'text-align:right">Bet ' + R + '</div>' +
+                            '<div style="' + hc + 'text-align:center">Result</div>' +
+                            '<div style="' + hc + 'text-align:center">Dlr</div>' +
+                            '<div style="' + hc + 'text-align:right">Net ' + R + '</div>' +
+                            '<div style="' + hc + '"></div>' +
+                        '</div>' +
+                        rows +
+                    '</div>';
+            })
+            .catch(function(e) {
+                body.innerHTML = '<span style="color:#ef4444;display:block;padding:20px;text-align:center">Failed to load: ' + escHtml(e.message || 'error') + '</span>';
+            });
+    };
+
+    // ── Coin Flip UI ──────────────────────────────────────────────────────────
+
+    function coinflipShowError(msg) {
+        var el = document.getElementById('cf-flip-btn');
+        if (!el) return;
+        var orig = el.textContent;
+        el.style.background = '#ef4444';
+        el.textContent = msg;
+        setTimeout(function() {
+            el.style.background = '';
+            el.textContent = casinoFlipGame ? 'Flip Again' : 'Flip';
+        }, 2000);
     }
+
+    function renderCoinflipMain(el) {
+        var g = casinoFlipGame;
+        var hasActive = g && g.status === 'active';
+        // Safety: reset stuck busy state when rendering idle screen
+        if (!hasActive) casinoFlipBusy = false;
+        el.innerHTML =
+            '<div class="cf-wrap">' +
+                '<div class="cf-field">' +
+                    '<div class="cf-coin-wrap"><div class="cf-coin" id="cf-coin">' +
+                        '<div class="cf-face cf-face-heads">' +
+                            '<svg viewBox="0 0 512 512" style="width:72px;height:72px;fill:#fff;opacity:.92"><g><path d="M128.1,141.1h356.8C442.8,57.4,356.1,0,256,0C192,0,133.5,23.5,88.6,62.3L128.1,141.1z"/><polygon points="355.3,193.2 154.2,193.2 254.7,394"/><path d="M413.6,193.2L253.9,512c0.7,0,1.4,0,2.1,0c141.4,0,256-114.6,256-256c0-21.7-2.7-42.7-7.8-62.8H413.6z"/><path d="M225.6,452.1L50.7,103C18.9,145.7,0,198.6,0,256c0,121.7,85,223.6,198.8,249.6L225.6,452.1z"/></g></svg>' +
+                        '</div>' +
+                        '<div class="cf-face cf-face-tails">' +
+                            '<svg viewBox="0 0 512 512" style="width:72px;height:72px;fill:#fff;opacity:.92"><g><path d="M128.1,141.1h356.8C442.8,57.4,356.1,0,256,0C192,0,133.5,23.5,88.6,62.3L128.1,141.1z"/><polygon points="355.3,193.2 154.2,193.2 254.7,394"/><path d="M413.6,193.2L253.9,512c0.7,0,1.4,0,2.1,0c141.4,0,256-114.6,256-256c0-21.7-2.7-42.7-7.8-62.8H413.6z"/><path d="M225.6,452.1L50.7,103C18.9,145.7,0,198.6,0,256c0,121.7,85,223.6,198.8,249.6L225.6,452.1z"/></g></svg>' +
+                        '</div>' +
+                    '</div></div>' +
+                    '<div class="cf-history-strip" id="cf-history-strip"></div>' +
+                '</div>' +
+                '<div class="cf-ctrl">' +
+                    (hasActive
+                        ? (function() {
+                              var curMult  = casinoFlipGame.current_multiplier || 1;
+                              var curPay   = casinoFlipGame.payout_rax || 0;
+                              var nextPay  = Math.min(Math.floor(curPay * 1.9), 100000);
+                              var maxed    = curPay >= 100000;
+                              return '<div class="cf-streak-info" id="cf-streak-info">' +
+                                         '<span class="cf-streak-mult">' + curMult.toFixed(2) + '×</span>' +
+                                         '<span class="cf-streak-label">Current Multiplier</span>' +
+                                     '</div>' +
+                                     '<button class="cf-cashout-btn" id="cf-cashout-btn" onclick="coinflipCashout()">' +
+                                         'Cash Out — ' + Number(curPay).toLocaleString() + ' ' + RAX_ICON +
+                                     '</button>' +
+                                     (!maxed
+                                         ? '<div class="cf-next-flip-row">' +
+                                               '<span class="cf-next-label">Next flip wins</span>' +
+                                               '<span class="cf-next-val">' + Number(nextPay).toLocaleString() + ' ' + RAX_ICON + '</span>' +
+                                           '</div>'
+                                         : '');
+                          })()
+                        : '') +
+                    '<div class="cf-side-row">' +
+                        '<button class="cf-side-btn cf-heads' + (casinoFlipSide === 'heads' ? ' active' : '') + '" id="cf-btn-heads" onclick="coinflipSetSide(\'heads\')">' +
+                            'Heads <span class="cf-side-dot cf-dot-heads"></span>' +
+                        '</button>' +
+                        '<button class="cf-random-btn" onclick="coinflipRandomSide()">🔀</button>' +
+                        '<button class="cf-side-btn cf-tails' + (casinoFlipSide === 'tails' ? ' active' : '') + '" id="cf-btn-tails" onclick="coinflipSetSide(\'tails\')">' +
+                            'Tails <span class="cf-side-dot cf-dot-tails"></span>' +
+                        '</button>' +
+                    '</div>' +
+                    (!hasActive
+                        ? '<div class="cf-amt-row">' +
+                              '<div class="cf-amt-wrap">' +
+                                  '<input class="casino-amt-input" type="number" id="cf-bet-input" min="100" max="10000" step="100" value="' + (casinoFlipLastBet || Math.min(casinoBalance, 1000) || 100) + '" />' +
+                                  '<span class="casino-amt-label">' + RAX_ICON + '</span>' +
+                              '</div>' +
+                              '<button class="casino-mult-btn" onclick="coinflipBetHalf()">½</button>' +
+                              '<button class="casino-mult-btn" onclick="coinflipBetDouble()">2×</button>' +
+                          '</div>' +
+                          '<div class="cf-chips">' +
+                              '<button class="casino-chip" onclick="setCoinflipBet(100)">100</button>' +
+                              '<button class="casino-chip" onclick="setCoinflipBet(500)">500</button>' +
+                              '<button class="casino-chip" onclick="setCoinflipBet(1000)">1K</button>' +
+                              '<button class="casino-chip" onclick="setCoinflipBet(2500)">2.5K</button>' +
+                              '<button class="casino-chip" onclick="setCoinflipBet(5000)">5K</button>' +
+                              '<button class="casino-chip" onclick="setCoinflipBet(10000)">MAX</button>' +
+                          '</div>'
+                        : '') +
+                    '<button class="cf-flip-btn" id="cf-flip-btn" onclick="coinflipFlipAction()">' +
+                        (hasActive ? 'Flip Again' : 'Flip') +
+                    '</button>' +
+                '</div>' +
+            '</div>';
+
+        // Restore coin face if resuming active game
+        if (hasActive) {
+            var log = JSON.parse(g.flip_log || '[]');
+            if (log.length) {
+                var lastResult = log[log.length - 1].result;
+                var coin = document.getElementById('cf-coin');
+                if (coin) coin.style.transform = 'rotateY(' + (lastResult === 'tails' ? '180' : '0') + 'deg)';
+            }
+            renderCoinflipStreak(log);
+        }
+    }
+
+    var CF_RAX_SVG_SMALL = '<svg viewBox="0 0 512 512" style="width:14px;height:14px;fill:#fff;opacity:.92"><g><path d="M128.1,141.1h356.8C442.8,57.4,356.1,0,256,0C192,0,133.5,23.5,88.6,62.3L128.1,141.1z"/><polygon points="355.3,193.2 154.2,193.2 254.7,394"/><path d="M413.6,193.2L253.9,512c0.7,0,1.4,0,2.1,0c141.4,0,256-114.6,256-256c0-21.7-2.7-42.7-7.8-62.8H413.6z"/><path d="M225.6,452.1L50.7,103C18.9,145.7,0,198.6,0,256c0,121.7,85,223.6,198.8,249.6L225.6,452.1z"/></g></svg>';
+
+    function renderCoinflipStreak(log) {
+        var strip = document.getElementById('cf-history-strip');
+        if (!strip) return;
+        if (!log || !log.length) { strip.innerHTML = ''; return; }
+        strip.innerHTML = log.map(function(f) {
+            var cls = f.result === 'heads' ? 'cf-dot-h' : 'cf-dot-t';
+            return '<span class="cf-streak-dot ' + cls + (f.won ? ' cf-dot-win' : ' cf-dot-lose') + '">' + CF_RAX_SVG_SMALL + '</span>';
+        }).join('');
+    }
+
+    window.coinflipSetSide = function(side) {
+        casinoFlipSide = side;
+        var bh = document.getElementById('cf-btn-heads');
+        var bt = document.getElementById('cf-btn-tails');
+        if (bh) bh.classList.toggle('active', side === 'heads');
+        if (bt) bt.classList.toggle('active', side === 'tails');
+    };
+
+    window.coinflipRandomSide = function() {
+        coinflipSetSide(Math.random() < 0.5 ? 'heads' : 'tails');
+    };
+
+    window.setCoinflipBet = function(v) {
+        var inp = document.getElementById('cf-bet-input');
+        if (inp) inp.value = v;
+    };
+
+    window.coinflipBetHalf = function() {
+        var inp = document.getElementById('cf-bet-input');
+        if (inp) inp.value = Math.max(100, Math.floor((parseInt(inp.value, 10) || 1000) / 2));
+    };
+
+    window.coinflipBetDouble = function() {
+        var inp = document.getElementById('cf-bet-input');
+        if (inp) inp.value = Math.min(10000, (parseInt(inp.value, 10) || 1000) * 2);
+    };
+
+    function coinflipSetBusy(busy) {
+        casinoFlipBusy = busy;
+        var btn = document.getElementById('cf-flip-btn');
+        var co  = document.getElementById('cf-cashout-btn');
+        if (btn) { btn.disabled = busy; btn.style.opacity = busy ? '.5' : '1'; }
+        if (co)  { co.disabled  = busy; co.style.opacity  = busy ? '.5' : '1'; }
+    }
+
+    function coinflipStartSpin() {
+        var coin = document.getElementById('cf-coin');
+        if (!coin) return;
+        coin.style.transition = 'none';
+        coin.classList.add('cf-spinning');
+    }
+
+    function coinflipStopSpin() {
+        var coin = document.getElementById('cf-coin');
+        if (!coin) return;
+        coin.classList.remove('cf-spinning');
+        void coin.offsetWidth; // force reflow to stop animation
+    }
+
+    function coinflipLand(result, onDone) {
+        var coin = document.getElementById('cf-coin');
+        if (!coin) { onDone && onDone(); return; }
+        coinflipStopSpin();
+        var landDeg = result === 'tails' ? 180 : 0;
+        coin.style.transition = 'transform 0.55s cubic-bezier(.2,.9,.4,1)';
+        coin.style.transform  = 'rotateY(' + (720 + landDeg) + 'deg)';
+        setTimeout(function() {
+            coin.style.transition = 'none';
+            coin.style.transform  = 'rotateY(' + landDeg + 'deg)';
+            onDone && onDone();
+        }, 600);
+    }
+
+    window.coinflipFlipAction = async function() {
+        if (casinoFlipBusy) return;
+        var newGame = !casinoFlipGame;
+        var bet;
+        if (newGame) {
+            var inp = document.getElementById('cf-bet-input');
+            bet = Math.floor(Number((inp && inp.value) || 0));
+            if (!bet || bet < 100 || bet > 10000) { coinflipShowError('100–10K Rax'); return; }
+            if (bet > casinoBalance) { coinflipShowError('Low balance'); return; }
+            casinoFlipLastBet = bet;
+        }
+
+        coinflipSetBusy(true);
+        coinflipStartSpin(); // Visual feedback starts immediately
+        var spinStart = Date.now();
+
+        try {
+            if (newGame) {
+                var sr = await fetch('/api/casino/coinflip/start', {
+                    method: 'POST', credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ bet: bet }),
+                });
+                var sd = await sr.json();
+                if (!sd.ok) { coinflipStopSpin(); coinflipSetBusy(false); coinflipShowError(sd.error || 'Error'); return; }
+                casinoFlipGame = sd.game;
+                casinoFlipLastSeeds = { server_seed_hash: sd.game.server_seed_hash || null, client_seed: sd.game.client_seed || null, server_seed: null };
+                updateCasinoBalance(sd.new_balance);
+            }
+
+            var fr = await fetch('/api/casino/coinflip/flip', {
+                method: 'POST', credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ side: casinoFlipSide }),
+            });
+            var resultData = await fr.json();
+            if (!resultData.ok) { coinflipStopSpin(); coinflipSetBusy(false); coinflipShowError(resultData.error || 'Flip failed'); return; }
+
+            // Ensure coin spins for at least 700ms before landing
+            var elapsed = Date.now() - spinStart;
+            if (elapsed < 700) {
+                await new Promise(function(resolve) { setTimeout(resolve, 700 - elapsed); });
+            }
+
+            // Build updated log for both win and loss
+            var currentLog = [];
+            try { currentLog = JSON.parse((casinoFlipGame && casinoFlipGame.flip_log) || '[]'); } catch(e) {}
+            currentLog.push({ side: casinoFlipSide, result: resultData.result, won: resultData.won });
+
+            coinflipLand(resultData.result, function() {
+                coinflipSetBusy(false);
+                if (resultData.won) {
+                    casinoFlipGame = Object.assign(casinoFlipGame || {}, {
+                        status: 'active',
+                        flips_won: resultData.flips_won,
+                        current_multiplier: resultData.current_multiplier,
+                        payout_rax: resultData.payout_rax,
+                        flip_log: JSON.stringify(currentLog),
+                    });
+                    renderCoinflipMain(document.getElementById('casino-main'));
+                    if (resultData.maxed) {
+                        setTimeout(function() { coinflipCashout(); }, 600);
+                    }
+                } else {
+                    // Show losing flip in streak for 1.5s then reset
+                    casinoFlipGame = Object.assign(casinoFlipGame || {}, { status: 'lost', flip_log: JSON.stringify(currentLog) });
+                    if (casinoFlipLastSeeds && resultData.server_seed) casinoFlipLastSeeds.server_seed = resultData.server_seed;
+                    renderCoinflipStreak(currentLog);
+                    // Disable flip button during loss animation so user can't click through
+                    var lostBtn = document.getElementById('cf-flip-btn');
+                    if (lostBtn) { lostBtn.disabled = true; lostBtn.textContent = 'Lost'; lostBtn.classList.add('cf-flip-lost'); }
+                    setTimeout(function() {
+                        casinoFlipGame = null;
+                        renderCoinflipMain(document.getElementById('casino-main'));
+                    }, 1500);
+                }
+            });
+        } catch(e) {
+            coinflipStopSpin();
+            coinflipSetBusy(false);
+            coinflipShowError('Network error');
+        }
+    };
+
+    window.coinflipCashout = async function() {
+        if (casinoFlipBusy || !casinoFlipGame) return;
+        coinflipSetBusy(true);
+        try {
+            var r = await fetch('/api/casino/coinflip/cashout', {
+                method: 'POST', credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+            });
+            var d = await r.json();
+            if (!d.ok) { coinflipSetBusy(false); coinflipShowError(d.error || 'Cashout failed'); return; }
+            if (casinoFlipLastSeeds && d.server_seed) casinoFlipLastSeeds.server_seed = d.server_seed;
+            updateCasinoBalance(d.new_balance);
+            casinoFlipGame = null;
+            renderCoinflipMain(document.getElementById('casino-main'));
+        } catch(e) { coinflipSetBusy(false); coinflipShowError('Network error'); }
+    };
+
+    window.showCoinflipHistory = function() {
+        var existing = document.querySelector('.mines-history-overlay');
+        if (existing) existing.remove();
+
+        var overlay = document.createElement('div');
+        overlay.className = 'mines-history-overlay';
+        var modal = document.createElement('div');
+        modal.className = 'mines-history-modal';
+        modal.innerHTML =
+            '<div class="mines-history-hdr">' +
+                '<span>📖 Game History</span>' +
+                '<button class="mines-history-close">✕</button>' +
+            '</div>' +
+            '<div class="mines-history-body"><span style="color:var(--muted)">Loading…</span></div>';
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+
+        modal.querySelector('.mines-history-close').onclick = function() { overlay.remove(); };
+        overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+
+        var body = modal.querySelector('.mines-history-body');
+
+        fetch('/api/casino/coinflip/history', { credentials: 'include' })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var games = data.games || [];
+                if (!games.length) { body.innerHTML = '<span style="color:var(--muted);display:block;padding:20px;text-align:center">No completed games yet.</span>'; return; }
+
+                var totalGames  = games.length;
+                var wins        = games.filter(function(g) { return g.status === 'cashed_out'; });
+                var losses      = games.filter(function(g) { return g.status === 'lost'; });
+                var winRate     = Math.round(wins.length / totalGames * 100);
+                var totalStaked = games.reduce(function(s, g) { return s + g.bet_rax; }, 0);
+                var totalPaidOut= wins.reduce(function(s, g) { return s + g.payout_rax; }, 0);
+                var totalLost   = losses.reduce(function(s, g) { return s + g.bet_rax; }, 0);
+                var netPnl      = wins.reduce(function(s, g) { return s + (g.payout_rax - g.bet_rax); }, 0) - totalLost;
+                var bestWin     = wins.length ? Math.max.apply(null, wins.map(function(g) { return g.payout_rax - g.bet_rax; })) : 0;
+                var worstLoss   = losses.length ? Math.max.apply(null, losses.map(function(g) { return g.bet_rax; })) : 0;
+                var avgBet      = Math.round(totalStaked / totalGames);
+                var avgMult     = wins.length ? (wins.reduce(function(s, g) { return s + g.current_multiplier; }, 0) / wins.length).toFixed(2) : '—';
+
+                var pnlColor = netPnl >= 0 ? 'var(--green)' : '#ef4444';
+                var pnlStr   = (netPnl >= 0 ? '+' : '') + netPnl.toLocaleString();
+                var R = RAX_ICON;
+
+                var stat = function(val, lbl) {
+                    return '<div class="mh-stat"><div class="mh-stat-val">' + val + '</div><div class="mh-stat-lbl">' + lbl + '</div></div>';
+                };
+
+                var statsBar =
+                    '<div class="mh-stats">' +
+                        stat(totalGames, 'Games') +
+                        stat(wins.length + 'W / ' + losses.length + 'L', 'Record') +
+                        stat(winRate + '%', 'Win Rate') +
+                        stat('<span style="color:' + pnlColor + '">' + pnlStr + ' ' + R + '</span>', 'Net P&L') +
+                        stat(totalStaked.toLocaleString() + ' ' + R, 'Total Staked') +
+                        stat(totalPaidOut.toLocaleString() + ' ' + R, 'Total Paid Out') +
+                        stat(totalLost.toLocaleString() + ' ' + R, 'Total Lost') +
+                        stat('<span style="color:var(--green)">+' + bestWin.toLocaleString() + ' ' + R + '</span>', 'Best Win') +
+                        stat('<span style="color:#ef4444">−' + worstLoss.toLocaleString() + ' ' + R + '</span>', 'Biggest Loss') +
+                        stat(avgBet.toLocaleString() + ' ' + R, 'Avg Bet') +
+                        stat(avgMult + (wins.length ? '×' : ''), 'Avg Cashout Mult') +
+                    '</div>';
+
+                var rows = games.map(function(g) {
+                    var won    = g.status === 'cashed_out';
+                    var netRaw = won ? g.payout_rax - g.bet_rax : -g.bet_rax;
+                    var netCol = won ? '#4ade80' : '#f87171';
+                    var netStr = (won ? '+' : '') + netRaw.toLocaleString();
+                    var log = [];
+                    try { log = JSON.parse(g.flip_log || '[]'); } catch(e) {}
+                    var flipsWon = log.filter(function(f) { return f.won; }).length;
+                    var dt     = new Date(g.created_at * 1000);
+                    var hr = dt.getHours(), mn = dt.getMinutes();
+                    var ampm = hr >= 12 ? 'PM' : 'AM';
+                    var h12  = hr % 12 || 12;
+                    var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                    var dtStr  = months[dt.getMonth()] + ' ' + dt.getDate() + ', ' + h12 + ':' + (mn < 10 ? '0' : '') + mn + ' ' + ampm;
+                    var c = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:5px 4px;font-size:11px;';
+                    var pfBtn = g.server_seed_hash
+                        ? '<div style="display:flex;align-items:center;justify-content:center;padding:3px 0">' +
+                          '<button class="pf-hist-btn" onclick="pfFromHistory(this)" data-type="coinflip" data-hash="' + escHtml(g.server_seed_hash || '') + '" data-client="' + escHtml(g.client_seed || '') + '" data-server="' + escHtml(g.server_seed || '') + '" data-fliplog="' + escHtml(g.flip_log || '[]') + '">🔒 Provably Fair</button>' +
+                          '</div>'
+                        : '<div></div>';
+                    return '<div class="mh-row" style="grid-template-columns:1.3fr 0.8fr 0.5fr 0.9fr 0.9fr auto">' +
+                        '<div style="' + c + 'color:#888">' + escHtml(dtStr) + '</div>' +
+                        '<div style="' + c + 'text-align:right">' + Number(g.bet_rax).toLocaleString() + '</div>' +
+                        '<div style="' + c + 'text-align:center">' + flipsWon + '</div>' +
+                        '<div style="' + c + 'text-align:center">' + (won ? Number(g.current_multiplier || 0).toFixed(2) + '×' : '—') + '</div>' +
+                        '<div style="' + c + 'text-align:right;font-weight:700;color:' + netCol + '">' + netStr + '</div>' +
+                        pfBtn +
+                    '</div>';
+                }).join('');
+
+                var hc   = 'overflow:hidden;white-space:nowrap;padding:4px 4px;font-size:9px;text-transform:uppercase;letter-spacing:.05em;font-weight:600;color:#666;';
+                var grid = 'display:grid;grid-template-columns:1.3fr 0.8fr 0.5fr 0.9fr 0.9fr auto;';
+                body.innerHTML = statsBar +
+                    '<div style="border-top:1px solid var(--border)">' +
+                        '<div style="' + grid + 'border-bottom:1px solid var(--border);background:rgba(255,255,255,.02)">' +
+                            '<div style="' + hc + 'text-align:left">Date</div>' +
+                            '<div style="' + hc + 'text-align:right">Bet ' + R + '</div>' +
+                            '<div style="' + hc + 'text-align:center">Flips</div>' +
+                            '<div style="' + hc + 'text-align:center">Mult</div>' +
+                            '<div style="' + hc + 'text-align:right">Net ' + R + '</div>' +
+                            '<div style="' + hc + '"></div>' +
+                        '</div>' +
+                        rows +
+                    '</div>';
+            })
+            .catch(function(e) {
+                body.innerHTML = '<span style="color:#ef4444;display:block;padding:20px;text-align:center">Failed to load: ' + escHtml(e.message || 'error') + '</span>';
+            });
+    };
 
     // ── Mines UI ──────────────────────────────────────────────────────────────
 
@@ -12276,7 +12953,7 @@
         for (var k = 0; k < gemsRevealed; k++) {
             mult *= (25 - k) / (25 - minesCount - k);
         }
-        return mult * 0.95;
+        return mult * 0.92;
     }
 
     function renderMinesMain(el) {
@@ -12299,6 +12976,11 @@
             ? Math.floor((g.bet_rax || betVal) * g.multiplier) - (g.bet_rax || betVal)
             : 0;
         var canCashout = active && g.gems_revealed > 0;
+        var nextReveal    = active ? (g.gems_revealed || 0) + 1 : 0;
+        var maxGems       = active ? 25 - (g.mines_count || casinoMinesLastMines) : 0;
+        var nextNetGain   = (active && nextReveal <= maxGems)
+            ? Math.floor((g.bet_rax || betVal) * minesCalcMult(g.mines_count, nextReveal)) - (g.bet_rax || betVal)
+            : null;
         var nextMultDisp = minesCalcMult(casinoMinesLastMines, 1).toFixed(2) + '×';
 
         // Grid
@@ -12369,8 +13051,9 @@
                     '<select class="mines-select" id="mines-count-select"' + (active ? ' disabled' : '') + '>' + minesOptions + '</select>' +
                 '</div>' +
                 (active ? '<div class="mines-stat">' +
-                    '<div class="mines-field-label">Net Gain (' + currMult.toFixed(2) + ')</div>' +
-                    '<div class="mines-net-gain">' + (canCashout ? RAX_ICON + netGain.toLocaleString() : '—') + '</div>' +
+                    '<div class="mines-field-label" id="mines-gain-label">Net Gain (' + currMult.toFixed(2) + '×)</div>' +
+                    '<div class="mines-net-gain" id="mines-gain-amt">' + (canCashout ? RAX_ICON + netGain.toLocaleString() : '—') + '</div>' +
+                    (nextNetGain !== null ? '<div class="mines-next-gem" id="mines-next-gem">next gem → ' + RAX_ICON + nextNetGain.toLocaleString() + '</div>' : '') +
                 '</div>' : '') +
                 '<div class="mines-stat mines-stat-btns">' + actionBtn + randBtn + '</div>' +
             '</div>' +
@@ -12434,17 +13117,64 @@
                 revealed: d.revealed, gems_revealed: d.gems_revealed,
                 multiplier: d.multiplier, status: d.status,
             };
+            casinoMinesLastSeeds = { server_seed_hash: d.server_seed_hash || null, client_seed: d.client_seed || null, server_seed: null };
             updateCasinoBalance(d.casino_balance);
             renderMinesMain(document.getElementById('casino-main'));
         })
         .catch(function() { casinoMinesBusy = false; alert('Network error'); });
     };
 
+    function minesSurgicalGemUpdate(idx, d) {
+        var g      = casinoMinesGame;
+        var betRax = g.bet_rax;
+        // 1. Flip tile: pending → gem (with .new for animation)
+        var grid = document.querySelector('.mines-grid');
+        if (grid && grid.children[idx]) {
+            var tileEl = grid.children[idx];
+            tileEl.className  = 'mines-tile gem new';
+            tileEl.onclick    = null;
+            tileEl.innerHTML  = '💎';
+            setTimeout(function() { tileEl.classList.remove('new'); }, 300);
+        }
+        // 2. Update multiplier label
+        var fieldLabel = document.getElementById('mines-gain-label');
+        if (fieldLabel) fieldLabel.textContent = 'Net Gain (' + d.multiplier.toFixed(2) + '×)';
+        // 3. Update net gain amount
+        var netGainEl = document.getElementById('mines-gain-amt');
+        if (netGainEl) netGainEl.innerHTML = RAX_ICON + (Math.floor(betRax * d.multiplier) - betRax).toLocaleString();
+        // 4. Update next-gem preview
+        var nextReveal  = d.gems_revealed + 1;
+        var maxGems     = 25 - g.mines_count;
+        var nextGemEl   = document.getElementById('mines-next-gem');
+        if (nextReveal <= maxGems) {
+            var nextAmt = Math.floor(betRax * minesCalcMult(g.mines_count, nextReveal)) - betRax;
+            if (nextGemEl) nextGemEl.innerHTML = 'next gem → ' + RAX_ICON + nextAmt.toLocaleString();
+        } else if (nextGemEl) {
+            nextGemEl.style.display = 'none';
+        }
+        // 5. Enable cashout button after first gem
+        if (d.gems_revealed === 1) {
+            var actionBtn = document.querySelector('.mines-action-btn');
+            if (actionBtn) {
+                actionBtn.textContent = 'Cash Out';
+                actionBtn.className   = 'mines-action-btn mines-cashout-btn';
+                actionBtn.disabled    = false;
+                actionBtn.onclick     = minesCashout;
+            }
+        }
+    }
+
     window.minesReveal = function(idx) {
         if (casinoMinesBusy || !casinoMinesGame) return;
-        casinoMinesBusy  = true;
+        casinoMinesBusy    = true;
         casinoMinesPending = idx;
-        renderMinesMain(document.getElementById('casino-main'));
+        // Instant visual feedback — directly flip tile to pending without full re-render
+        var grid = document.querySelector('.mines-grid');
+        if (grid && grid.children[idx]) {
+            var t = grid.children[idx];
+            t.className = 'mines-tile pending';
+            t.onclick   = null;
+        }
         fetch('/api/casino/mines/reveal', {
             method: 'POST', credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
@@ -12452,33 +13182,43 @@
         })
         .then(function(r) { return r.json(); })
         .then(function(d) {
-            casinoMinesBusy = false;
-            if (!d.ok) { alert(d.error || 'Error'); return; }
+            casinoMinesBusy    = false;
             casinoMinesPending = null;
+            if (!d.ok) { renderMinesMain(document.getElementById('casino-main')); return; }
             if (d.hit_mine) {
-                casinoMinesNewGem              = null;
+                // Terminal — full re-render to reveal mine positions
                 casinoMinesGame.mine_positions = d.mine_positions;
                 casinoMinesGame.status         = 'lost';
-                casinoMinesResult  = null;
-                casinoMinesHitTile = idx;
+                casinoMinesHitTile             = idx;
+                if (casinoMinesLastSeeds && d.server_seed) casinoMinesLastSeeds.server_seed = d.server_seed;
+                updateCasinoBalance(d.casino_balance);
+                renderMinesMain(document.getElementById('casino-main'));
+                minesScheduleReset();
             } else {
-                casinoMinesNewGem              = idx;
-                casinoMinesGame.revealed       = (casinoMinesGame.revealed || []).concat([idx]);
-                casinoMinesGame.gems_revealed  = d.gems_revealed;
-                casinoMinesGame.multiplier     = d.multiplier;
-                casinoMinesGame.status         = d.status;
+                casinoMinesGame.revealed      = (casinoMinesGame.revealed || []).concat([idx]);
+                casinoMinesGame.gems_revealed = d.gems_revealed;
+                casinoMinesGame.multiplier    = d.multiplier;
+                casinoMinesGame.status        = d.status;
                 if (d.status === 'won') {
+                    // Terminal — full re-render to show cashout popup and all mines
                     casinoMinesGame.mine_positions = d.mine_positions;
+                    if (casinoMinesLastSeeds && d.server_seed) casinoMinesLastSeeds.server_seed = d.server_seed;
                     casinoMinesResult = { multiplier: d.multiplier, payout_rax: d.payout_rax };
+                    updateCasinoBalance(d.casino_balance);
+                    renderMinesMain(document.getElementById('casino-main'));
+                    minesScheduleReset();
+                } else {
+                    // Mid-game gem — surgical update only
+                    minesSurgicalGemUpdate(idx, d);
+                    updateCasinoBalance(d.casino_balance);
                 }
             }
-            updateCasinoBalance(d.casino_balance);
-            renderMinesMain(document.getElementById('casino-main'));
-            // Clear new-gem marker after animation completes (~250ms)
-            if (!d.hit_mine) setTimeout(function() { casinoMinesNewGem = null; }, 300);
-            if (d.status !== 'active') { minesScheduleReset(); }
         })
-        .catch(function() { casinoMinesBusy = false; casinoMinesPending = null; renderMinesMain(document.getElementById('casino-main')); });
+        .catch(function() {
+            casinoMinesBusy    = false;
+            casinoMinesPending = null;
+            renderMinesMain(document.getElementById('casino-main'));
+        });
     };
 
     window.minesRandomPick = function() {
@@ -12497,6 +13237,7 @@
                 if (d.tile_index != null) casinoMinesHitTile = d.tile_index;
                 casinoMinesGame.mine_positions = d.mine_positions;
                 casinoMinesGame.status         = 'lost';
+                if (casinoMinesLastSeeds && d.server_seed) casinoMinesLastSeeds.server_seed = d.server_seed;
                 casinoMinesResult = null;
             } else {
                 if (d.tile_index != null) casinoMinesGame.revealed = (casinoMinesGame.revealed || []).concat([d.tile_index]);
@@ -12505,6 +13246,7 @@
                 casinoMinesGame.status        = d.status;
                 if (d.status === 'won') {
                     casinoMinesGame.mine_positions = d.mine_positions;
+                    if (casinoMinesLastSeeds && d.server_seed) casinoMinesLastSeeds.server_seed = d.server_seed;
                     casinoMinesResult = { multiplier: d.multiplier, payout_rax: d.payout_rax };
                 }
             }
@@ -12529,6 +13271,7 @@
             if (!d.ok) { alert(d.error || 'Error'); return; }
             casinoMinesGame.mine_positions = d.mine_positions;
             casinoMinesGame.status         = 'won';
+            if (casinoMinesLastSeeds && d.server_seed) casinoMinesLastSeeds.server_seed = d.server_seed;
             casinoMinesResult = { multiplier: d.multiplier, payout_rax: d.payout_rax };
             updateCasinoBalance(d.casino_balance);
             renderMinesMain(document.getElementById('casino-main'));
@@ -12536,6 +13279,485 @@
         })
         .catch(function() { casinoMinesBusy = false; });
     };
+
+    // ── Provably Fair Modal ───────────────────────────────────────────────────
+    window.showFairnessModal = async function(gameType) {
+        var existing = document.querySelector('.pf-overlay');
+        if (existing) existing.remove();
+
+        var seeds;
+        if (gameType === 'mines')     seeds = casinoMinesLastSeeds;
+        else if (gameType === 'coinflip') seeds = casinoFlipLastSeeds;
+        else                          seeds = casinoBJLastSeeds;
+        if (!seeds) return;
+
+        var isRevealed = !!seeds.server_seed;
+        var gameName   = gameType === 'mines' ? 'Mines' : gameType === 'coinflip' ? 'Coin Flip' : 'Blackjack';
+
+        var overlay = document.createElement('div');
+        overlay.className = 'pf-overlay';
+
+        var seedRows = function(seedsObj) {
+            var hashRow   = '<div class="pf-row"><div class="pf-row-label">Server Seed Hash</div><div class="pf-row-val pf-mono">' + escHtml(seedsObj.server_seed_hash || '—') + '</div></div>';
+            var clientRow = '<div class="pf-row"><div class="pf-row-label">Client Seed</div><div class="pf-row-val pf-mono">' + escHtml(seedsObj.client_seed || '—') + '</div></div>';
+            var serverRow = isRevealed
+                ? '<div class="pf-row"><div class="pf-row-label">Server Seed (Revealed)</div><div class="pf-row-val pf-mono pf-revealed">' + escHtml(seedsObj.server_seed) + '</div></div>'
+                : '<div class="pf-row"><div class="pf-row-label">Server Seed</div><div class="pf-row-val" style="color:var(--muted)">Hidden until game ends</div></div>';
+            return hashRow + clientRow + serverRow;
+        };
+
+        var verifierHTML;
+        if (gameType === 'mines') {
+            verifierHTML =
+              '<div class="pf-verify-intro">Paste the revealed seeds to verify mine positions were predetermined.</div>' +
+              '<label class="pf-label">Server Seed<input class="pf-input" id="pf-v-server" placeholder="Paste server seed…" value="' + escHtml(seeds.server_seed || '') + '"></label>' +
+              '<label class="pf-label">Client Seed<input class="pf-input" id="pf-v-client" placeholder="Paste client seed…" value="' + escHtml(seeds.client_seed || '') + '"></label>' +
+              '<label class="pf-label">Mines Count<input class="pf-input" id="pf-v-mines" type="number" min="1" max="15" value="3"></label>' +
+              '<button class="pf-verify-btn" onclick="pfVerifyMines()">Verify</button>' +
+              '<div id="pf-verify-result" class="pf-verify-result"></div>';
+        } else if (gameType === 'coinflip') {
+            var flipLog = seeds.flip_log || [];
+            if (flipLog.length) {
+                // Auto-run mode — show all flips from history
+                verifierHTML =
+                  '<div class="pf-verify-intro">Paste the revealed seeds to verify all flip outcomes were predetermined.</div>' +
+                  '<label class="pf-label">Server Seed<input class="pf-input" id="pf-v-server" placeholder="Paste server seed…" value="' + escHtml(seeds.server_seed || '') + '"></label>' +
+                  '<label class="pf-label">Client Seed<input class="pf-input" id="pf-v-client" placeholder="Paste client seed…" value="' + escHtml(seeds.client_seed || '') + '"></label>' +
+                  '<input type="hidden" id="pf-v-fliplog" value="' + escHtml(JSON.stringify(flipLog)) + '">' +
+                  '<button class="pf-verify-btn" onclick="pfVerifyAllFlips()">Verify All Flips</button>' +
+                  '<div id="pf-verify-result" class="pf-verify-result"></div>';
+            } else {
+                // Manual mode — single nonce
+                verifierHTML =
+                  '<div class="pf-verify-intro">Paste the revealed seeds and a flip nonce (0 = first flip, 1 = second, …) to verify each result.</div>' +
+                  '<label class="pf-label">Server Seed<input class="pf-input" id="pf-v-server" placeholder="Paste server seed…" value="' + escHtml(seeds.server_seed || '') + '"></label>' +
+                  '<label class="pf-label">Client Seed<input class="pf-input" id="pf-v-client" placeholder="Paste client seed…" value="' + escHtml(seeds.client_seed || '') + '"></label>' +
+                  '<label class="pf-label">Flip Nonce (0-based)<input class="pf-input" id="pf-v-nonce" type="number" min="0" value="0"></label>' +
+                  '<button class="pf-verify-btn" onclick="pfVerifyFlip()">Verify</button>' +
+                  '<div id="pf-verify-result" class="pf-verify-result"></div>';
+            }
+        } else {
+            // blackjack
+            var bjHands  = seeds.bj_hands  || [];
+            var bjDealer = seeds.bj_dealer || [];
+            verifierHTML =
+              '<div class="pf-verify-intro">Paste the revealed seeds to verify the deck shuffle and card dealing order were predetermined.</div>' +
+              '<label class="pf-label">Server Seed<input class="pf-input" id="pf-v-server" placeholder="Paste server seed…" value="' + escHtml(seeds.server_seed || '') + '"></label>' +
+              '<label class="pf-label">Client Seed<input class="pf-input" id="pf-v-client" placeholder="Paste client seed…" value="' + escHtml(seeds.client_seed || '') + '"></label>' +
+              '<input type="hidden" id="pf-v-bjhands"  value="' + escHtml(JSON.stringify(bjHands)) + '">' +
+              '<input type="hidden" id="pf-v-bjdealer" value="' + escHtml(JSON.stringify(bjDealer)) + '">' +
+              '<button class="pf-verify-btn" onclick="pfVerifyBJ()">Derive Deck</button>' +
+              '<div id="pf-verify-result" class="pf-verify-result"></div>';
+        }
+
+        overlay.innerHTML =
+            '<div class="pf-modal">' +
+                '<div class="pf-hdr">' +
+                    '<span>🔒 Provably Fair — ' + gameName + '</span>' +
+                    '<button class="pf-close">✕</button>' +
+                '</div>' +
+                '<div class="pf-tabs">' +
+                    '<button class="pf-tab pf-tab-active" data-tab="seeds">Seeds</button>' +
+                    '<button class="pf-tab" data-tab="verify">Verify</button>' +
+                '</div>' +
+                '<div class="pf-body">' +
+                    '<div class="pf-pane" id="pf-pane-seeds">' +
+                        '<p class="pf-desc">The server seed hash was committed before your game started. After the game ends, the server seed is revealed — you can verify SHA-256(server_seed) matches the hash and reproduce all outcomes.</p>' +
+                        seedRows(seeds) +
+                    '</div>' +
+                    '<div class="pf-pane" id="pf-pane-verify" style="display:none">' +
+                        verifierHTML +
+                    '</div>' +
+                '</div>' +
+            '</div>';
+
+        document.body.appendChild(overlay);
+
+        overlay.querySelector('.pf-close').onclick = function() { overlay.remove(); };
+        overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+
+        overlay.querySelectorAll('.pf-tab').forEach(function(btn) {
+            btn.onclick = function() {
+                overlay.querySelectorAll('.pf-tab').forEach(function(b) { b.classList.remove('pf-tab-active'); });
+                btn.classList.add('pf-tab-active');
+                var tab = btn.dataset.tab;
+                document.getElementById('pf-pane-seeds').style.display  = tab === 'seeds'  ? '' : 'none';
+                document.getElementById('pf-pane-verify').style.display = tab === 'verify' ? '' : 'none';
+            };
+        });
+    };
+
+    // Open fairness modal from a history row button
+    window.pfFromHistory = function(btn) {
+        var seeds = {
+            server_seed_hash: btn.dataset.hash   || null,
+            client_seed:      btn.dataset.client || null,
+            server_seed:      btn.dataset.server || null,
+        };
+        var gameType   = btn.dataset.type  || 'mines';
+        var minesCount = parseInt(btn.dataset.mines || '3', 10);
+
+        // Extra per-type data
+        if (gameType === 'coinflip' && btn.dataset.fliplog) {
+            try { seeds.flip_log = JSON.parse(btn.dataset.fliplog); } catch(e) { seeds.flip_log = []; }
+        }
+        if (gameType === 'blackjack') {
+            try { seeds.bj_hands  = JSON.parse(btn.dataset.bjhands  || '[]'); } catch(e) { seeds.bj_hands  = []; }
+            try { seeds.bj_dealer = JSON.parse(btn.dataset.bjdealer || '[]'); } catch(e) { seeds.bj_dealer = []; }
+        }
+
+        // Temporarily swap lastSeeds so showFairnessModal reads history game seeds
+        var prevMines = casinoMinesLastSeeds, prevFlip = casinoFlipLastSeeds, prevBJ = casinoBJLastSeeds;
+        if (gameType === 'mines')         casinoMinesLastSeeds = seeds;
+        else if (gameType === 'coinflip') casinoFlipLastSeeds  = seeds;
+        else                              casinoBJLastSeeds     = seeds;
+
+        showFairnessModal(gameType); // all DOM work is synchronous before any await
+
+        // Restore (modal already built from history seeds above)
+        casinoMinesLastSeeds = prevMines;
+        casinoFlipLastSeeds  = prevFlip;
+        casinoBJLastSeeds    = prevBJ;
+
+        // Pre-fill mines count in verifier tab
+        var minesInp = document.getElementById('pf-v-mines');
+        if (minesInp) minesInp.value = minesCount;
+    };
+
+    // Browser-side HMAC-SHA256 verifier helpers
+    async function pfHmacFloat(serverSeed, clientSeed, nonce) {
+        var enc = new TextEncoder();
+        var key = await window.crypto.subtle.importKey('raw', enc.encode(serverSeed), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+        var sig = await window.crypto.subtle.sign('HMAC', key, enc.encode(clientSeed + ':' + nonce));
+        var bytes = new Uint8Array(sig);
+        var view  = new DataView(bytes.buffer);
+        return view.getUint32(0, false) / 0x100000000;
+    }
+
+    // Signs a raw message (already includes clientSeed) with serverSeed as HMAC key.
+    // Used by block-based verifiers (mines, BJ) that pre-compose their messages.
+    async function pfHmacBytes(serverSeed, message) {
+        var enc = new TextEncoder();
+        var key = await window.crypto.subtle.importKey('raw', enc.encode(serverSeed), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+        return new Uint8Array(await window.crypto.subtle.sign('HMAC', key, enc.encode(message)));
+    }
+
+    async function pfSha256(input) {
+        var data = new TextEncoder().encode(input);
+        var hash = await window.crypto.subtle.digest('SHA-256', data);
+        return Array.from(new Uint8Array(hash)).map(function(b) { return b.toString(16).padStart(2, '0'); }).join('');
+    }
+
+    window.pfVerifyFlip = async function() {
+        var resultEl = document.getElementById('pf-verify-result');
+        var server   = (document.getElementById('pf-v-server') || {}).value || '';
+        var client   = (document.getElementById('pf-v-client') || {}).value || '';
+        var nonce    = parseInt((document.getElementById('pf-v-nonce') || {}).value || '0', 10);
+        if (!server || !client) { resultEl.textContent = 'Enter both seeds.'; resultEl.style.color = '#ef4444'; return; }
+        try {
+            var hash      = await pfSha256(server);
+            var seeds     = casinoFlipLastSeeds;
+            var hashOk    = seeds && seeds.server_seed_hash ? hash === seeds.server_seed_hash : null;
+            var f         = await pfHmacFloat(server, client, nonce);
+            var outcome   = f < 0.5 ? 'Heads' : 'Tails';
+            var hashLine  = hashOk === null ? '' : ('<br>Hash check: ' + (hashOk ? '✅ Matches committed hash' : '❌ Hash mismatch'));
+            resultEl.innerHTML = 'Flip ' + nonce + ' → <strong>' + outcome + '</strong> (float: ' + f.toFixed(6) + ')' + hashLine;
+            resultEl.style.color = '';
+        } catch(e) { resultEl.textContent = 'Error: ' + e.message; resultEl.style.color = '#ef4444'; }
+    };
+
+    window.pfVerifyMines = async function() {
+        var resultEl   = document.getElementById('pf-verify-result');
+        var server     = (document.getElementById('pf-v-server') || {}).value || '';
+        var client     = (document.getElementById('pf-v-client') || {}).value || '';
+        var minesCount = parseInt((document.getElementById('pf-v-mines') || {}).value || '3', 10);
+        if (!server || !client) { resultEl.textContent = 'Enter both seeds.'; resultEl.style.color = '#ef4444'; return; }
+        if (isNaN(minesCount) || minesCount < 1 || minesCount > 15) { resultEl.textContent = 'Mines must be 1–15.'; resultEl.style.color = '#ef4444'; return; }
+        try {
+            var hash    = await pfSha256(server);
+            var seeds   = casinoMinesLastSeeds;
+            var hashOk  = seeds && seeds.server_seed_hash ? hash === seeds.server_seed_hash : null;
+            // Block-based: 24 steps × 4 bytes = 96 bytes → 3 HMAC blocks (sm:0..sm:2)
+            var TILES   = 25, STEPS = TILES - 1, BLOCKS = Math.ceil(STEPS * 4 / 32);
+            var blockSigs = await Promise.all(Array.from({ length: BLOCKS }, function(_, b) {
+                return pfHmacBytes(server, client + ':sm:' + b);
+            }));
+            var buf = new Uint8Array(BLOCKS * 32);
+            for (var b = 0; b < BLOCKS; b++) buf.set(blockSigs[b], b * 32);
+            var indices = Array.from({ length: TILES }, function(_, i) { return i; });
+            for (var idx = 0; idx < STEPS; idx++) {
+                var i = TILES - 1 - idx;
+                var f = new DataView(buf.buffer, idx * 4, 4).getUint32(0, false) / 0x100000000;
+                var j = Math.floor(f * (i + 1));
+                var tmp = indices[i]; indices[i] = indices[j]; indices[j] = tmp;
+            }
+            var minePositions = indices.slice(0, minesCount);
+            var grid = '';
+            for (var t = 0; t < 25; t++) {
+                var isMine = minePositions.includes(t);
+                grid += '<span class="pf-grid-tile' + (isMine ? ' pf-mine' : ' pf-gem') + '">' + (isMine ? '💣' : '💎') + '</span>';
+            }
+            var hashLine = hashOk === null ? '' : '<div style="margin-top:8px;font-size:11px;color:' + (hashOk ? 'var(--green)' : '#ef4444') + '">Hash check: ' + (hashOk ? '✅ Matches committed hash' : '❌ Hash mismatch') + '</div>';
+            resultEl.innerHTML = '<div style="margin-bottom:6px;font-size:12px;color:var(--muted)">Mine positions for ' + minesCount + ' mines:</div><div class="pf-grid">' + grid + '</div>' + hashLine;
+            resultEl.style.color = '';
+        } catch(e) { resultEl.textContent = 'Error: ' + e.message; resultEl.style.color = '#ef4444'; }
+    };
+
+    // Auto-verify all flips in a coinflip game from history
+    window.pfVerifyAllFlips = async function() {
+        var resultEl = document.getElementById('pf-verify-result');
+        var server   = (document.getElementById('pf-v-server') || {}).value || '';
+        var client   = (document.getElementById('pf-v-client') || {}).value || '';
+        var logRaw   = (document.getElementById('pf-v-fliplog') || {}).value || '[]';
+        if (!server || !client) { resultEl.textContent = 'Enter both seeds.'; resultEl.style.color = '#ef4444'; return; }
+        try {
+            var flipLog  = JSON.parse(logRaw);
+            var hash     = await pfSha256(server);
+            var seeds    = casinoFlipLastSeeds;
+            var hashOk   = seeds && seeds.server_seed_hash ? hash === seeds.server_seed_hash : null;
+            var SUIT_SYM = { H: '♥', D: '♦', C: '♣', S: '♠' };
+            var lines    = '';
+            for (var n = 0; n < flipLog.length; n++) {
+                var entry     = flipLog[n];
+                var f         = await pfHmacFloat(server, client, n);
+                var computed  = f < 0.5 ? 'heads' : 'tails';
+                var picked    = (entry.side || '').toLowerCase();
+                var correct   = computed === picked;
+                var won       = entry.won;
+                var icon      = correct ? (won ? '✅' : '❌') : '❌';
+                lines += '<div style="padding:3px 0;font-size:12px">' +
+                    '<span style="color:var(--muted)">Flip ' + (n + 1) + ' (nonce ' + n + '):</span> ' +
+                    '<strong>' + computed.charAt(0).toUpperCase() + computed.slice(1) + '</strong>' +
+                    ' — you picked <strong>' + (picked ? picked.charAt(0).toUpperCase() + picked.slice(1) : '?') + '</strong> ' +
+                    icon + (won ? ' <span style="color:var(--green)">won</span>' : ' <span style="color:#ef4444">lost</span>') +
+                '</div>';
+            }
+            if (!lines) lines = '<div style="color:var(--muted)">No flip log entries.</div>';
+            var hashLine = hashOk === null ? '' : '<div style="margin-top:8px;font-size:11px;color:' + (hashOk ? 'var(--green)' : '#ef4444') + '">Hash check: ' + (hashOk ? '✅ Matches committed hash' : '❌ Hash mismatch') + '</div>';
+            resultEl.innerHTML = lines + hashLine;
+            resultEl.style.color = '';
+        } catch(e) { resultEl.textContent = 'Error: ' + e.message; resultEl.style.color = '#ef4444'; }
+    };
+
+    // Derive full BJ deck from seeds and map to dealing positions
+    window.pfVerifyBJ = async function() {
+        var resultEl = document.getElementById('pf-verify-result');
+        var server   = (document.getElementById('pf-v-server') || {}).value || '';
+        var client   = (document.getElementById('pf-v-client') || {}).value || '';
+        var handsRaw  = (document.getElementById('pf-v-bjhands')  || {}).value || '[]';
+        var dealerRaw = (document.getElementById('pf-v-bjdealer') || {}).value || '[]';
+        if (!server || !client) { resultEl.textContent = 'Enter both seeds.'; resultEl.style.color = '#ef4444'; return; }
+        try {
+            var hash     = await pfSha256(server);
+            var seeds    = casinoBJLastSeeds;
+            var hashOk   = seeds && seeds.server_seed_hash ? hash === seeds.server_seed_hash : null;
+            // Derive deck: 51 steps × 4 bytes = 204 bytes → 7 HMAC blocks (bj:0..bj:6)
+            var SUITS  = ['H','D','C','S'], VALUES = ['A','2','3','4','5','6','7','8','9','T','J','Q','K'];
+            var deck   = [];
+            for (var si = 0; si < SUITS.length; si++) for (var vi = 0; vi < VALUES.length; vi++) deck.push({ s: SUITS[si], v: VALUES[vi] });
+            var BJSTEPS = deck.length - 1, BJBLOCKS = Math.ceil(BJSTEPS * 4 / 32); // 51, 7
+            var bjSigs = await Promise.all(Array.from({ length: BJBLOCKS }, function(_, b) {
+                return pfHmacBytes(server, client + ':bj:' + b);
+            }));
+            var bjBuf = new Uint8Array(BJBLOCKS * 32);
+            for (var b = 0; b < BJBLOCKS; b++) bjBuf.set(bjSigs[b], b * 32);
+            for (var idx = 0; idx < BJSTEPS; idx++) {
+                var i = deck.length - 1 - idx;
+                var f = new DataView(bjBuf.buffer, idx * 4, 4).getUint32(0, false) / 0x100000000;
+                var j = Math.floor(f * (i + 1));
+                var tmp = deck[i]; deck[i] = deck[j]; deck[j] = tmp;
+            }
+            // deck[51] is first pop (player card 1), deck[50] is dealer up, etc.
+            var SUIT_SYM = { H: '♥', D: '♦', C: '♣', S: '♠' };
+            var RED = '#ef4444';
+            function cardStr(card) {
+                if (!card || !card.v) return '?';
+                var col = (card.s === 'H' || card.s === 'D') ? RED : '';
+                var lbl = (card.v === 'T' ? '10' : card.v) + (SUIT_SYM[card.s] || card.s);
+                return col ? '<span style="color:' + col + '">' + lbl + '</span>' : lbl;
+            }
+            var hands  = [], dealerCards = [];
+            try { hands       = JSON.parse(handsRaw);  } catch(_) {}
+            try { dealerCards = JSON.parse(dealerRaw); } catch(_) {}
+            // Dealing order: for N hands, dealing goes: h[0]c[0], dealer_up, h[0]c[1], dealer_hole, then hits in order
+            // We label the first 4 slots, then remaining as "Hit"
+            var labels = ['Player card 1', 'Dealer up card', 'Player card 2', 'Dealer hole card'];
+            var lines  = '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">Derived deal order (last card in deck = first dealt):</div>';
+            var allPlayerCards = [];
+            hands.forEach(function(h) { (h.cards || []).forEach(function(c) { allPlayerCards.push(c); }); });
+            var actualOrder = [
+                allPlayerCards[0] || null,
+                dealerCards[0]    || null,
+                allPlayerCards[1] || null,
+                dealerCards[1]    || null,
+            ];
+            for (var k = 2; k < allPlayerCards.length; k++) actualOrder.push(allPlayerCards[k]);
+            for (var k = 2; k < dealerCards.length; k++)    actualOrder.push(dealerCards[k]);
+
+            for (var slot = 0; slot < Math.min(52, Math.max(4, actualOrder.length)); slot++) {
+                var derived = deck[51 - slot];
+                var actual  = actualOrder[slot] || null;
+                var lbl     = slot < labels.length ? labels[slot] : ('Hit ' + (slot - 3));
+                var match   = actual && derived ? (derived.s === actual.s && derived.v === actual.v) : null;
+                var matchStr = match === null ? '' : (match ? ' ✅' : ' ❌');
+                var actStr   = actual ? (' — actual: ' + cardStr(actual) + matchStr) : '';
+                lines += '<div style="padding:2px 0;font-size:11px"><span style="color:#666;min-width:90px;display:inline-block">Slot ' + (slot+1) + ' (' + lbl + '):</span> ' + cardStr(derived) + actStr + '</div>';
+            }
+            var hashLine = hashOk === null ? '' : '<div style="margin-top:8px;font-size:11px;color:' + (hashOk ? 'var(--green)' : '#ef4444') + '">Hash check: ' + (hashOk ? '✅ Matches committed hash' : '❌ Hash mismatch') + '</div>';
+            resultEl.innerHTML = lines + hashLine;
+            resultEl.style.color = '';
+        } catch(e) { resultEl.textContent = 'Error: ' + e.message; resultEl.style.color = '#ef4444'; }
+    };
+
+    // ── Mines History ─────────────────────────────────────────────────────────
+    window.showMinesHistory = function() {
+        // Remove any existing overlay
+        var existing = document.querySelector('.mines-history-overlay');
+        if (existing) existing.remove();
+
+        var overlay = document.createElement('div');
+        overlay.className = 'mines-history-overlay';
+        var modal = document.createElement('div');
+        modal.className = 'mines-history-modal';
+        modal.innerHTML =
+            '<div class="mines-history-hdr">' +
+                '<span>📖 Game History</span>' +
+                '<button class="mines-history-close">✕</button>' +
+            '</div>' +
+            '<div class="mines-history-body"><span style="color:var(--muted)">Loading…</span></div>';
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+
+        modal.querySelector('.mines-history-close').onclick = function() { overlay.remove(); };
+        overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+
+        var body = modal.querySelector('.mines-history-body');
+
+        fetch('/api/casino/mines/history', { credentials: 'include' })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var games = data.games || [];
+                if (!games.length) { body.innerHTML = '<span style="color:var(--muted);display:block;padding:20px;text-align:center">No completed games yet.</span>'; return; }
+
+                // ── Compute stats ──
+                var totalGames   = games.length;
+                var wins         = games.filter(function(g) { return g.status === 'won'; });
+                var losses       = games.filter(function(g) { return g.status === 'lost'; });
+                var winRate      = Math.round(wins.length / totalGames * 100);
+                var totalStaked  = games.reduce(function(s, g) { return s + g.bet_rax; }, 0);
+                var totalPaidOut = wins.reduce(function(s, g) { return s + g.payout_rax; }, 0);
+                var totalLost    = losses.reduce(function(s, g) { return s + g.bet_rax; }, 0);
+                var netPnl       = games.reduce(function(s, g) { return s + g.net_rax; }, 0);
+                var bestWin      = wins.length  ? Math.max.apply(null, wins.map(function(g) { return g.net_rax; }))  : 0;
+                var worstLoss    = losses.length ? Math.max.apply(null, losses.map(function(g) { return g.bet_rax; })) : 0;
+                var avgBet       = Math.round(totalStaked / totalGames);
+                var avgMult      = wins.length ? (wins.reduce(function(s, g) { return s + g.multiplier; }, 0) / wins.length).toFixed(2) : '—';
+
+                var pnlColor = netPnl >= 0 ? 'var(--green)' : '#ef4444';
+                var pnlStr   = (netPnl >= 0 ? '+' : '') + netPnl.toLocaleString();
+
+                var stat = function(val, lbl) {
+                    return '<div class="mh-stat"><div class="mh-stat-val">' + val + '</div><div class="mh-stat-lbl">' + lbl + '</div></div>';
+                };
+                var R = RAX_ICON;
+
+                var statsBar =
+                    '<div class="mh-stats">' +
+                        stat(totalGames, 'Games') +
+                        stat(wins.length + 'W / ' + losses.length + 'L', 'Record') +
+                        stat(winRate + '%', 'Win Rate') +
+                        stat('<span style="color:' + pnlColor + '">' + pnlStr + ' ' + R + '</span>', 'Net P&L') +
+                        stat(totalStaked.toLocaleString() + ' ' + R, 'Total Staked') +
+                        stat(totalPaidOut.toLocaleString() + ' ' + R, 'Total Paid Out') +
+                        stat(totalLost.toLocaleString() + ' ' + R, 'Total Lost') +
+                        stat('<span style="color:var(--green)">+' + bestWin.toLocaleString() + ' ' + R + '</span>', 'Best Win') +
+                        stat('<span style="color:#ef4444">−' + worstLoss.toLocaleString() + ' ' + R + '</span>', 'Biggest Loss') +
+                        stat(avgBet.toLocaleString() + ' ' + R, 'Avg Bet') +
+                        stat(avgMult + (wins.length ? '×' : ''), 'Avg Win Mult') +
+                    '</div>';
+
+                // ── Game rows ──
+                var rows = games.map(function(g) {
+                    var won    = g.status === 'won';
+                    var netCol = won ? '#4ade80' : '#f87171';
+                    var netRaw = won ? Math.floor(Number(g.bet_rax) * Number(g.multiplier || 1)) - Number(g.bet_rax) : -Number(g.bet_rax);
+                    var netStr = (won ? '+' : '') + String(Math.round(netRaw));
+                    var d      = new Date(g.created_at * 1000);
+                    var hr     = d.getHours(), mn = d.getMinutes();
+                    var ampm   = hr >= 12 ? 'PM' : 'AM';
+                    var h12    = hr % 12 || 12;
+                    var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                    var dt     = months[d.getMonth()] + ' ' + d.getDate() + ', ' + h12 + ':' + (mn < 10 ? '0' : '') + mn + ' ' + ampm;
+                    var c = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:5px 4px;font-size:11px;';
+                    var pfBtn = g.server_seed_hash
+                        ? '<div style="display:flex;align-items:center;justify-content:center;padding:3px 0">' +
+                          '<button class="pf-hist-btn" onclick="pfFromHistory(this)" data-type="mines" data-mines="' + g.mines_count + '" data-hash="' + escHtml(g.server_seed_hash || '') + '" data-client="' + escHtml(g.client_seed || '') + '" data-server="' + escHtml(g.server_seed || '') + '">🔒 Provably Fair</button>' +
+                          '</div>'
+                        : '<div></div>';
+                    return '<div class="mh-row" style="grid-template-columns:1.2fr 0.8fr 0.4fr 0.4fr 0.8fr 0.8fr auto">' +
+                        '<div style="' + c + 'color:#888">' + escHtml(dt) + '</div>' +
+                        '<div style="' + c + 'text-align:right">' + Number(g.bet_rax).toLocaleString() + '</div>' +
+                        '<div style="' + c + 'text-align:center">' + g.mines_count + '</div>' +
+                        '<div style="' + c + 'text-align:center">' + g.gems_revealed + '</div>' +
+                        '<div style="' + c + 'text-align:center">' + (won ? Number(g.multiplier || 0).toFixed(2) + '×' : '—') + '</div>' +
+                        '<div style="' + c + 'text-align:right;font-weight:700;color:' + netCol + '">' + netStr + '</div>' +
+                        pfBtn +
+                    '</div>';
+                }).join('');
+
+                var hc = 'overflow:hidden;white-space:nowrap;padding:4px 4px;font-size:9px;text-transform:uppercase;letter-spacing:.05em;font-weight:600;color:#666;';
+                var grid = 'display:grid;grid-template-columns:1.2fr 0.8fr 0.4fr 0.4fr 0.8fr 0.8fr auto;';
+                body.innerHTML = statsBar +
+                    '<div style="border-top:1px solid var(--border)">' +
+                        '<div style="' + grid + 'border-bottom:1px solid var(--border);background:rgba(255,255,255,.02)">' +
+                            '<div style="' + hc + 'text-align:left">Date</div>' +
+                            '<div style="' + hc + 'text-align:right">Bet ' + R + '</div>' +
+                            '<div style="' + hc + 'text-align:center">💣</div>' +
+                            '<div style="' + hc + 'text-align:center">💎</div>' +
+                            '<div style="' + hc + 'text-align:center">Mult</div>' +
+                            '<div style="' + hc + 'text-align:right">Net ' + R + '</div>' +
+                            '<div style="' + hc + '"></div>' +
+                        '</div>' +
+                        rows +
+                    '</div>';
+            })
+            .catch(function(e) {
+                body.innerHTML = '<span style="color:#ef4444;display:block;padding:20px;text-align:center">Failed to load: ' + escHtml(e.message || 'error') + '</span>';
+            });
+    };
+
+    // ── Casino Disclaimer ─────────────────────────────────────────────────────
+    function showCasinoDisclaimer() {
+        try { if (sessionStorage.getItem('casino-disclaimer-seen')) return; } catch(e) {}
+        var existing = document.querySelector('.casino-disclaimer-overlay');
+        if (existing) return;
+
+        var overlay = document.createElement('div');
+        overlay.className = 'casino-disclaimer-overlay';
+
+        var modal = document.createElement('div');
+        modal.className = 'casino-disclaimer-modal';
+        modal.innerHTML =
+            '<div class="casino-disclaimer-icon">🎰</div>' +
+            '<h2 class="casino-disclaimer-title">Before You Play</h2>' +
+            '<div class="casino-disclaimer-body">' +
+                '<p>RaxEdge Casino was made to play with <strong>Rax</strong>. This is <strong>not</strong> a real-money casino and is not intended to encourage real-money gambling.</p>' +
+                '<div class="casino-disclaimer-warning">' +
+                    '<span class="casino-disclaimer-warn-icon">🚫</span>' +
+                    '<span><strong>DO NOT GAMBLE REAL MONEY.</strong></span>' +
+                '</div>' +
+            '</div>' +
+            '<button class="casino-disclaimer-btn">I Understand — Let\'s Play</button>';
+
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+
+        modal.querySelector('.casino-disclaimer-btn').onclick = function() {
+            overlay.style.opacity = '0';
+            setTimeout(function() { overlay.remove(); }, 250);
+            try { sessionStorage.setItem('casino-disclaimer-seen', '1'); } catch(e) {}
+        };
+    }
 
     // ── End casino UI ─────────────────────────────────────────────────────────
 
@@ -16384,7 +17606,7 @@
     }
 
     function renderPerfTable(rows, summary) {
-        var RAX = 'Ⓡ';
+        var RAX = RAX_ICON;
         var fmtRax = function(n) { return Number(n || 0).toLocaleString() + ' ' + RAX; };
         var fmtNet = function(n) {
             var v = Number(n || 0);
@@ -16463,7 +17685,7 @@
             if (!data.ok) { el.innerHTML = '<span style="color:#ef4444">Error loading payouts</span>'; return; }
             var queue = data.queue || [];
             if (!queue.length) { el.innerHTML = '<span style="color:var(--muted)">No payout queue entries</span>'; return; }
-            var RAX = 'Ⓡ';
+            var RAX = RAX_ICON;
             var statusColor = { pending: 'var(--orange,#f59e0b)', sent: 'var(--green)', failed: '#ef4444' };
             var MKT_SHORT = {
                 hits:'Hits', total_bases:'Total Bases', rbis:'RBIs', runs:'Runs', hrbi:'H+R+RBI',
@@ -16592,7 +17814,7 @@
             window.open(data.cardUrl, '_blank');
             var actEl = document.getElementById('pq-actions-' + queueId);
             if (actEl) {
-                var RAX = 'Ⓡ';
+                var RAX = RAX_ICON;
                 actEl.innerHTML =
                     '<a href="' + escHtml(data.cardUrl) + '" target="_blank" rel="noopener" class="pq-open-btn">Open in RS ↗</a>' +
                     '<button class="pq-sent-btn" onclick="markPayoutSent(' + queueId + ',this)">Mark Sent</button>' +
@@ -16703,8 +17925,7 @@
     }
 
     async function loadAdminCasinoWithdrawals() {
-        var el      = document.getElementById('admin-casino-wd-list');
-        var statsEl = document.getElementById('admin-casino-stats');
+        var el = document.getElementById('admin-casino-wd-list');
         if (!el) return;
         el.innerHTML = '<span style="color:var(--muted)">Loading…</span>';
         var statusFilter = document.getElementById('casino-wd-filter') ? document.getElementById('casino-wd-filter').value : '';
@@ -16716,21 +17937,6 @@
 
             var RAX   = 'Ⓡ';
             var queue = data.queue || [];
-            var stats = data.stats || {};
-
-            // Stats bar
-            if (statsEl) {
-                var edgePct  = stats.house_edge_pct != null ? (stats.house_edge_pct > 0 ? '+' : '') + stats.house_edge_pct + '%' : '—';
-                var edgeColor = (stats.house_edge_pct || 0) >= 0 ? 'var(--green)' : '#ef4444';
-                statsEl.innerHTML =
-                    '<div class="admin-stat" style="min-width:110px"><div class="admin-stat-val">' + Number(stats.total_hands || 0).toLocaleString() + '</div><div class="admin-stat-lbl">Hands Played</div></div>' +
-                    '<div class="admin-stat" style="min-width:110px"><div class="admin-stat-val">' + Number(stats.total_wagered || 0).toLocaleString() + ' ' + RAX + '</div><div class="admin-stat-lbl">Total Wagered</div></div>' +
-                    '<div class="admin-stat" style="min-width:110px"><div class="admin-stat-val" style="color:' + edgeColor + '">' + Number(stats.house_profit || 0).toLocaleString() + ' ' + RAX + '</div><div class="admin-stat-lbl">House Profit</div></div>' +
-                    '<div class="admin-stat" style="min-width:90px"><div class="admin-stat-val" style="color:' + edgeColor + '">' + edgePct + '</div><div class="admin-stat-lbl">House Edge</div></div>' +
-                    '<div class="admin-stat" style="min-width:110px"><div class="admin-stat-val">' + (stats.pending_count || 0) + '</div><div class="admin-stat-lbl">Pending WDs</div></div>' +
-                    '<div class="admin-stat" style="min-width:110px"><div class="admin-stat-val">' + Number(stats.paid_rax || 0).toLocaleString() + ' ' + RAX + '</div><div class="admin-stat-lbl">Total Paid Out</div></div>' +
-                    '<div class="admin-stat" style="min-width:110px"><div class="admin-stat-val">' + Number(stats.total_liability || 0).toLocaleString() + ' ' + RAX + '</div><div class="admin-stat-lbl">Casino Liability</div></div>';
-            }
 
             if (!queue.length) { el.innerHTML = '<span style="color:var(--muted)">No withdrawals found</span>'; return; }
 
@@ -16801,11 +18007,13 @@
         var wdPane    = document.getElementById('admin-casino-pane-wd');
         var txPane    = document.getElementById('admin-casino-pane-tx');
         var usersPane = document.getElementById('admin-casino-pane-users');
+        var perfPane  = document.getElementById('admin-casino-pane-perf');
         var wdBtn     = document.getElementById('admin-casino-sub-wd');
         var txBtn     = document.getElementById('admin-casino-sub-tx');
         var usersBtn  = document.getElementById('admin-casino-sub-users');
-        [wdPane, txPane, usersPane].forEach(function(p) { if (p) p.style.display = 'none'; });
-        [wdBtn, txBtn, usersBtn].forEach(function(b) { if (b) b.classList.remove('active'); });
+        var perfBtn   = document.getElementById('admin-casino-sub-perf');
+        [wdPane, txPane, usersPane, perfPane].forEach(function(p) { if (p) p.style.display = 'none'; });
+        [wdBtn, txBtn, usersBtn, perfBtn].forEach(function(b) { if (b) b.classList.remove('active'); });
         if (tab === 'tx') {
             if (txPane) txPane.style.display = '';
             if (txBtn)  txBtn.classList.add('active');
@@ -16814,9 +18022,109 @@
             if (usersPane) usersPane.style.display = '';
             if (usersBtn)  usersBtn.classList.add('active');
             loadAdminCasinoUsers();
+        } else if (tab === 'perf') {
+            if (perfPane) perfPane.style.display = '';
+            if (perfBtn)  perfBtn.classList.add('active');
+            loadAdminCasinoPerf();
         } else {
             if (wdPane) wdPane.style.display = '';
             if (wdBtn)  wdBtn.classList.add('active');
+            loadAdminCasinoWithdrawals();
+        }
+    }
+
+    async function loadAdminCasinoPerf() {
+        var el = document.getElementById('admin-casino-perf-content');
+        if (!el) return;
+        el.innerHTML = '<span style="color:var(--muted)">Loading…</span>';
+        try {
+            var res  = await fetch('/api/admin/casino-stats', { credentials: 'same-origin' });
+            var data = await res.json();
+            if (!data.ok) { el.innerHTML = '<span style="color:#ef4444">Error loading stats</span>'; return; }
+
+            var RAX_SM = '<svg viewBox="0 0 512 512" style="width:10px;height:10px;vertical-align:-1px;display:inline-block;margin-left:2px" aria-hidden="true"><g fill="currentColor"><path d="M128.1,141.1h356.8C442.8,57.4,356.1,0,256,0C192,0,133.5,23.5,88.6,62.3L128.1,141.1z"/><polygon points="355.3,193.2 154.2,193.2 254.7,394"/><path d="M413.6,193.2L253.9,512c0.7,0,1.4,0,2.1,0c141.4,0,256-114.6,256-256c0-21.7-2.7-42.7-7.8-62.8H413.6z"/><path d="M225.6,452.1L50.7,103C18.9,145.7,0,198.6,0,256c0,121.7,85,223.6,198.8,249.6L225.6,452.1z"/></g></svg>';
+            var fmtRax  = function(n) { return Number(n || 0).toLocaleString() + RAX_SM; };
+            var raxLbl  = function(lbl) { return lbl; };
+            var fmtEdge = function(pct) {
+                var v = Number(pct || 0);
+                var c = v >= 0 ? 'var(--green)' : '#ef4444';
+                return '<span style="color:' + c + '">' + (v >= 0 ? '+' : '') + v + '%</span>';
+            };
+            var fmtProfit = function(n) {
+                var v = Number(n || 0);
+                var c = v >= 0 ? 'var(--green)' : '#ef4444';
+                return '<span style="color:' + c + '">' + (v >= 0 ? '+' : '') + v.toLocaleString() + RAX_SM + '</span>';
+            };
+            var fmtPct = function(num, den) {
+                if (!den) return '—';
+                return (Math.round(num / den * 1000) / 10).toFixed(1) + '%';
+            };
+            var stat = function(val, lbl) {
+                return '<div class="admin-stat"><div class="admin-stat-val">' + val + '</div><div class="admin-stat-lbl">' + lbl + '</div></div>';
+            };
+
+            var bj = data.blackjack;
+            var mn = data.mines;
+            var cf = data.coinflip || {};
+            var t  = data.total;
+
+            var bjWinRate   = fmtPct(bj.player_wins, bj.total_games);
+            var mnWinRate   = fmtPct(mn.won_games,   mn.total_games);
+            var mnAvgMult   = mn.avg_cashout_mult != null ? mn.avg_cashout_mult.toFixed(2) + '×' : '—';
+
+            el.innerHTML =
+                '<div style="margin-bottom:20px">' +
+                    '<div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:10px">🃏 Blackjack</div>' +
+                    '<div style="display:flex;gap:12px;flex-wrap:wrap">' +
+                        stat(Number(bj.total_games).toLocaleString(), 'Games') +
+                        stat(fmtRax(bj.total_wagered), raxLbl('Wagered')) +
+                        stat(fmtProfit(bj.house_profit), raxLbl('House Profit')) +
+                        stat(fmtEdge(bj.house_edge_pct), 'Edge') +
+                        stat(Number(bj.unique_players).toLocaleString(), 'Unique Players') +
+                        stat(fmtRax(bj.avg_bet), raxLbl('Avg Bet')) +
+                        stat(bjWinRate, 'Player Win Rate') +
+                        stat(fmtPct(bj.pushes, bj.total_games), 'Push Rate') +
+                    '</div>' +
+                '</div>' +
+                '<div style="margin-bottom:20px">' +
+                    '<div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:10px">💣 Mines</div>' +
+                    '<div style="display:flex;gap:12px;flex-wrap:wrap">' +
+                        stat(Number(mn.total_games).toLocaleString(), 'Games') +
+                        stat(fmtRax(mn.total_wagered), raxLbl('Wagered')) +
+                        stat(fmtProfit(mn.house_profit), raxLbl('House Profit')) +
+                        stat(fmtEdge(mn.house_edge_pct), 'Edge') +
+                        stat(Number(mn.unique_players).toLocaleString(), 'Unique Players') +
+                        stat(fmtRax(mn.avg_bet), raxLbl('Avg Bet')) +
+                        stat(mnWinRate, 'Player Win Rate') +
+                        stat(mnAvgMult, 'Avg Cashout Mult') +
+                    '</div>' +
+                '</div>' +
+                '<div style="margin-bottom:20px">' +
+                    '<div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:10px">🪙 Coin Flip</div>' +
+                    '<div style="display:flex;gap:12px;flex-wrap:wrap">' +
+                        stat(Number(cf.total_games || 0).toLocaleString(), 'Games') +
+                        stat(fmtRax(cf.total_wagered), raxLbl('Wagered')) +
+                        stat(fmtProfit(cf.house_profit), raxLbl('House Profit')) +
+                        stat(fmtEdge(cf.house_edge_pct), 'Edge') +
+                        stat(Number(cf.unique_players || 0).toLocaleString(), 'Unique Players') +
+                        stat(fmtRax(cf.avg_bet), raxLbl('Avg Bet')) +
+                        stat(fmtPct(cf.won_games, cf.total_games), 'Cashout Rate') +
+                        stat(cf.avg_cashout_mult != null ? cf.avg_cashout_mult.toFixed(2) + '×' : '—', 'Avg Cashout Mult') +
+                    '</div>' +
+                '</div>' +
+                '<div style="height:1px;background:var(--border);margin:4px 0 16px"></div>' +
+                '<div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:10px">📊 Total</div>' +
+                '<div style="display:flex;gap:12px;flex-wrap:wrap">' +
+                    stat(Number(t.total_games).toLocaleString(), 'Total Games') +
+                    stat(fmtRax(t.total_wagered), raxLbl('Total Wagered')) +
+                    stat(fmtProfit(t.house_profit), raxLbl('House Profit')) +
+                    stat(fmtEdge(t.house_edge_pct), 'Blended Edge') +
+                    stat(Number(t.total_players).toLocaleString(), 'Total Players') +
+                    stat(fmtRax(t.avg_bet), raxLbl('Avg Bet')) +
+                    stat(fmtRax(t.casino_liability), raxLbl('Casino Liability')) +
+                '</div>';
+        } catch (e) {
+            el.innerHTML = '<span style="color:#ef4444">Failed to load: ' + escHtml(e.message) + '</span>';
         }
     }
 
@@ -16831,7 +18139,7 @@
             var users = data.users || [];
             if (!users.length) { el.innerHTML = '<span style="color:var(--muted)">No RS-verified users yet.</span>'; return; }
 
-            var RAX = 'Ⓡ';
+            var RAX = RAX_ICON;
             var fmtDt = function(ts) {
                 if (!ts) return '—';
                 return new Date(ts * 1000).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
@@ -16899,17 +18207,20 @@
                         '</table>' +
                     '</div>';
 
+                var cfAccess = u.coinflip_access ? 1 : 0;
+                var cfBtnId  = 'cf-access-' + u.id;
                 return '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px 16px;margin-bottom:8px">' +
-                    '<div style="display:flex;align-items:center;gap:12px;cursor:pointer" onclick="(function(el){el.style.display=el.style.display===\'\'?\'none\':\'\'})(document.getElementById(\'' + uid + '-detail\'))">' +
-                        '<div style="flex:1;min-width:0">' +
+                    '<div style="display:flex;align-items:center;gap:12px">' +
+                        '<div style="flex:1;min-width:0;cursor:pointer" onclick="(function(el){el.style.display=el.style.display===\'\'?\'none\':\'\'})(document.getElementById(\'' + uid + '-detail\'))">' +
                             '<div style="font-size:13px;font-weight:700;color:var(--fg)">@' + escHtml(u.rs_username || '?') + '</div>' +
                             '<div style="font-size:11px;color:var(--muted2);margin-top:2px">' + escHtml(u.email) + '</div>' +
                         '</div>' +
-                        '<div style="text-align:right;flex-shrink:0">' +
+                        '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">' +
                             '<div style="font-size:15px;font-weight:800;color:var(--fg)">' + Number(u.casino_balance).toLocaleString() + ' ' + RAX + '</div>' +
-                            '<div style="font-size:11px;color:var(--muted2);margin-top:2px">' + depCount + (depCount === 1 ? ' deposit' : ' deposits') + ' · ' + Number(totalDep).toLocaleString() + ' ' + RAX + ' in</div>' +
+                            '<div style="font-size:11px;color:var(--muted2)">' + depCount + (depCount === 1 ? ' deposit' : ' deposits') + ' · ' + Number(totalDep).toLocaleString() + ' ' + RAX + ' in</div>' +
+                            '<button id="' + cfBtnId + '" data-uid="' + u.id + '" data-val="' + cfAccess + '" onclick="adminToggleCoinflipAccess(this)" style="font-size:10px;font-weight:700;padding:3px 10px;border-radius:5px;border:1.5px solid ' + (cfAccess ? 'var(--green)' : 'var(--border2)') + ';background:transparent;color:' + (cfAccess ? 'var(--green)' : 'var(--muted)') + ';cursor:pointer;font-family:var(--sans)">🪙 Coin Flip ' + (cfAccess ? 'ON' : 'OFF') + '</button>' +
                         '</div>' +
-                        '<div style="color:var(--muted2);font-size:14px;flex-shrink:0">▾</div>' +
+                        '<div style="color:var(--muted2);font-size:14px;flex-shrink:0;cursor:pointer" onclick="(function(el){el.style.display=el.style.display===\'\'?\'none\':\'\'})(document.getElementById(\'' + uid + '-detail\'))">▾</div>' +
                     '</div>' +
                     detailHtml +
                 '</div>';
@@ -16918,6 +18229,27 @@
             el.innerHTML = '<span style="color:#ef4444">Failed: ' + escHtml(e.message) + '</span>';
         }
     }
+
+    window.adminToggleCoinflipAccess = async function(btn) {
+        var uid  = Number(btn.dataset.uid);
+        var cur  = Number(btn.dataset.val);
+        var next = cur ? 0 : 1;
+        btn.disabled = true;
+        try {
+            var r = await fetch('/api/admin/coinflip-access', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: uid, value: next }),
+            });
+            var d = await r.json();
+            if (!d.ok) { alert(d.error || 'Failed'); btn.disabled = false; return; }
+            btn.dataset.val = next;
+            btn.textContent = '🪙 Coin Flip ' + (next ? 'ON' : 'OFF');
+            btn.style.color       = next ? 'var(--green)' : 'var(--muted)';
+            btn.style.borderColor = next ? 'var(--green)' : 'var(--border2)';
+        } catch(e) { alert('Network error'); }
+        btn.disabled = false;
+    };
 
     var _casinoTxAll = [];
 

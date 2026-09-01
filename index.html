@@ -12,7 +12,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Barlow:wght@400;500;600;700&display=swap">
-    <link rel="stylesheet" href="/app.css?v=196">
+    <link rel="stylesheet" href="/app.css?v=231">
     <script src="https://www.google.com/recaptcha/api.js?render=6Let4qMsAAAAAFhvh6wy6Ai_Ruzq2j4MIlMhqRnl"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/hashids/2.3.0/hashids.min.js"></script>
     <script>
@@ -650,10 +650,11 @@
             <!-- Casino Withdrawals section -->
             <div id="admin-casino-section" style="display:none">
                 <!-- Sub-tabs -->
-                <div style="display:flex;gap:8px;margin-bottom:16px">
+                <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
                     <button id="admin-casino-sub-wd" class="admin-sub-btn active" onclick="adminCasinoSubTab('wd')">Withdrawals</button>
                     <button id="admin-casino-sub-tx" class="admin-sub-btn" onclick="adminCasinoSubTab('tx')">Transactions</button>
                     <button id="admin-casino-sub-users" class="admin-sub-btn" onclick="adminCasinoSubTab('users')">RS Users</button>
+                    <button id="admin-casino-sub-perf" class="admin-sub-btn" onclick="adminCasinoSubTab('perf')">Performance</button>
                 </div>
 
                 <!-- Withdrawals pane -->
@@ -671,7 +672,6 @@
                             <button onclick="loadAdminCasinoWithdrawals()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:5px;cursor:pointer">Refresh</button>
                         </div>
                     </div>
-                    <div id="admin-casino-stats" style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px"></div>
                     <div id="admin-casino-wd-list" style="font-size:13px;color:var(--muted)">Loading…</div>
                 </div>
 
@@ -707,6 +707,14 @@
                         <button onclick="loadAdminCasinoUsers()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:5px;cursor:pointer">Refresh</button>
                     </div>
                     <div id="admin-casino-users-list" style="font-size:13px;color:var(--muted)">Loading…</div>
+                </div>
+                <!-- Performance pane -->
+                <div id="admin-casino-pane-perf" style="display:none">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px">
+                        <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2)">Casino Performance</div>
+                        <button onclick="loadAdminCasinoPerf()" style="background:var(--bg3);border:1px solid var(--border2);color:var(--fg);font-family:var(--sans);font-size:12px;font-weight:600;padding:6px 14px;border-radius:5px;cursor:pointer">Refresh</button>
+                    </div>
+                    <div id="admin-casino-perf-content"><span style="color:var(--muted)">Loading…</span></div>
                 </div>
             </div><!-- /admin-casino-section -->
         </div>
@@ -1071,7 +1079,7 @@
     <!-- end #dashboard -->
 
     <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script>
-    <script src="/app.js?v=910"></script>
-    <div id="app-version-badge" style="position:fixed;bottom:6px;right:10px;font-size:9px;font-weight:600;color:var(--muted2);font-family:var(--mono);letter-spacing:.03em;pointer-events:none;z-index:1">v912</div>
+    <script src="/app.js?v=973"></script>
+    <div id="app-version-badge" style="position:fixed;bottom:6px;right:10px;font-size:9px;font-weight:600;color:var(--muted2);font-family:var(--mono);letter-spacing:.03em;pointer-events:none;z-index:1">v973</div>
 </body>
 </html>

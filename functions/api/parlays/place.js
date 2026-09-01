@@ -223,7 +223,7 @@ async function _place({ request, env, waitUntil }, onCreditConsumed) {
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
     const gameDate = leg.gameDate || today;
 
-    const VALID_SPORTS = ['mlb', 'wnba', 'nfl', 'ufc', 'cfb'];
+    const VALID_SPORTS = ['mlb', 'wnba', 'nfl', 'ufc', 'cfb', 'tennis'];
     // For team-market legs, derive sport from the team nickname so a leg placed
     // while on the wrong tab (e.g. WNBA tab + NFL team) is stored correctly.
     const TEAM_MARKETS = new Set(['team_ml', 'team_runline', 'team_total']);

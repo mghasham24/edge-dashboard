@@ -546,7 +546,7 @@ async function getMlbLive1innDoneGames(date) {
       const state = g.linescore?.inningState || '';
       if (inn == null) return false;
       if (inn >= 2) return true;
-      if (inn === 1 && (state === 'End' || state === 'Middle')) return true;
+      if (inn === 1 && state === 'End') return true;
       return false;
     })
     .map(g => ({
@@ -1147,6 +1147,31 @@ async function getSoccerPlayerStats(espnSlug, espnEventIds, proxyKey) {
   return stats;
 }
 
+// Returns { normalizedPlayerName → { won: bool } } for all completed tennis matches on date.
+// Fetches both ATP and WTA ESPN scoreboards directly (tennis is not CF-blocked).
+async function getTennisResults(date) {
+  const espnDate = date.replace(/-/g, '');
+  const results = {};
+  await Promise.all(['atp', 'wta'].map(async tour => {
+    try {
+      const res = await fetch(
+        `https://site.api.espn.com/apis/site/v2/sports/tennis/${tour}/scoreboard?dates=${espnDate}`,
+        { headers: ESPN_HEADERS, signal: AbortSignal.timeout(8000) }
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+      for (const event of (data.events || [])) {
+        if (!event.status?.type?.completed) continue;
+        for (const comp of (event.competitions?.[0]?.competitors || [])) {
+          const name = normalizeName(comp.athlete?.displayName || '');
+          if (name) results[name] = { won: !!comp.winner };
+        }
+      }
+    } catch(_) {}
+  }));
+  return results;
+}
+
 // ── Main handler ──────────────────────────────────────────────────────────────
 
 async function handleRequest({ request, env }) {
@@ -1405,6 +1430,8 @@ async function handleRequest({ request, env }) {
     if (mkt === 'ufc_ml' || mkt === 'ufc_total')                 return 'ufc';
     if (mkt && mkt.startsWith('ufc_method_'))                    return 'ufc';
     if (WNBA_PROP_TYPES.has(mkt))                                return 'wnba';
+    if (s === 'tennis')        return 'tennis';
+    if (mkt === 'tennis_ml')   return 'tennis';
     return 'mlb';
   }
 
@@ -1429,6 +1456,8 @@ async function handleRequest({ request, env }) {
   const ufcMap          = {};
   // soccer: date → espnSlug → { games: [...], stats: { playerName → statObj } }
   const soccerMap       = {};
+  // tennis: date → { normalizedPlayerName → { won: bool } }
+  const tennisMap       = {};
 
   const hasMlbOnDate    = date => eligibleLegs.some(l => l.game_date === date && legSportOf(l) === 'mlb');
   const hasWnbaOnDate   = date => eligibleLegs.some(l => l.game_date === date && legSportOf(l) === 'wnba');
@@ -1439,6 +1468,7 @@ async function handleRequest({ request, env }) {
   const has1innPbpOnDate= date => eligibleLegs.some(l => l.game_date === date && INN1_PBP_MKTS.has(l.market_type));
   // Cardinals (MLB) and Giants (MLB) match NFL_NICKNAMES — place.js may have stored them as sport='nfl'.
   // Fetch MLB games as fallback whenever there are NFL-classified team market legs on a date.
+  const hasTennisOnDate = date => eligibleLegs.some(l => l.game_date === date && legSportOf(l) === 'tennis');
   const hasNflTeamMktFallback = date => eligibleLegs.some(l =>
     l.game_date === date &&
     (l.market_type === 'team_ml' || l.market_type === 'team_runline' || l.market_type === 'team_total') &&
@@ -1469,6 +1499,7 @@ async function handleRequest({ request, env }) {
     // internally). WNBA/CFB stats don't need the game list so they also start at T=0.
     // Soccer slugs are each self-contained (games→stats) and run in parallel with everything.
     const [mlbResult, wnbaGames, nflGames, cfbGames, ufcResults, wnbaStats, cfbStatsResult,
+           tennisResult,
            ...soccerResults] = await Promise.all([
       // ── Self-contained MLB block ─────────────────────────────────────────
       (hasMlbOnDate(date) || hasNflTeamMktFallback(date)) ? (async () => {
@@ -1517,6 +1548,8 @@ async function handleRequest({ request, env }) {
       // ── Player stats — independent of game lists, start immediately ─────
       hasWnbaOnDate(date) ? withTimeout(getWnbaPlayerStats(date, proxyKey), 12000, {}) : Promise.resolve({}),
       cfbLegsForDate.length ? withTimeout(getCfbPlayerStats(date, cfbLegsForDate, proxyKey), 15000, {}) : Promise.resolve({}),
+      // ── Tennis results (ATP + WTA) ─────────────────────────────────────
+      hasTennisOnDate(date) ? withTimeout(getTennisResults(date), 10000, {}) : Promise.resolve({}),
       // ── Soccer slugs — each self-contained, all parallel ───────────────
       ...soccerSlugs.map(espnSlug => (async () => {
         try {
@@ -1542,6 +1575,7 @@ async function handleRequest({ request, env }) {
     nflGamesMap[date]       = nflGames;
     cfbGamesMap[date]       = cfbGames;
     ufcMap[date]            = ufcResults;
+    tennisMap[date]         = tennisResult   || {};
     wnbaStatsMap[date]      = wnbaStats      || {};
     cfbStatsMap[date]       = cfbStatsResult || {};
     for (const r of soccerResults) {
@@ -1562,7 +1596,8 @@ async function handleRequest({ request, env }) {
         nflGames:  nflGamesMap[date].map(g => `${g.awayName} ${g.awayScore} @ ${g.homeName} ${g.homeScore}`),
         cfbGames:  (cfbGamesMap[date] || []).map(g => `${g.awayAbbr} ${g.awayScore} @ ${g.homeAbbr} ${g.homeScore}`),
         cfbPlayers: Object.keys(cfbStatsMap[date] || {}),
-        ufcFights: Object.entries(ufcMap[date] || {}).map(([n, r]) => `${n}: ${JSON.stringify(r)}`),
+        ufcFights:    Object.entries(ufcMap[date] || {}).map(([n, r]) => `${n}: ${JSON.stringify(r)}`),
+        tennisResults: Object.entries(tennisMap[date] || {}).map(([n, r]) => `${n}: ${r.won ? 'won' : 'lost'}`),
         legs: eligibleLegs.filter(l => l.game_date === date).map(l => {
           const sport = legSportOf(l);
           const mkt   = l.market_type;
@@ -1736,6 +1771,27 @@ async function handleRequest({ request, env }) {
         // Soccer props are milestone (1+, 2+, 3+) — use >= / <= not > / <
         legOutcomes[leg.id] = (leg.direction === 'more' ? statVal >= leg.threshold : statVal <= leg.threshold) ? 'won' : 'lost';
       }
+      continue;
+    }
+
+    if (sport === 'tennis') {
+      const tResults  = tennisMap[leg.game_date] || {};
+      const playerKey = normForLookup(leg.player_name);
+      // Fallback: last name only (e.g. "fritz" matches "taylor fritz")
+      let result = tResults[playerKey];
+      if (!result) {
+        const lastName = playerKey.split(' ').pop();
+        if (lastName && lastName.length > 3) {
+          for (const [k, v] of Object.entries(tResults)) {
+            if (k.endsWith(lastName)) { result = v; break; }
+          }
+        }
+      }
+      if (!result) {
+        legOutcomes[leg.id] = leg.game_date < staleDate ? 'void' : null;
+        continue;
+      }
+      legOutcomes[leg.id] = result.won ? 'won' : 'lost';
       continue;
     }
 
@@ -1995,22 +2051,16 @@ async function handleRequest({ request, env }) {
       // No scratches — normal settlement
       parlayResult = anyLost ? 'lost' : 'won';
       finalPayout  = parlay.is_free_play ? Math.min(parlay.payout_rax, 3000) : parlay.payout_rax;
-    } else if (totalWonLegs < 2) {
-      // 1 or 0 active legs remain after scratches — refund only if no active leg lost
-      if (anyLost) {
-        parlayResult = 'lost';
-        finalPayout  = 0;
-      } else {
-        parlayResult = 'voided';
-        finalPayout  = parlay.received_rax ?? parlay.stake_rax;
-      }
     } else if (anyLost) {
-      // Scratch on the slip but another leg also lost — just a loss
+      // A non-void leg lost — parlay lost regardless of scratches
       parlayResult = 'lost';
       finalPayout  = 0;
+    } else if (totalWonLegs === 0) {
+      // Every leg voided — full stake refund
+      parlayResult = 'voided';
+      finalPayout  = parlay.received_rax ?? parlay.stake_rax;
     } else {
-      // All remaining legs won — recalculate payout using only the non-void legs' implied probs.
-      // Use stake_rax * 0.9 to match placement formula (RS takes 10% commission on deposit).
+      // Void leg(s) dropped, remaining legs all won — recalculate payout without voided legs
       const newTrueProb    = allWonLegProbs.reduce((acc, p) => acc * p, 1);
       const effectiveStake = Math.floor(parlay.stake_rax * 0.9);
       parlayResult = 'won';
