@@ -84,7 +84,7 @@ async function pickCard(env, now, db) {
       ' WHERE assigned_to_parlay_id IS NULL AND freed_at IS NULL AND verified_at > ?' +
       " AND sport='nba' AND season='2026'" +
       ' AND (claimed_for_casino_at IS NULL OR claimed_for_casino_at < ?)' +
-      " AND card_id NOT IN (SELECT card_id FROM casino_deposits WHERE status='confirmed' AND card_id IS NOT NULL AND created_at > " + (now - 30 * 24 * 3600) + ")" +
+      " AND card_id NOT IN (SELECT card_id FROM casino_deposits WHERE status IN ('confirmed','pending') AND card_id IS NOT NULL AND created_at > " + (now - 30 * 24 * 3600) + ")" +
       notIn + ' ORDER BY verified_at DESC LIMIT 1'
     ).bind(now - VERIFY_MAX_AGE, now - MIN_DEPOSIT_TTL, ...excluded).first();
     if (!row) break;

@@ -135,7 +135,7 @@ async function checkAuctionHistory(cardId, rsUsername, raxRequested, authInfo, s
         const raw = String(entry.amountDisplay || '').replace(/,/g, '');
         const amount = parseInt(raw, 10);
         // Validate amount is within 10% of rax_requested — guards against stale recycled-card trades
-        if (amount > 0 && amount >= raxRequested * 0.9 && amount <= raxRequested * 1.1) return amount;
+        if (amount > 0 && amount >= raxRequested * 0.9) return amount;
       }
     }
   } catch (_) {}
@@ -181,10 +181,11 @@ async function handleRequest({ request, env, userId, cronOk }) {
     : await env.DB.prepare(pendingQuery).all();
   const pending = pendingRows.results || [];
 
-  // Also load recently-expired deposits (within 24h) — reactivate if offer arrives late.
+  // Also load recently-expired deposits (within 2h) — reactivate if offer arrives late.
+  // ORDER BY created_at DESC so the most recently expired (highest chance of valid card transfer) are checked first.
   const expiredRows = userId ? { results: [] } : await env.DB.prepare(
-    "SELECT * FROM casino_deposits WHERE status='expired' AND created_at > ?"
-  ).bind(now - 24 * 3600).all();
+    "SELECT * FROM casino_deposits WHERE status='expired' AND created_at > ? ORDER BY created_at DESC LIMIT 10"
+  ).bind(now - 2 * 3600).all();
   const recentExpired = expiredRows.results || [];
 
   if (!pending.length && !recentExpired.length) {
@@ -375,67 +376,65 @@ async function handleRequest({ request, env, userId, cronOk }) {
   // Ownership check detects the card transfer instantly. Auction history then verifies
   // that THIS user actually bought the card from edgebot for the requested amount.
   // This is the ONLY path that credits a deposit — no offer-state-based crediting.
-  // Cap at 10 cards to stay within CF 30s wall-clock (each dep = 2 RS API calls).
+  // Cap at 20 cards to stay within CF 30s wall-clock (each dep = 2 RS API calls).
   const ownershipRows = [...pending, ...recentExpired]
     .filter(dep => dep.card_id != null)
-    .slice(0, 10);
+    .slice(0, 20);
 
-  // Load RS usernames for all ownership rows in one batch
+  // Load RS user IDs for all ownership rows in one batch
   const activatedCardIds = new Set();
   if (ownershipRows.length && !userId) {
     const ownerUserIds = [...new Set(ownershipRows.map(d => d.user_id))];
     const ownerPh = ownerUserIds.map(() => '?').join(',');
     const ownerAuthRows = await env.DB.prepare(
-      `SELECT user_id, rs_username FROM real_auth WHERE user_id IN (${ownerPh}) AND parlay_verified=1`
+      `SELECT user_id, rs_user_id FROM real_auth WHERE user_id IN (${ownerPh}) AND parlay_verified=1`
     ).bind(...ownerUserIds).all();
-    const ownerUsernameMap = {};
-    for (const r of (ownerAuthRows.results || [])) ownerUsernameMap[r.user_id] = r.rs_username;
+    const ownerUserIdMap = {};
+    for (const r of (ownerAuthRows.results || [])) ownerUserIdMap[r.user_id] = r.rs_user_id;
 
     for (const dep of ownershipRows) {
       if (activatedCardIds.has(dep.card_id)) continue;
       const ownerId = await fetchCardOwner(dep.card_id, authInfo, sessionTok);
       if (ownerId === null || ownerId === EDGEBOT_USER) continue; // card still with edgebot
 
-      // Card left edgebot — verify the depositing user was the buyer via auction history
-      const rsUsername = ownerUsernameMap[dep.user_id];
-      if (!rsUsername) continue; // no RS username on record — skip, offer polling will catch it
+      // Card left edgebot — verify the depositing user is the new owner by RS user ID
+      const rsUserId = ownerUserIdMap[dep.user_id];
+      if (!rsUserId) continue; // no RS user ID on record — skip, offer polling will catch it
 
-      const paidAmount = await checkAuctionHistory(dep.card_id, rsUsername, dep.rax_requested, authInfo, sessionTok);
-      if (paidAmount > 0) {
-        await activateDeposit(dep, dep.card_id, null, paidAmount);
+      if (ownerId === rsUserId) {
+        await activateDeposit(dep, dep.card_id, null, dep.rax_requested);
         activatedCardIds.add(dep.card_id);
       }
-      // paidAmount === 0: auction history doesn't confirm this user bought the card yet.
-      // Could be a timing lag (history updates within a few seconds of transfer) or a
-      // genuinely wrong deposit (card sold to someone else). Leave pending — offer
-      // polling in Phase 1/2 or the next cron run's auction check will resolve it.
+      // ownerId mismatch: card sold to someone else or timing lag. Leave pending.
     }
   }
 
-  // ── Phase 0c: Auction history fallback ───────────────────────────────────────
-  // Catches deposits where Phase 0b was skipped (per-user calls) or where the card
-  // owner check timed out but auction history has since updated. Runs cron-wide only.
+  // ── Phase 0c: Ownership fallback ─────────────────────────────────────────────
+  // Catches deposits where Phase 0b was skipped (per-user calls) or timed out.
+  // Re-checks card ownership and compares against depositing user's RS user ID.
+  // Runs cron-wide only.
   if (!userId) {
     const historyRows = [...pending, ...recentExpired]
       .filter(dep => dep.card_id && (now - dep.created_at) > 90)
-      .slice(0, 10);
+      .slice(0, 20);
 
     if (historyRows.length) {
       const userIds = [...new Set(historyRows.map(d => d.user_id))];
       const ph = userIds.map(() => '?').join(',');
       const authRows = await env.DB.prepare(
-        `SELECT user_id, rs_username FROM real_auth WHERE user_id IN (${ph}) AND parlay_verified=1`
+        `SELECT user_id, rs_user_id FROM real_auth WHERE user_id IN (${ph}) AND parlay_verified=1`
       ).bind(...userIds).all();
-      const usernameMap = {};
-      for (const r of (authRows.results || [])) usernameMap[r.user_id] = r.rs_username;
+      const userIdMap = {};
+      for (const r of (authRows.results || [])) userIdMap[r.user_id] = r.rs_user_id;
 
       for (const dep of historyRows) {
         if (activatedCardIds.has(dep.card_id)) continue;
-        const rsUsername = usernameMap[dep.user_id];
-        if (!rsUsername) continue;
-        const paidAmount = await checkAuctionHistory(dep.card_id, rsUsername, dep.rax_requested, authInfo, sessionTok);
-        if (paidAmount > 0) {
-          await activateDeposit(dep, dep.card_id, null, paidAmount);
+        const rsUserId = userIdMap[dep.user_id];
+        if (!rsUserId) continue;
+        const ownerId = await fetchCardOwner(dep.card_id, authInfo, sessionTok);
+        if (ownerId === null || ownerId === EDGEBOT_USER) continue;
+        if (ownerId === rsUserId) {
+          await activateDeposit(dep, dep.card_id, null, dep.rax_requested);
           activatedCardIds.add(dep.card_id);
         }
       }
@@ -490,6 +489,7 @@ async function handleRequest({ request, env, userId, cronOk }) {
   // same or next cron run once the card has transferred and history is populated.
 
   // ── Phase 2: Open offers — counter if under, accept if ≥ rax_requested ──────
+  const justAcceptedCards = new Set(); // cards accepted this run — must not expire same run
   for (const offer of (incomingOpen || [])) {
     if (seenSettled.has(offer.id)) continue;
     const cardId = getCardId(offer);
@@ -515,6 +515,7 @@ async function handleRequest({ request, env, userId, cronOk }) {
       // next cron run once auction history confirms this user paid edgebot.
       const result = await acceptOffer(offer.id, authInfo, sessionTok);
       if (!result.ok) { errors.push({ offerId: offer.id, action: 'accept', error: `RS ${result.status}: ${result.body}` }); continue; }
+      justAcceptedCards.add(Number(cardId)); // protect from TTL expiry this same run
       await env.DB.prepare(
         "UPDATE casino_deposits SET rs_offer_id=? WHERE id=? AND rs_offer_id IS NULL"
       ).bind(String(offer.id), dep.id).run();
@@ -538,6 +539,7 @@ async function handleRequest({ request, env, userId, cronOk }) {
     ...(outgoingOpen     || []).map(o => getCardId(o)),
     ...(outgoingAccepted || []).map(o => getCardId(o)),
     ...(incomingAccepted || []).map(o => getCardId(o)),
+    ...justAcceptedCards,
   ].filter(Boolean).map(Number));
 
   const toExpire = pending.filter(dep =>
