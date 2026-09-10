@@ -20,13 +20,16 @@
         key: 'soccer_wc',
         label: 'WC'
     }, {
+        key: 'football_nfl',
+        label: 'NFL'
+    }, {
         key: 'football_ncaaf',
         label: 'CFB'
     }, {
         key: 'baseball_cws',
         label: 'CWS'
     }];
-    var FREE_SPORTS = ['basketball_nba', 'icehockey_nhl', 'baseball_mlb', 'basketball_wnba', 'baseball_cws']; // free plan sports
+    var FREE_SPORTS = ['basketball_nba', 'icehockey_nhl', 'baseball_mlb', 'basketball_wnba', 'baseball_cws', 'football_nfl']; // free plan sports
     var MARKET_KEYS = {
         ML: 'h2h',
         Spread: 'spreads',
@@ -63,7 +66,8 @@
     var fcPoller     = null;
     var cfbPoller    = null;
     var wcPoller     = null;
-    var scoresPoller = null;
+    var scoresPoller    = null;
+    var takenSyncPoller = null;
     var wcSubTab     = 'games'; // 'games' | 'futures'
     var currentLoadAbort = null;
     var tabHiddenAt  = 0; // timestamp when tab was last hidden, for stale-check on return
@@ -80,6 +84,7 @@
         if (scoresPoller) { clearInterval(scoresPoller); scoresPoller = null; }
         if (evAutoRefreshTimer) { clearInterval(evAutoRefreshTimer); evAutoRefreshTimer = null; }
         if (liveSlipInterval)  { clearInterval(liveSlipInterval);  liveSlipInterval  = null; }
+        if (takenSyncPoller)   { clearInterval(takenSyncPoller);   takenSyncPoller   = null; }
     }
 
     document.addEventListener('visibilitychange', function() {
@@ -89,6 +94,7 @@
         } else {
             if (!currentUser) return;
             loadBetsTaken();
+            loadTakenBets();
             var hiddenMs = tabHiddenAt ? Date.now() - tabHiddenAt : 0;
             tabHiddenAt = 0;
             // Only do a full reload if away for > 5 min — game list may have changed
@@ -358,7 +364,7 @@
         'Manchester United':'https://a.espncdn.com/i/teamlogos/soccer/500/360.png','Man United':'https://a.espncdn.com/i/teamlogos/soccer/500/360.png','Man Utd':'https://a.espncdn.com/i/teamlogos/soccer/500/360.png',
         'Tottenham':'https://a.espncdn.com/i/teamlogos/soccer/500/367.png','Tottenham Hotspur':'https://a.espncdn.com/i/teamlogos/soccer/500/367.png',
         'Newcastle':'https://a.espncdn.com/i/teamlogos/soccer/500/361.png','Newcastle United':'https://a.espncdn.com/i/teamlogos/soccer/500/361.png',
-        'Aston Villa':'https://a.espncdn.com/i/teamlogos/soccer/500/1213.png',
+        'Aston Villa':'https://a.espncdn.com/i/teamlogos/soccer/500/362.png',
         'West Ham':'https://a.espncdn.com/i/teamlogos/soccer/500/371.png','West Ham United':'https://a.espncdn.com/i/teamlogos/soccer/500/371.png',
         'Brighton':'https://a.espncdn.com/i/teamlogos/soccer/500/331.png',
         'Fulham':'https://a.espncdn.com/i/teamlogos/soccer/500/370.png',
@@ -369,7 +375,7 @@
         'Brentford':'https://a.espncdn.com/i/teamlogos/soccer/500/337.png',
         'Nottm Forest':'https://a.espncdn.com/i/teamlogos/soccer/500/393.png','Nottingham Forest':'https://a.espncdn.com/i/teamlogos/soccer/500/393.png',
         'Leicester':'https://a.espncdn.com/i/teamlogos/soccer/500/375.png','Leicester City':'https://a.espncdn.com/i/teamlogos/soccer/500/375.png',
-        'Southampton':'https://a.espncdn.com/i/teamlogos/soccer/500/362.png',
+        'Southampton':'https://a.espncdn.com/i/teamlogos/soccer/500/2731.png',
         'Ipswich':'https://a.espncdn.com/i/teamlogos/soccer/500/335.png','Ipswich Town':'https://a.espncdn.com/i/teamlogos/soccer/500/335.png',
         'Leeds':'https://a.espncdn.com/i/teamlogos/soccer/500/357.png','Leeds United':'https://a.espncdn.com/i/teamlogos/soccer/500/357.png',
         'Burnley':'https://a.espncdn.com/i/teamlogos/soccer/500/346.png',
@@ -400,6 +406,17 @@
         'Paris St-Germain':'https://a.espncdn.com/i/teamlogos/soccer/500/160.png','PSG':'https://a.espncdn.com/i/teamlogos/soccer/500/160.png','Paris Saint-Germain':'https://a.espncdn.com/i/teamlogos/soccer/500/160.png',
         // UCL additional
         'Real Oviedo':'https://a.espncdn.com/i/teamlogos/soccer/500/3767.png',
+        'Lille':'https://a.espncdn.com/i/teamlogos/soccer/500/5765.png','LOSC Lille':'https://a.espncdn.com/i/teamlogos/soccer/500/5765.png',
+        'Real Betis':'https://a.espncdn.com/i/teamlogos/soccer/500/3799.png',
+        'Feyenoord':'https://a.espncdn.com/i/teamlogos/soccer/500/675.png',
+        'Galatasaray':'https://a.espncdn.com/i/teamlogos/soccer/500/660.png',
+        'Fenerbahce':'https://a.espncdn.com/i/teamlogos/soccer/500/651.png','Fenerbahçe':'https://a.espncdn.com/i/teamlogos/soccer/500/651.png',
+        'VfB Stuttgart':'https://a.espncdn.com/i/teamlogos/soccer/500/139.png','Stuttgart':'https://a.espncdn.com/i/teamlogos/soccer/500/139.png',
+        'Shakhtar Donetsk':'https://a.espncdn.com/i/teamlogos/soccer/500/2697.png',
+        'AEK Athens':'https://a.espncdn.com/i/teamlogos/soccer/500/3556.png',
+        'LASK Linz':'https://a.espncdn.com/i/teamlogos/soccer/500/2196.png','LASK':'https://a.espncdn.com/i/teamlogos/soccer/500/2196.png',
+        'Viking FK':'https://a.espncdn.com/i/teamlogos/soccer/500/2914.png','Viking':'https://a.espncdn.com/i/teamlogos/soccer/500/2914.png',
+        'SK Slovan Bratislava':'https://a.espncdn.com/i/teamlogos/soccer/500/3836.png','Slovan Bratislava':'https://a.espncdn.com/i/teamlogos/soccer/500/3836.png',
         'Benfica':'https://a.espncdn.com/i/teamlogos/soccer/500/1929.png','SL Benfica':'https://a.espncdn.com/i/teamlogos/soccer/500/1929.png','S.L. Benfica':'https://a.espncdn.com/i/teamlogos/soccer/500/1929.png',
         'Sporting CP':'https://a.espncdn.com/i/teamlogos/soccer/500/2250.png','Sporting Lisbon':'https://a.espncdn.com/i/teamlogos/soccer/500/2250.png','Sporting Lisboa':'https://a.espncdn.com/i/teamlogos/soccer/500/2250.png','Sporting':'https://a.espncdn.com/i/teamlogos/soccer/500/2250.png',
         'Porto':'https://a.espncdn.com/i/teamlogos/soccer/500/437.png','FC Porto':'https://a.espncdn.com/i/teamlogos/soccer/500/437.png',
@@ -1218,7 +1235,8 @@
         basketball_ncaab:      'https://a.espncdn.com/i/teamlogos/leagues/500/ncaa.png',
         icehockey_nhl:         'https://a.espncdn.com/i/teamlogos/leagues/500/nhl.png',
         baseball_mlb:          'https://a.espncdn.com/i/teamlogos/leagues/500/mlb.png',
-        mma_mixed_martial_arts:'https://a.espncdn.com/i/teamlogos/leagues/500/ufc.png'
+        mma_mixed_martial_arts:'https://a.espncdn.com/i/teamlogos/leagues/500/ufc.png',
+        football_nfl:          'https://a.espncdn.com/i/teamlogos/leagues/500/nfl.png'
     };
     var _fcLeagueLogoMap = {
         'UCL':        'https://a.espncdn.com/i/leaguelogos/soccer/500/2.png',
@@ -1414,6 +1432,14 @@
         // Sync to server so state persists across devices (single request to avoid race condition)
         var _syncBody = { id: id, taken: !!betTaken[id] };
         if (_autoId) _syncBody.also = _autoId;
+        // Include game/market/side so the backend can suppress bot alerts for this bet
+        if (betTaken[id]) {
+            var _allRows = [];
+            if (window.rawRowsBySport) Object.values(rawRowsBySport).forEach(function(sr) { _allRows = _allRows.concat(sr || []); });
+            if (!_allRows.length && window.rawRows) _allRows = rawRows;
+            var _takenRow = _allRows.find(function(r) { return r.id === id; });
+            if (_takenRow) { _syncBody.game = _takenRow.game; _syncBody.market = _takenRow.mkt; _syncBody.side = _takenRow.side; }
+        }
         fetch('/api/bets/taken', {
             method: 'POST',
             credentials: 'same-origin',
@@ -1778,17 +1804,34 @@
                 document.getElementById('gate').style.display = 'none';
                 document.getElementById('landing').classList.remove('visible');
                 document.getElementById('dashboard').style.display = 'block';
-                if (data.is_admin) document.getElementById('alerts-tab-btn').style.display = '';
+                if (data.plan === 'pro' || data.is_admin) document.getElementById('alerts-tab-btn').style.display = '';
                 showTrialNudge(data);
                 buildTabs();
                 if (isPro()) loadGroupCode();
                 await loadBetsTaken();
+                loadTakenBets();
                 // If redirected back from bookmarklet, open portfolio tab
                 var _openParam = new URLSearchParams(window.location.search).get('open');
                 if (_openParam) history.replaceState({}, '', '/');
-                if (sessionStorage.getItem('pending_rs_token')) {
+                var _copyParlayTemplate = sessionStorage.getItem('copy_parlay_template');
+                var _discordOauthResult = sessionStorage.getItem('discord_oauth_result');
+                if (_discordOauthResult && (data.plan === 'pro' || data.is_admin)) {
+                    // Auto-open alerts tab after Discord OAuth redirect
+                    setTimeout(function() {
+                        var alertsBtn = document.getElementById('alerts-tab-btn');
+                        if (alertsBtn) alertsBtn.click();
+                    }, 150);
+                } else if (sessionStorage.getItem('pending_rs_token')) {
                     var portBtn2 = document.getElementById('portfolio-tab-btn');
                     if (portBtn2) { setTimeout(function(){ portBtn2.click(); }, 100); }
+                } else if (_copyParlayTemplate) {
+                    try { parlayTemplateLegs = JSON.parse(_copyParlayTemplate); } catch(e) { parlayTemplateLegs = []; }
+                    sessionStorage.removeItem('copy_parlay_template');
+                    setTimeout(function() {
+                        var pb = document.getElementById('header-parlays-btn');
+                        if (pb) pb.click();
+                        parlaySetView('build');
+                    }, 100);
                 } else if (_openParam === 'parlays') {
                     setTimeout(function() { var pb = document.getElementById('header-parlays-btn'); if (pb) pb.click(); }, 100);
                 } else {
@@ -1825,8 +1868,27 @@
         var otdDeepLinkPending = (function() { var m = window.location.pathname.match(/^\/otd\/([^\/]+)/); return m ? decodeURIComponent(m[1]) : null; })();
         if (otdDeepLinkPending) sessionStorage.setItem('otd_deeplink_user', otdDeepLinkPending);
 
-        // Handle ?rs_token=...&rs_uuid=... redirect from bookmarklet
+        // Handle ?discord=connected|error from OAuth2 callback
         var urlParams = new URLSearchParams(window.location.search);
+        var discordParam = urlParams.get('discord');
+        if (discordParam) {
+            sessionStorage.setItem('discord_oauth_result', discordParam);
+            history.replaceState({}, '', '/');
+        }
+
+        // Handle ?copy_parlay=<base64> from slip.html "Copy Parlay" button
+        var copyParlayParam = urlParams.get('copy_parlay');
+        if (copyParlayParam) {
+            try {
+                var _cpLegs = JSON.parse(decodeURIComponent(escape(atob(copyParlayParam.replace(/-/g, '+').replace(/_/g, '/')))));
+                if (Array.isArray(_cpLegs) && _cpLegs.length) {
+                    sessionStorage.setItem('copy_parlay_template', JSON.stringify(_cpLegs));
+                }
+            } catch(e) {}
+            history.replaceState({}, '', '/');
+        }
+
+        // Handle ?rs_token=...&rs_uuid=... redirect from bookmarklet
         var rsToken = urlParams.get('rs_token');
         var rsUuid  = urlParams.get('rs_uuid');
         if (rsToken) {
@@ -2295,7 +2357,8 @@
             soccer_fc: 'FC',
             soccer_wc: 'WC',
             football_ncaaf: 'CFB',
-            baseball_cws: 'CWS'
+            baseball_cws: 'CWS',
+            football_nfl: 'NFL'
         };
         var leagueColorMap = {
             basketball_nba: '#4f6ef7',
@@ -2306,7 +2369,8 @@
             soccer_fc: '#2dcc7e',
             soccer_wc: '#f5a623',
             football_ncaaf: '#e5a823',
-            baseball_cws: '#f5a623'
+            baseball_cws: '#f5a623',
+            football_nfl: '#1a3a6b'
         };
         var leagueLbl = leagueBadgeMap[currentSport] || '';
         var leagueClr = leagueColorMap[currentSport] || 'var(--muted)';
@@ -3287,7 +3351,7 @@
         var isActive = btn.classList.contains('active');
         if (isActive) {
             btn.classList.remove('active');
-            btn.textContent = '🔔 Notify';
+            btn.innerHTML = '🚨 <span style="color:#ff3b3b">Alerts</span>';
             hideAlertsTab();
             loadOdds();
         } else {
@@ -3307,12 +3371,16 @@
     // ── Alerts panel ──────────────────────────────────────
 
     var _alertsVerified = false;
-    var _alertsConnectPoll = null;
+    var _alertsDmChannelId = null;
+    var _alertsLoading = false;
+    var _alertsPendingPoll = null;
 
     var ALERT_SPORTS = [
         { key: 'basketball_nba',         label: 'NBA'   },
         { key: 'icehockey_nhl',          label: 'NHL'   },
         { key: 'baseball_mlb',           label: 'MLB'   },
+        { key: 'basketball_wnba',        label: 'WNBA'  },
+        { key: 'football_nfl',           label: 'NFL'   },
         { key: 'basketball_ncaab',       label: 'NCAAB' },
         { key: 'mma_mixed_martial_arts', label: 'UFC'   },
         { key: 'soccer_fc',              label: 'FC'    },
@@ -3327,7 +3395,7 @@
             ALERT_SPORTS.forEach(function(s) {
                 var label = document.createElement('label');
                 label.style.cssText = 'display:flex;align-items:center;gap:8px;background:var(--bg4);border:1px solid var(--border);border-radius:7px;padding:8px 12px;cursor:pointer;font-size:13px;font-weight:600;color:var(--fg)';
-                label.innerHTML = '<input type="checkbox" data-sport="' + s.key + '" checked style="accent-color:var(--accent);width:15px;height:15px" onchange="saveAlertSettings()"> ' + s.label;
+                label.innerHTML = '<input type="checkbox" data-sport="' + s.key + '" checked style="accent-color:var(--accent);width:15px;height:15px"> ' + s.label;
                 grid.appendChild(label);
             });
         }
@@ -3339,7 +3407,41 @@
             var s = data.settings;
 
             _alertsVerified = s.verified;
-            updateAlertConnectUI(s.verified);
+            _alertsDmChannelId = s.discord_dm_channel_id || null;
+
+            // Check if we just returned from Discord OAuth2
+            var oauthResult = sessionStorage.getItem('discord_oauth_result');
+            if (oauthResult) {
+                sessionStorage.removeItem('discord_oauth_result');
+                if (oauthResult === 'connected') {
+                    _alertsVerified = true;
+                    try { posthog.capture('discord_connected'); } catch(e) {}
+                } else if (oauthResult === 'pending') {
+                    // OAuth done — settings response will have pending_code + dm_channel_id
+                } else if (oauthResult === 'error') {
+                    var statusEl2 = document.getElementById('alerts-connect-status');
+                    if (statusEl2) {
+                        statusEl2.style.display = '';
+                        statusEl2.style.color = '#ff3b3b';
+                        statusEl2.textContent = 'Authorization failed. Please try again.';
+                    }
+                }
+            }
+
+            updateAlertConnectUI(_alertsVerified);
+
+            if (!_alertsVerified && s.pending_code && s.dm_channel_id) {
+                // OAuth done — have channel ID, show step 2 (code + DM button)
+                showDiscordPendingCode(s.pending_code, s.dm_channel_id);
+            } else if (!_alertsVerified) {
+                // No channel ID yet — stay on step 1 (OAuth button)
+                hideDiscordPendingCode();
+            } else {
+                hideDiscordPendingCode();
+            }
+
+            // Suppress saveAlertSettings during programmatic population
+            _alertsLoading = true;
 
             // Populate settings
             var toggle = document.getElementById('alerts-enabled-toggle');
@@ -3364,8 +3466,10 @@
             // Unit size
             document.getElementById('alerts-unit-size').value = s.unit_size || 100;
 
+            _alertsLoading = false;
+
             loadTakenBets();
-        } catch(e) {}
+        } catch(e) { _alertsLoading = false; }
     }
 
     async function loadTakenBets() {
@@ -3448,61 +3552,63 @@
         }
     });
 
-    async function connectDiscord() {
-        var btn = document.getElementById('alerts-connect-btn');
-        var status = document.getElementById('alerts-connect-status');
-        var codeWrap = document.getElementById('alerts-discord-code-wrap');
-        btn.disabled = true;
-        btn.innerHTML = 'Opening Discord…';
-        status.style.display = 'none';
-        if (codeWrap) codeWrap.style.display = 'none';
+    function connectDiscord() {
+        window.location.href = '/api/alerts/discord-oauth';
+    }
 
+    function showDiscordPendingCode(code, dmChannelId) {
+        var codeEl = document.getElementById('alerts-discord-code');
+        var wrap = document.getElementById('alerts-discord-code-wrap');
+        var oauthStep = document.getElementById('alerts-oauth-step');
+        var dmLink = document.getElementById('alerts-open-dm-link');
+        if (!codeEl) return;
+        codeEl.textContent = code;
+        if (wrap) wrap.style.display = '';
+        if (oauthStep) oauthStep.style.display = 'none';
+        // Always use profile URL — channel URL shows "No channel found" for new DMs
+        // Poll every 5s to check if user has sent /connect in Discord
+        clearInterval(_alertsPendingPoll);
+        _alertsPendingPoll = setInterval(async function() {
+            try {
+                var r = await fetch('/api/alerts/settings', { credentials: 'same-origin' });
+                var d = await r.json();
+                if (d.settings && d.settings.verified) {
+                    clearInterval(_alertsPendingPoll);
+                    _alertsVerified = true;
+                    hideDiscordPendingCode();
+                    updateAlertConnectUI(true);
+                    try { posthog.capture('discord_connected'); } catch(e) {}
+                }
+            } catch(e) {}
+        }, 5000);
+    }
+
+    function hideDiscordPendingCode() {
+        clearInterval(_alertsPendingPoll);
+        var wrap = document.getElementById('alerts-discord-code-wrap');
+        var oauthStep = document.getElementById('alerts-oauth-step');
+        if (wrap) wrap.style.display = 'none';
+        if (oauthStep) oauthStep.style.display = '';
+    }
+
+    function copyDiscordCode() {
+        var codeEl = document.getElementById('alerts-discord-code');
+        var btn = document.getElementById('alerts-copy-btn');
+        if (!codeEl) return;
+        var text = codeEl.textContent.trim();
         try {
-            var res = await fetch('/api/alerts/connect', { method: 'POST', credentials: 'same-origin' });
-            var data = await res.json();
-            if (!data.ok || !data.code) throw new Error(data.error || 'Failed');
-
-            // Open DM with the bot directly (ensures correct DM channel ID is stored on /connect)
-            window.open('https://discord.com/users/1541566305923113000', '_blank');
-
-            // Show step 2 — the code to DM
-            var codeEl = document.getElementById('alerts-discord-code');
-            var codeInline = document.getElementById('alerts-discord-code-inline');
-            var botNameEl = document.getElementById('alerts-discord-botname');
-            if (codeEl) codeEl.textContent = data.code;
-            if (codeInline) codeInline.textContent = '/connect ' + data.code;
-            if (botNameEl) botNameEl.textContent = data.botName || 'RaxEdge';
-            if (codeWrap) codeWrap.style.display = '';
-
-            btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057c.002.022.015.045.033.057a19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z"/></svg> Connect to Discord';
-            btn.disabled = false;
-
-            // Poll every 3s to check if verification completed (up to 10 min)
-            if (_alertsConnectPoll) clearInterval(_alertsConnectPoll);
-            var pollCount = 0;
-            _alertsConnectPoll = setInterval(async function() {
-                pollCount++;
-                if (pollCount > 200) { clearInterval(_alertsConnectPoll); return; }
-                try {
-                    var r = await fetch('/api/alerts/settings', { credentials: 'same-origin' });
-                    var d = await r.json();
-                    if (d.settings && d.settings.verified) {
-                        clearInterval(_alertsConnectPoll);
-                        _alertsVerified = true;
-                        updateAlertConnectUI(true);
-                        if (codeWrap) codeWrap.style.display = 'none';
-                        status.style.display = 'none';
-                        try { posthog.capture('discord_connected'); } catch(e) {}
-                    }
-                } catch(e) {}
-            }, 3000);
-
+            navigator.clipboard.writeText(text).then(function() {
+                if (btn) { btn.textContent = 'Copied!'; setTimeout(function(){ btn.textContent = 'Copy'; }, 2000); }
+            });
         } catch(e) {
-            btn.disabled = false;
-            btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057c.002.022.015.045.033.057a19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z"/></svg> Connect to Discord';
-            status.textContent = 'Error: ' + e.message;
-            status.style.display = '';
-            status.style.color = 'var(--red)';
+            var ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.cssText = 'position:fixed;opacity:0';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            if (btn) { btn.textContent = 'Copied!'; setTimeout(function(){ btn.textContent = 'Copy'; }, 2000); }
         }
     }
 
@@ -3516,25 +3622,38 @@
         });
     }
 
+    var _alertsSaveTimer = null;
     async function saveAlertSettings() {
-        if (!_alertsVerified) return;
+        if (_alertsLoading) return;
         var enabled  = document.getElementById('alerts-enabled-toggle').checked;
         var minEv    = parseFloat(document.getElementById('alerts-ev-slider').value);
-        var oneSide  = document.getElementById('alerts-oneside-toggle').checked;
+        var _oneSideEl = document.getElementById('alerts-oneside-toggle');
+        var oneSide  = _oneSideEl ? _oneSideEl.checked : false;
         var unitSize = parseFloat(document.getElementById('alerts-unit-size').value) || 100;
 
         var sportChecks = document.querySelectorAll('#alerts-sports-grid input[data-sport]');
         var checked = Array.from(sportChecks).filter(function(c) { return c.checked; }).map(function(c) { return c.dataset.sport; });
         var sports = checked.length === ALERT_SPORTS.length ? 'ALL' : checked.join(',');
 
+        var statusEl = document.getElementById('alerts-save-status');
         try {
-            await fetch('/api/alerts/settings', {
+            var res = await fetch('/api/alerts/settings', {
                 method: 'POST',
                 credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ enabled: enabled, min_ev: minEv, sports: sports, one_side: oneSide, unit_size: unitSize })
             });
-        } catch(e) {}
+            var d = await res.json();
+            if (statusEl) {
+                statusEl.textContent = res.ok ? '✓ Saved' : '✗ ' + (d.error || 'Save failed');
+                statusEl.style.color = res.ok ? 'var(--green)' : 'var(--red)';
+                statusEl.style.display = '';
+                clearTimeout(_alertsSaveTimer);
+                if (res.ok) _alertsSaveTimer = setTimeout(function() { statusEl.style.display = 'none'; }, 2000);
+            }
+        } catch(e) {
+            if (statusEl) { statusEl.textContent = '✗ Network error'; statusEl.style.color = 'var(--red)'; statusEl.style.display = ''; }
+        }
     }
 
     function switchConnectTab(tab) {
@@ -5321,6 +5440,7 @@
 
     // ── Parlays tab ────────────────────────────────────────────────────────────
     var parlayPicks          = {};   // { [playerId]: 'more' | 'less' }
+    var parlayTemplateLegs   = [];   // legs pre-filled from shared slip "Copy Parlay"
     var parlayStake          = 1000;
     var parlayCategory       = 'hits';
     var parlayPrevCategory   = 'hits'; // restored when search is cleared
@@ -7433,7 +7553,7 @@
             '<button class="parlay-sport-btn' + (parlayActiveSport === 'cfb' ? ' active' : '') + '" onclick="setParlayActiveSport(\'cfb\')">CFB</button>' +
             '<button class="parlay-sport-btn' + (parlayActiveSport === 'ufc'    ? ' active' : '') + '" onclick="setParlayActiveSport(\'ufc\')">UFC</button>' +
             '<button class="parlay-sport-btn' + (parlayActiveSport === 'soccer'  ? ' active' : '') + '" onclick="setParlayActiveSport(\'soccer\')">FC</button>' +
-            (isAdmin ? '<button class="parlay-sport-btn' + (parlayActiveSport === 'tennis' ? ' active' : '') + '" onclick="setParlayActiveSport(\'tennis\')">Tennis</button>' : '') +
+            '<button class="parlay-sport-btn' + (parlayActiveSport === 'tennis' ? ' active' : '') + '" onclick="setParlayActiveSport(\'tennis\')">Tennis</button>' +
         '</div>';
 
         if (parlayActiveSport !== 'mlb') {
@@ -9570,6 +9690,7 @@
             '1inn_batters_ou':'1st Inn Batters', '1inn_hr_yn':'1st Inn HR',
             '1inn_ks':'1st Inn Ks', '1inn_ks_exact':'1st Inn Ks',
             team_ml:'Moneyline', team_runline:'Run Line', team_total:'Total',
+            tennis_ml:'Match Winner',
             ufc_ml:'Fighter ML', ufc_total:'Fight Total',
             cfb_pass_yds:'Pass Yards', cfb_pass_tds:'Pass TDs', cfb_rush_yds:'Rush Yards',
             cfb_recv_yds:'Rec Yards', cfb_combo_rush_yds:'Combined Rush Yards',
@@ -9596,6 +9717,8 @@
                     var pick = leg.label || (leg.threshold != null ? String(leg.threshold) : '');
                     line = arrow + ' ' + leg.player_name + ' (1IN)' + (pick ? ' · ' + pick : '');
                 }
+            } else if (leg.market_type === 'tennis_ml') {
+                line = arrow + ' ' + leg.player_name + ' to Win';
             } else if (leg.market_type === 'team_ml') {
                 var teamName = (leg.player_name || '').replace(/\s+ML$/i, '').trim();
                 line = arrow + ' ' + teamName + ' to Win';
@@ -9961,6 +10084,8 @@
                 statLine = escHtml('by ' + _movLabel + resultVal);
             } else if (mkt === 'goalscorer') {
                 statLine = escHtml('Goalscorer Yes' + resultVal);
+            } else if (mkt === 'tennis_ml') {
+                statLine = escHtml('Match Winner' + resultVal);
             } else {
                 statLine = escHtml((dir === 'more' ? 'Over ' : 'Under ') + thresh + ' ' + (MKT_SHORT[mkt] || mkt) + resultVal);
             }
@@ -9988,6 +10113,12 @@
                         tmInitText = (tmInitText ? tmInitText + ' · ' : '') + _nflEt;
                     }
                     timeHtml = '<span class="pslip-team-game" id="pst-' + s.id + '-' + li + '">' + tmInitText + '</span>';
+                } else if (mkt === 'tennis_ml') {
+                    var _tNow = Date.now();
+                    var _tStart = leg.game_start_ms || 0;
+                    var _tIsLive = !_tStart || _tNow >= _tStart;
+                    var _tChipTxt = _tIsLive ? 'Live' : new Date(_tStart).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' });
+                    timeHtml = '<span class="pslip-leg-time ' + (_tIsLive ? 'live' : 'pregame') + '">' + escHtml(_tChipTxt) + '</span>';
                 } else {
                     timeHtml = '<span class="pslip-leg-time" id="pst-' + s.id + '-' + li + '"></span>';
                 }
@@ -10001,10 +10132,10 @@
             var isLiveParlay = s.status === 'active' || s.status === 'lost';
             if (isTeamMkt && isLiveParlay && leg.status === 'pending') {
                 progHtml = '<div class="pslip-team-bs-wrap" id="prog-' + s.id + '-' + li + '"></div>';
-            } else if (!isTeamMkt && !mkt.startsWith('ufc_') && leg.status === 'pending' && isLiveParlay) {
+            } else if (!isTeamMkt && mkt !== 'tennis_ml' && !mkt.startsWith('ufc_') && leg.status === 'pending' && isLiveParlay) {
                 // Pending legs always get a live-updating bar — no date check (avoids UTC/ET midnight issues)
                 progHtml = '<div class="pslip-prog-wrap" id="prog-' + s.id + '-' + li + '">' + initBar + '</div>';
-            } else if (!isTeamMkt && !mkt.startsWith('ufc_') && (leg.status === 'won' || leg.status === 'lost')) {
+            } else if (!isTeamMkt && mkt !== 'tennis_ml' && !mkt.startsWith('ufc_') && (leg.status === 'won' || leg.status === 'lost')) {
                 // Settled legs — always give an ID so fetchSettledLegStats can update in-place
                 var rv  = leg.result_value != null ? parseFloat(leg.result_value) : (settledLegStats[s.id + '-' + li] != null ? settledLegStats[s.id + '-' + li] : null);
                 var thr = parseFloat(thresh) || 1;
@@ -10038,15 +10169,15 @@
                 }
             }
 
-            var legRsUrl = parlayLegRsUrl(leg);
+            var legRsUrl = mkt === 'tennis_ml' ? null : parlayLegRsUrl(leg);
             var _legSport2 = leg.sport || 'baseball_mlb';
             var _legRsBtnId = 'rsb-' + s.id + '-' + li;
-            var legRsBtn = legRsUrl
+            var legRsBtn = mkt === 'tennis_ml' ? '' : legRsUrl
                 ? '<a id="' + _legRsBtnId + '" href="' + escHtml(legRsUrl) + '" target="_blank" rel="noopener" class="rs-icon-btn" title="View game on Real Sports" onclick="event.stopPropagation()" style="margin-left:2px;flex-shrink:0" data-sport="' + escHtml(_legSport2) + '">' + RS_LOGO_SVG + '</a>'
                 : '<a id="' + _legRsBtnId + '" class="rs-icon-btn" target="_blank" rel="noopener" title="View game on Real Sports" onclick="event.stopPropagation()" style="display:none;margin-left:2px;flex-shrink:0" data-sport="' + escHtml(_legSport2) + '">' + RS_LOGO_SVG + '</a>';
             // Prop info (matchup abbreviation) shown for MLB/WNBA player prop legs
             var propInfoHtml = '';
-            if (!isTeamMkt && showStatus) {
+            if (!isTeamMkt && mkt !== 'tennis_ml' && showStatus) {
                 var _gdRaw = leg.game_date || '';
                 var _gdFmt = '';
                 if (_gdRaw) {
@@ -10242,8 +10373,59 @@
 
         var body = document.getElementById('parlay-slip-body');
         if (body) {
+            var templateHtml = '';
+            if (parlayTemplateLegs.length) {
+                var _tmplMkt = { hits:'Hits', total_bases:'Total Bases', rbis:'RBIs', runs:'Runs', hrbi:'H+R+RBI', singles:'Singles', stolen_bases:'Stolen Bases', doubles:'Doubles', walks:'Walks', home_runs:'Home Runs', pitcher_ks:'Strikeouts', outs_ou:'Outs Recorded', hits_allowed:'Hits Allowed', er_allowed:'Earned Runs', bb_allowed:'Walks Allowed', pts:'Points', reb:'Rebounds', ast:'Assists', fg3m:'3-Pointers', pra:'Pts+Reb+Ast', points:'Points', assists:'Assists', rebounds:'Rebounds', steals:'Steals', blocks:'Blocks', threes:'3-Pointers', goalscorer:'Goalscorer', sot:'Shots on Target', shots:'Shots', team_ml:'Moneyline', team_runline:'Run Line', team_total:'Team Total', ufc_ml:'Fight ML', ufc_total:'Fight Total', tennis_ml:'Match Winner', '1inn_ml':'1st Inn ML', '1inn_runs_ou':'1st Inn Runs', '1inn_runs_exact':'1st Inn Runs', '1inn_hits_ou':'1st Inn Hits', '1inn_hits_exact':'1st Inn Hits', '1inn_run_yn':'1st Inn Score', '1inn_walks_ou':'1st Inn Walks', '1inn_pitches_ou':'1st Inn Pitches', '1inn_pitches_range':'1st Inn Pitches', '1inn_batters_ou':'1st Inn Batters', '1inn_hr_yn':'1st Inn HR', '1inn_ks_exact':'1st Inn Ks' };
+                templateHtml = '<div class="parlay-template-header">' +
+                    '<span class="parlay-template-label">Copying parlay</span>' +
+                    '<button class="parlay-template-dismiss" onclick="parlayDismissTemplate()" title="Dismiss">×</button>' +
+                    '</div>' +
+                    parlayTemplateLegs.map(function(leg, _ti) {
+                        var dir = leg.direction || ((leg.label || '').toLowerCase().includes('less') ? 'less' : 'more');
+                        var mkt = leg.market_type || '';
+                        var isTeamMkt = mkt.startsWith('team_') || mkt.startsWith('1inn_');
+                        var dirLabel = isTeamMkt ? (leg.label || '') : (dir === 'less' ? '▼ Less' : '▲ More');
+                        var words = (leg.player_name || '').split(' ');
+                        var initials = ((words[0] ? words[0][0] : '') + (words.length > 1 ? words[words.length - 1][0] || '' : '')).toUpperCase();
+                        var hue = (function(s) { var h = 0; for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) & 0xffff; return h % 360; })(leg.player_name || '');
+                        var mktName = _tmplMkt[mkt] || '';
+                        var lineMatch = !isTeamMkt ? (leg.label || '').match(/[\d.]+/) : null;
+                        var lineNum = lineMatch ? lineMatch[0] : '';
+                        var statStr = isTeamMkt ? (mktName || leg.label || '') : (lineNum && mktName ? lineNum + ' ' + mktName : mktName || leg.label || '');
+                        var evtParts = (leg.event_name || '').match(/^(.+?)\s+@\s+(.+)$/);
+                        var evtAway = evtParts ? evtParts[1].trim() : '';
+                        var evtHome = evtParts ? evtParts[2].trim() : '';
+                        var matchup = evtAway && evtHome ? evtAway + ' @ ' + evtHome : (leg.event_name || '');
+                        var avId = 'tmpl-av-' + _ti;
+                        var avatarHtml;
+                        if (isTeamMkt && evtAway && evtHome) {
+                            var _is1innLeg = mkt.startsWith('1inn_');
+                            var logoA = dkTeamLogo(evtAway, leg.sport) || dkTeamLogo(evtAway.split(' ').pop(), leg.sport) || (_is1innLeg ? 'https://a.espncdn.com/i/teamlogos/mlb/500/' + evtAway.toLowerCase() + '.png' : null);
+                            var logoB = dkTeamLogo(evtHome, leg.sport) || dkTeamLogo(evtHome.split(' ').pop(), leg.sport) || (_is1innLeg ? 'https://a.espncdn.com/i/teamlogos/mlb/500/' + evtHome.toLowerCase() + '.png' : null);
+                            var initA = evtAway.replace(/\s+/g,'').slice(0,2).toUpperCase();
+                            var initB = evtHome.replace(/\s+/g,'').slice(0,2).toUpperCase();
+                            var _psl = function(cls, src, ini) { return src ? '<img class="' + cls + '" src="' + escHtml(src) + '" onerror="this.outerHTML=\'<span class=\\\'' + cls + ' pslip-dual-init\\\'>' + escHtml(ini) + '</span>\'">' : '<span class="' + cls + ' pslip-dual-init">' + escHtml(ini) + '</span>'; };
+                            avatarHtml = '<div class="pslip-av-dual" id="' + avId + '" style="width:40px;height:40px;flex-shrink:0;position:relative">' + _psl('pslip-dual-logo-a', logoA, initA) + _psl('pslip-dual-logo-b', logoB, initB) + '</div>';
+                        } else {
+                            avatarHtml = '<div class="parlay-slip-avatar" id="' + avId + '" style="background:hsl(' + hue + ',40%,25%)">' + escHtml(initials) + '</div>';
+                        }
+                        return '<div class="parlay-slip-pick dir-' + dir + '">' +
+                            avatarHtml +
+                            '<div class="parlay-slip-info">' +
+                                '<div class="parlay-slip-row1">' +
+                                    '<span class="parlay-slip-player">' + escHtml(leg.player_name || '') + '</span>' +
+                                    (matchup ? '<span class="parlay-slip-matchup-inline">' + escHtml(matchup) + '</span>' : '') +
+                                '</div>' +
+                                '<div class="parlay-slip-row2">' +
+                                    '<span class="parlay-slip-stat">' + escHtml(statStr) + '</span>' +
+                                    '<span class="parlay-slip-dir ' + dir + '">' + dirLabel + '</span>' +
+                                '</div>' +
+                            '</div>' +
+                        '</div>';
+                    }).join('');
+            }
             if (count === 0) {
-                body.innerHTML = '<div class="parlay-slip-empty"><div style="font-size:30px;opacity:.4">' + (parlayActiveSport === 'wnba' ? '🏀' : parlayActiveSport === 'nfl' ? '🏈' : parlayActiveSport === 'soccer' ? '⚽' : '⚾') + '</div><div style="line-height:1.5">Pick More or Less on any player to build your slip</div></div>';
+                body.innerHTML = templateHtml + '<div class="parlay-slip-empty"><div style="font-size:30px;opacity:.4">' + (parlayActiveSport === 'wnba' ? '🏀' : parlayActiveSport === 'nfl' ? '🏈' : parlayActiveSport === 'soccer' ? '⚽' : '⚾') + '</div><div style="line-height:1.5">Pick More or Less on any player to build your slip</div></div>';
             } else {
                 body.innerHTML = ids.map(function(id) {
                     var p        = findParlayPlayer(id);
@@ -10270,6 +10452,9 @@
                         } else if (p.market && p.market.startsWith('ufc_method_')) {
                             lineStr  = 'Method of Victory';
                             dirLabel = escHtml(p.stat || '');
+                        } else if (p.market === 'tennis_ml') {
+                            lineStr  = 'Match Winner';
+                            dirLabel = escHtml(p.name) + ' to Win';
                         } else {
                             lineStr  = 'Total ' + p.line;
                             dirLabel = p.initials === 'O' ? 'Over' : 'Under';
@@ -10298,11 +10483,28 @@
                         '<button class="parlay-slip-remove" onclick="parlayRemovePick(' + id + ')">×</button>' +
                     '</div>';
                 }).join('');
+                if (templateHtml) body.innerHTML = templateHtml + body.innerHTML;
+            }
+            // Async-load headshots for non-team template legs
+            if (parlayTemplateLegs.length) {
+                parlayTemplateLegs.forEach(function(leg, ti) {
+                    var mkt = leg.market_type || '';
+                    var isTeamMkt = mkt.startsWith('team_') || mkt.startsWith('1inn_');
+                    if (!isTeamMkt && leg.player_name) {
+                        loadSlipHeadshotAsync('tmpl-av-' + ti, leg.player_name, leg.sport || 'mlb');
+                    }
+                });
             }
         }
 
         parlayUpdatePayout();
     }
+
+    window.parlayDismissTemplate = function() {
+        parlayTemplateLegs = [];
+        sessionStorage.removeItem('copy_parlay_template');
+        parlayRenderSlip();
+    };
 
     function parlayUpdatePayout() {
         var ids   = Object.keys(parlayPicks);
@@ -10314,6 +10516,18 @@
         var oddsEl   = document.getElementById('parlay-odds-line');
         var noteEl   = document.getElementById('parlay-min-note');
         var placeBtn = document.getElementById('parlay-place-btn');
+
+        // If no live picks but template legs have odds, show estimated payout
+        if (payout === null && parlayTemplateLegs.length >= 2) {
+            var legsWithOdds = parlayTemplateLegs.filter(function(l) { return l.american_odds != null; });
+            if (legsWithOdds.length >= 2) {
+                var tmplProb = legsWithOdds.reduce(function(acc, l) {
+                    return acc * parlayToProb(l.american_odds);
+                }, 1);
+                var tmplRaw = Math.min(Math.floor(effectiveStake * 0.9 * 0.70 / tmplProb), 20000);
+                payout = Math.floor((tmplRaw + 2) / 10) * 10;
+            }
+        }
 
         if (payout !== null && payEl) {
             var maxS = parlayFreePlayActive ? 3000 : parlayMaxStake();
@@ -10913,6 +11127,8 @@
                 } else if (p.market === 'team_runline') {
                     var rlSign = p.line > 0 ? '+' : '';
                     lbl = p.team + ' ' + rlSign + p.line + ' (' + oddsStr + ')';
+                } else if (p.market === 'tennis_ml') {
+                    lbl = p.name + ' to Win (' + oddsStr + ')';
                 } else {
                     lbl = p.name + ' (' + oddsStr + ')'; // e.g. "NYY @ BOS O8.5 (+110)"
                 }
@@ -11237,7 +11453,7 @@
                             '</div>' +
                         '</div>' +
                         '<div class="parlay-odds-line" id="parlay-odds-line"></div>' +
-                        '<button class="parlay-place-btn" id="parlay-place-btn" onclick="parlaysPlace()" disabled>Place Parlay</button>' +
+                        '' + // place parlay temporarily disabled
                         '<div class="parlay-min-note" id="parlay-min-note">Select 2–5 players to continue</div>' +
                     '</div>' +
                 '</div>' +
@@ -11360,6 +11576,7 @@
         document.body.style.width = '100%';
         parlayCheckVerified();
         setNavLabel('🎲 Parlays');
+        showShutdownNotice('parlays');
         // Proactively warm soccer + NFL data in the background so tabs are instant when clicked
         if (!PARLAY_PLAYERS_SOCCER.length) {
             fetch('/api/dk/soccer-props', { credentials: 'include' })
@@ -11512,6 +11729,7 @@
         setNavLabel('🎰 Casino');
         renderCasinoPanel();
         showCasinoDisclaimer();
+        showShutdownNotice('casino');
     }
 
     function hideCasinoTab() {
@@ -11541,7 +11759,7 @@
     var casinoDepositPending = null;   // { card_url, rax_requested, rax_credited }
     var casinoBusy           = false;
     var casinoLastBet        = 0;      // remembered across hands
-    var casinoGameType       = 'blackjack'; // 'blackjack' | 'mines' | 'coinflip'
+    var casinoGameType       = 'blackjack'; // 'blackjack' | 'mines' | 'coinflip' | 'crash'
     var casinoMinesGame      = null;   // active mines game state
     var casinoMinesBusy      = false;
     var casinoMinesLastBet   = 0;
@@ -11555,6 +11773,17 @@
     var casinoFlipGame    = null;   // active coinflip game state
     var casinoFlipBusy    = false;
     var casinoFlipLastBet = 0;
+
+    var crashState   = null;  // last /api/casino/crash/state response
+    var crashHistory = [];    // last 20 crashed rounds for history bar
+    var crashPoller  = null;  // setInterval ID
+    var crashRaf     = null;  // requestAnimationFrame ID
+    var CRASH_K      = 0.06; // growth constant — must match server GROWTH_K
+    var crashClockOffsetMs = 0; // client_now - server_now drift correction
+    var crashRafFrame = 0;      // frame counter — text updates throttled to every 3rd frame (~20fps)
+    var crashMyBet      = null;  // { round_id, bet_amount, auto_cashout, cashout_at, profit }
+    var crashBusy       = false; // prevents double-submit on bet/cashout
+    var crashQueuedBet  = null;  // { amount, auto_cashout } — queued to auto-place next waiting round
     var casinoFlipSide    = 'heads';
 
     var casinoMinesLastSeeds = null; // { server_seed_hash, client_seed, server_seed } — persists after game ends
@@ -11670,15 +11899,17 @@
         }
         var minesTab    = '<button class="casino-game-tab' + (casinoGameType === 'mines'    ? ' active' : '') + '" onclick="casinoSetGameType(\'mines\')">💣 Mines</button>';
         var coinflipTab = '<button class="casino-game-tab' + (casinoGameType === 'coinflip' ? ' active' : '') + '" onclick="casinoSetGameType(\'coinflip\')">🪙 Coin Flip</button>';
+        var crashTab    = '<button class="casino-game-tab' + (casinoGameType === 'crash' ? ' active' : '') + '" onclick="casinoSetGameType(\'crash\')">📈 Crash</button>';
         panel.innerHTML = [
             '<div class="casino-hdr">',
             '  <div class="casino-game-tabs">',
             '    <button class="casino-game-tab' + (casinoGameType === 'blackjack' ? ' active' : '') + '" onclick="casinoSetGameType(\'blackjack\')">🃏 Blackjack</button>',
             '    ' + minesTab,
             '    ' + coinflipTab,
+            '    ' + crashTab,
             '  </div>',
             '  <div class="casino-hdr-right">',
-            '    <button class="casino-hdr-btn dep" onclick="showCasinoModal(\'deposit\')">+ Deposit</button>',
+            // deposit button temporarily disabled
             '    <div class="casino-hdr-bal-wrap">',
             '      <span class="casino-hdr-bal-label">Balance</span>',
             '      <span class="casino-hdr-bal" id="casino-bal-display">—</span>',
@@ -11688,6 +11919,7 @@
             (casinoGameType === 'blackjack' ? '    <button class="casino-hdr-btn" onclick="window.showBlackjackHistory()" title="Game History" style="opacity:.7">📖 History</button>' : ''),
             (casinoGameType === 'mines'    ? '    <button class="casino-hdr-btn" onclick="window.showMinesHistory()"     title="Game History" style="opacity:.7">📖 History</button>' : ''),
             (casinoGameType === 'coinflip' ? '    <button class="casino-hdr-btn" onclick="window.showCoinflipHistory()"  title="Game History" style="opacity:.7">📖 History</button>' : ''),
+            (casinoGameType === 'crash'    ? '    <button class="casino-hdr-btn" onclick="window.showCrashHistory()"     title="Provably Fair History" style="opacity:.7">🔐 Fairness</button>' : ''),
             '  </div>',
             '</div>',
             '<div class="casino-main" id="casino-main"></div>',
@@ -11786,6 +12018,10 @@
             renderCoinflipMain(el);
             return;
         }
+        if (casinoGameType === 'crash') {
+            renderCrashMain(el);
+            return;
+        }
         var hasGame = casinoGame && (casinoGame.status === 'active' || casinoGame.status === 'complete');
         var fieldHTML = hasGame ? renderCasinoFieldHTML(casinoGame) : renderCasinoIdleFieldHTML();
         var ctrlHTML  = hasGame ? renderCasinoCtrlHTML(casinoGame)  : renderCasinoBetCtrlHTML();
@@ -11796,10 +12032,721 @@
 
     window.casinoSetGameType = function(type) {
         if (casinoGameType === type) return;
+        if (casinoGameType === 'crash') stopCrashPoller();
         casinoGameType = type;
         // Re-render panel header to update active tab
         renderCasinoPanel();
         casinoLoadBalance();
+    };
+
+    // ── Crash game ────────────────────────────────────────────────────────────
+
+    function crashCalcMult(startedAtSec, nowMs) {
+        var correctedMs = nowMs - crashClockOffsetMs;
+        var elapsed = Math.max(0, correctedMs / 1000 - startedAtSec);
+        return Math.min(200, Math.floor(Math.exp(CRASH_K * elapsed) * 100) / 100);
+    }
+
+    function startCrashPoller() {
+        stopCrashPoller();
+        crashPollOnce();
+        crashPoller = setInterval(crashPollOnce, 250);
+        function rafLoop() {
+            renderCrashFrame();
+            crashRaf = requestAnimationFrame(rafLoop);
+        }
+        crashRaf = requestAnimationFrame(rafLoop);
+    }
+
+    function stopCrashPoller() {
+        if (crashPoller) { clearInterval(crashPoller); crashPoller = null; }
+        if (crashRaf)    { cancelAnimationFrame(crashRaf); crashRaf = null; }
+        crashQueuedBet = null;
+    }
+
+    async function crashPollOnce() {
+        try {
+            var r = await fetch('/api/casino/crash/state');
+            var d = await r.json();
+            if (!d.ok) return;
+            if (d.server_now) crashClockOffsetMs = Date.now() - d.server_now * 1000;
+            crashState = d;
+
+            // Sync my_bet from server — handles refresh and auto-cashout/bust resolution
+            if (d.my_bet) {
+                crashMyBet = Object.assign({ round_id: d.round.id }, d.my_bet);
+            } else if (crashMyBet && crashMyBet.round_id !== d.round.id) {
+                crashMyBet = null; // new round started, no bet yet
+            }
+
+            // Auto-place queued bet when a fresh waiting round appears
+            if (d.round.status === 'waiting' && crashQueuedBet && !crashMyBet && !crashBusy) {
+                var q = crashQueuedBet;
+                crashQueuedBet = null;
+                crashBusy = true;
+                fetch('/api/casino/crash/bet', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ amount: q.amount, auto_cashout: q.auto_cashout || undefined })
+                }).then(function(res) { return res.json(); }).then(function(bd) {
+                    if (bd.ok) {
+                        crashMyBet = { round_id: bd.round_id, bet_amount: bd.amount, auto_cashout: bd.auto_cashout, cashout_at: null, profit: null };
+                        casinoBalance = bd.balance;
+                        updateCasinoBalance(bd.balance);
+                    }
+                }).catch(function(){}).finally(function() {
+                    crashBusy = false;
+                    updateCrashControls();
+                });
+            }
+
+            if (d.round.status === 'crashed' && d.round.crash_point) {
+                if (!crashHistory.find(function(h) { return h.id === d.round.id; })) {
+                    crashHistory.unshift({ id: d.round.id, crash_point: d.round.crash_point });
+                    if (crashHistory.length > 20) crashHistory.pop();
+                    updateCrashHistoryBar();
+                }
+            }
+            updateCrashBetList();
+            updateCrashControls(true); // keep button className/disabled in sync at poll rate
+        } catch(e) {}
+    }
+
+    function renderCrashFrame() {
+        var el  = document.getElementById('crash-mult-display');
+        var lbl = document.getElementById('crash-status-lbl');
+        if (!el || !crashState) return;
+        var r = crashState.round;
+        var nowMs = Date.now();
+        crashRafFrame++;
+        var textTick = (crashRafFrame % 3 === 0); // ~20fps for text updates
+
+        if (r.status === 'waiting') {
+            el.className = 'crash-mult-display';
+            if (textTick) {
+                var remaining = Math.max(0, (r.created_at + 11) - nowMs / 1000);
+                el.textContent = '1.00×';
+                if (lbl) { lbl.textContent = 'Starting in ' + remaining.toFixed(1) + 's'; lbl.style.display = ''; }
+            }
+        } else if (r.status === 'running') {
+            var mult = crashCalcMult(r.started_at, nowMs);
+            el.textContent = mult.toFixed(2) + '×';
+            el.className = 'crash-mult-display running';
+            if (lbl) lbl.style.display = 'none';
+            // Live cashout button payout — only text, no disabled/className mutations
+            if (textTick && !crashBusy && crashMyBet && crashMyBet.round_id === r.id && crashMyBet.cashout_at === null) {
+                var coBtn = document.getElementById('crash-action-btn');
+                if (coBtn && !coBtn.style.opacity) { // skip if instant-feedback dim is active
+                    var livePay = Math.floor((crashMyBet.bet_amount || 0) * mult);
+                    coBtn.textContent = 'Cash Out · ' + livePay.toLocaleString() + ' Rax';
+                }
+            }
+            // Instant auto-cashout detection at 60fps — show result before next server poll
+            if (crashMyBet && crashMyBet.round_id === r.id &&
+                    crashMyBet.cashout_at === null && crashMyBet.auto_cashout !== null &&
+                    mult >= crashMyBet.auto_cashout) {
+                var co = crashMyBet.auto_cashout;
+                crashMyBet.cashout_at = co;
+                crashMyBet.profit = Math.floor(crashMyBet.bet_amount * co) - crashMyBet.bet_amount;
+                var wrap = document.querySelector('.crash-canvas-wrap');
+                if (wrap && !wrap.querySelector('.crash-cashout-popup')) {
+                    var pop = document.createElement('div');
+                    pop.className = 'crash-cashout-popup';
+                    pop.innerHTML =
+                        '<div class="mines-popup-mult">' + co.toFixed(2) + '×</div>' +
+                        '<div class="mines-popup-line"></div>' +
+                        '<div class="mines-popup-amount">' + RAX_ICON_LG + (crashMyBet.profit + crashMyBet.bet_amount).toLocaleString() + '</div>';
+                    wrap.appendChild(pop);
+                    setTimeout(function() { if (pop.parentNode) pop.parentNode.removeChild(pop); }, 2500);
+                }
+            }
+        } else if (r.status === 'crashed') {
+            el.textContent = r.crash_point.toFixed(2) + '×';
+            el.className = 'crash-mult-display crashed';
+            if (lbl) { lbl.textContent = 'Crashed'; lbl.style.display = ''; }
+        }
+        // NOTE: updateCrashControls() intentionally NOT called here — DOM mutations in RAF
+        // block touch events. It runs from crashPollOnce (250ms) and action finally blocks.
+        drawCrashCanvas();
+    }
+
+    function updateCrashHistoryBar() {
+        var bar = document.getElementById('crash-history-bar');
+        if (!bar || !crashHistory.length) return;
+        bar.innerHTML = crashHistory.map(function(h) {
+            var green = h.crash_point >= 2;
+            return '<span class="crash-pill' + (green ? ' green' : '') + '">' + h.crash_point.toFixed(2) + '×</span>';
+        }).join('');
+    }
+
+    function updateCrashBetList() {
+        var el = document.getElementById('crash-bet-list');
+        if (!el || !crashState) return;
+        var bets = crashState.bets || [];
+        if (!bets.length) { el.innerHTML = '<div class="crash-bet-empty">Waiting for bets…</div>'; return; }
+        el.innerHTML = bets.map(function(b) {
+            var cashed = b.cashout_at && !b.busted;
+            var bust   = b.busted;
+            return '<div class="crash-bet-row' + (cashed ? ' cashed' : bust ? ' bust' : '') + '">' +
+                '<span class="crash-bet-user">' + escHtml(b.username) + '</span>' +
+                (b.amount !== null ? '<span class="crash-bet-amt">' + Number(b.amount).toLocaleString() + ' Rax</span>' : '') +
+                (cashed ? '<span class="crash-bet-cashout">' + b.cashout_at.toFixed(2) + '×</span>' : '') +
+                '</div>';
+        }).join('');
+    }
+
+    function drawCrashCanvas() {
+        var canvas = document.getElementById('crash-canvas');
+        if (!canvas) return;
+        var ctx = canvas.getContext('2d');
+        var W = canvas.clientWidth || canvas.offsetWidth;
+        var H = canvas.clientHeight || canvas.offsetHeight;
+        if (!W || !H) return;
+        if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
+        ctx.clearRect(0, 0, W, H);
+
+        if (!crashState) return;
+        var r = crashState.round;
+        var crashed = r.status === 'crashed';
+
+        if (r.status === 'waiting') {
+            ctx.beginPath();
+            ctx.arc(28, H - 20, 5, 0, Math.PI * 2);
+            ctx.fillStyle = '#3dcdb4';
+            ctx.fill();
+            return;
+        }
+
+        // When crashed: derive elapsed from crash_point (ln(cp)/K) so the curve stops exactly
+        // at the apex with no flat horizontal tail caused by integer crashed_at overshoot.
+        var currentMult, elapsed;
+        if (crashed) {
+            currentMult = r.crash_point;
+            elapsed     = Math.log(Math.max(1.001, currentMult)) / CRASH_K;
+        } else {
+            elapsed     = Math.max(0.1, Date.now() / 1000 - r.started_at);
+            currentMult = Math.min(200, Math.exp(CRASH_K * elapsed));
+        }
+
+        var maxT = Math.max(elapsed * 1.08, 5);
+        var maxM = Math.max(currentMult * 1.2, 2);
+
+        var PAD_L = 36, PAD_B = 20, PAD_R = 12, PAD_T = 20;
+        var gW = W - PAD_L - PAD_R;
+        var gH = H - PAD_T - PAD_B;
+
+        function tx(t)    { return PAD_L + (t / maxT) * gW; }
+        function ty(mult) { return H - PAD_B - ((Math.max(mult, 1) - 1) / (maxM - 1)) * gH; }
+
+        var steps = Math.max(120, Math.floor(elapsed * 30));
+        var pts = [];
+        for (var i = 0; i <= steps; i++) {
+            var t = (i / steps) * elapsed;
+            pts.push([tx(t), ty(Math.exp(CRASH_K * t))]);
+        }
+
+        // Filled gradient area
+        var grad = ctx.createLinearGradient(0, PAD_T, 0, H - PAD_B);
+        if (crashed) {
+            grad.addColorStop(0, 'rgba(220,60,60,0.30)');
+            grad.addColorStop(1, 'rgba(220,60,60,0.02)');
+        } else {
+            grad.addColorStop(0, 'rgba(61,205,180,0.22)');
+            grad.addColorStop(1, 'rgba(61,205,180,0.02)');
+        }
+        ctx.beginPath();
+        ctx.moveTo(pts[0][0], H - PAD_B);
+        for (var j = 0; j < pts.length; j++) ctx.lineTo(pts[j][0], pts[j][1]);
+        ctx.lineTo(pts[pts.length - 1][0], H - PAD_B);
+        ctx.closePath();
+        ctx.fillStyle = grad;
+        ctx.fill();
+
+        // Curve stroke
+        ctx.beginPath();
+        ctx.moveTo(pts[0][0], pts[0][1]);
+        for (var k = 1; k < pts.length; k++) ctx.lineTo(pts[k][0], pts[k][1]);
+        ctx.strokeStyle = crashed ? '#e55' : '#3dcdb4';
+        ctx.lineWidth = 2.5;
+        ctx.lineJoin = 'round';
+        ctx.stroke();
+
+        // Tip dot
+        var last = pts[pts.length - 1];
+        ctx.beginPath();
+        ctx.arc(last[0], last[1], 6, 0, Math.PI * 2);
+        ctx.fillStyle = crashed ? '#e55' : '#fff';
+        ctx.fill();
+
+        // Y-axis grid labels
+        ctx.fillStyle = 'rgba(160,175,190,0.45)';
+        ctx.font = '11px system-ui, sans-serif';
+        ctx.textAlign = 'right';
+        var yMarks = [1, 1.5, 2, 3, 5, 10, 20, 50, 100, 200];
+        for (var n = 0; n < yMarks.length; n++) {
+            var m2 = yMarks[n];
+            if (m2 > maxM) break;
+            var yy = ty(m2);
+            ctx.fillText(m2 + '×', PAD_L - 4, yy + 4);
+            ctx.strokeStyle = 'rgba(160,175,190,0.07)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(PAD_L, yy);
+            ctx.lineTo(W - PAD_R, yy);
+            ctx.stroke();
+        }
+    }
+
+    function updateCrashControls(forceText) {
+        var btn   = document.getElementById('crash-action-btn');
+        var netEl = document.getElementById('crash-net-gain-val');
+        var pcEl  = document.getElementById('crash-player-count');
+        var twEl  = document.getElementById('crash-total-wagered');
+        if (!btn || !crashState) return;
+        if (btn.style.opacity) btn.style.opacity = ''; // reset instant-feedback dim
+        // Reset split layout by default — individual states opt in below
+        var splitNext = document.getElementById('crash-split-next');
+        if (splitNext) splitNext.style.display = 'none';
+
+        var r     = crashState.round;
+        var my    = crashMyBet;
+        var nowMs = Date.now();
+
+        // Net gain preview (amount × cashout_at - amount)
+        if (netEl) {
+            var amtInp = document.getElementById('crash-bet-amt');
+            var coInp  = document.getElementById('crash-cashout-at');
+            var preAmt = amtInp ? (parseInt(amtInp.value, 10) || 0) : 0;
+            var preCo  = coInp  ? (parseFloat(coInp.value)    || 2.0) : 2.0;
+            var gain   = Math.max(0, Math.floor(preAmt * preCo) - preAmt);
+            netEl.textContent = '+' + gain.toLocaleString() + ' Rax';
+        }
+
+        // Player count and total wagered from visible bets
+        var bets = crashState.bets || [];
+        if (pcEl) pcEl.textContent = bets.length;
+        if (twEl) {
+            var total = bets.reduce(function(s, b) { return s + (b.amount || 0); }, 0);
+            twEl.textContent = total.toLocaleString();
+        }
+
+        // Inputs editable when: waiting (no bet) OR running with no active bet and not yet queued
+        var noActiveBet = !(my && my.round_id === r.id);
+        var canBet = (r.status === 'waiting' && noActiveBet) ||
+                     (r.status === 'running' && noActiveBet && !crashQueuedBet);
+        var amtInp2 = document.getElementById('crash-bet-amt');
+        var coInp2  = document.getElementById('crash-cashout-at');
+        var coChk2  = document.getElementById('crash-co-enabled');
+        var coWrap2 = document.getElementById('crash-co-input-wrap');
+        var halfBtn = document.querySelector('.crash-ctrl-half');
+        var dblBtn  = document.querySelector('.crash-ctrl-double');
+        if (amtInp2) amtInp2.disabled = !canBet;
+        if (coChk2)  coChk2.disabled  = !canBet;
+        var coEnabled = coChk2 && coChk2.checked;
+        if (coInp2)  coInp2.disabled  = !canBet || !coEnabled;
+        if (halfBtn) halfBtn.disabled  = !canBet;
+        if (dblBtn)  dblBtn.disabled   = !canBet;
+
+        // Button state machine
+        if (r.status === 'waiting') {
+            if (my && my.round_id === r.id) {
+                btn.textContent = 'Starting…';
+                btn.className = 'crash-action-btn btn-waiting';
+                btn.disabled = true;
+            } else {
+                btn.textContent = 'Play Next Round';
+                btn.className = 'crash-action-btn btn-bet';
+                btn.disabled = false; // crashBusy guard is in crashAction itself
+            }
+        } else if (r.status === 'running') {
+            if (my && my.round_id === r.id && my.cashout_at === null) {
+                var mult = crashCalcMult(r.started_at, nowMs);
+                btn.className = 'crash-action-btn btn-cashout';
+                btn.disabled = false; // crashBusy guard is in crashAction itself
+                var livePayout = Math.floor((my.bet_amount || 0) * mult);
+                btn.textContent = 'Cash Out · ' + livePayout.toLocaleString() + ' Rax';
+            } else if (my && my.round_id === r.id && my.cashout_at !== null) {
+                // Split button: left = cashed out indicator, right = queue next round
+                btn.textContent = 'Cashed Out ✓';
+                btn.className = 'crash-action-btn btn-waiting crash-split-l';
+                btn.disabled = true;
+                var sn = document.getElementById('crash-split-next');
+                if (sn) {
+                    sn.style.display = '';
+                    sn.className = 'crash-action-btn crash-split-r ' + (crashQueuedBet ? 'btn-queued' : 'btn-bet');
+                    sn.textContent = crashQueuedBet ? 'Queued ✓' : 'Play Next Round';
+                    sn.disabled = false;
+                }
+            } else if (crashQueuedBet) {
+                btn.textContent = 'Queued — Tap to Cancel';
+                btn.className = 'crash-action-btn btn-queued';
+                btn.disabled = false;
+            } else {
+                btn.textContent = 'Play Next Round';
+                btn.className = 'crash-action-btn btn-bet';
+                btn.disabled = false; // crashBusy guard is in crashAction itself
+            }
+        } else if (r.status === 'crashed') {
+            if (my && my.round_id === r.id && my.profit !== null && my.profit !== undefined) {
+                if (my.profit >= 0) {
+                    btn.textContent = 'Won +' + my.profit.toLocaleString() + ' Rax';
+                    btn.className = 'crash-action-btn btn-result-win';
+                } else {
+                    btn.textContent = 'Lost ' + Math.abs(my.profit).toLocaleString() + ' Rax';
+                    btn.className = 'crash-action-btn btn-result-loss';
+                }
+                btn.disabled = true;
+            } else {
+                btn.textContent = 'Next Round Starting…';
+                btn.className = 'crash-action-btn btn-waiting';
+                btn.disabled = true;
+            }
+        }
+    }
+
+    function crashQueueNextRound() {
+        if (!crashState) return;
+        if (crashQueuedBet) {
+            crashQueuedBet = null;
+        } else {
+            var amtInp = document.getElementById('crash-bet-amt');
+            var coInp  = document.getElementById('crash-cashout-at');
+            var coChk  = document.getElementById('crash-co-enabled');
+            var amount = parseInt(amtInp && amtInp.value, 10) || 0;
+            var autoCashout = (coChk && coChk.checked && coInp) ? parseFloat(coInp.value) : null;
+            if (autoCashout && (isNaN(autoCashout) || autoCashout < 1.01)) autoCashout = null;
+            var sn = document.getElementById('crash-split-next');
+            if (amount < 10 || amount > 5000) {
+                if (sn) { sn.textContent = 'Bet: 10–5,000 Rax'; setTimeout(updateCrashControls, 1500); }
+                return;
+            }
+            if (amount > casinoBalance) {
+                if (sn) { sn.textContent = 'Insufficient balance'; setTimeout(updateCrashControls, 1500); }
+                return;
+            }
+            crashQueuedBet = { amount: amount, auto_cashout: autoCashout || null };
+        }
+        updateCrashControls(true);
+    }
+
+    window.crashQueueNext = function() { crashQueueNextRound(); };
+
+    window.crashAction = function() {
+        if (crashBusy || !crashState) return;
+        var r  = crashState.round;
+        var my = crashMyBet;
+        if (r.status === 'waiting' && !(my && my.round_id === r.id)) {
+            crashPlaceBet();
+        } else if (r.status === 'running' && my && my.round_id === r.id && my.cashout_at === null) {
+            crashCashout();
+        } else if (r.status === 'running' && my && my.round_id === r.id && my.cashout_at !== null) {
+            crashQueueNextRound(); // cashed out — queue next round via left-side action tap
+        } else if (r.status === 'running' && !(my && my.round_id === r.id)) {
+            if (crashQueuedBet) {
+                // Cancel queue
+                crashQueuedBet = null;
+            } else {
+                // Validate and queue bet for next round
+                var amtInp = document.getElementById('crash-bet-amt');
+                var coInp  = document.getElementById('crash-cashout-at');
+                var coChk  = document.getElementById('crash-co-enabled');
+                var amount = parseInt(amtInp && amtInp.value, 10) || 0;
+                var autoCashout = (coChk && coChk.checked && coInp) ? parseFloat(coInp.value) : null;
+                if (autoCashout && (isNaN(autoCashout) || autoCashout < 1.01)) autoCashout = null;
+                var btn = document.getElementById('crash-action-btn');
+                if (amount < 10 || amount > 5000) {
+                    if (btn) { btn.textContent = 'Bet: 10–5,000 Rax'; setTimeout(updateCrashControls, 1500); }
+                    return;
+                }
+                if (amount > casinoBalance) {
+                    if (btn) { btn.textContent = 'Insufficient balance'; setTimeout(updateCrashControls, 1500); }
+                    return;
+                }
+                crashQueuedBet = { amount: amount, auto_cashout: autoCashout || null };
+            }
+            updateCrashControls();
+        }
+    };
+
+    async function crashPlaceBet() {
+        var _btn0 = document.getElementById('crash-action-btn');
+        if (_btn0) { _btn0.textContent = 'Placing…'; _btn0.style.opacity = '0.7'; }
+        var amtInp = document.getElementById('crash-bet-amt');
+        var coInp  = document.getElementById('crash-cashout-at');
+        var coChk  = document.getElementById('crash-co-enabled');
+        var amount = parseInt(amtInp && amtInp.value, 10) || 0;
+        var autoCashout = (coChk && coChk.checked && coInp) ? parseFloat(coInp.value) : null;
+        if (autoCashout && (isNaN(autoCashout) || autoCashout < 1.01)) autoCashout = null;
+
+        if (amount < 10 || amount > 5000) {
+            var btn = document.getElementById('crash-action-btn');
+            if (btn) { var orig = btn.textContent; btn.textContent = 'Bet: 10–5,000 Rax'; setTimeout(function() { if (btn) btn.textContent = orig; }, 1500); }
+            return;
+        }
+        if (amount > casinoBalance) {
+            var btn = document.getElementById('crash-action-btn');
+            if (btn) { var orig = btn.textContent; btn.textContent = 'Insufficient balance'; setTimeout(function() { if (btn) btn.textContent = orig; }, 1500); }
+            return;
+        }
+
+        crashBusy = true;
+        try {
+            var res = await fetch('/api/casino/crash/bet', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ amount: amount, auto_cashout: autoCashout || undefined })
+            });
+            var d;
+            try { d = await res.json(); } catch(_) { d = { ok: false, error: 'Server error (' + res.status + ')' }; }
+            if (!d.ok) {
+                var btn2 = document.getElementById('crash-action-btn');
+                if (btn2) { btn2.textContent = d.error || 'Error'; setTimeout(function() { if (btn2) { btn2.textContent = 'Play Next Round'; updateCrashControls(); } }, 2000); }
+                return;
+            }
+            crashMyBet = { round_id: d.round_id, bet_amount: d.amount, auto_cashout: d.auto_cashout, cashout_at: null, profit: null };
+            casinoBalance = d.balance;
+            updateCasinoBalance(d.balance);
+        } catch(e) {
+            var btn3 = document.getElementById('crash-action-btn');
+            if (btn3) { btn3.textContent = 'Try again'; setTimeout(function() { if (btn3) { btn3.textContent = 'Play Next Round'; updateCrashControls(); } }, 2000); }
+        } finally {
+            crashBusy = false;
+            updateCrashControls(true);
+        }
+    }
+
+    async function crashCashout() {
+        crashBusy = true;
+
+        // Capture tap time once — used for both optimistic mult and server request
+        var tapTime = Date.now();
+
+        // Optimistic cashout — flip button state instantly, delay popup/balance until server confirms
+        var optMult = null, optPayout = null;
+        if (crashMyBet && crashState && crashState.round.status === 'running') {
+            optMult   = crashCalcMult(crashState.round.started_at, tapTime);
+            optPayout = Math.floor(crashMyBet.bet_amount * optMult);
+            crashMyBet.cashout_at = optMult;
+            crashMyBet.profit     = optPayout - crashMyBet.bet_amount;
+            updateCrashControls(true);
+        }
+
+        try {
+            var res = await fetch('/api/casino/crash/cashout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tap_time: tapTime })
+            });
+            var d = await res.json();
+            if (!d.ok) {
+                // Round already crashed before tap — revert; poll will set final result
+                if (optMult !== null && crashMyBet) {
+                    crashMyBet.cashout_at = null;
+                    crashMyBet.profit     = null;
+                }
+                return;
+            }
+            // Server confirmed — show popup and credit balance
+            if (crashMyBet) {
+                crashMyBet.cashout_at = d.cashout_at;
+                crashMyBet.profit     = d.profit;
+            }
+            casinoBalance = d.balance;
+            updateCasinoBalance(d.balance);
+            var wrap0 = document.querySelector('.crash-canvas-wrap');
+            if (wrap0 && !wrap0.querySelector('.crash-cashout-popup')) {
+                var pop0 = document.createElement('div');
+                pop0.className = 'crash-cashout-popup';
+                pop0.innerHTML =
+                    '<div class="mines-popup-mult">' + d.cashout_at.toFixed(2) + '×</div>' +
+                    '<div class="mines-popup-line"></div>' +
+                    '<div class="mines-popup-amount">' + RAX_ICON_LG + d.payout.toLocaleString() + '</div>';
+                wrap0.appendChild(pop0);
+                setTimeout(function() { if (pop0.parentNode) pop0.parentNode.removeChild(pop0); }, 2500);
+            }
+        } catch(e) {
+            // Network error — server may have already credited balance before connection dropped.
+            // Resync from server so the display reflects actual D1 state.
+            setTimeout(casinoLoadBalance, 500);
+            if (optMult !== null && crashMyBet) {
+                crashMyBet.cashout_at = null;
+                crashMyBet.profit     = null;
+            }
+        }
+        finally { crashBusy = false; updateCrashControls(true); }
+    }
+
+    window.crashCoUp = function() {
+        var inp = document.getElementById('crash-cashout-at');
+        if (!inp) return;
+        var v = Math.round((parseFloat(inp.value) || 2.0) * 100) / 100;
+        inp.value = Math.min(200, Math.round((v + 1.0) * 100) / 100).toFixed(2);
+    };
+
+    window.crashCoDown = function() {
+        var inp = document.getElementById('crash-cashout-at');
+        if (!inp) return;
+        var v = Math.round((parseFloat(inp.value) || 2.0) * 100) / 100;
+        inp.value = Math.max(1.01, Math.round((v - 1.0) * 100) / 100).toFixed(2);
+    };
+
+    window.crashBetHalf = function() {
+        var inp = document.getElementById('crash-bet-amt');
+        if (!inp) return;
+        inp.value = Math.max(10, Math.floor((parseInt(inp.value, 10) || 100) / 2));
+        crashUpdateNetGain();
+    };
+
+    window.crashBetDouble = function() {
+        var inp = document.getElementById('crash-bet-amt');
+        if (!inp) return;
+        inp.value = Math.min(5000, (parseInt(inp.value, 10) || 100) * 2);
+        crashUpdateNetGain();
+    };
+
+    window.crashToggleCo = function() {
+        var chk  = document.getElementById('crash-co-enabled');
+        var wrap = document.getElementById('crash-co-input-wrap');
+        var inp  = document.getElementById('crash-cashout-at');
+        var on   = chk && chk.checked;
+        try { localStorage.setItem('crash_co_enabled', on ? '1' : '0'); } catch(_) {}
+        if (wrap) { wrap.style.opacity = on ? '1' : '0.35'; wrap.style.pointerEvents = on ? '' : 'none'; }
+        if (inp)  inp.disabled = !on;
+        crashUpdateNetGain();
+    };
+
+    window.crashUpdateNetGain = function() {
+        var netEl  = document.getElementById('crash-net-gain-val');
+        var amtInp = document.getElementById('crash-bet-amt');
+        var coInp  = document.getElementById('crash-cashout-at');
+        var chk    = document.getElementById('crash-co-enabled');
+        if (!netEl) return;
+        var amt  = amtInp ? (parseInt(amtInp.value, 10) || 0) : 0;
+        var coOn = chk && chk.checked;
+        var co   = (coOn && coInp) ? (parseFloat(coInp.value) || 2.0) : null;
+        if (!coOn || !co) { netEl.textContent = '—'; return; }
+        var gain = Math.max(0, Math.floor(amt * co) - amt);
+        netEl.textContent = '+' + gain.toLocaleString() + ' Rax';
+    };
+
+    function renderCrashMain(el) {
+        el.innerHTML =
+            '<div class="crash-wrap">' +
+            // ── Left control panel ────────────────────────────────────────
+            '<div class="crash-ctrl-panel">' +
+            '<div class="crash-inputs-row">' +
+            '  <div class="crash-ctrl-section">' +
+            '    <div class="crash-ctrl-label">Amount</div>' +
+            '    <div class="crash-ctrl-input-wrap">' +
+            '      <input type="number" id="crash-bet-amt" class="crash-ctrl-input" min="10" max="5000" step="10" value="100">' +
+            '      <span class="crash-ctrl-unit crash-rax-unit">' + RAX_ICON + '</span>' +
+            '      <button class="crash-ctrl-half" onclick="crashBetHalf()">½</button>' +
+            '      <button class="crash-ctrl-double" onclick="crashBetDouble()">2×</button>' +
+            '    </div>' +
+            '  </div>' +
+            '  <div class="crash-ctrl-section" id="crash-co-section">' +
+            '    <div class="crash-ctrl-label">' +
+            '      <label class="crash-co-toggle-wrap">' +
+            '        <input type="checkbox" id="crash-co-enabled" onchange="crashToggleCo()" style="margin-right:5px;cursor:pointer;">' +
+            '        Auto Cashout' +
+            '      </label>' +
+            '    </div>' +
+            '    <div class="crash-ctrl-input-wrap" id="crash-co-input-wrap" style="opacity:0.35;pointer-events:none;">' +
+            '      <input type="number" id="crash-cashout-at" class="crash-ctrl-input" min="1.01" max="200" step="0.01" value="2.00" disabled>' +
+            '      <div class="crash-co-arrows">' +
+            '        <button class="crash-co-arrow" onclick="crashCoUp()" ontouchend="event.preventDefault();crashCoUp()">▲</button>' +
+            '        <button class="crash-co-arrow" onclick="crashCoDown()" ontouchend="event.preventDefault();crashCoDown()">▼</button>' +
+            '      </div>' +
+            '    </div>' +
+            '  </div>' +
+            '</div>' +
+            '  <div id="crash-action-wrap">' +
+'    <button id="crash-action-btn" class="crash-action-btn btn-bet" onclick="crashAction()">Play Next Round</button>' +
+'    <button id="crash-split-next" class="crash-action-btn btn-bet crash-split-r" onclick="window.crashQueueNext()" style="display:none">Play Next Round</button>' +
+'  </div>' +
+            '  <div class="crash-player-chip">' +
+            '    <span>👥</span> <span id="crash-player-count">—</span>' +
+            '    <span class="crash-chip-sep"> · </span>' +
+            '    <span id="crash-total-wagered">—</span><span class="crash-chip-unit"> Rax wagered</span>' +
+            '  </div>' +
+            '</div>' +
+            // ── Right: history + canvas + bet list ────────────────────────
+            '<div class="crash-right">' +
+            '  <div class="crash-history-bar" id="crash-history-bar"></div>' +
+            '  <div class="crash-canvas-wrap">' +
+            '    <canvas id="crash-canvas" class="crash-canvas"></canvas>' +
+            '    <div class="crash-mult-overlay">' +
+            '      <div class="crash-mult-display" id="crash-mult-display">1.00×</div>' +
+            '      <div class="crash-status-lbl" id="crash-status-lbl">Loading…</div>' +
+            '    </div>' +
+            '  </div>' +
+            '  <div class="crash-bet-list" id="crash-bet-list"><div class="crash-bet-empty">Loading…</div></div>' +
+            '</div>' +
+            '</div>';
+
+        // iOS WebKit: click on text nodes inside <button> can silently miss;
+        // Restore auto-cashout toggle preference from localStorage
+        try {
+            var coSaved = localStorage.getItem('crash_co_enabled');
+            if (coSaved === '1') {
+                var coChkInit = document.getElementById('crash-co-enabled');
+                if (coChkInit) { coChkInit.checked = true; window.crashToggleCo(); }
+            }
+        } catch(_) {}
+
+        // touchend on the element itself is always reliable.
+        var _actionBtn = document.getElementById('crash-action-btn');
+        if (_actionBtn) {
+            _actionBtn.addEventListener('touchend', function(e) {
+                e.preventDefault();
+                window.crashAction();
+            }, { passive: false });
+        }
+        var _splitNext = document.getElementById('crash-split-next');
+        if (_splitNext) {
+            _splitNext.addEventListener('touchend', function(e) {
+                e.preventDefault();
+                window.crashQueueNext();
+            }, { passive: false });
+        }
+
+        // Pre-load history, then start live poller
+        fetch('/api/casino/crash/history').then(function(r) { return r.json(); }).then(function(d) {
+            if (d.ok && d.rounds && d.rounds.length) {
+                crashHistory = d.rounds.map(function(r) { return { id: r.id, crash_point: r.crash_point }; });
+                updateCrashHistoryBar();
+            }
+        }).catch(function(){}).finally(function() {
+            startCrashPoller();
+        });
+    }
+
+    window.showCrashHistory = function() {
+        var overlay = document.getElementById('casino-modal');
+        var content = document.getElementById('casino-modal-content');
+        var title   = document.getElementById('casino-modal-title');
+        if (!overlay || !content) return;
+        if (title) title.textContent = 'Provably Fair — Last Rounds';
+        content.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px 0">Loading…</p>';
+        overlay.style.display = 'flex';
+        fetch('/api/casino/crash/history').then(function(r) { return r.json(); }).then(function(d) {
+            if (!d.ok || !d.rounds.length) { content.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px 0">No completed rounds yet.</p>'; return; }
+            content.innerHTML = '<div style="overflow-x:auto">' +
+                '<table style="width:100%;border-collapse:collapse;font-size:12px">' +
+                '<thead><tr style="color:var(--muted);border-bottom:1px solid var(--border2)">' +
+                '<th style="padding:6px 8px;text-align:left">Round</th>' +
+                '<th style="padding:6px 8px;text-align:left">Crashed At</th>' +
+                '<th style="padding:6px 8px;text-align:left;font-size:10px">Server Seed (verify)</th>' +
+                '</tr></thead><tbody>' +
+                d.rounds.map(function(r) {
+                    return '<tr style="border-bottom:1px solid var(--border2)">' +
+                        '<td style="padding:6px 8px;color:var(--muted)">#' + r.id + '</td>' +
+                        '<td style="padding:6px 8px;font-weight:700;color:' + (r.crash_point >= 2 ? '#3dcdb4' : '#e55') + '">' + r.crash_point.toFixed(2) + '×</td>' +
+                        '<td style="padding:6px 8px;font-family:monospace;font-size:10px;color:var(--muted);word-break:break-all">' + escHtml(r.server_seed) + '</td>' +
+                        '</tr>';
+                }).join('') +
+                '</tbody></table></div>';
+        }).catch(function() { content.innerHTML = '<p style="color:#e55;text-align:center;padding:20px 0">Failed to load history.</p>'; });
     };
 
     // ── Idle state (no active game) ───────────────────────────────────────────
@@ -13743,6 +14690,29 @@
     };
 
     // ── Casino Disclaimer ─────────────────────────────────────────────────────
+    function showShutdownNotice(section) {
+        var existing = document.querySelector('.shutdown-notice-overlay');
+        if (existing) return;
+
+        var overlay = document.createElement('div');
+        overlay.className = 'shutdown-notice-overlay casino-disclaimer-overlay';
+        overlay.style.cssText = 'pointer-events:all';
+
+        var modal = document.createElement('div');
+        modal.className = 'casino-disclaimer-modal';
+        var label = section === 'parlays' ? 'Parlays' : 'Casino';
+        modal.innerHTML =
+            '<div class="casino-disclaimer-icon">🚫</div>' +
+            '<h2 class="casino-disclaimer-title">' + label + ' Temporarily Shut Down</h2>' +
+            '<div class="casino-disclaimer-body">' +
+                '<p>RaxEdge ' + label + ' is temporarily unavailable. We\'re working on getting it back.</p>' +
+                '<p style="margin-top:10px">If you want a chance at it coming back, DM <strong>@louis</strong> or <strong>@mod</strong> on Real Sports and let them know.</p>' +
+            '</div>';
+
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+    }
+
     function showCasinoDisclaimer() {
         try { if (sessionStorage.getItem('casino-disclaimer-seen')) return; } catch(e) {}
         var existing = document.querySelector('.casino-disclaimer-overlay');
@@ -13879,6 +14849,8 @@
     var otdSuggestGlobalLevel = 5; // global rarity (Legendary 1 default)
     var otdSuggestMyPassLevel = null; // null = use actual RS pass levels; number = override
     var otdSuggestShowAllPasses = false; // expand owned passes beyond top 15
+    var otdRemoveMode = false; // toggle: click a pass to exclude it from coverage
+    var otdExcludedPasses = new Set(); // "id|season" strings excluded from coverage calc
 
     function loadOtdSuggestions() {
         var errEl = document.getElementById('otd-suggest-err');
@@ -13909,7 +14881,8 @@
         otdSuggestData = null;
         otdSuggestOpenOverlap = null;
         renderOtdSuggest();
-        var suggestUrl = '/api/real/otd?action=suggest&sport=' + encodeURIComponent(otdSuggestSport) + '&userId=' + encodeURIComponent(otdSuggestUser.id);
+        var suggestUrl = '/api/real/otd?action=suggest&sport=' + encodeURIComponent(otdSuggestSport) + '&userId=' + encodeURIComponent(otdSuggestUser.id) + '&claims=' + otdSuggestClaimLimit;
+        if (otdExcludedPasses.size > 0) suggestUrl += '&exclude=' + encodeURIComponent(Array.from(otdExcludedPasses).sort().join(','));
         fetch(suggestUrl, { credentials: 'same-origin' })
             .then(function(r) { return r.json(); })
             .then(function(d) {
@@ -13921,6 +14894,7 @@
                     return;
                 }
                 otdSuggestData = d;
+                otdRemoveMode = false; // exit remove mode after fresh load
                 // Init per-card rarity to Legendary 1 (value=5) if not already set
                 (d.suggestions || []).forEach(function(s) { if (otdSuggestLevels[s.id] === undefined) otdSuggestLevels[s.id] = 5; });
                 renderOtdSuggest();
@@ -13931,6 +14905,12 @@
                 var e2 = document.getElementById('otd-suggest-err');
                 if (e2) { e2.textContent = 'Failed to load — try again'; e2.style.display = ''; }
             });
+    }
+
+    function otdToggleExclude(key) {
+        if (otdExcludedPasses.has(key)) otdExcludedPasses.delete(key);
+        else otdExcludedPasses.add(key);
+        renderOtdSuggest();
     }
 
     function otdSuggestSetLevel(id, level) {
@@ -14018,29 +14998,44 @@
 
         // Owned passes section
         var ownedHtml = '<div style="margin-bottom:18px">' +
-            '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
                 '<span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Your ' + (SPORT_LABELS[otdSuggestSport] || 'Sport') + ' Passes</span>' +
-                '<span style="font-size:11px;color:var(--muted)">' + d.coveredDays + (otdSuggestSport === 'ufc' ? ' fight' : ' game') + ' days · ' + RAX_ICON + ownedTotal.toLocaleString() + '</span>' +
+                '<div style="display:flex;align-items:center;gap:10px">' +
+                    '<span style="font-size:11px;color:var(--muted)">' + d.coveredDays + (otdSuggestSport === 'ufc' ? ' fight' : ' game') + ' days · ' + RAX_ICON + ownedTotal.toLocaleString() + '</span>' +
+                    '<button onclick="otdRemoveMode=!otdRemoveMode;renderOtdSuggest()" title="Remove passes from coverage" style="background:' + (otdRemoveMode ? '#ef444418' : 'var(--bg3)') + ';border:1px solid ' + (otdRemoveMode ? '#ef4444' : 'var(--border2)') + ';border-radius:6px;color:' + (otdRemoveMode ? '#ef4444' : 'var(--muted)') + ';font-family:var(--sans);font-size:11px;font-weight:700;padding:3px 9px;cursor:pointer">' + (otdRemoveMode ? '✕ Done' : '− Remove') + '</button>' +
+                '</div>' +
             '</div>';
         if (d.ownedPasses.length === 0) {
             ownedHtml += '<div style="font-size:13px;color:var(--muted2)">No ' + (SPORT_LABELS[otdSuggestSport] || 'sport') + ' passes found for this user.</div>';
         } else {
-            var sortedPasses = d.ownedPasses.filter(function(p) { return (p.level != null ? p.level : 1) > 1; }).sort(function(a, b) {
-                var lvDiff = (b.level != null ? b.level : 1) - (a.level != null ? a.level : 1);
-                return lvDiff !== 0 ? lvDiff : (b.totalEarnings || 0) - (a.totalEarnings || 0);
+            var sortedPasses = d.ownedPasses.slice().sort(function(a, b) {
+                return (b.boostedEarnings || 0) - (a.boostedEarnings || 0);
             });
             var displayPasses = otdSuggestShowAllPasses ? sortedPasses : sortedPasses.slice(0, 15);
             ownedHtml += '<div style="display:flex;flex-wrap:wrap;gap:6px">' +
                 displayPasses.map(function(p) {
-                    var lv = p.level != null ? p.level : 1;
-                    var rc = otdRarityColor(lv);
-                    var earnHtml = lv === 0
-                        ? '<span style="color:#22c55e66;font-family:var(--mono);font-size:11px">' + RAX_ICON + '0</span>' +
-                          (p.baseEarnings ? '<span style="color:var(--muted2);font-family:var(--mono);font-size:10px">(' + Math.round(p.baseEarnings).toLocaleString() + ')</span>' : '')
-                        : '<span style="color:#22c55e;font-family:var(--mono);font-size:11px">' + RAX_ICON + (p.totalEarnings || 0).toLocaleString() + '</span>';
+                    var lv = p.level || 0;
+                    var passKey = p.id + '|' + p.season;
+                    var isExcluded = otdExcludedPasses.has(passKey);
+                    var nameColor = lv >= 20 ? '#f472b6'
+                        : lv >= 10 ? '#facc15'
+                        : lv >= 5  ? '#c084fc'
+                        : lv === 4 ? '#f87171'
+                        : lv === 3 ? '#60a5fa'
+                        : lv === 2 ? '#4ade80'
+                        : lv === 1 ? '#60a5fa'
+                        : 'var(--muted)';
                     var seasonTag = p.season ? '<span style="font-size:9px;color:var(--muted2);margin-left:2px">(' + escHtml(otdFormatSeason(otdSuggestSport, p.season)) + ')</span>' : '';
-                    return '<span style="display:inline-flex;align-items:center;gap:5px;background:' + rc + '22;border:1px solid ' + rc + '66;border-radius:20px;padding:3px 10px;font-size:12px;color:var(--fg)">' +
-                        escHtml(p.name) + seasonTag + earnHtml +
+                    var earnHtml = p.missingD1
+                        ? '<span style="color:var(--muted2);font-size:10px;margin-left:2px">no data</span>'
+                        : (p.boostedEarnings ? '<span style="color:#22c55e;font-family:var(--mono);font-size:11px">' + RAX_ICON + Math.round(p.boostedEarnings).toLocaleString() + '</span>' : '');
+                    var bg = isExcluded ? '#ef444415' : (p.missingD1 ? 'var(--bg3)' : nameColor + '18');
+                    var border = isExcluded ? '#ef444455' : (p.missingD1 ? 'var(--border2)' : nameColor + '55');
+                    var clickAttr = otdRemoveMode ? ' onclick="otdToggleExclude(\'' + passKey.replace(/'/g, '') + '\')" style="display:inline-flex;align-items:center;gap:5px;background:' + bg + ';border:1px solid ' + border + ';border-radius:20px;padding:3px 10px;font-size:12px;cursor:pointer;opacity:' + (isExcluded ? '0.5' : '1') + ';' + (isExcluded ? 'text-decoration:line-through' : '') + '"'
+                        : ' style="display:inline-flex;align-items:center;gap:5px;background:' + bg + ';border:1px solid ' + border + ';border-radius:20px;padding:3px 10px;font-size:12px"';
+                    return '<span' + clickAttr + '>' +
+                        (isExcluded ? '<span style="color:#ef4444;font-size:10px">✕</span>' : '') +
+                        '<span style="color:' + (isExcluded ? '#ef4444' : nameColor) + ';font-weight:600">' + escHtml(p.name) + '</span>' + seasonTag + earnHtml +
                     '</span>';
                 }).join('') +
                 (sortedPasses.length > 15
@@ -14048,6 +15043,13 @@
                         (otdSuggestShowAllPasses ? 'Show less' : 'Show all ' + sortedPasses.length) + '</button>'
                     : '') +
             '</div>';
+            if (otdExcludedPasses.size > 0) {
+                ownedHtml += '<div style="display:flex;align-items:center;gap:10px;margin-top:10px;padding:8px 12px;background:#ef444410;border:1px solid #ef444430;border-radius:8px">' +
+                    '<span style="font-size:12px;color:#ef4444;font-weight:600">' + otdExcludedPasses.size + ' pass' + (otdExcludedPasses.size > 1 ? 'es' : '') + ' removed from coverage</span>' +
+                    '<button onclick="loadOtdSuggestions()" style="background:#ef4444;border:none;border-radius:6px;color:#fff;font-family:var(--sans);font-size:11px;font-weight:700;padding:4px 12px;cursor:pointer">Update Suggestions</button>' +
+                    '<button onclick="otdExcludedPasses.clear();renderOtdSuggest()" style="background:transparent;border:1px solid #ef444455;border-radius:6px;color:#ef4444;font-family:var(--sans);font-size:11px;padding:4px 10px;cursor:pointer">Clear</button>' +
+                '</div>';
+            }
         }
         ownedHtml += '</div>';
 
@@ -14079,7 +15081,7 @@
                     '<span style="font-size:10px;color:var(--muted2)">Claims/day:</span>' +
                     [2,3].map(function(n) {
                         var active = otdSuggestClaimLimit === n;
-                        return '<button onclick="otdSuggestClaimLimit=' + n + ';renderOtdSuggest()" style="background:' + (active ? 'var(--accent)' : 'var(--bg3)') + ';border:1px solid ' + (active ? 'var(--accent)' : 'var(--border2)') + ';border-radius:4px;color:' + (active ? '#fff' : 'var(--muted)') + ';font-family:var(--sans);font-size:10px;font-weight:700;padding:3px 8px;cursor:pointer">' + n + '</button>';
+                        return '<button onclick="otdSuggestClaimLimit=' + n + ';loadOtdSuggestions()" style="background:' + (active ? 'var(--accent)' : 'var(--bg3)') + ';border:1px solid ' + (active ? 'var(--accent)' : 'var(--border2)') + ';border-radius:4px;color:' + (active ? '#fff' : 'var(--muted)') + ';font-family:var(--sans);font-size:10px;font-weight:700;padding:3px 8px;cursor:pointer">' + n + '</button>';
                     }).join('') +
                 '</div>' +
             '</div>' +
@@ -14126,9 +15128,15 @@
                 }, 0);
             }
             // Re-sort by rarity-adjusted unique earnings so the order matches what's shown on cards
+            // For upgrades: net = uniqueEarnings × (newMult - currentMult)
             function _uniqueRax(s) {
                 var lv = otdSuggestLevels[s.id] !== undefined ? otdSuggestLevels[s.id] : otdSuggestGlobalLevel;
                 var m = _sMult[lv] || 1;
+                if (s.isUpgrade) {
+                    var curM = _sMult[s.currentLevel] || 1;
+                    var gain = m - curM;
+                    return gain <= 0 ? -1 : Math.round((s.uniqueEarnings || 0) * gain);
+                }
                 return Math.round((s.totalEarnings || 0) * m) - computeDisplacementWasted(s, otdSuggestClaimLimit, m);
             }
             var sorted30 = d.suggestions.slice().sort(function(a, b) { return _uniqueRax(b) - _uniqueRax(a); }).slice(0, 60);
@@ -14147,10 +15155,12 @@
                 }).join('');
                 var headshotUrl = s.avatar ? 'https://media.realapp.com/assets/teams/default/large/' + s.avatar + '.webp' : '';
 
+                var upgradeScore = s.isUpgrade ? _uniqueRax(s) : 0;
                 var card = '<div style="position:relative;border-radius:10px;overflow:hidden;height:' + cardH + ';background:linear-gradient(160deg,' + rc + '55 0%,' + rc + '22 100%);border:1px solid ' + rc + '55">' +
                     // Rank badge top-left
-                    '<div style="position:absolute;top:6px;left:6px;z-index:3">' +
+                    '<div style="position:absolute;top:6px;left:6px;z-index:3;display:flex;flex-direction:column;gap:3px">' +
                         '<span style="font-size:9px;font-weight:800;color:#fff;background:rgba(0,0,0,.6);padding:2px 6px;border-radius:3px">#' + (i + 1) + '</span>' +
+                        (s.isUpgrade && upgradeScore > 0 ? '<span style="font-size:8px;font-weight:900;color:#fff;background:#f59e0b;padding:2px 6px;border-radius:3px;letter-spacing:.04em">UPGRADE</span>' : '') +
                     '</div>' +
                     // Rarity badge top-center
                     '<div style="position:absolute;top:6px;left:0;right:0;display:flex;justify-content:center;z-index:3;pointer-events:none">' +
@@ -14183,11 +15193,13 @@
                 '</div>';
 
                 // Below-card stats (compact — no inline breakdown panel)
-                var netColor = uniqueAtRarity > 400 ? '#26a69a' : uniqueAtRarity > 100 ? 'var(--accent)' : 'var(--muted)';
+                var displayScore = s.isUpgrade && upgradeScore > 0 ? upgradeScore : uniqueAtRarity;
+                var displayLabel = s.isUpgrade && upgradeScore > 0 ? '+' + RAX_ICON + displayScore.toLocaleString() + ' gain' : RAX_ICON + uniqueAtRarity.toLocaleString() + ' net';
+                var netColor = displayScore > 400 ? '#26a69a' : displayScore > 100 ? 'var(--accent)' : 'var(--muted)';
                 var belowCard = '<div style="padding:6px 2px 0">' +
                     '<div style="display:flex;justify-content:space-between;align-items:center">' +
-                        '<span style="font-size:10px;font-weight:700;color:' + netColor + '">' + RAX_ICON + uniqueAtRarity.toLocaleString() + ' net</span>' +
-                        (s.overlapDays > 0
+                        '<span style="font-size:10px;font-weight:700;color:' + netColor + '">' + displayLabel + '</span>' +
+                        (s.overlapDays > 0 && overlapAtRarity > 0
                             ? '<button onclick="otdSuggestToggleOverlap(\'' + s.id + '\')" style="background:' + (overlapOpen ? 'rgba(239,83,80,.15)' : 'var(--bg3)') + ';border:1px solid ' + (overlapOpen ? 'rgba(239,83,80,.5)' : 'var(--border2)') + ';border-radius:4px;color:' + (overlapOpen ? '#ef5350' : 'var(--muted)') + ';font-family:var(--sans);font-size:9px;font-weight:700;padding:2px 6px;cursor:pointer">−' + RAX_ICON + overlapAtRarity.toLocaleString() + ' Overlap</button>'
                             : '<span style="font-size:9px;color:var(--muted2)">no overlap</span>') +
                     '</div>' +
@@ -14227,12 +15239,12 @@
                                     ? MONTH_SHORT[parseInt(dp[1],10)-1] + ' ' + parseInt(dp[2],10) + ', 20' + String(dp[0]).slice(2)
                                     : (ev.dayDisplay || ev.day || '');
                                 var newRax = Math.round((ev.earnings || 0) * oMult);
-                                var allCards = (ev.competitors || []).map(function(c) { return { name: c.name, rax: compEffectiveEarnings(c), level: c.level, isNew: false }; }).filter(function(c) { return c.rax > 0; });
+                                var allCards = (ev.competitors || []).map(function(c) { return { name: c.name, rax: compEffectiveEarnings(c), level: c.level, isNew: false }; });
                                 allCards.push({ name: openSugg.name, rax: newRax, isNew: true });
                                 allCards.sort(function(a, b) { return b.rax - a.rax; });
                                 var isWasted = allCards.findIndex(function(c) { return c.isNew; }) >= otdSuggestClaimLimit;
                                 var borderClr = isWasted ? 'rgba(239,83,80,.45)' : 'rgba(34,197,94,.4)';
-                                var displayCards = allCards.map(function(c, idx) { return { c: c, rank: idx }; }).filter(function(d) { return d.c.rax >= 150 || d.c.isNew; });
+                                var displayCards = allCards.map(function(c, idx) { return { c: c, rank: idx }; });
                                 var rows = displayCards.map(function(d) {
                                     var c = d.c, claimed = d.rank < otdSuggestClaimLimit;
                                     var clr = claimed ? '#22c55e' : '#ef5350';
@@ -16356,6 +17368,49 @@
                     freshSyncData[s.key] = _wnbaSd;
                     return;
                 }
+                if (s.key === 'football_nfl') {
+                    var [nflRes2, nflSyncEv] = await Promise.all([
+                        fetch('/api/dk/nfl-lines', { credentials: 'same-origin' }),
+                        fetch('/api/real/sync?sport=football_nfl', { credentials: 'same-origin' }),
+                    ]);
+                    var nflData = nflRes2.ok ? await nflRes2.json() : null;
+                    var _nflSd = nflSyncEv.ok ? await nflSyncEv.json() : null;
+                    if (!nflData || !nflData.ok || !nflData.games || !nflData.games.length) return;
+                    var rows = [];
+                    nflData.games.forEach(function(game) {
+                        var gid = String(game.eventId);
+                        var pid = gid + '-h2h';
+                        var gameKey = game.awayTeam + ' @ ' + game.homeTeam;
+                        var cm = game.startMs ? new Date(game.startMs) : null;
+                        var mlMkt = (game.markets || []).find(function(m) { return m.market === 'team_ml'; });
+                        if (!mlMkt) return;
+                        [[game.awayTeam, 'A'], [game.homeTeam, 'B']].forEach(function(pair) {
+                            var teamName = pair[0], ps = pair[1];
+                            var price = ps === 'A' ? mlMkt.awayOdds : mlMkt.homeOdds;
+                            if (price == null) return;
+                            rows.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'ML', side: teamName, am: price, pt: null, pid: pid, ps: ps, gid: gid, _sport_key: 'football_nfl' });
+                        });
+                        if (game.altSpreadMap) {
+                            var spid = gid + '-spread';
+                            [[game.awayTeam, 'A'], [game.homeTeam, 'B']].forEach(function(pair) {
+                                var teamName = pair[0], ps = pair[1];
+                                rows.push({ id: spid+'-'+ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName, am: null, pt: null, pid: spid, ps: ps, gid: gid, _sport_key: 'football_nfl', _altSpreadMap: game.altSpreadMap });
+                            });
+                        }
+                        var totMkt2 = (game.markets || []).find(function(m) { return m.market === 'team_total'; });
+                        if (totMkt2 && totMkt2.overOdds && totMkt2.underOdds) {
+                            var tpid2 = gid + '-total';
+                            rows.push({ id: tpid2+'-A', game: gameKey, cm: cm, mkt: 'Total', side: 'Over',  am: totMkt2.overOdds,  pt: totMkt2.line, pid: tpid2, ps: 'A', gid: gid, _sport_key: 'football_nfl' });
+                            rows.push({ id: tpid2+'-B', game: gameKey, cm: cm, mkt: 'Total', side: 'Under', am: totMkt2.underOdds, pt: totMkt2.line, pid: tpid2, ps: 'B', gid: gid, _sport_key: 'football_nfl' });
+                        }
+                    });
+                    // Fill yourLines from sync so patchNflSpreadOdds can set r.am before computeAndCacheEv
+                    if (_nflSd) fillPredsFromSync(rows, _nflSd);
+                    patchNflSpreadOddsRows(rows);
+                    rawRowsBySport[s.key] = rows;
+                    freshSyncData[s.key] = _nflSd;
+                    return;
+                }
                 if (s.key === 'icehockey_nhl') {
                     var [nhlRes, nhlSyncEv] = await Promise.all([
                         fetch('/api/fd/nhl', { credentials: 'same-origin' }),
@@ -16449,7 +17504,11 @@
             done++; updateStatus();
             if (rawRowsBySport['soccer_fc'] && rawRowsBySport['soccer_fc'].length) {
                 var savedSportEvFc = currentSport, savedRawRowsEvFc = rawRows;
-                currentSport = 'soccer_fc'; rawRows = rawRowsBySport['soccer_fc'];
+                // Deep copy rows so fetchRealMarkets doesn't modify the live FC tab's row objects in-place.
+                // rawRowsBySport['soccer_fc'] and the FC tab's rawRows share the same object refs when the
+                // user loaded the FC tab first — mutating them here would silently overwrite the FC display.
+                var fcEvRows = rawRowsBySport['soccer_fc'].map(function(r) { return Object.assign({}, r); });
+                currentSport = 'soccer_fc'; rawRows = fcEvRows;
                 await fetchRealMarkets('soccer_fc', true);
                 rawRowsBySport['soccer_fc'] = rawRows;
                 rawRows = savedRawRowsEvFc; currentSport = savedSportEvFc;
@@ -17982,9 +19041,12 @@
                         '<button onclick="casinoWithdrawalFail(' + w.id + ',this)" style="background:none;border:1px solid #ef4444;border-radius:5px;padding:4px 10px;font-size:11px;color:#ef4444;cursor:pointer">Refund</button>';
                 }
 
+                var savedUrls = w.card_urls_parsed || [];
                 var cardHtml = hasCard
                     ? '<a href="' + escHtml(w.card_url) + '" target="_blank" rel="noopener" style="color:var(--accent);font-size:11px">Card #' + escHtml(String(w.target_card_id)) + ' ↗</a>'
-                    : '<span style="color:var(--muted2);font-size:11px">—</span>';
+                    : savedUrls.length
+                        ? savedUrls.map(function(u, i) { return '<a href="' + escHtml(u) + '" target="_blank" rel="noopener" style="color:var(--accent);font-size:11px;margin-left:' + (i ? '6px' : '0') + '">Card ' + (savedUrls.length > 1 ? (i + 1) : '') + ' ↗</a>'; }).join('')
+                        : '<span style="color:var(--muted2);font-size:11px">—</span>';
                 var noteHtml = w.notes ? '<div style="font-size:10px;color:var(--muted2);margin-top:3px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escHtml(w.notes) + '">' + escHtml(w.notes.slice(0, 80)) + '</div>' : '';
 
                 var copyBtn = '<button onclick="copyCasinoCmd(this)" data-wid="' + w.id + '" data-amount="' + (w.amount || 0) + '" data-cardurl="' + escHtml(w.card_url || '') + '" style="background:none;border:1px solid var(--border);border-radius:5px;padding:3px 8px;font-size:10px;color:var(--muted);cursor:pointer">Copy cmd</button>';
@@ -18225,6 +19287,8 @@
 
                 var cfAccess = u.coinflip_access ? 1 : 0;
                 var cfBtnId  = 'cf-access-' + u.id;
+                var crAccess = u.crash_access ? 1 : 0;
+                var crBtnId  = 'cr-access-' + u.id;
                 return '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px 16px;margin-bottom:8px">' +
                     '<div style="display:flex;align-items:center;gap:12px">' +
                         '<div style="flex:1;min-width:0;cursor:pointer" onclick="(function(el){el.style.display=el.style.display===\'\'?\'none\':\'\'})(document.getElementById(\'' + uid + '-detail\'))">' +
@@ -18235,6 +19299,7 @@
                             '<div style="font-size:15px;font-weight:800;color:var(--fg)">' + Number(u.casino_balance).toLocaleString() + ' ' + RAX + '</div>' +
                             '<div style="font-size:11px;color:var(--muted2)">' + depCount + (depCount === 1 ? ' deposit' : ' deposits') + ' · ' + Number(totalDep).toLocaleString() + ' ' + RAX + ' in</div>' +
                             '<button id="' + cfBtnId + '" data-uid="' + u.id + '" data-val="' + cfAccess + '" onclick="adminToggleCoinflipAccess(this)" style="font-size:10px;font-weight:700;padding:3px 10px;border-radius:5px;border:1.5px solid ' + (cfAccess ? 'var(--green)' : 'var(--border2)') + ';background:transparent;color:' + (cfAccess ? 'var(--green)' : 'var(--muted)') + ';cursor:pointer;font-family:var(--sans)">🪙 Coin Flip ' + (cfAccess ? 'ON' : 'OFF') + '</button>' +
+                            '<button id="' + crBtnId + '" data-uid="' + u.id + '" data-val="' + crAccess + '" onclick="adminToggleCrashAccess(this)" style="font-size:10px;font-weight:700;padding:3px 10px;border-radius:5px;border:1.5px solid ' + (crAccess ? 'var(--green)' : 'var(--border2)') + ';background:transparent;color:' + (crAccess ? 'var(--green)' : 'var(--muted)') + ';cursor:pointer;font-family:var(--sans)">📈 Crash ' + (crAccess ? 'ON' : 'OFF') + '</button>' +
                         '</div>' +
                         '<div style="color:var(--muted2);font-size:14px;flex-shrink:0;cursor:pointer" onclick="(function(el){el.style.display=el.style.display===\'\'?\'none\':\'\'})(document.getElementById(\'' + uid + '-detail\'))">▾</div>' +
                     '</div>' +
@@ -18261,6 +19326,27 @@
             if (!d.ok) { alert(d.error || 'Failed'); btn.disabled = false; return; }
             btn.dataset.val = next;
             btn.textContent = '🪙 Coin Flip ' + (next ? 'ON' : 'OFF');
+            btn.style.color       = next ? 'var(--green)' : 'var(--muted)';
+            btn.style.borderColor = next ? 'var(--green)' : 'var(--border2)';
+        } catch(e) { alert('Network error'); }
+        btn.disabled = false;
+    };
+
+    window.adminToggleCrashAccess = async function(btn) {
+        var uid  = Number(btn.dataset.uid);
+        var cur  = Number(btn.dataset.val);
+        var next = cur ? 0 : 1;
+        btn.disabled = true;
+        try {
+            var r = await fetch('/api/admin/crash-access', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: uid, value: next }),
+            });
+            var d = await r.json();
+            if (!d.ok) { alert(d.error || 'Failed'); btn.disabled = false; return; }
+            btn.dataset.val = next;
+            btn.textContent = '📈 Crash ' + (next ? 'ON' : 'OFF');
             btn.style.color       = next ? 'var(--green)' : 'var(--muted)';
             btn.style.borderColor = next ? 'var(--green)' : 'var(--border2)';
         } catch(e) { alert('Network error'); }
@@ -19383,7 +20469,10 @@
 
     function loadOdds() {
         try { posthog.capture('refresh_clicked', { sport: currentSport }); } catch(e) {}
-        loadBetsTaken(); // keep taken bets in sync across devices
+        loadBetsTaken();  // keep taken bets in sync across devices
+        loadTakenBets();  // sync Discord-marked bets into dashboard
+        if (takenSyncPoller) clearInterval(takenSyncPoller);
+        takenSyncPoller = setInterval(loadTakenBets, 30000);
         stopAllPollers();
         payoutRatios = {}; rsMarketIds = {}; rsOutcomeKeys = {};
         if (!isPro()) {
@@ -19580,6 +20669,81 @@
                     if (document.hidden) return;
                     fetchAltLinesForWNBA();
                 }, 30000);
+            });
+            return;
+        }
+
+        if (currentSport === 'football_nfl') {
+            altOdds = {};
+            dkPreGameStore = {};
+            fetch('/api/dk/nfl-lines', { credentials: 'same-origin' })
+            .then(function(r) {
+                if (r.status === 401) {
+                    dot.className = 'sdot error';
+                    stxt.textContent = 'Session expired — please log in again.';
+                    resetRefreshBtn();
+                    handleUnauthenticated();
+                    return Promise.reject('unauth');
+                }
+                return r.json();
+            })
+            .then(function(data) {
+                if (!data.ok || !data.games || !data.games.length) {
+                    rawRows = []; rsGameIds = {};
+                    dot.className = 'sdot error';
+                    stxt.textContent = 'No NFL games today';
+                    return;
+                }
+                var rows = [];
+                data.games.forEach(function(game) {
+                    var gid = String(game.eventId);
+                    var pid = gid + '-h2h';
+                    var gameKey = game.awayTeam + ' @ ' + game.homeTeam;
+                    var cm = game.startMs ? new Date(game.startMs) : null;
+                    var mlMkt = (game.markets || []).find(function(m) { return m.market === 'team_ml'; });
+                    if (!mlMkt) return;
+                    [[game.awayTeam, 'A'], [game.homeTeam, 'B']].forEach(function(pair) {
+                        var teamName = pair[0], ps = pair[1];
+                        var price = ps === 'A' ? mlMkt.awayOdds : mlMkt.homeOdds;
+                        if (price == null) return;
+                        rows.push({ id: pid+'-'+ps, game: gameKey, cm: cm, mkt: 'ML', side: teamName, am: price, pt: null, pid: pid, ps: ps, gid: gid });
+                    });
+                    if (game.altSpreadMap) {
+                        var spid = gid + '-spread';
+                        [[game.awayTeam, 'A'], [game.homeTeam, 'B']].forEach(function(pair) {
+                            var teamName = pair[0], ps = pair[1];
+                            rows.push({ id: spid+'-'+ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName, am: null, pt: null, pid: spid, ps: ps, gid: gid, _altSpreadMap: game.altSpreadMap });
+                        });
+                    }
+                    var totMkt = (game.markets || []).find(function(m) { return m.market === 'team_total'; });
+                    if (totMkt && totMkt.overOdds && totMkt.underOdds) {
+                        var tpid = gid + '-total';
+                        rows.push({ id: tpid+'-A', game: gameKey, cm: cm, mkt: 'Total', side: 'Over',  am: totMkt.overOdds,  pt: totMkt.line, pid: tpid, ps: 'A', gid: gid });
+                        rows.push({ id: tpid+'-B', game: gameKey, cm: cm, mkt: 'Total', side: 'Under', am: totMkt.underOdds, pt: totMkt.line, pid: tpid, ps: 'B', gid: gid });
+                    }
+                });
+                rawRows = rows;
+                rawRowsBySport[currentSport] = rawRows;
+                var nowStr = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+                if (rawRows.length) {
+                    dot.className = 'sdot live';
+                    stxt.textContent = 'Updated ' + nowStr + ' - ' + data.games.length + ' games - DraftKings';
+                } else {
+                    dot.className = 'sdot error';
+                    stxt.textContent = 'No NFL games today';
+                }
+            })
+            .catch(function(e) {
+                if (e === 'unauth') return;
+                rawRows = []; rsGameIds = {};
+                dot.className = 'sdot error';
+                stxt.textContent = 'Error fetching NFL data';
+            })
+            .then(function() {
+                resetRefreshBtn();
+                if (rawRows.length > 0) {
+                    fetchRealMarkets(currentSport).then(function() { patchNflSpreadOdds(); fetchExactEvForRows(currentSport); }).catch(function() { renderTable(); });
+                } else { renderTable(); }
             });
             return;
         }
@@ -19907,7 +21071,7 @@
                                     var fdAway = (fdTeams[0] || '').toLowerCase();
                                     var fdHome = (fdTeams[1] || '').toLowerCase();
                                     var found = mKeys.find(function(k) {
-                                        if (k.endsWith('__lines') || k.endsWith('__gid')) return false;
+                                        if (k.includes('__')) return false;
                                         var kBase = k.endsWith(' (2)') ? k.slice(0, -4) : k;
                                         var p = kBase.split(' @ ');
                                         if (p.length !== 2) return false;
@@ -20259,7 +21423,7 @@
         // Build resolved map identical to fetchRealMarkets: full-name game key → original Real key
         var resolvedMap = {};
         marketKeys.forEach(function(k) {
-            if (k.endsWith('__lines') || k.endsWith('__gid')) return;
+            if (k.includes('__')) return;
             // Strip " (2)" before resolving team names so the suffix doesn't corrupt abbreviation lookup
             var dhSuffix = k.endsWith(' (2)') ? ' (2)' : '';
             var kBase = dhSuffix ? k.slice(0, -4) : k;
@@ -20270,12 +21434,28 @@
             resolvedMap[k] = k;
         });
 
+        // DK uses longer city-qualified names that RS shortens (e.g. "Slavia Prague" → "Slavia")
+        var SOCCER_DK_NORM = {
+            'Slavia Prague': 'Slavia', 'Sparta Prague': 'Sparta',
+            'AC Milan': 'Milan', 'Inter Milan': 'Inter',
+            'RC Lens': 'Lens', 'Stade Rennais': 'Rennes',
+            'RB Leipzig': 'Leipzig', 'Bayer Leverkusen': 'Leverkusen',
+            'Brighton & Hove Albion': 'Brighton', 'Brighton Hove Albion': 'Brighton',
+            'Nottingham Forest': "Nott'm Forest"
+        };
+        function normDkSoccerGame(gameStr) {
+            return gameStr.split(' @ ').map(function(t) { return SOCCER_DK_NORM[t.trim()] || t.trim(); }).join(' @ ');
+        }
+
         rows.forEach(function(r) {
             var mktLabel = r.mkt === 'ML' ? 'Game Winner' : r.mkt === 'Spread' ? 'Spread' : r.mkt === 'Total' ? 'Total' : r.mkt === 'RFI' ? 'Run in 1st inning?' : null;
             if (!mktLabel) return;
 
-            // Try exact/resolved match first, then fuzzy fallback
+            // Try exact/resolved match first; for soccer also try DK-name-normalized key
             var realKey = resolvedMap[r.game];
+            if (!realKey && (r._sport_key === 'soccer_fc' || r._sport_key === 'soccer_wc' || currentSport === 'soccer_fc' || currentSport === 'soccer_wc')) {
+                realKey = resolvedMap[normDkSoccerGame(r.game)];
+            }
             // Doubleheader: try (2) and base key first; fall through to fuzzy (RS uses short nicknames)
             if (!realKey) {
                 var _dhm2 = r.game.match(/\(Game (\d+)\)/);
@@ -20302,7 +21482,7 @@
                 var fdAwayNick = nickname(fdAway);
                 var fdHomeNick = nickname(fdHome);
                 var found = marketKeys.find(function(k) {
-                    if (k.endsWith('__lines') || k.endsWith('__gid')) return false;
+                    if (k.includes('__')) return false;
                     var parts = k.split(' @ ');
                     if (parts.length !== 2) return false;
                     var ra = normSync(resolveTeamName(parts[0].trim()));
@@ -20400,51 +21580,41 @@
                 });
                 if (!match) match = isOver ? outcomes[0] : outcomes[1];
             } else if (r.mkt === 'Spread' && (r._sport_key === 'soccer_fc' || currentSport === 'soccer_fc' || r._sport_key === 'soccer_wc' || currentSport === 'soccer_wc')) {
-                // FC: find -0.5 and +0.5 outcomes — also check o.line since RS team-key substitution
-                // can strip the ±0.5 suffix from the label, but line is extracted from the raw label.
-                var fcMinusO2 = outcomes.find(function(o) {
-                    if (o.line === -0.5) return true;
-                    if (o.label && o.label.indexOf('-0.5') !== -1) return true;
-                    // RS "Match Result": "X Win" = must win outright = -0.5. Check rawLabel since team-key substitution strips "Win" from label.
-                    var chk2m = (o.rawLabel || o.label || '').toLowerCase();
-                    return chk2m.indexOf('win') !== -1 && chk2m.indexOf('win or draw') === -1 && chk2m.indexOf('draw') === -1;
+                // FC/WC: same DK-price-based matching as fetchRealMarkets pass 0d.
+                // Find drawO ("Win or Draw") and winO ("Win" only), then use DK -0.5 prices
+                // to assign — cheaper -0.5 = outright favorite = "Win" side.
+                // This avoids team name fuzzy-matching (RS uses 3-letter codes like INT, RMA).
+                var _fpsDrawO = outcomes.find(function(o) { var s = o.rawLabel || o.label || ''; return /win or draw/i.test(s) || (!/\bwin\b/i.test(s) && /draw/i.test(s)); });
+                var _fpsWinO  = outcomes.find(function(o) {
+                    if (o === _fpsDrawO) return false;
+                    var s = o.rawLabel || o.label || '';
+                    return /\bwin\b/i.test(s);
                 });
-                var fcPlusO2  = outcomes.find(function(o) {
-                    if (o.line === 0.5) return true;
-                    if (o.label && o.label.indexOf('+0.5') !== -1) return true;
-                    // RS "Match Result": "X Win or Draw" = draw counts = +0.5. Check rawLabel too.
-                    var chk2p = (o.rawLabel || o.label || '').toLowerCase();
-                    return chk2p.indexOf('win or draw') !== -1;
-                });
-                if (fcMinusO2 || fcPlusO2) {
-                    var fcTw2 = r.side.toLowerCase().split(' ').filter(function(w) { return w.length > 2; });
-                    function fcLbl2(o) {
-                        if (!o || !o.label) return false;
-                        var lbl = o.label.toLowerCase().replace(/[+-]?\d+\.?\d*\s*$/, '').trim();
-                        // Full word match
-                        if (fcTw2.some(function(w) { return lbl.indexOf(w) !== -1 || w.indexOf(lbl) !== -1; })) return true;
-                        // Abbreviation match: first token of RS label vs start of team name words
-                        var abbr = lbl.split(/\s+/)[0];
-                        if (abbr && abbr.length >= 2) { return fcTw2.some(function(w) { return w.startsWith(abbr); }); }
-                        return false;
-                    }
-                    if (fcLbl2(fcMinusO2)) {
-                        match = fcMinusO2;
-                    } else if (fcLbl2(fcPlusO2)) {
-                        match = fcPlusO2;
-                    } else if (fcMinusO2 && fcPlusO2) {
-                        // Use +0.5 prices: team with cheaper +0.5 (more likely W or D) is the +0.5 side
-                        var _hp2 = r._dkSpreads && r._dkSpreads.Home && r._dkSpreads.Home['0.5'];
-                        var _ap2 = r._dkSpreads && r._dkSpreads.Away && r._dkSpreads.Away['0.5'];
-                        if (_hp2 != null && _ap2 != null) {
-                            var homeHasPlusHalf2 = _hp2 <= _ap2;
-                            match = (r.ps === 'B') === homeHasPlusHalf2 ? fcPlusO2 : fcMinusO2;
-                        } else {
-                            match = (r.ps === 'B') ? fcPlusO2 : fcMinusO2;
-                        }
+                if (!_fpsDrawO && !_fpsWinO) {
+                    _fpsWinO  = outcomes.find(function(o) { return o.line === -0.5 || (o.label && o.label.indexOf('-0.5') !== -1); });
+                    _fpsDrawO = outcomes.find(function(o) { return o.line === 0.5  || (o.label && o.label.indexOf('+0.5') !== -1); });
+                }
+                if (_fpsDrawO && _fpsWinO) {
+                    var _fpsFcT    = r.ps === 'B' ? 'Home' : 'Away';
+                    var _fpsOppFcT = r.ps === 'B' ? 'Away' : 'Home';
+                    var _fpsMyM    = r._dkSpreads && (r._dkSpreads[_fpsFcT]    || {})['-0.5'];
+                    var _fpsOppM   = r._dkSpreads && (r._dkSpreads[_fpsOppFcT] || {})['-0.5'];
+                    if (_fpsMyM != null && _fpsOppM != null) {
+                        match = _fpsMyM <= _fpsOppM ? _fpsWinO : _fpsDrawO;
+                    } else if (_fpsMyM != null) {
+                        match = _fpsWinO; // I have -0.5 → I'm the outright favorite
+                    } else if (_fpsOppM != null) {
+                        match = _fpsDrawO; // Opponent has -0.5 → I'm the underdog
                     } else {
-                        match = fcMinusO2 || fcPlusO2;
+                        var _fpsFbAw = r._dkAwm, _fpsFbHm = r._dkHm;
+                        if (_fpsFbAw != null && _fpsFbHm != null) {
+                            match = ((_fpsFbAw <= _fpsFbHm) === (r.ps === 'A')) ? _fpsWinO : _fpsDrawO;
+                        } else {
+                            match = r.ps === 'B' ? _fpsWinO : _fpsDrawO;
+                        }
                     }
+                } else if (_fpsDrawO || _fpsWinO) {
+                    match = _fpsDrawO || _fpsWinO;
                 } else {
                     match = r.ps === 'A' ? outcomes[0] : outcomes[1];
                 }
@@ -20459,6 +21629,18 @@
                     return olNorm === cfbNorm || olNorm.indexOf(cfbNorm) !== -1 || cfbNorm.indexOf(olNorm) !== -1
                         || sideLower.split(' ').some(function(w) { return w.length > 1 && ol.indexOf(w) !== -1; });
                 });
+            } else if ((r._sport_key === 'football_nfl' || currentSport === 'football_nfl') && r.mkt === 'Spread') {
+                // NFL Spread: RS outcome labels are team abbreviations like "NE +3.5" or "SEA -3.5".
+                // resolveTeamName("NE +3.5") fails to expand the abbreviation, so generic word-match doesn't work.
+                // Match by the line value at end of label against yourLines[r.id] (already set above).
+                var nflRsLine = yourLines[r.id];
+                if (nflRsLine != null) {
+                    match = outcomes.find(function(o) {
+                        var m = (o.label || '').match(/([+-]?\d+\.?\d*)\s*$/);
+                        return m ? parseFloat(m[1]) === nflRsLine : false;
+                    });
+                }
+                if (!match) match = r.ps === 'A' ? outcomes[0] : outcomes[1];
             } else {
                 match = outcomes.find(function(o) {
                     if (!o.label) return false;
@@ -20473,19 +21655,22 @@
                 var gameStarted = r.cm && r.cm.getTime() < Date.now();
                 if (gameStarted && (pct <= 3 || pct >= 97)) return;
                 if (match.probability != null) probsExact[r.id] = match.probability;
-                // FC: use RS label sign to assign the correct DK price and store aligned pct
-                if (r.mkt === 'Spread' && (r._sport_key === 'soccer_fc' || currentSport === 'soccer_fc' || r._sport_key === 'soccer_wc' || currentSport === 'soccer_wc') && r._dkSpreads) {
+                // FC/WC: use RS label to determine ±0.5 line, always set r.pt so DK pollers use it
+                if (r.mkt === 'Spread' && (r._sport_key === 'soccer_fc' || currentSport === 'soccer_fc' || r._sport_key === 'soccer_wc' || currentSport === 'soccer_wc')) {
                     var fcOutType2 = r.ps === 'B' ? 'Home' : 'Away';
                     var rsLine2 = match.line;
-                    // Infer line from RS "Win or Draw" / "Win" labels when explicit line is missing
-                    if (rsLine2 == null && match.label) {
-                        var _rl2 = match.label.toLowerCase();
-                        rsLine2 = _rl2.indexOf('win or draw') !== -1 ? 0.5 : (_rl2.indexOf('win') !== -1 ? -0.5 : null);
+                    if (rsLine2 == null) {
+                        var _rl2 = match.rawLabel || match.label || '';
+                        rsLine2 = /win or draw/i.test(_rl2) ? 0.5 : (/\bwin\b/i.test(_rl2) ? -0.5 : /draw/i.test(_rl2) ? 0.5 : null);
                     }
-                    var dkSpr2 = (r._dkSpreads && r._dkSpreads[fcOutType2]) || {};
-                    var dkPrice3 = rsLine2 != null ? dkSpr2[String(rsLine2)] : null;
-                    if (dkPrice3 != null) { r.am = dkPrice3; r.pt = rsLine2; }
-                    if (rsLine2 != null) yourLines[r.id] = rsLine2;
+                    if (rsLine2 != null) {
+                        r.pt = rsLine2; // Always set — DK pollers read r.pt to re-apply prices
+                        if (r._dkSpreads) {
+                            var dkPrice3 = (r._dkSpreads[fcOutType2] || {})[String(rsLine2)];
+                            if (dkPrice3 != null) r.am = dkPrice3;
+                        }
+                        yourLines[r.id] = rsLine2;
+                    }
                     preds[r.id] = String(match.pct);
                 } else {
                     preds[r.id] = String(match.pct);
@@ -21733,6 +22918,25 @@
         return overrides[key] || ABBREV_MAP[key] || abbrevOrName;
     }
 
+    // Patch NFL Spread row `am` values using RS-filled yourLines + game's altSpreadMap.
+    // Must run AFTER fetchRealMarkets populates yourLines. Operates on a rows array in-place.
+    function patchNflSpreadOddsRows(rows) {
+        rows.forEach(function(r) {
+            if (r.mkt !== 'Spread' || !r._altSpreadMap) return;
+            var rsLine = yourLines[r.id];
+            if (rsLine == null) return;
+            var key = String(rsLine);
+            var odds = r.ps === 'A' ? r._altSpreadMap.away[key] : r._altSpreadMap.home[key];
+            if (odds != null) { r.am = odds; r.pt = rsLine; }
+        });
+    }
+
+    // Same as patchNflSpreadOddsRows but operates on the current rawRows (main NFL tab).
+    function patchNflSpreadOdds() {
+        patchNflSpreadOddsRows(rawRows);
+        rawRowsBySport[currentSport] = rawRows;
+    }
+
     // Fetch actual RS expected payout for ML rows via the CF payout proxy (D1-cached 30s).
     // Only runs after fetchRealMarkets has set rsMarketIds/rsOutcomeKeys. ML rows only —
     // non-ML payout values were unreliable. Sanity-checks result: discards if EV < -20%.
@@ -21924,7 +23128,7 @@
             // Build a resolved map: full name game key -> original Real key
             var resolvedMap = {};
             marketKeys.forEach(function(k) {
-                if (k.endsWith('__lines')) return;
+                if (k.includes('__')) return;
                 // Strip " (2)" before resolving team names so the suffix doesn't corrupt abbreviation lookup
                 var dhSuffix = k.endsWith(' (2)') ? ' (2)' : '';
                 var kBase = dhSuffix ? k.slice(0, -4) : k;
@@ -21948,7 +23152,7 @@
                     var fdAwayLast = _mmaLast(fdAway);
                     var fdHomeLast = _mmaLast(fdHome);
                     return marketKeys.some(function(k) {
-                        if (k.endsWith('__lines') || k.endsWith('__gid')) return false;
+                        if (k.includes('__')) return false;
                         var realTeams = k.split(' @ ');
                         if (realTeams.length !== 2) return false;
                         var rAway = norm(realTeams[0].trim());
@@ -21969,6 +23173,11 @@
             rawRows.forEach(function(r) {
                 // Try exact match first, then resolved abbreviation match
                 var realKey = resolvedMap[r.game];
+                if (!realKey && (currentSport === 'soccer_fc' || currentSport === 'soccer_wc' || (r._sport_key && (r._sport_key === 'soccer_fc' || r._sport_key === 'soccer_wc')))) {
+                    var _snNorm = { 'Slavia Prague': 'Slavia', 'Sparta Prague': 'Sparta', 'AC Milan': 'Milan', 'Inter Milan': 'Inter', 'RC Lens': 'Lens', 'Stade Rennais': 'Rennes', 'RB Leipzig': 'Leipzig', 'Bayer Leverkusen': 'Leverkusen', 'Brighton & Hove Albion': 'Brighton', 'Brighton Hove Albion': 'Brighton', 'Nottingham Forest': "Nott'm Forest" };
+                    var _normGame = r.game.split(' @ ').map(function(t) { return _snNorm[t.trim()] || t.trim(); }).join(' @ ');
+                    if (_normGame !== r.game) realKey = resolvedMap[_normGame];
+                }
 
                 // Doubleheader: FD uses "(Game N)" suffix, RS uses one key per matchup (short nicknames)
                 // Try resolved base key and (2) key first; then fall through to fuzzy.
@@ -21996,7 +23205,7 @@
                     var fdAwayLast = _mmaLast(fdAway);
                     var fdHomeLast = _mmaLast(fdHome);
                     var matched = marketKeys.find(function(k) {
-                        if (k.endsWith('__lines') || k.endsWith('__gid')) return false;
+                        if (k.includes('__')) return false;
                         var realTeams = k.split(' @ ');
                         if (realTeams.length !== 2) return false;
                         var rAway = norm(resolveTeamName(realTeams[0].trim()));
@@ -22175,78 +23384,102 @@
                     }
                 }
 
-                // Pass 0d: Soccer FC spread — find -0.5 and +0.5 outcomes by label, then match this
-                // team's name against both to determine which side RS assigned to this team.
-                // This avoids positional fallback errors when RS returns outcomes in home-first order.
-if (!match && r.mkt === 'Spread' && (sport === 'soccer_fc' || sport === 'soccer_wc')) {
-                    // Also check o.line — RS outcome label is sometimes stripped of ±0.5 by team-key substitution,
-                    // but the line field is extracted from the raw label before substitution and preserves it.
-                    var fcMinusO = outcomes.find(function(o) { return o.line === -0.5 || (o.label && o.label.indexOf('-0.5') !== -1); });
-                    var fcPlusO  = outcomes.find(function(o) { return o.line === 0.5  || (o.label && o.label.indexOf('+0.5') !== -1); });
-                    // RS 'Match Result' format: "Win or Draw" = +0.5 equiv, "Win" (only) = -0.5 equiv
-                    if (!fcMinusO && !fcPlusO) {
-                        var _wod = outcomes.find(function(o) { var chk = o.rawLabel || o.label || ''; return /win or draw/i.test(chk); });
-                        var _won = _wod ? outcomes.find(function(o) { if (o === _wod) return false; var chk = o.rawLabel || o.label || ''; return /\bwin\b/i.test(chk) && !/win or draw/i.test(chk); }) : null;
-                        if (_wod && _won) { fcPlusO = _wod; fcMinusO = _won; }
-                    }
-                    if (fcMinusO || fcPlusO) {
-                        var fcTeamLow = r.side.toLowerCase();
-                        var _wcLblAliases = { 'usa': 'united states', 'united states': 'usa', "côte d'ivoire": 'ivory coast', 'ivory coast': "côte d'ivoire", 'curaçao': 'curacao', 'curacao': 'curaçao' };
-                        var _fcGeoStop = { south: 1, north: 1, east: 1, west: 1, central: 1, new: 1 };
-                        var fcTeamWords = fcTeamLow.split(' ').filter(function(w) { return w.length > 2 && !_fcGeoStop[w]; });
-                        if (_wcLblAliases[fcTeamLow]) fcTeamWords = fcTeamWords.concat(_wcLblAliases[fcTeamLow].split(' ').filter(function(w) { return w.length > 2 && !_fcGeoStop[w]; }));
-                        function fcLabelMatch(o) {
-                            if (!o || !o.label) return false;
-                            var lbl = o.label.toLowerCase().replace(/[+-]?\d+\.?\d*\s*$/, '').trim();
-                            // Full word match
-                            if (fcTeamWords.some(function(w) { return lbl.indexOf(w) !== -1 || w.indexOf(lbl) !== -1; })) return true;
-                            // Abbreviation match: first token of RS label vs start of any team name word
-                            var abbr = lbl.split(/\s+/)[0];
-                            if (abbr && abbr.length >= 2) { return fcTeamWords.some(function(w) { return w.startsWith(abbr); }); }
-                            return false;
-                        }
-                        if (fcLabelMatch(fcMinusO)) {
-                            match = fcMinusO;
-                        } else if (fcLabelMatch(fcPlusO)) {
-                            match = fcPlusO;
-                        } else if (fcMinusO && fcPlusO) {
-                            // Use +0.5 prices: team with cheaper +0.5 (more likely W or D) is the +0.5 side
-                            var _hp = r._dkSpreads && r._dkSpreads.Home && r._dkSpreads.Home['0.5'];
-                            var _ap = r._dkSpreads && r._dkSpreads.Away && r._dkSpreads.Away['0.5'];
-                            if (_hp != null && _ap != null) {
-                                var homeHasPlusHalf = _hp <= _ap;
-                                match = (r.ps === 'B') === homeHasPlusHalf ? fcPlusO : fcMinusO;
+                // Pass 0d: Soccer FC spread — assign RS outcome to this row.
+                // For FC (Match Result market), RS has exactly two outcomes:
+                //   "X Win or Draw" (+0.5 side: team wins OR draws = doesn't lose)
+                //   "Y Win"         (-0.5 side: team must win outright)
+                // Strategy: find drawO ("Win or Draw") and winO ("Win" only), then use DK -0.5
+                // prices to determine which belongs to this row — cheaper -0.5 = outright favorite = "Win" side.
+                // This is independent of team name matching, so RS 3-letter codes (INT, RMA, etc.) work.
+                if (!match && r.mkt === 'Spread' && sport === 'soccer_fc') {
+                    var _fcDrawO = outcomes.find(function(o) { var s = o.rawLabel || o.label || ''; return /win or draw/i.test(s) || /draw/i.test(s); });
+                    var _fcWinO  = outcomes.find(function(o) {
+                        if (o === _fcDrawO) return false;
+                        var s = o.rawLabel || o.label || '';
+                        return /\bwin\b/i.test(s);
+                    });
+                    if (_fcDrawO && _fcWinO) {
+                        // Use DK -0.5 prices: cheaper -0.5 = this team must win outright = gets "Win" outcome.
+                        var _fcT    = r.ps === 'B' ? 'Home' : 'Away';
+                        var _oppFcT = r.ps === 'B' ? 'Away' : 'Home';
+                        var _fcMyM  = r._dkSpreads && (r._dkSpreads[_fcT]  || {})['-0.5'];
+                        var _fcOppM = r._dkSpreads && (r._dkSpreads[_oppFcT] || {})['-0.5'];
+                        if (_fcMyM != null && _fcOppM != null) {
+                            // Both sides have -0.5 — cheaper one is the outright favorite
+                            match = _fcMyM <= _fcOppM ? _fcWinO : _fcDrawO;
+                        } else if (_fcMyM != null) {
+                            // Only I have a -0.5 line → I'm the outright favorite → "Win" side
+                            match = _fcWinO;
+                        } else if (_fcOppM != null) {
+                            // Only opponent has -0.5 → I'm the underdog → "Win or Draw" side
+                            match = _fcDrawO;
+                        } else {
+                            // No -0.5 for either — use stored awm/hm as tiebreaker
+                            var _awFb = r._dkAwm, _hmFb = r._dkHm;
+                            if (_awFb != null && _hmFb != null) {
+                                match = ((_awFb <= _hmFb) === (r.ps === 'A')) ? _fcWinO : _fcDrawO;
                             } else {
-                                match = r.ps === 'B' ? fcPlusO : fcMinusO;
+                                match = r.ps === 'B' ? _fcWinO : _fcDrawO;
                             }
-                        } else {
-                            match = fcMinusO || fcPlusO;
                         }
-                    } else if (sport === 'soccer_wc' && outcomes.length === 2) {
-                        // WC: RS may use "X Win or Draw" / "Y Win" format with no ±0.5 labels.
-                        // "Win or Draw" = the +0.5 side (team doesn't need to win outright).
-                        // "Win" (only) = the -0.5 side (team must win outright).
-                        var _wodO = outcomes.find(function(o) { return /draw/i.test(o.rawLabel || o.label || ''); });
-                        var _wonO = _wodO ? outcomes.find(function(o) { return o !== _wodO; }) : null;
-                        if (_wodO && _wonO) {
-                            var _rTeamLow = r.side.toLowerCase();
-                            var _wcGeoStop2 = { south: 1, north: 1, east: 1, west: 1, central: 1, new: 1 };
-                            var _rWords2  = _rTeamLow.split(' ').filter(function(w) { return w.length > 2 && !_wcGeoStop2[w]; });
-                            var _wcAlias2 = ({'usa':'united states','united states':'usa','bih':'bosnia','bosnia':'bih','can':'canada','canada':'can',"côte d'ivoire":'ivory coast','ivory coast':"côte d'ivoire",'curaçao':'curacao','curacao':'curaçao','south korea':'kor','kor':'south korea','south africa':'rsa','rsa':'south africa','north macedonia':'mkd','mkd':'north macedonia','costa rica':'crc','crc':'costa rica'})[_rTeamLow] || '';
-                            if (_wcAlias2) _rWords2 = _rWords2.concat(_wcAlias2.split(' ').filter(function(w) { return w.length > 2 && !_wcGeoStop2[w]; }));
-                            function _wcLblHit(o) {
-                                if (!o || !o.label) return false;
-                                var lbl = o.label.toLowerCase();
-                                return _rWords2.some(function(w) { return lbl.indexOf(w) !== -1; });
+                    } else if (_fcDrawO || _fcWinO) {
+                        // Only one outcome identified — use it or positional
+                        var _fcSingle = _fcDrawO || _fcWinO;
+                        match = _fcSingle;
+                    } else if (outcomes.length === 2) {
+                        // No label pattern recognized — fall back to checking explicit line fields
+                        var _fcM2 = outcomes.find(function(o) { return o.line === -0.5 || (o.label && o.label.indexOf('-0.5') !== -1); });
+                        var _fcP2 = outcomes.find(function(o) { return o.line === 0.5  || (o.label && o.label.indexOf('+0.5') !== -1); });
+                        if (_fcM2 && _fcP2) {
+                            var _fcH2 = r._dkSpreads && (r._dkSpreads.Home || {})['-0.5'];
+                            var _fcA2 = r._dkSpreads && (r._dkSpreads.Away || {})['-0.5'];
+                            if (_fcH2 != null && _fcA2 != null) {
+                                match = (_fcH2 <= _fcA2) === (r.ps === 'B') ? _fcM2 : _fcP2;
+                            } else {
+                                match = r.ps === 'B' ? _fcM2 : _fcP2;
                             }
-                            if (_wcLblHit(_wodO)) { match = _wodO; }
-                            else if (_wcLblHit(_wonO)) { match = _wonO; }
-                            else { match = r.ps === 'A' ? outcomes[0] : outcomes[1]; }
                         } else {
-                            match = r.ps === 'A' ? outcomes[0] : outcomes[1];
+                            match = r.ps === 'B' ? outcomes[0] : outcomes[1];
+                        }
+                    }
+                }
+                // Pass 0d-wc: Soccer WC spread — same Win/Win-or-Draw pattern but with team name matching
+                // since WC doesn't use 3-letter codes the same way as EPL/UCL.
+                if (!match && r.mkt === 'Spread' && sport === 'soccer_wc') {
+                    var _wcMinusO = outcomes.find(function(o) { return o.line === -0.5 || (o.label && o.label.indexOf('-0.5') !== -1); });
+                    var _wcPlusO  = outcomes.find(function(o) { return o.line === 0.5  || (o.label && o.label.indexOf('+0.5') !== -1); });
+                    if (!_wcMinusO && !_wcPlusO && outcomes.length === 2) {
+                        var _wcDraw = outcomes.find(function(o) { return /draw/i.test(o.rawLabel || o.label || ''); });
+                        var _wcWin  = _wcDraw ? outcomes.find(function(o) { return o !== _wcDraw; }) : null;
+                        if (_wcDraw && _wcWin) { _wcPlusO = _wcDraw; _wcMinusO = _wcWin; }
+                    }
+                    if (_wcMinusO || _wcPlusO) {
+                        var _wcTeamLow = r.side.toLowerCase();
+                        var _wcGeoStop3 = { south: 1, north: 1, east: 1, west: 1, central: 1, new: 1 };
+                        var _wcRWords3 = _wcTeamLow.split(' ').filter(function(w) { return w.length > 2 && !_wcGeoStop3[w]; });
+                        var _wcAlias3 = ({'usa':'united states','united states':'usa','bih':'bosnia','bosnia':'bih','can':'canada','canada':'can',"côte d'ivoire":'ivory coast','ivory coast':"côte d'ivoire",'curaçao':'curacao','curacao':'curaçao','south korea':'kor','kor':'south korea','south africa':'rsa','rsa':'south africa','north macedonia':'mkd','mkd':'north macedonia','costa rica':'crc','crc':'costa rica'})[_wcTeamLow] || '';
+                        if (_wcAlias3) _wcRWords3 = _wcRWords3.concat(_wcAlias3.split(' ').filter(function(w) { return w.length > 2 && !_wcGeoStop3[w]; }));
+                        function _wcLblHit3(o) {
+                            if (!o || !o.label) return false;
+                            var lbl = o.label.toLowerCase();
+                            return _wcRWords3.some(function(w) { return lbl.indexOf(w) !== -1; });
+                        }
+                        if (_wcMinusO && _wcPlusO) {
+                            if (_wcLblHit3(_wcMinusO)) { match = _wcMinusO; }
+                            else if (_wcLblHit3(_wcPlusO)) { match = _wcPlusO; }
+                            else {
+                                var _wcHm = r._dkSpreads && (r._dkSpreads.Home || {})['-0.5'];
+                                var _wcAm = r._dkSpreads && (r._dkSpreads.Away || {})['-0.5'];
+                                if (_wcHm != null && _wcAm != null) {
+                                    match = ((_wcHm <= _wcAm) === (r.ps === 'B')) ? _wcMinusO : _wcPlusO;
+                                } else {
+                                    match = r.ps === 'B' ? _wcMinusO : _wcPlusO;
+                                }
+                            }
+                        } else {
+                            match = _wcMinusO || _wcPlusO;
                         }
                     } else {
-                        // No ±0.5 labels — positional fallback
                         match = r.ps === 'A' ? outcomes[0] : outcomes[1];
                     }
                 }
@@ -22336,35 +23569,30 @@ if (!match && r.mkt === 'Spread' && (sport === 'soccer_fc' || sport === 'soccer_
                         var pairedId = r.id.endsWith('-A') ? r.id.slice(0, -2) + '-B' : r.id.slice(0, -2) + '-A';
                         vols[pairedId] = mktData.volumeDisplay;
                     }
-                    // FC: use RS outcome label to directly pick the correct DK ±0.5 price.
-                    // RS labels each side as "TEAM -0.5" or "TEAM +0.5" — trust that sign exactly.
-                    // Never compute complements: 100 - pct gives the OPPONENT's probability, not this team's.
-                    if ((sport === 'soccer_fc' || sport === 'soccer_wc') && r.mkt === 'Spread' && r._dkSpreads) {
-                        // Use RS's actual line to look up the exact DK price at that line.
-                        // match.line is extracted from the raw RS label (e.g. "MAN UTD -1.5" → -1.5)
-                        // before any team-key substitution, so it's always correct.
+                    // FC/WC: use RS outcome label to determine the ±0.5 line and pick the correct DK price.
+                    // r.pt is ALWAYS set from RS label so subsequent DK pollers use the RS-assigned line.
+                    if ((sport === 'soccer_fc' || sport === 'soccer_wc') && r.mkt === 'Spread') {
                         var fcOutType = r.ps === 'B' ? 'Home' : 'Away';
-                        var rsLine = match.line; // e.g. -1.5, -0.5, 0.5, 1.5
-                        // WC uses "X Win or Draw" / "Y Win" labels (no ±0.5 literals).
-                        // Infer line from label: "draw" in label = +0.5, "win" only = -0.5.
-                        if (rsLine == null && (sport === 'soccer_wc' || sport === 'soccer_fc')) {
-                            var _wcRaw = match.rawLabel || match.label || '';
-                            rsLine = /win or draw/i.test(_wcRaw) ? 0.5 : (/win/i.test(_wcRaw) ? -0.5 : /draw/i.test(_wcRaw) ? 0.5 : null);
+                        var rsLine = match.line;
+                        if (rsLine == null) {
+                            var _rsRaw = match.rawLabel || match.label || '';
+                            rsLine = /win or draw/i.test(_rsRaw) ? 0.5 : (/win/i.test(_rsRaw) ? -0.5 : /draw/i.test(_rsRaw) ? 0.5 : null);
                         }
-                        var dkSpr = (r._dkSpreads && r._dkSpreads[fcOutType]) || {};
-                        var dkPrice2 = rsLine != null ? dkSpr[String(rsLine)] : null;
-                        if (dkPrice2 != null) {
-                            r.am = dkPrice2; r.pt = rsLine;
-                        } else if (sport === 'soccer_wc' && rsLine != null && rsLine !== r.pt) {
-                            // DK shifted the line mid-game (live flip) but RS still shows the
-                            // pre-game line direction. Lock display to RS line and clear EV —
-                            // comparing RS +0.5 prob vs DK -0.5 no-vig is a mismatch that
-                            // produces false edges.
-                            r.pt = rsLine;
-                            delete preds[r.id];
-                            delete probsExact[r.id];
+                        if (rsLine != null) {
+                            r.pt = rsLine; // Set unconditionally — DK pollers read r.pt to re-apply prices
+                            if (r._dkSpreads) {
+                                var dkSpr = (r._dkSpreads[fcOutType]) || {};
+                                var dkPrice2 = dkSpr[String(rsLine)];
+                                if (dkPrice2 != null) {
+                                    r.am = dkPrice2;
+                                } else if (sport === 'soccer_wc') {
+                                    // DK line shifted — clear EV to avoid RS/DK mismatch
+                                    delete preds[r.id];
+                                    delete probsExact[r.id];
+                                }
+                            }
+                            yourLines[r.id] = rsLine;
                         }
-                        if (rsLine != null) yourLines[r.id] = rsLine;
                     }
                 }
                 // Auto-fill Real Line from Real Sports outcome label (e.g. "ATL +6.5" -> 6.5)
@@ -22701,7 +23929,8 @@ if (!match && r.mkt === 'Spread' && (sport === 'soccer_fc' || sport === 'soccer_
                         if (initAm == null) return;
                         rows.push({ id: pid + '-' + ps, game: gameKey, cm: cm, mkt: 'Spread', side: teamName,
                             am: initAm, pt: initPt, pid: pid, ps: ps, gid: gid, league: game.league || '',
-                            _sport_key: 'soccer_fc', _dkHm: game.hm, _dkHp: game.hp, _dkAwm: game.awm, _dkAwp: game.awp,
+                            _sport_key: 'soccer_fc', _dkSpreads: game.spreads || { Home: {}, Away: {} },
+                            _dkHm: game.hm, _dkHp: game.hp, _dkAwm: game.awm, _dkAwp: game.awp,
                             _live: game.live || null });
                     });
                 });
@@ -22715,12 +23944,14 @@ if (!match && r.mkt === 'Spread' && (sport === 'soccer_fc' || sport === 'soccer_
                     var game = data.games[r.game];
                     if (!game) return;
                     r._dkSpreads = game.spreads || { Home: {}, Away: {} };
-                    // Re-apply current RS line to pick the updated DK price at that exact line
-                    var yl = yourLines[r.id];
-                    if (yl != null) {
-                        var fcOutType4 = r.ps === 'B' ? 'Home' : 'Away';
-                        var dk = (r._dkSpreads[fcOutType4] || {})[String(yl)];
-                        if (dk != null) { r.am = dk; r.pt = yl; }
+                    var fcOutType4 = r.ps === 'B' ? 'Home' : 'Away';
+                    // RS label is the only source of truth — "X Win or Draw" → 0.5, "Y Win" → -0.5.
+                    // yourLines[r.id] is set by fetchRealMarkets from the RS outcome label.
+                    // If RS hasn't synced yet, don't update r.am at all — stale DK price is better than wrong line.
+                    var rsLine4 = (yourLines && yourLines[r.id] != null) ? yourLines[r.id] : null;
+                    if (rsLine4 != null) {
+                        var dk4 = (r._dkSpreads[fcOutType4] || {})[String(rsLine4)];
+                        if (dk4 != null) { r.am = dk4; r.pt = rsLine4; }
                     }
                     if (game.league) r.league = game.league;
                     r._live = game.live || null;
