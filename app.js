@@ -3416,8 +3416,12 @@
                 if (oauthResult === 'connected') {
                     _alertsVerified = true;
                     try { posthog.capture('discord_connected'); } catch(e) {}
+                } else if (oauthResult === 'dm_sent') {
+                    // Bot sent a DM — settings response will have pending_code + dm_channel_id
+                    sessionStorage.setItem('discord_dm_sent', '1');
                 } else if (oauthResult === 'pending') {
-                    // OAuth done — settings response will have pending_code + dm_channel_id
+                    // OAuth done but bot couldn't DM (no shared server / DMs disabled)
+                    sessionStorage.removeItem('discord_dm_sent');
                 } else if (oauthResult === 'error') {
                     var statusEl2 = document.getElementById('alerts-connect-status');
                     if (statusEl2) {
@@ -3560,12 +3564,20 @@
         var codeEl = document.getElementById('alerts-discord-code');
         var wrap = document.getElementById('alerts-discord-code-wrap');
         var oauthStep = document.getElementById('alerts-oauth-step');
-        var dmLink = document.getElementById('alerts-open-dm-link');
+        var hintEl = document.getElementById('alerts-discord-hint');
         if (!codeEl) return;
         codeEl.textContent = code;
         if (wrap) wrap.style.display = '';
         if (oauthStep) oauthStep.style.display = 'none';
-        // Always use profile URL — channel URL shows "No channel found" for new DMs
+        // Show context-appropriate hint based on whether the bot DMed them
+        var dmSent = sessionStorage.getItem('discord_dm_sent');
+        if (hintEl) {
+            if (dmSent) {
+                hintEl.textContent = 'Check your Discord DMs — we sent you a message. Type /connect ' + code + ' in that conversation.';
+            } else {
+                hintEl.textContent = 'Open Discord, search for our bot, and send: /connect ' + code + '  (or join the RaxEdge server — the bot will be able to DM you there)';
+            }
+        }
         // Poll every 5s to check if user has sent /connect in Discord
         clearInterval(_alertsPendingPoll);
         _alertsPendingPoll = setInterval(async function() {
