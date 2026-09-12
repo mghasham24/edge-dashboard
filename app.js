@@ -23232,14 +23232,20 @@
                     var fdHome = norm(fdTeams[1] || '');
                     var fdAwayLast = _mmaLast(fdAway);
                     var fdHomeLast = _mmaLast(fdHome);
-                    var matched = marketKeys.find(function(k) {
-                        if (k.includes('__')) return false;
+                    var matched = null, _matchedScore = -1;
+                    marketKeys.forEach(function(k) {
+                        if (k.includes('__')) return;
                         var realTeams = k.split(' @ ');
-                        if (realTeams.length !== 2) return false;
+                        if (realTeams.length !== 2) return;
                         var rAway = norm(resolveTeamName(realTeams[0].trim()));
                         var rHome = norm(resolveTeamName(realTeams[1].trim()));
                         var rAwayLast = _mmaLast(rAway);
                         var rHomeLast = _mmaLast(rHome);
+                        // Hard discriminator: "a&m" must be present on both sides or neither.
+                        // Prevents "Texas" matching "Texas A&M".
+                        if ((fdHome.indexOf('a&m') !== -1) !== (rHome.indexOf('a&m') !== -1 || norm(realTeams[1]).indexOf('a&m') !== -1)) return;
+                        if ((fdAway.indexOf('a&m') !== -1) !== (rAway.indexOf('a&m') !== -1 || norm(realTeams[0]).indexOf('a&m') !== -1)) return;
+                        var _passes = false;
                         // For MMA: check last names in both orientations
                         if (sport === 'mma_mixed_martial_arts') {
                             var normalMatch = (rAwayLast.indexOf(fdAwayLast) !== -1 || fdAwayLast.indexOf(rAwayLast) !== -1)
@@ -23284,7 +23290,19 @@
                                      || fdHome.split(' ').some(function(w) { return w.length > 2 && !_gs[w] && rHome.indexOf(w) !== -1; })
                                      || (!!_wcA[rHome] && (fdHome === _wcA[rHome] || fdHome.indexOf(_wcA[rHome]) !== -1))
                                      || (!!_wcA[fdHome] && (rHome === _wcA[fdHome] || rHome.indexOf(_wcA[fdHome]) !== -1));
-                        return awayMatch && homeMatch;
+                        _passes = awayMatch && homeMatch;
+                        if (_passes) {
+                            // Score to pick best candidate when multiple keys pass (e.g. "Texas" vs "Texas A&M")
+                            function _frmScore(rs, fd) {
+                                if (rs === fd) return 10;
+                                if (rs.indexOf(fd) !== -1 || fd.indexOf(rs) !== -1) return 4;
+                                var rsW = rs.split(' ').filter(function(w) { return w.length > 2 && !_gs[w]; });
+                                var fdW = fd.split(' ').filter(function(w) { return w.length > 2 && !_gs[w]; });
+                                return rsW.filter(function(w) { return fdW.indexOf(w) !== -1; }).length || 0;
+                            }
+                            var score = _frmScore(rAway, fdAway) + _frmScore(rHome, fdHome);
+                            if (score > _matchedScore) { matched = k; _matchedScore = score; }
+                        }
                     });
                     if (matched) {
                         var _isFdDH2b = /\(Game [2-9]/.test(r.game);
