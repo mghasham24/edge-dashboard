@@ -22506,6 +22506,10 @@
         if (currentSport === 'football_ncaaf' && currentCfbConf !== 'ALL') {
             filtered = filtered.filter(function(r) { return r._cfbConf === currentCfbConf; });
         }
+        // CFB: hide rows with no RS market data (no prediction loaded)
+        if (currentSport === 'football_ncaaf') {
+            filtered = filtered.filter(function(r) { return preds[r.id] !== undefined && preds[r.id] !== ''; });
+        }
         var mO = { ML: 0, Spread: 1, Total: 2, RFI: 3 };
         var FC_LEAGUE_ORDER = { 'UCL': 0, 'EPL': 1, 'La Liga': 2, 'Serie A': 3, 'Bundesliga': 4, 'Ligue 1': 5, 'MLS': 6 };
         filtered.sort(function(a, b) {
