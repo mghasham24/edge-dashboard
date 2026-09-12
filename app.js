@@ -21529,6 +21529,11 @@
                     var rhRaw = normSync(parts[1].trim());
                     var raNick = nickname(ra);
                     var rhNick = nickname(rh);
+                    // Hard discriminators — presence must match exactly (both have it or neither does).
+                    // "a&m" prevents "Texas" from matching "Texas A&M".
+                    var _hasAmFdH = fdHome.indexOf('a&m') !== -1, _hasAmRsH = rh.indexOf('a&m') !== -1 || rhRaw.indexOf('a&m') !== -1;
+                    var _hasAmFdA = fdAway.indexOf('a&m') !== -1, _hasAmRsA = ra.indexOf('a&m') !== -1 || raRaw.indexOf('a&m') !== -1;
+                    if (_hasAmFdH !== _hasAmRsH || _hasAmFdA !== _hasAmRsA) return;
                     if (!matchSide(ra, raNick, raRaw, fdAway, fdAwayNick)) return;
                     if (!matchSide(rh, rhNick, rhRaw, fdHome, fdHomeNick)) return;
                     var score = _teamScore(ra, fdAway) + _teamScore(rh, fdHome);
@@ -23521,10 +23526,13 @@
                 // CFB pass: team keys are short abbreviations (FSU, NMSU, NC ST) — words may be ≤2 chars.
                 // Normalize by stripping spaces to match RS labels (e.g. "NC ST" → "ncst").
                 if (!match && sport === 'football_ncaaf' && r.mkt === 'ML') {
+                    var _sideHasAm = sideLower.indexOf('a&m') !== -1;
                     var cfbSideNorm = sideLower.replace(/\s+/g, '');
                     match = outcomes.find(function(o) {
                         if (!o.label) return false;
                         var ol = resolveTeamName(o.label).toLowerCase();
+                        // "a&m" is a hard discriminator — both or neither must have it
+                        if (_sideHasAm !== (ol.indexOf('a&m') !== -1)) return false;
                         var olNorm = ol.replace(/\s+/g, '');
                         return olNorm === cfbSideNorm || olNorm.indexOf(cfbSideNorm) !== -1 || cfbSideNorm.indexOf(olNorm) !== -1
                             || sideLower.split(' ').some(function(w) { return w.length > 1 && ol.indexOf(w) !== -1; });
