@@ -21491,10 +21491,35 @@
                 function nickname(s) { var w = s.trim().split(' '); return w[w.length - 1]; }
                 var fdAwayNick = nickname(fdAway);
                 var fdHomeNick = nickname(fdHome);
-                var found = marketKeys.find(function(k) {
-                    if (k.includes('__')) return false;
+                var _geoStop = { south: 1, north: 1, east: 1, west: 1, central: 1, new: 1 };
+                function notGeo(w) { return !_geoStop[w]; }
+                var _wcNameAliases = { 'usa': 'united states', 'united states': 'usa', "cote d'ivoire": 'ivory coast', 'ivory coast': "cote d'ivoire" };
+                function matchSide(r1, r1Nick, r1Raw, fd, fdNick) {
+                    if (r1Nick === fdNick || r1.indexOf(fdNick) !== -1 || fd.indexOf(r1Nick) !== -1
+                        || r1.split(' ').some(function(w) { return w.length > 2 && notGeo(w) && fd.indexOf(w) !== -1; })
+                        || fd.split(' ').some(function(w) { return w.length > 2 && notGeo(w) && r1.indexOf(w) !== -1; })
+                        || r1Raw.indexOf(fdNick) !== -1 || fd.indexOf(nickname(r1Raw)) !== -1
+                        || r1Raw.split(' ').some(function(w) { return w.length > 2 && notGeo(w) && fd.indexOf(w) !== -1; })
+                        || fd.split(' ').some(function(w) { return w.length > 2 && notGeo(w) && r1Raw.indexOf(w) !== -1; })) return true;
+                    var r1Exp = _wcNameAliases[r1] || ''; var fdExp = _wcNameAliases[fd] || '';
+                    return (!!r1Exp && (fd === r1Exp || fd.indexOf(r1Exp) !== -1 || r1Exp.indexOf(fd) !== -1))
+                        || (!!fdExp && (r1 === fdExp || r1.indexOf(fdExp) !== -1 || fdExp.indexOf(r1) !== -1));
+                }
+                // Score match quality so the most specific game wins (e.g. "Texas A&M" beats "Texas"
+                // when both are candidates for a row whose side is "Texas A&M").
+                function _teamScore(rsN, fdN) {
+                    if (rsN === fdN) return 10;
+                    if (rsN.indexOf(fdN) !== -1 || fdN.indexOf(rsN) !== -1) return 4;
+                    var rsW = rsN.split(' ').filter(function(w) { return w.length > 2 && notGeo(w); });
+                    var fdW = fdN.split(' ').filter(function(w) { return w.length > 2 && notGeo(w); });
+                    var common = rsW.filter(function(w) { return fdW.indexOf(w) !== -1; }).length;
+                    return common > 0 ? common : (nickname(rsN) === nickname(fdN) ? 1 : 0);
+                }
+                var found = null, _foundScore = -1;
+                marketKeys.forEach(function(k) {
+                    if (k.includes('__')) return;
                     var parts = k.split(' @ ');
-                    if (parts.length !== 2) return false;
+                    if (parts.length !== 2) return;
                     var ra = normSync(resolveTeamName(parts[0].trim()));
                     var rh = normSync(resolveTeamName(parts[1].trim()));
                     // Also keep raw (pre-resolved) names as fallback — guards against cross-sport
@@ -21504,23 +21529,10 @@
                     var rhRaw = normSync(parts[1].trim());
                     var raNick = nickname(ra);
                     var rhNick = nickname(rh);
-                    // Nickname match first, then any-word match (for soccer short names like "Atletico" vs "Atletico Madrid")
-                    // Exclude geographic direction words — "south" in "South Korea" must not match "South Africa"
-                    var _geoStop = { south: 1, north: 1, east: 1, west: 1, central: 1, new: 1 };
-                    function notGeo(w) { return !_geoStop[w]; }
-                    var _wcNameAliases = { 'usa': 'united states', 'united states': 'usa', "cote d'ivoire": 'ivory coast', 'ivory coast': "cote d'ivoire" };
-                    function matchSide(r1, r1Nick, r1Raw, fd, fdNick) {
-                        if (r1Nick === fdNick || r1.indexOf(fdNick) !== -1 || fd.indexOf(r1Nick) !== -1
-                            || r1.split(' ').some(function(w) { return w.length > 2 && notGeo(w) && fd.indexOf(w) !== -1; })
-                            || fd.split(' ').some(function(w) { return w.length > 2 && notGeo(w) && r1.indexOf(w) !== -1; })
-                            || r1Raw.indexOf(fdNick) !== -1 || fd.indexOf(nickname(r1Raw)) !== -1
-                            || r1Raw.split(' ').some(function(w) { return w.length > 2 && notGeo(w) && fd.indexOf(w) !== -1; })
-                            || fd.split(' ').some(function(w) { return w.length > 2 && notGeo(w) && r1Raw.indexOf(w) !== -1; })) return true;
-                        var r1Exp = _wcNameAliases[r1] || ''; var fdExp = _wcNameAliases[fd] || '';
-                        return (!!r1Exp && (fd === r1Exp || fd.indexOf(r1Exp) !== -1 || r1Exp.indexOf(fd) !== -1))
-                            || (!!fdExp && (r1 === fdExp || r1.indexOf(fdExp) !== -1 || fdExp.indexOf(r1) !== -1));
-                    }
-                    return matchSide(ra, raNick, raRaw, fdAway, fdAwayNick) && matchSide(rh, rhNick, rhRaw, fdHome, fdHomeNick);
+                    if (!matchSide(ra, raNick, raRaw, fdAway, fdAwayNick)) return;
+                    if (!matchSide(rh, rhNick, rhRaw, fdHome, fdHomeNick)) return;
+                    var score = _teamScore(ra, fdAway) + _teamScore(rh, fdHome);
+                    if (score > _foundScore) { found = k; _foundScore = score; }
                 });
                 if (found) {
                     // DH-awareness: Game 2 FD rows must use the RS ' (2)' key, not Game 1's key
