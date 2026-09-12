@@ -20946,7 +20946,7 @@
                 return r.json();
             })
             .then(function(data) {
-                if (!data.ok || !data.games || !Object.keys(data.games).length) {
+                if (!data.ok || !data.games || !data.games.length) {
                     rawRows = []; rsGameIds = {};
                     dot.className = 'sdot error';
                     stxt.textContent = 'No CFB games available';
@@ -20954,26 +20954,24 @@
                 }
                 var rows = [];
                 var confsSet = new Set();
-                Object.entries(data.games).forEach(function([gameKey, game]) {
-                    var cm = game.cm ? new Date(game.cm) : null;
-                    var gid = game.id;
+                data.games.forEach(function(game) {
+                    var cm = game.startMs ? new Date(game.startMs) : null;
+                    var gid = game.eventId;
                     var pid = gid + '-ml';
-                    var awayConf = game.awayConf || '';
-                    var homeConf = game.homeConf || '';
-                    if (awayConf) confsSet.add(awayConf);
-                    if (homeConf) confsSet.add(homeConf);
-                    if (game.awayOdds != null) rows.push({ id: pid + '-A', game: gameKey, cm: cm, mkt: 'ML', side: game.away, am: game.awayOdds, pt: null, pid: pid, ps: 'A', gid: gid, _cfbConf: awayConf || homeConf, _sport_key: 'football_ncaaf' });
-                    if (game.homeOdds != null) rows.push({ id: pid + '-B', game: gameKey, cm: cm, mkt: 'ML', side: game.home, am: game.homeOdds, pt: null, pid: pid, ps: 'B', gid: gid, _cfbConf: homeConf || awayConf, _sport_key: 'football_ncaaf' });
+                    var gameKey = (game.awayTeam || '') + ' @ ' + (game.homeTeam || '');
+                    var mlMkt = (game.markets || []).find(function(m) { return m.market === 'team_ml'; });
+                    if (!mlMkt) return;
+                    if (mlMkt.awayOdds != null) rows.push({ id: pid + '-A', game: gameKey, cm: cm, mkt: 'ML', side: game.awayTeam, am: mlMkt.awayOdds, pt: null, pid: pid, ps: 'A', gid: gid, _cfbConf: '', _sport_key: 'football_ncaaf' });
+                    if (mlMkt.homeOdds != null) rows.push({ id: pid + '-B', game: gameKey, cm: cm, mkt: 'ML', side: game.homeTeam, am: mlMkt.homeOdds, pt: null, pid: pid, ps: 'B', gid: gid, _cfbConf: '', _sport_key: 'football_ncaaf' });
                 });
-                var CFB_CONF_ORDER = ['SEC', 'B10', 'ACC', 'B12', 'P12', 'MWC', 'CUSA', 'MAC', 'AAC', 'SBC'];
-                _cfbConfsAvailable = ['ALL'].concat(CFB_CONF_ORDER.filter(function(c) { return confsSet.has(c); }));
+                _cfbConfsAvailable = ['ALL'];
                 buildCfbConfNav();
                 rawRows = rows;
                 rawRowsBySport[currentSport] = rawRows;
                 var nowStr = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
                 if (rawRows.length) {
                     dot.className = 'sdot live';
-                    stxt.textContent = 'Updated ' + nowStr + ' · ' + Object.keys(data.games).length + ' games · DraftKings';
+                    stxt.textContent = 'Updated ' + nowStr + ' · ' + data.games.length + ' games · DraftKings';
                 } else {
                     dot.className = 'sdot error';
                     stxt.textContent = 'No CFB games available';
@@ -21801,16 +21799,17 @@
                         fetch('/api/real/sync?sport=football_ncaaf', { credentials: 'same-origin' })
                     ]);
                     var cfbDataP = cfbResP.ok ? await cfbResP.json() : null;
-                    if (cfbDataP && cfbDataP.ok && cfbDataP.games) {
+                    if (cfbDataP && cfbDataP.ok && cfbDataP.games && cfbDataP.games.length) {
                         var cfbRowsP = [];
-                        Object.entries(cfbDataP.games).forEach(function([gameKey, game]) {
-                            var cm = game.cm ? new Date(game.cm) : null;
-                            var gid = game.id;
+                        cfbDataP.games.forEach(function(game) {
+                            var cm = game.startMs ? new Date(game.startMs) : null;
+                            var gid = game.eventId;
                             var pid = gid + '-ml';
-                            var awayConf = game.awayConf || '';
-                            var homeConf = game.homeConf || '';
-                            if (game.awayOdds != null) cfbRowsP.push({ id: pid+'-A', game: gameKey, cm: cm, mkt: 'ML', side: game.away, am: game.awayOdds, pt: null, pid: pid, ps: 'A', gid: gid, _cfbConf: awayConf || homeConf, _sport_key: 'football_ncaaf' });
-                            if (game.homeOdds != null) cfbRowsP.push({ id: pid+'-B', game: gameKey, cm: cm, mkt: 'ML', side: game.home, am: game.homeOdds, pt: null, pid: pid, ps: 'B', gid: gid, _cfbConf: homeConf || awayConf, _sport_key: 'football_ncaaf' });
+                            var gameKey = (game.awayTeam || '') + ' @ ' + (game.homeTeam || '');
+                            var mlMkt = (game.markets || []).find(function(m) { return m.market === 'team_ml'; });
+                            if (!mlMkt) return;
+                            if (mlMkt.awayOdds != null) cfbRowsP.push({ id: pid+'-A', game: gameKey, cm: cm, mkt: 'ML', side: game.awayTeam, am: mlMkt.awayOdds, pt: null, pid: pid, ps: 'A', gid: gid, _cfbConf: '', _sport_key: 'football_ncaaf' });
+                            if (mlMkt.homeOdds != null) cfbRowsP.push({ id: pid+'-B', game: gameKey, cm: cm, mkt: 'ML', side: game.homeTeam, am: mlMkt.homeOdds, pt: null, pid: pid, ps: 'B', gid: gid, _cfbConf: '', _sport_key: 'football_ncaaf' });
                         });
                         rawRowsBySport[s.key] = cfbRowsP;
                         if (cfbSyncResP.ok) {
